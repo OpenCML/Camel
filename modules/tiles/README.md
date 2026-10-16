@@ -383,3 +383,12 @@ receive their own matmul contract while retaining the original gradient contract
 as a compilation dependency. The source-template key now serializes the complete
 owned indexing instance, including expressions, parameters, predicates and law
 selection; changing a map cannot reuse previously generated addresses.
+
+Axis sum/mean/maximum lowering validates the core iteration roles, direct output
+projection and full numerical law (accumulator, initial value, order, empty result
+and finalization). Its serial and parallel-maximum loads use the core operand
+map, with the same bounds checks as pointwise and matrix accesses. Canonical
+maps retain the compact row/axis address. Noncanonical affine reads are supported
+by those kernels but excluded from row regions, whose shared-memory accesses
+assume canonical rows. Guarded, indirect and negative-stride reads are rejected.
+This does not yet generalize full-tensor or sum-to reductions to arbitrary maps.

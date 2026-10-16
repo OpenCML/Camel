@@ -19,9 +19,11 @@ using namespace camel::tiles;
 using namespace camel::tiles::kernel;
 
 void checkPointwiseContracts();
+void checkReductionContracts();
 
 void checkKernelIR() {
     checkPointwiseContracts();
+    checkReductionContracts();
     const auto integer = [](uint32_t value) { return ScalarExpr::literal(ScalarValue::u32(value)); };
     const auto signedInteger = [](int32_t value) { return ScalarExpr::literal(ScalarValue::i32(value)); };
     const auto bits = ScalarExpr::bitcast(ScalarType::U32, ScalarExpr::symbol("x",DType::F32));
@@ -239,4 +241,56 @@ void checkPointwiseContracts() {
     if(reduction.launches.size()!=2)
         throw std::runtime_error("cross-row epilogue incorrectly fused");
     std::cout<<"tiles pointwise contracts: operand maps, bounds and row eligibility passed\n";
+}
+
+void checkReductionContracts() {
+    namespace sem=camel::core::sem;
+    const auto f32=camel::core::type::TypeCode::Float32;
+    const auto f64=camel::core::type::TypeCode::Float64;
+    const std::string uri="tilestest:axis_contract";
+    auto &table=camel::core::OperatorTable::instance();
+    const auto id=table.intern(uri);
+    sem::OperatorSemantics declaration{.key=sem::OperatorKey::of(uri)};
+    declaration.laws={{.name="sum",.kind=sem::LawKind::Add,.input=f32,.accumulator=f64,.result=f32}};
+    table.declareSemantics(uri,declaration);
+    Program p;
+    p.contracts={{.uri=uri,.key=declaration.key,.declaration=table.semantics(id)}};
+    p.nodes={{.op="input",.shape={2,2},.data={1,2,3,4}},
+             {.op="sum_axis",.shape={2,1},.inputs={0},.attributes={1},.semantic=0}};
+    p.outputs={1};
+    sem::IndexedInstance inst;
+    const auto row=inst.exprs.dim(0), col=inst.exprs.dim(1), two=inst.exprs.constant(2), zero=inst.exprs.constant(0);
+    inst.domain.dims={{"row",two,sem::DimRole::Parallel},{"column",two,sem::DimRole::Reduction}};
+    inst.norm={{.kind=sem::AccessKind::Affine,.coords={row,col}},{.kind=sem::AccessKind::None}};
+    inst.output={.coords={row,zero},.mode=sem::WriteMode::Combine};inst.law=0;
+    p.nodes[1].indexing=inst;
+    generate(p);
+    auto transposed=p;transposed.nodes[1].indexing->norm[0].coords={col,row};
+    const auto before=generationCacheStats();generate(transposed);
+    if(p.source==transposed.source || generationCacheStats().misses!=before.misses+1 ||
+       !canonicalAxisReduction(p,p.nodes[1]) || canonicalAxisReduction(transposed,transposed.nodes[1]))
+        throw std::runtime_error("reduction access map ignored by source or row eligibility");
+    for(size_t output=0;output<2;++output)
+        for(size_t r=0;r<2;++r)
+            if(axisReductionAddress(transposed,transposed.nodes[1],IndexExpr(output),IndexExpr(r)).evaluate({})!=r*2+output)
+                throw std::runtime_error("reduction mapped traversal is incorrect");
+    auto rejected=[](Program bad,const char *message) {
+        try { validatePlan(bad); } catch(const std::exception &e) {
+            if(std::string(e.what()).find(message)!=std::string::npos) return;
+            throw;
+        }
+        throw std::runtime_error(std::string("accepted invalid reduction contract: ")+message);
+    };
+    auto bad=p;bad.nodes[1].indexing->norm[0].coords[0]=bad.nodes[1].indexing->exprs.add(row,two);
+    rejected(bad,"outside operand domain");
+    bad=p;bad.nodes[1].indexing->output.coords={zero,row};rejected(bad,"axis projection");
+    bad=p;bad.nodes[1].indexing->norm[0].valid.push_back({row,sem::Constraint::Rel::Lt,two});
+    rejected(bad,"unconditional affine");
+    auto otherLaw=declaration;otherLaw.laws[0].accumulator=f32;
+    bad=p;bad.contracts[0].declaration=&otherLaw;
+    bool lawRejected=false;
+    try { (void)axisReductionAddress(bad,bad.nodes[1],IndexExpr(0),IndexExpr(0)); }
+    catch(const std::exception &e) { lawRejected=std::string(e.what()).find("unsupported numerical law")!=std::string::npos; }
+    if(!lawRejected) throw std::runtime_error("accepted incompatible accumulator law");
+    std::cout<<"tiles axis contracts: mapped traversal, numerical law and row eligibility passed\n";
 }

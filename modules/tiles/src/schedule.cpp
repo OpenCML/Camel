@@ -276,6 +276,7 @@ void validate(const Program &p) {
             kept[axis] = 1;
             removed.erase(removed.begin() + axis);
             require(n.shape == kept || n.shape == removed, "reduction output shape");
+            (void)kernel::axisReductionAddress(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
         }
     }
 }

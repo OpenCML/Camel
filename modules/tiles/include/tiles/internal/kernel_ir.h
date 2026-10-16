@@ -88,6 +88,9 @@ void validateBody(const KernelBody &body);
 std::string emitBody(const KernelBody &body);
 IndexExpr
 pointwiseAddress(const Program &program, const Node &node, size_t operand, const IndexExpr &linear);
+IndexExpr axisReductionAddress(
+    const Program &program, const Node &node, const IndexExpr &row, const IndexExpr &reduction);
+bool canonicalAxisReduction(const Program &program, const Node &node);
 bool canonicalPointwise(const Program &program, const Node &node);
 void validateMatmulContract(const Program &program, const Node &node);
 KernelBody scalarBody(const Program &program, Launch &launch);

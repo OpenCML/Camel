@@ -55,7 +55,7 @@ std::optional<RowKernel> rowKernel(const Program &p) {
         if (n.op == "sum_axis" || n.op == "mean_axis" || n.op == "max_axis") {
             if (n.inputs.size() != 1 || n.attributes != std::vector<int64_t>{1} ||
                 p.nodes[n.inputs[0]].shape != shape || n.shape != Shape{shape[0], 1} ||
-                !n.indexing || n.semantic >= p.contracts.size())
+                !n.indexing || n.semantic >= p.contracts.size() || !canonicalAxisReduction(p, n))
                 return std::nullopt;
             const auto *decl = p.contracts[n.semantic].declaration;
             if (!decl || n.indexing->law >= decl->laws.size())

@@ -174,12 +174,7 @@ KernelBody serialBody(const Program &p, Launch &launch) {
         } else if (op.ends_with("_axis")) {
             const size_t axis = reducer->attributes.at(0);
             width             = shape[axis];
-            size_t inner      = 1;
-            for (size_t d = axis + 1; d < shape.size(); ++d)
-                inner *= shape[d];
-            const auto safeInner = IndexExpr(std::max(inner, size_t(1)));
-            at                   = (row / safeInner) * IndexExpr(width * inner) + row % safeInner +
-                                   r * IndexExpr(inner);
+            at                = axisReductionAddress(p, *reducer, row, r);
         }
         const auto dtype = (op == "max_axis" || op == "sum_to") ? DType::F32 : DType::F64;
         const auto acc   = ScalarExpr::symbol("k_acc", dtype);
