@@ -665,8 +665,9 @@ class Compiler {
 };
 } // namespace
 
-Program
-compile(Function *function, const std::vector<Argument> &arguments, rt::fact::FactStore &facts) {
+static Program compileInputs(
+    Function *function, const std::vector<Argument> &arguments, rt::fact::FactStore &facts,
+    bool fromTypes) {
     if (!function || !function->graph())
         throw std::runtime_error("expected a function graph");
     Compiler c(facts);
@@ -678,8 +679,29 @@ compile(Function *function, const std::vector<Argument> &arguments, rt::fact::Fa
         for (size_t i = 0; i < closure->size(); ++i)
             with.push_back(c.host(closure->get<slot_t>(i), types->typeAt(i), true));
     }
-    for (const auto &a : arguments)
-        norm.push_back(c.host(a.value, a.type, true));
+    if (fromTypes) {
+        if (!with.empty())
+            throw UnsupportedComputation(
+                "type-only compilation requires an extracted closure-free region");
+        auto *signature = function->graph()->funcType();
+        for (size_t i = 0; i < signature->normTypesCount(); ++i) {
+            auto *type = signature->normTypeAt(i);
+            Node input{.op = "input"};
+            if (type->code() == ty::TypeCode::Float64) {
+                input.dtype = DType::F64;
+            } else {
+                const auto *tensor = tensor::asTensorType(type);
+                if (!tensor || tensor->dtype() != ty::TypeCode::Float32 || !tensor->isStaticShape())
+                    throw UnsupportedComputation(
+                        "type-only compilation requires static f32 tensor shapes");
+                input.shape = *tensor->shape();
+            }
+            norm.push_back(Value{.type = type, .tensor = c.append(std::move(input))});
+        }
+    } else {
+        for (const auto &a : arguments)
+            norm.push_back(c.host(a.value, a.type, true));
+    }
     auto out = c.call(function->graph(), {}, norm, with);
     c.program.outputs.clear();
     auto collect = [&](auto &&self, const Value &value) -> void {
@@ -705,7 +727,14 @@ compile(Function *function, const std::vector<Argument> &arguments, rt::fact::Fa
         }
     };
     collect(collect, out);
-    generate(c.program);
+    generate(c.program, {}, fromTypes ? InputBindings::Deferred : InputBindings::Required);
     return std::move(c.program);
+}
+Program
+compile(Function *function, const std::vector<Argument> &arguments, rt::fact::FactStore &facts) {
+    return compileInputs(function, arguments, facts, false);
+}
+Program compileTypes(Function *function, rt::fact::FactStore &facts) {
+    return compileInputs(function, {}, facts, true);
 }
 } // namespace camel::tiles

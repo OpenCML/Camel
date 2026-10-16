@@ -15,6 +15,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft_session.h"
 #include "tiles/device.h"
+#include "tiles/internal/capability.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
 #include <algorithm>
@@ -66,6 +67,14 @@ runtime::GCGraph *outlineRegions(
                 callee,
                 core::type::TupleType::create(std::vector<core::type::Type *>{}),
                 core::mm::autoSpace());
+            if (device) {
+                // Populate the shared plan/source cache from types, before any device
+                // selection or input upload. Unsupported lowerings retain CPU fallback.
+                try {
+                    (void)compileTypes(fn, context.facts());
+                } catch (const UnsupportedComputation &) {
+                }
+            }
             auto fnNode =
                 draft.materializeStaticValue(core::rtdata::toSlot(fn), callee->funcType());
             auto *type = callee->funcType()->exitType();

@@ -120,7 +120,7 @@ std::vector<Lifetime> lifetimes(const Program &p) {
 
 bool elementwise(const std::string &op) { return unary(op) || binary(op); }
 
-void validate(const Program &p) {
+void validate(const Program &p, InputBindings bindings) {
     require(!p.nodes.empty() && !p.outputs.empty(), "missing output");
     auto &table                 = core::OperatorTable::instance();
     const auto declarationEpoch = table.declarationEpoch();
@@ -171,6 +171,9 @@ void validate(const Program &p) {
                 n.dtype == DType::F32 || (n.dtype == DType::F64 && n.shape.empty()),
                 "input payload dtype");
             require(n.inputs.empty(), "input has dependencies");
+            if (bindings == InputBindings::Deferred && !n.resident && n.data.empty() &&
+                !n.scalarBits)
+                continue;
             if (n.resident)
                 require(
                     n.data.empty() && !n.scalarBits && n.resident->shape == n.shape &&
@@ -284,8 +287,8 @@ void validate(const Program &p) {
     }
 }
 
-void schedule(Program &p, ScheduleOptions options) {
-    validate(p);
+void schedule(Program &p, ScheduleOptions options, InputBindings bindings) {
+    validate(p, bindings);
     const size_t count = p.nodes.size();
     std::vector<size_t> users(count), consumer(count, SIZE_MAX), owner(count), groupSize(count, 1);
     std::iota(owner.begin(), owner.end(), 0);
@@ -383,10 +386,10 @@ void schedule(Program &p, ScheduleOptions options) {
                 .gridX          = static_cast<unsigned>(std::min<size_t>(region->rows, 65535))}};
         }
     }
-    planStorage(p);
+    planStorage(p, bindings);
 }
 
-void planStorage(Program &p) {
+void planStorage(Program &p, InputBindings bindings) {
     const size_t count = p.nodes.size();
     const auto life    = lifetimes(p);
     p.storage          = {};
@@ -414,11 +417,11 @@ void planStorage(Program &p) {
         until[selected]     = life[id].end;
         p.storage.slots[id] = selected;
     }
-    validatePlan(p);
+    validatePlan(p, bindings);
 }
 
-void validatePlan(const Program &p) {
-    validate(p);
+void validatePlan(const Program &p, InputBindings bindings) {
+    validate(p, bindings);
     require(p.storage.slots.size() == p.nodes.size(), "storage mapping size");
     std::vector<size_t> stageOf(p.nodes.size(), SIZE_MAX);
     for (size_t i = 0; i < p.nodes.size(); ++i)

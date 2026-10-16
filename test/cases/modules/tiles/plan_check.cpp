@@ -339,6 +339,31 @@ int main() {
         std::cout << "tiles operator contracts: absent, replaced and incompatible declarations rejected\n";
         std::weak_ptr<DeviceStorage> cacheOwner;
         {
+            Program unbound;
+            unbound.nodes = {{.op="input", .shape={1048576}},
+                             {.op="neg", .shape={1048576}, .inputs={0}}};
+            unbound.outputs = {1};
+            generate(unbound, {}, InputBindings::Deferred);
+            if (!unbound.nodes[0].data.empty() || unbound.source.empty())
+                throw std::runtime_error("shape-only planning allocated an input payload");
+            bool refused = false;
+            try { validatePlan(unbound); } catch (const std::exception &) { refused = true; }
+            if (!refused)
+                throw std::runtime_error("executable validation accepted an unbound input");
+            unbound.nodes[0].data.resize(1048576, 3.0f);
+            const auto beforeBinding = kernel::generationCacheStats();
+            generate(unbound);
+            if (kernel::generationCacheStats().hits != beforeBinding.hits + 1)
+                throw std::runtime_error("binding input data changed the compiled plan identity");
+            unbound.nodes[0].data.resize(1);
+            refused = false;
+            try { generate(unbound, {}, InputBindings::Deferred); }
+            catch (const std::exception &) { refused = true; }
+            if (!refused)
+                throw std::runtime_error("deferred binding hid an invalid provided payload");
+        }
+        std::cout << "tiles deferred inputs: payload-free planning and strict execution checks passed\n";
+        {
             Program borrowed;
             auto value = std::make_shared<DeviceValue>();
             auto owner = retainHostValue({1}, DType::F32, std::as_bytes(std::span(&hostSentinel, 1)))->owner;

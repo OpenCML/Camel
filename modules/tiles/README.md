@@ -62,8 +62,11 @@ For statically shaped eligible tensor regions, decorating the function uses the
 same region extraction and resident transfers as `std::tiles`. Unsupported nodes
 stay on CPU while supported regions prefer GPU; captures and CPU effects are
 preserved. Partitioning happens once when the decorated function value is built.
-Kernel planning and CUDA compilation still happen at execution time, not yet at
-source compilation time. Symbolic and unknown shapes do not use this regional path.
+Static regions now generate their launch plans and CUDA source from parameter types
+when outlined, without allocating placeholder input tensors or initializing CUDA.
+The process-local plan/source cache retains this work. NVRTC compilation still happens
+at execution time, as do graph extraction and binding validation; cached artifacts are
+not yet attached directly to graph calls. Symbolic and unknown shapes do not use this regional path.
 When no static region can be extracted, the existing whole-function, call-site
 specialization remains: an unavailable backend or unsupported computation runs
 the original function on the current CPU execution backend. Regional execution
