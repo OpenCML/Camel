@@ -1,7 +1,7 @@
 /**
- * progen finding F21 ((other) crash after a rewrite). Segmentation fault after `std::inline`: a
+ * progen finding F21 ((other) crash after a rewrite). Segmentation fault after `std::opt::inline`: a
  *   lambda that captures a parameter is passed to a function that does not call it.
- * Pipeline: std::inline std::nvm
+ * Pipeline: std::opt::inline std::nvm
  * Expected output: (nothing)
  * Actual: CRASH
  * Reduced by test/tools/progen from seed 1192 (generator version 1, all features).

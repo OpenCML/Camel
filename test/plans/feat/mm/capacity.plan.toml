@@ -56,10 +56,10 @@ timeout_ms = 60000
 
 [[tests]]
 name = "capacity.f24_const_graphs_simplify"
-desc = "progen finding F24 through std::opt::simplify on the node VM."
+desc = "progen finding F24 through std::opt on the node VM."
 kind = "behavior"
 case = "../../../cases/opt/progen/findings/const_graph_capacity.cml"
-args = ["${case}", "std::opt::simplify", "${run_nvm}"]
+args = ["${case}", "std::opt", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_exact = "a\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -198,11 +198,11 @@ timeout_ms = 300000
 
 [[tests]]
 name = "capacity.growth_simplify_gc_stress"
-desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (CAMEL_SPACE_SEGMENT_KB, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::opt::simplify std::nvm, with a verified major collection at every safepoint: the rewrite releases the graphs it replaces and allocates new ones across segments."
+desc = "The three spaces grow by segments while the program is compiled and run: with a first segment of 32 KB (CAMEL_SPACE_SEGMENT_KB, a test control; since types are interned, the permanent space of 500 functions no longer fills three segments of 64 KB) 500 functions of all shapes need several segments of each space. The program prints the sum the generator computed and the statistics line shows at least 3 segments per space. Pipeline: std::opt std::nvm, with a verified major collection at every safepoint: the rewrite releases the graphs it replaces and allocates new ones across segments."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}", "run", "mixed", "500", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "run", "mixed", "500", "std::opt", "std::nvm"]
 envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_STATS=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
@@ -221,10 +221,10 @@ timeout_ms = 300000
 
 [[tests]]
 name = "capacity.perm_query_types"
-desc = "Queries must not fill the permanent space. A program of 120 lines under std::specialize std::opt: the rewrites ask for every user of every value whether it is passed to a var parameter, and every question used to leave a new function type in the permanent space (1.4 million of them, past 256 MB; 'Permanent space exhausted' at the old 32 MB). The answers are memoized per operator and argument types, and an unchanged graph keeps the type of its static area across a commit. The program prints what the run without passes prints, inside a permanent space limited to 32 MB, and the statistics line shows less than 4 MB in use (measured: 673 KB; 77 KB without passes)."
+desc = "Queries must not fill the permanent space. A program of 120 lines under std::opt::specialize std::opt: the rewrites ask for every user of every value whether it is passed to a var parameter, and every question used to leave a new function type in the permanent space (1.4 million of them, past 256 MB; 'Permanent space exhausted' at the old 32 MB). The answers are memoized per operator and argument types, and an unchanged graph keeps the type of its static area across a commit. The program prints what the run without passes prints, inside a permanent space limited to 32 MB, and the statistics line shows less than 4 MB in use (measured: 673 KB; 77 KB without passes)."
 kind = "behavior"
 case = "../../../cases/feat/mm/capacity/perm_query_types.cml"
-args = ["${case}", "std::specialize", "std::opt"]
+args = ["${case}", "std::opt::specialize", "std::opt"]
 envs = ["PROGEN_I0=4", "PROGEN_I1=5", "CAMEL_PERM_SPACE_LIMIT_MB=32", "CAMEL_GC_STATS=1"]
 expect_exit = 0
 expect_stdout_contains = ["L3 (0, -21) (0, -21)", "L5 (6, -21) 4", "L6 [-2, -2, -2, -2, -2, -2] 4", "L7 5", "L8 (a, -21)"]

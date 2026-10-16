@@ -69,10 +69,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.inline"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::inline."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -85,10 +85,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.specialize"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::specialize."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::specialize"]
+args = ["${case}", "std::opt::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -101,10 +101,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.devirtualize"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::devirtualize."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::devirtualize"]
+args = ["${case}", "std::opt::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -181,10 +181,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.simplify"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::simplify."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::opt::simplify"]
+args = ["${case}", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -213,10 +213,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.macro_inline"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::inline."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::macro", "std::inline"]
+args = ["${case}", "std::macro", "std::opt::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -229,10 +229,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.macro_specialize"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::specialize."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::macro", "std::specialize"]
+args = ["${case}", "std::macro", "std::opt::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -245,10 +245,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.macro_devirtualize"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::devirtualize."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::macro", "std::devirtualize"]
+args = ["${case}", "std::macro", "std::opt::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -325,10 +325,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.macro_simplify"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt::simplify."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::macro", "std::opt::simplify"]
+args = ["${case}", "std::macro", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -341,10 +341,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.all_6"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::inline std::specialize std::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::inline", "std::specialize", "std::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -357,10 +357,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.all_macro_9"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::inline std::specialize std::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt::simplify."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::macro", "std::inline", "std::specialize", "std::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt::simplify"]
+args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -421,10 +421,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.inline_fvm"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::inline std::fvm."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -437,10 +437,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.inline_jit"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::inline std::jit."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::inline std::jit."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::inline", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -453,10 +453,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.inline_tf"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::inline std::tf."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::inline std::tf."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::inline", "std::tf"]
+args = ["${case}", "std::opt::inline", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -469,10 +469,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.specialize_jit"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::specialize std::jit."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::specialize", "std::jit"]
+args = ["${case}", "std::opt::specialize", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -485,10 +485,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sync_block_order.simplify_jit"
-desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt::simplify std::jit."
+desc = "A sync block runs its expressions in written order: as an arm ending in a value, nested in a sync block, with a multi-name let, as a lambda body. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
-args = ["${case}", "std::opt::simplify", "std::jit"]
+args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

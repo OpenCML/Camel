@@ -1,5 +1,5 @@
 /**
- * Effects around code that std::opt::simplify evaluates away. The recursion
+ * Effects around code that std::opt evaluates away. The recursion
  * builds a constant, so simplify inlines and folds it; the println before it
  * must still run first, the arm that reads a value computed before its branch
  * (`items`) must enter after the branch, not at the start of main, and the tail

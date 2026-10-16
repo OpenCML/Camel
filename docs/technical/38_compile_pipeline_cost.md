@@ -108,11 +108,11 @@
 遍与后端（重构前，中位数）：
 
 - 后端：小、中程序上 `std::nvm` / `std::fvm` / `std::jit` 的整个遍是 0.3–3.6 ms。`std::bc`（只编字节码并打印，不执行）是 0.2–2.8 ms，可作为 fvm 执行前准备的上界。progen-20 上 fvm 遍 33 ms，scale-4000 上 106 ms。
-- `std::macro`、`std::opt::fold`、`cse`、`dce`、`std::specialize` 在中等程序上各 0.1–3 ms。
-- **`std::opt::simplify` 是例外**：36 行的 array_basic 上 124 ms，155 行的 progen-1 上 88 ms，比整个编译还慢 5 倍。
-- **规模问题**：在大程序上，`std::inline` 与 `std::opt::simplify` 呈超线性。以下是重构前单独一轮的测量：
+- `std::macro`、`std::opt::fold`、`cse`、`dce`、`std::opt::specialize` 在中等程序上各 0.1–3 ms。
+- **`std::opt` 是例外**：36 行的 array_basic 上 124 ms，155 行的 progen-1 上 88 ms，比整个编译还慢 5 倍。
+- **规模问题**：在大程序上，`std::opt::inline` 与 `std::opt` 呈超线性。以下是重构前单独一轮的测量：
 
-  | 程序 | `std::inline` | `std::opt::simplify` | 测量时负载 |
+  | 程序 | `std::opt::inline` | `std::opt` | 测量时负载 |
   |---|---:|---:|---:|
   | scale-4000 | 58 s | 23 s | 约 10 |
   | scale-4000 | 285 s | 72 s | 20–35 |
@@ -294,7 +294,7 @@ CPU 采样（scale-4000，10 次）的变化：
 
 | # | 现状 | 建议的表示 / 做法 | 预期收益 | 风险 | 归属 |
 |---:|---|---|---|---|---|
-| 1 | `std::inline` 与 `std::opt::simplify` 超线性：4,000 函数时分别 58 s、23 s；36 行程序上 simplify 也要 124 ms | 先剖析这两个遍：疑为每次改写后重扫全图或重建索引；改为工作表与增量的使用者索引 | 大程序上数量级；带遍的流水线普遍 2–5× | 改写正确性：用 progen 全矩阵守护 | 遍（`src/passes/opt/`） |
+| 1 | `std::opt::inline` 与 `std::opt` 超线性：4,000 函数时分别 58 s、23 s；36 行程序上 simplify 也要 124 ms | 先剖析这两个遍：疑为每次改写后重扫全图或重建索引；改为工作表与增量的使用者索引 | 大程序上数量级；带遍的流水线普遍 2–5× | 改写正确性：用 progen 全矩阵守护 | 遍（`src/passes/opt/`） |
 | 2 | GIR 构建：作用域与名字表以 `std::string` 为键（哈希加 rehash 约 17%）；`visit` 返回 `std::any`；每节点多次分配 | 名字用整数句柄（GCT 的树内驻留已提供稳定句柄，可提升为上下文级的整数表）；作用域改为平铺数组加句柄索引；`visit` 返回带标签的小值类型 | GIR 阶段 30–50%，即大程序墙钟 15–25% | 与 GIR 数据模型设计同时做，避免重做 | GIR 数据模型 |
 | 3 | 源码映射：每个 AST、GCT、GIR 节点都要 `deriveOrigin`，`OriginRecord` 带 `std::string label` 与 `vector inputs`（约 88 字节），语义包是 `vector<SemanticPart>`（每项一个 `std::string`）；仍占 GCT 阶段 36% | label 改为枚举或静态字符串；inputs 与 parts 放进按 origin 分段的平铺池；GCT 只在与 AST 不同时登记语义包，其余按 parent 链回溯 | GCT 阶段再降约 30%，AST 与 GIR 各降 5–10%，常驻内存降约 10% | 调试器与语言服务器读这些表，接口要保持 | 源码映射（本线可做，需先与调试器线核对接口） |
 | 4 | 编码（运行时图）占 20–27%，其中 38% 是分配；每个函数图约 40 KB 常驻 | 编码按图一次性预估大小、整块分配；草图节点不逐个重建 | 编码阶段 30–50%；每图常驻内存减半 | 与图存储设计重叠 | GIR 数据模型 |
@@ -318,7 +318,7 @@ CPU 采样（scale-4000，10 次）的变化：
 
 - 只在 Linux x86-64 上测过。阶段报告在 Windows 上会写出，但没有分配数与 RSS；shim 与剖析脚本只在 Linux 上有效。
 - 测量机器同时有别的构建在跑，绝对数字有 ±20% 的噪声。三方对比因为同轮交替，比较是公平的；但只看小程序，差别在噪声以内。
-- 第 2 节里 `std::inline` 与 `std::opt::simplify` 在大程序上的数字是重构前单独一轮的测量，未重复；我没有剖析这两个遍。
+- 第 2 节里 `std::opt::inline` 与 `std::opt` 在大程序上的数字是重构前单独一轮的测量，未重复；我没有剖析这两个遍。
 - progen 在 `--size 20` 时，生成的 `macro` 函数会让 `std::macro` 因某个算子在提前求值中不可用而拒绝程序（`:mark/map_arr`）。这是合法的拒绝，但说明大程序的带遍基准要去掉 `macro` 特性。
 - fvm 的执行前准备只用 `std::bc` 近似，因为 JIT 与 fastvm 不在本线的改动范围内，没有在其内部加阶段。
 - 变基到 `fsh-dev`（472c01c8，含图存储线）后：完整默认测试集 4,332 项，4,322 通过，0 失败，10 跳过；GCT 导出对照 1,120 个文件 0 个不同；文档链接检查与 `check-std-includes` 通过。

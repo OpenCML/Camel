@@ -1,4 +1,4 @@
-/// Translated without passes; after std::inline the pass ends with the internal error
+/// Translated without passes; after std::opt::inline the pass ends with the internal error
 /// "JOIN arm count mismatch".
 module d11_inline_join
 

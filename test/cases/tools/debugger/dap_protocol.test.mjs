@@ -183,7 +183,7 @@ await runTest(async (t) => {
     }
 
     // ---- back ends without hooks run on std::fvm, and say so ----------------------------------
-    for (const passes of [['std::jit'], ['std::inline', 'std::prl']]) {
+    for (const passes of [['std::jit'], ['std::opt::inline', 'std::prl']]) {
         const name = passes[passes.length - 1]
         const dap = await t.dap()
         const line = lineOf(CALLS, 'println(c)')
@@ -207,20 +207,32 @@ await runTest(async (t) => {
         const dap = await t.dap()
         const callLine = lineOf(CALLS, 'let a = double(x)')
         const sumLine = lineOf(CALLS, 'let c = a + b')
-        const s = await dap.launch(CALLS, { passes: ['std::opt', 'std::fvm'] }, { [CALLS]: [callLine, sumLine] })
-        checkEq(s.breakpoints[CALLS].map((b) => b.verified), [true, true], 'opt: both lines have nodes in the graph as compiled')
+        const printLine = lineOf(CALLS, 'println(c)')
+        const s = await dap.launch(CALLS, { passes: ['std::opt', 'std::fvm'] }, { [CALLS]: [callLine, sumLine, printLine] })
+        checkEq(s.breakpoints[CALLS].map((b) => b.verified), [true, true, true], 'opt: all three lines have executable nodes before optimisation')
         const changed = await dap.waitEvent('breakpoint', (b) => b.breakpoint?.id === s.breakpoints[CALLS][0].id)
         check(
             changed?.body.breakpoint.verified === false && /a pass removed or replaced it/.test(changed.body.breakpoint.message),
             'opt: when the passes have run, the breakpoint on the inlined call is reported as gone, with the reason',
             changed,
         )
+        // The full optimisation pipeline folds the constant sum too. It remains a
+        // readable value, but only the effectful println is an executable stop.
+        const folded = await dap.waitEvent('breakpoint', (b) => b.breakpoint?.id === s.breakpoints[CALLS][1].id)
+        check(
+            folded?.body.breakpoint.verified === false && /only defines constants/.test(folded.body.breakpoint.message),
+            'opt: the folded sum loses its breakpoint with the constant-only reason',
+            folded,
+        )
         const stop = await dap.waitStop()
-        checkEq(stop?.line, sumLine, 'opt: the node that survived stops at its source line')
+        checkEq(stop?.line, printLine, 'opt: the surviving effect stops at its source line')
+        checkEq(stop?.body.hitBreakpointIds, [s.breakpoints[CALLS][2].id], 'opt: only the surviving breakpoint is hit')
         const locals = await dap.variables(stop.top.id)
         check(/not in the graph/.test(locals?.a?.value || ''), 'opt: a name whose node a pass removed says so', locals)
+        checkEq(locals?.c?.value, '10', 'opt: the folded sum remains readable as a constant')
         await dap.request('continue', { threadId: 1 })
         checkEq((await dap.waitEvent('exited'))?.body?.exitCode, 0, 'opt: the program runs to its end')
+        checkEq(dap.outputOf('stdout'), '10\n', 'opt: the surviving effect prints the folded value')
         await dap.stop()
     }
 

@@ -1,7 +1,7 @@
 /**
- * progen finding F12 (effect order lost). `std::opt::simplify` swaps two effects of a sync body:
+ * progen finding F12 (effect order lost). `std::opt` swaps two effects of a sync body:
  *   the `println` of a later call comes before the `println` of an earlier `reduce`.
- * Pipeline: std::opt::simplify std::nvm
+ * Pipeline: std::opt std::nvm
  * Expected output: (empty line) | L1 0 0
  * Actual: L1 0 0 | (empty line)
  * Reduced by test/tools/progen from seed 462 (generator version 1, all features).

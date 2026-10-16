@@ -288,7 +288,7 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 
 ### 7.5 Inline Pass 的 SCC-DAG 强正确性语义
 
-`std::inline` 目前采用 **SCC 缩点 + DAG 逆拓扑** 的执行框架，而不是旧的“逐图扫描 + 反复重跑”：
+`std::opt::inline` 目前采用 **SCC 缩点 + DAG 逆拓扑** 的执行框架，而不是旧的“逐图扫描 + 反复重跑”：
 
 > 深入版说明见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md)（覆盖会话级 use-index 重定向、`inlineCallable` 的 `SYNC/GATE` 语义、slot-safe prune 与预算哨兵）。
 
@@ -300,10 +300,10 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 
 关键约束：
 
-- **`std::inline` 目标策略（可配置）**：当前 pass 先枚举 SCC 内 `FUNC` 候选，再按策略过滤：
-  - `std::inline::small`：小子图且**非分支 arm**（非 `DATA/PORT` 节点数 `<= 4`）；
-  - `std::inline::arm`：`BRCH` arm 且小子图；
-  - `std::inline::hybrid` / `std::inline`：满足任一条件即内联；
+- **`std::opt::inline` 目标策略（可配置）**：当前 pass 先枚举 SCC 内 `FUNC` 候选，再按策略过滤：
+  - `std::opt::inline::small`：小子图且**非分支 arm**（非 `DATA/PORT` 节点数 `<= 4`）；
+  - `std::opt::inline::arm`：`BRCH` arm 且小子图；
+  - `std::opt::inline::hybrid` / `std::opt::inline`：满足任一条件即内联；
   - 默认启用“SCC 入口 callee 保护”：SCC 内若调用目标是该 SCC 的入口 callee（被 SCC 外调用），则不内联。详见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md) §1.1 / §6.1。
 - **SCC 内目标冻结**：每个 SCC 只处理进入该 SCC 时捕获到的初始 inline target；处理中新增的 FUNC 不在同轮继续展开，避免振荡。
 - **重定向完整性**：seal 前不允许残留 legacy 图引用。实现上以断言检查 `FUNC.bodyGraph` 与 `DATA(Function).graph` 不再指向 source graph。
@@ -320,16 +320,16 @@ Node 自身只保留查询入口，不再直接持有这些 `std::string`。
 
 ### 7.6 FastVM BRCH/JOIN/JUMP 协议收敛
 
-`std::inline` 场景下，FastVM 侧做了两条强约束收敛：
+`std::opt::inline` 场景下，FastVM 侧做了两条强约束收敛：
 
 - BRCH 生成阶段按**语义 arm 数**（if:2，match:withCnt+1）固定发射 JUMP 占位，避免“按当前可达输出数量发射”导致的 `jumpIdx` 偏移漂移。
 - BRCH 目标回填从单索引映射改为**多索引映射**（`target -> [jumpIdx...]`），保证多个 arm 收敛到同一控制头节点时不会覆盖回填位。
 
 对应回归：
 
-- `fib.cml std::inline std::gir` 通过；
-- `inline_unique_subgraph.cml std::inline std::gir` 通过；
-- `inline_unique_subgraph.cml std::inline std::fvm` 通过。
+- `fib.cml std::opt::inline std::gir` 通过；
+- `inline_unique_subgraph.cml std::opt::inline std::gir` 通过；
+- `inline_unique_subgraph.cml std::opt::inline std::fvm` 通过。
 
 ## 8. 内存与所有权模型
 

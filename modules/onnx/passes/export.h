@@ -13,14 +13,14 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 04, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
  * onnx::export: the ONNX exporter as the last pass of a pipeline.
  *
- *   camel m.cml std::macro std::opt::simplify onnx::export
+ *   camel m.cml std::macro std::opt onnx::export
  *
  * The export request is the program's own `onnx.export_model(fn, example,
  * path[, dynamic_axes[, target]])` call: the pass looks for it in the entry

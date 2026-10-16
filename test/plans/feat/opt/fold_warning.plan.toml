@@ -36,10 +36,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_fault_untaken.fold_simplify_fvm"
-desc = "The warning is given once per expression in a pipeline: std::opt::fold and then std::opt::simplify (which runs fold again in every round) print one line, and the program runs as without passes on FastVM."
+desc = "The warning is given once per expression in a pipeline: std::opt::fold and then std::opt (which runs fold again in every round) print one line, and the program runs as without passes on FastVM."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
-args = ["${case}", "std::opt::fold", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt::fold", "std::opt", "std::fvm"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
@@ -52,10 +52,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_fault_untaken.simplify_jit"
-desc = "std::opt::simplify alone: one warning, 7, exit 0 on the JIT."
+desc = "std::opt alone: one warning, 7, exit 0 on the JIT."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
-args = ["${case}", "std::opt::simplify", "std::jit"]
+args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
@@ -67,11 +67,11 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
 
 [[tests]]
-name = "constant_fault_untaken.opt_no_fold"
-desc = "A pipeline without fold (std::opt) says nothing: the warning belongs to the pass that would have folded the expression."
+name = "constant_fault_untaken.inline_no_fold"
+desc = "A pipeline without fold (std::opt::inline) says nothing: the warning belongs to the pass that would have folded the expression."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
-args = ["${case}", "std::opt"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
@@ -116,10 +116,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_fault_reached.simplify_fvm"
-desc = "The same under std::opt::simplify on FastVM: unchanged behaviour, one warning."
+desc = "The same under std::opt on FastVM: unchanged behaviour, one warning."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout.trim().split('\n')
@@ -137,7 +137,7 @@ name = "constant_fault_reached.json"
 desc = "With --output-format json the warning is one JSON array on stderr (severity Warn, stage pass:std::opt::fold, the position of the division), and stdout is the program's output followed by the error array, which holds the error only."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
-args = ["--output-format", "json", "${case}", "std::opt::fold", "std::opt::simplify"]
+args = ["--output-format", "json", "${case}", "std::opt::fold", "std::opt"]
 expect_exit = 1
 verify_script = """
 const warnings = JSON.parse(input.stderr)

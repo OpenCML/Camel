@@ -2,7 +2,7 @@
 import { runTest, check, checkEq, fixture, lineOf } from '../../../tools/debugger/client.mjs'
 await runTest(async t => {
     const file = fixture('calls.cml'), line = lineOf(file, 'let c = a + b')
-    for (const passes of [['std::nvm'], ['std::fvm'], ['std::macro', 'std::inline', 'std::nvm']]) {
+    for (const passes of [['std::nvm'], ['std::fvm'], ['std::macro', 'std::opt::inline', 'std::nvm']]) {
         const dap = await t.dap()
         await dap.launch(file, { passes, stopOnPassEntry: true })
         check(await dap.waitEvent('stopped'), 'initial compiler boundary')

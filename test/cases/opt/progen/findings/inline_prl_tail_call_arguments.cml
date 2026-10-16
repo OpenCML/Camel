@@ -1,10 +1,10 @@
 /**
  * progen finding F38 ((other) wrong value after inlining). A function that calls itself in tail
- *   position with its parameters permuted, `r4(0, a5, 1.0)`. `std::inline` puts the arm into
+ *   position with its parameters permuted, `r4(0, a5, 1.0)`. `std::opt::inline` puts the arm into
  *   the function, so the call becomes a self tail call; the parallel scheduler refilled the
  *   frame in place, argument by argument, and read `a5` for the second parameter after it had
  *   stored 0 into it. The graph is right: the other three schedulers print 6.
- * Pipeline: std::inline std::prl
+ * Pipeline: std::opt::inline std::prl
  * Expected output: L4 0 6
  * Actual: L4 0 0
  * Reduced by test/tools/progen from seed 5362 (generator version 2, all features).

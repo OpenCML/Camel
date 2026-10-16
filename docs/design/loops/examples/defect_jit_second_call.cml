@@ -3,9 +3,9 @@
  * Expected output: 1, 1, 11. Observed:
  *   camel defect_jit_second_call.cml std::fvm               -> 1 1 11
  *   camel defect_jit_second_call.cml std::jit               -> 1 1 11
- *   camel defect_jit_second_call.cml std::inline std::fvm   -> 1 1 11
- *   camel defect_jit_second_call.cml std::inline std::jit   -> 1 2 17
- * After std::inline the function only calls itself, so std::jit compiles it to native code;
+ *   camel defect_jit_second_call.cml std::opt::inline std::fvm   -> 1 1 11
+ *   camel defect_jit_second_call.cml std::opt::inline std::jit   -> 1 2 17
+ * After std::opt::inline the function only calls itself, so std::jit compiles it to native code;
  * the first call is right, later calls are not.
  */
 module defect_jit_second_call

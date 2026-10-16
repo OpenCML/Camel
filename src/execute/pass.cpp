@@ -27,6 +27,7 @@
 #include "camel/core/process_exit.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "camel/passes/test/control.h"
 #include "camel/passes/trans/json/gir.h"
 #include "camel/runtime/capacity.h"
 #include "macro/macro.h"
@@ -370,40 +371,40 @@ PassScopePtr initPassScope() {
                                        })},
                                   })},
                          })},
-                    {"inline",
-                     def(PASS1(InlineRewritePass, InlineRewriteConfig{}),
-                         {
-                             {"small", def([](const context_ptr_t &ctx) {
-                                  return std::make_unique<InlineRewritePass>(
-                                      ctx,
-                                      InlineRewriteConfig{
-                                          .inlineStrategy = InlineTargetStrategy::Small,
-                                      });
-                              })},
-                             {"arm", def([](const context_ptr_t &ctx) {
-                                  return std::make_unique<InlineRewritePass>(
-                                      ctx,
-                                      InlineRewriteConfig{
-                                          .inlineStrategy = InlineTargetStrategy::Arm,
-                                      });
-                              })},
-                             {"hybrid", def([](const context_ptr_t &ctx) {
-                                  return std::make_unique<InlineRewritePass>(
-                                      ctx,
-                                      InlineRewriteConfig{
-                                          .inlineStrategy = InlineTargetStrategy::Hybrid,
-                                      });
-                              })},
-                         })},
-                    {"devirtualize", def(PASS(DevirtualizeRewritePass))},
-                    {"specialize", def(PASS(SpecializeRewritePass))},
                     {"opt",
                      def(PASS(OptimizeRewritePass),
                          {
+                             {"inline",
+                              def(PASS1(InlineRewritePass, InlineRewriteConfig{}),
+                                  {
+                                      {"small", def([](const context_ptr_t &ctx) {
+                                           return std::make_unique<InlineRewritePass>(
+                                               ctx,
+                                               InlineRewriteConfig{
+                                                   .inlineStrategy = InlineTargetStrategy::Small,
+                                               });
+                                       })},
+                                      {"arm", def([](const context_ptr_t &ctx) {
+                                           return std::make_unique<InlineRewritePass>(
+                                               ctx,
+                                               InlineRewriteConfig{
+                                                   .inlineStrategy = InlineTargetStrategy::Arm,
+                                               });
+                                       })},
+                                      {"hybrid", def([](const context_ptr_t &ctx) {
+                                           return std::make_unique<InlineRewritePass>(
+                                               ctx,
+                                               InlineRewriteConfig{
+                                                   .inlineStrategy = InlineTargetStrategy::Hybrid,
+                                               });
+                                       })},
+                                  })},
+                             {"devirtualize", def(PASS(DevirtualizeRewritePass))},
+                             {"specialize", def(PASS(SpecializeRewritePass))},
                              {"fold", def(PASS(ConstantFoldPass))},
                              {"cse", def(PASS(CommonSubexpressionPass))},
                              {"dce", def(PASS(DeadCodePass))},
-                             {"simplify", def(PASS(SimplifyPass))},
+                             {"ctrl", def(PASS(ControlReductionPass))},
                          })},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
                     {"tfdump", def(PASS(TfDumpPass))},
@@ -419,6 +420,11 @@ PassScopePtr initPassScope() {
 const PassScopePtr passScope = initPassScope();
 
 std::unordered_map<std::string, std::string> passAliases = {
+    // Frequently used spelling of the standalone inline stage and its strategies.
+    {"std::inline", "std::opt::inline"},
+    {"std::inline::small", "std::opt::inline::small"},
+    {"std::inline::arm", "std::opt::inline::arm"},
+    {"std::inline::hybrid", "std::opt::inline::hybrid"},
     // The implementation and executor remain in the bundled Tiles module.
     {"std::tiles", "tiles::compile"},
     // Standard scheduler aliases
@@ -695,6 +701,11 @@ PassFactory lookupPassFactory(const std::string &name) {
     if (resolved == kResourcesTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
         return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
             return std::make_unique<ResourcesTestPass>(ctx);
+        };
+    }
+    if (resolved == kControlTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<ControlTestPass>(ctx);
         };
     }
     if (resolved == kFactStoreTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {

@@ -178,10 +178,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "autoencoder.devirtualize_inline.nvm"
-desc = "autoencoder prints exactly what it prints under std::macro std::nvm when run as std::macro std::devirtualize std::inline std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+desc = "autoencoder prints exactly what it prints under std::macro std::nvm when run as std::macro std::opt::devirtualize std::opt::inline std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
 kind = "differential"
 case = "../../../cases/modules/nn/autoencoder.cml"
-args = ["${case}", "std::macro", "std::devirtualize", "std::inline", "std::nvm"]
+args = ["${case}", "std::macro", "std::opt::devirtualize", "std::opt::inline", "std::nvm"]
 compare_to = "autoencoder"
 compare_fields = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -244,10 +244,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "tiny_rnn.devirtualize_inline.nvm"
-desc = "tiny_rnn prints exactly what it prints under std::macro std::nvm when run as std::macro std::devirtualize std::inline std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+desc = "tiny_rnn prints exactly what it prints under std::macro std::nvm when run as std::macro std::opt::devirtualize std::opt::inline std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
 kind = "differential"
 case = "../../../cases/modules/nn/tiny_rnn.cml"
-args = ["${case}", "std::macro", "std::devirtualize", "std::inline", "std::nvm"]
+args = ["${case}", "std::macro", "std::opt::devirtualize", "std::opt::inline", "std::nvm"]
 compare_to = "tiny_rnn"
 compare_fields = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -837,10 +837,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "siamese_shared_encoder.devirtualize_inline.nvm"
-desc = "siamese_shared_encoder prints exactly what it prints under std::macro std::nvm when run as std::macro std::devirtualize std::inline std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
+desc = "siamese_shared_encoder prints exactly what it prints under std::macro std::nvm when run as std::macro std::opt::devirtualize std::opt::inline std::nvm (this pipeline used to crash: the train loop's inlined arm read a tuple that was never computed)."
 kind = "differential"
 case = "../../../cases/modules/nn/siamese_shared_encoder.cml"
-args = ["${case}", "std::macro", "std::devirtualize", "std::inline", "std::nvm"]
+args = ["${case}", "std::macro", "std::opt::devirtualize", "std::opt::inline", "std::nvm"]
 compare_to = "siamese_shared_encoder"
 compare_fields = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -1034,10 +1034,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "mnist_py.simplify"
-desc = "MNIST training keeps its result under std::opt::simplify: the trained weights are read from a var tuple after it is reassigned (`wait train_result = train<...>(W)`), which the pass must not replace by the initial weights."
+desc = "MNIST training keeps its result under std::opt: the trained weights are read from a var tuple after it is reassigned (`wait train_result = train<...>(W)`), which the pass must not replace by the initial weights."
 kind = "behavior"
 case = "../../../cases/modules/nn/mnist_py.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 # The training set is downloaded once into tmp/; without network access the test is skipped.
 skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]
 expect_exit = 0
@@ -1229,7 +1229,7 @@ name = "svm.simplify.fvm"
 desc = "Exercises a heavier tensor optimization example with SVM-style training and prediction; simplified, then run by FastVM."
 kind = "behavior"
 case = "../../../cases/modules/nn/svm.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
@@ -1239,7 +1239,7 @@ name = "svm.simplify.jit"
 desc = "Exercises a heavier tensor optimization example with SVM-style training and prediction; simplified, then run by the JIT."
 kind = "behavior"
 case = "../../../cases/modules/nn/svm.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
@@ -1249,7 +1249,7 @@ name = "residual_mlp.simplify.fvm"
 desc = "Trains a residual MLP struct model (nested Linear layers plus an int field) with sgd and adam over recursive train loops; simplified, then run by FastVM."
 kind = "behavior"
 case = "../../../cases/modules/nn/residual_mlp.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1272,7 +1272,7 @@ name = "residual_mlp.simplify.jit"
 desc = "Trains a residual MLP struct model (nested Linear layers plus an int field) with sgd and adam over recursive train loops; simplified, then run by the JIT."
 kind = "behavior"
 case = "../../../cases/modules/nn/residual_mlp.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1295,7 +1295,7 @@ name = "gru_lite_large_bytecode"
 desc = "Same as gru_lite under a pipeline that specialises and simplifies before std::macro: the linked FastVM program has more than 65535 bytecode words, which the 16-bit call-target field used to truncate (crash, or zeros_like: RuntimeError)."
 kind = "behavior"
 case = "../../../cases/modules/nn/gru_lite.cml"
-args = ["${case}", "std::specialize", "std::opt::simplify", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::devirtualize", "std::fvm"]
+args = ["${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1326,7 +1326,7 @@ name = "residual_mlp_large_bytecode"
 desc = "Same as residual_mlp under a pipeline whose linked FastVM program has jump targets beyond 65535 bytecode words (they were truncated to 16 bits: a crash, or subtract: Unsupported Tensor dtype)."
 kind = "behavior"
 case = "../../../cases/modules/nn/residual_mlp.cml"
-args = ["${case}", "std::specialize", "std::opt::simplify", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::devirtualize", "std::fvm"]
+args = ["${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1346,10 +1346,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "residual_mlp_inline_large"
-desc = "Same as residual_mlp with std::inline run on the 36,000-node program that simplifying before std::macro produces. The pass counted the direct calls of the whole program again for every graph it looked at (405 s); the counts are now shared within a round (about 6 s)."
+desc = "Same as residual_mlp with std::opt::inline run on the 36,000-node program that simplifying before std::macro produces. The pass counted the direct calls of the whole program again for every graph it looked at (405 s); the counts are now shared within a round (about 6 s)."
 kind = "behavior"
 case = "../../../cases/modules/nn/residual_mlp.cml"
-args = ["${case}", "std::opt::simplify", "std::specialize", "std::macro", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt", "std::opt::specialize", "std::macro", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

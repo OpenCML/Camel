@@ -6,7 +6,7 @@ out: a translation unit, a refusal (with its reason), a compile-time diagnostic 
 itself, or a failure of the pass.
 
     python3 docs/design/cpp-memory/tools/cpp_coverage.py test/cases benchmarks examples exemplars
-    python3 docs/design/cpp-memory/tools/cpp_coverage.py --passes "std::inline" test/cases
+    python3 docs/design/cpp-memory/tools/cpp_coverage.py --passes "std::opt::inline" test/cases
     python3 docs/design/cpp-memory/tools/cpp_coverage.py --json /tmp/cov.json --list-ok test/cases
     python3 docs/design/cpp-memory/tools/cpp_coverage.py --from-json /tmp/cov.json
 

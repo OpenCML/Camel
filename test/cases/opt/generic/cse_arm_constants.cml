@@ -7,7 +7,7 @@
  *
  * Conditions are float comparisons so that no other 7 exists outside the arms
  * (an ungated equal constant would absorb both and hide the defect). `now()`
- * gives a condition std::opt::simplify cannot fold; the output does not depend
+ * gives a condition std::opt cannot fold; the output does not depend
  * on the clock.
  */
 module cse_arm_constants

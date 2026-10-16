@@ -54,14 +54,14 @@ code --install-extension camel-lang-0.1.0.vsix
 |------|------|
 | `Camel: Restart Language Server` | 停止 `camel-ls` 并重新启动。 |
 | `Camel: Show Graph of Current Function` | 把光标所在函数的图以 Graphviz DOT 文本显示在编辑器旁的只读文档中；保存文件时刷新。可用 Graphviz 预览扩展渲染。 |
-| `Camel: Run Current File with Passes…` | 询问一个遍序列（例如 `std::inline std::fvm`），在集成终端中运行 `camel <文件> <遍>`。 |
+| `Camel: Run Current File with Passes…` | 询问一个遍序列（例如 `std::opt::inline std::fvm`），在集成终端中运行 `camel <文件> <遍>`。 |
 
 | 设置项 | 默认值 | 含义 |
 |--------|--------|------|
 | `camel.server.path` | `""` | `camel-ls` 的路径。 |
 | `camel.path` | `""` | `camel` 的路径。 |
-| `camel.graph.passes` | `[]` | 打印图之前施加的遍，例如 `["std::inline"]`。 |
-| `camel.run.passes` | `["std::inline", "std::fvm"]` | 第一次运行文件时建议的遍序列。 |
+| `camel.graph.passes` | `[]` | 打印图之前施加的遍，例如 `["std::opt::inline"]`。 |
+| `camel.run.passes` | `["std::opt::inline", "std::fvm"]` | 第一次运行文件时建议的遍序列。 |
 | `camel.trace.server` | `off` | 记录协议消息（`messages` 或 `verbose`）。 |
 
 详见 [`editors/vscode/README.md`](../editors/vscode/README.md)。
@@ -115,7 +115,7 @@ code --install-extension camel-lang-0.1.0.vsix
 {
   "textDocument": { "uri": "file:///path/to/file.cml" },
   "position": { "line": 7, "character": 10 },
-  "passes": ["std::inline"]
+  "passes": ["std::opt::inline"]
 }
 ```
 
@@ -126,7 +126,7 @@ code --install-extension camel-lang-0.1.0.vsix
 ```json
 {
   "function": "fib",
-  "passes": ["std::inline"],
+  "passes": ["std::opt::inline"],
   "text": "digraph GraphIR { ... }",
   "diagnostics": ""
 }

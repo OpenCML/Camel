@@ -23,7 +23,7 @@
 | [13_macro_system_progress.md](13_macro_system_progress.md) | 宏系统重构阶段性进展、风险与后续路线 |
 | [14_funcnode_runtime_convergence.md](14_funcnode_runtime_convergence.md) | FuncNode 运行时收敛方案与迁移要点 |
 | [15_gir_graph_gc_milestone.md](15_gir_graph_gc_milestone.md) | GIR Graph 垃圾回收里程碑与阶段成果 |
-| [16_inline_rewrite_algorithm.md](16_inline_rewrite_algorithm.md) | `std::inline` 重写算法、SCC 调度、Graph API 协作与不变量 |
+| [16_inline_rewrite_algorithm.md](16_inline_rewrite_algorithm.md) | `std::opt::inline` 重写算法、SCC 调度、Graph API 协作与不变量 |
 | [17_graph_rewrite_api_contracts.md](17_graph_rewrite_api_contracts.md) | Graph 重写 API 契约：事务边界、可写域、内联入口规则与验证器约束 |
 | [18_sync_control_semantics.md](18_sync_control_semantics.md) | 同步控制语义解读：`BRCH/JOIN/GATE` 分工、`EXIT` 锚点规则与后端契约 |
 | [19_tail_call_optimization.md](19_tail_call_optimization.md) | 尾调用优化（TCO）：以 NodeVM 为主的机制说明（拓扑、判据、帧与尾调路径）；附录含 FastVM 对照 |

@@ -2,7 +2,7 @@
  * A branch whose condition is known after folding is replaced by the taken arm. The condition
  * may still wait on an effect: here it is the result of a call that prints. The replaced
  * branch must keep running after that effect; it used to be dropped silently under
- * std::opt::simplify (both "side 2" lines were missing, exit 0).
+ * std::opt (both "side 2" lines were missing, exit 0).
  */
 module pruned_branch_keeps_condition_effect
 

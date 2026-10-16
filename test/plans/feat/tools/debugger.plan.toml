@@ -31,6 +31,12 @@ case = "../../../cases/tools/debugger/dap_stepping.test.mjs"
 timeout_ms = 300000
 
 [[tests]]
+name = "debugger.dap_tail_steps"
+desc = "Tail-recursive F10 skips replacement activations, F11 enters with new parameter snapshots, and breakpoints still interrupt step-over on NVM and FVM."
+case = "../../../cases/tools/debugger/dap_tail_steps.test.mjs"
+timeout_ms = 300000
+
+[[tests]]
 name = "debugger.dap_frames"
 desc = "How the program is presented over DAP on both back ends (design principles 2.11, 2.12): the arms of a branch are part of the frame of their function (line steps go through them, their names are the frame's while they run), the frames setting and camel/setFrames show the real subgraphs instead; a line step that goes past a line nothing uses the result of says so, and so does a breakpoint on it that was never hit; full names in the stack, captured values, evaluate and function breakpoints (ambiguous without the module, a function nothing calls)."
 case = "../../../cases/tools/debugger/dap_frames.test.mjs"

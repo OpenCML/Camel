@@ -24,6 +24,7 @@
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/execute/entry_args.h"
+#include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
@@ -418,7 +419,8 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
 }
 
 inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
-    return linkCheek(from, to) && !hasDirectDataDependency(from, to);
+    return linkCheek(from, to) && !hasDirectDataDependency(from, to) &&
+           !runtime::hasControlDependency(*nodeDraftOf(to), nodeIdOf(from), nodeIdOf(to));
 }
 
 inline camel::source::SemanticPart semanticPart(
@@ -7549,7 +7551,12 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         outputAnchor = gatedValue;
     }
     for (node_handle_t ctrlInput : pendingCtrlInputs) {
-        if (ctrlInput != nullptr && linkCheek(ctrlInput, outputAnchor)) {
+        // A return GATE must retain a CTRL input even when its value already depends on it.
+        if (ctrlInput != nullptr && linkCheek(ctrlInput, outputAnchor) &&
+            !runtime::hasControlDependency(
+                *nodeDraftOf(outputAnchor),
+                nodeIdOf(ctrlInput),
+                nodeIdOf(outputAnchor))) {
             linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
         }
     }

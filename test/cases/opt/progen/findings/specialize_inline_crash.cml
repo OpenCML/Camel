@@ -1,7 +1,7 @@
 /**
- * progen finding F22 ((other) crash after a rewrite). Segmentation fault after `std::specialize
- *   std::inline`: a recursive `macro` function passes a lambda that captures its depth parameter.
- * Pipeline: std::specialize std::inline std::nvm
+ * progen finding F22 ((other) crash after a rewrite). Segmentation fault after `std::opt::specialize
+ *   std::opt::inline`: a recursive `macro` function passes a lambda that captures its depth parameter.
+ * Pipeline: std::opt::specialize std::opt::inline std::nvm
  * Expected output: (empty line)
  * Actual: CRASH
  * Reduced by test/tools/progen from seed 79 (generator version 1, all features).

@@ -21,7 +21,7 @@
   "request": "launch",
   "name": "Inspect compiler passes",
   "program": "${file}",
-  "passes": ["std::macro", "std::inline", "std::nvm"],
+  "passes": ["std::macro", "std::opt::inline", "std::nvm"],
   "stopOnPassEntry": true,
   "passBreakpoints": [2]
 }

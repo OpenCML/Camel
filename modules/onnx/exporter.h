@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
  *
  * Export is translation. The function applied to an input of the example's
  * type (dtype and shape, with ExportOptions::dynamicAxes left unknown) is
- * first simplified by the generic passes (std::opt::simplify) as a program of
+ * first simplified by the generic passes (std::opt) as a program of
  * its own: its captures become constants, shapes are specialized, calls are
  * inlined, recursion of static depth unrolls, and everything that does not
  * depend on the input folds into constants. The exporter then translates the

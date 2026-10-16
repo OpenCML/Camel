@@ -68,10 +68,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "recursion_depth_limit.inline_nvm"
-desc = "Non-tail recursion past the default limit of 1000 open calls stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM after std::inline); depth(200) printed before it, nothing after."
+desc = "Non-tail recursion past the default limit of 1000 open calls stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM after std::opt::inline); depth(200) printed before it, nothing after."
 kind = "negative"
 case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"
@@ -232,10 +232,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "sync_literal_operands.simplify.fvm"
-desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::opt::simplify on FastVM."
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::opt on FastVM."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_literal_operands.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -248,10 +248,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "sync_literal_operands.macro_simplify.tf"
-desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::macro then std::opt::simplify on Taskflow."
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::macro then std::opt on Taskflow."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_literal_operands.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "std::tf"]
+args = ["${case}", "std::macro", "std::opt", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

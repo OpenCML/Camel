@@ -1,6 +1,6 @@
 # JIT 字节码到机器码翻译注解
 
-本文档以 `fib.cml` 在 `std::inline std::asm` / `std::inline std::lbc` / `std::inline std::rmir` 下的输出为参照，说明**字节码经 MIR（V* 虚拟寄存器）→ 寄存器分配 → 编码**生成 x64 机器码的流程。适用于理解 backend、MIR 层与调试汇编。
+本文档以 `fib.cml` 在 `std::opt::inline std::asm` / `std::opt::inline std::lbc` / `std::opt::inline std::rmir` 下的输出为参照，说明**字节码经 MIR（V* 虚拟寄存器）→ 寄存器分配 → 编码**生成 x64 机器码的流程。适用于理解 backend、MIR 层与调试汇编。
 
 ---
 
@@ -50,7 +50,7 @@
 
 ## 2. 按字节码逐条翻译
 
-以下顺序与 `std::inline std::lbc` 中 fib 相关图的字节码一致；汇编片段取自 `std::inline std::asm` 的典型输出（偏移以十六进制给出）。
+以下顺序与 `std::opt::inline std::lbc` 中 fib 相关图的字节码一致；汇编片段取自 `std::opt::inline std::asm` 的典型输出（偏移以十六进制给出）。
 
 ---
 
@@ -311,11 +311,11 @@
 ## 5. 参考命令与文件
 
 - 查看链接后字节码：  
-  `camel <path>/fib.cml std::inline std::lbc`
+  `camel <path>/fib.cml std::opt::inline std::lbc`
 - 查看 JIT MIR（带 pc/槽注释）：  
-  `camel <path>/fib.cml std::inline std::rmir`
+  `camel <path>/fib.cml std::opt::inline std::rmir`
 - 查看 JIT 汇编：  
-  `camel <path>/fib.cml std::inline std::asm`
+  `camel <path>/fib.cml std::opt::inline std::asm`
 - 实现位置：  
   - 字节码→MIR：`x64_backend.cpp` 中 `compileBytecode` 的 `switch (bc.opcode)`，`mir_builder.h`。  
   - MIR 优化：`mir_optimize.cpp`。  

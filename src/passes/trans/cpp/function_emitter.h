@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
  * respected, the arms of each branch laid out as contiguous ranges. A branch is an if /
  * else-if / else statement at the place of its BRCH, its arms the statements of their nodes:
  * in the form the front end gives (each arm a graph of its own, called by a FUNC node) the arm
- * graph is lowered into the function in place of the call; in the form std::inline leaves (the
+ * graph is lowered into the function in place of the call; in the form std::opt::inline leaves (the
  * arm's nodes between the BRCH and the JOIN) the range of the arm is.
  *
  * A call of the function itself whose value is the function's value, with nothing after it, is
@@ -80,8 +80,8 @@ struct ProgramParts {
     /// level before it calls `main`), and its call of `main`. Neither that call nor a call
     /// that computes a top-level value counts towards the recursion limit
     /// (camel/execute/limits.h, kEntryCalls).
-    const GCGraph *root     = nullptr;
-    gc_node_ref_t entryCall = camel::runtime::kInvalidNodeRef;
+    const GCGraph *root      = nullptr;
+    gc_node_ref_t entryCall  = camel::runtime::kInvalidNodeRef;
     const GCGraph *entryMain = nullptr;
     /// Where the first of them is used: the warning that the program links the runtime is
     /// located there.
@@ -170,13 +170,14 @@ class FunctionEmitter {
         Frame &frame, const std::vector<gc_node_ref_t> &order, gc_node_ref_t result, Tail tail);
     /// Lowers node `ref`; true when it was the sequence's result and its own lowering already
     /// did what `tail` asks (a branch whose arms end the function, a tail call).
-    bool lowerNode(
-        Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail);
+    bool
+    lowerNode(Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail);
     bool lowerBranch(
         Frame &frame, gc_node_ref_t brch, const std::vector<gc_node_ref_t> &order, Block &out,
         bool joinIsTail, const Tail &tail);
-    void lowerCall(Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail,
-                   bool &handled);
+    void lowerCall(
+        Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail,
+        bool &handled);
     void lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out);
     void lowerFill(Frame &frame, gc_node_ref_t ref, Block &out);
     void lowerAccess(Frame &frame, gc_node_ref_t ref);
@@ -202,8 +203,9 @@ class FunctionEmitter {
 
     /// Names the value of `ref`: a statement `const T name = expr;` (or `expr;` when nothing
     /// uses it), or the expression itself when it may be moved to its one use.
-    void bind(Frame &frame, gc_node_ref_t ref, std::string expr, bool inlinable, Block &out,
-              const std::string &hint);
+    void bind(
+        Frame &frame, gc_node_ref_t ref, std::string expr, bool inlinable, Block &out,
+        const std::string &hint);
     const CppValue &valueOf(Frame &frame, gc_node_ref_t ref);
     std::string cppType(const GCGraph *graph, gc_node_ref_t ref, const Type *type);
 

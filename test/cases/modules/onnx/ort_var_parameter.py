@@ -2,7 +2,7 @@
 """Export of a function whose state is a `var` handed to a called function, checked on ONNX Runtime.
 
 The model is exported twice (by the operator in a default run, and by the pass onnx::export after
-std::macro std::opt::simplify); each file must pass onnx.checker and give tanh(x)*2 and s+tanh(x)
+std::macro std::opt); each file must pass onnx.checker and give tanh(x)*2 and s+tanh(x)
 for two inputs. A change of the inliner once made the exporter refuse this program."""
 import os
 import subprocess
@@ -42,7 +42,7 @@ def main() -> int:
         env = dict(os.environ, CAMEL_HOME=str(HOME))
         for label, passes, var in [
             ("operator", [], "EXPORT_VAR_PARAMETER_OUT"),
-            ("pass", ["std::macro", "std::opt::simplify", "onnx::export"], "CAMEL_ONNX_OUT"),
+            ("pass", ["std::macro", "std::opt", "onnx::export"], "CAMEL_ONNX_OUT"),
         ]:
             out = Path(tmp) / f"{label}.onnx"
             run_env = dict(env, EXPORT_VAR_PARAMETER_OUT=str(Path(tmp) / "unused.onnx"))

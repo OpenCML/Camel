@@ -3,7 +3,7 @@
   "id": "F01",
   "file": "findings/inline_untaken_arm_effect.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -15,7 +15,7 @@
   "id": "F02",
   "file": "findings/inline_wrong_arm_runs.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -39,7 +39,7 @@
   "id": "F04",
   "file": "findings/inline_statement_effect_lost.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -81,7 +81,7 @@
   "id": "F07",
   "file": "findings/simplify_nested_function_effect_lost.cml",
   "pipeline": [
-   "std::opt::simplify",
+   "std::opt",
    "std::nvm"
   ],
   "env": {},
@@ -94,7 +94,7 @@
   "id": "F08",
   "file": "findings/inline_dce_arm_effect_lost.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::opt::dce",
    "std::nvm"
   ],
@@ -109,7 +109,7 @@
   "id": "F09",
   "file": "findings/inline_fvm_arm_effect_lost.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::fvm"
   ],
   "env": {},
@@ -123,7 +123,7 @@
   "id": "F10",
   "file": "findings/inline_unused_branch_effect_lost.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -137,7 +137,7 @@
   "id": "F11",
   "file": "findings/simplify_arm_write_lost.cml",
   "pipeline": [
-   "std::opt::simplify",
+   "std::opt",
    "std::nvm"
   ],
   "env": {},
@@ -150,7 +150,7 @@
   "id": "F12",
   "file": "findings/simplify_effect_order.cml",
   "pipeline": [
-   "std::opt::simplify",
+   "std::opt",
    "std::nvm"
   ],
   "env": {},
@@ -165,7 +165,7 @@
   "id": "F13",
   "file": "findings/inline_dce_arm_value.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::opt::dce",
    "std::nvm"
   ],
@@ -180,7 +180,7 @@
   "id": "F14",
   "file": "findings/inline_branch_value_null.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -194,7 +194,7 @@
   "id": "F15",
   "file": "findings/inline_match_value_null.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -209,7 +209,7 @@
   "file": "findings/fold_inline_env_value.cml",
   "pipeline": [
    "std::opt::fold",
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {
@@ -225,7 +225,7 @@
   "id": "F17",
   "file": "findings/inline_jit_argument_value.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::jit"
   ],
   "env": {
@@ -241,7 +241,7 @@
   "id": "F18",
   "file": "findings/inline_untaken_arm_fault.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -253,7 +253,7 @@
   "id": "F19",
   "file": "findings/simplify_recursion_never_ends.cml",
   "pipeline": [
-   "std::opt::simplify",
+   "std::opt",
    "std::nvm"
   ],
   "env": {
@@ -267,7 +267,7 @@
   "id": "F20",
   "file": "findings/inline_crash_function_argument.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -279,7 +279,7 @@
   "id": "F21",
   "file": "findings/inline_crash_capturing_lambda.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -291,8 +291,8 @@
   "id": "F22",
   "file": "findings/specialize_inline_crash.cml",
   "pipeline": [
-   "std::specialize",
-   "std::inline",
+   "std::opt::specialize",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -306,7 +306,7 @@
   "id": "F23",
   "file": "findings/simplify_crash.cml",
   "pipeline": [
-   "std::opt::simplify",
+   "std::opt",
    "std::nvm"
   ],
   "env": {},
@@ -401,7 +401,7 @@
   "file": "findings/fold_inline_match_arm_value.cml",
   "pipeline": [
    "std::opt::fold",
-   "std::inline",
+   "std::opt::inline",
    "std::nvm"
   ],
   "env": {},
@@ -425,7 +425,7 @@
   "id": "F34",
   "file": "findings/opt_permanent_space.cml",
   "pipeline": [
-   "std::specialize",
+   "std::opt::specialize",
    "std::opt",
    "std::nvm"
   ],
@@ -453,7 +453,7 @@
   "id": "F36",
   "file": "findings/inline_jit_second_call.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::jit"
   ],
   "env": {},
@@ -469,7 +469,7 @@
   "id": "F37",
   "file": "findings/inline_jit_arm_value_float.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::jit"
   ],
   "env": {},
@@ -483,7 +483,7 @@
   "id": "F38",
   "file": "findings/inline_prl_tail_call_arguments.cml",
   "pipeline": [
-   "std::inline",
+   "std::opt::inline",
    "std::prl"
   ],
   "env": {},

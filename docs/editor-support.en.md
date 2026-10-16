@@ -54,15 +54,15 @@ The extension looks for `camel-ls` in this order: the setting `camel.server.path
 |---------|--------------|
 | `Camel: Restart Language Server` | Stops `camel-ls` and starts it again. |
 | `Camel: Show Graph of Current Function` | Shows the graph of the function under the cursor as Graphviz DOT in a read-only document beside the editor; refreshed when the file is saved. A Graphviz preview extension can render it. |
-| `Camel: Run Current File with Passes…` | Asks for a pass sequence (for example `std::inline std::fvm`) and runs `camel <file> <passes>` in the integrated terminal. |
+| `Camel: Run Current File with Passes…` | Asks for a pass sequence (for example `std::opt::inline std::fvm`) and runs `camel <file> <passes>` in the integrated terminal. |
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
 | `camel.server.path` | `""` | Path of `camel-ls`. |
 | `camel.path` | `""` | Path of `camel`. |
 | `camel.debugger.path` | `""` | Path of `camel-db`, started as `camel-db --dap` for a debug session. |
-| `camel.graph.passes` | `[]` | Passes applied before the graph is printed, for example `["std::inline"]`. |
-| `camel.run.passes` | `["std::inline", "std::fvm"]` | Pass sequence proposed the first time a file is run. |
+| `camel.graph.passes` | `[]` | Passes applied before the graph is printed, for example `["std::opt::inline"]`. |
+| `camel.run.passes` | `["std::opt::inline", "std::fvm"]` | Pass sequence proposed the first time a file is run. |
 | `camel.trace.server` | `off` | Logs the protocol messages (`messages` or `verbose`). |
 
 See [`editors/vscode/README.md`](../editors/vscode/README.md) for details.
@@ -116,7 +116,7 @@ Parameters:
 {
   "textDocument": { "uri": "file:///path/to/file.cml" },
   "position": { "line": 7, "character": 10 },
-  "passes": ["std::inline"]
+  "passes": ["std::opt::inline"]
 }
 ```
 
@@ -127,7 +127,7 @@ Result:
 ```json
 {
   "function": "fib",
-  "passes": ["std::inline"],
+  "passes": ["std::opt::inline"],
   "text": "digraph GraphIR { ... }",
   "diagnostics": ""
 }

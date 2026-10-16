@@ -13,20 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 02, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * Shared runtime rewrite engine entrypoint.
- *
- * `std::inline` and `std::opt` both route
- * through the same GCGraph-native
- * rewrite substrate. The difference is purely configuration:
- * `std::inline`
- * enables only inlining, while `std::opt` may additionally enable
- *
- * devirtualization and specialization.
+ * Call-rewrite engine shared by the standalone std::opt::{inline,devirtualize,specialize}
+ * stages and the integrated std::opt driver. The driver adds fold, cse and dce rounds;
+ * this engine only performs the call rewrites selected by its configuration.
  */
 
 #pragma once

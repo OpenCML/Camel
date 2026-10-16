@@ -41,7 +41,7 @@
 
 | | 用时 | 峰值内存 |
 |---|---|---|
-| `fib(32)`：`std::fvm` / `std::inline std::jit` | 0.78 s [0.42, 1.04] / 0.035 s [0.028, 0.051] | 10.7 / 11.2 MB |
+| `fib(32)`：`std::fvm` / `std::opt::inline std::jit` | 0.78 s [0.42, 1.04] / 0.035 s [0.028, 0.051] | 10.7 / 11.2 MB |
 | `fib(32)`：独立的 C++，不计递归深度 / 计数作参数 / 计数放全局变量 | 0.014 / 0.017–0.019 / 0.024 s | 9.5 MB |
 | `fib(37)`：同上三种 | 0.083 / 0.123 / 0.181 s | |
 | 两百万个短命字符串：`std::fvm` | 0.76 s [0.73, 1.15] | 123.5 MB |
@@ -279,9 +279,9 @@ if (cond) {
 臂的两种形态（图数据模型 3.5、设计原则 2.12）都认：
 
 - **子图形态**：臂是一个 `FUNC` 节点，被调图是臂图。把臂图的语句并入当前函数，臂图的端口绑定到 `FUNC` 节点的实参。并入是递归的（臂里还有分支）。
-- **区域形态**（`std::inline` 之后）：臂的节点在当前图里，位于 `BRCH` 与 `JOIN` 之间，按执行序里的区间取出（修 D11）。
+- **区域形态**（`std::opt::inline` 之后）：臂的节点在当前图里，位于 `BRCH` 与 `JOIN` 之间，按执行序里的区间取出（修 D11）。
 
-不能并入的 `FUNC`（具名函数、泛型实例、`std::inline` 留下的普通调用）是 C++ 的函数调用。
+不能并入的 `FUNC`（具名函数、泛型实例、`std::opt::inline` 留下的普通调用）是 C++ 的函数调用。
 
 ### 6.3 尾调用
 
@@ -420,7 +420,7 @@ const double v5 = rt::bridge::call<double>(op_4, site_4, {rt::bridge::arg(x)}, {
 **`test/tools/cppexec/`**（Python，没有第三方依赖）：
 
 ```
-python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或目录…
+python3 test/tools/cppexec/run.py [--passes "std::opt::inline"] [--jobs N] 程序或目录…
 ```
 
 对每个程序：`camel <程序> std::cpp` → 用 `$CXX` 编译 → 运行 → 运行 `camel <程序> std::fvm` → 比较标准输出与退出码。结果分为：相同；转译被拒绝（附理由的分类）；C++ 编译不过；运行崩溃；输出不同（第一处不同的行）。`--expect` 读一份清单（“这些程序必须相同”），有不符就以非零退出。它取代调研稿里的 `cpp_coverage.py` 与 `cpp_build_run.py`（那两个留在调研稿旁边，作为调研时的记录）。
@@ -443,7 +443,7 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 | 1 | 新转译器的骨架（3.1 的分工；执行序；分支语句；臂并入；区域形态）；`camel/standalone/` 的 `core.h`、`num.h`、`str.h`、`format.h`；标量、字符串、`println`/`print`/`format` 与今天的子集用到的其余算子（独立译法或桥）；`cppexec` 与默认测试集里的用例；`camel-cpp` 与文档 | 今天能译的程序全部编得过；与 `std::fvm` 不同的只剩阶段 2 要做的三类（故障报告、递归上限、深尾递归）；编译时间的数字 |
 | 2 | 回绕运算与带位置的算子；自尾调用写成循环；递归计数与大栈线程；故障报告；`main` 的返回值与 `exit` | 上一行剩下的三类都相同；`fib(32)` 等基准对 `std::fvm`、`std::jit` 的数字 |
 | 3 | 数组（含 `range`、`len`、下标、`slice`、`concat`、`append`）、元组与结构体（`FILL`、`ACCS`）、`T?`/`T!` 与错误值、`if` 无 `else`、变量单元、闭包与 `CALL`、高阶算子、`attempt`、带参数的 `main`、算出来的顶层值；每一项加进清单 | 每一项之后的全语料数字 |
-| 4 | 映射与集合；互相尾调用的合成；`std::inline` 之后的覆盖率追平 | 同上 |
+| 4 | 映射与集合；互相尾调用的合成；`std::opt::inline` 之后的覆盖率追平 | 同上 |
 | 5 | 桥上的外部对象（张量）；并行的 `map` | 同上 |
 
 ### 12.1 覆盖率与正确性（每个阶段结束时更新）
@@ -452,26 +452,26 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 |---|---|---|---|---|---|
 | 0（基线 `a7274883`，旧转译器） | 776 | 205 | 196 | 129 | 0 |
 | 1–2（`81cb46d7`…`29c22f27`） | 776 | 207 | 207 | 204 | 169 |
-| 1–2，先 `std::inline` | 776 | 215 | 215 | 212 | 177 |
+| 1–2，先 `std::opt::inline` | 776 | 215 | 215 | 212 | 177 |
 | 3（本稿此版） | 783 | 464 | 464 | 455 | 412 |
-| 3，先 `std::inline` | 783 | 464 | 464 | 455 | 412 |
+| 3，先 `std::opt::inline` | 783 | 464 | 464 | 455 | 412 |
 | 变基到 `d270689c` 并加随机数之后 | 866 | 545 | 545 | 535 | 492 |
 | 再加 `join`、`zip`、`statistics.mean`/`stdev`（本稿此版） | 866 | 564 | 564 | 551 | 505 |
-| 同上，先 `std::inline` | 865 | 563 | 563 | 550 | 505 |
+| 同上，先 `std::opt::inline` | 865 | 563 | 563 | 550 | 505 |
 | 变基到算子线（`append` 返回新值）之后，译 `:op/assn_append` | 879 | 574 | 574 | 566 | 521 |
-| 同上，先 `std::inline` | 879 | 574 | 574 | 566 | 521 |
+| 同上，先 `std::opt::inline` | 879 | 574 | 574 | 566 | 521 |
 
 语料是 `test/cases benchmarks examples exemplars`（基线时 1,096 个程序，阶段 3 时 1,106 个），`python3 test/tools/cppexec/run.py --jobs 4 <这四个目录>` 量出【实测】。“写出 C++”之后没有一个编译不过、运行崩溃。阶段 3 时写出了 C++ 却与 `std::fvm` 不同的 9 个：5 个打印计时或当前时间；4 个依赖运行时今天“在原地追加”的 `append`（`xs->append<x>` 写成语句，见 5.2：2.12 裁定之后它们会是编译期错误，`cppexec` 把它们单独列为 `differs: in-place append (2.12)`）。
 
 仍被拒绝的 319 个里，按第一个理由：张量（返回、形参、算子，约 200 个，要第 9 节的外部对象）、映射与集合、带参数的 `main`（27 个，等 Q7）、`any`、`PyObject`。
 
-变基之后语料是 1,232 个程序（`fsh-dev` 加了许多用例），到达转译器的 866 个。写出了 C++ 的 564 个全部编得过、没有一个运行崩溃；与 `std::fvm` 不同的 13 个：8 个打印计时或当前时间（`perf/fib_recursive`、`linear/nvm/acc`、`para/core/monte_carlo_pi`、`asian_option_mc` 等，后两个用带种子的随机数，除计时一行外相同），5 个是“在原地追加”（上面 4 个加 `linear/nvm/lambda`，它原先因 `:str/join` 被拒）。先 `std::inline` 时少的一个是 `para/core/asian_option_mc`：负载下 `std::fvm` 一侧 60 秒内没跑完，不是转译的问题。仍被拒绝的 302 个：张量 193、带参数的 `main` 29、映射与集合 25、数组或 `T!` 上还没有独立译法的模块算子 32（`algo` 的排序、`str:split`、`fs:try_read_text` 等；`algo` 的排序要等“返回新值”那条线）、把函数值交给模块算子 12（`autodiff:grad`）、`PyObject` 7、`Json` 3。
+变基之后语料是 1,232 个程序（`fsh-dev` 加了许多用例），到达转译器的 866 个。写出了 C++ 的 564 个全部编得过、没有一个运行崩溃；与 `std::fvm` 不同的 13 个：8 个打印计时或当前时间（`perf/fib_recursive`、`linear/nvm/acc`、`para/core/monte_carlo_pi`、`asian_option_mc` 等，后两个用带种子的随机数，除计时一行外相同），5 个是“在原地追加”（上面 4 个加 `linear/nvm/lambda`，它原先因 `:str/join` 被拒）。先 `std::opt::inline` 时少的一个是 `para/core/asian_option_mc`：负载下 `std::fvm` 一侧 60 秒内没跑完，不是转译的问题。仍被拒绝的 302 个：张量 193、带参数的 `main` 29、映射与集合 25、数组或 `T!` 上还没有独立译法的模块算子 32（`algo` 的排序、`str:split`、`fs:try_read_text` 等；`algo` 的排序要等“返回新值”那条线）、把函数值交给模块算子 12（`autodiff:grad`）、`PyObject` 7、`Json` 3。
 
 ### 12.3 基准
 
 `python3 docs/design/cpp-memory/tools/measure.py --rounds 7`，整个进程的墙钟时间（含启动，生成的程序另有编译），机器负载 19–24【实测，阶段 3 之后】：
 
-| 程序 | `std::fvm` | `std::inline std::jit` | `std::cpp`（clang -O2） |
+| 程序 | `std::fvm` | `std::opt::inline std::jit` | `std::cpp`（clang -O2） |
 |---|---|---|---|
 | `a01_fib`（`fib(32)`，整数递归） | 0.469 s [0.355, 0.518] | 0.023 s [0.021, 0.029] | **0.015 s [0.013, 0.018]** |
 | `a03_tail_loop`（一千万步尾递归） | 0.883 s [0.709, 1.294] | 0.652 s [0.564, 1.299] | **0.033 s [0.019, 0.045]** |
@@ -483,7 +483,7 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 
 变基到 `d270689c` 之后（分代回收成为默认，即时编译线的改进进来了）再量一次，同样 7 轮，机器负载 3–6【实测】。生成的程序以 `-ffp-contract=off` 编译：
 
-| 程序 | `std::fvm` | `std::inline std::jit` | `std::cpp`（clang -O2） |
+| 程序 | `std::fvm` | `std::opt::inline std::jit` | `std::cpp`（clang -O2） |
 |---|---|---|---|
 | `a01_fib` | 0.327 s [0.283, 0.386] | 0.023 s [0.021, 0.027] | **0.016 s [0.011, 0.016]** |
 | `a03_tail_loop` | 0.711 s [0.625, 0.796] | 0.150 s [0.130, 0.192] | **0.017 s [0.012, 0.025]** |
@@ -510,7 +510,7 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 | D8 深尾递归段错误 | 6.3（自尾调用与互相尾调用）；`exec/tail_calls.cml` |
 | D9 `exit` 与没有声明返回类型的 `main` | 7.3；`faults/exit_code.cml`、`entry/undeclared_int.cml` |
 | D10 `main` 不返回整数是内部错误 | 7.3；`entry/declared_string.cml` |
-| D11 内联之后不认区域形态与 `SYNC` | 6.2、6.4；先 `std::inline` 的全语料一行（12.1） |
+| D11 内联之后不认区域形态与 `SYNC` | 6.2、6.4；先 `std::opt::inline` 的全语料一行（12.1） |
 | D12 `camel-cpp` 与文档 | 第 10 节；`docs/cpp_export_build.md` 改写 |
 
 ### 12.4 变基到 `fsh-dev` 的 `d270689c` 时的改动

@@ -385,7 +385,7 @@ PyTorch running the same number of SGD steps (tolerance 1e-4).
 
 `--stateless` (`CAMEL_BENCH_TRAIN_PROTOCOL=stateless`) is the earlier protocol:
 every timed step starts from the same weights and discards its update. The
-**updates are not consumed**, so `std::opt::simplify` removes the update and
+**updates are not consumed**, so `std::opt` removes the update and
 the whole backward pass; those are not training-step timings. The protocol is
 kept for comparison with earlier results and as the negative control of the
 reconciliation.
@@ -393,11 +393,11 @@ reconciliation.
 **Configurations** (`train.config_commands()`; an assertion at import rejects
 two names for one command line): `torch_eager`, `camel_nvm` (`std::macro
 std::nvm`), `camel_fvm` (`std::macro std::fvm`), `camel_fuse_nvm` (`std::macro
-tensor::fuse std::nvm`), `camel_opt_nvm` (`std::macro std::opt::simplify
+tensor::fuse std::nvm`), `camel_opt_nvm` (`std::macro std::opt
 std::nvm`) and `camel_export_ort` (the training step exported by
 `onnx.export_model`, run by ONNX Runtime with the driver feeding the updated
 parameters back). Note that `camel_opt` in `run.py` (inference) is
-`tensor::fuse`, not `std::opt::simplify`.
+`tensor::fuse`, not `std::opt`.
 
 **Reconciliation before timing.** `reconcile_train.py` checks, per model,
 configuration and protocol, the gradient operators a step executes (per-step

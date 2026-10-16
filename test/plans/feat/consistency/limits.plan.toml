@@ -297,7 +297,7 @@ expect_stderr_contains = ["Invalid --max-macro-depth value: 'many'."]
 
 [[tests]]
 name = "limit.direct.exceeds.native"
-desc = "The same limit under std::inline std::jit, where depth is compiled to native code: the compiled recursion counts its depth and leaves through the fault exit with the interpreter's diagnostic."
+desc = "The same limit under std::opt::inline std::jit, where depth is compiled to native code: the compiled recursion counts its depth and leaves through the fault exit with the interpreter's diagnostic."
 backends = ["inline_jit"]
 envs = ["N=100"]
 expect_exit = 1
@@ -316,7 +316,7 @@ expect_diagnostic_column = 43
 
 [[tests]]
 name = "limit.10000.fits"
-desc = "Limit 10000: depth(9999) is under the count on every back end and under std::inline std::jit. It finishes wherever the native stack holds 9999 levels; where it does not (the back ends that nest on the native stack, on Windows, which keeps 15/16 of the stack as the reserve for SEH unwinding: stackReserve in src/execute/limits.cpp), it stops at the recursive call with the diagnostic of a full native stack, never with the count's."
+desc = "Limit 10000: depth(9999) is under the count on every back end and under std::opt::inline std::jit. It finishes wherever the native stack holds 9999 levels; where it does not (the back ends that nest on the native stack, on Windows, which keeps 15/16 of the stack as the reserve for SEH unwinding: stackReserve in src/execute/limits.cpp), it stops at the recursive call with the diagnostic of a full native stack, never with the count's."
 args = ["--max-recursion-depth", "10000", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
 backends_agree = []
@@ -349,7 +349,7 @@ assert(/Maximum recursion depth \(10000\) exceeded/.test(text) || /native stack 
 
 [[tests]]
 name = "limit.10000.exceeds.native"
-desc = "The same in native code (std::inline std::jit), at the same call."
+desc = "The same in native code (std::opt::inline std::jit), at the same call."
 args = ["--max-recursion-depth", "10000", "${case}", "${backend}"]
 backends = ["inline_jit"]
 envs = ["N=100000"]

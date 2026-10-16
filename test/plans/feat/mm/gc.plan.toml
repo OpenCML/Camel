@@ -371,7 +371,7 @@ skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "When objects move, std::jit still compiles a graph with an object constant: the code reads the constant from the static area, which the collector updates, instead of baking its address in."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_jit_constants.cml"
-args = ["-vv", "${case}", "std::inline", "std::jit"]
+args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
 envs = ["CAMEL_GC_POISON=1"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'count' as frameless code", "compiled & cached graph 'tag' as frameless code"]
@@ -385,7 +385,7 @@ skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "Without the moving collector std::jit compiles both graphs."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_jit_constants.cml"
-args = ["-vv", "${case}", "std::inline", "std::jit"]
+args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
 envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'count'", "compiled & cached graph 'tag'"]

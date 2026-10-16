@@ -9,7 +9,7 @@ A pipeline is the list of pass names given to `camel <file> <pass>...`.
             (`std::nvm`, `std::fvm`, `std::jit`, 20 each) and are the same 60 pipelines as in
             the first run; R61-R80 end in the translation pass `onnx::export` (drawn from the
             same generator after the first 60, so the first 60 are unchanged).
-  onnx      E1 (`std::macro std::opt::simplify onnx::export`, the documented export pipeline)
+  onnx      E1 (`std::macro std::opt onnx::export`, the documented export pipeline)
             and R61-R80. They are run only on programs with an export entry (their own
             `onnx.export_model` call); the written model is then run on ONNX Runtime.
   refuse    pipelines that every program must refuse: an unknown pass name (XU1, XU2) and,
@@ -33,12 +33,12 @@ FIXED: Dict[str, List[str]] = {
     "P4": ["std::macro", "std::nvm"],
     "P5": ["std::macro", "std::fvm"],
     "P6": ["std::macro", "std::opt", "std::nvm"],
-    "P7": ["std::macro", "std::opt::simplify", "std::nvm"],
-    "P8": ["std::macro", "std::opt::simplify", "std::fvm"],
-    "P9": ["std::macro", "std::inline", "std::nvm"],
+    "P7": ["std::macro", "std::opt", "std::nvm"],
+    "P8": ["std::macro", "std::opt", "std::fvm"],
+    "P9": ["std::macro", "std::opt::inline", "std::nvm"],
     "P10": ["std::macro", "tensor::fuse", "std::nvm"],
-    "P11": ["std::opt::simplify", "std::nvm"],
-    "P12": ["std::macro", "std::opt::simplify", "std::tf"],
+    "P11": ["std::opt", "std::nvm"],
+    "P12": ["std::macro", "std::opt", "std::tf"],
 }
 
 REFERENCE = "P0"
@@ -47,14 +47,14 @@ MACRO_REFERENCE = "P4"
 
 REWRITE_PASSES: List[str] = [
     "std::macro",
-    "std::devirtualize",
-    "std::specialize",
-    "std::inline",
+    "std::opt::devirtualize",
+    "std::opt::specialize",
+    "std::opt::inline",
     "std::opt::fold",
     "std::opt::cse",
     "std::opt::dce",
     "tensor::fuse",
-    "std::opt::simplify",
+    "std::opt",
 ]
 
 TERMINALS: List[str] = ["std::nvm", "std::fvm", "std::jit"]
@@ -72,7 +72,7 @@ RANDOM_PER_TERMINAL = 20
 
 # The pipeline the documentation gives for the export pass (docs/cli.md).
 ONNX_FIXED: Dict[str, List[str]] = {
-    "E1": ["std::macro", "std::opt::simplify", ONNX_TERMINAL],
+    "E1": ["std::macro", "std::opt", ONNX_TERMINAL],
 }
 
 UNKNOWN_PASS = "x1a::no_such_pass"
@@ -86,7 +86,7 @@ EXPECT_REFUSE: Dict[str, dict] = {
                       "is not raised before execution shows as output/effects before the "
                       "diagnostic"},
     "XO1": {"passes": [ONNX_TERMINAL], "applies": "onnx",
-            "source": "docs/cli.md, 'Refusal': without std::opt::simplify the entry graph still "
+            "source": "docs/cli.md, 'Refusal': without std::opt the entry graph still "
                       "calls main, so onnx::export refuses with TranslationRefused"},
 }
 
