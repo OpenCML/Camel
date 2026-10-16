@@ -78,5 +78,7 @@ struct KernelBody {
 void validateBody(const KernelBody &body);
 std::string emitBody(const KernelBody &body);
 void validateMatmulContract(const Program &program, const Node &node);
+KernelBody parallelMaxBody(const Program &program, Launch &launch);
+KernelBody serialBody(const Program &program, Launch &launch);
 KernelBody matmulBody(const Program &program, Launch &launch);
 } // namespace camel::tiles::kernel

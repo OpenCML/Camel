@@ -47,7 +47,7 @@ kind = "behavior"
 case = "../../../cases/modules/tiles/source.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["extern \"C\" __global__", "i<3ULL", "v[2][i]=__fadd_rn(a,b)"]
+expect_stdout_contains = ["extern \"C\" __global__", "k_row<3ULL", "__fadd_rn(", "reinterpret_cast<float*>(v[2])[k_row]"]
 timeout_ms = 10000
 
 [[tests]]

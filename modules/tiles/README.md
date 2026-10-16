@@ -308,7 +308,8 @@ is an implementation detail, not a new normative Camel graph semantics.
 
 ### Structured kernel bodies
 
-Matrix multiplication lowers to a typed physical statement tree before CUDA
+Matrix multiplication, elementwise/layout fusion, canonical serial reductions
+and parallel maximum lower to a typed physical statement tree before CUDA
 serialization: lexical index/scalar bindings, masked loads and stores, loops,
 conditions, assignments and block barriers. Global and shared buffers have
 explicit element types and write permissions. The validator checks references,
@@ -317,8 +318,13 @@ or loops. There is no raw CUDA statement node. Address bounds, races and shared
 value initialization remain the lowering's proof obligations, checked by GPU
 edge-shape and canonical FMA-chain regressions rather than claimed by this validator.
 The accumulator survives across panels and padded K contributions are excluded.
-Other kernel families still use their existing emitters; moving them to the same
-statement representation is subsequent work.
+Row-region kernels and fault-reporting scalar chains still use their existing
+emitters; moving them to the same statement representation is subsequent work.
+Serial reduction bodies explicitly retain their accumulator type, initial value,
+ordered loop, mean finalization and output rounding. Fused producer and epilogue
+nodes use lexical scalar bindings, with contraction permitted only by both
+original operator declarations and lexical grants. Parallel maximum has typed
+shared accesses and uniform barriers outside each lane predicate.
 
 Matrix kernels now require the core's rank-two matrix domain and ascending f32
 FMA-chain law. Operand addresses are composed from the declared affine maps;
