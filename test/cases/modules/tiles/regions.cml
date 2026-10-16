@@ -1,0 +1,24 @@
+module tiles_regions
+import { Tensor } from tensor
+import { regions } from tiles
+func chain(x: Tensor<f32, const [2, 3]>): Tensor<f32, const [2,3]> {
+    let y = x + x
+    return y * y
+}
+func dynamic(x: Tensor<f32>): Tensor<f32> { return x + x }
+func cpu(x: Tensor<f32, const [2,3]>): Tensor<f32, const [2,3]> { return x }
+func detour(x: Tensor<f32, const [2,3]>): Tensor<f32, const [2,3]> {
+    let y = x + x
+    return y + cpu(y)
+}
+func ordered(x: Tensor<f32, const [2,3]>): Tensor<f32, const [2,3]> sync {
+    let y = wait (x + x)
+    return y + y
+}
+func main(): int sync {
+    println(regions<chain>())
+    println(regions<dynamic>())
+    println(regions<detour>())
+    println(regions<ordered>())
+    return 0
+}

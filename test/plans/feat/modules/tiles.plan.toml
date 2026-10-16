@@ -37,7 +37,7 @@ tool = "python"
 case = "../../../cases/modules/tiles/plan_check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected"]
+expect_stdout_contains = ["tiles regions: convexity, boundaries, liveness and dependency order passed", "tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected"]
 timeout_ms = 10000
 
 [[tests]]
@@ -161,4 +161,70 @@ args = ["${case}", "std::prl"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
 expect_output_contains = ["node 3: unsupported graph node kind 15"]
+timeout_ms = 10000
+
+[[tests]]
+name = "regions.nvm"
+kind = "behavior"
+case = "../../../cases/modules/tiles/regions.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const plans = input.stdout.trim().split(/\r?\n/).map(JSON.parse)
+assert(plans.length === 4, "expected four graph region analyses")
+const [chain, dynamic, detour, ordered] = plans
+assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
+assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
+assert(dynamic.regions.length === 0 && dynamic.excluded.some(n => n.reason === "unresolved_type"), "unknown shapes must not claim static compilation")
+assert(detour.regions.length === 2 && detour.regions.every(r => r.members.length === 1), "CPU detour must prevent cyclic contraction")
+assert(detour.regions[1].inputs.length === 2, "second region must retain both CPU and GPU dependencies")
+assert(ordered.excluded.some(n => n.reason === "control_edge") && ordered.regions.every(r => r.members.length === 1), "control endpoints must remain outside GPU regions")
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "regions.fvm"
+kind = "behavior"
+case = "../../../cases/modules/tiles/regions.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const plans = input.stdout.trim().split(/\r?\n/).map(JSON.parse)
+assert(plans.length === 4, "expected four graph region analyses")
+const [chain, dynamic, detour, ordered] = plans
+assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
+assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
+assert(dynamic.regions.length === 0 && dynamic.excluded.some(n => n.reason === "unresolved_type"), "unknown shapes must not claim static compilation")
+assert(detour.regions.length === 2 && detour.regions.every(r => r.members.length === 1), "CPU detour must prevent cyclic contraction")
+assert(detour.regions[1].inputs.length === 2, "second region must retain both CPU and GPU dependencies")
+assert(ordered.excluded.some(n => n.reason === "control_edge") && ordered.regions.every(r => r.members.length === 1), "control endpoints must remain outside GPU regions")
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "regions.jit"
+kind = "behavior"
+case = "../../../cases/modules/tiles/regions.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const plans = input.stdout.trim().split(/\r?\n/).map(JSON.parse)
+assert(plans.length === 4, "expected four graph region analyses")
+const [chain, dynamic, detour, ordered] = plans
+assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
+assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
+assert(dynamic.regions.length === 0 && dynamic.excluded.some(n => n.reason === "unresolved_type"), "unknown shapes must not claim static compilation")
+assert(detour.regions.length === 2 && detour.regions.every(r => r.members.length === 1), "CPU detour must prevent cyclic contraction")
+assert(detour.regions[1].inputs.length === 2, "second region must retain both CPU and GPU dependencies")
+assert(ordered.excluded.some(n => n.reason === "control_edge") && ordered.regions.every(r => r.members.length === 1), "control endpoints must remain outside GPU regions")
+}
+"""
 timeout_ms = 10000

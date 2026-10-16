@@ -397,3 +397,22 @@ the canonical row-major contribution sequence even for nonadjacent sum-to axes.
 Full sums retain f64 results and accumulators; sum-to retains its f32 accumulator.
 Only direct output projections and unconditional nonnegative affine reads are
 supported; symbolic or guarded domains still require further lowering.
+
+## Graph region analysis
+
+`regions<fn>()` returns JSON describing static GPU candidate regions of `fn`:
+member node IDs in dependency order, distinct boundary inputs and outputs, and
+exclusion reasons. It inspects the function graph without calling it or loading
+CUDA. Candidate selection uses core declarations, type/instance facts and the
+same physical index-contract checks as lowering. The current coverage is static
+f32 pointwise operations, rank-2 matrix multiplication and supported reductions;
+dynamic shapes, scalar arithmetic, layouts and other node kinds remain boundaries.
+This is analysis for the graph pass, not automatic GPU execution.
+
+Regions are connected and dependency-convex: replacing each region by one call
+must leave the complete CPU/GPU dependency graph acyclic. In particular, a direct
+GPU edge cannot justify fusion across a CPU detour. Shared values used outside a
+region remain explicit outputs; unreachable nodes are omitted. Control-edge
+endpoints are excluded, and this analysis does not descend into calls, branch
+arms or LOOP bodies. The internal planner is deterministic and produces maximal
+legal contractions for its greedy order, not a globally optimal cost partition.

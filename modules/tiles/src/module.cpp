@@ -25,6 +25,7 @@
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
+#include "tiles/internal/regions.h"
 #include "tiles/program.h"
 #include <cstring>
 #include <mutex>
@@ -62,6 +63,14 @@ Program prepare(ArgsView &with, ArgsView &norm, Context &ctx) {
             args.push_back({tuple->get<slot_t>(i), type->typeAt(i)});
     }
     return compile(fn, args, ctx.facts());
+}
+
+slot_t regionsKernel(ArgsView &with, ArgsView &, Context &ctx) {
+    return checked([&] {
+        core::mm::NoCollectionScope noCollection;
+        auto text = inspectRegions(*with.get<::Function *>(0)->graph(), ctx.facts());
+        return td::toSlot(::String::from(text, core::mm::autoSpace()));
+    });
 }
 
 slot_t sourceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -373,6 +382,21 @@ class TilesModule final : public BuiltinModule {
                           })}}));
         }
         exportEntity(
+            "regions",
+            OperatorGroup::create(
+                "regions",
+                {{"tiles:regions",
+                  DynamicFuncTypeResolver::create(
+                      {{1, {false}}, {0, {}}},
+                      "<fn: Function>() => string",
+                      [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
+                          if (with.size() != 1 || !norm.empty() ||
+                              with[0]->code() != TypeCode::Function)
+                              return std::nullopt;
+                          return Type::String();
+                      })}}));
+        exportEntity(
             "available",
             OperatorGroup::create(
                 "available",
@@ -396,6 +420,7 @@ class TilesModule final : public BuiltinModule {
                     {"download", &downloadKernel},
                     {"source", &sourceKernel},
                     {"inspect", &inspectKernel},
+                    {"regions", &regionsKernel},
                     {"benchmark", &benchmarkKernel},
                     {"available", &availableKernel},
                     {"device", &deviceKernel}});
@@ -409,13 +434,15 @@ class TilesModule final : public BuiltinModule {
              {"download", false},
              {"source", false},
              {"inspect", false},
+             {"regions", false},
              {"benchmark", false},
              {"available", false},
              {"device", false}});
         // These compile the graph of the function value they receive: a back end that runs a
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
-        for (const char *name : {"run", "run_device", "source", "inspect", "benchmark"}) {
+        for (const char *name :
+             {"run", "run_device", "source", "inspect", "benchmark", "regions"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
                 {.pure = false, .inspectsGraphs = true});

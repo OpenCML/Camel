@@ -1,0 +1,41 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license: https://opensource.org/license/mit
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
+ * Author: Camel Contributors
+ * Created: Oct. 16, 2026
+ * Updated: Oct. 16, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
+// Dependency-convex region partitioning; eligibility comes from the semantic planner.
+#pragma once
+#include <cstddef>
+#include <string>
+#include <vector>
+namespace camel::runtime {
+class GCGraph;
+namespace fact {
+class FactStore;
+}
+} // namespace camel::runtime
+
+namespace camel::tiles {
+struct RegionNode {
+    std::vector<size_t> inputs;
+    bool eligible = false;
+    bool output   = false;
+};
+struct Region {
+    std::vector<size_t> members; // In dependency order, independent of source node numbering.
+    std::vector<size_t> inputs;
+    std::vector<size_t> outputs;
+};
+// Includes CPU nodes in cycle checks. Unreachable nodes are excluded. The caller marks
+// all observable roots (including effect/control roots) and all dependency edge kinds.
+// The result contains node IDs only: no GC pointers or references to the source graph.
+std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes);
+// Inspect one function graph without executing it or initializing CUDA. This is
+// candidate analysis, not a claim that graph extraction/execution is implemented.
+std::string inspectRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
+} // namespace camel::tiles
