@@ -32,4 +32,14 @@ The integration is validated on `wzj-dev` before promotion to `develop`.
 
 Initial Windows integration checks: 236/236 passed across loops, graph facts,
 resources, definitions, index/operator semantics, tensor bounds, Tiles and GPU
-plans. Final broader results and Linux evidence are recorded separately when complete.
+plans. Linux passed 106/106 Tiles, tensor and GPU checks, 95/95 core protocol
+checks, and 14/14 definition checks after the final cache fixes.
+
+The Windows default developer suite completed 5,104 cases: 5,093 passed, 10 skipped,
+one failed to start (`logical_branch.short_circuit.fvm`, null exit status).
+That run overlapped artifact collection, which also reported a Windows file-lock
+error. After the suite exited, a fresh standard build completed successfully;
+the entire logical-branch, definition and Tiles host plans passed 43/43. This
+resolves the observed failure, but is not a claim of a second full-suite run.
+Raw results are the adjacent `core-p34`, `core-full`, `core-final-retest` and
+`definition-cache` logs dated 2026-10-16.
