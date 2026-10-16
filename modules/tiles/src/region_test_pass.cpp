@@ -25,7 +25,6 @@
 #include <utility>
 #include <vector>
 namespace camel::tiles {
-namespace {
 // Invoke twice and re-read the operator views after the first nested call. Regions
 // are pure, so the discarded result is not an observable extra effect.
 slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &context) {
@@ -44,6 +43,7 @@ slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &co
     (void)invoke();
     return invoke();
 }
+namespace {
 class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
     operator_t run_;
 

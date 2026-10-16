@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: May. 06, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -291,10 +291,9 @@ struct BytecodeHeader {                  // 8 bytes
             [[fallthrough]];
         case OpCode::JOIN:
             [[fallthrough]];
-        case OpCode::OPER:
-            [[fallthrough]];
         case OpCode::SCHD:
             return 1;
+        case OpCode::OPER: // Native function pointer followed by its OperId.
         case OpCode::FILL:
             return 2;
         case OpCode::FUNC:

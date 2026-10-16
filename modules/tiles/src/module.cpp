@@ -442,6 +442,7 @@ class TilesModule final : public BuiltinModule {
                 ctx,
                 std::unordered_map<std::string, operator_t>{
                     {"run", &runKernel},
+                    {"test_call", &testNativeCall},
                     {"gpu", &gpuKernel},
                     {"run_device", &runDeviceKernel},
                     {"upload", &uploadKernel},

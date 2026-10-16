@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 06, 2026
- * Updated: May. 01, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -431,17 +431,11 @@ slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc) {
     auto *base        = static_cast<Bytecode *>(const_cast<void *>(jc->base));
     Bytecode &bc      = base[pc];
     Frame *frame      = reinterpret_cast<Frame *>(slots[0]); // Convention: slot[0] stores Frame*.
-    operator_t func   = bc.extra()->func;
-    data_arr_t nargs  = bc.nargs();
-    data_arr_t wargs  = bc.wargs();
     data_idx_t result = bc.result;
-
-    FrameArgsView withView(*frame, wargs);
-    FrameArgsView normView(*frame, nargs);
 
     slot_t ret;
     try {
-        ret = func(withView, normView, vm->context());
+        ret = vm->invokeNativeOperator(bc, *frame);
     } catch (const RuntimeFault &fault) {
         throw reportRuntimeFault(
             vm->context(),
@@ -623,11 +617,6 @@ slot_t jitHelperOper(slot_t *slots, void *ctx, size_t pc) {
         Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
         Frame *frame = reinterpret_cast<Frame *>(slots[0]);
         syncHelperOrigin(vm, pc);
-        // The views keep references to the operand lists.
-        const data_arr_t nargs = bc.nargs();
-        const data_arr_t wargs = bc.wargs();
-        FrameArgsView withView(*frame, wargs);
-        FrameArgsView normView(*frame, nargs);
         if (camel::core::effect_trace::enabled()) [[unlikely]] {
             if (auto sourceContext = vm->context().sourceContext()) {
                 camel::core::effect_trace::setSite(sourceContext->debugMap().pcOrigin(pc));
@@ -635,7 +624,7 @@ slot_t jitHelperOper(slot_t *slots, void *ctx, size_t pc) {
         }
         slot_t result;
         try {
-            result = bc.extra()->func(withView, normView, vm->context());
+            result = vm->invokeNativeOperator(bc, *frame);
         } catch (const RuntimeFault &fault) {
             // The fault of the operator, at this bytecode: what the interpreter reports.
             throw reportRuntimeFault(

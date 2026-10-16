@@ -252,11 +252,22 @@ timeout_ms = 10000
 
 
 [[tests]]
-name = "native_region_invocation.nvm"
+name = "native_region_invocation"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline_native", "std::nvm"]
+args = ["${case}", "tiles::test_outline_native", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "native_region_invocation.jit_hot"
+kind = "behavior"
+case = "../../../cases/modules/tiles/region_execution.cml"
+args = ["${case}", "tiles::test_outline_native", "std::jit"]
+envs = ["CAMEL_JIT_HOT_THRESHOLD=0", "CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 10000

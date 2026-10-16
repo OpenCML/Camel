@@ -54,6 +54,7 @@ struct RegionAnalysis {
 RegionAnalysis analyzeRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
 // Register semantic-equivalence checks only when CAMEL_ENABLE_TEST_PASSES is enabled.
 void registerRegionTestPasses(operator_t run);
+slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &context);
 
 // Inspect one function graph without executing it or initializing CUDA. This is
 // candidate analysis with extracted drafts, not automatic graph execution.
