@@ -467,6 +467,16 @@ At present all complicated type computation is implemented directly by operators
 
 - **`std::cpp`**: the fault reports of generated programs are byte-identical to the interpreter's; recursion is counted exactly (as on every back end); the extra blank line of `println<fmt>` and the extra line feed of `print<fmt>` are defects of the interpreter and are fixed there; `std::cpp::bench` is removed; `map`/`filter` run sequentially in generated programs for now; `main` takes its parameters as `--arg name=value`, as the command line does.
 
+### 2.14 Supplementary rulings (2026-10-16)
+
+- **Debugger**: returning from a branch arm to the join does not stop on the same line a second time, and a breakpoint on that line hits only on the first entry; an inlined function still shows as a frame of its own (the user wrote two functions and sees two frames; inlining is an optimization).
+- **The accessors of `Json` also accept `Json!`**, so that a failed parse chains too.
+- **The value of NaN**: a NaN produced by `max`, `min` or `relu` is always the canonical quiet NaN (printed `nan`). NaNs from ordinary arithmetic are not constrained by this.
+- **`argmax` and `argmin`** compare by IEEE 754-2019 `maximum` and `minimum`: with a NaN they return the position of the first NaN; on a tie the position of the first extreme, +0 being greater than -0.
+- **An exact operator may declare that the four `finite_math` assumptions change its result**; rounding permissions still do not apply to it. `@numeric` is not supported before a `wait` block for now. Max pooling and the maximum inside `log_softmax` follow the new `max` rule.
+- **Reductions**: a reduction over an empty domain is a fault, even when the result has no elements. The sum of an int64 tensor is to accumulate exactly in int64 (today it accumulates in f64, a defect to fix).
+- **Loops**: a loop header needs `for` or `while`; `for … while` tests the condition before taking the next element each round; a loop runs at most 1,000,000 rounds in `std::macro` (adjustable like the recursion limit); `for` iterates arrays only for now, strings, maps and tensors later; the state has the type of its initial value, tensor shapes are not widened, a type annotation is written when needed.
+
 ---
 
 ## 3. `macro`
