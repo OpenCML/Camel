@@ -264,7 +264,7 @@
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：必选 `?index=N`（与 3.24 的 `index` 对应）。
-- **响应**：`{ "index": N, "pass": "std::inline" | null, "consumed": false, "dot": "digraph GraphIR {...}" }`。`dot` 为 rgir 风格可读 DOT（仅 `label`/`type` 属性，节点行带 `origin=<id>`、`span="sl:sc-el:ec"`、`srcfile="..."`，同 `std::rgir` 输出），供 Graphviz 渲染或与 gir-json 的 `originId` 对照。
+- **响应**：`{ "index": N, "pass": "std::inline" | null, "consumed": false, "dot": "digraph GraphIR {...}" }`。`dot` 为 gir 风格精简 DOT（包含节点类型和输出类型等语义属性，节点行带 `origin=<id>`、`span="sl:sc-el:ec"`、`srcfile="..."`，同 `std::gir` 输出），供 Graphviz 渲染或与 gir-json 的 `originId` 对照。
 - **错误**：400（缺 `index` 或该序号无快照，body 含 `error`）。
 
 ---

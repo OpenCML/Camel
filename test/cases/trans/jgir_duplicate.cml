@@ -1,0 +1,2 @@
+func double(value: int): int { return value + value }
+func main(): int { return double(2) }

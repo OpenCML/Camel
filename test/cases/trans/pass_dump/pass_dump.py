@@ -56,7 +56,7 @@ def main() -> int:
         names = sorted(p.name for p in out.iterdir()) if out.is_dir() else []
         expected = [f"{stem}.{ext}"
                     for stem in ("00_input", "01_std.macro", "02_std.inline")
-                    for ext in ("rgir.dot", "stats.json")]
+                    for ext in ("gir.dot", "stats.json")]
         check(names == sorted(expected), f"snapshot files {sorted(expected)} (got {names})")
         if failures:
             return 1
@@ -67,7 +67,7 @@ def main() -> int:
 
         diff = subprocess.run(
             [sys.executable, str(GRAPH_DIFF), "--json",
-             str(out / "00_input.rgir.dot"), str(out / "01_std.macro.rgir.dot")],
+             str(out / "00_input.gir.dot"), str(out / "01_std.macro.gir.dot")],
             capture_output=True, text=True)
         check(diff.returncode == 1, "graph-diff exit code 1 when the graphs differ")
         report = json.loads(diff.stdout)
@@ -82,7 +82,7 @@ def main() -> int:
 
         same = subprocess.run(
             [sys.executable, str(GRAPH_DIFF),
-             str(out / "01_std.macro.rgir.dot"), str(out / "01_std.macro.rgir.dot")],
+             str(out / "01_std.macro.gir.dot"), str(out / "01_std.macro.gir.dot")],
             capture_output=True, text=True)
         check(same.returncode == 0, "graph-diff exit code 0 on identical snapshots")
 

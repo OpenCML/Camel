@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,10 +23,10 @@
 #include "nlohmann/json.hpp"
 
 #include "camel/core/error/diagnostics.h"
+#include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/snapshot.h"
 #include "camel/utils/log.h"
-#include "camel/execute/entry_args.h"
 #include "compile.h"
 #include "core/debug_core.h"
 #include "run.h"
@@ -67,7 +67,7 @@ void passGraphSnapshotHandler(
     auto *collector = static_cast<PassGraphCollector *>(userData);
     if (!collector || !collector->store)
         return;
-    std::string dot = dumpReadableRuntimeGraph(graph, collector->ctx);
+    std::string dot = dumpCompactRuntimeGraph(graph, collector->ctx);
     if (dot.empty())
         return;
     PassGraphEntry entry;
@@ -129,8 +129,9 @@ debuggablePasses(const std::vector<std::string> &passes, std::string &notice) {
         std::string reason;
         if (pass == "std::jit" || pass == "std::fastvm::jit") {
             reason = "compiled code cannot be stopped";
-        } else if (pass == "std::tf" || pass == "std::prl" || pass == "std::parallel" ||
-                   pass == "std::taskflow") {
+        } else if (
+            pass == "std::tf" || pass == "std::prl" || pass == "std::parallel" ||
+            pass == "std::taskflow") {
             // DESIGN-QUESTION(parallel-debugging)
             reason = "the parallel scheduler runs several nodes at once, so there is no single "
                      "current node; the order of evaluation under the debugger is the "
@@ -152,9 +153,9 @@ debuggablePasses(const std::vector<std::string> &passes, std::string &notice) {
 /// Compiles `targetFile` into the debugger state. The core records the names of the program
 /// while the builders run.
 bool compileInto(const std::string &targetFile) {
-    auto &st = getState();
+    auto &st           = getState();
     st.compiledPending = false;
-    auto file = std::make_unique<std::ifstream>(targetFile);
+    auto file          = std::make_unique<std::ifstream>(targetFile);
     if (!file->is_open()) {
         std::cout << "Error: cannot open file " << targetFile << std::endl;
         return false;
@@ -287,7 +288,7 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
         // graph each pass returns (from 1). The guard clears the global hook on every exit.
         auto &passGraphStore = getPassGraphStore();
         if (graph && graph->hasNodePayload()) {
-            std::string dot = dumpReadableRuntimeGraph(graph, st.ctx);
+            std::string dot = dumpCompactRuntimeGraph(graph, st.ctx);
             if (!dot.empty()) {
                 PassGraphEntry entry;
                 entry.index = 0;

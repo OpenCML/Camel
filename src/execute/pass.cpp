@@ -13,21 +13,22 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/execute/pass.h"
 #include "camel/common/scope.h"
-#include "camel/core/process_exit.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
-#include "camel/core/source/manager.h"
-#include "camel/execute/entry_args.h"
-#include "camel/runtime/capacity.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
+#include "camel/core/process_exit.h"
+#include "camel/core/source/manager.h"
+#include "camel/execute/entry_args.h"
+#include "camel/passes/trans/json/gir.h"
+#include "camel/runtime/capacity.h"
 #include "macro/macro.h"
 #include "passes/opt/devirtualize/devirtualize.h"
 #include "passes/opt/generic/generic.h"
@@ -321,16 +322,17 @@ PassScopePtr initPassScope() {
                 scope({
                     {"null", def(PASS(NullGraphIRPass))},
                     {"macro", def(PASS(MacroRewritePass))},
-                    {"graphviz", def(PASS(GraphVizDumpPass))},
-                    {"stats", def(PASS(GraphStatsPass))},
-                    {"readable_graphviz",
-                     def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.readableOnly = true}))},
-                    {"annotated_graphviz",
+                    // GIR formats: compact DOT by default, rich DOT for Graphviz, JSON for tools.
+                    {"gir", def(PASS(GraphVizDumpPass))},
+                    {"rgir", def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.rich = true}))},
+                    {"jgir", def(PASS(JsonGirDumpPass))},
+                    {"agir",
                      def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.annotateRoles = true}))},
-                    {"readable_annotated_graphviz",
+                    {"argir",
                      def(PASS1(
                          GraphVizDumpPass,
-                         (GraphVizDumpConfig{.readableOnly = true, .annotateRoles = true})))},
+                         (GraphVizDumpConfig{.rich = true, .annotateRoles = true})))},
+                    {"stats", def(PASS(GraphStatsPass))},
                     {"cpp",
                      def(PASS(CppDumpPass),
                          {
@@ -431,12 +433,6 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::tf", "std::taskflow"},
     // Common translation and dump aliases
     // Common translation and dump aliases
-    {"std::dot", "std::graphviz"},
-    {"std::gir", "std::graphviz"},
-    {"std::rdot", "std::readable_graphviz"},
-    {"std::rgir", "std::readable_graphviz"},
-    {"std::agir", "std::annotated_graphviz"},
-    {"std::argir", "std::readable_annotated_graphviz"},
     {"std::cxx", "std::cpp"},
     {"std::cppmod", "std::cpp::module"},
     {"std::cppinspect", "std::cpp::inspect"},
@@ -564,12 +560,8 @@ void deliverPassWarnings(Context &ctx, const std::string &name) {
         }
     }
     if (!fresh.empty()) {
-        if (PassWarningHandler handler =
-                passWarningHandlerSlot().load(std::memory_order_acquire)) {
-            handler(
-                name.c_str(),
-                fresh,
-                passWarningUserDataSlot().load(std::memory_order_acquire));
+        if (PassWarningHandler handler = passWarningHandlerSlot().load(std::memory_order_acquire)) {
+            handler(name.c_str(), fresh, passWarningUserDataSlot().load(std::memory_order_acquire));
         }
     }
     // A warning made an error on the command line (-Werror) is an error of the pipeline: it
@@ -791,7 +783,7 @@ void requireKnownPasses(const std::vector<std::string> &passes, const context_pt
         }
         listAvailablePasses(name);
         setPipelineStage("pass:" + name);
-        auto unknown = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(name);
+        auto unknown  = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(name);
         unknown.stage = "pass:" + name;
         setPipelineStage("");
         throw unknown;
@@ -824,7 +816,8 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
     for (size_t i = *consumer + 1; i < passes.size(); ++i) {
         rest += (rest.empty() ? "'" : ", '") + passes[i] + "'";
     }
-    auto warning = DiagnosticBuilder::of(RuntimeDiag::PassesNeverRun).commit(passes[*consumer], rest);
+    auto warning =
+        DiagnosticBuilder::of(RuntimeDiag::PassesNeverRun).commit(passes[*consumer], rest);
     warning.stage = "pass:" + passes[*consumer];
     return warning;
 }
@@ -875,7 +868,9 @@ PassApplyResult applyPassesDetailed(
                 if (!open.empty()) {
                     std::string names;
                     for (size_t i = 0; i < open.size(); ++i) {
-                        names += (i == 0 ? "'" : i + 1 == open.size() ? " and '" : ", '") +
+                        names += (i == 0                 ? "'"
+                                  : i + 1 == open.size() ? " and '"
+                                                         : ", '") +
                                  open[i] + "'";
                     }
                     auto diag = ctx->rtmDiags()->of(RuntimeDiag::EntryArgumentMissing);

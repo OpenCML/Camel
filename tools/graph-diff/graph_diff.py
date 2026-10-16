@@ -2,14 +2,14 @@
 """graph-diff: compare two per-pass graph snapshots.
 
 The snapshots are the readable DOT files written by `camel --dump-after-each-pass <dir>`
-(the `std::rgir` format). Nodes are compared as a multiset keyed by
+(the `std::gir` format). Nodes are compared as a multiset keyed by
 (node type, label, source file, source span): node identities change from pass to pass, the
 operator and where it came from do not. The output lists what a pass removed and what it
 added, each with its source location, and how many nodes carry a source location at all.
 
 Usage:
-    graph_diff.py BEFORE.rgir.dot AFTER.rgir.dot [--json] [--limit N]
-    graph_diff.py --coverage SNAPSHOT.rgir.dot [--json]
+    graph_diff.py BEFORE.gir.dot AFTER.gir.dot [--json] [--limit N]
+    graph_diff.py --coverage SNAPSHOT.gir.dot [--json]
 
 Exit code: 0 when the two multisets are equal, 1 when they differ, 2 on usage errors.
 """

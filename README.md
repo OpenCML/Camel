@@ -68,7 +68,7 @@ camel prog.cml std::fvm                 # run on the bytecode VM
 camel prog.cml std::jit                 # run with JIT compilation
 camel prog.cml std::prl                 # run with parallel scheduling
 camel prog.cml std::opt std::fvm        # optimize, then run
-camel prog.cml std::rgir                # print the graph (Graphviz DOT) instead of running
+camel prog.cml std::gir                # print the graph (Graphviz DOT) instead of running
 camel prog.cml std::macro std::opt::simplify onnx::export    # translate `main` to an ONNX model
 ```
 

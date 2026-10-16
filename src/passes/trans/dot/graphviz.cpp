@@ -19,6 +19,7 @@
 
 #include "graphviz.h"
 #include "camel/core/operator_semantics.h"
+#include "camel/passes/trans/gir_metadata.h"
 
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
@@ -37,205 +38,9 @@
 
 using namespace std;
 using namespace camel::core::context;
+using namespace camel::passes::gir;
 
 namespace {
-
-const camel::runtime::GCNode *
-lookupRecord(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t index) {
-    return graph ? graph->node(index) : nullptr;
-}
-
-camel::core::type::Type *
-nodeStaticSlotType(camel::runtime::GCGraph *graph, const camel::runtime::GCNode &record) {
-    if (graph == nullptr || record.dataIndex >= 0) {
-        return record.dataType();
-    }
-    const auto staticTypes = graph->staticDataType();
-    const size_t staticIdx = static_cast<size_t>(-record.dataIndex);
-    if (staticTypes != nullptr && staticIdx < staticTypes->size()) {
-        return staticTypes->typeAt(staticIdx);
-    }
-    return record.dataType();
-}
-
-string formatStaticDataValue(camel::runtime::GCGraph *graph, const camel::runtime::GCNode &record) {
-    if (graph == nullptr || record.dataIndex >= 0) {
-        return {};
-    }
-    const auto staticSlots = graph->staticSlots();
-    const size_t staticIdx = static_cast<size_t>(-record.dataIndex);
-    if (staticIdx >= staticSlots.size()) {
-        return {};
-    }
-
-    auto *slotType = nodeStaticSlotType(graph, record);
-    if (slotType == nullptr) {
-        return {};
-    }
-
-    std::ostringstream os;
-    camel::core::rtdata::printSlot(os, staticSlots[staticIdx], slotType);
-    return os.str();
-}
-
-struct PortInfo {
-    string name;
-    string kind;
-    size_t index = 0;
-};
-
-PortInfo portInfo(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef) {
-    if (!graph)
-        return {};
-    const auto captured = graph->captureNames();
-    const auto closures = graph->closureNodes();
-    // Captures have their own name table, even when the function has no declared arguments.
-    for (size_t i = 0; i < closures.size(); ++i) {
-        if (closures[i] == nodeRef) {
-            return {
-                i < captured.size() ? string(camel::core::symbolText(captured[i])) : "",
-                "capture",
-                i};
-        }
-    }
-    const auto withPorts      = graph->withPorts();
-    const size_t declaredWith = closures.empty() && captured.size() <= withPorts.size()
-                                    ? withPorts.size() - captured.size()
-                                    : withPorts.size();
-    auto argName              = [&](size_t index) -> string {
-        const auto *type = graph->funcType();
-        return type && index < type->argNamesCount() ? string(type->argNameAt(index)) : "";
-    };
-    for (size_t i = 0; i < withPorts.size(); ++i) {
-        if (withPorts[i] != nodeRef)
-            continue;
-        if (i >= declaredWith) {
-            return {string(camel::core::symbolText(captured[i - declaredWith])), "capture", i};
-        }
-        return {argName(i), "with", i};
-    }
-    const auto normPorts = graph->normPorts();
-    for (size_t i = 0; i < normPorts.size(); ++i) {
-        if (normPorts[i] == nodeRef)
-            return {argName(declaredWith + i), "normal", i};
-    }
-    return {};
-}
-
-string portLabel(
-    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-    const camel::runtime::GCNode &) {
-    const auto info = portInfo(graph, nodeRef);
-    return info.name.empty() ? "PORT" : info.name;
-}
-
-string graphTooltip(camel::runtime::GCGraph *graph) {
-    ASSERT(graph != nullptr, "Graph tooltip requires a runtime graph.");
-    auto *funcType = graph->funcType();
-    return funcType ? funcType->toString() : string("<unknown>");
-}
-
-string recordTooltip(camel::runtime::GCGraph *graph, const camel::runtime::GCNode &record) {
-    ASSERT(graph != nullptr, "Node tooltip requires a runtime graph.");
-    return std::format("{}::node#{}", graph->name(), record.dataIndex);
-}
-
-string recordLabel(
-    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-    const camel::runtime::GCNode &record) {
-    switch (record.kind) {
-    case camel::runtime::GCNodeKind::Data: {
-        const string value = formatStaticDataValue(graph, record);
-        return value.empty() ? "DATA" : value;
-    }
-    case camel::runtime::GCNodeKind::Port:
-        return portLabel(graph, nodeRef, record);
-    case camel::runtime::GCNodeKind::Cast:
-        return "CAST";
-    case camel::runtime::GCNodeKind::Copy:
-        return "COPY";
-    case camel::runtime::GCNodeKind::Fill:
-        return record.dataType() ? record.dataType()->toString() : "FILL";
-    case camel::runtime::GCNodeKind::Accs: {
-        const auto *body = graph->nodeBodyAs<camel::runtime::GCAccsBody>(nodeRef);
-        ASSERT(
-            graph->nodePayloadBytes(nodeRef).size() >= sizeof(camel::runtime::GCAccsBody),
-            "GraphViz ACCS payload is smaller than its fixed header.");
-        if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
-            const std::string_view key = body->key();
-            return "." + std::string(key.data(), key.size());
-        }
-        return std::format(".{}", body->value);
-    }
-    case camel::runtime::GCNodeKind::Brch:
-        return "BRCH";
-    case camel::runtime::GCNodeKind::Join:
-        return "JOIN";
-    case camel::runtime::GCNodeKind::Call:
-        return "CALL";
-    case camel::runtime::GCNodeKind::Func: {
-        auto *callee = graph->directCalleeGraphOf(nodeRef);
-        return callee ? callee->name() : "FUNC";
-    }
-    case camel::runtime::GCNodeKind::Oper:
-        ASSERT(
-            graph->nodePayloadBytes(nodeRef).size() >= sizeof(camel::runtime::GCOperBody),
-            "GraphViz OPER payload is smaller than its fixed header.");
-        return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
-    case camel::runtime::GCNodeKind::Sync:
-        return "SYNC";
-    case camel::runtime::GCNodeKind::Gate:
-        return "GATE";
-    case camel::runtime::GCNodeKind::Loop: {
-        // `LOOP while cond=f.loop1.cond body=f.loop1.body` (graph model 3.5, the LOOP card).
-        const auto *cond = graph->loopCondGraphOf(nodeRef);
-        const auto *body = graph->loopBodyGraphOf(nodeRef);
-        std::string text =
-            std::format("LOOP {}", camel::core::loopKindName(graph->loopKindOf(nodeRef)));
-        if (cond) {
-            text += " cond=" + cond->name();
-        }
-        return text + " body=" + (body ? body->name() : std::string("?"));
-    }
-    default:
-        return "NODE";
-    }
-}
-
-string recordType(const camel::runtime::GCNode &record) {
-    switch (record.kind) {
-    case camel::runtime::GCNodeKind::Data:
-        return "DATA";
-    case camel::runtime::GCNodeKind::Port:
-        return "PORT";
-    case camel::runtime::GCNodeKind::Cast:
-        return "CAST";
-    case camel::runtime::GCNodeKind::Copy:
-        return "COPY";
-    case camel::runtime::GCNodeKind::Fill:
-        return "FILL";
-    case camel::runtime::GCNodeKind::Accs:
-        return "ACCS";
-    case camel::runtime::GCNodeKind::Brch:
-        return "BRCH";
-    case camel::runtime::GCNodeKind::Join:
-        return "JOIN";
-    case camel::runtime::GCNodeKind::Call:
-        return "CALL";
-    case camel::runtime::GCNodeKind::Func:
-        return "FUNC";
-    case camel::runtime::GCNodeKind::Oper:
-        return "OPER";
-    case camel::runtime::GCNodeKind::Sync:
-        return "SYNC";
-    case camel::runtime::GCNodeKind::Gate:
-        return "GATE";
-    case camel::runtime::GCNodeKind::Loop:
-        return "LOOP";
-    default:
-        return "NODE";
-    }
-}
 
 string recordShape(const camel::runtime::GCNode &record) {
     switch (record.kind) {
@@ -451,7 +256,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     res += baseIndent_;
 
     if (depth_ == 0) {
-        if (config_.readableOnly) {
+        if (!config_.rich) {
             res += "digraph GraphIR {\n";
         } else {
             res += std::format(
@@ -463,7 +268,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     } else {
         res += std::format("subgraph cluster_{} {{\n", funcId);
         res += std::format("{}{}label=\"{}\";\n", baseIndent_, indent_, funcName);
-        if (!config_.readableOnly) {
+        if (config_.rich) {
             res += std::format("{}{}tooltip=\"{}\";\n", baseIndent_, indent_, graphTooltip(graph));
         }
     }
@@ -483,7 +288,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     });
 
     if (!graph->isRoot() && (!graph->normPorts().empty() || !graph->withPorts().empty())) {
-        if (config_.readableOnly) {
+        if (!config_.rich) {
             res += std::format(
                 "{}{}{} [label=\"ARGS\", type=\"ARGS\"];\n",
                 baseIndent_,
@@ -498,7 +303,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         }
     }
 
-    if (config_.readableOnly) {
+    if (!config_.rich) {
         res +=
             std::format("{}{}{} [label=\"EXIT\", type=\"EXIT\"];\n", baseIndent_, indent_, exitId);
     } else {
@@ -523,7 +328,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         if (port->dataType())
             metadata += std::format(", value_type=\"{}\"", escape(port->dataType()->toString()));
         metadata += debugOriginAttr(graph, ref);
-        const string styling = config_.readableOnly
+        const string styling = !config_.rich
                                    ? ""
                                    : std::format(
                                          ", shape=circle, style={}, tooltip=\"{}\"",
@@ -534,7 +339,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             baseIndent_,
             indent_,
             nodeIdent(port),
-            escape(config_.readableOnly ? label : wrapText(label, 7, 2)),
+            escape(!config_.rich ? label : wrapText(label, 7, 2)),
             nodeType,
             metadata,
             styling);
@@ -592,7 +397,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 }
             }
         }
-        if (config_.readableOnly) {
+        if (!config_.rich) {
             res += std::format(
                 "{}{}{} [label=\"{}\", type=\"{}\"{}{}];\n",
                 baseIndent_,
@@ -613,7 +418,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 type,
                 shape,
                 roleFill.empty() ? style : std::format("\"filled,{}\"", style),
-                (size.empty() ? "" : ", " + size) + valueAttr,
+                (size.empty() ? "" : ", " + size) + valueAttr + debugOriginAttr(graph, nodeRef),
                 roleFill.empty()
                     ? ""
                     : std::format(", fillcolor=\"{}\", role=\"{}\"", roleFill, roleAttr),
@@ -624,7 +429,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     for (size_t i = 0; i < graph->withPorts().size(); ++i) {
         const auto *port = lookupRecord(graph, graph->withPorts()[i]);
         ASSERT(port != nullptr, "Runtime with-port record is missing.");
-        if (config_.readableOnly) {
+        if (!config_.rich) {
             res += std::format(
                 "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
                 baseIndent_,
@@ -647,7 +452,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     for (size_t i = 0; i < graph->normPorts().size(); ++i) {
         const auto *port = lookupRecord(graph, graph->normPorts()[i]);
         ASSERT(port != nullptr, "Runtime norm-port record is missing.");
-        if (config_.readableOnly) {
+        if (!config_.rich) {
             res += std::format(
                 "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
                 baseIndent_,
@@ -669,7 +474,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
 
     const auto *exitRecord = graph->exitNode();
     ASSERT(exitRecord != nullptr, "Runtime graph exit node is missing.");
-    if (config_.readableOnly) {
+    if (!config_.rich) {
         res += std::format(
             "{}{}{} -> {} [label=\"{}\", type=\"{}\"];\n",
             baseIndent_,
@@ -704,7 +509,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 }
                 outIdx++;
             }
-            if (config_.readableOnly) {
+            if (!config_.rich) {
                 res += std::format(
                     "{}{}{} -> {} [label=\"{}|{}\", type=\"{}\"];\n",
                     baseIndent_,
@@ -737,7 +542,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 }
                 outIdx++;
             }
-            if (config_.readableOnly) {
+            if (!config_.rich) {
                 res += std::format(
                     "{}{}{} -> {} [label=\"{}|{}\", type=\"{}\"];\n",
                     baseIndent_,
@@ -770,7 +575,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 }
                 outIdx++;
             }
-            if (config_.readableOnly) {
+            if (!config_.rich) {
                 res += std::format(
                     "{}{}{} -> {} [label=\"{}|{}\", type=\"{}\"];\n",
                     baseIndent_,
@@ -798,7 +603,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         res += std::format("{}subgraph cluster_legend {{\n", indent_);
         res += std::format("{}{}label=\"roles\";\n", indent_, indent_);
         for (const auto &[name, spec] : rolesSeen_) {
-            if (config_.readableOnly) {
+            if (!config_.rich) {
                 res += std::format(
                     "{}{}\"legend_{}\" [label=\"{}\", type=\"LEGEND\", role=\"{}\"];\n",
                     indent_,
@@ -830,18 +635,15 @@ GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context)
 GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context, GraphVizDumpConfig config)
     : RuntimeGraphTranslatePass(context), config_(std::move(config)) {}
 
-std::string GraphVizDumpPass::dumpReadable(camel::runtime::GCGraph *graph) {
-    return dumpGraph(graph);
-}
+std::string GraphVizDumpPass::dumpDot(camel::runtime::GCGraph *graph) { return dumpGraph(graph); }
 
-std::string dumpReadableRuntimeGraph(camel::runtime::GCGraph *graph, const context_ptr_t &ctx) {
+std::string dumpCompactRuntimeGraph(camel::runtime::GCGraph *graph, const context_ptr_t &ctx) {
     if (!graph || !graph->hasNodePayload()) {
         return {};
     }
     GraphVizDumpConfig config;
-    config.readableOnly = true;
     GraphVizDumpPass pass(ctx, std::move(config));
-    return pass.dumpReadable(graph);
+    return pass.dumpDot(graph);
 }
 
 camel::runtime::GCGraph *GraphVizDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {

@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,26 +41,26 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/source/manager.h"
 #include "camel/core/type/composite/array.h"
-#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/passes/macro/macro.h"
+#include "camel/passes/opt/config.h"
+#include "camel/passes/opt/generic.h"
+#include "camel/passes/trans/dot/graphviz.h"
+#include "camel/runtime/capacity.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
-#include "camel/passes/macro/macro.h"
-#include "camel/passes/opt/generic.h"
-#include "camel/passes/opt/config.h"
-#include "camel/runtime/capacity.h"
-#include "camel/passes/trans/dot/graphviz.h"
 
 #include <algorithm>
 #include <cstdlib>
 #include <deque>
-#include <functional>
 #include <format>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -304,7 +304,8 @@ class Evaluator {
     Activation activationOf(GCGraph *callee, std::span<const Value> args);
     bool nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGraph *target);
     std::vector<LoopFrame *> loops_;
-    GCGraph *nonTailFn_ = nullptr; // the function whose loop translation met a call outside tail position
+    GCGraph *nonTailFn_ =
+        nullptr; // the function whose loop translation met a call outside tail position
 
     // ---- linear recursion as paired loops, and functions as export-time values (see below)
     struct LinearFrame {
@@ -331,13 +332,16 @@ class Evaluator {
         Activation &act, const std::optional<std::string> &trip, const std::vector<Value> &init,
         const LoopBody &body);
     Value translateLinear(Activation &act, GCGraph *fn, std::vector<Value> args);
-    Value linearBody(const LinearFrame &f, std::span<const Value> state, size_t arm, const Value *hole);
+    Value
+    linearBody(const LinearFrame &f, std::span<const Value> state, size_t arm, const Value *hole);
     std::vector<Value> linearNext(const LinearFrame &f, std::span<const Value> state);
     std::string linearCont(Activation &act, const LinearFrame &f, std::span<const Value> state);
     std::vector<Value> linearReplay(Activation &act, const LinearFrame &f, const Value &steps);
     Value evalIndirectCall(Activation &act, gc_node_ref_t ref);
-    Value callClosure(Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount);
-    Value callLoopClosure(Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount);
+    Value
+    callClosure(Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount);
+    Value callLoopClosure(
+        Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount);
     /// Refuses a linear recursion for a condition it fails, at its recursive call.
     [[noreturn]] void refuseLinear(const LinearFrame &f, std::string_view what);
     Value mergeValues(Activation &act, const std::string &cond, const Value &a, const Value &b);
@@ -469,7 +473,8 @@ bool runsBefore(const GCGraph *g, gc_node_ref_t from, gc_node_ref_t to) {
     while (!work.empty()) {
         const gc_node_ref_t ref = work.back();
         work.pop_back();
-        for (const auto users : {g->normOutputsOf(ref), g->withOutputsOf(ref), g->ctrlOutputsOf(ref)}) {
+        for (const auto users :
+             {g->normOutputsOf(ref), g->withOutputsOf(ref), g->ctrlOutputsOf(ref)}) {
             for (gc_node_ref_t user : users) {
                 if (user == to) {
                     return true;
@@ -667,7 +672,8 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
                 (declared && n->dataType()->castSafetyFrom(declared) == type::CastSafety::Safe)) {
                 return src;
             }
-            const std::string have = known ? known->toString() : std::string("a value of unknown type");
+            const std::string have =
+                known ? known->toString() : std::string("a value of unknown type");
             if (safety == type::CastSafety::Forbidden) {
                 unsupported(
                     act,
@@ -1029,8 +1035,7 @@ bool Evaluator::nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGra
     return false;
 }
 
-std::vector<Value>
-Evaluator::callArguments(Activation &act, gc_node_ref_t site, GCGraph *callee) {
+std::vector<Value> Evaluator::callArguments(Activation &act, gc_node_ref_t site, GCGraph *callee) {
     GCGraph *g      = act.graph;
     const auto with = g->withInputsOf(site);
     const auto norm = g->normInputsOf(site);
@@ -1186,12 +1191,11 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
         return outputs.size() - 1;
     };
     const auto boolOperand = [&](const BodyOutcome &o) {
-        return o.contConst ? emitter_.operand(
-                                 Value::constant(
-                                     rtdata::toSlot<bool>(*o.contConst),
-                                     type::Type::Bool()),
-                                 TypeCode::Bool)
-                           : o.contName;
+        return o.contConst
+                   ? emitter_.operand(
+                         Value::constant(rtdata::toSlot<bool>(*o.contConst), type::Type::Bool()),
+                         TypeCode::Bool)
+                   : o.contName;
     };
 
     std::optional<size_t> contAt;
@@ -1234,7 +1238,8 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
     std::vector<std::optional<size_t>> resultAt;
     const Value *resultLike = nullptr;
     const auto leafKind     = [](const Value &leaf) -> std::string {
-        if (leaf.isClosure() || (leaf.isConstant() && leaf.ty && leaf.ty->code() == TypeCode::Function)) {
+        if (leaf.isClosure() ||
+            (leaf.isConstant() && leaf.ty && leaf.ty->code() == TypeCode::Function)) {
             return "a function";
         }
         if (leaf.isSymbolic() && leaf.form == Value::Form::IntArray) {
@@ -1274,7 +1279,7 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
                         "every path",
                         j,
                         !isCarriable(la[j]) || !isCarriable(lb[j]) ? leafKind(bad)
-                                                                    : "of different types on them"));
+                                                                   : "of different types on them"));
             }
             resultAt[j] = request(la[j], lb[j]);
             resultLeaves.push_back(la[j]);
@@ -1324,10 +1329,9 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
     if (!outputs.empty()) {
         for (size_t i = 0; i < 2; ++i) {
             for (const Output &o : outputs) {
-                bodies[i].outputs.push_back(
-                    valueInfoOf(
-                        emitter_.appendIdentity(bodies[i], o.names[i], "path_out"),
-                        o.facts));
+                bodies[i].outputs.push_back(valueInfoOf(
+                    emitter_.appendIdentity(bodies[i], o.names[i], "path_out"),
+                    o.facts));
             }
         }
         const std::vector<std::string> names = emitter_.nodeN(
@@ -1586,7 +1590,9 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
     // "" is the trip count (none); the body always runs once, as a call of the function does.
     std::vector<std::string> loopInputs{
         std::string(),
-        emitter_.operand(Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()), TypeCode::Bool)};
+        emitter_.operand(
+            Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()),
+            TypeCode::Bool)};
     std::vector<size_t> carriedIndex;
     for (size_t k = 0; k < count; ++k) {
         if (carried[k]) {
@@ -1704,7 +1710,9 @@ std::vector<Value> Evaluator::emitLoop(
     bodyGraph.outputs = std::move(outputs);
     std::vector<std::string> loopInputs{
         trip ? *trip : std::string(),
-        emitter_.operand(Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()), TypeCode::Bool)};
+        emitter_.operand(
+            Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()),
+            TypeCode::Bool)};
     for (const Value &v : init) {
         loopInputs.push_back(emitter_.operand(v, factsOf(v).dtype));
     }
@@ -1919,11 +1927,8 @@ Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value
     std::vector<Value> init = pick(f.args, f.carried);
     const size_t m          = init.size();
     init.push_back(Value::constant(rtdata::toSlot<rtdata::Int64>(0), type::Type::Int64()));
-    const std::vector<Value> last = emitLoop(
-        act,
-        std::nullopt,
-        init,
-        [&](const Value &, const std::vector<Value> &state) {
+    const std::vector<Value> last =
+        emitLoop(act, std::nullopt, init, [&](const Value &, const std::vector<Value> &state) {
             const std::vector<Value> full =
                 place(f.args, f.carried, std::span<const Value>(state.data(), m));
             const std::string again = linearCont(act, f, full);
@@ -1945,11 +1950,10 @@ Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value
                     stepped.push_back(emitter_.operand(next[k], *in.dtype));
                 }
                 const int64_t one[] = {1};
-                stepped.push_back(
-                    emitter_.node(
-                        "Add",
-                        {emitter_.operand(state[m], TypeCode::Int64),
-                         emitter_.node("Squeeze", {emitter_.int64s(one)})}));
+                stepped.push_back(emitter_.node(
+                    "Add",
+                    {emitter_.operand(state[m], TypeCode::Int64),
+                     emitter_.node("Squeeze", {emitter_.int64s(one)})}));
                 sides[0] = emitter_.popScope();
             } catch (...) {
                 emitter_.popScope();
@@ -2032,11 +2036,15 @@ Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value
         std::vector<Value> result;
         flattenValue(linearBody(f, state, f.recArm, &hole), result);
         if (result.size() != leaves.size()) {
-            unsupported(act, "the two paths of a linear recursion return values of different structure");
+            unsupported(
+                act,
+                "the two paths of a linear recursion return values of different structure");
         }
         for (size_t j = 0; j < leaves.size(); ++j) {
             if (leaves[j].isClosure() != result[j].isClosure()) {
-                unsupported(act, "the two paths of a linear recursion return values of different structure");
+                unsupported(
+                    act,
+                    "the two paths of a linear recursion return values of different structure");
             }
             if (!leaves[j].isClosure()) {
                 changed[j] = !sameValue(result[j], plain[j]);
@@ -2308,8 +2316,8 @@ Value Evaluator::callLoopClosure(
             holes[j].closureRef = j;
         }
     }
-    size_t at        = 0;
-    const Value hole = rebuildValue(f.base, holes, at);
+    size_t at            = 0;
+    const Value hole     = rebuildValue(f.base, holes, at);
     const auto closureAt = [&](std::span<const Value> state) {
         std::vector<Value> result;
         flattenValue(linearBody(f, state, f.recArm, &hole), result);
@@ -2330,7 +2338,7 @@ Value Evaluator::callLoopClosure(
 
     // A discarded evaluation: what the bottom call returns (its structure and types), how often
     // the function calls the one below it, and with what.
-    size_t calls = 0;
+    size_t calls       = 0;
     bool sameArguments = true;
     std::vector<Value> shape; // leaves of the result, as placeholders
     Value shapeLike;
@@ -2355,9 +2363,13 @@ Value Evaluator::callLoopClosure(
             probeArgs.push_back(rebuildValue(a, leaves, next));
         }
         const HoleCall none = [&](size_t, const std::vector<Value> &) -> Value {
-            refuseLinear(f, "the function of the call that ends a recursion calls a function of the recursion");
+            refuseLinear(
+                f,
+                "the function of the call that ends a recursion calls a function of the recursion");
         };
-        shapeLike = withHole(none, [&] { return callClosure(act, baseLeaves.at(where.leaf), probeArgs, withCount); });
+        shapeLike = withHole(none, [&] {
+            return callClosure(act, baseLeaves.at(where.leaf), probeArgs, withCount);
+        });
         flattenValue(shapeLike, shape);
         for (Value &leaf : shape) {
             if (!isCarriable(leaf)) {
@@ -2370,7 +2382,10 @@ Value Evaluator::callLoopClosure(
         }
         const HoleCall count = [&](size_t leaf, const std::vector<Value> &inner) -> Value {
             if (leaf != where.leaf) {
-                refuseLinear(f, "a function of a linear recursion calls another function of the same recursion");
+                refuseLinear(
+                    f,
+                    "a function of a linear recursion calls another function of the same "
+                    "recursion");
             }
             ++calls;
             sameArguments = sameArguments && inner.size() == probeArgs.size();
@@ -2382,10 +2397,14 @@ Value Evaluator::callLoopClosure(
         };
         std::vector<Value> result;
         flattenValue(
-            withHole(count, [&] { return callClosure(act, closureAt(state), probeArgs, withCount); }),
+            withHole(
+                count,
+                [&] { return callClosure(act, closureAt(state), probeArgs, withCount); }),
             result);
         if (calls > 0 && result.size() != shape.size()) {
-            refuseLinear(f, "the functions of a linear recursion return values of different structure");
+            refuseLinear(
+                f,
+                "the functions of a linear recursion return values of different structure");
         }
         emitter_.popScope();
     } catch (...) {
@@ -2395,7 +2414,9 @@ Value Evaluator::callLoopClosure(
     if (calls == 0) {
         // It never calls the function below it: the first call's function is the whole answer.
         const HoleCall none = [&](size_t, const std::vector<Value> &) -> Value {
-            refuseLinear(f, "a function of a linear recursion calls the one below it on some paths only");
+            refuseLinear(
+                f,
+                "a function of a linear recursion calls the one below it on some paths only");
         };
         return withHole(none, [&] { return callClosure(act, closureAt(f.args), args, withCount); });
     }
@@ -2409,10 +2430,13 @@ Value Evaluator::callLoopClosure(
 
     // Bottom: the function of the last call.
     const HoleCall none = [&](size_t, const std::vector<Value> &) -> Value {
-        refuseLinear(f, "the function of the call that ends a recursion calls a function of the recursion");
+        refuseLinear(
+            f,
+            "the function of the call that ends a recursion calls a function of the recursion");
     };
-    const Value bottom =
-        withHole(none, [&] { return callClosure(act, baseLeaves.at(where.leaf), args, withCount); });
+    const Value bottom = withHole(none, [&] {
+        return callClosure(act, baseLeaves.at(where.leaf), args, withCount);
+    });
     std::vector<Value> bottomLeaves;
     flattenValue(bottom, bottomLeaves);
 
@@ -2433,13 +2457,15 @@ Value Evaluator::callLoopClosure(
                      iter.name}),
                 type::Type::Int64());
             const std::vector<Value> state = linearReplay(act, f, index);
-            const HoleCall below = [&](size_t, const std::vector<Value> &) -> Value {
+            const HoleCall below           = [&](size_t, const std::vector<Value> &) -> Value {
                 size_t next = 0;
                 return rebuildValue(bottom, current, next);
             };
             std::vector<Value> result;
             flattenValue(
-                withHole(below, [&] { return callClosure(act, closureAt(state), args, withCount); }),
+                withHole(
+                    below,
+                    [&] { return callClosure(act, closureAt(state), args, withCount); }),
                 result);
             return std::pair<std::optional<std::string>, std::vector<Value>>{std::nullopt, result};
         });
@@ -2543,8 +2569,8 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
                 "an array variable is appended to (`acc = acc->append<v>`); an ONNX model holds "
                 "no growing arrays: compute the values as a tensor instead");
         }
-        const Value operand        = eval(act, g->normInputsOf(last)[1]);
-        const AssignmentKind kind  = assignmentKindOf(operUriOf(g, last));
+        const Value operand       = eval(act, g->normInputsOf(last)[1]);
+        const AssignmentKind kind = assignmentKindOf(operUriOf(g, last));
         if (kind.binary.empty()) {
             return operand;
         }
@@ -2626,8 +2652,8 @@ Value Evaluator::applyOper(
         std::cerr << std::format("[onnx] {} {}({})\n", act.graph->name(), uri, args);
     }
     try {
-        Value result = lowering->lower(
-            LowerContext(emitter_, uri, norm, std::move(facts), resultType));
+        Value result =
+            lowering->lower(LowerContext(emitter_, uri, norm, std::move(facts), resultType));
         if (traceEnabled()) {
             std::cerr << std::format("[onnx]   -> {}\n", describe(result));
         }
@@ -2645,8 +2671,8 @@ Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
     if (act.linear != nullptr && g == act.linear->frame->fn && join == act.linear->frame->join) {
         return eval(act, arms[act.linear->arm]);
     }
-    const auto caseRefs      = g->withInputsOf(brch);
-    const Value cond         = eval(act, g->normInputsOf(brch).front());
+    const auto caseRefs = g->withInputsOf(brch);
+    const Value cond    = eval(act, g->normInputsOf(brch).front());
     if (!cond.isConstant()) {
         if (!caseRefs.empty() || arms.size() != 2 || cond.form != Value::Form::Scalar) {
             unsupported(
@@ -2718,10 +2744,9 @@ Value Evaluator::evalSymbolicBranch(
         emitter_.pushScope(i == 0 ? "then_branch" : "else_branch");
         act.memo.emplace_back();
         try {
-            results[i]          = eval(act, arms[i]);
-            if (results[i].isClosure() ||
-                (results[i].isConstant() && results[i].ty &&
-                 results[i].ty->code() == TypeCode::Function)) {
+            results[i] = eval(act, arms[i]);
+            if (results[i].isClosure() || (results[i].isConstant() && results[i].ty &&
+                                           results[i].ty->code() == TypeCode::Function)) {
                 refuseFunctionBranch(
                     act,
                     results[i].isClosure() ? results[i].camelType : results[i].ty);
@@ -2863,7 +2888,7 @@ Value Evaluator::evalSymbolicAggregateBranch(
         // An arm yields a function that exists only at export time (what a linear recursion
         // returns). Its captured values must stay visible where it is called, so the arms
         // cannot live in If subgraphs: both are evaluated here and the condition selects.
-        Value cond        = Value::symbolicScalar(condName, type::Type::Bool());
+        Value cond = Value::symbolicScalar(condName, type::Type::Bool());
         return evalEagerBranch(act, cond, arms);
     }
     std::vector<ArmLeaf> leaves;
@@ -3011,7 +3036,8 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
         return Value::aggregate(targetType, std::move(fields));
     }
     if (source.isConstant() && targetType->code() == TypeCode::Function &&
-        (closuresWanted_ > 0 || std::ranges::any_of(values, [](const Value &v) { return v.isClosure(); }))) {
+        (closuresWanted_ > 0 ||
+         std::ranges::any_of(values, [](const Value &v) { return v.isClosure(); }))) {
         // A closure: the function and its captured values, kept until it is called.
         auto *fn = rtdata::fromSlot<::Function *>(source.slot);
         if (fn == nullptr || fn->graph() == nullptr) {
@@ -3054,7 +3080,7 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
 // element unsqueezed and the elements concatenated.
 Value Evaluator::symbolicFloatArray(
     Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values) {
-    auto *templ          = rtdata::fromSlot<::Array *>(source.slot);
+    auto *templ = rtdata::fromSlot<::Array *>(source.slot);
     type::Type *elemType =
         static_cast<type::ArrayType *>(act.graph->node(ref)->dataType())->elemType();
     const TypeCode dtype = tensor::normalizeTensorDType(elemType->code());
@@ -3884,7 +3910,7 @@ Model translatePrepared(
         std::cerr << "ONNX_PREP_STATS simplified " << reachableStats(root) << std::endl;
     }
     if (dumpEnabled()) {
-        GraphVizDumpPass(context, GraphVizDumpConfig{.readableOnly = true}).apply(root, std::cerr);
+        GraphVizDumpPass(context).apply(root, std::cerr);
     }
 
     Evaluator evaluator(emitter, options, ctx, std::move(names), ctx.sourceContext());
@@ -3951,11 +3977,10 @@ class DeclaredInputBinder {
             auto *structType = static_cast<type::StructType *>(ty);
             std::vector<Value> fields;
             for (size_t i = 0; i < structType->size(); ++i) {
-                fields.push_back(
-                    bind(
-                        structType->typeAt(i),
-                        name + "_" + std::string(structType->fieldName(i)),
-                        param));
+                fields.push_back(bind(
+                    structType->typeAt(i),
+                    name + "_" + std::string(structType->fieldName(i)),
+                    param));
             }
             return Value::aggregate(ty, std::move(fields));
         }

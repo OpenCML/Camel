@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -74,7 +74,7 @@ string targetFile = "";
 
 namespace {
 
-/// State of `--dump-after-each-pass <dir>`: one readable DOT (std::rgir format, with the
+/// State of `--dump-after-each-pass <dir>`: one readable DOT (std::gir format, with the
 /// origin/span/srcfile attributes of each node) and one GRAPH_STATS JSON per snapshot.
 /// Snapshot 00 is the graph before the first pass; snapshot N is the output of the N-th pass
 /// that returned a graph. Passes that consume the graph (scheduling and translation passes)
@@ -104,8 +104,8 @@ string passDumpStem(size_t index, const string &passName) {
 void writePassDump(PassDumpState &state, const string &passName, camel::runtime::GCGraph *graph) {
     const string stem = passDumpStem(state.next++, passName);
     {
-        std::ofstream dot(state.dir / (stem + ".rgir.dot"), std::ios::binary);
-        dot << dumpReadableRuntimeGraph(graph, state.ctx);
+        std::ofstream dot(state.dir / (stem + ".gir.dot"), std::ios::binary);
+        dot << dumpCompactRuntimeGraph(graph, state.ctx);
     }
     {
         std::ofstream stats(state.dir / (stem + ".stats.json"), std::ios::binary);
@@ -353,8 +353,8 @@ int runCommand(int argc, char *argv[]) {
             if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
                 mainModule->compile(CompileStage::GCT);
             }
-            if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps || Inspect::dumpInstances ||
-                Inspect::dumpFacts) {
+            if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps ||
+                Inspect::dumpInstances || Inspect::dumpFacts) {
                 mainModule->compile(CompileStage::Done);
             }
         } else {
