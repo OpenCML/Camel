@@ -142,16 +142,17 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
         t.emplace(
             "rsqrt",
             rounded(f32, kApprox, "1 / sqrt(x) per element: two steps, each rounded in f32"));
-        // exp: measured over every f32 input, at most 1.01 ulp where the result is a normal
-        // float; results below the smallest normal float are flushed to zero (the subnormal
-        // range is outside the bound). Declared at the library target of 2 ulp.
+        // exp: measured over every f32 input (portable and AVX2+FMA units), at most 1.01 ulp
+        // where the result is a normal float and 0.76 ulp where it is subnormal, NaN, +-inf and
+        // +-0 exact (the scale is applied in two normal factors,
+        // so a subnormal result is rounded once). Declared at the library target of 2 ulp.
         t.emplace(
             "exp",
             bounded(
                 2.0f,
-                SpecialValues{.subnormals = false},
-                "e^x per element, within 2 ulp where the result is a normal float; results in "
-                "the subnormal range are flushed to +0; NaN, +-inf and +-0 exact"));
+                {},
+                "e^x per element, within 2 ulp, subnormal results included (+0 below half the "
+                "smallest subnormal); NaN, +-inf and +-0 exact"));
         // log: the C library's logf, measured at most 0.82 ulp over every f32 input.
         t.emplace(
             "log",

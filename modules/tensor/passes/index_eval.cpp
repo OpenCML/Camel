@@ -779,6 +779,21 @@ Generator unaryCases(bool integers) {
     };
 }
 
+/// exp: the unary cases, and now and then inputs whose results are subnormal or round to +0
+/// (x in [-105, -86]: e^x from 2^-151 to 2^-124), which must be within the bound too.
+Generator expCases() {
+    return [](Rng &rng) {
+        if (!rng.chance(40)) {
+            return unaryCases(false)(rng);
+        }
+        Data d{TypeCode::Float32, randomShape(rng, static_cast<size_t>(rng.range(1, 2)), 9), {}};
+        for (int64_t k = 0; k < numelOf(d.shape); ++k) {
+            d.values.push_back(f32(static_cast<float>(-86.0 - static_cast<double>(rng.range(0, 1 << 20)) * 19.0 / (1 << 20))));
+        }
+        return Case{Arg::tensor(std::move(d))};
+    };
+}
+
 Generator transposeCases() {
     return [](Rng &rng) {
         return Case{Arg::tensor(randomData(rng, pickDtype(rng), randomShape(rng, static_cast<size_t>(rng.range(2, 4)))))};
@@ -1222,7 +1237,7 @@ camel::runtime::GCGraph *IndexEvalTestPass::apply(camel::runtime::GCGraph *graph
         {"tensor:relu", unaryCases(true), 40},
         {"tensor:sqrt", unaryCases(false), 40},
         {"tensor:rsqrt", unaryCases(false), 40},
-        {"tensor:exp", unaryCases(false), 40},
+        {"tensor:exp", expCases(), 60},
         {"tensor:log", unaryCases(false), 40},
         {"tensor:transpose", transposeCases(), 60},
         {"tensor:permute", permuteCases(), 80},

@@ -124,7 +124,7 @@ for (const [uri, [cls, compute, sensitive]] of Object.entries(expect)) {
   assert(typeof s.algorithm === 'string' && s.algorithm.length > 0, `${uri}: no algorithm`)
 }
 assert(byUri.get('tensor:exp').semantics.ulp === 2 && byUri.get('tensor:log').semantics.ulp === 2, 'exp and log are declared within 2 ulp')
-assert(JSON.stringify(byUri.get('tensor:exp').semantics.not_ieee) === '["subnormals"]', 'exp flushes subnormal results')
+assert(byUri.get('tensor:exp').semantics.not_ieee === undefined && byUri.get('tensor:log').semantics.not_ieee === undefined, 'exp and log keep subnormal results (no departure from IEEE declared)')
 assert(JSON.stringify(byUri.get(':op/div_d').semantics.faults) === '["division_by_zero"]', 'scalar float division faults on a zero divisor')
 assert(JSON.stringify(byUri.get(':op/add_d').semantics.faults) === '[]', 'scalar float addition never faults')
 assert(byUri.get('tensor:matmul').semantics.faults === undefined, 'tensor faults are not declared yet')
