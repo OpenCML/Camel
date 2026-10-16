@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <list>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>

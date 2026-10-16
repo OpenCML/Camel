@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace camel::tiles::kernel {
 namespace sem = core::sem;

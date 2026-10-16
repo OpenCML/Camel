@@ -11,6 +11,8 @@
 // Generic row-local tensor DAGs; shared values are computed once and reused across reductions.
 #include "tiles/internal/row_kernel.h"
 #include <algorithm>
+#include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>

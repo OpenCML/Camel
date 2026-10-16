@@ -12,6 +12,9 @@
 #pragma once
 #include "tiles/internal/access.h"
 #include "tiles/internal/scalar_expr.h"
+#include <cstdint>
+#include <optional>
+#include <string>
 #include <variant>
 #include <vector>
 

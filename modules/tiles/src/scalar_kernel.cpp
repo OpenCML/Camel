@@ -11,6 +11,8 @@
 // Structured scalar chains with explicit device fault and early-return nodes.
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
+#include <cstdint>
+#include <string>
 #include <unordered_map>
 
 namespace camel::tiles::kernel {
