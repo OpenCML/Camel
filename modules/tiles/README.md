@@ -58,13 +58,21 @@ capture. Unary and multiple arguments, function values, aggregate results and
 nested decorated calls are supported. Inside a GPU compilation, a nested dispatch
 is lowered as the underlying computation, without host execution or a nested GPU
 launch. Numeric permissions remain attached to the original operator nodes.
-When the backend is unavailable or compilation identifies an unsupported computation,
-the original function runs on the current CPU execution backend. This is graph
+For statically shaped eligible tensor regions, decorating the function uses the
+same region extraction and resident transfers as `std::tiles`. Unsupported nodes
+stay on CPU while supported regions prefer GPU; captures and CPU effects are
+preserved. Partitioning happens once when the decorated function value is built.
+Kernel planning and CUDA compilation still happen at execution time, not yet at
+source compilation time. Symbolic and unknown shapes do not use this regional path.
+When no static region can be extracted, the existing whole-function, call-site
+specialization remains: an unavailable backend or unsupported computation runs
+the original function on the current CPU execution backend. Regional execution
+also falls back independently when its backend is unavailable. This is graph
 execution, not a fused CPU JIT kernel. Configuration errors, malformed graphs,
 compilation failures and device execution faults are reported; an executed GPU
 region is never replayed on CPU. `run` continues to require the GPU. Functions with mutable parameters, unbound context parameters or
 no ordinary inputs are currently rejected. This is separate from the planned
-`@kernel` block-kernel validation annotation and from automatic region placement.
+`@kernel` block-kernel validation annotation.
 The annotation also supports local functions with captured values. Use `gpu(lambda)`
 when constructing a GPU-dispatched function value directly.
 

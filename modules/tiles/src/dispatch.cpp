@@ -14,12 +14,15 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft.h"
 #include "tiles/internal/graph_values.h"
+#include "tiles/internal/regions.h"
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace camel::tiles {
-Function *gpuFunction(Function *source, operator_t run) {
+Function *gpuFunction(
+    Function *source, operator_t run, core::context::Context &context,
+    const RegionDeviceOps &preferred) {
     namespace rt = runtime;
     namespace ty = core::type;
     namespace td = core::rtdata;
@@ -29,6 +32,25 @@ Function *gpuFunction(Function *source, operator_t run) {
         throw std::runtime_error(
             "@gpu requires a function with ordinary input parameters and no unbound context "
             "parameters");
+    for (size_t i = 0; i < signature->normTypesCount(); ++i)
+        if (signature->normIsVarAt(i))
+            throw std::runtime_error("@gpu does not accept mutable input parameters");
+    // Partition once when decorating. A detached rewrite leaves the original callable
+    // intact; its captured values remain traced by the new Function's closure tuple.
+    size_t regions = 0;
+    auto *regional = outlineRegions(
+        context,
+        source->graph(),
+        preferred.execute,
+        preferred.executeUri,
+        regions,
+        &preferred);
+    if (regions) {
+        auto *result =
+            static_cast<Function *>(source->clone(core::mm::autoSpace(), signature, false));
+        result->setRuntimeGraph(regional);
+        return result;
+    }
     rt::GraphDraft draft;
     draft.setFuncType(signature);
     auto *closureType = ty::TupleType::create({signature});
