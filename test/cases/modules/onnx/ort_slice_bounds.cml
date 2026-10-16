@@ -1,0 +1,31 @@
+/**
+ * A slice whose end depends on the model input: Camel faults when the end leaves the axis
+ * (design principles 2.10) where the ONNX Slice would clamp it, so the exported model must fail
+ * on ONNX Runtime where Camel faults and agree with Camel elsewhere (checked by
+ * ort_slice_bounds.py, for the slice alone and inside a branch on the data: MODE=branch).
+ */
+module ort_slice_bounds
+import { Tensor, reshape, slice, sum } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func head(x: Tensor): Tensor {
+    return slice(x, 0, 0, int(sum(x)))
+}
+
+/// A branch on the data: an ONNX If, only the arm taken runs.
+func branch(x: Tensor): Tensor {
+    return if sum(x) > 100.0 then x else head(x)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 1.0, 1.0], [3])
+    println(head(x))
+    if get_env('MODE') == 'branch' then {
+        export_model((x: Tensor): Tensor => branch(x), x, get_env('ONNX_OUT'))
+    } else {
+        export_model((x: Tensor): Tensor => head(x), x, get_env('ONNX_OUT'))
+    }
+    println('exported')
+    return 0
+}

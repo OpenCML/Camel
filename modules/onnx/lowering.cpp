@@ -363,32 +363,29 @@ Value lowerConcat(const LowerContext &ctx) {
         {intAttr("axis", ctx.constInt(2))});
 }
 
-/// slice(t, axis, start, end[, step]). The axis and the step are constants of the model; a start
-/// or an end that depends on the model input (the counter of a loop over the time axis) is an
-/// input of the ONNX Slice, which clamps out-of-range bounds as Camel does. The extent of the
-/// sliced axis is then unknown to the exporter.
+/**
+ * slice(t, axis, start, end[, step]). The axis and the step are constants of the model. A
+ * start or an end outside the axis (after a negative one is counted from the end) is a fault in
+ * Camel (design principles 2.10), while the ONNX Slice clamps it, so the exporter never relies
+ * on Slice for the bounds:
+ *
+ *   - constant bounds on an axis of known extent are checked here (proved in range, or the
+ *     export fails with a located error) and give a plain Slice;
+ *   - otherwise (a bound that depends on the model input, such as the counter of a loop over
+ *     the time axis, or an extent known only when the model runs) each bound goes through a
+ *     guard that faults in ONNX exactly when Camel faults: a Gather into a vector of n + 1
+ *     zeros at b (b >= 0) or b - 1 (b < 0), which is in range exactly for -n <= b <= n, and
+ *     whose zero is added to the bound so the guard stays on the data path;
+ *   - such a guard cannot be emitted where the model computes both arms of a branch and
+ *     selects one (Emitter::speculative): it would fault on the arm Camel does not run. That
+ *     slice is refused.
+ */
 Value lowerSlice(const LowerContext &ctx) {
     Emitter &e            = ctx.emitter();
     const int64_t axis[]  = {ctx.constInt(1)};
     const int64_t steps[] = {ctx.constInt(4, 1)};
-    bool dynamic          = false;
-    const auto bound      = [&](size_t index) {
-        if (ctx.arg(index).isConstant()) {
-            const int64_t value[] = {ctx.constInt(index)};
-            return e.int64s(value);
-        }
-        if (ctx.arg(index).form != Value::Form::Scalar) {
-            throw ExportError(
-                std::format("'tensor:slice': argument {} must be an integer", index));
-        }
-        dynamic              = true;
-        const int64_t zero[] = {0};
-        return e.node("Unsqueeze", {ctx.input(index, TypeCode::Int64), e.int64s(zero)});
-    };
-    const std::string starts = bound(2);
-    const std::string ends   = bound(3);
-    if (!dynamic) {
-        return ctx.emit("Slice", {ctx.input(0), starts, ends, e.int64s(axis), e.int64s(steps)});
+    if (steps[0] <= 0) {
+        throw ExportError(std::format("'tensor:slice': the step {} is not positive", steps[0]));
     }
     const auto facts = ctx.facts(0);
     if (!facts.shape) {
@@ -401,11 +398,85 @@ Value lowerSlice(const LowerContext &ctx) {
         throw ExportError(
             std::format("'tensor:slice': axis {} is out of range for rank {}", axis[0], rank));
     }
-    shape[static_cast<size_t>(at)] = tensor::kUnknownDim;
+    const int64_t extent = shape[static_cast<size_t>(at)];
+    for (size_t index : {size_t{2}, size_t{3}}) {
+        if (!ctx.arg(index).isConstant() && ctx.arg(index).form != Value::Form::Scalar) {
+            throw ExportError(
+                std::format("'tensor:slice': argument {} must be an integer", index));
+        }
+    }
+    const bool constantBounds = ctx.arg(2).isConstant() && ctx.arg(3).isConstant();
+
+    // Proved in range from the static extent and the constants: a plain Slice.
+    if (constantBounds && extent != tensor::kUnknownDim) {
+        for (size_t index : {size_t{2}, size_t{3}}) {
+            const int64_t b = ctx.constInt(index);
+            const int64_t n = b < 0 ? b + extent : b;
+            if (n < 0 || n > extent) {
+                throw ExportError(std::format(
+                    "'tensor:slice': the {} {} is outside axis {} of extent {} (Camel faults "
+                    "where the ONNX Slice would clamp it)",
+                    index == 2 ? "start" : "end",
+                    b,
+                    at,
+                    extent));
+            }
+        }
+        const int64_t start[] = {ctx.constInt(2)}, end[] = {ctx.constInt(3)};
+        return ctx.emit(
+            "Slice",
+            {ctx.input(0), e.int64s(start), e.int64s(end), e.int64s(axis), e.int64s(steps)});
+    }
+
+    if (e.speculative()) {
+        throw ExportError(std::format(
+            "'tensor:slice': its bounds on axis {} cannot be proved within the axis at export "
+            "time, and it is on an arm of a branch on a model-dependent condition, which the "
+            "exported model computes whether or not it is taken; an ONNX Slice there would "
+            "clamp bounds that Camel faults on (design principles 2.10). Prove the bounds with "
+            "constants, or move the slice out of the branch",
+            at));
+    }
+
+    // The guards: zeros of length n + 1, n the extent (known now, or read from the shape).
+    const int64_t zero[] = {0}, one[] = {1};
+    std::string extentVec;
+    if (extent != tensor::kUnknownDim) {
+        const int64_t n[] = {extent};
+        extentVec         = e.int64s(n);
+    } else {
+        const int64_t axisIndex[] = {at};
+        extentVec                 = e.node(
+            "Gather",
+            {e.node("Shape", {ctx.input(0)}), e.int64s(axisIndex)},
+            {intAttr("axis", 0)});
+    }
+    const auto int64Cast = intAttr("to", static_cast<int64_t>(elemTypeOf(TypeCode::Int64)));
+    const std::string zeros =
+        e.node("Cast", {e.node("ConstantOfShape", {e.node("Add", {extentVec, e.int64s(one)})})}, {int64Cast});
+    const auto guarded = [&](size_t index) {
+        std::string b;
+        if (ctx.arg(index).isConstant()) {
+            const int64_t value[] = {ctx.constInt(index)};
+            b                     = e.int64s(value);
+        } else {
+            b = e.node("Unsqueeze", {ctx.input(index, TypeCode::Int64), e.int64s(zero)});
+        }
+        const std::string negative =
+            e.node("Cast", {e.node("Less", {b, e.int64s(zero)})}, {int64Cast});
+        const std::string check =
+            e.node("Gather", {zeros, e.node("Sub", {b, negative})}, {intAttr("axis", 0)});
+        return e.node("Add", {b, check});
+    };
+    const std::string starts = guarded(2);
+    const std::string ends   = guarded(3);
+    if (!constantBounds) {
+        shape[static_cast<size_t>(at)] = tensor::kUnknownDim;
+    }
     return Value::symbolic(
         e.node("Slice", {ctx.input(0), starts, ends, e.int64s(axis), e.int64s(steps)}),
         facts.dtype,
-        shape);
+        constantBounds ? ctx.result().shape.value_or(shape) : shape);
 }
 
 /// Reduction over one axis. Opset 18 moved `axes` from an attribute to an input for every

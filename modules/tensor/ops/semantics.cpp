@@ -142,16 +142,17 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
         t.emplace(
             "rsqrt",
             rounded(f32, kApprox, "1 / sqrt(x) per element: two steps, each rounded in f32"));
-        // exp: measured over every f32 input, at most 1.01 ulp where the result is a normal
-        // float; results below the smallest normal float are flushed to zero (the subnormal
-        // range is outside the bound). Declared at the library target of 2 ulp.
+        // exp: measured over every f32 input (portable and AVX2+FMA units), at most 1.01 ulp
+        // where the result is a normal float and 0.76 ulp where it is subnormal, NaN, +-inf and
+        // +-0 exact (the scale is applied in two normal factors,
+        // so a subnormal result is rounded once). Declared at the library target of 2 ulp.
         t.emplace(
             "exp",
             bounded(
                 2.0f,
-                SpecialValues{.subnormals = false},
-                "e^x per element, within 2 ulp where the result is a normal float; results in "
-                "the subnormal range are flushed to +0; NaN, +-inf and +-0 exact"));
+                {},
+                "e^x per element, within 2 ulp, subnormal results included (+0 below half the "
+                "smallest subnormal); NaN, +-inf and +-0 exact"));
         // log: the C library's logf, measured at most 0.82 ulp over every f32 input.
         t.emplace(
             "log",
@@ -164,14 +165,16 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
                 f64,
                 kReduce,
                 "every element converted to f64 and added to an f64 accumulator from +0 in "
-                "row-major order; the result is the f64 sum"));
+                "row-major order; the result is the f64 sum (int64 and bool elements: added "
+                "exactly in int64, wrapping, and converted to f64 once)"));
         t.emplace(
             "mean",
             rounded(
                 f64,
                 kReduce,
-                "the f64 sum of `sum`, divided by the element count in f64; an empty tensor is a "
-                "fault"));
+                "the sum of `sum` (f64; int64 for int64 and bool elements) converted to f64 and "
+                "divided by the element count in f64; an empty tensor is a fault "
+                "(DivisionByZero, as its definition divides by zero)"));
         t.emplace(
             "sum_axis",
             rounded(
@@ -195,6 +198,18 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
             exactFloat(
                 "IEEE 754-2019 minimum over the axis (exactly associative and commutative: any "
                 "order gives the same bits); an empty axis is a fault"));
+        t.emplace(
+            "argmax_axis",
+            exactFloat(
+                "the position (int64) of the first maximum over the axis by IEEE 754-2019 "
+                "maximum: the first NaN if there is one, +0 above -0, the earlier position on a "
+                "tie; an empty axis is a fault"));
+        t.emplace(
+            "argmin_axis",
+            exactFloat(
+                "the position (int64) of the first minimum over the axis by IEEE 754-2019 "
+                "minimum: the first NaN if there is one, -0 below +0, the earlier position on a "
+                "tie; an empty axis is a fault"));
         t.emplace(
             "sum_to",
             rounded(

@@ -158,6 +158,14 @@ class Emitter {
     void pushScope(std::string name);
     Graph popScope();
 
+    /// Speculation: while above 0, the nodes emitted compute an arm of a branch whose
+    /// condition depends on the model input, and the model computes both arms and selects
+    /// (Where). A node that can fault in ONNX where Camel would not run it must not be emitted
+    /// then (see lowerSlice).
+    void beginSpeculation() { ++speculation_; }
+    void endSpeculation() { --speculation_; }
+    bool speculative() const { return speculation_ > 0; }
+
   private:
     std::string constantOperand(const Value &value, std::optional<type::TypeCode> dtype);
     /// Element type of the output of `opType` applied to `inputs`, when the rules know it.
@@ -177,6 +185,7 @@ class Emitter {
     const CapabilityTable *capabilities_;
     std::unordered_map<std::string, ElemType> elemTypes_;
     int64_t opset_;
+    int speculation_ = 0;
     std::deque<Scope> scopes_;
     std::unordered_set<std::string> usedNames_;
     std::unordered_map<std::string, size_t> nameCounts_;

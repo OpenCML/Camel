@@ -533,6 +533,23 @@ std::optional<Num> fold(const sem::ReductionLaw &law, const std::vector<std::vec
     if (contributions.empty() && law.empty == sem::LawEmpty::Fault) {
         return std::nullopt;
     }
+    if (law.kind == sem::LawKind::ArgMax || law.kind == sem::LawKind::ArgMin) {
+        // The position, in canonical order, of the first contribution equal (bit for bit, a
+        // NaN as NaN) to the IEEE maximum (minimum) of them all, written from the standard's
+        // operation rather than from the kernel's comparison (design principles 2.14).
+        const bool max = law.kind == sem::LawKind::ArgMax;
+        Num extreme    = convert(contributions[0][0], law.accumulator);
+        for (size_t k = 1; k < contributions.size(); ++k) {
+            extreme = maximumOf(extreme, convert(contributions[k][0], law.accumulator), max);
+        }
+        for (size_t k = 0; k < contributions.size(); ++k) {
+            const Num v = convert(contributions[k][0], law.accumulator);
+            if (isNan(extreme) ? isNan(v) : bitsOf(v) == bitsOf(extreme)) {
+                return i64(static_cast<int64_t>(k));
+            }
+        }
+        return std::nullopt; // unreachable: the extreme is one of the contributions
+    }
     Num acc;
     size_t first = 0;
     if (law.init == sem::LawInit::Constant) {
@@ -776,6 +793,21 @@ Generator unaryCases(bool integers) {
     return [integers](Rng &rng) {
         const TypeCode t = integers && rng.chance(30) ? TypeCode::Int64 : TypeCode::Float32;
         return Case{Arg::tensor(randomData(rng, t, randomShape(rng, static_cast<size_t>(rng.range(0, 4)))))};
+    };
+}
+
+/// exp: the unary cases, and now and then inputs whose results are subnormal or round to +0
+/// (x in [-105, -86]: e^x from 2^-151 to 2^-124), which must be within the bound too.
+Generator expCases() {
+    return [](Rng &rng) {
+        if (!rng.chance(40)) {
+            return unaryCases(false)(rng);
+        }
+        Data d{TypeCode::Float32, randomShape(rng, static_cast<size_t>(rng.range(1, 2)), 9), {}};
+        for (int64_t k = 0; k < numelOf(d.shape); ++k) {
+            d.values.push_back(f32(static_cast<float>(-86.0 - static_cast<double>(rng.range(0, 1 << 20)) * 19.0 / (1 << 20))));
+        }
+        return Case{Arg::tensor(std::move(d))};
     };
 }
 
@@ -1222,7 +1254,7 @@ camel::runtime::GCGraph *IndexEvalTestPass::apply(camel::runtime::GCGraph *graph
         {"tensor:relu", unaryCases(true), 40},
         {"tensor:sqrt", unaryCases(false), 40},
         {"tensor:rsqrt", unaryCases(false), 40},
-        {"tensor:exp", unaryCases(false), 40},
+        {"tensor:exp", expCases(), 60},
         {"tensor:log", unaryCases(false), 40},
         {"tensor:transpose", transposeCases(), 60},
         {"tensor:permute", permuteCases(), 80},
@@ -1238,6 +1270,8 @@ camel::runtime::GCGraph *IndexEvalTestPass::apply(camel::runtime::GCGraph *graph
         {"tensor:mean_axis", reduceAxisCases(), 120},
         {"tensor:max_axis", reduceAxisCases(), 120},
         {"tensor:min_axis", reduceAxisCases(), 120},
+        {"tensor:argmax_axis", reduceAxisCases(), 120},
+        {"tensor:argmin_axis", reduceAxisCases(), 120},
         {"tensor:sum_to", sumToCases(), 100},
         {"tensor:matmul", matmulCases(), 150},
         {"nn:max_pool2d", poolCases(), 80},

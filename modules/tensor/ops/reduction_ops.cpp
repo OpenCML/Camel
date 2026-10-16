@@ -28,6 +28,7 @@
 
 #include "../kernels/reduce.h"
 
+#include "camel/core/error/runtime.h"
 #include "camel/core/type/composite/array.h"
 #include "catalog.h"
 #include "support.h"
@@ -37,6 +38,8 @@
 namespace camel::tensor::ops {
 
 using namespace camel::core::type;
+using camel::core::error::RuntimeDiag;
+using camel::core::error::throwRuntimeFault;
 namespace k = camel::tensor::kernels;
 
 namespace {
@@ -63,7 +66,7 @@ InferFn reduceAxisInfer(k::ReduceOp op) {
         std::optional<TypeCode> dtype = in.dtype;
         if (op == k::ReduceOp::Mean) {
             dtype = TypeCode::Float32;
-        } else if (op == k::ReduceOp::ArgMax) {
+        } else if (op == k::ReduceOp::ArgMax || op == k::ReduceOp::ArgMin) {
             dtype = TypeCode::Int64;
         } else if (op == k::ReduceOp::Sum && dtype == TypeCode::Bool) {
             dtype = TypeCode::Int64;
@@ -98,11 +101,15 @@ slot_t sumAllKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 slot_t meanAllKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    TensorObject *t = tensorArg(norm, 0);
+    // The definition (stdlib/tensor_definitions.cml) is sum(x) / (numel(x) as float): for a
+    // tensor without elements that float division by zero faults, so the kernel raises the same
+    // fault (design principles 2.13: a kernel agrees with its definition, faults included).
+    // Raised outside runKernel, which would turn it into a kernel error.
+    if (t->numel() == 0) {
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
+    }
     return runKernel("mean", [&] {
-        TensorObject *t = tensorArg(norm, 0);
-        if (t->numel() == 0) {
-            throw std::invalid_argument("mean of an empty tensor");
-        }
         return camel::core::rtdata::toSlot(k::sumAll(t) / static_cast<double>(t->numel()));
     });
 }
@@ -324,6 +331,7 @@ std::vector<OpDef> reductionOps() {
     defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max"));
     defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min"));
     defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMin>("argmin_axis", "argmin"));
 
     defs.push_back(OpDef{
         .name      = "softmax",
@@ -369,6 +377,7 @@ std::vector<OpDef> reductionOps() {
     setVjp(defs, "max_axis", &extremumAxisVjp);
     setVjp(defs, "min_axis", &extremumAxisVjp);
     setVjp(defs, "argmax_axis", &camel::core::noGradient);
+    setVjp(defs, "argmin_axis", &camel::core::noGradient);
     setVjp(defs, "softmax", &softmaxVjp);
     setVjp(defs, "log_softmax", &logSoftmaxVjp);
     setVjp(defs, "layer_norm", &layerNormVjp);

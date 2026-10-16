@@ -2176,12 +2176,16 @@ Value Evaluator::mergeValues(
 Value Evaluator::evalEagerBranch(
     Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms) {
     ++closuresWanted_;
+    // Both arms are computed and one is selected: neither may fault where Camel would not.
+    emitter_.beginSpeculation();
     try {
         const Value a = eval(act, arms[0]);
         const Value b = eval(act, arms[1]);
+        emitter_.endSpeculation();
         --closuresWanted_;
         return mergeValues(act, emitter_.operand(cond, TypeCode::Bool), a, b);
     } catch (...) {
+        emitter_.endSpeculation();
         --closuresWanted_;
         throw;
     }
@@ -2230,8 +2234,17 @@ Value Evaluator::callClosure(
     case Value::ClosureKind::Loop:
         return callLoopClosure(act, fn, args, withCount);
     case Value::ClosureKind::Select: {
-        const Value a = callClosure(act, fn.fields[0], args, withCount);
-        const Value b = callClosure(act, fn.fields[1], args, withCount);
+        // Both functions are called and one result is selected (see evalEagerBranch).
+        emitter_.beginSpeculation();
+        Value a, b;
+        try {
+            a = callClosure(act, fn.fields[0], args, withCount);
+            b = callClosure(act, fn.fields[1], args, withCount);
+        } catch (...) {
+            emitter_.endSpeculation();
+            throw;
+        }
+        emitter_.endSpeculation();
         return mergeValues(act, fn.name, a, b);
     }
     case Value::ClosureKind::Plain:
