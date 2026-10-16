@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.2.12"
+#define VERSION "0.2.13"
 
 #include <string>
 #include <vector>
@@ -101,17 +101,17 @@ extern std::string configFilePath; // Configuration file path
 } // namespace Check
 
 namespace Inspect {
-extern bool dumpTokens; // Whether to dump tokens
-extern bool dumpCST;    // Whether to dump Concrete Syntax Tree
-extern bool dumpAST;    // Whether to dump Abstract Syntax Tree
-extern bool dumpGCT;    // Whether to dump Graph Construction Tree
-extern bool dumpGIR;    // Whether to dump Graph Intermediate Representation
-extern bool dumpTNS;    // Whether to dump Topological Node Sequence
-extern bool dumpOps;    // Whether to dump the operators of the imported modules
+extern bool dumpTokens;    // Whether to dump tokens
+extern bool dumpCST;       // Whether to dump Concrete Syntax Tree
+extern bool dumpAST;       // Whether to dump Abstract Syntax Tree
+extern bool dumpGCT;       // Whether to dump Graph Construction Tree
+extern bool dumpGIR;       // Whether to dump Graph Intermediate Representation
+extern bool dumpTNS;       // Whether to dump Topological Node Sequence
+extern bool dumpOps;       // Whether to dump the operators of the imported modules
 extern bool dumpInstances; // Whether to dump the index semantics of every operator node
 extern bool dumpFacts;     // Whether to compute and dump the graph facts of the program
-extern bool geneCode;   // Whether to dump generate code from GIR
-extern int passUntil;   // Pass until the given pass
+extern bool geneCode;      // Whether to dump generate code from GIR
+extern int passUntil;      // Pass until the given pass
 } // namespace Inspect
 
 } // namespace CmdLineArgs
