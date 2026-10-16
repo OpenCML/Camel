@@ -41,9 +41,8 @@ The same supported computation subset and device errors as `run` apply; there is
 no CPU fallback. Functions with mutable parameters, unbound context parameters or
 no ordinary inputs are currently rejected. This is separate from the planned
 `@kernel` block-kernel validation annotation and from automatic region placement.
-Use the annotation on top-level functions for now. For a local captured function,
-use `gpu(lambda)` explicitly: a decorated local function declaration currently
-hits an unresolved compiler failure before dispatch.
+The annotation also supports local functions with captured values. Use `gpu(lambda)`
+when constructing a GPU-dispatched function value directly.
 
 NVRTC always receives `--fmad=false`, `--prec-div=true`, `--prec-sqrt=true`
 and `--ftz=false`. The in-process module cache compares the source and all compiler

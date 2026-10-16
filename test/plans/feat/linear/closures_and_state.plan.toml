@@ -323,3 +323,24 @@ args = ["${case}", "std::macro", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+
+[[tests]]
+name = "decorator_local"
+desc = "Local decorator factories preserve enclosing sync order and closure captures."
+kind = "behavior"
+case = "../../../cases/linear/nvm/decorator_local.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+expect_exit = 0
+expect_stdout_exact = "before\n5.0\n16.0\nafter\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "decorator_local.macro"
+kind = "behavior"
+case = "../../../cases/linear/nvm/decorator_local.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "before\n5.0\n16.0\nafter\n"
+timeout_ms = 10000

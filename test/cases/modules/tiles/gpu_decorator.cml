@@ -49,5 +49,8 @@ func main(): int sync {
     println(sum(caller(a, b, c)) == 0.0)
     let captured = gpu((v: Tensor<f32>): Tensor<f32> => v + x)
     println(sum(captured(y)))
+    @gpu
+    func local(v: Tensor<f32>): Tensor<f32> { return v + x }
+    println(sum(local(y)))
     return 0
 }

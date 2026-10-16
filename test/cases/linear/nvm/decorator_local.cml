@@ -1,0 +1,15 @@
+// A decorator factory must not leak its sync-chain node into the enclosing graph.
+module decorator_local
+func identity(f: (x: float) => float): (x: float) => float { return f }
+func main(): int sync {
+    println('before')
+    let bias = 2.0
+    @identity
+    func local(x: float): float { return x + bias }
+    println(local(3.0))
+    @identity
+    func plain(x: float): float { return x * x }
+    println(plain(4.0))
+    println('after')
+    return 0
+}

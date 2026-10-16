@@ -10,7 +10,7 @@ case = "../../cases/modules/tiles/gpu_decorator.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 expect_exit = 0
-expect_stdout_exact = "66.0\n14.0\n28.0\n66.0\n12.0 14.0\ntrue\ntrue\ntrue\n66.0\n"
+expect_stdout_exact = "66.0\n14.0\n28.0\n66.0\n12.0 14.0\ntrue\ntrue\ntrue\n66.0\n66.0\n"
 timeout_ms = 60000
 
 [[tests]]
@@ -19,7 +19,7 @@ kind = "behavior"
 case = "../../cases/modules/tiles/gpu_decorator.cml"
 args = ["${case}", "std::macro", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "66.0\n14.0\n28.0\n66.0\n12.0 14.0\ntrue\ntrue\ntrue\n66.0\n"
+expect_stdout_exact = "66.0\n14.0\n28.0\n66.0\n12.0 14.0\ntrue\ntrue\ntrue\n66.0\n66.0\n"
 timeout_ms = 60000
 
 [[tests]]
