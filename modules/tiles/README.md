@@ -308,6 +308,14 @@ is an implementation detail, not a new normative Camel graph semantics.
 
 ### Structured kernel bodies
 
+Index instantiation during graph extraction calls the core's `sem::instantiate`
+by `OperId`, using the actual call's types and static slots. Layouts and synthetic
+gradient matrix primitives use that same protocol. Tensor's private index
+callbacks are not invoked directly, so a replaced core declaration supplies both
+the selected maps and the laws against which they are validated. Static slots
+are borrowed only inside extraction's no-collection scope and never retained in
+the owned execution plan. Graph-fact caching of these queries is subsequent work.
+
 Matrix multiplication, elementwise/layout fusion, canonical serial reductions
 and parallel maximum lower to a typed physical statement tree before CUDA
 serialization: lexical index/scalar bindings, masked loads and stores, loops,
