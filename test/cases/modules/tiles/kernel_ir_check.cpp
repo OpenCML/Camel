@@ -18,7 +18,10 @@
 using namespace camel::tiles;
 using namespace camel::tiles::kernel;
 
+void checkPointwiseContracts();
+
 void checkKernelIR() {
+    checkPointwiseContracts();
     const auto integer = [](uint32_t value) { return ScalarExpr::literal(ScalarValue::u32(value)); };
     const auto signedInteger = [](int32_t value) { return ScalarExpr::literal(ScalarValue::i32(value)); };
     const auto bits = ScalarExpr::bitcast(ScalarType::U32, ScalarExpr::symbol("x",DType::F32));
@@ -175,4 +178,65 @@ void checkMatrixContracts() {
     p.contracts[0].declaration=table.semantics(id);
     rejected(p,"ascending f32 FMA");
     std::cout<<"tiles matrix contracts: core maps, FMA law and cache dependency passed\n";
+}
+
+void checkPointwiseContracts() {
+    namespace sem=camel::core::sem;
+    auto &table=camel::core::OperatorTable::instance();
+    const std::string uri="tilestest:pointwise_contract";
+    const auto id=table.intern(uri);
+    sem::OperatorSemantics declaration{.key=sem::OperatorKey::of(uri)};
+    table.declareSemantics(uri,declaration);
+    Program p;
+    p.contracts={{.uri=uri,.key=declaration.key,.declaration=table.semantics(id)}};
+    p.nodes={{.op="input",.shape={2,2},.data={1,2,3,4}},
+             {.op="add",.shape={2,2},.inputs={0,0},.semantic=0}};
+    p.outputs={1};
+    sem::IndexedInstance inst;
+    const auto row=inst.exprs.dim(0), col=inst.exprs.dim(1), two=inst.exprs.constant(2);
+    inst.domain.dims={{"row",two,sem::DimRole::Parallel},{"col",two,sem::DimRole::Parallel}};
+    inst.norm={{.kind=sem::AccessKind::Affine,.coords={row,col}},
+               {.kind=sem::AccessKind::Affine,.coords={row,col}}};
+    inst.output={.coords={row,col}};
+    p.nodes[1].indexing=inst;
+    generate(p);
+    if(!canonicalPointwise(p,p.nodes[1])) throw std::runtime_error("canonical core broadcast rejected");
+    auto transposed=p;
+    transposed.nodes[1].indexing->norm[1].coords={col,row};
+    const auto before=generationCacheStats();
+    generate(transposed);
+    if(transposed.source==p.source || generationCacheStats().misses!=before.misses+1)
+        throw std::runtime_error("pointwise core map ignored by source cache");
+    if(pointwiseAddress(transposed,transposed.nodes[1],0,IndexExpr(1)).evaluate({})!=1 ||
+       pointwiseAddress(transposed,transposed.nodes[1],1,IndexExpr(1)).evaluate({})!=2 ||
+       canonicalPointwise(transposed,transposed.nodes[1]))
+        throw std::runtime_error("operand-position mapping or row-fusion eligibility lost");
+    auto rejected=[&](Program bad,const char *message) {
+        try { validatePlan(bad); } catch(const std::exception &e) {
+            if(std::string(e.what()).find(message)!=std::string::npos) return;
+            throw;
+        }
+        throw std::runtime_error(std::string("accepted invalid pointwise contract: ")+message);
+    };
+    auto bad=p;
+    bad.nodes[1].indexing->norm[0].coords[0]=bad.nodes[1].indexing->exprs.add(row,two);
+    rejected(bad,"outside operand domain");
+    bad=p;bad.nodes[1].indexing->output.coords={col,row};
+    rejected(bad,"output is not the pointwise domain");
+    bad=p;bad.nodes[1].indexing->norm[0].valid.push_back({row,sem::Constraint::Rel::Lt,two});
+    rejected(bad,"unconditional affine");
+    Program reduction=p;
+    reduction.nodes[0].shape={2,2,2};reduction.nodes[0].data={1,2,3,4,5,6,7,8};
+    reduction.nodes[1]=Node{.op="sum_axis",.shape={2,2},.inputs={0},.attributes={2}};
+    auto epilogue=p.nodes[1];epilogue.op="neg";epilogue.inputs={1};epilogue.indexing->norm.resize(1);
+    reduction.nodes.push_back(epilogue);reduction.outputs={2};
+    generate(reduction);
+    if(reduction.launches.size()!=1 || reduction.launches[0].implementation!="ordered_reduce")
+        throw std::runtime_error("canonical reduction epilogue did not fuse");
+    reduction.nodes[2].indexing->norm[0].coords={col,row};
+    rejected(reduction,"ordered reduction epilogue domain");
+    generate(reduction);
+    if(reduction.launches.size()!=2)
+        throw std::runtime_error("cross-row epilogue incorrectly fused");
+    std::cout<<"tiles pointwise contracts: operand maps, bounds and row eligibility passed\n";
 }

@@ -21,41 +21,6 @@ void require(bool ok, const char *reason) {
     if (!ok)
         throw std::runtime_error(std::string("matmul core contract: ") + reason);
 }
-// Compose a core affine access with row-major storage and a physical iteration point.
-// Signed, guarded and indirect maps need a different lowering; never silently ignore them.
-IndexExpr address(
-    const sem::IndexedInstance &inst, const sem::Access &access, const Shape &shape,
-    const std::vector<IndexExpr> &point) {
-    require(
-        access.kind == sem::AccessKind::Affine && access.valid.empty() && !access.indirect,
-        "requires unconditional affine accesses");
-    const auto extents = inst.extents();
-    require(extents && point.size() == extents->size(), "unresolved iteration domain");
-    const auto view = sem::rowMajorView(inst, access, shape);
-    require(view && view->offset >= 0, "unrepresentable storage map");
-    const bool empty = std::find(extents->begin(), extents->end(), 0) != extents->end();
-    for (size_t axis = 0; axis < access.coords.size(); ++axis) {
-        const auto affine =
-            inst.exprs.affine(access.coords[axis], point.size(), inst.paramValues());
-        require(affine && affine->constant >= 0, "negative or nonlinear coordinate");
-        IndexExpr maximum(static_cast<uint64_t>(affine->constant));
-        for (size_t d = 0; d < point.size(); ++d) {
-            require(affine->coeffs[d] >= 0, "negative coordinate stride");
-            if (!empty)
-                maximum = maximum + IndexExpr(affine->coeffs[d]) * IndexExpr((*extents)[d] - 1);
-        }
-        require(
-            empty || maximum.evaluate({}) < static_cast<uint64_t>(shape.at(axis)),
-            "access outside operand domain");
-    }
-    IndexExpr result(view->offset);
-    for (size_t d = 0; d < point.size(); ++d) {
-        require(view->strides[d] >= 0, "negative physical stride");
-        if (view->strides[d])
-            result = result + point[d] * IndexExpr(view->strides[d]);
-    }
-    return result;
-}
 void matrixContract(const Program &p, const Node &n, const Shape &domain) {
     require(n.indexing.has_value() && n.semantic < p.contracts.size(), "missing index instance");
     const auto &inst = *n.indexing;
@@ -106,8 +71,8 @@ void validateMatmulContract(const Program &p, const Node &n) {
     const auto &b = p.nodes.at(n.inputs.at(1)).shape;
     matrixContract(p, n, {a.at(0), b.at(1), a.at(1)});
     const std::vector<IndexExpr> point(3, IndexExpr(0));
-    (void)address(*n.indexing, n.indexing->norm[0], a, point);
-    (void)address(*n.indexing, n.indexing->norm[1], b, point);
+    (void)affineAddress(*n.indexing, n.indexing->norm[0], a, point);
+    (void)affineAddress(*n.indexing, n.indexing->norm[1], b, point);
 }
 KernelBody matmulBody(const Program &p, Launch &launch) {
     const auto id  = launch.node;
@@ -149,13 +114,13 @@ KernelBody matmulBody(const Program &p, Launch &launch) {
         Load{
             "k_a",
             {0,
-             address(*n.indexing, n.indexing->norm[0], a, {row, IndexExpr(0), ak}),
+             affineAddress(*n.indexing, n.indexing->norm[0], a, {row, IndexExpr(0), ak}),
              Predicate::less(row, IndexExpr(m)) && Predicate::less(ak, IndexExpr(k))},
             zero},
         Load{
             "k_b",
             {1,
-             address(*n.indexing, n.indexing->norm[1], b, {IndexExpr(0), col, bk}),
+             affineAddress(*n.indexing, n.indexing->norm[1], b, {IndexExpr(0), col, bk}),
              Predicate::less(bk, IndexExpr(k)) && Predicate::less(col, IndexExpr(cols))},
             zero},
         Store{{3, ty * IndexExpr(16) + tx, Predicate(true)}, symbol("k_a")},
@@ -176,7 +141,7 @@ KernelBody matmulBody(const Program &p, Launch &launch) {
         Loop{"k_base", IndexExpr(0), IndexExpr(k), 16, std::move(tile)},
         Store{
             {2,
-             address(
+             affineAddress(
                  *n.indexing,
                  sem::Access{.kind = sem::AccessKind::Affine, .coords = n.indexing->output.coords},
                  n.shape,

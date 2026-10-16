@@ -78,6 +78,13 @@ class Lowerer {
                decl->numeric.compute == core::type::TypeCode::Float32 &&
                (decl->numeric.sensitiveTo & core::sem::kContract);
     }
+    IndexExpr operand(const Node &n, size_t side, const IndexExpr &at) {
+        if (elementwise(n.op) && n.indexing)
+            return pointwiseAddress(p, n, side, at);
+        return n.op == "reindex"   ? mapped(n, at)
+               : n.op == "reshape" ? at
+                                   : broadcast(p.nodes[n.inputs.at(side)].shape, n.shape, at);
+    }
     ScalarExpr value(Block &body, size_t id, const IndexExpr &at) {
         if (id == reduction)
             return ScalarExpr::symbol("k_reduced", DType::F32);
@@ -87,13 +94,8 @@ class Lowerer {
         const auto coordinate = name();
         body.push_back(IndexBinding{coordinate, at});
         const auto q = IndexExpr::variable(coordinate);
-        auto input   = [&](size_t in) {
-            return value(
-                body,
-                in,
-                n.op == "reindex"   ? mapped(n, q)
-                : n.op == "reshape" ? q
-                                    : broadcast(p.nodes[in].shape, n.shape, q));
+        auto input   = [&](size_t side) {
+            return value(body, n.inputs.at(side), operand(n, side, q));
         };
         // Keep lexical permission checks on both nodes of a contracted multiply/add.
         if (n.op == "add" && contract(n))
@@ -102,21 +104,15 @@ class Lowerer {
                 const auto &product  = p.nodes[productId];
                 if (product.op != "multiply" || !member(productId) || !contract(product))
                     continue;
-                const auto atProduct = broadcast(product.shape, n.shape, q);
-                auto a               = value(
-                    body,
-                    product.inputs[0],
-                    broadcast(p.nodes[product.inputs[0]].shape, product.shape, atProduct));
-                auto b = value(
-                    body,
-                    product.inputs[1],
-                    broadcast(p.nodes[product.inputs[1]].shape, product.shape, atProduct));
-                auto c = input(n.inputs[1 - side]);
+                const auto atProduct = operand(n, side, q);
+                auto a = value(body, product.inputs[0], operand(product, 0, atProduct));
+                auto b = value(body, product.inputs[1], operand(product, 1, atProduct));
+                auto c = input(1 - side);
                 return bind(body, ScalarExpr::apply(ScalarOp::Fma, {a, b, c}));
             }
-        auto expr = elementwiseExpression(n.op).substitute("a", input(n.inputs.at(0)));
+        auto expr = elementwiseExpression(n.op).substitute("a", input(0));
         if (n.inputs.size() == 2)
-            expr = expr.substitute("b", input(n.inputs[1]));
+            expr = expr.substitute("b", input(1));
         return bind(body, std::move(expr));
     }
 };

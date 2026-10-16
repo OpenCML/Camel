@@ -308,6 +308,17 @@ is an implementation detail, not a new normative Camel graph semantics.
 
 ### Structured kernel bodies
 
+Declared pointwise operands use their core affine access maps in fused serial
+lowering, including both levels of a permitted multiply/add contraction. Operand
+positions are distinct even when two arguments refer to the same graph value.
+The shared affine address composer checks each operand axis over the rectangular
+domain and is also used by tiled matrix loads. Pointwise lowering currently
+requires a direct parallel output domain and unconditional nonnegative affine
+accesses; unsupported maps are rejected rather than replaced with broadcasts.
+Row regions and ordered-reduction epilogues require canonical broadcast maps,
+so cross-row maps stay in the general physical schedule. Explicit internal
+primitives without index declarations retain their built-in physical indexing.
+
 Index instantiation during graph extraction calls the core's `sem::instantiate`
 by `OperId`, using the actual call's types and static slots. Layouts and synthetic
 gradient matrix primitives use that same protocol. Tensor's private index
