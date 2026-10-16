@@ -24,7 +24,7 @@ namespace camel::tiles::kernel {
 enum class MemorySpace { Global, Shared };
 struct Buffer {
     MemorySpace space;
-    DType type;
+    ScalarType type;
     size_t slot; // Global: the Program node; shared: local identity.
     size_t extent;
     bool writable;
@@ -62,6 +62,8 @@ struct Loop {
 struct Conditional {
     std::variant<Predicate, ScalarPredicate> condition;
     Block body;
+    // Both arms have independent lexical scopes and share the incoming bindings.
+    Block otherwise;
 };
 struct Barrier {};
 // Device faults use a separately declared unsigned status word. Smaller source

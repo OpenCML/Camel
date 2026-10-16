@@ -24,8 +24,8 @@
 
 namespace camel::tiles::kernel {
 namespace {
-void checkType(DType type) {
-    if (type != DType::F32 && type != DType::F64)
+void checkType(ScalarType type) {
+    if (type.kind < ScalarType::F32 || type.kind > ScalarType::U32)
         throw std::invalid_argument("invalid scalar type");
 }
 size_t arity(ScalarOp op) {
@@ -36,6 +36,10 @@ size_t arity(ScalarOp op) {
     case ScalarOp::Log:
     case ScalarOp::Sqrt:
         return 1;
+    case ScalarOp::BitAnd:
+    case ScalarOp::BitOr:
+    case ScalarOp::BitXor:
+    case ScalarOp::LogicalShiftRight:
     case ScalarOp::Add:
     case ScalarOp::Subtract:
     case ScalarOp::Multiply:
@@ -91,6 +95,29 @@ template <class T> T compute(ScalarOp op, const std::vector<T> &x) {
     }
 }
 } // namespace
+ScalarType::ScalarType(Kind value) : kind(value) { checkType(*this); }
+ScalarType::ScalarType(DType type) : kind(F32) {
+    if (type == DType::F32)
+        kind = F32;
+    else if (type == DType::F64)
+        kind = F64;
+    else
+        throw std::invalid_argument("invalid tensor scalar type");
+}
+ScalarValue ScalarValue::i32(int32_t value) {
+    return {ScalarType::I32, std::bit_cast<uint32_t>(value)};
+}
+ScalarValue ScalarValue::u32(uint32_t value) { return {ScalarType::U32, value}; }
+int32_t ScalarValue::asI32() const {
+    if (type != ScalarType::I32 || bits > UINT32_MAX)
+        throw std::invalid_argument("expected scalar i32 bits");
+    return std::bit_cast<int32_t>(static_cast<uint32_t>(bits));
+}
+uint32_t ScalarValue::asU32() const {
+    if (type != ScalarType::U32 || bits > UINT32_MAX)
+        throw std::invalid_argument("expected scalar u32 bits");
+    return static_cast<uint32_t>(bits);
+}
 ScalarValue ScalarValue::f32(float value) { return {DType::F32, std::bit_cast<uint32_t>(value)}; }
 ScalarValue ScalarValue::f64(double value) { return {DType::F64, std::bit_cast<uint64_t>(value)}; }
 float ScalarValue::asF32() const {
@@ -105,7 +132,7 @@ double ScalarValue::asF64() const {
 }
 struct ScalarExpr::Node {
     enum class Kind { Literal, Symbol, Operation } kind;
-    DType type;
+    ScalarType type;
     ScalarValue value{DType::F32, 0};
     std::string name;
     ScalarOp op = ScalarOp::Neg;
@@ -114,13 +141,13 @@ struct ScalarExpr::Node {
 ScalarExpr::ScalarExpr(std::shared_ptr<const Node> n) : node(std::move(n)) {}
 ScalarExpr ScalarExpr::literal(ScalarValue value) {
     checkType(value.type);
-    if (value.type == DType::F32)
-        (void)value.asF32();
+    if (value.type != DType::F64 && value.bits > UINT32_MAX)
+        throw std::invalid_argument("invalid 32-bit scalar payload");
     return ScalarExpr(
         std::make_shared<Node>(
             Node{.kind = Node::Kind::Literal, .type = value.type, .value = value}));
 }
-ScalarExpr ScalarExpr::symbol(std::string name, DType type) {
+ScalarExpr ScalarExpr::symbol(std::string name, ScalarType type) {
     checkType(type);
     auto initial = [](char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
@@ -141,6 +168,14 @@ ScalarExpr ScalarExpr::apply(ScalarOp op, std::vector<ScalarExpr> inputs) {
     for (const auto &input : inputs)
         if (input.type() != type)
             throw std::invalid_argument("mixed scalar types require explicit casts");
+    const bool integer = type == ScalarType::I32 || type == ScalarType::U32;
+    const bool bitwise = op == ScalarOp::BitAnd || op == ScalarOp::BitOr ||
+                         op == ScalarOp::BitXor || op == ScalarOp::LogicalShiftRight;
+    if (bitwise && !integer)
+        throw std::invalid_argument("bit operation requires integers");
+    if (integer && !bitwise && op != ScalarOp::Add && op != ScalarOp::Subtract &&
+        op != ScalarOp::Multiply && op != ScalarOp::Minimum && op != ScalarOp::Maximum)
+        throw std::invalid_argument("unsupported integer scalar operation");
     return ScalarExpr(
         std::make_shared<Node>(Node{
             .kind   = Node::Kind::Operation,
@@ -148,10 +183,13 @@ ScalarExpr ScalarExpr::apply(ScalarOp op, std::vector<ScalarExpr> inputs) {
             .op     = op,
             .inputs = std::move(inputs)}));
 }
-ScalarExpr ScalarExpr::cast(DType type, ScalarExpr input) {
+ScalarExpr ScalarExpr::cast(ScalarType type, ScalarExpr input) {
     checkType(type);
     if (input.type() == type)
         return input;
+    if ((type != ScalarType::F32 && type != ScalarType::F64) ||
+        (input.type() != ScalarType::F32 && input.type() != ScalarType::F64))
+        throw std::invalid_argument("numeric conversion involving integers is not supported");
     return ScalarExpr(
         std::make_shared<Node>(Node{
             .kind   = Node::Kind::Operation,
@@ -159,7 +197,20 @@ ScalarExpr ScalarExpr::cast(DType type, ScalarExpr input) {
             .op     = ScalarOp::Cast,
             .inputs = {std::move(input)}}));
 }
-DType ScalarExpr::type() const { return node->type; }
+ScalarExpr ScalarExpr::bitcast(ScalarType type, ScalarExpr input) {
+    checkType(type);
+    if (type == ScalarType::F64 || input.type() == ScalarType::F64)
+        throw std::invalid_argument("bitcast requires equal 32-bit widths");
+    if (type == input.type())
+        return input;
+    return ScalarExpr(
+        std::make_shared<Node>(Node{
+            .kind   = Node::Kind::Operation,
+            .type   = type,
+            .op     = ScalarOp::Bitcast,
+            .inputs = {std::move(input)}}));
+}
+ScalarType ScalarExpr::type() const { return node->type; }
 ScalarValue
 ScalarExpr::evaluate(const std::unordered_map<std::string, ScalarValue> &bindings) const {
     if (std::fegetround() != FE_TONEAREST)
@@ -172,9 +223,49 @@ ScalarExpr::evaluate(const std::unordered_map<std::string, ScalarValue> &binding
             throw std::runtime_error("unbound scalar symbol " + node->name);
         if (found->second.type != type())
             throw std::runtime_error("scalar binding type mismatch");
-        if (type() == DType::F32)
-            (void)found->second.asF32();
+        if (type() != DType::F64 && found->second.bits > UINT32_MAX)
+            throw std::invalid_argument("invalid 32-bit scalar binding");
         return found->second;
+    }
+    if (node->op == ScalarOp::Bitcast)
+        return {type(), node->inputs[0].evaluate(bindings).bits};
+    if (type() == ScalarType::I32 || type() == ScalarType::U32) {
+        const auto a = node->inputs[0].evaluate(bindings);
+        const auto b = node->inputs[1].evaluate(bindings);
+        const auto x = static_cast<uint32_t>(a.bits), y = static_cast<uint32_t>(b.bits);
+        uint32_t value;
+        switch (node->op) {
+        case ScalarOp::Add:
+            value = x + y;
+            break;
+        case ScalarOp::Subtract:
+            value = x - y;
+            break;
+        case ScalarOp::Multiply:
+            value = x * y;
+            break;
+        case ScalarOp::BitAnd:
+            value = x & y;
+            break;
+        case ScalarOp::BitOr:
+            value = x | y;
+            break;
+        case ScalarOp::BitXor:
+            value = x ^ y;
+            break;
+        case ScalarOp::LogicalShiftRight:
+            value = x >> (y & 31U);
+            break;
+        case ScalarOp::Minimum:
+        case ScalarOp::Maximum: {
+            const bool less = type() == ScalarType::I32 ? a.asI32() < b.asI32() : x < y;
+            value           = (node->op == ScalarOp::Minimum ? less : !less) ? x : y;
+            break;
+        }
+        default:
+            throw std::invalid_argument("invalid integer evaluation operation");
+        }
+        return {type(), value};
     }
     if (node->op == ScalarOp::Cast) {
         const auto value = node->inputs[0].evaluate(bindings);
@@ -207,10 +298,10 @@ ScalarExpr ScalarExpr::substitute(const std::string &name, const ScalarExpr &rep
         input = input.substitute(name, replacement);
     return ScalarExpr(std::move(copy));
 }
-std::unordered_map<std::string, DType> ScalarExpr::symbols() const {
+std::unordered_map<std::string, ScalarType> ScalarExpr::symbols() const {
     if (node->kind == Node::Kind::Symbol)
         return {{node->name, type()}};
-    std::unordered_map<std::string, DType> result;
+    std::unordered_map<std::string, ScalarType> result;
     for (const auto &input : node->inputs)
         for (const auto &[name, dtype] : input.symbols()) {
             auto [it, inserted] = result.emplace(name, dtype);
@@ -221,6 +312,10 @@ std::unordered_map<std::string, DType> ScalarExpr::symbols() const {
 }
 std::string ScalarExpr::cuda() const {
     const bool f32 = type() == DType::F32;
+    if (node->kind == Node::Kind::Literal && type() == ScalarType::I32)
+        return "tiles_i32(" + std::to_string(node->value.bits) + "U)";
+    if (node->kind == Node::Kind::Literal && type() == ScalarType::U32)
+        return std::to_string(node->value.bits) + "U";
     if (node->kind == Node::Kind::Literal)
         return f32 ? "__uint_as_float(" + std::to_string(node->value.bits) + "U)"
                    : "__longlong_as_double(" + std::to_string(node->value.bits) + "ULL)";
@@ -238,6 +333,50 @@ std::string ScalarExpr::cuda() const {
         }
         return result + ')';
     };
+    if (node->op == ScalarOp::Bitcast) {
+        const auto bits = node->inputs[0].type() == ScalarType::F32
+                              ? "__float_as_uint(" + x[0] + ")"
+                              : "((unsigned)(" + x[0] + "))";
+        return type() == ScalarType::F32   ? "__uint_as_float(" + bits + ")"
+               : type() == ScalarType::I32 ? "tiles_i32(" + bits + ")"
+                                           : bits;
+    }
+    if (type() == ScalarType::I32 || type() == ScalarType::U32) {
+        if (node->op == ScalarOp::Minimum || node->op == ScalarOp::Maximum)
+            return "(" + x[0] + (node->op == ScalarOp::Minimum ? "<" : ">") + x[1] + "?" + x[0] +
+                   ":" + x[1] + ")";
+        std::string op;
+        switch (node->op) {
+        case ScalarOp::Add:
+            op = "+";
+            break;
+        case ScalarOp::Subtract:
+            op = "-";
+            break;
+        case ScalarOp::Multiply:
+            op = "*";
+            break;
+        case ScalarOp::BitAnd:
+            op = "&";
+            break;
+        case ScalarOp::BitOr:
+            op = "|";
+            break;
+        case ScalarOp::BitXor:
+            op = "^";
+            break;
+        case ScalarOp::LogicalShiftRight:
+            op = ">>";
+            break;
+        default:
+            throw std::invalid_argument("invalid integer CUDA operation");
+        }
+        const auto rhs   = node->op == ScalarOp::LogicalShiftRight
+                               ? "(((unsigned)(" + x[1] + "))&31U)"
+                               : "((unsigned)(" + x[1] + "))";
+        const auto value = "(((unsigned)(" + x[0] + "))" + op + rhs + ")";
+        return type() == ScalarType::I32 ? "tiles_i32(" + value + ")" : value;
+    }
     const std::string prefix = f32 ? "__f" : "__d";
     switch (node->op) {
     case ScalarOp::Add:
@@ -266,6 +405,8 @@ std::string ScalarExpr::cuda() const {
         return call(f32 ? "tiles_minimum" : "tiles_minimum64");
     case ScalarOp::Cast:
         return f32 ? call("__double2float_rn") : "((double)(" + x[0] + "))";
+    default:
+        break; // Integer and bitcast operations were handled above.
     }
     throw std::runtime_error("invalid scalar CUDA operation");
 }
@@ -288,8 +429,14 @@ bool ScalarPredicate::evaluate(const std::unordered_map<std::string, ScalarValue
     if (lhs.type() != rhs.type())
         throw std::invalid_argument("scalar comparison type mismatch");
     const auto a = lhs.evaluate(bindings), b = rhs.evaluate(bindings);
-    const double x = a.type == DType::F32 ? a.asF32() : a.asF64();
-    const double y = b.type == DType::F32 ? b.asF32() : b.asF64();
+    auto number = [](ScalarValue value) -> double {
+        if (value.type == ScalarType::I32)
+            return value.asI32();
+        if (value.type == ScalarType::U32)
+            return value.asU32();
+        return value.type == ScalarType::F32 ? value.asF32() : value.asF64();
+    };
+    const double x = number(a), y = number(b);
     switch (compare) {
     case ScalarCompare::Equal:
         return x == y;
@@ -344,6 +491,9 @@ ScalarExpr elementwiseExpression(std::string_view op, DType type) {
 }
 std::string scalarCudaPreamble() {
     return R"CUDA(
+__device__ __forceinline__ int tiles_i32(unsigned x) {
+    return x <= 0x7fffffffU ? (int)x : -1 - (int)(~x);
+}
 __device__ __forceinline__ float tiles_maximum(float a, float b) {
     if (a != a || b != b) return __uint_as_float(0x7fc00000U);
     if (a == b) return __uint_as_float(__float_as_uint(a) & __float_as_uint(b));

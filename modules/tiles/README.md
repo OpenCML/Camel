@@ -325,6 +325,20 @@ and early-return statements. The validator rejects status-word aliasing, invalid
 fault ordinals, mistyped conditions and kernels mixing early exits with barriers
 without a reconvergence proof. Both signed zeros trigger scalar division faults;
 NaNs do not. Tensor division continues to use IEEE arithmetic without this check.
+Conditions carry two independently scoped arms. Both arms may assign existing
+accumulators; arm-local bindings never escape or become visible in the sibling
+arm. Barrier and early-exit checks traverse both arms, including empty-then
+branches. This supports mutually exclusive optimized and canonical reduction
+paths without re-evaluating a mutable condition after the first arm executes.
+Physical scalar registers and buffers additionally support i32/u32, independently
+of the public tensor element types. Integer add/subtract/multiply wrap modulo
+2^32; min/max and comparisons use the declared signedness. Bitwise AND/OR/XOR
+and logical right shift operate on the bit representation; shift counts use
+their low five bits. Explicit equal-width 32-bit bitcasts preserve all payload
+bits, including floating NaNs and signed zero. Integer division and numeric
+float/integer conversions are currently rejected. These are internal physical
+instructions, not new Camel source-language integer semantics. The host oracle
+and CUDA emitter implement the same rules without signed C++ overflow.
 Serial reduction bodies explicitly retain their accumulator type, initial value,
 ordered loop, mean finalization and output rounding. Fused producer and epilogue
 nodes use lexical scalar bindings, with contraction permitted only by both

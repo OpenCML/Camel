@@ -1,0 +1,99 @@
+[36m[INFO][0m camel executable: D:\Projects\Camel\out\latest\bin\camel.exe
+[36m[INFO][0m discovered plans: 4
+
+[36m[PLAN][0m feat.modules.tiles: modules.tiles
+[32m[PASS][0m slice_bounds_rejected_before_cuda                     28.78 ms
+[32m[PASS][0m plan                                                  16.30 ms
+[32m[PASS][0m plan_validation                                      174.50 ms
+[32m[PASS][0m source                                                16.37 ms
+[32m[PASS][0m reject_effect                                         29.70 ms
+[32m[PASS][0m selected_branch_effect                                16.88 ms
+[32m[PASS][0m empty_mean                                            18.62 ms
+[32m[PASS][0m loop_structure_nvm                                    19.37 ms
+[32m[PASS][0m loop_structure_fvm                                    20.24 ms
+[32m[PASS][0m loop_structure_jit                                    18.36 ms
+[32m[PASS][0m loop_structure_prl                                    33.61 ms
+[32m[PASS][0m loop_structure_closure_nvm                            17.07 ms
+[32m[PASS][0m loop_structure_closure_fvm                            17.55 ms
+[32m[PASS][0m loop_structure_closure_prl                            22.46 ms
+
+[36m[PLAN][0m gpu.tiles: gpu.tiles
+[32m[PASS][0m runtime_scalars                                      763.64 ms
+[32m[PASS][0m ordered_reduction_fusion                             998.41 ms
+[32m[PASS][0m matmul_rounding.nvm                                  186.40 ms
+[32m[PASS][0m matmul_rounding.fvm                                  183.16 ms
+[32m[PASS][0m matmul_rounding.jit                                  183.76 ms
+[32m[PASS][0m max_special_values                                   717.29 ms
+[32m[PASS][0m max_grid_stride                                      243.85 ms
+[32m[PASS][0m benchmark_protocol                                   451.27 ms
+[32m[PASS][0m fusion.nvm                                           177.87 ms
+[32m[PASS][0m fusion.fvm                                           186.10 ms
+[32m[PASS][0m fusion.jit                                           177.58 ms
+[32m[PASS][0m boundaries.nvm                                       205.17 ms
+[32m[PASS][0m boundaries.fvm                                       207.14 ms
+[32m[PASS][0m boundaries.jit                                       207.36 ms
+[32m[PASS][0m vector_add                                           150.22 ms
+[32m[PASS][0m softmax                                              202.35 ms
+[32m[PASS][0m matmul                                               152.88 ms
+[32m[PASS][0m consistency.nvm                                      263.52 ms
+[32m[PASS][0m consistency.fvm                                      257.63 ms
+[32m[PASS][0m consistency.jit                                      260.84 ms
+[32m[PASS][0m index_maps.nvm                                       198.77 ms
+[32m[PASS][0m index_maps.fvm                                       199.48 ms
+[32m[PASS][0m index_maps.jit                                       196.88 ms
+[32m[PASS][0m mapped_fusion.nvm                                    201.74 ms
+[32m[PASS][0m mapped_fusion.fvm                                    204.31 ms
+[32m[PASS][0m mapped_fusion.jit                                    209.52 ms
+[32m[PASS][0m aggregate_outputs.nvm                                234.58 ms
+[32m[PASS][0m aggregate_outputs.fvm                                232.48 ms
+[32m[PASS][0m aggregate_outputs.jit                                223.98 ms
+[32m[PASS][0m gradients.nvm                                        288.53 ms
+[32m[PASS][0m gradients.fvm                                        283.43 ms
+[32m[PASS][0m gradients.jit                                        285.91 ms
+[32m[PASS][0m specialized_branches.nvm                             212.95 ms
+[32m[PASS][0m specialized_branches.fvm                             206.25 ms
+[32m[PASS][0m specialized_branches.jit                             202.13 ms
+[32m[PASS][0m value_gradient.nvm                                   280.38 ms
+[32m[PASS][0m value_gradient.fvm                                   291.01 ms
+[32m[PASS][0m value_gradient.jit                                   269.36 ms
+[32m[PASS][0m resident_transfers.nvm                               149.06 ms
+[32m[PASS][0m resident_transfers.fvm                               135.51 ms
+[32m[PASS][0m resident_transfers.jit                               143.76 ms
+[32m[PASS][0m resident_compute.nvm                                 194.25 ms
+[32m[PASS][0m resident_compute.fvm                                 200.65 ms
+[32m[PASS][0m resident_compute.jit                                 200.51 ms
+[32m[PASS][0m resident_outputs.nvm                                 240.78 ms
+[32m[PASS][0m resident_outputs.fvm                                 238.29 ms
+[32m[PASS][0m resident_outputs.jit                                 228.08 ms
+[32m[PASS][0m resident_scalars.nvm                                 236.74 ms
+[32m[PASS][0m resident_scalars.fvm                                 233.73 ms
+[32m[PASS][0m resident_scalars.jit                                 224.72 ms
+[32m[PASS][0m scalar_arithmetic.nvm                                233.87 ms
+[32m[PASS][0m scalar_zero.nvm                                      148.34 ms
+[32m[PASS][0m scalar_arithmetic.fvm                                230.84 ms
+[32m[PASS][0m scalar_zero.fvm                                      156.12 ms
+[32m[PASS][0m scalar_arithmetic.jit                                234.74 ms
+[32m[PASS][0m scalar_zero.jit                                      147.79 ms
+[32m[PASS][0m scalar_zero_positive                                 153.68 ms
+[32m[PASS][0m scalar_zero_control.nvm                              155.18 ms
+[32m[PASS][0m scalar_zero_control.fvm                              155.63 ms
+[32m[PASS][0m scalar_zero_control.jit                              156.34 ms
+[32m[PASS][0m module_lease                                         966.34 ms
+[32m[PASS][0m extrema_canonical_bits                                  3.88 s
+[32m[PASS][0m numeric_permission_boundaries                           1.01 s
+[32m[PASS][0m numeric_permissions_moving_gc                           1.05 s
+[32m[PASS][0m matmul_edges.nvm                                     257.41 ms
+[32m[PASS][0m matmul_edges.fvm                                     256.39 ms
+[32m[PASS][0m matmul_edges.jit                                     269.49 ms
+[32m[PASS][0m scalar_predicates.nvm                                161.03 ms
+[32m[PASS][0m scalar_predicates.fvm                                151.04 ms
+[32m[PASS][0m scalar_predicates.jit                                167.23 ms
+
+[36m[PLAN][0m gpu.tiles_transfer: gpu.tiles_transfer
+[32m[PASS][0m large_upload_completion                              400.94 ms
+
+[36m[PLAN][0m gpu.tiles_rows: gpu.tiles_rows
+[32m[PASS][0m shared_row_regions                                   561.94 ms
+[32m[PASS][0m strict_sum_bits                                         2.42 s
+
+[36m[SUMMARY][0m total: 87, pass: 87, fail: 0
