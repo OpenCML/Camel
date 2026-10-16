@@ -10,6 +10,7 @@
 
 // Dependency-convex region partitioning; eligibility comes from the semantic planner.
 #pragma once
+#include "camel/core/operator.h"
 #include "camel/runtime/draft.h"
 #include <cstddef>
 #include <memory>
@@ -52,7 +53,7 @@ struct RegionAnalysis {
 };
 RegionAnalysis analyzeRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
 // Register semantic-equivalence checks only when CAMEL_ENABLE_TEST_PASSES is enabled.
-void registerRegionTestPasses();
+void registerRegionTestPasses(operator_t run);
 
 // Inspect one function graph without executing it or initializing CUDA. This is
 // candidate analysis with extracted drafts, not automatic graph execution.

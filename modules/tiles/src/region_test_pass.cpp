@@ -8,12 +8,13 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-// Test outlining by executing the extracted functions on ordinary CPU backends.
+// Test region rewriting through ordinary CPU calls and explicit GPU execution.
 #include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/pass/opt.h"
 #include "camel/runtime/draft_session.h"
+#include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
 #include <cstdlib>
 #include <memory>
@@ -24,8 +25,11 @@
 namespace camel::tiles {
 namespace {
 class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
+    operator_t run_;
+
   public:
-    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    RegionOutlineTestPass(const core::context::context_ptr_t &context, operator_t run = nullptr)
+        : RuntimeGraphRewritePass(context), run_(run) {}
     runtime::GCGraph *apply(runtime::GCGraph *root, std::ostream &os) override {
         namespace rt = runtime;
         core::mm::NoCollectionScope noCollection;
@@ -48,12 +52,21 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                 auto fnNode =
                     draft.materializeStaticValue(core::rtdata::toSlot(fn), callee->funcType());
                 auto *type = callee->funcType()->exitType();
-                auto call  = draft.addCallNode(type, {}, draft.allocateRuntimeSlot(type));
-                draft.setWithInputs(call, std::span(&fnNode, 1));
                 std::vector<rt::gc_node_ref_t> args(
                     extracted.parameters.begin(),
                     extracted.parameters.end());
-                draft.setNormInputs(call, args);
+                rt::gc_node_ref_t call;
+                if (run_) {
+                    const auto packed =
+                        args.size() == 1 ? args.front() : packGraphTuple(draft, args);
+                    call =
+                        draft.addOperNode(type, run_, "tiles:run", draft.allocateRuntimeSlot(type));
+                    draft.setNormInputs(call, std::span(&packed, 1));
+                } else {
+                    call = draft.addCallNode(type, {}, draft.allocateRuntimeSlot(type));
+                    draft.setNormInputs(call, args);
+                }
+                draft.setWithInputs(call, std::span(&fnNode, 1));
                 for (size_t i = 0; i < region.outputs.size(); ++i) {
                     const auto old   = static_cast<rt::gc_node_ref_t>(region.outputs[i]);
                     auto replacement = call;
@@ -89,10 +102,16 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
     }
 };
 } // namespace
-void registerRegionTestPasses() {
-    if (std::getenv("CAMEL_ENABLE_TEST_PASSES"))
+void registerRegionTestPasses(operator_t run) {
+    if (std::getenv("CAMEL_ENABLE_TEST_PASSES")) {
         registerModulePass("tiles::test_outline", [](const core::context::context_ptr_t &ctx) {
             return std::make_unique<RegionOutlineTestPass>(ctx);
         });
+        registerModulePass(
+            "tiles::test_outline_gpu",
+            [run](const core::context::context_ptr_t &ctx) {
+                return std::make_unique<RegionOutlineTestPass>(ctx, run);
+            });
+    }
 }
 } // namespace camel::tiles

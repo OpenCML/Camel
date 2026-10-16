@@ -329,7 +329,7 @@ class TilesModule final : public BuiltinModule {
   public:
     explicit TilesModule(context_ptr_t ctx) : BuiltinModule("tiles", ctx) {
         tensor::ops::registerTensorOps();
-        registerRegionTestPasses();
+        registerRegionTestPasses(&runKernel);
         exportType(Reference("Device"), DeviceType::get(tensor::TensorType::Default()));
         exportEntity(
             "gpu",
