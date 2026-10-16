@@ -623,18 +623,20 @@ bool DebugCore::stepReached(const ShadowFrame &f, const Arrival &a) const {
         if (!step_.graph.empty()) {
             return f.info->stableId == step_.graph;
         }
-        return step_.into || depth <= step_.depth;
+        return step_.into || depth < step_.depth || (depth == step_.depth && frame == step_.frame);
     case StepKind::Line:
         // Design principles 2.11: the next line in execution order, not in the text.
         if (!located) {
             return false;
         }
-        if (!step_.into && depth > step_.depth) {
+        if (!step_.into &&
+            (depth > step_.depth || (depth == step_.depth && frame != step_.frame))) {
+            // A tail call replaces the activation at the same depth. F10 runs that
+            // entire call to its real caller; only F11 enters the replacement.
             return false;
         }
         if (frame != step_.frame) {
-            // The caller after a return, a callee (step in), or the frame that replaced this
-            // one by a tail call. DESIGN-QUESTION(step-over-tail-call)
+            // The caller after a return, or a callee (including a tail call) on step in.
             return true;
         }
         if (a.function != step_.function) {
@@ -688,7 +690,8 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
             details["breakpointIds"] = it->second;
         }
     }
-    if (f.awaitingEntry && located) [[unlikely]] {
+    f.atEntry = f.awaitingEntry && located;
+    if (f.atEntry) [[unlikely]] {
         // The first located node of an activation: the entry of its function (3.3).
         f.awaitingEntry           = false;
         const GraphInfo *function = f.function != nullptr ? f.function : f.info;

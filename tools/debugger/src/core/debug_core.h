@@ -162,6 +162,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         LinePosition activationLine;
         /// The activation has not run a located node yet (function breakpoints, 3.3).
         bool awaitingEntry = false;
+        bool atEntry = false; // the current instruction is the first located one of this activation
     };
 
     struct Step {
