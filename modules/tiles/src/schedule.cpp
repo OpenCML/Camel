@@ -11,6 +11,7 @@
 // Checked tensor schedules and interval-based storage reuse for one ordered stream.
 #include "camel/core/operator_table.h"
 #include "tiles/device.h"
+#include "tiles/internal/kernel_ir.h"
 #include "tiles/internal/row_kernel.h"
 #include "tiles/program.h"
 #include <algorithm>
@@ -259,6 +260,7 @@ void validate(const Program &p) {
             const auto &b = p.nodes[n.inputs[1]].shape;
             require(a.size() == 2 && b.size() == 2, "matmul rank");
             require(a[1] == b[0] && n.shape == Shape{a[0], b[1]}, "matmul dimensions");
+            kernel::validateMatmulContract(p, n);
         }
         if (reduction) {
             require(

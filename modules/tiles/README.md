@@ -319,3 +319,13 @@ edge-shape and canonical FMA-chain regressions rather than claimed by this valid
 The accumulator survives across panels and padded K contributions are excluded.
 Other kernel families still use their existing emitters; moving them to the same
 statement representation is subsequent work.
+
+Matrix kernels now require the core's rank-two matrix domain and ascending f32
+FMA-chain law. Operand addresses are composed from the declared affine maps;
+shared A/B panels require independence from the other output dimension. The
+consumer rejects unsupported guards, indirect maps, out-of-domain coordinates
+and incompatible laws before execution. Synthetic gradient matrix primitives
+receive their own matmul contract while retaining the original gradient contract
+as a compilation dependency. The source-template key now serializes the complete
+owned indexing instance, including expressions, parameters, predicates and law
+selection; changing a map cannot reuse previously generated addresses.

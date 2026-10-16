@@ -15,12 +15,107 @@
 #include <stdexcept>
 
 namespace camel::tiles::kernel {
+namespace {
+namespace sem = core::sem;
+void require(bool ok, const char *reason) {
+    if (!ok)
+        throw std::runtime_error(std::string("matmul core contract: ") + reason);
+}
+// Compose a core affine access with row-major storage and a physical iteration point.
+// Signed, guarded and indirect maps need a different lowering; never silently ignore them.
+IndexExpr address(
+    const sem::IndexedInstance &inst, const sem::Access &access, const Shape &shape,
+    const std::vector<IndexExpr> &point) {
+    require(
+        access.kind == sem::AccessKind::Affine && access.valid.empty() && !access.indirect,
+        "requires unconditional affine accesses");
+    const auto extents = inst.extents();
+    require(extents && point.size() == extents->size(), "unresolved iteration domain");
+    const auto view = sem::rowMajorView(inst, access, shape);
+    require(view && view->offset >= 0, "unrepresentable storage map");
+    const bool empty = std::find(extents->begin(), extents->end(), 0) != extents->end();
+    for (size_t axis = 0; axis < access.coords.size(); ++axis) {
+        const auto affine =
+            inst.exprs.affine(access.coords[axis], point.size(), inst.paramValues());
+        require(affine && affine->constant >= 0, "negative or nonlinear coordinate");
+        IndexExpr maximum(static_cast<uint64_t>(affine->constant));
+        for (size_t d = 0; d < point.size(); ++d) {
+            require(affine->coeffs[d] >= 0, "negative coordinate stride");
+            if (!empty)
+                maximum = maximum + IndexExpr(affine->coeffs[d]) * IndexExpr((*extents)[d] - 1);
+        }
+        require(
+            empty || maximum.evaluate({}) < static_cast<uint64_t>(shape.at(axis)),
+            "access outside operand domain");
+    }
+    IndexExpr result(view->offset);
+    for (size_t d = 0; d < point.size(); ++d) {
+        require(view->strides[d] >= 0, "negative physical stride");
+        if (view->strides[d])
+            result = result + point[d] * IndexExpr(view->strides[d]);
+    }
+    return result;
+}
+void matrixContract(const Program &p, const Node &n, const Shape &domain) {
+    require(n.indexing.has_value() && n.semantic < p.contracts.size(), "missing index instance");
+    const auto &inst = *n.indexing;
+    const auto *decl = p.contracts[n.semantic].declaration;
+    require(decl && inst.law < decl->laws.size(), "missing reduction law");
+    const auto problem = sem::validate(inst, decl);
+    require(!problem, "invalid index instance");
+    require(
+        inst.extents() == std::optional<Shape>(domain) && inst.norm.size() == 2 &&
+            inst.with.empty() && inst.domain.guard.empty(),
+        "unsupported iteration domain");
+    require(
+        inst.domain.dims[0].role == sem::DimRole::Parallel &&
+            inst.domain.dims[1].role == sem::DimRole::Parallel &&
+            inst.domain.dims[2].role == sem::DimRole::Reduction,
+        "unsupported dimension roles");
+    require(
+        sem::holds(inst, inst.domain.constraints, std::vector<int64_t>(3)),
+        "unsatisfied domain constraints");
+    require(
+        inst.output.mode == sem::WriteMode::Combine && !inst.output.indirect &&
+            inst.output.valid.empty() && inst.output.coords.size() == 2,
+        "unsupported output map");
+    for (size_t d = 0; d < 2; ++d) {
+        const auto &e = inst.exprs[inst.output.coords[d]];
+        require(
+            e.op == sem::ExprOp::Dim && e.value == static_cast<int64_t>(d),
+            "output is not a direct matrix domain");
+    }
+    const auto &law = decl->laws[inst.law];
+    const auto f32  = core::type::TypeCode::Float32;
+    require(
+        law.kind == sem::LawKind::FmaChain && law.input == f32 && law.accumulator == f32 &&
+            law.result == f32 && law.init == sem::LawInit::Constant && law.initBits == 0 &&
+            law.empty == sem::LawEmpty::Initial && law.order == sem::LawOrder::Ascending &&
+            law.finalize == sem::LawFinalize::None,
+        "requires ascending f32 FMA chain from positive zero");
+    // Cooperative A loads are shared across columns; B loads across rows.
+    const auto lhs = sem::rowMajorView(inst, inst.norm[0], p.nodes[n.inputs[0]].shape);
+    const auto rhs = sem::rowMajorView(inst, inst.norm[1], p.nodes[n.inputs[1]].shape);
+    require(
+        lhs && rhs && lhs->strides[1] == 0 && rhs->strides[0] == 0,
+        "cross-output dependence prevents tiled sharing");
+}
+} // namespace
+void validateMatmulContract(const Program &p, const Node &n) {
+    const auto &a = p.nodes.at(n.inputs.at(0)).shape;
+    const auto &b = p.nodes.at(n.inputs.at(1)).shape;
+    matrixContract(p, n, {a.at(0), b.at(1), a.at(1)});
+    const std::vector<IndexExpr> point(3, IndexExpr(0));
+    (void)address(*n.indexing, n.indexing->norm[0], a, point);
+    (void)address(*n.indexing, n.indexing->norm[1], b, point);
+}
 KernelBody matmulBody(const Program &p, Launch &launch) {
     const auto id  = launch.node;
     const auto &n  = p.nodes.at(id);
     const auto &a  = p.nodes.at(n.inputs.at(0)).shape;
     const auto &b  = p.nodes.at(n.inputs.at(1)).shape;
     const size_t m = a.at(0), k = a.at(1), cols = b.at(1);
+    validateMatmulContract(p, n);
     const size_t gx = (cols + 15) / 16, gy = (m + 15) / 16;
     if (gx > 2147483647 || gy > 65535)
         throw std::runtime_error("matrix launch exceeds CUDA grid limits");
@@ -54,13 +149,13 @@ KernelBody matmulBody(const Program &p, Launch &launch) {
         Load{
             "k_a",
             {0,
-             row * IndexExpr(k) + ak,
+             address(*n.indexing, n.indexing->norm[0], a, {row, IndexExpr(0), ak}),
              Predicate::less(row, IndexExpr(m)) && Predicate::less(ak, IndexExpr(k))},
             zero},
         Load{
             "k_b",
             {1,
-             bk * IndexExpr(cols) + col,
+             address(*n.indexing, n.indexing->norm[1], b, {IndexExpr(0), col, bk}),
              Predicate::less(bk, IndexExpr(k)) && Predicate::less(col, IndexExpr(cols))},
             zero},
         Store{{3, ty * IndexExpr(16) + tx, Predicate(true)}, symbol("k_a")},
@@ -81,7 +176,11 @@ KernelBody matmulBody(const Program &p, Launch &launch) {
         Loop{"k_base", IndexExpr(0), IndexExpr(k), 16, std::move(tile)},
         Store{
             {2,
-             row * IndexExpr(cols) + col,
+             address(
+                 *n.indexing,
+                 sem::Access{.kind = sem::AccessKind::Affine, .coords = n.indexing->output.coords},
+                 n.shape,
+                 {row, col, IndexExpr(0)}),
              Predicate::less(row, IndexExpr(m)) && Predicate::less(col, IndexExpr(cols))},
             symbol("k_acc")}};
     validateBody(result);

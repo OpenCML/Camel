@@ -39,11 +39,74 @@ class Key {
         for (auto n : v)
             number(static_cast<uint64_t>(n));
     }
+    void predicate(const core::sem::Predicate &v) {
+        number(v.size());
+        for (const auto &c : v) {
+            number(c.lhs);
+            number(static_cast<uint64_t>(c.rel));
+            number(c.rhs);
+        }
+    }
+    void indirect(const std::optional<core::sem::Indirect> &v) {
+        number(v.has_value());
+        if (v) {
+            number(v->indexOperand);
+            numbers(v->indexCoords);
+            number(v->axis);
+        }
+    }
+    void accesses(const std::vector<core::sem::Access> &v) {
+        number(v.size());
+        for (const auto &a : v) {
+            number(static_cast<uint64_t>(a.kind));
+            numbers(a.coords);
+            predicate(a.valid);
+            number(static_cast<uint64_t>(a.onInvalid));
+            number(a.padding);
+            indirect(a.indirect);
+        }
+    }
+    void indexed(const core::sem::IndexedInstance &v) {
+        number(v.exprs.size());
+        for (size_t i = 0; i < v.exprs.size(); ++i) {
+            const auto &e = v.exprs[static_cast<core::sem::ExprId>(i)];
+            number(static_cast<uint64_t>(e.op));
+            number(e.value);
+            number(e.lhs);
+            number(e.rhs);
+        }
+        number(v.domain.dims.size());
+        for (const auto &d : v.domain.dims) {
+            text(d.name);
+            number(d.extent);
+            number(static_cast<uint64_t>(d.role));
+        }
+        number(v.domain.params.size());
+        for (const auto &p : v.domain.params) {
+            text(p.name);
+            number(static_cast<uint64_t>(p.source));
+            number(p.operand);
+            number(p.axis);
+            number(p.value.has_value());
+            if (p.value)
+                number(*p.value);
+            number(p.definition);
+        }
+        predicate(v.domain.constraints);
+        predicate(v.domain.guard);
+        accesses(v.norm);
+        accesses(v.with);
+        numbers(v.output.coords);
+        predicate(v.output.valid);
+        number(static_cast<uint64_t>(v.output.mode));
+        indirect(v.output.indirect);
+        number(v.law);
+    }
     std::string finish() { return std::move(value); }
 };
 std::string planKey(const Program &p, ScheduleOptions options) {
     Key key;
-    key.number(3); // Process-local key schema; not a persistent semantic fingerprint.
+    key.number(4); // Process-local key schema; not a persistent semantic fingerprint.
     key.number(options.fuseElementwise);
     key.number(options.parallelMax);
     key.number(p.contracts.size());
@@ -65,6 +128,9 @@ std::string planKey(const Program &p, ScheduleOptions options) {
         key.numbers(n.attributes); // Includes graph constant64 literal bits.
         key.number(n.offset);
         key.numbers(n.strides);
+        key.number(n.indexing.has_value());
+        if (n.indexing)
+            key.indexed(*n.indexing);
         // data/scalarBits and resident ownership only supply runtime buffer
         // contents. Physical allocation slots are recomputed on every call.
     }

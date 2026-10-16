@@ -45,6 +45,5 @@ struct Access {
     std::optional<uint64_t>
     evaluate(const std::unordered_map<std::string, uint64_t> &bindings) const;
     Access substitute(const std::string &name, const IndexExpr &replacement) const;
-    std::string loadF32(uint32_t fallbackBits = 0) const;
 };
 } // namespace camel::tiles::kernel

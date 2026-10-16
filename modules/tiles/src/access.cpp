@@ -128,8 +128,4 @@ Access::evaluate(const std::unordered_map<std::string, uint64_t> &bindings) cons
 Access Access::substitute(const std::string &name, const IndexExpr &replacement) const {
     return {buffer, address.substitute(name, replacement), mask.substitute(name, replacement)};
 }
-std::string Access::loadF32(uint32_t fallbackBits) const {
-    return "(" + mask.cuda() + "?v[" + std::to_string(buffer) + "][" + address.cuda() +
-           "]:__uint_as_float(" + std::to_string(fallbackBits) + "U))";
-}
 } // namespace camel::tiles::kernel

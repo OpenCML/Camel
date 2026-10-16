@@ -37,10 +37,12 @@ template<class F> void rejects(const Program &original, F mutate, const char *re
 }
 
 void checkKernelIR();
+void checkMatrixContracts();
 
 int main() {
     try {
         checkKernelIR();
+        checkMatrixContracts();
         using kernel::ScalarExpr;
         using kernel::ScalarValue;
         using kernel::ScalarOp;

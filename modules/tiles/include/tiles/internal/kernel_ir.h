@@ -18,6 +18,7 @@
 namespace camel::tiles {
 struct Program;
 struct Launch;
+struct Node;
 } // namespace camel::tiles
 namespace camel::tiles::kernel {
 enum class MemorySpace { Global, Shared };
@@ -76,5 +77,6 @@ struct KernelBody {
 // Memory bounds and producer/consumer races remain the physical planner's proof obligation.
 void validateBody(const KernelBody &body);
 std::string emitBody(const KernelBody &body);
+void validateMatmulContract(const Program &program, const Node &node);
 KernelBody matmulBody(const Program &program, Launch &launch);
 } // namespace camel::tiles::kernel

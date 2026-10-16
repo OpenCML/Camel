@@ -307,7 +307,8 @@ class Compiler {
                 // lowered with their own permissions and must remain unchanged.
                 for (size_t i = first; i < program.nodes.size(); ++i) {
                     program.nodes[i].permissions = g->nodePermissions(id);
-                    program.nodes[i].semantic    = semantic;
+                    if (program.nodes[i].semantic == SIZE_MAX)
+                        program.nodes[i].semantic = semantic;
                 }
                 // An operator's instance describes its result, never synthetic
                 // casts or constants introduced while lowering its arguments.
@@ -464,6 +465,21 @@ class Compiler {
             n.op = "matmul";
             n.inputs =
                 left ? std::vector<size_t>{dy, transposed} : std::vector<size_t>{transposed, dy};
+            // The physical primitive has its own indexing/law, not the three-operand
+            // gradient operator's instance. Keep both contracts in the dependency set.
+            static const auto matmulId = core::OperatorTable::instance().intern("tensor:matmul");
+            const auto *matmul         = tensor::ops::OpRegistry::instance().find(matmulId);
+            if (!matmul)
+                throw std::runtime_error("missing core matmul declaration");
+            std::vector<ty::Type *> matrixTypes;
+            for (auto in : n.inputs)
+                matrixTypes.push_back(
+                    tensor::TensorType::get(ty::TypeCode::Float32, program.nodes[in].shape));
+            std::vector<std::optional<ConstArg>> matrixConstants(2);
+            n.indexing = tensor::ops::instantiate(
+                *matmul,
+                tensor::ops::InferContext(matrixTypes, matrixConstants));
+            n.semantic = contract(matmulId);
             return {.type = *inferred, .tensor = append(std::move(n))};
         }
         const std::string unary  = "|neg|abs|exp|log|sqrt|rsqrt|relu|";

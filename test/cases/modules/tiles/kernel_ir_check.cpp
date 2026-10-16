@@ -10,6 +10,9 @@
 
 // Structural mutation tests for physical kernel types, scopes and convergence.
 #include "tiles/internal/kernel_ir.h"
+#include "tiles/internal/codegen_cache.h"
+#include "tiles/program.h"
+#include "camel/core/operator_table.h"
 #include <iostream>
 #include <stdexcept>
 using namespace camel::tiles;
@@ -49,4 +52,59 @@ void checkKernelIR() {
     body.statements.push_back(Conditional{Predicate::equal(IndexExpr::variable("block_x"),IndexExpr(0)),{Barrier{}}});
     validateBody(body);
     std::cout<<"tiles kernel bodies: scopes, typed memory and uniform barriers passed\n";
+}
+
+void checkMatrixContracts() {
+    namespace sem=camel::core::sem;
+    auto &table=camel::core::OperatorTable::instance();
+    const std::string uri="tilestest:matrix_contract";
+    const auto id=table.intern(uri);
+    const auto f32=camel::core::type::TypeCode::Float32;
+    sem::OperatorSemantics declaration{.key=sem::OperatorKey::of(uri),
+        .laws={{.name="fma",.kind=sem::LawKind::FmaChain,.input=f32,.accumulator=f32,.result=f32}}};
+    table.declareSemantics(uri,declaration);
+    Program p;
+    p.contracts={{.uri=uri,.key=declaration.key,.declaration=table.semantics(id)}};
+    p.nodes={{.op="input",.shape={2,2},.data={1,2,3,4}},
+             {.op="input",.shape={2,2},.data={5,6,7,8}},
+             {.op="matmul",.shape={2,2},.inputs={0,1},.semantic=0}};
+    p.outputs={2};
+    sem::IndexedInstance inst;
+    const auto m=inst.exprs.dim(0),n=inst.exprs.dim(1),k=inst.exprs.dim(2);
+    const auto two=inst.exprs.constant(2);
+    inst.domain.dims={{"m",two,sem::DimRole::Parallel},{"n",two,sem::DimRole::Parallel},{"k",two,sem::DimRole::Reduction}};
+    inst.norm={{.kind=sem::AccessKind::Affine,.coords={m,k}},{.kind=sem::AccessKind::Affine,.coords={k,n}}};
+    inst.output={.coords={m,n},.mode=sem::WriteMode::Combine};inst.law=0;
+    p.nodes[2].indexing=inst;
+    generate(p);
+    const auto original=p.source;
+    const auto before=generationCacheStats();
+    auto transposed=p;
+    transposed.nodes[2].indexing->norm[0].coords={k,m};
+    generate(transposed);
+    if(generationCacheStats().misses!=before.misses+1 || transposed.source==original)
+        throw std::runtime_error("core access map was ignored by generation or cache");
+    auto originalLaunch=p.launches.front(), transposedLaunch=transposed.launches.front();
+    const auto originalBody=matmulBody(p,originalLaunch), transposedBody=matmulBody(transposed,transposedLaunch);
+    const auto &originalLoad=std::get<Load>(std::get<Loop>(originalBody.statements[3]).body[0]);
+    const auto &transposedLoad=std::get<Load>(std::get<Loop>(transposedBody.statements[3]).body[0]);
+    const std::unordered_map<std::string,uint64_t> point={{"k_row",0},{"k_base",0},{"thread_x",1}};
+    if(originalLoad.source.evaluate(point)!=1 || transposedLoad.source.evaluate(point)!=2)
+        throw std::runtime_error("physical access does not follow core transposition");
+    auto rejected=[&](Program bad,const char *reason) {
+        try { validatePlan(bad); }
+        catch(const std::exception &e) {if(std::string(e.what()).find(reason)!=std::string::npos)return;throw;}
+        throw std::runtime_error(std::string("accepted matrix contract: ")+reason);
+    };
+    auto bad=p;bad.nodes[2].indexing->norm[0].coords={m,n};rejected(bad,"cross-output");
+    bad=p;bad.nodes[2].indexing->norm[0].coords[1]=bad.nodes[2].indexing->exprs.add(k,two);rejected(bad,"outside operand");
+    bad=p;bad.nodes[2].indexing->norm[0].valid.push_back({m,sem::Constraint::Rel::Lt,two});rejected(bad,"unconditional affine");
+    bad=p;bad.nodes[2].indexing->domain.constraints.push_back({two,sem::Constraint::Rel::Lt,two});rejected(bad,"unsatisfied domain");
+    bad=p;bad.nodes[2].indexing.reset();rejected(bad,"missing index instance");
+    bad=p;bad.nodes[2].indexing->output.coords={n,m};rejected(bad,"direct matrix domain");
+    declaration.laws[0].kind=sem::LawKind::MulAdd;
+    table.declareSemantics(uri,declaration);
+    p.contracts[0].declaration=table.semantics(id);
+    rejected(p,"ascending f32 FMA");
+    std::cout<<"tiles matrix contracts: core maps, FMA law and cache dependency passed\n";
 }
