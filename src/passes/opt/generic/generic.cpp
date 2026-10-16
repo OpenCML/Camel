@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,11 +31,11 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tuple.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/pass/warnings.h"
-#include "camel/core/rtdata/tuple.h"
-#include "camel/core/rtdata/struct.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
@@ -306,7 +306,8 @@ std::optional<std::vector<std::vector<gc_node_ref_t>>> branchArmNodes(
             }
             owner[n] = static_cast<int>(arm);
             regions[arm].push_back(n);
-            for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
+            for (auto inputs :
+                 {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
                 for (gc_node_ref_t in : inputs) {
                     if (in < inBranch.size() && inBranch[in]) {
                         stack.push_back(in);
@@ -346,7 +347,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     const gc_node_ref_t result = draft.withInputsOf(join)[*arm];
 
     const auto tails = draft.withInputsOf(join);
-    auto found = branchArmNodes(draft, brch, join, tails);
+    auto found       = branchArmNodes(draft, brch, join, tails);
     if (!found) {
         return false;
     }
@@ -457,7 +458,8 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, join);
         for (gc_node_ref_t pred : after) {
             const auto existing = draft.ctrlInputsOf(user);
-            if (pred != user && !dropped[pred] && std::ranges::find(existing, pred) == existing.end()) {
+            if (pred != user && !dropped[pred] &&
+                std::ranges::find(existing, pred) == existing.end()) {
                 draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
             }
         }
@@ -477,7 +479,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     const gc_node_ref_t takenHead = arms[*arm].head;
     const gc_node_ref_t newHead =
         takenHead != kInvalidNodeRef && draft.header(takenHead) && !dropped[takenHead] ? takenHead
-                                                                                          : result;
+                                                                                       : result;
     draft.retargetBranchArmAnchors(join, result, result);
     draft.retargetBranchArmAnchors(brch, newHead, result);
     draft.eraseNode(join);
@@ -497,12 +499,13 @@ bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
     if (sources.size() != 1) {
         return false;
     }
-    const auto source = staticValueOf(draft, sources[0]);
+    const auto source  = staticValueOf(draft, sources[0]);
     type::Type *result = draft.header(id)->dataType;
     if (!source || !source->second || !result || source->first == NullSlot) {
         return false;
     }
-    const auto *body = reinterpret_cast<const camel::runtime::GCAccsBody *>(draft.payloadOf(id).data());
+    const auto *body =
+        reinterpret_cast<const camel::runtime::GCAccsBody *>(draft.payloadOf(id).data());
     slot_t value = NullSlot;
     if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex &&
         source->second->code() == type::TypeCode::Tuple) {
@@ -532,7 +535,8 @@ bool foldStaticFill(
     if (sources.size() != 1 || !result || !type::isGCTraced(result->code())) {
         return false;
     }
-    const auto *body = reinterpret_cast<const camel::runtime::GCFillBody *>(draft.payloadOf(id).data());
+    const auto *body =
+        reinterpret_cast<const camel::runtime::GCFillBody *>(draft.payloadOf(id).data());
     if (body->fillKind == camel::runtime::GCFillKind::FunctionClosure) {
         return false; // closures stay calls std::opt can devirtualize
     }
@@ -553,7 +557,10 @@ bool foldStaticFill(
     // Keep the object alive until commit moves it into the graph's static area.
     roots.emplace_back(camel::core::mm::autoSpace(), object, result, "std::opt::fold");
     camel::execute::writeRuntimeFillSlots(object, result, body, slots);
-    replaceNode(draft, id, draft.materializeStaticValue(camel::core::rtdata::toSlot(object), result));
+    replaceNode(
+        draft,
+        id,
+        draft.materializeStaticValue(camel::core::rtdata::toSlot(object), result));
     return true;
 }
 
@@ -578,12 +585,12 @@ bool foldStaticCast(
     }
     const type::CastSafety safety = target->castSafetyFrom(source->second);
     // A module type checks a value of its own kind (the constant's type says it is one).
-    const bool checkedByTarget    = target->isOtherType() && safety != type::CastSafety::Forbidden &&
-                                    source->second->code() == target->code() &&
-                                    source->first != NullSlot;
-    const bool safePrimitive      = safety == type::CastSafety::Safe &&
-                                    type::isPrimitive(target->code()) &&
-                                    type::isPrimitive(source->second->code());
+    const bool checkedByTarget = target->isOtherType() && safety != type::CastSafety::Forbidden &&
+                                 source->second->code() == target->code() &&
+                                 source->first != NullSlot;
+    const bool safePrimitive   = safety == type::CastSafety::Safe &&
+                                 type::isPrimitive(target->code()) &&
+                                 type::isPrimitive(source->second->code());
     if (!checkedByTarget && !safePrimitive) {
         return false;
     }
@@ -760,13 +767,13 @@ size_t cseDraft(GraphDraft &draft) {
     // different permissions (design principles 2.13) may compute different bits, and merging
     // them would give one of them permissions it was not granted, or take some away. They are
     // not merged (docs/design/op-semantics 6.4).
-    using Key          = std::tuple<
-                 std::string,
-                 type::Type *,
-                 std::vector<gc_node_ref_t>,
-                 std::vector<gc_node_ref_t>,
-                 std::vector<uint64_t>,
-                 uint8_t>;
+    using Key = std::tuple<
+        std::string,
+        type::Type *,
+        std::vector<gc_node_ref_t>,
+        std::vector<gc_node_ref_t>,
+        std::vector<uint64_t>,
+        uint8_t>;
     std::map<Key, gc_node_ref_t> seen;
     size_t merged = 0;
 
@@ -836,13 +843,15 @@ size_t cseDraft(GraphDraft &draft) {
  * run.
  */
 bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
-    for (auto inputs : {draft.normInputsOf(gate), draft.withInputsOf(gate), draft.ctrlInputsOf(gate)}) {
+    for (auto inputs :
+         {draft.normInputsOf(gate), draft.withInputsOf(gate), draft.ctrlInputsOf(gate)}) {
         for (gc_node_ref_t in : inputs) {
             if (isValueOnly(draft, in)) {
                 continue;
             }
             size_t users = 0;
-            for (auto group : {draft.normUsersOf(in), draft.withUsersOf(in), draft.ctrlUsersOf(in)}) {
+            for (auto group :
+                 {draft.normUsersOf(in), draft.withUsersOf(in), draft.ctrlUsersOf(in)}) {
                 for (gc_node_ref_t user : group) {
                     users += user != gate ? 1 : 0;
                 }
@@ -914,28 +923,25 @@ GCGraph *simplifyGraph(
     }
     for (size_t round = 0; round < maxRounds; ++round) {
         bool optChanged = false;
-        graph = applyOptimizeRewritePass(context, graph, os, config, &optChanged);
+        graph           = applyOptimizeRewritePass(context, graph, os, config, &optChanged);
         std::deque<camel::core::mm::RootHandle> roots;
-        size_t folded = 0, removed = 0;
+        size_t folded = 0, merged = 0, removed = 0;
         graph = rewriteReachableGraphs(
             context,
             graph,
             "std::opt::fold",
             [&](GraphDraft &draft) { return foldDraft(draft, *context, roots); },
             &folded);
+        graph = rewriteReachableGraphs(context, graph, "std::opt::cse", cseDraft, &merged);
         graph = rewriteReachableGraphs(context, graph, "std::opt::dce", dceDraft, &removed);
-        if (!optChanged && folded == 0 && removed == 0) {
-            CAMEL_LOG_INFO_S("Opt", "std::opt::simplify: fixpoint after {} round(s)", round + 1);
+        if (!optChanged && folded == 0 && merged == 0 && removed == 0) {
+            CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
             return graph;
         }
     }
     CAMEL_LOG_WARN_S(
         "Opt",
-        "std::opt::simplify: still changing after {} rounds (a recursion of non-static depth?)",
+        "std::opt: still changing after {} rounds (a recursion of non-static depth?)",
         maxRounds);
     return graph;
-}
-
-GCGraph *SimplifyPass::apply(GCGraph *graph, std::ostream &os) {
-    return simplifyGraph(context_, graph, OptimizeRewriteConfig{}, os);
 }

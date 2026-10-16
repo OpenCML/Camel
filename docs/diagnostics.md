@@ -4207,7 +4207,7 @@ Pass '{0}' consumes the graph, so {1} written after it will not run.
 A scheduling pass executes the program and a translation pass translates it; neither hands a graph on, and the pipeline ends there. Remove the passes written after it, or move them before it.
 ```
 
-**Example** (`test/cases/linear/byref/wait_direct_user.cml`, run as `camel test/cases/linear/byref/wait_direct_user.cml std::nvm std::inline std::fvm`)
+**Example** (`test/cases/linear/byref/wait_direct_user.cml`, run as `camel test/cases/linear/byref/wait_direct_user.cml std::nvm std::opt::inline std::fvm`)
 
 ```camel
 module wait_direct_user

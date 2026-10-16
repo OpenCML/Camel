@@ -88,11 +88,11 @@ golden = "golden/attempt_compiled.txt"
 [[tests]]
 name = "attempt.compiled.inline_jit"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-desc = "With std::inline before std::jit the recursive callee is compiled as a native self-recursion; the log shows that it was compiled."
+desc = "With std::opt::inline before std::jit the recursive callee is compiled as a native self-recursion; the log shows that it was compiled."
 kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
-args = ["-vv", "${case}", "std::inline", "std::jit"]
+args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
 expect_output_contains = ["compiled & cached graph 'depth'", "MaxRecursionDepthExceeded at compiled.cml:13:65", "DivisionByZero at compiled.cml:12:53"]
 verify_script = """
 assert(input.normalized.stdout.trimEnd().endsWith('-29200\nend'), JSON.stringify(input.normalized.stdout.slice(-200)))
@@ -123,9 +123,9 @@ golden = "golden/attempt_library.txt"
 
 [[tests]]
 name = "attempt.library.inline_opt"
-desc = "The same through std::inline std::opt: the library functions are inlined into the closures, the boundary stays."
+desc = "The same through std::opt::inline std::opt: the library functions are inlined into the closures, the boundary stays."
 case = "../../../cases/consistency/attempt/library.cml"
-args = ["${case}", "std::inline", "std::opt", "${backend}"]
+args = ["${case}", "std::opt::inline", "std::opt", "${backend}"]
 golden = "golden/attempt_library.txt"
 
 # --- the program goes on -------------------------------------------------------------------
@@ -280,9 +280,9 @@ golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
 name = "attempt.pipeline.inline"
-desc = "std::inline: the callees are small and called once; the fault stays inside the boundary."
+desc = "std::opt::inline: the callees are small and called once; the fault stays inside the boundary."
 case = "../../../cases/consistency/attempt/pipelines.cml"
-args = ["${case}", "std::inline", "${backend}"]
+args = ["${case}", "std::opt::inline", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
@@ -294,9 +294,9 @@ golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
 name = "attempt.pipeline.simplify"
-desc = "std::opt::simplify. It specialises a callee on the constant 0 and warns that the division always faults (not folded, 2.9); the warning is switched off here, the output is the same."
+desc = "std::opt. It specialises a callee on the constant 0 and warns that the division always faults (not folded, 2.9); the warning is switched off here, the output is the same."
 case = "../../../cases/consistency/attempt/pipelines.cml"
-args = ["-Wno-constant-expression-faults", "${case}", "std::opt::simplify", "${backend}"]
+args = ["-Wno-constant-expression-faults", "${case}", "std::opt", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
@@ -322,23 +322,23 @@ golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
 name = "attempt.pipeline.inline_opt"
-desc = "std::inline std::opt."
+desc = "std::opt::inline std::opt."
 case = "../../../cases/consistency/attempt/pipelines.cml"
-args = ["${case}", "std::inline", "std::opt", "${backend}"]
+args = ["${case}", "std::opt::inline", "std::opt", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
 name = "attempt.pipeline.places_opt"
-desc = "The places program (closures, higher-order operators, a tail-recursive loop) through std::inline std::opt."
+desc = "The places program (closures, higher-order operators, a tail-recursive loop) through std::opt::inline std::opt."
 case = "../../../cases/consistency/attempt/places.cml"
-args = ["${case}", "std::inline", "std::opt", "${backend}"]
+args = ["${case}", "std::opt::inline", "std::opt", "${backend}"]
 golden = "golden/attempt_places.txt"
 
 [[tests]]
 name = "attempt.pipeline.nested_opt"
-desc = "The nested program through std::inline std::opt."
+desc = "The nested program through std::opt::inline std::opt."
 case = "../../../cases/consistency/attempt/nested.cml"
-args = ["${case}", "std::inline", "std::opt", "${backend}"]
+args = ["${case}", "std::opt::inline", "std::opt", "${backend}"]
 golden = "golden/attempt_nested.txt"
 
 # --- other libraries ----------------------------------------------------------------------

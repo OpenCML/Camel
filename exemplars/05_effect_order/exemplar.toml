@@ -1,5 +1,5 @@
 title = "Effect and callback order"
-summary = "Prints inside a callback keep their order under NodeVM, FastVM and after the callback is inlined by std::opt::simplify."
+summary = "Prints inside a callback keep their order under NodeVM, FastVM and after the callback is inlined by std::opt."
 
 [[runs]]
 name = "nvm"
@@ -15,13 +15,13 @@ stdout = "expected/output.txt"
 
 [[runs]]
 name = "simplified"
-args = ["std::macro", "std::opt::simplify", "std::nvm"]
+args = ["std::macro", "std::opt", "std::nvm"]
 exit = 0
 stdout = "expected/output.txt"
 
 [[runs]]
 name = "dump"
-args = ["std::macro", "std::opt::simplify", "std::agir"]
+args = ["std::macro", "std::opt", "std::agir"]
 exit = 0
 stdout = "expected/simplified.agir.dot"
 output_contains = ["role=\"effect\""]

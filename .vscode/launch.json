@@ -64,7 +64,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/out/latest/bin/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
-            "args": ["-v", "--log-level debug", "${file}", "std::inline", "std::nodevm"],
+            "args": ["-v", "--log-level debug", "${file}", "std::opt::inline", "std::nodevm"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,
@@ -78,7 +78,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/out/latest/bin/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
-            "args": ["-v", "--log-level debug", "${file}", "std::inline", "std::jit"],
+            "args": ["-v", "--log-level debug", "${file}", "std::opt::inline", "std::jit"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,
@@ -106,7 +106,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/out/latest/bin/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
-            "args": ["-v", "--log-level debug", "${file}", "std::inline"],
+            "args": ["-v", "--log-level debug", "${file}", "std::opt::inline"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": true,
@@ -238,7 +238,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/out/latest/bin/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
-            "args": ["-v", "--log-level debug", "${file}", "std::inline", "std::graphviz"],
+            "args": ["-v", "--log-level debug", "${file}", "std::opt::inline", "std::graphviz"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": false,
@@ -280,7 +280,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/out/latest/bin/camel.exe",
             "symbolSearchPath": "${workspaceFolder}/out/latest/bin",
-            "args": ["${file}", "std::inline", "std::bytecode"],
+            "args": ["${file}", "std::opt::inline", "std::bytecode"],
             "console": "externalTerminal",
             "logging": {
                 "moduleLoad": false,

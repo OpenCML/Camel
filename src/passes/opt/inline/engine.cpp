@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,10 +21,10 @@
  * Shared runtime rewrite engine for GCGraph-native optimization passes.
  *
  * This file hosts the actual multi-phase rewrite loop used by:
- * - `std::inline`        : inline only
- * - `std::devirtualize`  : static-call devirtualization only
- * - `std::specialize`    : direct-call specialization only
- * - `std::opt`           : aggregate optimization pipeline
+ * - `std::opt::inline`        : inline only
+ * - `std::opt::devirtualize`  : static-call devirtualization only
+ * - `std::opt::specialize`    : direct-call specialization only
+ * - `std::opt`               : call-rewrite rounds of the integrated optimizer
  *
  * Keeping the execution engine here avoids smuggling extra optimization phases
  * behind the `InlineRewritePass` wrapper and makes the pass surface explicit.
@@ -33,18 +33,18 @@
 #include "engine.h"
 
 #include "../generic/rewrite.h"
-#include "camel/passes/opt/inline.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/passes/opt/inline.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
 
-#include <optional>
 #include <algorithm>
 #include <cstdlib>
 #include <format>
 #include <functional>
+#include <optional>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -488,6 +488,15 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> 
                 }
             }
         }
+        if (isRecursive && std::ranges::none_of(graphsInComponent, [&](const GCGraph *graph) {
+                return info.componentEntryGraphs.contains(graph);
+            })) {
+            // DCE can remove the last external call while the graph registry still retains
+            // this SCC. With no known entry there is no profitable compaction boundary:
+            // inlining its members into each other only expands an unused recursive cycle.
+            // Keep every member as a boundary until an external call identifies an entry.
+            info.componentEntryGraphs.insert(graphsInComponent.begin(), graphsInComponent.end());
+        }
     }
 
     std::vector<size_t> work;
@@ -593,12 +602,13 @@ GCGraph *applyRuntimeOptimizeRewrite(
                         continue;
                     }
                     if (!closureSet.contains(callee)) {
-                        throw std::runtime_error(std::format(
-                            "Runtime rewrite discovered FUNC node {} in graph '{}' with callee "
-                            "graph {:p} outside the reachable closure.",
-                            it.ref(),
-                            runtimeGraph->name(),
-                            static_cast<void *>(callee)));
+                        throw std::runtime_error(
+                            std::format(
+                                "Runtime rewrite discovered FUNC node {} in graph '{}' with callee "
+                                "graph {:p} outside the reachable closure.",
+                                it.ref(),
+                                runtimeGraph->name(),
+                                static_cast<void *>(callee)));
                     }
                 }
             }
@@ -619,8 +629,8 @@ GCGraph *applyRuntimeOptimizeRewrite(
         // depend only on the drafts, which a round changes in three ways: a specialization or a
         // devirtualization retargets or creates a FUNC node (the counts are dropped and
         // recomputed on the next use), and an inline restarts the round. Counting the closure
-        // again for every graph made one inline cost (graphs x nodes): 405 s for std::inline on
-        // a 36,000-node program of 1,732 graphs.
+        // again for every graph made one inline cost (graphs x nodes): 405 s for std::opt::inline
+        // on a 36,000-node program of 1,732 graphs.
         std::optional<std::unordered_map<const GCGraph *, size_t>> roundCallCounts;
         for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
             GCGraph *nextGraph = *it;
@@ -664,8 +674,8 @@ GCGraph *applyRuntimeOptimizeRewrite(
                         roundCallCounts.reset();
                         // The callee after the rewrite is the copy (counted in full even when
                         // an existing copy was reused).
-                        const auto *body =
-                            reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data());
+                        const auto *body = reinterpret_cast<const GCFuncBody *>(
+                            draft.payloadOf(funcNodeId).data());
                         growthSpent += body->calleeGraph ? body->calleeGraph->nodeCount() : 0;
                     }
                 }
@@ -974,7 +984,8 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
         if (sources.empty()) {
             continue;
         }
-        const auto asArm = std::ranges::find(joinArms, user, &decltype(joinArms)::value_type::first);
+        const auto asArm =
+            std::ranges::find(joinArms, user, &decltype(joinArms)::value_type::first);
         if (asArm != joinArms.end()) {
             // The call was the tail of an arm of this JOIN. What the call ran after is code
             // of that arm, and an arm is what its tail depends on: the wait belongs on the

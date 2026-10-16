@@ -2,7 +2,7 @@
  * A loop with an invariant computation (k * k + 7 does not change between iterations) and a
  * value derived from the counter (i * 4). `k` comes from the environment so that it is not a
  * compile-time constant. Used to see what the optimisation passes do with them today:
- *   K=3 camel invariant.cml std::opt::simplify std::rgir
+ *   K=3 camel invariant.cml std::opt std::rgir
  */
 module invariant
 import { get_env } from sys

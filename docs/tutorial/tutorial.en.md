@@ -961,10 +961,10 @@ GRAPH_STATS {"graphs":7,"nodes":70,"edges":85,"opers":18,"direct_calls":4,"indir
 The two lines of numbers differ: `std::opt` changed the graph (there are fewer direct calls and more operator nodes — functions were inlined at their call sites), while the result of the program is unchanged. To save the whole graph pass by pass, use `--dump-after-each-pass`:
 
 ```bash
-camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::inline std::opt::fold std::fvm
+camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::opt::inline std::opt::fold std::fvm
 ```
 
-The directory `snap` then contains `00_input.rgir.dot`, `01_std.inline.rgir.dot`, `02_std.opt.fold.rgir.dot` and the corresponding `.stats.json` files: the input graph, and the graph after each pass.
+The directory `snap` then contains `00_input.rgir.dot`, `01_std.opt.inline.rgir.dot`, `02_std.opt.fold.rgir.dot` and the corresponding `.stats.json` files: the input graph, and the graph after each pass.
 
 A few rules:
 
@@ -1030,7 +1030,7 @@ tensor([[      2.],
 **Exporting it**: the same source, with a different set of passes. Nothing in the program was written for the export; not even `import onnx` is needed:
 
 ```bash
-CAMEL_ONNX_OUT=model.onnx camel docs/tutorial/examples/15_model.cml std::macro std::opt::simplify onnx::export
+CAMEL_ONNX_OUT=model.onnx camel docs/tutorial/examples/15_model.cml std::macro std::opt onnx::export
 ```
 
 ```text

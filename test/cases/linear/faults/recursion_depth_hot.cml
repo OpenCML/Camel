@@ -1,5 +1,5 @@
 /**
- * A recursion one call deeper than the limit, in functions the JIT compiles after std::inline
+ * A recursion one call deeper than the limit, in functions the JIT compiles after std::opt::inline
  * (first run within the limit): MaxRecursionDepthExceeded at the recursive call that goes too
  * deep (line 19, column 38: the first call of `tree`), as the bytecode VM reports it, not a
  * stack overflow. A tail recursion of a million calls is no recursion in depth.

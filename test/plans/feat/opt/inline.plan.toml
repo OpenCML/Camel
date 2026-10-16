@@ -4,11 +4,29 @@ tier = "feat"
 tags = ["feat", "opt", "inline"]
 
 [[tests]]
+name = "consecutive_sync_calls.opt.gates"
+desc = "The integrated optimizer reduces unused inlined return gates to the one gate that orders the program result after all four prints."
+kind = "behavior"
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "std::opt", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const graph = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
+    assert(graph, 'main graph missing')
+    const gates = graph.nodes.filter(n => n.kind === 'GATE')
+    assert(gates.length === 1 && gates[0].id === graph.exit, 'only the result gate should remain')
+    assert(graph.nodes.filter(n => n.label === ':io/println').length === 4, 'all four prints must remain')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
 name = "consecutive_sync_calls.inline.gates"
 desc = "Inlining reuses the callee completion gate instead of wrapping the same return value in another gate."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::inline", "std::jgir"]
+args = ["${case}", "std::opt::inline", "std::jgir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -35,7 +53,7 @@ name = "consecutive_sync_calls.inline.nvm"
 desc = "Reusing inlined completion gates preserves all four effects and their order on nvm."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -51,7 +69,7 @@ name = "consecutive_sync_calls.inline.fvm"
 desc = "Reusing inlined completion gates preserves all four effects and their order on fvm."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -67,7 +85,7 @@ name = "consecutive_sync_calls.inline.jit"
 desc = "Reusing inlined completion gates preserves all four effects and their order on jit."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::inline", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -83,7 +101,7 @@ name = "consecutive_sync_calls.inline.tf"
 desc = "Reusing inlined completion gates preserves all four effects and their order on tf."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::inline", "std::tf"]
+args = ["${case}", "std::opt::inline", "std::tf"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -99,7 +117,7 @@ name = "consecutive_sync_calls.inline.prl"
 desc = "Reusing inlined completion gates preserves all four effects and their order on prl."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::inline", "std::prl"]
+args = ["${case}", "std::opt::inline", "std::prl"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -115,7 +133,7 @@ name = "branch_arm_behavior"
 desc = "Checks inline rewriting preserves branch-arm behavior when a call result rejoins control flow."
 kind = "behavior"
 case = "../../../cases/opt/inline/branch_arm_behavior.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 ({ input, assert, match }) => {
@@ -133,7 +151,7 @@ name = "empty_entry_targets_fallback"
 desc = "Checks the inliner handles entry nodes that simplify to no meaningful outgoing targets."
 kind = "behavior"
 case = "../../../cases/opt/inline/empty_entry_targets_fallback.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 ({ input, assert, match }) => {
@@ -150,7 +168,7 @@ name = "entry_multi_target_with_sync"
 desc = "Checks the inliner preserves multi-target entry fan-out before return."
 kind = "behavior"
 case = "../../../cases/opt/inline/entry_multi_target_with_sync.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 ({ input, assert, match }) => {
@@ -169,7 +187,7 @@ name = "entry_single_target_no_sync"
 desc = "Checks the fast inline path for a tiny single-target leaf call."
 kind = "behavior"
 case = "../../../cases/opt/inline/entry_single_target_no_sync.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 ({ input, assert, match }) => {
@@ -187,7 +205,7 @@ name = "no_param_reverse_root"
 desc = "Checks zero-argument callees can be reattached correctly from the return root during inlining."
 kind = "behavior"
 case = "../../../cases/opt/inline/no_param_reverse_root.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 ({ input, assert, match }) => {
@@ -204,7 +222,7 @@ name = "registry_sweep_unique_arm"
 desc = "Checks inline registry cleanup keeps distinct branch-arm helper bodies separate."
 kind = "behavior"
 case = "../../../cases/opt/inline/registry_sweep_unique_arm.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 ({ input, assert, match }) => {
@@ -222,7 +240,7 @@ name = "scc_entry_guard_recursion"
 desc = "Checks the inliner avoids infinite expansion on recursive SCC entry points."
 kind = "behavior"
 case = "../../../cases/opt/inline/scc_entry_guard_recursion.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 ({ input, assert, match }) => {
@@ -239,7 +257,7 @@ name = "inline_strategy_hybrid_mix"
 desc = "Checks mixed inline strategies can coexist without stale rescanning state."
 kind = "behavior"
 case = "../../../cases/opt/inline/strategy_hybrid_mix.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 ({ input, assert, match }) => {
@@ -257,7 +275,7 @@ name = "strategy_small_non_arm"
 desc = "Checks the small-function heuristic still inlines non-branch callees."
 kind = "behavior"
 case = "../../../cases/opt/inline/strategy_small_non_arm.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 ({ input, assert, match }) => {
@@ -274,7 +292,7 @@ name = "value_ctrl_gate_anchor"
 desc = "Checks inlining preserves the control anchor around side effects and returned values."
 kind = "behavior"
 case = "../../../cases/opt/inline/value_ctrl_gate_anchor.cml"
-args = ["${case}", "std::inline"]
+args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 verify_script = """
 ({ input, assert, match }) => {
@@ -305,10 +323,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "arm_entry_after_inline.inline.nvm"
-desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on NodeVM (printed 0 for 0.512)."
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::opt::inline on NodeVM (printed 0 for 0.512)."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -321,10 +339,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "arm_entry_after_inline.inline.tf"
-desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on Taskflow (printed 0 for 0.512)."
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::opt::inline on Taskflow (printed 0 for 0.512)."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
-args = ["${case}", "std::inline", "std::tf"]
+args = ["${case}", "std::opt::inline", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -337,10 +355,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "arm_entry_after_inline.inline.fvm"
-desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on FastVM."
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::opt::inline on FastVM."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -353,10 +371,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "arm_entry_after_inline.inline.jit"
-desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::inline on the JIT."
+desc = "Branch arms whose inlined helper nodes precede the recorded arm head compute the zero-pass values under: std::opt::inline on the JIT."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_entry_after_inline.cml"
-args = ["${case}", "std::inline", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -449,10 +467,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "arm_entry_after_inline_macro.inline_macro.nvm"
-desc = "A macro function whose recursive arm holds inlined helper nodes before the recorded arm head evaluates to the zero-pass value under: std::inline std::macro (the macro evaluator printed 0)."
+desc = "A macro function whose recursive arm holds inlined helper nodes before the recorded arm head evaluates to the zero-pass value under: std::opt::inline std::macro (the macro evaluator printed 0)."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_entry_after_inline_macro.cml"
-args = ["${case}", "std::inline", "std::macro", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::macro", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -497,10 +515,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "specialized_arg_keeps_order.simplify.fvm"
-desc = "A call whose argument is the constant result of an inlined sync call still runs after that call's effects when the constant is bound into a specialization, under: std::opt::simplify on FastVM (printed only 40)."
+desc = "A call whose argument is the constant result of an inlined sync call still runs after that call's effects when the constant is bound into a specialization, under: std::opt on FastVM (printed only 40)."
 kind = "behavior"
 case = "../../../cases/opt/inline/specialized_arg_keeps_order.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -513,10 +531,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "specialized_arg_keeps_order.macro_simplify_cse_dce.nvm"
-desc = "A call whose argument is the constant result of an inlined sync call still runs after that call's effects when the constant is bound into a specialization, under: std::macro std::opt::simplify std::opt::cse std::opt::dce."
+desc = "A call whose argument is the constant result of an inlined sync call still runs after that call's effects when the constant is bound into a specialization, under: std::macro std::opt std::opt::cse std::opt::dce."
 kind = "behavior"
 case = "../../../cases/opt/inline/specialized_arg_keeps_order.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "std::opt::cse", "std::opt::dce", "std::nvm"]
+args = ["${case}", "std::macro", "std::opt", "std::opt::cse", "std::opt::dce", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -545,10 +563,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "consecutive_sync_calls.specialize_inline.nvm"
-desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::specialize then std::inline (two sessions, was already correct)."
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt::specialize then std::opt::inline (two sessions, was already correct)."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::specialize", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::specialize", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -593,10 +611,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "consecutive_sync_calls.simplify.nvm"
-desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt::simplify."
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -609,10 +627,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "consecutive_sync_calls.simplify.jit"
-desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt::simplify on the JIT."
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::opt on the JIT."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::opt::simplify", "std::jit"]
+args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -625,10 +643,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "consecutive_sync_calls.macro_simplify_cse_dce.nvm"
-desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::macro std::opt::simplify std::opt::cse std::opt::dce."
+desc = "Consecutive statement calls of sync functions with constant arguments all run, in source order, when each call is specialized and inlined in one rewrite session. Under: std::macro std::opt std::opt::cse std::opt::dce."
 kind = "behavior"
 case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "std::opt::cse", "std::opt::dce", "std::nvm"]
+args = ["${case}", "std::macro", "std::opt", "std::opt::cse", "std::opt::dce", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -673,10 +691,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.inline.nvm"
-desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline on NodeVM (the println after the call was skipped)."
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt::inline on NodeVM (the println after the call was skipped)."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -689,10 +707,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.inline.fvm"
-desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline on FastVM (skipped)."
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt::inline on FastVM (skipped)."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -705,10 +723,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.inline.jit"
-desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline on the JIT (skipped)."
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt::inline on the JIT (skipped)."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["${case}", "std::inline", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -721,10 +739,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.inline_arm.nvm"
-desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::inline::arm, the minimal pipeline."
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt::inline::arm, the minimal pipeline."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["${case}", "std::inline::arm", "std::nvm"]
+args = ["${case}", "std::opt::inline::arm", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -737,10 +755,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.simplify.nvm"
-desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt::simplify."
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -753,10 +771,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.simplify.fvm"
-desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt::simplify on FastVM."
+desc = "A call followed by an effect inside a branch arm (a sync callee inlined into the arm) is not compiled as a tail call: the effect after it still runs, and the tail recursion inside the callee stays a tail call. Under: std::opt on FastVM."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -801,10 +819,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.inline.tf"
-desc = "The recursion of timed stays a tail call when std::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::inline on Taskflow."
+desc = "The recursion of timed stays a tail call when std::opt::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::opt::inline on Taskflow."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["${case}", "std::inline", "std::tf"]
+args = ["${case}", "std::opt::inline", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -817,10 +835,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.inline.prl"
-desc = "The recursion of timed stays a tail call when std::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::inline on std::prl."
+desc = "The recursion of timed stays a tail call when std::opt::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::opt::inline on std::prl."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["${case}", "std::inline", "std::prl"]
+args = ["${case}", "std::opt::inline", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -833,10 +851,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.inline.tf_t1"
-desc = "The recursion of timed stays a tail call when std::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::inline on Taskflow with one worker."
+desc = "The recursion of timed stays a tail call when std::opt::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::opt::inline on Taskflow with one worker."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["-t", "1", "${case}", "std::inline", "std::tf"]
+args = ["-t", "1", "${case}", "std::opt::inline", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -849,10 +867,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "arm_call_then_effect.inline.prl_t1"
-desc = "The recursion of timed stays a tail call when std::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::inline on std::prl with one worker."
+desc = "The recursion of timed stays a tail call when std::opt::inline has unrolled timed into itself: the call then feeds an inner JOIN of nested branches in tail position, and the parallel scheduler took it for an ordinary call (50000 levels: segmentation fault). The println after the call of timed in measure still runs. Under: std::opt::inline on std::prl with one worker."
 kind = "behavior"
 case = "../../../cases/opt/inline/arm_call_then_effect.cml"
-args = ["-t", "1", "${case}", "std::inline", "std::prl"]
+args = ["-t", "1", "${case}", "std::opt::inline", "std::prl"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

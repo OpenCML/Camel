@@ -4,7 +4,7 @@
  * warns (SemanticDiag::IgnoredSideEffect): "The call of 'wr' is neither waited nor in a sync
  * block ... Without either, the write runs only if the variable is read afterwards." The
  * program prints `wr` and `after` under every pipeline tried (no pass, std::fvm, std::opt,
- * std::inline, std::opt::simplify, std::prl): the call does run.
+ * std::opt::inline, std::opt, std::prl): the call does run.
  * See README.md, "For the owner to decide", J2.
  */
 module bare_arm_var_call_warning

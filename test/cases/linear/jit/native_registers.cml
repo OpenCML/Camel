@@ -1,6 +1,6 @@
 /**
  * Arithmetic and comparisons with more values alive in one basic block than the JIT has
- * registers for, in functions it compiles after std::inline (arithmetic and self recursion
+ * registers for, in functions it compiles after std::opt::inline (arithmetic and self recursion
  * only). Every operand position of every two-operand instruction is taken by rax, rcx, rdx
  * and r8-r10 somewhere, the destination is often the register of an operand, and `mix`
  * needs the second lowering (no values kept in registers across bytecodes).

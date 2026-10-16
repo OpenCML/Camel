@@ -1,4 +1,4 @@
-# `std::inline` 重写算法与 GIR API 协作详解
+# `std::opt::inline` 重写算法与 GIR API 协作详解
 
 本文针对当前实现（`src/passes/opt/inline/inline.cpp`、`src/passes/opt/inline/engine.cpp` + `src/runtime/draft_inline.cpp`）进行工程化拆解，重点说明：
 
@@ -11,33 +11,34 @@
 
 ## 1. 总体设计目标
 
-当前 `std::inline` 在 **Pass 层**是一个**跨图事务式重写**过程，目标有三层：
+当前 `std::opt::inline` 在 **Pass 层**是一个**跨图事务式重写**过程，目标有三层：
 
 1. **跨图引用一致性**：会话内所有图引用都以运行时图（`GCGraph`）的身份表示，提交时统一改写到新编码的图上。
 2. **分支语义不破坏**：被内联的函数体留在调用原本所在的分支臂内，`BRCH` 的臂首/臂尾锚点随拼接迁移。
 3. **可收敛性**：递归图不被整体复制进调用方，增长与次数受预算约束，避免展开失控。
 
-### 1.1 重要：`std::inline` 是策略化目标选择
+### 1.1 重要：`std::opt::inline` 是策略化目标选择
 
 实现上必须把下面两点分开理解：
 
 | 层次 | 含义 |
 |------|------|
 | **`inlineCallableInDraft`**（`include/camel/runtime/draft_inline.h`） | **通用原语**：对**任意**满足前提的 `FUNC` 节点，把其被调图（`GCFuncBody::calleeGraph`）克隆进调用方并返回 `DraftInlineResult`。 |
-| **`InlineRewritePass`（`std::inline*`）** | **策略层**：先枚举 `FUNC` 候选，再按策略过滤，并通过 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）调用上述原语。支持 `Small` / `Arm` / `Hybrid` 三种策略（`InlineTargetStrategy`）。 |
+| **`InlineRewritePass`（`std::opt::inline*`）** | **策略层**：先枚举 `FUNC` 候选，再按策略过滤，并通过 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）调用上述原语。支持 `Small` / `Arm` / `Hybrid` 三种策略（`InlineTargetStrategy`）。 |
 
 当前 pass 入口命名与含义（注册表见 `src/execute/pass.cpp`）：
 
-- `std::inline`：默认综合策略（等价 `std::inline::hybrid`）；
-- `std::inline::small`：只内联“小”被调图上的调用，且该调用**不是**分支臂首；
-- `std::inline::arm`：只内联位于分支臂首的调用，不要求被调图“小”；
-- `std::inline::hybrid`：综合策略（被调图“小”，或调用位于分支臂首，满足其一即内联）。
+- `std::opt::inline`：默认综合策略（等价 `std::opt::inline::hybrid`）；
+- `std::opt::inline::small`：只内联“小”被调图上的调用，且该调用**不是**分支臂首；
+- `std::opt::inline::arm`：只内联位于分支臂首的调用，不要求被调图“小”；
+- `std::opt::inline::hybrid`：综合策略（被调图“小”，或调用位于分支臂首，满足其一即内联）。
 
 重要边界：
 
-- `std::inline*` 只负责 **inline target selection + inline rewrite**；
+- `std::opt::inline*` 只负责 **inline target selection + inline rewrite**；
 - 若需要运行聚合优化流水线（如 **specialization / devirtualization / inlining**），
-  入口应使用 `std::opt`，而不是再把这些 phase 混回 `std::inline`。
+  入口使用 `std::opt`：循环执行去虚化、特化、内联、常量折叠、公共子表达式消除与死代码消除，直到稳定或达到预算。
+  `std::inline`（含 `small` / `arm` / `hybrid`）保留为 `std::opt::inline` 的别名。
 
 其中“小”的判定见 §6.1：除了节点数阈值（除 `DATA/PORT` 外节点数 `<= 8`，
 `InlineRewriteConfig::smallSubgraphMaxNonDataPortNodes`）之外，还考虑调用点个数、
@@ -48,7 +49,8 @@
 ## 2. Pass 入口与事务边界
 
 `InlineRewritePass::apply` 以“仅开启内联”的 `OptimizeRewriteConfig` 调用 `applyOptimizeRewritePass`
-（`src/passes/opt/inline/engine.cpp`）；`std::opt` 走同一入口，只是另外开启去虚化与特化。
+（`src/passes/opt/inline/engine.cpp`）；`std::opt` 由 `simplifyGraph` 驱动，每轮调用该引擎完成
+去虚化、特化与内联，再执行 fold、cse 与 dce。下面描述的是引擎内的重写会话。
 每一轮重写会话的动作：
 
 1. 用 `RuntimeGraphDraftSession session(context, runtimeRoot)` 开启重写事务；
@@ -165,7 +167,9 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 
 - `componentOf` / `components`：每张图所属的分量；
 - `recursiveGraphs`：位于调用环上的图（分量多于一张图，或单张图直接调用自己）；
-- `componentEntryGraphs`：被分量外的图调用的图（分量的入口）；
+- `componentEntryGraphs`：被分量外的图调用的图（分量的入口）；递归分量若没有已知的外部入口，
+  则把全部成员作为内联边界。DCE 可能删掉最后一个外部调用，但图注册表仍保留该分量；
+  此时不能失去入口保护，让成员互相内联并展开整个递归环。
 - `externallyCalledGraphs`：被闭包内某张图直接调用的图；
 - `reachesRecursion`：能沿直接调用到达某张递归图的图（递归图自身也在内）。
 

@@ -3535,7 +3535,7 @@ Model finishModel(Emitter &emitter, const ExportOptions &options) {
     return model;
 }
 
-/// How both export entries simplify the bound function: the std::opt::simplify fixpoint with
+/// How both export entries simplify the bound function: the std::opt fixpoint with
 /// everything that is not recursive inlined, and the export-only split of branched calls.
 OptimizeRewriteConfig exportRewriteConfig() {
     OptimizeRewriteConfig config;
@@ -3649,7 +3649,7 @@ void bindCaptures(camel::runtime::GraphDraft &draft, std::span<const Example> ca
 
 /// How much of the function's simplification an export performs itself.
 enum class Preparation {
-    /// onnx.export_model: macro expansion and the whole std::opt::simplify fixpoint.
+    /// onnx.export_model: macro expansion and the whole std::opt fixpoint.
     Full,
     /// onnx::export: the same simplification without macro expansion, which is the business
     /// of std::macro before the pass (the name is historical: the pass used to fold shapes

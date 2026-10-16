@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 29, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,11 +43,11 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/type.h"
 
-#include <functional>
 #include <algorithm>
 #include <atomic>
 #include <deque>
 #include <format>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -795,7 +795,7 @@ class Engine {
 // Afterwards a call of such a value is a call of a closure built in this graph, which
 // rewriteIndirectCall differentiates; a value that is still not evident (it is chosen by a
 // branch, read from a container, a parameter of the differentiated function) is refused at
-// its call as before. Inlining is std::inline's own (camel/passes/opt/inline.h), so the order
+// its call as before. Inlining is std::opt::inline's own (camel/passes/opt/inline.h), so the order
 // and the effects of the inlined body are kept by the same code as everywhere else.
 //
 // Bounded: only calls that carry function values are inlined, and a branch arm is never
@@ -1127,18 +1127,17 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
 void ForwardRewrite::rewriteClosureCall(
     gc_node_ref_t call, GCGraph *graph, std::vector<gc_node_ref_t> captures,
     gc_node_ref_t calleeValue) {
-    FunctionType *type = graph->funcType();
+    FunctionType *type            = graph->funcType();
     std::vector<Type *> portTypes = portTypesOf(graph);
     for (gc_node_ref_t capture : graph->closureNodes()) {
         portTypes.push_back(graph->node(capture)->dataType());
     }
-    const bool carriesFlow =
-        tangentTypeOf(type->exitType()) != nullptr && anyTangent(portTypes);
+    const bool carriesFlow = tangentTypeOf(type->exitType()) != nullptr && anyTangent(portTypes);
     if (!carriesFlow || type->modifiers().macro()) {
         return; // nothing to differentiate: the call stays, a constant to the reverse pass
     }
     const std::vector<gc_node_ref_t> withInputs = copyOf(draft_.withInputsOf(call));
-    std::vector<gc_node_ref_t> norm              = copyOf(draft_.normInputsOf(call));
+    std::vector<gc_node_ref_t> norm             = copyOf(draft_.normInputsOf(call));
     norm.insert(norm.end(), captures.begin(), captures.end());
     std::vector<gc_node_ref_t> inputs(withInputs.begin() + 1, withInputs.end());
     inputs.insert(inputs.end(), norm.begin(), norm.end());
@@ -1195,7 +1194,7 @@ void ForwardRewrite::rewriteClosureCall(
     static const camel::core::OperId kVjp =
         camel::core::OperatorTable::instance().intern("autodiff:vjp");
     const camel::core::OperId oper = body->oper;
-    const auto staticFunction  = [&](gc_node_ref_t node) -> ::Function  *{
+    const auto staticFunction      = [&](gc_node_ref_t node) -> ::Function      *{
         const auto value = staticValue(draft_, node);
         auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
         return function && function->graph() ? function : nullptr;
@@ -1697,8 +1696,8 @@ std::string Backward::refusalReason(gc_node_ref_t call) const {
                "the function it calls is known, but cannot be differentiated through its body "
                "(a macro, or a function value without a graph)";
     }
-    return std::string(head) + "which function it calls is not evident where it is called: " +
-           whyNotEvident(callee);
+    return std::string(head) +
+           "which function it calls is not evident where it is called: " + whyNotEvident(callee);
 }
 
 std::string Backward::whyNotEvident(gc_node_ref_t function) const {
@@ -1825,8 +1824,10 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
         while (!work.empty()) {
             const gc_node_ref_t node = work.back();
             work.pop_back();
-            for (auto users : {forward_.normUsersOf(node), forward_.withUsersOf(node),
-                               forward_.ctrlUsersOf(node)}) {
+            for (auto users :
+                 {forward_.normUsersOf(node),
+                  forward_.withUsersOf(node),
+                  forward_.ctrlUsersOf(node)}) {
                 for (gc_node_ref_t user : users) {
                     if (after.insert(user).second) {
                         work.push_back(user);
@@ -2168,7 +2169,7 @@ void Engine::refuse() {
         if (currentSource && origin != camel::source::kInvalidOriginId) {
             if (const auto *file = currentSource->fileForOrigin(origin)) {
                 const auto range = currentSource->resolveOrigin(origin);
-                place = Place{file->path, range.start.line, range.start.character, true};
+                place            = Place{file->path, range.start.line, range.start.character, true};
             }
         }
         return place;

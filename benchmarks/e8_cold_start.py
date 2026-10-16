@@ -37,7 +37,7 @@ from common import stats  # noqa: E402
 import train  # noqa: E402
 
 ROW = "E8ROW "
-CAMEL_CONFIGS = {"camel_nvm": ("std::macro", "std::nvm"), "camel_opt_nvm": ("std::macro", "std::opt::simplify", "std::nvm")}
+CAMEL_CONFIGS = {"camel_nvm": ("std::macro", "std::nvm"), "camel_opt_nvm": ("std::macro", "std::opt", "std::nvm")}
 PY_CONFIGS = {
     "torch_eager": ("train", "torch_trial_row({model!r}, 1, 1, {threads})", "torch"),
     "torch_compile": ("baselines.torch_compile_runner", "trial_row({model!r}, 'default', 1, 1, {threads})", "torch"),

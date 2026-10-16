@@ -1,7 +1,7 @@
 /**
- * progen finding F07 (effect order lost). `std::opt::simplify` drops the `println` of a nested
+ * progen finding F07 (effect order lost). `std::opt` drops the `println` of a nested
  *   function with a sync body that is called, with its result unused, in a taken arm.
- * Pipeline: std::opt::simplify std::nvm
+ * Pipeline: std::opt std::nvm
  * Expected output: (empty line)
  * Actual: (nothing)
  * Reduced by test/tools/progen from seed 284 (generator version 1, all features).

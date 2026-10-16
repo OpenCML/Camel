@@ -88,7 +88,7 @@ signatures and examples in the [standard library reference](../docs/stdlib-refer
 | File | What it shows | Run |
 |------|------|------|
 | [`train_linear.cml`](ml/train_linear.cml) | A minimal training loop: `autodiff.grad` for the gradient, `nn.sgd` for the update | `camel examples/ml/train_linear.cml` |
-| [`export_onnx.cml`](ml/export_onnx.cml) | A small two-layer model exported to an ONNX file with `onnx.export_model` | `camel examples/ml/export_onnx.cml`<br>`camel examples/ml/export_onnx.cml std::macro std::opt::simplify onnx::export` |
+| [`export_onnx.cml`](ml/export_onnx.cml) | A small two-layer model exported to an ONNX file with `onnx.export_model` | `camel examples/ml/export_onnx.cml`<br>`camel examples/ml/export_onnx.cml std::macro std::opt onnx::export` |
 
 The programs under `files/` and `ml/`, and `text/log_filter.cml`, write their files to
 `tmp/examples/`, relative to the directory the command is run from; they create the directory themselves, and it is not tracked

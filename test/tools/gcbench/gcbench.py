@@ -39,7 +39,7 @@ MAP_CHAIN = [os.path.join(GC, "map_chain.cml"), "--arg", "n=2000", "--arg", "rep
 BUILD_TREE = [os.path.join(GC, "build_tree.cml"), "--arg", "depth=13", "--arg", "reps=40"]
 SOAK = [os.path.join(MM, "gc_soak.cml"), "--arg", "rows=20000", "--arg", "reps=20000"]
 FIB = os.path.join(GC, "fib.cml")
-JIT = ["std::inline", "std::jit"]
+JIT = ["std::opt::inline", "std::jit"]
 
 
 def train(name, reps):
@@ -91,7 +91,7 @@ BENCHMARKS = [
     ("fib32.fvm", [FIB, "--arg", "n=32", "std::fvm"], {}),
     ("fib30.prl", [FIB, "--arg", "n=30", "std::prl"], {}),
     ("fib40.jit", [FIB, "--arg", "n=40"] + JIT, {}),
-    ("jit_const36.fvm", [os.path.join(GC, "jit_const.cml"), "--arg", "n=36", "std::inline", "std::fvm"], {}),
+    ("jit_const36.fvm", [os.path.join(GC, "jit_const.cml"), "--arg", "n=36", "std::opt::inline", "std::fvm"], {}),
     ("jit_const36.jit", [os.path.join(GC, "jit_const.cml"), "--arg", "n=36"] + JIT, {}),
 ]
 

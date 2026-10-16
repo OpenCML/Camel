@@ -97,10 +97,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.passes.inline"
-desc = "The passes treat a LOOP node as opaque and keep it: after std::inline the loops give the same results."
+desc = "The passes treat a LOOP node as opaque and keep it: after std::opt::inline the loops give the same results."
 kind = "behavior"
 case = "../../../cases/loops/captures.cml"
-args = ["${case}", "std::inline", "${backend}"]
+args = ["${case}", "std::opt::inline", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -110,10 +110,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.passes.simplify"
-desc = "After std::macro std::opt::simplify (fold, inline, specialization) the loops give the same results."
+desc = "After std::macro std::opt (fold, inline, specialization) the loops give the same results."
 kind = "behavior"
 case = "../../../cases/loops/captures.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${backend}"]
+args = ["${case}", "std::macro", "std::opt", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0

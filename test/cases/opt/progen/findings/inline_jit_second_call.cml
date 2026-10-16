@@ -1,10 +1,10 @@
 /**
  * finding F36 ((other) wrong value after inlining), found by hand, not by progen. After
- *   `std::inline` a self-tail-recursive function of four parameters is compiled by the JIT; its
+ *   `std::opt::inline` a self-tail-recursive function of four parameters is compiled by the JIT; its
  *   first call is right, every later call adds each `i * j` twice (the node VM, the bytecode VM
  *   and the parallel scheduler print the expected lines, and so does `std::jit` without
- *   `std::inline`).
- * Pipeline: std::inline std::jit
+ *   `std::opt::inline`).
+ * Pipeline: std::opt::inline std::jit
  * Expected output: 1, 1, 11 (three lines)
  * Actual: 1, 2, 17
  */

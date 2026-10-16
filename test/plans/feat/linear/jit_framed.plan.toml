@@ -5,7 +5,7 @@ tags = ["feat", "linear", "jit", "codegen"]
 desc = "Graphs that need the runtime, compiled by std::jit as framed code (docs/technical/07_jit_architecture.md, section 17): operators, casts, struct and tuple access, match, calls of other graphs, calls through function values and higher-order operators"
 
 # Framed code calls C++ helpers for operators and leaves to its driver for calls of Camel
-# functions. Every test runs the same program on the four back ends and under std::inline
+# functions. Every test runs the same program on the four back ends and under std::opt::inline
 # std::jit, which must agree; the `.compiled` tests then check in the -vv log that the functions
 # were compiled, and as which kind of code, so that an agreement reached because everything fell
 # back to the interpreter does not pass.
@@ -42,11 +42,11 @@ expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped c
 
 [[tests]]
 name = "framed.operators.inline.compiled"
-desc = "The same after std::inline, where the branch arms are part of the functions: nothing is left to the interpreter for a construct of the bytecode."
+desc = "The same after std::opt::inline, where the branch arms are part of the functions: nothing is left to the interpreter for a construct of the bytecode."
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["-vv", "${case}", "std::inline", "std::jit"]
+args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
 envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'fib' as frameless code", "collatz 111 118", "weigh 3210", "totals 14415"]
@@ -78,7 +78,7 @@ desc = "With the generational collector every function is still compiled, as the
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
-args = ["-vv", "${case}", "std::inline", "std::jit"]
+args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
 envs = ["CAMEL_GC=generational"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'repeat' as framed code", "compiled & cached graph 'fib' as frameless code", "weigh 3210", "totals 14415"]

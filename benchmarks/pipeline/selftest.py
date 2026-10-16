@@ -343,16 +343,16 @@ check("R1: a library precondition is not a defect of a standard pass",
 other = outcome_under(NEW, rec([]), failing("An error has occurred: Array index out of bounds.."))
 check("R1: another run-time error stays a defect",
       (other["outcome"], c.DEFECT_CLASS[other["outcome"]]), ("RUN_FAIL", "crash_hang_or_error"))
-early = outcome_under(NEW, rec([], output=""), failing("autodiff: needs std::macro", stage="pass:std::opt::simplify", output=""))
+early = outcome_under(NEW, rec([], output=""), failing("autodiff: needs std::macro", stage="pass:std::opt", output=""))
 check("R1: located library diagnostic of a pass, before execution",
       (early["outcome"], early["library_precondition"]), ("LIBRARY_PRECONDITION", "located_before_execution"))
-obscure = outcome_under(NEW, rec([], output=""), failing("autodiff: needs std::macro", stage="pass:std::opt::simplify",
+obscure = outcome_under(NEW, rec([], output=""), failing("autodiff: needs std::macro", stage="pass:std::opt",
                                                          output="", line=0))
 check("R1: the same without a location is obscure", obscure["library_precondition"], "late_or_obscure")
 check("R1: prefix must start the message", c.library_of("An error has occurred: x in autodiff: y"), None)
 check("R1: std::macro position", [c.macro_position(p) for p in (["std::nvm"], ["std::macro", "std::nvm"],
-                                                                 ["std::inline", "std::macro", "std::nvm"])],
-      ["no std::macro in the pipeline", "std::macro first", "std::macro after std::inline"])
+                                                                 ["std::opt::inline", "std::macro", "std::nvm"])],
+      ["no std::macro in the pipeline", "std::macro first", "std::macro after std::opt::inline"])
 check("R1: classes of the defect outcomes",
       [c.DEFECT_CLASS[o] for o in ("VALUE_MISMATCH", "EFFECT_MISMATCH", "CRASH", "HANG", "REFUSED_UNLOCATED", "CONSISTENT")],
       ["silent_result_change"] * 2 + ["crash_hang_or_error"] * 2 + ["diagnostic_unlocated_or_late", "agrees"])
@@ -403,7 +403,7 @@ check("R1: unknown pass is a refusal of a command line, still unlocated (D2 kept
 table = {t["pass"]: t for t in c.standard_pass_table(rows)}
 check("R1: per-pass table counts defect cells, not library preconditions",
       (table["std::nvm"]["cells"], table["std::nvm"]["defect_cells"], table["std::nvm"]["library_precondition_cells"],
-       table["std::opt::simplify"]["defect_cells"], table["std::macro"]["defect_cells_in_pipelines_without_it"]),
+       table["std::opt"]["defect_cells"], table["std::macro"]["defect_cells_in_pipelines_without_it"]),
       (3, 1, 1, 0, 1))
 sig, causes = c.signature_tables(rows, refusal_rows, True)
 check("R1: library precondition has its own set in the signature tables",

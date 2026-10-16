@@ -167,7 +167,7 @@
               "name": "Debug Camel file (passes)",
               "program": "^\"\\${workspaceFolder}/${1:main.cml}\"",
               "passes": [
-                "${2:std::inline}",
+                "${2:std::opt::inline}",
                 "std::fvm"
               ],
               "args": [],
@@ -246,7 +246,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Passes applied in order, for example std::inline std::fvm."
+            "description": "Passes applied in order, for example std::opt::inline std::fvm."
           }
         }
       }
@@ -279,7 +279,7 @@
           },
           "default": [],
           "scope": "resource",
-          "markdownDescription": "Passes applied before the graph of **Camel: Show Graph of Current Function** is printed, for example `[\"std::inline\"]`. Empty: the graph as compiled."
+          "markdownDescription": "Passes applied before the graph of **Camel: Show Graph of Current Function** is printed, for example `[\"std::opt::inline\"]`. Empty: the graph as compiled."
         },
         "camel.run.passes": {
           "type": "array",
@@ -287,7 +287,7 @@
             "type": "string"
           },
           "default": [
-            "std::inline",
+            "std::opt::inline",
             "std::fvm"
           ],
           "scope": "resource",

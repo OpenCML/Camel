@@ -189,7 +189,7 @@
 
 **普查。** `python3 docs/design/graph-model/tools/graph_census.py examples exemplars benchmarks test/cases stdlib`【实测】：1099 个 `.cml` 文件，1053 个有 `main`，769 个能直接编译（其余是负例测试或需要参数）。
 
-| | 不加遍 | `std::inline` 之后 | `std::macro std::opt::simplify` 之后 |
+| | 不加遍 | `std::opt::inline` 之后 | `std::macro std::opt` 之后 |
 |---|---|---|---|
 | 程序 / 图 / 节点 / 边 | 769 / 6,513 / 47,064 / 53,014 | 769 / 6,513 / 76,802 / 105,201 | 746 / 9,985 / 205,869 / 464,974 |
 | 每图节点数：中位 / p90 / p99 / 最大 | 3 / 13 / 61 / 319 | 4 / 24 / 140 / 884 | 7 / 45 / 249 / 753 |
@@ -218,7 +218,7 @@
 | `examples/nodes/empty.cml`（空的 `main`） | 4 行 | 2 / 3 | 8,589 | — | 7 ms |
 | `test/cases/compile/function_values/value_positions.cml` | 84 行 | 36 / 368 | 42,768 | 24,800（每节点 67 次） | 22 ms |
 | `test/cases/modules/stdlib/array_basic.cml`（导入用 Camel 写的 `array`） | 36 + 171 行 | 122 / 656 | 83,454 | 54,381（每节点 83 次） | 35 ms |
-| 同上，加 `std::macro std::opt::simplify` | | 122 / 1,414 | 891,848 | — | 164 ms |
+| 同上，加 `std::macro std::opt` | | 122 / 1,414 | 891,848 | — | 164 ms |
 
 分阶段（`camel inspect` 的各个开关与 `camel check`，含各自打印输出的分配，所以是上界）：`value_positions.cml` 到词法 13,233、到 AST 14,619、到 GCT 17,968、建完 GIR（`camel check`）29,609、编码成运行时图并打印 DOT 42,768。**建 GIR 一步 11,641 次，编码一步 13,159 次，两步合计占启动之后全部分配（34,179）的 73%。**
 
@@ -1533,25 +1533,25 @@ export func simplify(p: Program): Program! {
 |---|---|---|---|---|
 | 空程序的基线（内建算子的签名等） | | 24 KB / 162 次分配 | **4 KB / 70 次** | |
 | 不加遍：每图字节数 / 分配次数 | 1,364 / 11.0 | 1,183 / 9.6 | **505 / 4.5** | 200 以内 |
-| `std::inline` 之后 | 1,811 / 12.2 | 1,484 / 10.2 | **800 / 5.1** | |
-| `std::macro std::opt::simplify` 之后：每图 / 每节点 | 4,493 / 185 | 2,416 / 100.6 | **1,833 / 76.3** | 不随提交增长 |
+| `std::opt::inline` 之后 | 1,811 / 12.2 | 1,484 / 10.2 | **800 / 5.1** | |
+| `std::macro std::opt` 之后：每图 / 每节点 | 4,493 / 185 | 2,416 / 100.6 | **1,833 / 76.3** | 不随提交增长 |
 | 全语料永久空间合计（不加遍，含基线） | | 24,609 KB | **5,634 KB** | |
 | 图空间：每节点字节数（不加遍 / 化简后） | 97.0 / 136.8 | 92.5 / 128.6 | 92.5 / 128.6 | （第 3 步的指标） |
 
-`array_basic.cml`（122 张图）：永久空间 140 KB → 36 KB；数组类型 347 个 → 38 个，函数类型 491 个（另有 267 个名字记录）→ 214 个；`std::macro` 后接一到三次 `std::opt::simplify`，永久空间都是 105 KB（第 2 步前 234 KB）。全语料 1,069 个程序按种类合计（含基线）：函数类型 26,203 KB → 3,825 KB，元组 2,349 KB → 1,801 KB，数组 196 KB → 63 KB，函数名字记录 489 KB → 0。
+`array_basic.cml`（122 张图）：永久空间 140 KB → 36 KB；数组类型 347 个 → 38 个，函数类型 491 个（另有 267 个名字记录）→ 214 个；`std::macro` 后接一到三次 `std::opt`，永久空间都是 105 KB（第 2 步前 234 KB）。全语料 1,069 个程序按种类合计（含基线）：函数类型 26,203 KB → 3,825 KB，元组 2,349 KB → 1,801 KB，数组 196 KB → 63 KB，函数名字记录 489 KB → 0。
 
 **第 3 步的第一小步（帧布局进图块）之后**（同一语料，`fsh-dev` ce3637cb 上的第 2 步对照；附录 A 的普查命令）：
 
 | | 第 2 步后 | 3a 之后 |
 |---|---|---|
 | 永久空间，不加遍：每图字节数 / 分配次数（扣除基线） | 446 / 4.2 | **281 / 3.4** |
-| `std::inline` 之后 | 730 / 4.8 | **361 / 3.6** |
-| `std::macro std::opt::simplify` 之后：每图 / 每节点 | 1,735 / 75.9 | **913 / 40.0** |
+| `std::opt::inline` 之后 | 730 / 4.8 | **361 / 3.6** |
+| `std::macro std::opt` 之后：每图 / 每节点 | 1,735 / 75.9 | **913 / 40.0** |
 | 图空间：每节点字节数（不加遍 / 化简后） | 93.3 / 130.3 | 114.8 / 163.9 |
 
 帧布局搬进了图空间，所以图空间每节点多了约 20–34 字节：这是用"随图释放"换"永不释放"，总量相近，而化简流水线下永久空间不再为每个被改写的图新增布局。"每图 200 字节"仍未达到：剩下的是静态区布局、捕获元组类型与每个函数的开放签名。图空间每节点的字节数要等定长节点的排布（第 3 步的下一小步）才会降下来。全语料 1,201 个程序不加遍、化简后的转储与第 2 步逐字节相同。
 
-**3b（定长节点）之后**（同一语料，`fsh-dev` 0ca4b8a5 对照）：图空间每节点 114.9 → **85.7** 字节（不加遍），163.8 → **110.5** 字节（化简后）；每图 805 → 600 字节。离设计的"每节点 50 字节以内"还差的是每张图的 `GCGraph` 对象本身、静态区与帧布局。一张图能放的东西变多了：原来一个节点至少占 5 个 8 字节块，节点块先满（约 1.3 万个节点）；现在上限是 65,534 个节点、65,535 条边、65,534 个负载字，通常边先满。`RuntimeDiag::GraphTooLarge` 与 ONNX 导出的同类拒绝因此说的是"edges"而不再是"node blocks"，它的帮助文字相应改写；这是用户看得到的唯一变化。导出一个树形递归（深度取决于输入）时，拒绝发生在图装不下的那一刻，所以它比原来晚、更慢（同一容器里 9 秒 → 39 秒）。全语料 1,297 个程序不加遍、1,238 个程序 `std::inline` 后与化简后的转储逐字节相同；`depth_direct.cml` 在 2 MiB 栈里仍是 3,594 层。
+**3b（定长节点）之后**（同一语料，`fsh-dev` 0ca4b8a5 对照）：图空间每节点 114.9 → **85.7** 字节（不加遍），163.8 → **110.5** 字节（化简后）；每图 805 → 600 字节。离设计的"每节点 50 字节以内"还差的是每张图的 `GCGraph` 对象本身、静态区与帧布局。一张图能放的东西变多了：原来一个节点至少占 5 个 8 字节块，节点块先满（约 1.3 万个节点）；现在上限是 65,534 个节点、65,535 条边、65,534 个负载字，通常边先满。`RuntimeDiag::GraphTooLarge` 与 ONNX 导出的同类拒绝因此说的是"edges"而不再是"node blocks"，它的帮助文字相应改写；这是用户看得到的唯一变化。导出一个树形递归（深度取决于输入）时，拒绝发生在图装不下的那一刻，所以它比原来晚、更慢（同一容器里 9 秒 → 39 秒）。全语料 1,297 个程序不加遍、1,238 个程序 `std::opt::inline` 后与化简后的转储逐字节相同；`depth_direct.cml` 在 2 MiB 栈里仍是 3,594 层。
 
 **"每图 200 字节以内"还差一步，差的正是帧布局。** 扣除基线后剩下的约 2.5 MB 里，元组类型约占一半（1.25 MB），几乎全是各图自己的帧布局与静态区布局：每张图的槽位类型序列各不相同，驻留只能让相同的那些共用。设计里帧布局本来就不是类型对象，而是图块里的 `TypeId` 数组、随图释放（3.8、4.1）；第 3 步做完之后按同样的算法估算约为每图 190 字节。函数类型剩下的主要是每个程序定义的函数各一个开放签名。"化简流水线下不随提交增长"同理：类型对象已不随提交新增（同一程序重复化简，永久空间不变），只有内容确实变了的图在重新编码时得到一个新的帧布局。
 
@@ -1560,7 +1560,7 @@ export func simplify(p: Program): Program! {
 - **形参名留在函数类型里，作为驻留键的一部分。** 设计（3.3、3.8）说签名不含形参名、显示时从端口表取。但今天类型在诊断与图转储里自己打印形参名（`(a: int, b: int) => int`），节点上带的就是这个类型；按设计去掉会改变用户看得到的输出。所以名字以 `SymId` 存在签名里、参与驻留，不参与 `equals`/`assignableFrom`。代价是"类型编号相等 ⇔ 类型相同"只有一个方向：两个只差形参名的函数类型相容、编号不同。把显示改成从端口表取名字之后，这一项可以按设计去掉。
 - **前端正在建的函数的签名不驻留**（`OpenFunctionType`）。设计说"先有图、图建完再驻留它的签名"；但建图器用这个签名对象的身份认"同一个函数的前向声明与定义"（`enterScope`、`rejectRedeclaredFunction`），没写返回类型的函数的值在函数体建完之前就已经带着它。这两处查找改成按实体认之前，这里只把可变性收进一个专门的类：一个程序定义的每个函数一个开放签名，其余函数类型一律驻留。
 - 符号表与算子表的存储在表自己的、从不释放的块里，没有放进永久空间（算子在模块装载时就登记，那时命令行还没有配置空间上限；也使"永久空间 = 类型"这个度量保持干净）。算子的实现（函数指针）没有进算子表，它按 `Context` 由执行器管理器解析；NodeVM 往冻结图里回写函数指针的做法（附录 B 的 D6）因此原样保留，等第 3 步的 `ExecPlan`。调度器与遍按 URI 查实现、印诊断的地方仍取 URI 文本，这不是"认算子"。`mayFault` 只为实现里完全没有故障路径的内建算子声明了"不故障"（带类型后缀的加、减、大小比较，`and`/`or`/`not`），其余一律是缺省的"可能故障"；没有任何遍读它。
-- 驻留之后，`std::opt::simplify` 里按类型查重的特化缓存命中得更多，少做了几次重复的特化；特化图名字里的序号（`forward$spec64` → `forward$spec61`）因此在一个程序（`test/cases/modules/nn/residual_mlp.cml`）的化简后转储里变了，图的内容不变。全语料 1,176 个程序不加遍、1,117 个程序 `std::inline` 后的转储与诊断逐字节相同。
+- 驻留之后，`std::opt` 里按类型查重的特化缓存命中得更多，少做了几次重复的特化；特化图名字里的序号（`forward$spec64` → `forward$spec61`）因此在一个程序（`test/cases/modules/nn/residual_mlp.cml`）的化简后转储里变了，图的内容不变。全语料 1,176 个程序不加遍、1,117 个程序 `std::opt::inline` 后的转储与诊断逐字节相同。
 
 **与算子语义协议的衔接（2026-10-15）。** 第 3 步的 3a–3c 之后，[算子语义协议与图事实](../op-semantics/README.cn.md)（设计稿）在本模型上加三样东西：算子表项旁一份带版本的 `OperatorSemantics` 记录与稳定标识 `protocol:name@主.次`（第 9 步的 `OPRS` 节区随之记版本）；每节点一个字节的数值许可列（与位置列平行，全为 0 时不存，随图块进 `.cmo`）；挂在快照上的事实库，印记用第 5 步的 `(GraphId, 修订号)`，第 5 步之前用每个冻结图编码时分配的序号过渡。`LOOP` 的消费接口与 I18–I20 三条不变量也在那份设计稿里，随第 10 步实施。
 
@@ -1733,7 +1733,7 @@ let r = xs[i]          // OPER :op/idx_arr  pure, mayFault
 func abs(x: int): int { return if x < 0 then 0 - x else x }
 ```
 
-前端给出的是"每条臂一张子图"（3.5 的图）；`std::inline` 之后臂的节点并进外层图，成为 `BRCH` 与 `JOIN` 之间的一段。两种形态今天都存在、都被校验。
+前端给出的是"每条臂一张子图"（3.5 的图）；`std::opt::inline` 之后臂的节点并进外层图，成为 `BRCH` 与 `JOIN` 之间的一段。两种形态今天都存在、都被校验。
 
 - 甲：两种都是模型的一部分。语法到图的映射是子图形态；区域形态是遍的产物，由分支臂不变量约束。
 - 乙：只承认子图形态，内联遍不得把臂并进外层图。
@@ -1882,13 +1882,13 @@ let u  = t as (int, int)    // 今天：同上，'(int, int)' to '(int, int)'
 ```
 # 1.10 普查
 python3 docs/design/graph-model/tools/graph_census.py examples exemplars benchmarks test/cases stdlib
-python3 docs/design/graph-model/tools/graph_census.py --passes "std::inline" examples exemplars benchmarks test/cases stdlib
-python3 docs/design/graph-model/tools/graph_census.py --passes "std::macro std::opt::simplify" examples exemplars benchmarks test/cases stdlib
+python3 docs/design/graph-model/tools/graph_census.py --passes "std::opt::inline" examples exemplars benchmarks test/cases stdlib
+python3 docs/design/graph-model/tools/graph_census.py --passes "std::macro std::opt" examples exemplars benchmarks test/cases stdlib
 
 # 1.10 一次编译的分配次数
 bash docs/design/graph-model/tools/compile_cost.sh docs/design/graph-model/examples/nodes/empty.cml \
      test/cases/compile/function_values/value_positions.cml test/cases/modules/stdlib/array_basic.cml
-GM_PASSES="std::macro std::opt::simplify" bash docs/design/graph-model/tools/compile_cost.sh test/cases/modules/stdlib/array_basic.cml
+GM_PASSES="std::macro std::opt" bash docs/design/graph-model/tools/compile_cost.sh test/cases/modules/stdlib/array_basic.cml
 
 # 3.5、3.6 的图
 bash docs/design/graph-model/tools/rgir.sh docs/design/graph-model/examples/nodes/oper.cml

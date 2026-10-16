@@ -1,5 +1,5 @@
 /**
- * Divisions by values that are not constants, in functions the JIT compiles after std::inline:
+ * Divisions by values that are not constants, in functions the JIT compiles after std::opt::inline:
  * dividend, divisor and quotient in every register (idiv needs rax and rdx for itself), a
  * divisor of -1, and float divisions. None of them faults.
  */

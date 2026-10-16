@@ -11,7 +11,7 @@ Straight-line functions add the other shape: snapshots of the variable (`let k =
 with writes, a snapshot feeding an argument that the callee ignores while the callee writes the
 variable, a recursion between two snapshots, and a branch whose arms write.
 
-Why this exists: std::opt::simplify once dropped a declared write to a var (one increment missing)
+Why this exists: std::opt once dropped a declared write to a var (one increment missing)
 in a recursion whose last call returned a constant, and once let a read of a var slip behind later
 writes (the read fed an argument the inlined callee did not use). The first version of this
 generator had only recursions and passed while the second defect existed.
@@ -23,7 +23,7 @@ known and its branch is removed inside the arm of the run-time branch) or with a
 The arm that ends the recursion, the sibling arms of the run-time branches and the calling arm
 itself print and / or write the variable, varied by the seed, as is the arm taken. The execution
 order once laid out part of one arm, then the sibling arm, then the rest (the JOIN waited on nodes
-inside an arm after an inner branch was removed): under std::opt::simplify an arm ran into its
+inside an arm after an inner branch was removed): under std::opt an arm ran into its
 sibling (a line printed twice on NodeVM and Taskflow; a wrong number on FastVM and the JIT), exit 0.
 These functions are in programs of their own (a<k>.cml beside p<k>.cml) and draw from their own
 random stream, so the programs of the first two shapes are the same as before they were added.
@@ -48,15 +48,15 @@ REPO_ROOT = HERE.parents[3]
 PIPELINES = [
     [],
     ["std::fvm"],
-    ["std::opt::simplify"],
-    ["std::macro", "std::opt::simplify", "std::fvm"],
-    ["std::macro", "std::opt::simplify", "std::jit"],
-    ["std::inline", "std::inline", "std::inline", "std::inline", "std::inline"],
+    ["std::opt"],
+    ["std::macro", "std::opt", "std::fvm"],
+    ["std::macro", "std::opt", "std::jit"],
+    ["std::opt::inline", "std::opt::inline", "std::opt::inline", "std::opt::inline", "std::opt::inline"],
     ["std::opt", "std::opt::fold", "std::opt", "std::opt::fold", "std::opt", "std::opt::fold", "std::opt", "std::opt::fold", "std::opt::dce"],
-    ["std::opt::simplify", "std::tf"],
-    ["std::opt::simplify", "std::nvm"],
-    ["std::opt::simplify", "std::fvm"],
-    ["std::opt::simplify", "std::jit"],
+    ["std::opt", "std::tf"],
+    ["std::opt", "std::nvm"],
+    ["std::opt", "std::fvm"],
+    ["std::opt", "std::jit"],
 ]
 
 # The run-time integer the programs read (`int(get_env(...))`): no pass knows it.

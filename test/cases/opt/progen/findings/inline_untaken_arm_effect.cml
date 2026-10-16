@@ -1,7 +1,7 @@
 /**
- * progen finding F01 (branch arm). `std::inline` makes a call written in the arm of `if false`
+ * progen finding F01 (branch arm). `std::opt::inline` makes a call written in the arm of `if false`
  *   run: the callee's `println` prints although the arm is never taken.
- * Pipeline: std::inline std::nvm
+ * Pipeline: std::opt::inline std::nvm
  * Expected output: (nothing)
  * Actual: a
  * Reduced by test/tools/progen from seed 75 (generator version 1, all features).

@@ -938,7 +938,7 @@ tool = "python"
 case = "../../cases/modules/tiles/numeric_permissions.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::fvm: numeric permission boundaries", "std::jit: numeric permission boundaries", "std::inline std::fvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
+expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::fvm: numeric permission boundaries", "std::jit: numeric permission boundaries", "std::opt::inline std::fvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
 timeout_ms = 180000
 
 [[tests]]

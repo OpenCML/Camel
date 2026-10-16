@@ -365,10 +365,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "collapse.stats"
-desc = "std::stats before and after std::opt::simplify: the gradient's calls (direct and through pullback closures) are gone, and the value is unchanged."
+desc = "std::stats before and after std::opt: the gradient's calls (direct and through pullback closures) are gone, and the value is unchanged."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/collapse.cml"
-args = ["${case}", "std::macro", "std::stats", "std::opt::simplify", "std::stats", "${run_nvm}"]
+args = ["${case}", "std::macro", "std::stats", "std::opt", "std::stats", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -400,7 +400,7 @@ name = "second_order.simplified"
 desc = "The second-order gradient graphs simplify to straight-line code: no direct or indirect call is left, and the values are unchanged."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
-args = ["${case}", "std::macro", "std::stats", "std::opt::simplify", "std::stats", "${run_nvm}"]
+args = ["${case}", "std::macro", "std::stats", "std::opt", "std::stats", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -527,7 +527,7 @@ name = "scalar_grad.simplify.fvm"
 desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (simplified, then run by FastVM)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -543,7 +543,7 @@ name = "scalar_grad.simplify.jit"
 desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (simplified, then run by the JIT)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -559,7 +559,7 @@ name = "control_flow_grad.simplify.fvm"
 desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (simplified, then run by FastVM)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/control_flow_grad.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -575,7 +575,7 @@ name = "control_flow_grad.simplify.jit"
 desc = "Differentiates through data-dependent branches, arms reading different values, and recursion. (simplified, then run by the JIT)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/control_flow_grad.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -591,7 +591,7 @@ name = "tensor_grad_check.simplify.fvm"
 desc = "Checks every tensor derivative rule against finite differences. (simplified, then run by FastVM)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -609,7 +609,7 @@ name = "nn_grad_check.simplify.fvm"
 desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences. (simplified, then run by FastVM)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/nn_grad_check.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -627,7 +627,7 @@ name = "nn_grad_check.simplify.jit"
 desc = "Checks the nn derivative rules (conv, pooling, embedding, cross-entropy) against finite differences. (simplified, then run by the JIT)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/nn_grad_check.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -645,7 +645,7 @@ name = "custom_rule.simplify.fvm"
 desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body. (simplified, then run by FastVM)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/custom_rule.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -661,7 +661,7 @@ name = "custom_rule.simplify.jit"
 desc = "Uses @vjp custom derivative rules at call sites instead of differentiating the decorated body. (simplified, then run by the JIT)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/custom_rule.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -677,7 +677,7 @@ name = "second_order.simplify.fvm"
 desc = "grad of a function that calls grad: d2/dx2 x^3 at 2 is 12 (scalar), and grad(sum(grad(sum(x^3)))) is 6x (tensor); the inner gradient is built when the outer transformation meets it. (simplified, then run by FastVM)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -688,7 +688,7 @@ name = "second_order.simplify.jit"
 desc = "grad of a function that calls grad: d2/dx2 x^3 at 2 is 12 (scalar), and grad(sum(grad(sum(x^3)))) is 6x (tensor); the inner gradient is built when the outer transformation meets it. (simplified, then run by the JIT)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/second_order.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 expect_stdout_contains = ["scalar d2=12", "tensor([      6.,     -12.,       3.], dtype=float32)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -699,7 +699,7 @@ name = "collapse.simplify.fvm"
 desc = "The collapsed gradient computes the same value as the pullback form. (simplified, then run by FastVM)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/collapse.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -715,7 +715,7 @@ name = "collapse.simplify.jit"
 desc = "The collapsed gradient computes the same value as the pullback form. (simplified, then run by the JIT)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/collapse.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -810,7 +810,7 @@ name = "tensor_grad_check.simplify.jit"
 desc = "Checks every tensor derivative rule against finite differences. (simplified, then run by the JIT)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/tensor_grad_check.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -899,10 +899,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "control_flow_grad.inline.nvm"
-desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::inline (failed at run time: branch arms must be subgraph calls)."
+desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::opt::inline (failed at run time: branch arms must be subgraph calls)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/control_flow_grad.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -915,10 +915,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "control_flow_grad.inline_macro.nvm"
-desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::inline before std::macro (failed the same way)."
+desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::opt::inline before std::macro (failed the same way)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/control_flow_grad.cml"
-args = ["${case}", "std::inline", "std::macro", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::macro", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -931,10 +931,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "control_flow_grad.simplify_only.nvm"
-desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::opt::simplify without std::macro (failed the same way)."
+desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::opt without std::macro (failed the same way)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/control_flow_grad.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -947,10 +947,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "control_flow_grad.inline.fvm"
-desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::inline on FastVM."
+desc = "grad that std::macro has not expanded differentiates at run time the graph the passes left; inlining leaves the functions it will transform as compiled. Under: std::opt::inline on FastVM."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/control_flow_grad.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -995,10 +995,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_inline.inline.nvm"
-desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::inline (failed at run time after printing: branch arms must be subgraph calls)."
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::opt::inline (failed at run time after printing: branch arms must be subgraph calls)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1011,10 +1011,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_inline.inline_small.nvm"
-desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::inline::small (the recursive call merged into its arm made grad crash with SIGSEGV)."
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::opt::inline::small (the recursive call merged into its arm made grad crash with SIGSEGV)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
-args = ["${case}", "std::inline::small", "std::nvm"]
+args = ["${case}", "std::opt::inline::small", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1027,10 +1027,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_inline.macro_inline.nvm"
-desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::macro then std::inline (grad of a parameter cannot be expanded by std::macro, so even this order failed)."
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::macro then std::opt::inline (grad of a parameter cannot be expanded by std::macro, so even this order failed)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
-args = ["${case}", "std::macro", "std::inline", "std::nvm"]
+args = ["${case}", "std::macro", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1043,10 +1043,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_inline.simplify.fvm"
-desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::opt::simplify on FastVM."
+desc = "grad of a branchy function, of a recursive one and of a function that arrives as a parameter, with the same functions also called directly. Under: std::opt on FastVM."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_inline.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1107,10 +1107,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_specialized_callee.specialize.nvm"
-desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::specialize (scaled was 0: the tangent positions were read off the unspecialized function type)."
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::opt::specialize (scaled was 0: the tangent positions were read off the unspecialized function type)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
-args = ["${case}", "std::specialize", "std::nvm"]
+args = ["${case}", "std::opt::specialize", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1123,10 +1123,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_specialized_callee.specialize_fold.nvm"
-desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::specialize then std::opt::fold (unrolled was 0: the arm left by the folded branch has type () => float)."
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::opt::specialize then std::opt::fold (unrolled was 0: the arm left by the folded branch has type () => float)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
-args = ["${case}", "std::specialize", "std::opt::fold", "std::nvm"]
+args = ["${case}", "std::opt::specialize", "std::opt::fold", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1139,10 +1139,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_specialized_callee.specialize_fold.fvm"
-desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::specialize then std::opt::fold on FastVM."
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::opt::specialize then std::opt::fold on FastVM."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
-args = ["${case}", "std::specialize", "std::opt::fold", "std::fvm"]
+args = ["${case}", "std::opt::specialize", "std::opt::fold", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1172,10 +1172,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.macro_simplify.nvm"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::macro then std::opt::simplify."
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::macro then std::opt."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
 envs = ["STEPS=3"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1189,10 +1189,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.specialize_inline.nvm"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::specialize then std::inline (two sessions: already correct)."
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt::specialize then std::opt::inline (two sessions: already correct)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
-args = ["${case}", "std::specialize", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::specialize", "std::opt::inline", "std::nvm"]
 envs = ["STEPS=3"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1223,10 +1223,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.simplify.nvm"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt::simplify (the failing pipeline of benchmarks/gru training)."
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt (the failing pipeline of benchmarks/gru training)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 envs = ["STEPS=3"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1257,10 +1257,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.simplify.jit"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt::simplify on the JIT."
+desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt on the JIT."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
-args = ["${case}", "std::opt::simplify", "std::jit"]
+args = ["${case}", "std::opt", "std::jit"]
 envs = ["STEPS=3"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1290,10 +1290,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_specialized_callee.simplify.nvm"
-desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::opt::simplify (unrolled was 0)."
+desc = "grad left to run with the program, through a callee specialized to constant arguments and through a branch arm that fold turned into an ordinary call (their function types do not describe their ports). Under: std::opt (unrolled was 0)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_specialized_callee.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1354,10 +1354,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_closure.simplify.macro"
-desc = "Gradients through calls of closures built in the differentiated function: a let-bound lambda capturing a value computed from the parameter (the CD-05 reproducer), nested lambdas, a lambda capturing a tensor that depends on the parameter, a lambda called twice, a lambda without captures. The library differentiates the closure's graph with the captured values as arguments, so no pass has to devirtualise first; values checked against finite differences. Under: std::opt::simplify std::macro (the order that worked before)."
+desc = "Gradients through calls of closures built in the differentiated function: a let-bound lambda capturing a value computed from the parameter (the CD-05 reproducer), nested lambdas, a lambda capturing a tensor that depends on the parameter, a lambda called twice, a lambda without captures. The library differentiates the closure's graph with the captured values as arguments, so no pass has to devirtualise first; values checked against finite differences. Under: std::opt std::macro (the order that worked before)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_closure.cml"
-args = ["${case}", "std::opt::simplify", "std::macro"]
+args = ["${case}", "std::opt", "std::macro"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1416,10 +1416,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_effects_kept.macro.simplify"
-desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with value_and_grad. Under: std::macro std::opt::simplify (the derivative inlined and folded)."
+desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with value_and_grad. Under: std::macro std::opt (the derivative inlined and folded)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_effects_kept.cml"
-args = ["${case}", "std::macro", "std::opt::simplify"]
+args = ["${case}", "std::macro", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1480,10 +1480,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_values.macro.simplify"
-desc = "Gradients through calls of function values that are named or built elsewhere than at the call: (1) a closure called twice inside a second closure that captured it, (2) three closures deep, (3) a closure returned by a factory and called twice, (4) a factory closure capturing a tensor, (5) a closure passed to a function that calls it twice, (6) a named function passed, (7) a closure passed on through two functions, (8) a factory closure passed to a function, (9) a function taking a closure and returning one that captures it, (10) a lambda returning a lambda. In all but (6) a captured value depends on the differentiated parameter, so the gradient must also arrive through the capture. The expected gradients agree with central finite differences of an independent NumPy float64 version of each loss (grad_function_values_reference.py). Under: std::macro std::opt::simplify (the derivative inlined and folded)."
+desc = "Gradients through calls of function values that are named or built elsewhere than at the call: (1) a closure called twice inside a second closure that captured it, (2) three closures deep, (3) a closure returned by a factory and called twice, (4) a factory closure capturing a tensor, (5) a closure passed to a function that calls it twice, (6) a named function passed, (7) a closure passed on through two functions, (8) a factory closure passed to a function, (9) a function taking a closure and returning one that captures it, (10) a lambda returning a lambda. In all but (6) a captured value depends on the differentiated parameter, so the gradient must also arrive through the capture. The expected gradients agree with central finite differences of an independent NumPy float64 version of each loss (grad_function_values_reference.py). Under: std::macro std::opt (the derivative inlined and folded)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_values.cml"
-args = ["${case}", "std::macro", "std::opt::simplify"]
+args = ["${case}", "std::macro", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1544,10 +1544,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_values_effects.macro.simplify"
-desc = "The function values of grad_function_values in code with effects: the function that is passed a closure, the factory and the differentiated functions print. The gradients are those without the prints (finite differences, suite effects of the reference script), and every print happens once, in source order: the bodies brought into the differentiated graph keep the order their calls had. Under: std::macro std::opt::simplify (the derivative inlined and folded)."
+desc = "The function values of grad_function_values in code with effects: the function that is passed a closure, the factory and the differentiated functions print. The gradients are those without the prints (finite differences, suite effects of the reference script), and every print happens once, in source order: the bodies brought into the differentiated graph keep the order their calls had. Under: std::macro std::opt (the derivative inlined and folded)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_values_effects.cml"
-args = ["${case}", "std::macro", "std::opt::simplify"]
+args = ["${case}", "std::macro", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1772,10 +1772,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_values_arms.macro.simplify"
-desc = "Gradients through calls of a closure made inside the arms of a branch, the closure being built before the branch and capturing a value that depends on the parameter. loss1 takes its first arm at the input, loss2 its second. The expected gradients agree with central finite differences of an independent NumPy float64 version (suite arms of grad_function_values_reference.py). Under: std::macro std::opt::simplify (the derivative inlined and folded)."
+desc = "Gradients through calls of a closure made inside the arms of a branch, the closure being built before the branch and capturing a value that depends on the parameter. loss1 takes its first arm at the input, loss2 its second. The expected gradients agree with central finite differences of an independent NumPy float64 version (suite arms of grad_function_values_reference.py). Under: std::macro std::opt (the derivative inlined and folded)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_values_arms.cml"
-args = ["${case}", "std::macro", "std::opt::simplify"]
+args = ["${case}", "std::macro", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1928,10 +1928,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "grad_through_as.simplified.nvm"
-desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and value_and_grad give 2 * x * w. (std::macro, then std::opt::simplify, which folds the conversion of the constant)"
+desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and value_and_grad give 2 * x * w. (std::macro, then std::opt, which folds the conversion of the constant)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_through_as.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_nvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1945,7 +1945,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "benchmark_gradients_vs_torch"
-desc = "The training gradient of nine benchmark models (mlp, mlp_big, lenet, lenet_big, gru, gru_big, transformer, transformer4, transformer_big) against PyTorch float32 autograd on the benchmark weights and input (benchmarks/train.py --check): the gradient of mean(y * y) with respect to every weight, under std::macro std::nvm and under std::macro std::opt::simplify std::nvm, each weight within 1e-4 of the reference (max|diff| over the weight's largest gradient entry, floored at 1e-3 of the model's). 1e-4 is the benchmark's agreement tolerance; the worst of the nine measures 6.7e-06. This is the second of the two numerical comparisons (native execution against PyTorch), not the exported artifact against native execution. resnet and resnetbn are checked by the next four entries: a float32-against-float32 comparison is not a test of their rules."
+desc = "The training gradient of nine benchmark models (mlp, mlp_big, lenet, lenet_big, gru, gru_big, transformer, transformer4, transformer_big) against PyTorch float32 autograd on the benchmark weights and input (benchmarks/train.py --check): the gradient of mean(y * y) with respect to every weight, under std::macro std::nvm and under std::macro std::opt std::nvm, each weight within 1e-4 of the reference (max|diff| over the weight's largest gradient entry, floored at 1e-3 of the model's). 1e-4 is the benchmark's agreement tolerance; the worst of the nine measures 6.7e-06. This is the second of the two numerical comparisons (native execution against PyTorch), not the exported artifact against native execution. resnet and resnetbn are checked by the next four entries: a float32-against-float32 comparison is not a test of their rules."
 kind = "behavior"
 tool = "python"
 case = "../../../../benchmarks/train.py"

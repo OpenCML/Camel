@@ -22,10 +22,10 @@ expect_stdout = "[1, 2, 3] [1, 2, 3, 4] [1, 2, 3, 5]\n[1, 2, 3, 7, 8] [1, 2, 3]\
 
 [[tests]]
 name = "new_values.append_new.passes"
-desc = "The same program through std::inline, std::opt::simplify, std::jit."
+desc = "The same program through std::opt::inline, std::opt, std::jit."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/append_new.cml"
-args = ["${case}", "std::inline", "std::opt::simplify", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout = "[1, 2, 3] [1, 2, 3, 4] [1, 2, 3, 5]\n[1, 2, 3, 7, 8] [1, 2, 3]\n[10, 20, 30] [1, 2, 3]\n[1, 2, 3] [1, 2, 3] [3, 1, 2]\n[1, 2] [1, 2, 3, 4]\n[[0], [0], [2]]\n"
 
@@ -42,10 +42,10 @@ expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 
 
 [[tests]]
 name = "new_values.rebinding_loop.passes"
-desc = "The same program through std::inline, std::opt::simplify, std::fvm."
+desc = "The same program through std::opt::inline, std::opt, std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
-args = ["${case}", "std::inline", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 expect_exit = 0
 expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]\n"
 
@@ -175,10 +175,10 @@ expect_stdout = "1 2 [1, 2] [1, 2, 3] 2\n1 [1, 2, 3, 4] 4 true\n[1] [[1], [2], [
 
 [[tests]]
 name = "new_values.peek.passes"
-desc = "The same program through std::inline, std::opt, std::jit: the passes keep `:var/peek` a read."
+desc = "The same program through std::opt::inline, std::opt, std::jit: the passes keep `:var/peek` a read."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/peek.cml"
-args = ["${case}", "std::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout = "1 2 [1, 2] [1, 2, 3] 2\n1 [1, 2, 3, 4] 4 true\n[1] [[1], [2], [3]]\n[5, 6] 2 [5, 6, 7]\n"
 
@@ -246,7 +246,7 @@ expect_stdout = "[0, 1, 25, 2] 4\n"
 
 [[tests]]
 name = "new_values.rebinding_loop.opt"
-desc = "The rebinding loops through std::macro, std::opt, std::jit and std::inline, std::opt, std::prl."
+desc = "The rebinding loops through std::macro, std::opt, std::jit and std::opt::inline, std::opt, std::prl."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
@@ -342,10 +342,10 @@ expect_stdout_contains = [":var/take", "algo:sort_in_place", "algo:merge_sort_in
 
 [[tests]]
 name = "new_values.sort_rebinding.passes"
-desc = "The same program through std::inline, std::opt, std::jit: the passes keep the in-place forms (state-only operators) in order."
+desc = "The same program through std::opt::inline, std::opt, std::jit: the passes keep the in-place forms (state-only operators) in order."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
-args = ["${case}", "std::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]\n"
 

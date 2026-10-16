@@ -28,7 +28,7 @@
 
 1. 把循环写成尾递归后求梯度，在 `std::nvm`、`std::fvm` 上迭代 200 次就因递归深度 256 而终止（100 次可以）。
 2. `std::macro` 对尾递归写的循环最多提前求值 64 层；100 次迭代是编译期错误。
-3. `std::opt::simplify` 把循环当成“可以按轮展开的递归”，16 轮剥出 16 份循环体的特化副本，循环本身还在。
+3. `std::opt` 把循环当成“可以按轮展开的递归”，16 轮剥出 16 份循环体的特化副本，循环本身还在。
 4. ONNX 导出器 3997 行里约 1700 行在从递归里恢复循环；一个循环体只写了一次 `tanh` 的程序，导出的模型里有 5 个 `Tanh`。
 
 这些都不是 (a) 做不到，而是 (a) 之下每一处都要各自再写一遍“这其实是个循环”的识别；(b)/(c) 把它写在图上一次。
@@ -41,7 +41,7 @@
 2. **Q2 循环携带的状态从哪来**：只提供“对 `var` 赋值”的语句形式，还是同时提供“状态写在循环头、循环体的值是下一轮状态”的表达式形式。建议两种都要，后者是主形式：2.7 已定“梯度经过 `var` 直接拒绝”，只有语句形式的话，循环在被求导的函数里就用不了。
 3. **Q3 语句形式的循环体是否必须是同步块**：循环体不是同步块时，体内的赋值没有任何东西依赖，按 2.1 一条都不执行（实测：分支臂里两条赋值只执行了最后一条）。建议要求写出 `sync`（`while c sync { ... }`），不做隐式规则。
 
-**调研中发现的现有缺陷**（第 10 节）：`std::inline std::jit` 下，一个 4 个参数的尾递归函数第二次及以后的调用返回错误结果（最小复现 `examples/defect_jit_second_call.cml`，期望 `1 1 11`，得到 `1 2 17`）。
+**调研中发现的现有缺陷**（第 10 节）：`std::opt::inline std::jit` 下，一个 4 个参数的尾递归函数第二次及以后的调用返回错误结果（最小复现 `examples/defect_jit_second_call.cml`，期望 `1 1 11`，得到 `1 2 17`）。
 
 ---
 
@@ -102,7 +102,7 @@ subgraph "loop" {
 
 要点【实测】：
 
-- **一个尾递归循环是三张图。** 分支的每个臂在建图时是一张自己的子图，由 `BRCH` 控制的 `FUNC` 节点调用（`src/compile/gir/builder.cpp:3030-3102`）。递归调用在臂的子图 `__g_6__` 里，所以递归是 `loop → __g_6__ → loop` 的**互递归**；运行 `std::inline` 之后臂才被并入 `loop`，变成直接的自递归。
+- **一个尾递归循环是三张图。** 分支的每个臂在建图时是一张自己的子图，由 `BRCH` 控制的 `FUNC` 节点调用（`src/compile/gir/builder.cpp:3030-3102`）。递归调用在臂的子图 `__g_6__` 里，所以递归是 `loop → __g_6__ → loop` 的**互递归**；运行 `std::opt::inline` 之后臂才被并入 `loop`，变成直接的自递归。
 - **“这是一个循环”不写在图上。** 图上只有分支和调用。尾位置是每个执行器按同一套判据临时判定的：出口是 `JOIN`、某个臂以这次调用结尾、拓扑序里它之后只有 `GATE`（`docs/technical/19_tail_call_optimization.md` 第 6 节；`src/execute/graph_runtime_support.cpp:300-521`）。
 - 状态就是参数；每一轮不变的 `n` 也是参数，每一轮都重新传一次。
 
@@ -111,20 +111,20 @@ subgraph "loop" {
 | 后端 | 尾调用的执行方式 | 非尾递归的上限 | 备注 |
 |---|---|---|---|
 | `std::nvm` | 同一次 `call` 内换图换帧，`goto loop_start`【读码 `nodevm.cpp:689-725`】 | 256 帧 | 每一轮线性扫过整张图的拓扑序 |
-| `std::fvm` | 字节码 `TAIL`：释放当前帧、取新帧、跳到入口【读码 `gotovm.cpp:570-687`】；实测 `std::inline` 后 `loop` 的字节码为 `LGT; BRCH; JUMP×3; LADD; LADD; TAIL; JOIN; RETN` | 256 帧 | |
-| `std::jit` | 只编译“纯标量算术 + 只调用自己”的图【读码 `x64_backend.cpp:102-151`】；自尾调用在 Windows 上是一条 `jmp`，在 Linux 上经 `trampolineTail`【读码 `:954-992`】 | 原生代码内无上限 | 不加 `std::inline` 时循环**不被编译**：`-v` 输出 `compile skipped for graph '__g_6__': targets non-self graph 'loop'`【实测】 |
+| `std::fvm` | 字节码 `TAIL`：释放当前帧、取新帧、跳到入口【读码 `gotovm.cpp:570-687`】；实测 `std::opt::inline` 后 `loop` 的字节码为 `LGT; BRCH; JUMP×3; LADD; LADD; TAIL; JOIN; RETN` | 256 帧 | |
+| `std::jit` | 只编译“纯标量算术 + 只调用自己”的图【读码 `x64_backend.cpp:102-151`】；自尾调用在 Windows 上是一条 `jmp`，在 Linux 上经 `trampolineTail`【读码 `:954-992`】 | 原生代码内无上限 | 不加 `std::opt::inline` 时循环**不被编译**：`-v` 输出 `compile skipped for graph '__g_6__': targets non-self graph 'loop'`【实测】 |
 | `std::tf` | `evalGraph` 里的 `for(;;)`，自调用复用同一帧【读码 `taskflow.cpp:1000-1061`】 | 原生栈 | 单线程顺序执行 |
 | `std::macro` 求值器 | 没有尾调用优化，深度上限 64【读码 `src/execute/macro/eval.cpp:67`】 | 64 | |
 | `std::cpp` | 生成普通的 C++ 互递归函数，是否变成循环取决于 C++ 编译器【实测输出 `f_loop` ↔ `f_g_6`】 | 原生栈 | |
 
 三百万次迭代的求和，同一台（当时有其他构建在跑的）机器上各跑三次的整进程耗时【实测，仅作量级参考】：
 
-| 写法 | `std::nvm` | `std::fvm` | `std::inline std::fvm` | `std::inline std::jit` | `std::tf` |
+| 写法 | `std::nvm` | `std::fvm` | `std::opt::inline std::fvm` | `std::opt::inline std::jit` | `std::tf` |
 |---|---|---|---|---|---|
 | 状态是参数（`sum_tail.cml` 改为 3000000） | 1.1–1.4 s | 0.33–0.72 s | 0.18–0.50 s | 0.20–0.25 s | 2.9–3.6 s |
 | 状态在 `var` 单元里（`while_desugared.cml` 改为 3000000） | 2.2–2.4 s | 0.95–2.2 s | 0.64–1.4 s | 1.0–1.2 s | 9.1–10.7 s |
 
-状态放在 `var` 里的同一个循环，在 `std::inline std::jit` 下慢约 5 倍：读写变量是算子 `:var/get`、`:op/assn_l`，而即时编译对任何含 `OPER` 的图回退到解释器（`-v` 输出 `compile skipped for graph 'step': pc=25 contains OPER`【实测】）。
+状态放在 `var` 里的同一个循环，在 `std::opt::inline std::jit` 下慢约 5 倍：读写变量是算子 `:var/get`、`:op/assn_l`，而即时编译对任何含 `OPER` 的图回退到解释器（`-v` 输出 `compile skipped for graph 'step': pc=25 contains OPER`【实测】）。
 
 ### 1.3 现状的四个硬限制（都是实测）
 
@@ -142,7 +142,7 @@ N=1000 ... std::macro std::tf                               -> 1.3677  0.367695�
 
 **L2 `std::macro` 提前求值循环最多 64 层。** `examples/macro_loop.cml`：`count(0, 20, 0)` 被求值，`count(0, 100, 0)` 是编译期错误 `'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls`。
 
-**L3 `std::opt::simplify` 把循环当递归逐轮展开。** `K=3 camel examples/invariant.cml std::opt::simplify std::rgir`：循环 `spin(0, 1000000, k, 0)` 的初值是常量，于是每一轮特化出一份 `i` 为下一个常量的副本，16 轮后图里有 `loop$spec7` … `loop$spec20` 逐层嵌套的 14 份循环体，再加原来的 `loop`；每一份里 `k * k` 的乘法都还在。`sum_tail.cml` 的统计：不加遍 5 张图 25 个节点，`std::opt::simplify` 之后 22 张图 68 个节点、20 个直接调用。循环没有变快，优化的轮数与增长预算花在了剥皮上。
+**L3 `std::opt` 把循环当递归逐轮展开。** `K=3 camel examples/invariant.cml std::opt std::rgir`：循环 `spin(0, 1000000, k, 0)` 的初值是常量，于是每一轮特化出一份 `i` 为下一个常量的副本，16 轮后图里有 `loop$spec7` … `loop$spec20` 逐层嵌套的 14 份循环体，再加原来的 `loop`；每一份里 `k * k` 的乘法都还在。`sum_tail.cml` 的统计：不加遍 5 张图 25 个节点，`std::opt` 之后 22 张图 68 个节点、20 个直接调用。循环没有变快，优化的轮数与增长预算花在了剥皮上。
 
 **L4 导出器要从递归里恢复循环。** `modules/onnx/exporter.cpp` 共 3997 行，其中尾递归到 `Loop`（`evalLoopBody`、`translateLoop`、`mergeOutcomes`，约 1037–1591 行）、线性递归到成对的 `Loop`（约 1593–2074 行）、作为值的回传函数（约 2076–2426 行）与辅助诊断合计约 1700 行【读码，按函数边界估算】。它是对函数的图做符号求值来认出循环的：先试算一遍、丢弃，找出哪些实参在变。结果：
 
@@ -350,7 +350,7 @@ subgraph "sq_sum" {
 
 | | 稳定映射 | 新节点 | 尾递归与循环同一种图 | L1 梯度深度 | L2 macro 深度 | L3 被逐轮展开 | L4 导出要恢复 | 即时编译 |
 |---|---|---|---|---|---|---|---|---|
-| (a) | 是 | 0 | 是 | 保留 | 保留 | 保留 | 保留 | 须先 `std::inline`；状态在单元里时不编译 |
+| (a) | 是 | 0 | 是 | 保留 | 保留 | 保留 | 保留 | 须先 `std::opt::inline`；状态在单元里时不编译 |
 | (b) | 是 | 1 | 否 | 可解 | 可解 | 不存在 | 直接 | 回边明确，仍要做跨子图编译 |
 | (c) | 是 | 1 | 优化后是 | 可解 | 可解 | 不存在 | 直接；旧代码可逐步退役 | 同 (b) |
 | (d) | 是 | 0 | 是 | 可解但要守约定 | 可解 | 须教会化简 | 省掉识别 | 同 (a) |
@@ -377,7 +377,7 @@ L3 的逐轮展开不会发生在循环节点上；内联引擎对递归的各�
 
 **G5 循环类优化有落点。** 不变量外提是“把循环体子图里只依赖捕获端口的节点搬到外层图，多加一条捕获边”，一处局部改写；(a) 之下要给递归函数加参数并改所有调用点（第 6 节）。
 
-**G6 即时编译有明确的编译单元。** 现在 `std::jit` 不加 `std::inline` 根本不编译循环（1.2 节），加了之后只编译自递归的纯算术函数，而且恰好在这条路径上实测到错误结果（第 10 节 D1）。循环节点给出入口、回边、状态槽位，编译成原生循环不需要“先内联成自递归再认出尾调用”。这一条的收益最大也最远：仍然要做把条件与循环体子图编进外层函数的工作（5.5 节）。
+**G6 即时编译有明确的编译单元。** 现在 `std::jit` 不加 `std::opt::inline` 根本不编译循环（1.2 节），加了之后只编译自递归的纯算术函数，而且恰好在这条路径上实测到错误结果（第 10 节 D1）。循环节点给出入口、回边、状态槽位，编译成原生循环不需要“先内联成自递归再认出尾调用”。这一条的收益最大也最远：仍然要做把条件与循环体子图编进外层函数的工作（5.5 节）。
 
 **G7 诊断：迭代次数。** 循环的执行器手里有计数器，故障可以报“第 501 轮”；尾递归的帧被复用，没有地方记。
 
@@ -576,13 +576,13 @@ let h = while let (h, k) = (x, 0); k < 6 && sum(h * h) >= 1.0 {
 
 | 遍 | 对 `LOOP` | 说明 | 规模 |
 |---|---|---|---|
-| `std::inline`（`inline/engine.cpp` 1018 行，`draft_inline.cpp` 1983 行） | 需要小改，之后可复用对调用的处理 | 候选只收 `FUNC`/`CALL`（`engine.cpp:629-639`），循环节点本身不是内联目标；循环体**里**的调用照常内联（子图在可达闭包里）。要改的：调用图 SCC 的边只来自 `FUNC`（`:393-403`），需把“外层图 → 条件/循环体子图”算作边；`mayHaveEffects`（`:116-146`）要进入两张子图，否则带效应的循环被当成无效应 | 约 80 行 |
-| `std::specialize` | 第一步不透明；之后复用对 `FUNC` 的做法 | 把常量捕获绑定进循环体的副本，与把常量实参绑定进被调图是同一操作 | 约 150 行（后期） |
-| `std::devirtualize` | 不透明，不用改 | 只动 `CALL` | 0 |
+| `std::opt::inline`（`inline/engine.cpp` 1018 行，`draft_inline.cpp` 1983 行） | 需要小改，之后可复用对调用的处理 | 候选只收 `FUNC`/`CALL`（`engine.cpp:629-639`），循环节点本身不是内联目标；循环体**里**的调用照常内联（子图在可达闭包里）。要改的：调用图 SCC 的边只来自 `FUNC`（`:393-403`），需把“外层图 → 条件/循环体子图”算作边；`mayHaveEffects`（`:116-146`）要进入两张子图，否则带效应的循环被当成无效应 | 约 80 行 |
+| `std::opt::specialize` | 第一步不透明；之后复用对 `FUNC` 的做法 | 把常量捕获绑定进循环体的副本，与把常量实参绑定进被调图是同一操作 | 约 150 行（后期） |
+| `std::opt::devirtualize` | 不透明，不用改 | 只动 `CALL` | 0 |
 | `std::opt::fold`（`generic.cpp:644-742`） | 第一步不透明；之后专门处理 | if 链跳过未知种类；`reinferDraftTypes`（`draft_types.cpp:146-189`）对未知种类返回空，需加一条“出值类型 = 状态类型”。后期：条件恒假则删掉循环；`For` 遍历常量短数组或条件可逐轮折叠时展开 | 20 行 + 后期约 200 行 |
 | `std::opt::cse` | 不透明，不用改 | 只合并纯算子与常量；循环体是独立子图，用不到 `armRegions` 那套臂区域标记 | 0 |
 | `std::opt::dce` | 不透明；之后小改 | 未知种类永不删除。后期：两张子图都无效应且出值无人使用的循环可以删 | 后期约 40 行 |
-| `std::opt::simplify` | 驱动器，不用改 | 继承以上各遍；对循环节点不会发生 L3 的逐轮展开 | 0 |
+| `std::opt` | 驱动器，不用改 | 继承以上各遍；对循环节点不会发生 L3 的逐轮展开 | 0 |
 | `tensor::fuse`（177 行） | 不透明，不用改 | 只做算子 URI 的模式匹配；循环体子图在枚举范围内，体内的融合照常 | 0 |
 | `std::macro`（`src/execute/macro/eval.cpp` 969 行） | **必须处理** | 它自带一个解释器，对未知种类抛 `Unsupported runtime node kind`（`:911-915`）。第一步在求值前降级；之后在 `executeGraph` 里加一个按迭代执行的分支与步数上限 | 约 100 行 |
 
@@ -658,7 +658,7 @@ let h = while let (h, k) = (x, 0); k < 6 && sum(h * h) >= 1.0 {
 
 ## 6. 循环类优化
 
-现在一个都没有【读码：在 `src/passes/opt` 与 `modules/tensor` 里搜索 loop / invariant / hoist / induction / licm，没有循环优化】。实测佐证：`invariant.cml` 里每轮不变的 `k * k + 7` 在 `std::opt::simplify` 之后仍在每一份循环体里。
+现在一个都没有【读码：在 `src/passes/opt` 与 `modules/tensor` 里搜索 loop / invariant / hoist / induction / licm，没有循环优化】。实测佐证：`invariant.cml` 里每轮不变的 `k * k + 7` 在 `std::opt` 之后仍在每一份循环体里。
 
 | 优化 | 方案 (a)：自递归子图 | 方案 (b)/(c)：`LOOP` 节点 |
 |---|---|---|
@@ -682,7 +682,7 @@ let h = while let (h, k) = (x, 0); k < 6 && sum(h * h) >= 1.0 {
 
 | 步 | 内容 | 用户可见 | 规模 | 风险 | 前置 |
 |---|---|---|---|---|---|
-| **0** | 修 D1（`std::inline std::jit` 的错误结果）。与循环无关，但循环会大量经过这条路径 | — | 未知，先定位 | — | 无 |
+| **0** | 修 D1（`std::opt::inline std::jit` 的错误结果）。与循环无关，但循环会大量经过这条路径 | — | 未知，先定位 | — | 无 |
 | **1** | 语法、AST、GCT；`LOOP` 节点种类、节点体、克隆、编码、校验、打印（`std::rgir`、`std::gir`、`std::stats`）；建图（先做表达式形式的 `while`/`for`）；**降级改写**；所有执行与转译入口（四个后端、`std::macro` 求值器、`std::cpp`、`onnx::export`、微分）在入口处降级；各遍把 `LOOP` 当不透明节点（`carriesOrdering`、`mayHaveEffects`、SCC 的边、`traceGraphs`）。语言文档 `docs/language` 06、07 与本原则文档的对应表各加一行 | **是：表达式形式的循环可用**，性能与能力等于手写尾递归 | 约 1500 行 + 测试 | 中：动到图的编码与克隆 | Q1、Q2、Q4 裁定 |
 | **2** | 语句形式：捕获变量的读写跟踪（循环作为写入者）、同步链、诊断 | **是：两种形式都可用** | 约 300 行 | 中：副作用追踪是 2.8 承认的薄弱处 | Q3 裁定 |
 | **3** | `progen` 生成循环，参考求值器，化简器；把循环纳入默认的固定批次 | — | 约 200 行 Python | 低 | 步 1、2 |
@@ -693,7 +693,7 @@ let h = while let (h, k) = (x, 0); k < 6 && sum(h * h) >= 1.0 {
 | **8** | 微分：`LOOP` 的前向/反向循环；节点的“收集输出”（若采用）；梯度的导出 | 循环的梯度不再受 256 帧限制；导出的梯度线性而非平方 | 约 1000 行 | 高 | 步 4、7；5.6 的磁带方案需先做小原型 |
 | **9** | 不变量外提（6.1）、单元提升为状态（6.5）、归纳变量（6.2） | 语句形式的循环也能即时编译与导出 | 约 650 行 | 中–高 | 步 6；最好先有统一的效应与逃逸分析 |
 | **10** | 即时编译：把纯标量的循环编成原生循环 | CPU 密集的循环有数量级的提升 | 500–800 行 | 高 | 步 0、4、9 |
-| **11** | 提升遍 `recursion → loop`（可选，放进 `std::opt::simplify` 或单独的遍）；之后逐步退役导出器里的递归恢复 | 手写的尾递归得到循环的全部待遇 | 约 400 行，可删约 1700 行 | 中 | 步 7、8 |
+| **11** | 提升遍 `recursion → loop`（可选，放进 `std::opt` 或单独的遍）；之后逐步退役导出器里的递归恢复 | 手写的尾递归得到循环的全部待遇 | 约 400 行，可删约 1700 行 | 中 | 步 7、8 |
 
 - **步 1 之后语言用户就能用循环**（表达式形式）；步 2 之后两种形式齐全。
 - 步 4–11 之间除表中的前置外互不依赖，可以按人手并行。
@@ -833,10 +833,10 @@ macro 函数里的循环在 `std::macro` 下被提前求值；不终止的循环
 ### 10.1 实际运行验证的
 
 - 尾递归、`reduce`、`foreach` 三种写法的图（`std::rgir`）；尾递归内联前后的图与 `std::fvm` 字节码。
-- `examples/` 下各程序在 `std::nvm`、`std::fvm`、`std::jit`、`std::inline std::jit`、`std::opt std::fvm`、`std::opt::simplify std::fvm`、`std::tf` 上的结果（除 D1 外一致）。
+- `examples/` 下各程序在 `std::nvm`、`std::fvm`、`std::jit`、`std::opt::inline std::jit`、`std::opt std::fvm`、`std::opt std::fvm`、`std::tf` 上的结果（除 D1 外一致）。
 - L1（梯度的深度上限，N = 50/100/200/300/1000，四种流水线）、L2（macro 64 层）、L3（`simplify` 的逐轮特化，图与统计）、L4 中“模型里 5 个 `Tanh`、1 个 `Loop`、4 个 `If`”。
 - 1.4 节全部六条（循环体内的效应、`foreach` 在同步块外、臂内赋值、块内 `return`、循环内故障的诊断、不终止）。
-- `std::jit` 不加 `std::inline` 时不编译尾递归循环；状态在 `var` 里时回退到解释器（`-v` 的日志）。
+- `std::jit` 不加 `std::opt::inline` 时不编译尾递归循环；状态在 `var` 里时回退到解释器（`-v` 的日志）。
 - 1.2 节的耗时（各三次，机器上同时有其他负载，只能看量级）。
 - `std::cpp` 对尾递归的输出。
 
@@ -861,7 +861,7 @@ macro 函数里的循环在 `std::macro` 下被提前求值；不终止的循环
 
 ### 10.4 发现的现有缺陷
 
-**D1 `std::inline std::jit`：尾递归函数第二次及以后的调用返回错误结果。**
+**D1 `std::opt::inline std::jit`：尾递归函数第二次及以后的调用返回错误结果。**
 
 最小复现 `examples/defect_jit_second_call.cml`：
 
@@ -880,16 +880,16 @@ func main(): int sync {
 
 | 流水线 | 输出 |
 |---|---|
-| `std::nvm`、`std::fvm`、`std::jit`、`std::inline std::fvm`、`std::opt std::jit`、`std::opt::simplify std::jit` | `1 1 11` |
-| `std::inline std::jit` | `1 2 17` |
+| `std::nvm`、`std::fvm`、`std::jit`、`std::opt::inline std::fvm`、`std::opt std::jit`、`std::opt std::jit` | `1 1 11` |
+| `std::opt::inline std::jit` | `1 2 17` |
 
-同一个函数只调用一次时结果正确；三个参数、循环体里没有中间乘法的 `sum_tail.cml` 调用两次也正确。嵌套循环的形式（`examples/nested_tail.cml`，外层循环每轮调用一次内层）在 `std::inline std::jit` 下得到 2686515000、在 `std::opt::simplify std::jit` 下得到 2680368756，正确值是 2011522500；按参数规模缩小后 `N=2 M=2` 时得到 2 而不是 1。`std::inline` 之后该函数只调用自己，被编译成原生代码（1.2 节）；原因没有定位，没有修改。
+同一个函数只调用一次时结果正确；三个参数、循环体里没有中间乘法的 `sum_tail.cml` 调用两次也正确。嵌套循环的形式（`examples/nested_tail.cml`，外层循环每轮调用一次内层）在 `std::opt::inline std::jit` 下得到 2686515000、在 `std::opt std::jit` 下得到 2680368756，正确值是 2011522500；按参数规模缩小后 `N=2 M=2` 时得到 2 而不是 1。`std::opt::inline` 之后该函数只调用自己，被编译成原生代码（1.2 节）；原因没有定位，没有修改。
 
 **其余观察（不是新缺陷）**：
 
 - `docs/technical/19_tail_call_optimization.md` 描述的 `twinFrame` 与 NodeVM 现在的实现（`tailLow`/`tailHigh`）不一致；`docs/technical/16_inline_rewrite_algorithm.md` 里的若干标识符（`buildSccGraphPlan`、各 `k…PerScc` 预算）在代码里已不存在。两处文档落后于代码【读码】。
 - `modules/onnx/exporter.cpp:730` 附近的注释仍说循环体的分支用 `Where` 合并，代码与文档 26 自 2026-10-06 起用的是 `If`【读码】。
-- 已归档的 `test/cases/opt/progen/findings/simplify_recursion_never_ends.cml`（F19）：`std::opt::simplify` 之后一个互递归在 `std::nvm`、`std::tf` 上超过递归深度而 `std::fvm`、`std::jit` 正常结束。它是既有发现，与“尾位置是否成立会被遍和后端的差异影响”这一点有关，本稿没有进一步分析。
+- 已归档的 `test/cases/opt/progen/findings/simplify_recursion_never_ends.cml`（F19）：`std::opt` 之后一个互递归在 `std::nvm`、`std::tf` 上超过递归深度而 `std::fvm`、`std::jit` 正常结束。它是既有发现，与“尾位置是否成立会被遍和后端的差异影响”这一点有关，本稿没有进一步分析。
 
 ---
 
@@ -905,8 +905,8 @@ E=docs/design/loops/examples
 
 ```sh
 camel $E/sum_tail.cml std::rgir                     # 1.1 节：尾递归的三张图
-camel $E/sum_tail.cml std::inline std::rgir         # 臂并入之后
-camel $E/sum_tail.cml std::inline std::fastvm::bytecode
+camel $E/sum_tail.cml std::opt::inline std::rgir         # 臂并入之后
+camel $E/sum_tail.cml std::opt::inline std::fastvm::bytecode
 camel $E/for_tail.cml std::rgir                     # for 的三种现有写法
 camel $E/while_desugared.cml std::rgir              # 2.1 节：语句形式按 (a) 脱糖
 ```
@@ -918,10 +918,10 @@ N=100 camel $E/grad_tail.cml std::macro std::nvm    # L1：可以
 N=200 camel $E/grad_tail.cml std::macro std::nvm    # L1：MaxRecursionDepthExceeded
 N=1000 camel $E/grad_tail.cml std::macro std::tf    # 靠原生栈
 camel $E/macro_loop.cml std::macro std::nvm         # L2
-K=3 camel $E/invariant.cml std::opt::simplify std::rgir | grep -E 'label="loop|mul_l'   # L3
+K=3 camel $E/invariant.cml std::opt std::rgir | grep -E 'label="loop|mul_l'   # L3
 camel $E/sum_tail.cml std::stats std::null          # 统计：5 张图 25 个节点
-camel $E/sum_tail.cml std::opt::simplify std::stats std::null    # 22 张图 68 个节点
-CAMEL_ONNX_OUT=/tmp/loop.onnx camel $E/export_tail.cml std::macro std::opt::simplify onnx::export   # L4
+camel $E/sum_tail.cml std::opt std::stats std::null    # 22 张图 68 个节点
+CAMEL_ONNX_OUT=/tmp/loop.onnx camel $E/export_tail.cml std::macro std::opt onnx::export   # L4
 python3 -c "
 import onnx, collections
 def count(g, c):
@@ -941,7 +941,7 @@ camel $E/block_effects.cml            # 2 与 12
 camel $E/block_return.cml             # 1 与 11
 camel $E/fault_in_loop.cml            # 7:62 DivisionByZero，没有迭代序号
 camel -v $E/sum_tail.cml std::jit 2>&1 | grep JIT           # 循环没有被编译
-camel -v $E/while_desugared.cml std::inline std::jit 2>&1 | grep JIT   # contains OPER
+camel -v $E/while_desugared.cml std::opt::inline std::jit 2>&1 | grep JIT   # contains OPER
 camel $E/sum_tail.cml std::cpp        # C++ 输出：f_loop 与 f_g_6 互递归
 ```
 
@@ -957,9 +957,9 @@ camel $E/sum_bench.cml std::fvm       # 同一进程内分别计时：尾递归�
 
 ```sh
 camel $E/defect_jit_second_call.cml std::fvm                # 1 1 11
-camel $E/defect_jit_second_call.cml std::inline std::jit    # 1 2 17
+camel $E/defect_jit_second_call.cml std::opt::inline std::jit    # 1 2 17
 camel $E/nested_tail.cml std::fvm                           # 2011522500
-camel $E/nested_tail.cml std::inline std::jit               # 2686515000
+camel $E/nested_tail.cml std::opt::inline std::jit               # 2686515000
 ```
 
 ## 附录 B：示例文件

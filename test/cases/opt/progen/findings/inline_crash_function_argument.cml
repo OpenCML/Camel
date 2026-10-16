@@ -1,8 +1,8 @@
 /**
- * progen finding F20 ((other) crash after a rewrite). Segmentation fault after `std::inline`
+ * progen finding F20 ((other) crash after a rewrite). Segmentation fault after `std::opt::inline`
  *   (every scheduler): a function with a function parameter, called from another function in the
  *   taken arm.
- * Pipeline: std::inline std::nvm
+ * Pipeline: std::opt::inline std::nvm
  * Expected output: (nothing)
  * Actual: CRASH
  * Reduced by test/tools/progen from seed 1665 (generator version 1, all features).

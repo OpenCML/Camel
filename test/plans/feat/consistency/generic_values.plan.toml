@@ -36,27 +36,27 @@ golden = "golden/generic_values.txt"
 
 [[tests]]
 name = "generic_values.values.inline"
-desc = "The same program through std::inline, std::fvm."
+desc = "The same program through std::opt::inline, std::fvm."
 case = "../../../cases/consistency/generic_values/values.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/generic_values.txt"
 
 [[tests]]
 name = "generic_values.values.simplify"
-desc = "The same program through std::opt::simplify, std::nvm."
+desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/generic_values/values.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/generic_values.txt"
 
 [[tests]]
 name = "generic_values.values.inline_opt"
-desc = "The same program through std::inline, std::opt, std::jit."
+desc = "The same program through std::opt::inline, std::opt, std::jit."
 case = "../../../cases/consistency/generic_values/values.cml"
-args = ["${case}", "std::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/generic_values.txt"

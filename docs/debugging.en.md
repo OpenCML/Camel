@@ -49,7 +49,7 @@ Build Camel (`npm run build`) and install the extension as described in
 | Attribute | Meaning |
 |-----------|---------|
 | `program` | The `.cml` file. Required. |
-| `passes` | The pass sequence, as on the command line (`camel file.cml std::inline std::fvm`). Empty or absent: the graph as compiled, on `std::nvm`. |
+| `passes` | The pass sequence, as on the command line (`camel file.cml std::opt::inline std::fvm`). Empty or absent: the graph as compiled, on `std::nvm`. |
 | `args` | Values for the parameters of `main`, each `name=value` (the `--arg` option of `camel`). |
 | `cwd` | Working directory of the program. |
 | `env` | Environment variables added for the program. |
@@ -342,7 +342,7 @@ isolated by attempt* is switched on.
 | `std::nvm`, `std::fvm` | supported |
 | `std::jit` | runs as `std::fvm`: compiled code cannot be stopped. The debug console says so |
 | `std::prl` / `std::tf` (parallel) | runs as `std::fvm`: several nodes run at once, so there is no single current node. The debug console says so. The order under the debugger is the sequential one |
-| optimisation passes before the back end (`std::inline`, `std::opt`, `std::macro`, ...) | supported; see below |
+| optimisation passes before the back end (`std::opt::inline`, `std::opt`, `std::macro`, ...) | supported; see below |
 
 Passes rewrite the graph, and the debugger shows the graph that runs. Nodes keep their source
 positions through passes, so stops and breakpoints stay on the right lines where the nodes
@@ -376,7 +376,7 @@ survive. What changes:
 - An error value that reaches the exit of `main` unhandled (`main(): T!`) is not a stop: no
   frame is left by then. It is reported as without a debugger, `UnhandledError` on standard
   error and exit code 1; break on the `throw` to see where it is made.
-- After `std::inline` a name bound to an inlined call is not shown under its name (see section 4).
+- After `std::opt::inline` a name bound to an inlined call is not shown under its name (see section 4).
 - Verified: Windows Release and Linux Debug protocol tests, plus the Windows VS Code UI.
   macOS remains unverified. Windows Debug currently exceeds the PE DLL export limit, a build
   limitation rather than an enabled allocation-breakpoint capability.

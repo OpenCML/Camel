@@ -266,11 +266,11 @@ func main(): int sync {                  func main(): int sync {
 
 以下都只涉及入口模块自己的顶层值，全部【实测】：
 
-- 直接调用、递归、泛型实例、作为值传递的函数、带 `with` 实参的调用、高阶算子的元素函数（lambda 与具名函数）里使用顶层的 `let`：`examples/uses/main.cml` 在 `std::nvm`、`std::fvm`、`std::jit`、`std::tf`、`std::inline std::fvm`、`std::macro std::opt::simplify std::nvm` 六条流水线上输出相同。
+- 直接调用、递归、泛型实例、作为值传递的函数、带 `with` 实参的调用、高阶算子的元素函数（lambda 与具名函数）里使用顶层的 `let`：`examples/uses/main.cml` 在 `std::nvm`、`std::fvm`、`std::jit`、`std::tf`、`std::opt::inline std::fvm`、`std::macro std::opt std::nvm` 六条流水线上输出相同。
 - 顶层的 `var` 被函数读写：`examples/now_var/main.cml`、`examples/misc/var_reads.cml`（读、写、`foreach` 里写、经另一个函数读）与 `test/cases/linear/nvm/fib1.cml` 在 7 到 12 条流水线上结果一致、正确。设计原则 2.7 说这一用法“没有完全实现”；在单个模块之内本次没有找到出错的程序，找到的缺口是跨模块（1.5 (1)）。单模块内是否还有别的缺口【未查】。
-- 提前求值与折叠：`examples/macro_let/main.cml` 中 `let k = square(12)`（`macro` 函数）经 `std::macro` 在 root 上变成 `DATA 144`；再经 `std::opt::simplify`，用到它的函数被按常量特化（`area$spec1`），整个程序折成 `DATA 904.778`。
+- 提前求值与折叠：`examples/macro_let/main.cml` 中 `let k = square(12)`（`macro` 函数）经 `std::macro` 在 root 上变成 `DATA 144`；再经 `std::opt`，用到它的函数被按常量特化（`area$spec1`），整个程序折成 `DATA 904.778`。
 - 求梯度：`examples/ad_let/main.cml` 中被求导的函数用到顶层的张量 `w`，`grad(loss)(x)` 给出对 `x` 的梯度，`w` 按常数处理。
-- ONNX：`examples/onnx_let/main.cml` 把权重写在顶层，`std::macro std::opt::simplify onnx::export` 导出的模型有一个输入 `x` 和一个 2×2 的初始化器（名字是 `const`，不是 `w`）。
+- ONNX：`examples/onnx_let/main.cml` 把权重写在顶层，`std::macro std::opt onnx::export` 导出的模型有一个输入 `x` 和一个 2×2 的初始化器（名字是 `const`，不是 `w`）。
 
 这些就是 (a) 合并之后跨模块应当得到的行为。
 
@@ -331,7 +331,7 @@ digraph GraphIR {
 }
 ```
 
-运行【实测，`std::nvm`、`std::fvm`、`std::jit`、`std::tf`、`std::inline std::jit`、`std::opt std::tf`、`std::macro std::opt::simplify std::nvm`】：
+运行【实测，`std::nvm`、`std::fvm`、`std::jit`、`std::tf`、`std::opt::inline std::jit`、`std::opt std::tf`、`std::macro std::opt std::nvm`】：
 
 ```
 read_config runs
@@ -460,7 +460,7 @@ programs with a top-level let/var: 17
 - 没被依赖的顶层节点不进运行时图（1.3），所以运行时 root 的大小只取决于程序实际用到的值。
 - 边：root 上 `FILL` 的 `WITH` 入边数等于 `main` 传递使用的模块级值的个数；每个函数图多出的端口数等于它传递使用的模块级值的个数（3.2）。
 
-容量不是 (a) 的约束。真正会把 root 撑大的是内联（`std::opt::simplify` 把 `main` 并进 root），那是今天就有的情况，与合并无关。
+容量不是 (a) 的约束。真正会把 root 撑大的是内联（`std::opt` 把 `main` 并进 root），那是今天就有的情况，与合并无关。
 
 ---
 
@@ -487,7 +487,7 @@ programs with a top-level let/var: 17
 | 端口节点 | 21 | 9 | +12 |
 | `WITH` 边 | 21 | 8 | +13 |
 
-代价与“用到它的函数个数 + 调用处个数”成正比，与调用深度无关。对执行的影响是每次调用多传一个槽位。常量会被现有的遍消掉：`std::macro std::opt::simplify` 之后 `examples/macro_let/main.cml` 里用到常量的函数被特化，端口没有了（1.6）。
+代价与“用到它的函数个数 + 调用处个数”成正比，与调用深度无关。对执行的影响是每次调用多传一个槽位。常量会被现有的遍消掉：`std::macro std::opt` 之后 `examples/macro_let/main.cml` 里用到常量的函数被特化，端口没有了（1.6）。
 
 这一代价是今天单个模块里就有的，(a) 不增加它，只是让它也适用于别的模块的值。
 
@@ -672,9 +672,9 @@ C++ 模块没有 root 图，只有算子。今天的常量是无参的纯算子�
 
 ### 7.4 各个遍
 
-- 内联、特化、去虚化（`src/passes/opt/`）：处理的是带 `with` 端口的函数与闭包，今天就在处理“用到 root 上的值的函数”，不区分值来自哪个模块。【实测】单模块下 `std::inline`、`std::opt`、`std::opt::simplify` 结果正确（1.6、2.1）。不需要改。
+- 内联、特化、去虚化（`src/passes/opt/`）：处理的是带 `with` 端口的函数与闭包，今天就在处理“用到 root 上的值的函数”，不区分值来自哪个模块。【实测】单模块下 `std::opt::inline`、`std::opt`、`std::opt` 结果正确（1.6、2.1）。不需要改。
 - `std::macro`：模块级常量的提前求值今天就工作（1.6）。`math::pi` 按 5.5 (ii) 是 root 上的纯算子节点，`std::opt::fold` 折成常量，使用它的函数再被特化——与 `examples/misc/pi_today.cml` 今天的结果（root 上 `DATA 6.28319`）相同。不需要改。
-- 一处要留意：`std::inline` 把顶层值的初始化函数并进 root（2.1 的例子内联后 root 上出现 `println` 等节点【实测】）。库多了以后 root 会因此变大；内联已经有“目标图不超过 4096 节点”的上限（`docs/cli.md`“Resource limits”），够用。
+- 一处要留意：`std::opt::inline` 把顶层值的初始化函数并进 root（2.1 的例子内联后 root 上出现 `println` 等节点【实测】）。库多了以后 root 会因此变大；内联已经有“目标图不超过 4096 节点”的上限（`docs/cli.md`“Resource limits”），够用。
 
 ### 7.5 四个后端
 
@@ -690,7 +690,7 @@ root 上的值在整个运行期间都被 `main` 的函数值与各层帧引用�
 
 ### 7.8 ONNX 导出
 
-`onnx::export` 翻译的就是入口图（root）【读码 `modules/onnx/exporter.cpp:3970-4022`】。模块顶层的张量是 root 上的节点，经 `std::macro std::opt::simplify` 折成常量后成为初始化器：【实测 `examples/onnx_let/`】输入 `['x']`，初始化器 `[('const', [2, 2])]`，节点 `MatMul, Tanh, Identity`。**顶层放权重今天在单个模块里就能导出**；合并之后权重放在另一个模块（`import { w } from weights`）也一样，因为它们在同一张 root 上。
+`onnx::export` 翻译的就是入口图（root）【读码 `modules/onnx/exporter.cpp:3970-4022`】。模块顶层的张量是 root 上的节点，经 `std::macro std::opt` 折成常量后成为初始化器：【实测 `examples/onnx_let/`】输入 `['x']`，初始化器 `[('const', [2, 2])]`，节点 `MatMul, Tanh, Identity`。**顶层放权重今天在单个模块里就能导出**；合并之后权重放在另一个模块（`import { w } from weights`）也一样，因为它们在同一张 root 上。
 
 建议的改进：初始化器用顶层 `let` 的名字命名（`w`，跨模块时 `weights::w`）。今天只有 `--arg` 绑定的对象有名字【读码 `exporter.cpp:4005-4010`】。实现上是把“顶层声明的名字”作为 root 节点的调试信息带到导出器，约 50 行。`onnx.export_model` 导出某个函数时，函数捕获的模块级值作为捕获的常量进入模型，路径相同【未查：没有运行跨捕获的 `export_model`】。
 
@@ -937,7 +937,7 @@ camel docs/design/module-root/examples/emu/b_hier.cml                     # 2.2
 camel docs/design/module-root/examples/emu/c_diamond.cml                  # 2.3
 camel docs/design/module-root/examples/uses/main.cml std::stats std::nvm  # 3.2
 python3 docs/design/module-root/examples/tools/root_stats.py examples exemplars benchmarks test/cases   # 2.6
-CAMEL_ONNX_OUT=/tmp/m.onnx camel docs/design/module-root/examples/onnx_let/main.cml std::macro std::opt::simplify onnx::export   # 7.8
+CAMEL_ONNX_OUT=/tmp/m.onnx camel docs/design/module-root/examples/onnx_let/main.cml std::macro std::opt onnx::export   # 7.8
 ```
 
 | 目录 | 内容 |

@@ -1,7 +1,7 @@
 /**
  * A constant under `as` is still a constant, and `as` on a value that depends on the model
  * input is a checked assertion. Three models, each exported by both routes (the operator in a
- * default run, the pass onnx::export after std::macro std::opt::simplify), from an example that
+ * default run, the pass onnx::export after std::macro std::opt), from an example that
  * is itself a tensor of literals converted with `as`:
  *
  *   affine   weights built from literals and converted to a shaped type (one of them to a type

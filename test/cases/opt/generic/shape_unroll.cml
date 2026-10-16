@@ -1,6 +1,6 @@
 /**
  * Shape specialization: `forward` is called with a tensor whose type carries its shape, so
- * std::opt::simplify specializes it to that type, folds `shape(x)` to a constant, and unrolls the
+ * std::opt specializes it to that type, folds `shape(x)` to a constant, and unrolls the
  * recursion over `shape(x)[1]` steps into straight-line code. The value must not change.
  */
 module shape_unroll

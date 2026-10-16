@@ -214,7 +214,7 @@ int main() {
 | | | | 外部对象（`PyObject`） | 7 |
 | | | | `any` | 3 |
 
-**先跑 `std::inline` 再转译，结果更差**：写出 C++ 的从 201 个降到 133 个，内部错误从 4 个升到 54 个（其中 50 个是 `JOIN arm count mismatch`），另有 42 个因为内联产生的 `SYNC` 节点被拒绝（诊断里把它叫作"a sync block"，其实是内联遍的汇合点）。【实测 `cpp_coverage.py --passes "std::inline"`】也就是说转译器只认前端直接给出的"每条臂一张子图"的形态，不认内联之后的区域形态（附录 B D11）。
+**先跑 `std::opt::inline` 再转译，结果更差**：写出 C++ 的从 201 个降到 133 个，内部错误从 4 个升到 54 个（其中 50 个是 `JOIN arm count mismatch`），另有 42 个因为内联产生的 `SYNC` 节点被拒绝（诊断里把它叫作"a sync block"，其实是内联遍的汇合点）。【实测 `cpp_coverage.py --passes "std::opt::inline"`】也就是说转译器只认前端直接给出的"每条臂一张子图"的形态，不认内联之后的区域形态（附录 B D11）。
 
 ### 1.5 写出来的 C++ 能不能编译，跑出来对不对
 
@@ -277,7 +277,7 @@ int main() {
 
 `bash docs/design/cpp-memory/tools/measure_all.sh perf`（5 轮）与一次单独的 7 轮补测【实测；整个进程的墙钟时间，含启动与编译，秒】：
 
-| 程序 | `std::fvm` | `std::inline std::jit` | `std::cpp` + `clang -O2` | 手改：算子写成 C++ 运算符 |
+| 程序 | `std::fvm` | `std::opt::inline std::jit` | `std::cpp` + `clang -O2` | 手改：算子写成 C++ 运算符 |
 |---|---|---|---|---|
 | `a01_fib`（`fib(32)`，整数） | 1.34 [0.47, 1.64] | 0.060 [0.039, 0.075] | 1.34 [0.38, 1.62] | **0.021 [0.017, 0.027]** |
 | `a07_fib_float`（`fibf(27.0)`） | 0.20 [0.09, 0.23] | 0.062 [0.050, 0.073] | 0.145 [0.11, 0.18] | 未量 |
@@ -582,7 +582,7 @@ static std::string f_tag(const std::string &name, const std::vector<std::string>
 
 **丁二：两种模式并存。** 2.11 允许各后端各选各的。`std::cpp` 链接运行时、走方案甲，所有算子和模块都能用；另设一个模式（比如 `std::cpp::standalone`）走方案乙，只接受不依赖动态模块的程序，产出不需要 `libcamel` 的 C++。两者共用转译器的前半段（活跃分析、结构化控制流、丁一），只在"堆值怎么表示、怎么调算子"上分叉。
 
-**丁三：按图选择。** 不含安全点的图（纯标量、叶子）照今天的样子生成，不要帧；这部分图在 `std::inline` 之后正是即时编译今天能编译的那一类。只有持有引用跨安全点的函数付出代价。这其实是甲的活跃分析的自然结果，列在这里是因为它回答了"会不会拖慢数值代码"：不会。
+**丁三：按图选择。** 不含安全点的图（纯标量、叶子）照今天的样子生成，不要帧；这部分图在 `std::opt::inline` 之后正是即时编译今天能编译的那一类。只有持有引用跨安全点的函数付出代价。这其实是甲的活跃分析的自然结果，列在这里是因为它回答了"会不会拖慢数值代码"：不会。
 
 ### 4.6 对照表
 
@@ -794,7 +794,7 @@ bash $T/run_examples.sh $E/refused std::fvm
 
 # 1.4 覆盖率；先内联的覆盖率
 python3 $T/cpp_coverage.py --json /tmp/cov.json test/cases benchmarks examples exemplars
-python3 $T/cpp_coverage.py --passes "std::inline" test/cases benchmarks examples exemplars
+python3 $T/cpp_coverage.py --passes "std::opt::inline" test/cases benchmarks examples exemplars
 
 # 1.5 写出来的 C++ 逐个编译、运行、与 std::fvm 比较（201 个，四到五个并行约 20 分钟）
 python3 $T/cpp_build_run.py /tmp/cov.json --jobs 5
@@ -803,8 +803,8 @@ python3 $T/cpp_build_run.py /tmp/cov.json --jobs 5
 bash $T/cppbuild.sh $E/accepted/a01_fib.cml          # 打印可执行文件的路径
 bash $T/compare.sh $E/accepted
 bash $T/compare.sh $E/defects                        # 附录 B
-bash $T/compare.sh $E/defects/d09_sync_order.cml std::inline
-bash $T/compare.sh $E/defects/d11_inline_join.cml std::inline
+bash $T/compare.sh $E/defects/d09_sync_order.cml std::opt::inline
+bash $T/compare.sh $E/defects/d11_inline_join.cml std::opt::inline
 
 # 1.7 尾递归循环：原生栈不限时结果正确
 bash $T/cppbuild.sh $E/defects/d10_tail_loop.cml && (ulimit -s unlimited; /tmp/cppmem/d10_tail_loop)
@@ -844,13 +844,13 @@ bash $T/poll_demo.sh
 | D2 | **浮点常量只保留六位小数**：`1.0e-7 * 3.0` 打印 `0.0`（应为 `3e-07`），`3.141592653589793` 打印 `3.141593` | `bash $T/compare.sh $E/defects/d01_float_literal.cml` | 常量用 `std::to_string` 写出【读码 `bridge.cpp:186-188`】 | 最短且可回读的写法（2.10 的浮点转文字规则） |
 | D3 | **对字符串的 `match` 永远走默认分支**：`kind('a')` 得到 `other`（应为 `vowel`） | `bash $T/compare.sh test/cases/linear/match/multi_pattern.cml` | 生成 `(v_arg_0 == String::from("a", mm::autoSpace()))`，比较的是两个指针【读码 `runtime_emitter.cpp:949-956`】。这也是生成的代码依赖对象身份的一处 | 按内容比较 |
 | D4 | **分支的值被使用两次，被选中的臂执行两次**：打印 `1 1 2`（应为 `1 2`） | `bash $T/compare.sh $E/defects/d07_branch_twice.cml` | `JOIN` 被写成条件表达式的文本，粘贴到每个使用处【读码 `runtime_emitter.cpp:486、906-959、1161-1166`】 | 臂执行一次 |
-| D5 | **同步块里分支之后的效应跑到分支之前**：打印 `before after 1`（应为 `before 1 after`）；先 `std::inline` 则是 `before after 1 1` | `bash $T/compare.sh $E/defects/d09_sync_order.cml`；再加 `std::inline` | 同 D4：`JOIN` 不落成语句，它出去的控制边被忽略，分支被推迟到值第一次被用到的地方 | 按控制边的顺序 |
+| D5 | **同步块里分支之后的效应跑到分支之前**：打印 `before after 1`（应为 `before 1 after`）；先 `std::opt::inline` 则是 `before after 1 1` | `bash $T/compare.sh $E/defects/d09_sync_order.cml`；再加 `std::opt::inline` | 同 D4：`JOIN` 不落成语句，它出去的控制边被忽略，分支被推迟到值第一次被用到的地方 | 按控制边的顺序 |
 | D6 | 故障没有源码位置，写在标准错误上：`Error: DivisionByZero`。201 个里 47 个因此与解释器的输出不同 | `bash $T/compare.sh $E/defects/d03_div_zero.cml` | `int main()` 捕获异常后只印 `what()`【读码 `runtime_emitter.cpp:1117-1125`】 | 见 Q4 |
 | D7 | 非尾递归没有深度上限：1200 层照常算完（解释器在 1000 层报错），三百万层段错误 | `bash $T/compare.sh $E/defects/d02_deep_recursion.cml`；`test/cases/linear/runtime/recursion_depth_limit.cml` | 生成的是原生的 C++ 递归 | 见 Q4 |
 | D8 | 一千万步的尾递归循环段错误。201 个里 6 个程序因此崩溃（含一个本应不终止的循环） | `bash $T/compare.sh $E/defects/d10_tail_loop.cml` | 函数与它的臂函数互相调用，`clang++ -O2` 没有消除 | 见 Q5 |
 | D9 | `exit(3)` 的退出码变成 1，并印 `Unknown error`；没有声明返回类型的 `main` 的最后一个值被当作退出码（解释器是 0，生成的程序是 3） | `bash $T/compare.sh test/cases/consistency/faults/exit_code.cml`；`…/consistency/entry/undeclared_int.cml` | 标准错误上是 `Unknown error`，即 `exit` 展开时抛出的不是 `std::exception`，被 `catch (...)` 接住【实测】；入口一律把 `main` 的返回值 `static_cast<int>` 成退出码【读码 `runtime_emitter.cpp:1118`】 | 与解释器相同的退出码（2.10："只有显式声明了返回类型的 `main`，它的返回值才算程序的结果"） |
 | D10 | `main` 没有声明整数返回类型时是 `PassInternalError`（"Camel 'main' must return int-compatible type"），不是带位置的拒绝。四个目录里 4 个程序 | `camel $E/defects/d06_main_without_type.cml std::cpp` | 【读码 `runtime_emitter.cpp:1105-1109`：`throw std::runtime_error`】 | 转译，或 `TranslationRefused` |
-| D11 | 先 `std::inline` 再 `std::cpp`：50 个程序是 `PassInternalError`（`JOIN arm count mismatch`），42 个因 `SYNC` 被拒绝，诊断把它叫作"a sync block" | `camel $E/defects/d11_inline_join.cml std::inline std::cpp`；`camel $E/defects/d10_tail_loop.cml std::inline std::cpp` | 转译器只认"每条臂一张子图"的形态；`SYNC` 是内联遍的汇合点，不是源码里的同步块 | 两种形态都能转译；诊断用词准确 |
+| D11 | 先 `std::opt::inline` 再 `std::cpp`：50 个程序是 `PassInternalError`（`JOIN arm count mismatch`），42 个因 `SYNC` 被拒绝，诊断把它叫作"a sync block" | `camel $E/defects/d11_inline_join.cml std::opt::inline std::cpp`；`camel $E/defects/d10_tail_loop.cml std::opt::inline std::cpp` | 转译器只认"每条臂一张子图"的形态；`SYNC` 是内联遍的汇合点，不是源码里的同步块 | 两种形态都能转译；诊断用词准确 |
 | D12 | `camel-cpp` 在 Linux 上不可用：写出 `.cpp` 之后 `libcamel.lib not found`，退出码 1。`docs/cpp_export_build.md` 的"方式 A"（`CPP_GEN_SOURCE`、`cpp_gen` 目标）在 CMake 里不存在 | `out/latest/bin/camel-cpp $E/accepted/a01_fib.cml` | 【读码 `tools/camel-cpp/main.cpp:55-70`：只找 `libcamel.lib`】 | 工具可用，或文档注明仅限 Windows 并删去不存在的方式 |
 
 另外三点不算 `std::cpp` 的缺陷，但与本题有关：

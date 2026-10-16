@@ -23,7 +23,7 @@ program's inputs, and each consumer says what an open parameter means:
 
 | Consumer | An open parameter is |
 |---|---|
-| a rewriting pass (`std::opt::*`, `std::macro`, `std::inline`) | an unknown value, as in any function |
+| a rewriting pass (`std::opt::*`, `std::macro`, `std::opt::inline`) | an unknown value, as in any function |
 | a dump (`std::rgir`, `std::gir`) | a PORT node named like the parameter |
 | a scheduling pass | an error: `EntryArgumentMissing` |
 | `onnx::export` | an input of the model |
@@ -91,7 +91,7 @@ The pass first looks for `onnx.export_model` requests in the entry graph, as bef
 there is none:
 
 - if a request exists in a graph reachable from the entry graph, the program is a driver
-  program whose `main` was not inlined: the old refusal naming `std::opt::simplify` is kept;
+  program whose `main` was not inlined: the old refusal naming `std::opt` is kept;
 - otherwise the program makes no request, and the entry graph itself is translated
   (`translateEntryGraph`, `modules/onnx/exporter.cpp`).
 
@@ -105,7 +105,7 @@ there is none:
 2. names the constants that came from `--arg` after their parameter and fields
    (`boundEntryArguments`), so they appear as named initializers;
 3. hands the graph to the part of the exporter shared with the two function entries
-   (`translatePrepared`): the `std::opt::simplify` fixpoint with export settings (everything
+   (`translatePrepared`): the `std::opt` fixpoint with export settings (everything
    non-recursive inlined, which removes the call of `main` when no earlier pass did), the
    effect check, the node-by-node translation, and one output per leaf of the result.
 
@@ -122,9 +122,9 @@ value is given with `--arg` at export. The convention the language suggests (dat
 parameters, weights as `with` parameters) therefore reads naturally on the command line:
 
     # weights baked in, data as input
-    CAMEL_ONNX_OUT=m.onnx camel model.cml --arg p=weights std::macro std::opt::simplify onnx::export
+    CAMEL_ONNX_OUT=m.onnx camel model.cml --arg p=weights std::macro std::opt onnx::export
     # weights as inputs (and, for a training step, as outputs)
-    CAMEL_ONNX_OUT=m.onnx camel step.cml std::macro std::opt::simplify onnx::export
+    CAMEL_ONNX_OUT=m.onnx camel step.cml std::macro std::opt onnx::export
 
 An ordinary parameter given with `--arg` is baked in the same way; the exporter does not treat
 the two kinds differently beyond their order.

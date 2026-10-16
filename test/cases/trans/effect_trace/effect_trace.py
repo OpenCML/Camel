@@ -78,7 +78,7 @@ def main() -> int:
         trace = Path(t) / "trace.jsonl"
         if mode == "order":
             program = REPO_ROOT / "exemplars" / "05_effect_order" / "program.cml"
-            pipelines = {"nvm": ["std::nvm"], "fvm": ["std::fvm"], "inline+nvm": ["std::inline", "std::nvm"]}
+            pipelines = {"nvm": ["std::nvm"], "fvm": ["std::fvm"], "inline+nvm": ["std::opt::inline", "std::nvm"]}
             results = {name: run(program, passes, trace) for name, passes in pipelines.items()}
             ref_code, ref_out, ref_lines = results["nvm"]
             check(ref_code == 0, f"nvm exit code 0 (got {ref_code})")
@@ -147,7 +147,7 @@ def main() -> int:
                 "    wait c += a\n"
                 "    println(c)\n"
                 "    return 0\n}\n", encoding="utf-8")
-            for passes in (["std::nvm"], ["std::fvm"], ["std::inline", "std::nvm"]):
+            for passes in (["std::nvm"], ["std::fvm"], ["std::opt::inline", "std::nvm"]):
                 code, out, lines = run(program, passes, trace)
                 uris = [l["uri"] for l in lines]
                 check(code == 0 and out == "3\n", f"{passes}: prints 3")

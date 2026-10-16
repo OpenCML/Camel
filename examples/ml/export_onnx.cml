@@ -1,7 +1,7 @@
 // Exports a small two-layer model to an ONNX file with `onnx.export_model`: the function to
 // export, an example input (its type and shape become the model input) and the file path.
 // Run: camel examples/ml/export_onnx.cml
-//      camel examples/ml/export_onnx.cml std::macro std::opt::simplify onnx::export
+//      camel examples/ml/export_onnx.cml std::macro std::opt onnx::export
 // The first command runs the program; the second translates it without running it and
 // writes the same model.
 module export_onnx

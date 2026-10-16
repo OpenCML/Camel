@@ -8,7 +8,7 @@ root = Path(__file__).resolve().parents[4]
 binary = root / 'out/latest/bin' / ('camel.exe' if os.name == 'nt' else 'camel')
 env = os.environ.copy()
 env['CAMEL_HOME'] = str(root / 'out/latest')
-for passes in [['std::nvm'], ['std::fvm'], ['std::jit'], ['std::inline', 'std::fvm'], ['std::opt', 'std::nvm']]:
+for passes in [['std::nvm'], ['std::fvm'], ['std::jit'], ['std::opt::inline', 'std::fvm'], ['std::opt', 'std::nvm']]:
     result = subprocess.run([str(binary), str(Path(__file__).with_suffix('.cml')), *passes], cwd=root, env=env, capture_output=True, text=True, timeout=60)
     if result.returncode:
         raise RuntimeError(result.stdout + result.stderr)

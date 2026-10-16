@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 30, 2026
- * Updated: Sep. 30, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,7 @@
  *   GRAPH_STATS {"graphs":..,"nodes":..,"edges":..,"opers":..,"direct_calls":..,
  *                "indirect_calls":..,"closures":..,"branches":..}
  * over every graph reachable from the root, and passes the program on
- * unchanged, so `camel f.cml std::macro std::stats std::opt::simplify std::stats`
+ * unchanged, so `camel f.cml std::macro std::stats std::opt std::stats`
  * compares a program before and after simplification.
  */
 

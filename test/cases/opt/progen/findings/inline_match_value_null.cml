@@ -1,7 +1,7 @@
 /**
- * progen finding F15 (branch arm). After `std::inline` the value of a `match` whose taken arm
+ * progen finding F15 (branch arm). After `std::opt::inline` the value of a `match` whose taken arm
  *   returns the result of a call is `null` instead of the struct.
- * Pipeline: std::inline std::nvm
+ * Pipeline: std::opt::inline std::nvm
  * Expected output: L6 { n: 5, tag:  }
  * Actual: L6 null
  * Reduced by test/tools/progen from seed 468 (generator version 1, all features).

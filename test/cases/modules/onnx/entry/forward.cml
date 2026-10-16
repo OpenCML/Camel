@@ -1,6 +1,6 @@
 /**
  * A pure program: `main` is the model. It makes no export request and does not import the
- * onnx module; `camel forward.cml std::macro std::opt::simplify onnx::export` translates the
+ * onnx module; `camel forward.cml std::macro std::opt onnx::export` translates the
  * computation of `main`: one model input per parameter, shaped by its declared type (the
  * negative extent is a dynamic axis), the result is the output.
  */

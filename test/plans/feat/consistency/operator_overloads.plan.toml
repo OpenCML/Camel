@@ -24,19 +24,19 @@ expect_stdout = "0 1 1\n4.0 7.0 2.0 -2.0 4.0 2.0 true false\n3 ab 2 -4 false 5.0
 
 [[tests]]
 name = "operator_overloads.basic.inline"
-desc = "The same program through std::inline, std::fvm: an overload is a function like any other."
+desc = "The same program through std::opt::inline, std::fvm: an overload is a function like any other."
 kind = "behavior"
 case = "../../../cases/consistency/operator_overloads/basic.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 expect_stdout = "0 1 1\n4.0 7.0 2.0 -2.0 4.0 2.0 true false\n3 ab 2 -4 false 5.0\n4.0 7.0 3\n"
 
 [[tests]]
 name = "operator_overloads.basic.simplify"
-desc = "The same program through std::opt::simplify, std::jit."
+desc = "The same program through std::opt, std::jit."
 kind = "behavior"
 case = "../../../cases/consistency/operator_overloads/basic.cml"
-args = ["${case}", "std::opt::simplify", "std::jit"]
+args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout = "0 1 1\n4.0 7.0 2.0 -2.0 4.0 2.0 true false\n3 ab 2 -4 false 5.0\n4.0 7.0 3\n"
 
@@ -53,10 +53,10 @@ expect_stdout = "[1, 2, 3] [x, y] (2, 9) (q, r) [1, 2, 3]\n"
 
 [[tests]]
 name = "operator_overloads.generic.inline"
-desc = "The same program through std::inline, std::opt::simplify, std::fvm."
+desc = "The same program through std::opt::inline, std::opt, std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/operator_overloads/generic.cml"
-args = ["${case}", "std::inline", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 expect_exit = 0
 expect_stdout = "[1, 2, 3] [x, y] (2, 9) (q, r) [1, 2, 3]\n"
 
@@ -260,10 +260,10 @@ expect_output_not_contains = ["[Warn]", "[Error]"]
 
 [[tests]]
 name = "operator_overloads.struct_equality.passes"
-desc = "The same program through std::inline and std::opt."
+desc = "The same program through std::opt::inline and std::opt."
 kind = "behavior"
 case = "../../../cases/consistency/operator_overloads/specific/struct_equality.cml"
-args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 expect_exit = 0
 expect_stdout = "true false false true\nfalse true\nfalse true\n"
 

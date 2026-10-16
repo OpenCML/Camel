@@ -1,5 +1,5 @@
 """T13 account 1 (static side): dump the program graph after `std::macro` and after
-`std::macro std::opt::simplify`, per model.
+`std::macro std::opt`, per model.
 
 Outputs per model:
   <out>/<model>.macro.rgir.dot        AI-readable DOT (std::rgir) of the macro graph
@@ -8,7 +8,7 @@ Outputs per model:
   <out>/<model>.op_histogram.json     per-graph, per-operator node counts parsed from
                                       the DOTs (OPER nodes only), both variants
 
-Note: std::opt::simplify inlines calls, so node totals over ALL graphs go UP while
+Note: std::opt inlines calls, so node totals over ALL graphs go UP while
 the executed closure's work goes down; the histogram is context. The executed-op
 ground truth is run_opstats.py's calls/step.
 
@@ -85,7 +85,7 @@ def main() -> int:
     for model in args.models.split(","):
         stats_lines = []
         histogram = {}
-        for tag, passes in [("macro", ["std::macro"]), ("simplify", ["std::macro", "std::opt::simplify"])]:
+        for tag, passes in [("macro", ["std::macro"]), ("simplify", ["std::macro", "std::opt"])]:
             out = run_passes(model, [*passes, "std::stats", "std::rgir"])
             dot_lines, in_dot = [], False
             for line in out.splitlines():

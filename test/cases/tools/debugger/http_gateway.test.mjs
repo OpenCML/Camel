@@ -77,19 +77,19 @@ await runTest(async (t) => {
     check(done, 'continue runs the program to its end', await gw.task(task))
 
     // ---- the graph after each pass ----------------------------------------------------
-    r = await gw.post('/api/run', { target: task, passes: ['std::inline'] })
+    r = await gw.post('/api/run', { target: task, passes: ['std::opt::inline'] })
     checkEq(r.json?.ok, true, 'a completed task runs again, with passes')
     const snapshots = await until(async () => {
         const g = await gw.get(`/api/pass-graphs?target=${task}`)
         return g.json?.graphs?.length >= 2 ? g.json.graphs : null
     })
     check(snapshots, 'a run records the graph before the passes and after each pass', (await gw.get(`/api/pass-graphs?target=${task}`)).text)
-    checkEq(snapshots?.map((g) => g.pass), [null, 'std::inline'], 'one snapshot per pass, the input first')
+    checkEq(snapshots?.map((g) => g.pass), [null, 'std::opt::inline'], 'one snapshot per pass, the input first')
     r = await gw.get(`/api/pass-graph?target=${task}&index=1`)
     check(r.json?.dot?.startsWith('digraph'), 'a snapshot is the DOT text of the graph', r.text.slice(0, 200))
     const input = await gw.get(`/api/pass-graph?target=${task}&index=0`)
     check(input.json?.dot?.includes('label="double", type="FUNC"') && !r.json?.dot?.includes('label="double", type="FUNC"'),
-        'std::inline removed the call that the input graph has')
+        'std::opt::inline removed the call that the input graph has')
     r = await gw.get(`/api/pass-graph?target=${task}&index=99`)
     checkEq(r.status, 400, 'a snapshot that does not exist is a 400')
     await gw.waitTask(task, (x) => x.taskState === 'completed')
@@ -102,7 +102,7 @@ await runTest(async (t) => {
     checkEq(r.json?.ok, true, 'a second restart is accepted')
     paused = await gw.waitTask(task, (x) => x.paused)
     check(paused, 'the restarted task pauses at a breakpoint set before', await gw.task(task))
-    checkEq(paused?.lastAlloc?.origin, add.originId, 'at the node that is still in the graph after std::inline')
+    checkEq(paused?.lastAlloc?.origin, add.originId, 'at the node that is still in the graph after std::opt::inline')
 
     r = await gw.post('/api/terminate', { target: task })
     checkEq(r.json?.ok, true, 'terminate is accepted')

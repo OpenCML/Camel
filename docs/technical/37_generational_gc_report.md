@@ -205,7 +205,7 @@ one-minute load average before and after the benchmark. "ratio" is generational 
 mark-sweep on the medians. A minor collection that precedes a major one is counted in the stop
 of the major one.
 
-`std::jit` is `std::inline std::jit`; the tensor programs run after `std::macro`. `std::prl`
+`std::jit` is `std::opt::inline std::jit`; the tensor programs run after `std::macro`. `std::prl`
 uses all 18 threads, so the load after a `prl` row is in part its own. Rows marked (9) were
 measured a second time with nine rounds at a lower load, and that measurement is shown.
 
@@ -311,8 +311,8 @@ code reads an object constant from the static area of its graph each time it use
 is a root the collector updates in place) instead of containing its address, and graphs that
 need the runtime are compiled as framed code (`07_jit_architecture.md`, 17.4). Over the
 repository's programs the same graphs are compiled under both collectors, and
-`jit_const(36)` under `std::inline std::jit` takes 0.101 s with the generational collector
-against 0.102 s with mark-sweep (2.74 s on `std::inline std::fvm`). What follows is the state
+`jit_const(36)` under `std::opt::inline std::jit` takes 0.101 s with the generational collector
+against 0.102 s with mark-sweep (2.74 s on `std::opt::inline std::fvm`). What follows is the state
 this report measured.
 
 With the generational collector a graph whose static area holds an object constant (a string
@@ -326,7 +326,7 @@ arguments; the others need arguments or are meant to fail):
 | Passes | Programs with a compiled graph (mark-sweep / generational) | Graphs compiled | Graphs lost | Programs that lose one |
 |---|---|---|---|---|
 | `std::jit` | 38 / 36 | 93 / 84 | 9 | 4: `linear/nvm/lambda.cml`, `linear/nvm/render.cml`, `consistency/values/match_values.cml`, `para/core/unordered_foreach_smoke.cml` |
-| `std::inline std::jit` | 26 / 26 | 38 / 38 | 0 | 0 |
+| `std::opt::inline std::jit` | 26 / 26 | 38 / 38 | 0 | 0 |
 
 The new check refuses 71 (14 after inlining) graphs in all, but all except the 9 are graphs
 that the compiler refuses for another reason with mark-sweep too (an operator call, a call of
@@ -339,8 +339,8 @@ that returns a string constant.
 
 | Benchmark | mark-sweep s | generational s | ratio | Load |
 |---|---|---|---|---|
-| jit_const(36), `std::inline std::jit` | 0.100 [0.096, 0.116] | 2.09 [2.02, 2.26] | 21 | 17 / 17 |
-| jit_const(36), `std::inline std::fvm` | 2.50 [2.10, 4.75] | 2.53 [1.97, 3.09] | 1.01 | 16 / 17 |
+| jit_const(36), `std::opt::inline std::jit` | 0.100 [0.096, 0.116] | 2.09 [2.02, 2.26] | 21 | 17 / 17 |
+| jit_const(36), `std::opt::inline std::fvm` | 2.50 [2.10, 4.75] | 2.53 [1.97, 3.09] | 1.01 | 16 / 17 |
 
 Removing the restriction needs either stack maps or constants loaded through a table that the
 collector updates; neither was attempted.
@@ -463,7 +463,7 @@ The facts, from the sections above:
 3. For data that is built and kept it is 10 to 45 % slower and is stopped two to three times
    as long in total; the longest single stop is about the same.
 4. For tensor work and for code that does not allocate there is no measured difference.
-5. (Superseded since, see 6.1.) `std::jit` loses 9 of 93 compiled graphs in the test programs (none after `std::inline`),
+5. (Superseded since, see 6.1.) `std::jit` loses 9 of 93 compiled graphs in the test programs (none after `std::opt::inline`),
    and a hot function that returns or uses an object constant can lose a factor of 20.
 6. The `any` defect turned from "wrong only under stress" into "wrong output, exit code 0" in
    a ten-line program that uses `json.decode` (6.4). Closed: `any` is removed.
@@ -481,7 +481,7 @@ two things are settled.**
   set in both modes.
 
 Neither the JIT restriction nor the cost for long-lived data is a reason to wait in itself:
-the first costs nothing after `std::inline` in the programs examined and has a known remedy,
+the first costs nothing after `std::opt::inline` in the programs examined and has a known remedy,
 the second is the ordinary price of a copying young generation (a lower
 `CAMEL_GC_PROMOTION_AGE` should reduce it; that was not measured). The measurements argue for the switch once the two points above are
 closed, and the stall of the mark-sweep allocator argues for not staying with it indefinitely.

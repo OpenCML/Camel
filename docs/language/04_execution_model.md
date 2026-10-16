@@ -283,7 +283,7 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
 | `std::jit` | 带即时编译的字节码虚拟机；不能编译的图由解释器执行 |
 | `std::prl` | 并行调度：互不依赖的节点可以并发执行 |
 | `std::macro` | 提前求值 macro 调用 |
-| `std::opt`、`std::inline`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt::simplify` | 优化 |
+| `std::opt`、`std::opt::inline`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt` | 优化 |
 | `std::rgir`、`std::gir` | 打印图（DOT 格式），不运行 |
 | `std::stats` | 打印图的统计数字，图原样传下去 |
 | `onnx::export`、`std::cpp` | 转译为 ONNX 模型、C++ 源码 |
