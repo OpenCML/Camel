@@ -33,6 +33,11 @@
  *
  * Beside them, `:mark/unordered_reduce_arr` declares its index semantics and its reduction law
  * (docs/design/op-semantics 6.6 and 7): an unordered reduction by the function it is given.
+ *
+ * The built-in operators that touch resources declare them (docs/design/op-semantics 8,
+ * declareBuiltinOperatorResources): the variable operators and the assignments their cell,
+ * the console and the profiler their ambient state. The higher-order `:mark/` operators run
+ * the functions they are given and are left to the conservative reading.
  */
 
 #include "builtin.h"
@@ -40,6 +45,7 @@
 #include "camel/core/operator_table.h"
 
 #include <string>
+#include <string_view>
 
 namespace {
 
@@ -191,4 +197,63 @@ void declareBuiltinOperatorSemantics() {
         }
     }
     declareUnorderedReduce();
+}
+
+void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
+    auto &table      = OperatorTable::instance();
+    const auto cell  = [](AccessMode mode) { return operandAccess(ResourceClass::Variable, 0, mode); };
+    const auto alias = [](uint8_t operand) {
+        return ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = operand};
+    };
+    // `var v = e`: a new cell.
+    table.declareResources(
+        ":var/new",
+        ResourceSpec{.allocates = Resource{.cls = ResourceClass::Variable}});
+    // Reading a variable reads its cell; the value read is (or shares) what the cell holds.
+    for (const char *uri : {":var/get", ":var/peek"}) {
+        table.declareResources(uri, ResourceSpec{.accesses = {cell(AccessMode::Read)}, .result = alias(0)});
+    }
+    // `:var/take` hands an in-place form the cell's own array when nothing else holds it, so
+    // the cell's content changes with what the form does (Builder::inPlaceRebindingOf).
+    table.declareResources(
+        ":var/take",
+        ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)});
+    // The assignments: `=` stores its second operand (and returns it); a compound assignment
+    // reads the cell, combines and stores (and returns the new value, a number or a string);
+    // `acc = acc->append<v>` may append to the cell's own array and returns it.
+    for (std::string_view name : names) {
+        if (!name.starts_with("op/assn")) {
+            continue;
+        }
+        const std::string uri = ":" + std::string(name);
+        const std::string_view rest = name.substr(std::string_view("op/assn").size());
+        ResourceSpec spec;
+        if (rest.empty() || rest == "_owned" || (rest.size() == 2 && rest[0] == '_')) {
+            spec = ResourceSpec{.accesses = {cell(AccessMode::Write)}, .result = alias(1)};
+        } else if (rest == "_append") {
+            spec = ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)};
+        } else {
+            spec = ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}};
+        }
+        table.declareResources(uri, std::move(spec));
+    }
+    // The console and the profiler: state outside the values, visible outside the program.
+    for (const char *uri : {":io/print", ":io/println"}) {
+        table.declareResources(
+            uri,
+            ResourceSpec{.accesses = {ambientAccess("io:stdout", AccessMode::Write)}, .externalEffect = true});
+    }
+    table.declareResources(
+        ":io/input",
+        ResourceSpec{
+            .accesses       = {ambientAccess("io:stdin", AccessMode::ReadModifyWrite)},
+            .externalEffect = true});
+    for (const char *uri :
+         {":profiler/begin", ":profiler/end", ":profiler/instant", ":profiler/enable"}) {
+        table.declareResources(
+            uri,
+            ResourceSpec{
+                .accesses       = {ambientAccess("profiler", AccessMode::ReadModifyWrite)},
+                .externalEffect = true});
+    }
 }

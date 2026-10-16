@@ -1,0 +1,5 @@
+func main(): int sync {
+    let n = loop s = 3 while s do s - 1
+    println(n)
+    return 0
+}

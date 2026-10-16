@@ -155,6 +155,14 @@ struct OperatorTraits {
     /// While it runs, the operator calls function values it received as arguments (the
     /// higher-order operators and `attempt`), so what it does depends on those functions.
     bool callsGraphs = false;
+    /// The operator reads the graphs of the function values it receives as arguments (it
+    /// compiles, exports or differentiates them) instead of only calling them. Such an operator
+    /// is given the program's own graphs, with their structure (a LOOP node: docs/design/
+    /// op-semantics 11.4), also on a back end that runs a private, lowered copy of the program:
+    /// lowerLoopsToTailRecursion (camel/runtime/loop_lowering.h) passes each of its operands of
+    /// function type through `:graph/original`, which takes a function value of the copy back
+    /// to the program's graph it was copied from (GCGraph::originalGraph).
+    bool inspectsGraphs = false;
 };
 
 /**
@@ -224,6 +232,10 @@ class OperatorTable {
     bool isPure(OperId id) const;
     bool isPure(std::string_view uri) const;
 
+    /// True when the operator reads the graphs of the function values it receives
+    /// (OperatorTraits::inspectsGraphs). Lock-free.
+    bool inspectsGraphs(OperId id) const { return (traitBits(id) & kInspectsGraphs) != 0; }
+
     /// True when running the operator is an effect visible outside the program's variables:
     /// it is neither pure nor state-only. True for an undeclared operator.
     bool hasExternalEffect(OperId id) const;
@@ -287,6 +299,14 @@ class OperatorTable {
      *   4. Every reduction law is consistent in itself (sem::checkLaw): its constants fit the
      *      accumulator, a float add or multiply does not claim exact associativity, a law that
      *      starts from its first contribution faults on an empty domain.
+     *   5. The resources are consistent in themselves (sem::checkResources) and with the
+     *      traits: a pure operator touches none; any other touches, allocates or affects
+     *      something; an external effect only where the traits allow one (not pure, not
+     *      state-only), while an operator the traits count as external may declare none (a
+     *      refinement: an assignment writes the program's own cell). Checked against the
+     *      traits declared so far: declare them first.
+     *   6. A definition names a library module and a function, and binds every parameter to
+     *      an operand (the rest is checked when the library is compiled).
      *
      * The instances an instantiation function returns cannot be checked here (it is code);
      * sem::instantiate validates each one structurally, and the property tests compare the
@@ -295,6 +315,25 @@ class OperatorTable {
      * Every declaration, new or replacing, increments declarationEpoch().
      */
     void declareSemantics(std::string_view uri, sem::OperatorSemantics semantics);
+
+    /// Declares the resources of the operator `uri` (docs/design/op-semantics, section 8): its
+    /// semantics record gets them, a record of its own (`uri@1.0`, nothing else declared) when
+    /// it has none, otherwise the same record one minor version up. Checked as
+    /// declareSemantics checks (check 5); throws std::invalid_argument when rejected.
+    void declareResources(std::string_view uri, sem::ResourceSpec resources);
+
+    /// Declares the definition of the operator `uri` (docs/design/op-semantics, section 9): a
+    /// function of a library module written in Camel that is its normative definition. Its
+    /// semantics record gets it, as declareResources gives resources (a record of its own, or
+    /// the existing one a minor version up: a definition is a fact added). Checked as
+    /// declareSemantics checks (check 6); the definition itself is compiled and checked when it
+    /// is first asked for (camel/runtime/definitions.h).
+    void declareDefinition(std::string_view uri, sem::Definition definition);
+
+    /// declareResources for `protocol:name`, one `{name, resources}` each (a module's load).
+    void declareResources(
+        std::string_view protocol,
+        std::initializer_list<std::pair<std::string_view, sem::ResourceSpec>> operators);
 
     /// The declared semantics, or nullptr when nobody declared any. Lock-free; the record
     /// stays valid until the process exits.
@@ -321,12 +360,13 @@ class OperatorTable {
     // declared it". kNoFault is stored inverted so that an all-zero byte is the conservative
     // reading of every trait.
     enum : uint8_t {
-        kDeclared    = 1 << 0,
-        kPure        = 1 << 1,
-        kElementwise = 1 << 2,
-        kStateOnly   = 1 << 3,
-        kNoFault     = 1 << 4,
-        kCallsGraphs = 1 << 5,
+        kDeclared       = 1 << 0,
+        kPure           = 1 << 1,
+        kElementwise    = 1 << 2,
+        kStateOnly      = 1 << 3,
+        kNoFault        = 1 << 4,
+        kCallsGraphs    = 1 << 5,
+        kInspectsGraphs = 1 << 6,
     };
 
     // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isMarked).

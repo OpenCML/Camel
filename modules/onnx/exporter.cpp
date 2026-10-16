@@ -721,6 +721,14 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         return evalCall(act, ref);
     case GCNodeKind::Call:
         return evalIndirectCall(act, ref);
+    case GCNodeKind::Loop:
+        // A LOOP node maps one to one onto an ONNX Loop (docs/design/loops 5.7); that
+        // translation is the next step. Until then the export refuses it where it is written
+        // rather than lowering it to a recursion it would have to recover again.
+        unsupported(
+            act,
+            "a 'loop' expression is not exported to ONNX yet; write the loop as a "
+            "tail-recursive function, which is exported as an ONNX Loop");
     default:
         unsupported(
             act,

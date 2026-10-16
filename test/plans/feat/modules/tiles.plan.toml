@@ -78,3 +78,77 @@ envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
 expect_output_contains = ["mean of empty tensor"]
 timeout_ms = 10000
+
+# A function given to Tiles is read as the program wrote it, LOOP included, on every back end:
+# std::fvm, std::jit and std::prl run a private copy with the loops lowered to tail recursion,
+# and hand Tiles the program's own graph (OperatorTraits::inspectsGraphs, op-semantics 11.4).
+# Tiles does not compile LOOP yet: its refusal names the node, the same on all four.
+[[tests]]
+name = "loop_structure_nvm"
+kind = "negative"
+case = "../../../cases/modules/tiles/loop_source.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["tiles: twice node 2: unsupported graph node kind 15"]
+timeout_ms = 10000
+
+[[tests]]
+name = "loop_structure_fvm"
+kind = "negative"
+case = "../../../cases/modules/tiles/loop_source.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["tiles: twice node 2: unsupported graph node kind 15"]
+timeout_ms = 10000
+
+[[tests]]
+name = "loop_structure_jit"
+kind = "negative"
+case = "../../../cases/modules/tiles/loop_source.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["tiles: twice node 2: unsupported graph node kind 15"]
+timeout_ms = 10000
+
+[[tests]]
+name = "loop_structure_prl"
+kind = "negative"
+case = "../../../cases/modules/tiles/loop_source.cml"
+args = ["${case}", "std::prl"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["tiles: twice node 2: unsupported graph node kind 15"]
+timeout_ms = 10000
+
+[[tests]]
+name = "loop_structure_closure_nvm"
+kind = "negative"
+case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["node 3: unsupported graph node kind 15"]
+timeout_ms = 10000
+
+[[tests]]
+name = "loop_structure_closure_fvm"
+kind = "negative"
+case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["node 3: unsupported graph node kind 15"]
+timeout_ms = 10000
+
+[[tests]]
+name = "loop_structure_closure_prl"
+kind = "negative"
+case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
+args = ["${case}", "std::prl"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["node 3: unsupported graph node kind 15"]
+timeout_ms = 10000

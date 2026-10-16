@@ -29,6 +29,7 @@
 
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/capacity.h"
+#include "camel/runtime/reachable.h"
 #include "runtime/graph_build.h"
 
 #include "camel/core/mm.h"
@@ -368,6 +369,14 @@ void visitDraftGraphs(
             continue;
         }
         const DraftNodeHeader *header = draft.header(id);
+        if (header && header->kind == GCNodeKind::Loop) {
+            const auto *loop = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(id).data());
+            if (loop->condGraph) {
+                visitor(loop->condGraph);
+            }
+            visitor(loop->bodyGraph);
+            continue;
+        }
         if (!header || header->kind != GCNodeKind::Func) {
             continue;
         }
@@ -403,6 +412,13 @@ std::vector<GCGraph *> collectDraftDependencyGraphs(const GraphDraft &draft) {
             continue;
         }
         const DraftNodeHeader *header = draft.header(id);
+        if (header && header->kind == GCNodeKind::Loop) {
+            // A LOOP node calls its two graphs each round: they are callees too.
+            const auto *loop = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(id).data());
+            pushUniqueGraph(dependencies, loop->condGraph);
+            pushUniqueGraph(dependencies, loop->bodyGraph);
+            continue;
+        }
         if (!header || header->kind != GCNodeKind::Func) {
             continue;
         }
@@ -591,6 +607,133 @@ GCGraph *allocateGraph(
     }
 }
 
+/// A static value of `before` and the value the commit put in its place in `after` mean the
+/// same: the same slot, or (a function value, a tuple of them) the copy the commit made, over the
+/// copy of the same graph. Anything else that differs counts as a change.
+bool sameStaticValue(slot_t before, slot_t after, Type *type, const GraphMap &rewritten) {
+    if (before == after) {
+        return true;
+    }
+    if (type == nullptr || before == NullSlot || after == NullSlot) {
+        return false;
+    }
+    if (type->code() == TypeCode::Function) {
+        auto *a = fromSlot<::Function *>(before);
+        auto *b = fromSlot<::Function *>(after);
+        auto it = rewritten.find(a->graph());
+        if (it == rewritten.end() || it->second != b->graph() || a->tupleType() != b->tupleType()) {
+            return false;
+        }
+        const ::Tuple *ca = a->tuple(), *cb = b->tuple();
+        if (ca == nullptr || cb == nullptr) {
+            return ca == cb;
+        }
+        for (size_t i = 0; i < a->tupleType()->size(); ++i) {
+            if (!sameStaticValue(ca->get<slot_t>(i), cb->get<slot_t>(i), a->tupleType()->typeAt(i), rewritten)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (type->code() == TypeCode::Tuple) {
+        auto *tupleType = static_cast<TupleType *>(type);
+        auto *a         = fromSlot<::Tuple *>(before);
+        auto *b         = fromSlot<::Tuple *>(after);
+        for (size_t i = 0; i < tupleType->size(); ++i) {
+            if (!sameStaticValue(a->get<slot_t>(i), b->get<slot_t>(i), tupleType->typeAt(i), rewritten)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+/**
+ * The commit encoded `after` from the draft of `before`, and they have the same content: the
+ * same records, edges, payloads, ports, anchors, permissions, frame and static layout, the same
+ * static values and the same graphs referred to (each by its copy). Source positions do not
+ * count. A pass that asked to edit a graph and changed nothing leaves it the same graph to the
+ * fact store (GCGraph::serial). Conservative: what it cannot compare counts as a change.
+ */
+bool sameContent(const GCGraph &before, const GCGraph &after, const GraphMap &rewritten) {
+    const GCGraphNativePayload *a = before.nodePayload();
+    const GCGraphNativePayload *b = after.nodePayload();
+    if (a == nullptr || b == nullptr) {
+        return false;
+    }
+    const auto sameArray = [](const auto *x, const auto *y, size_t n) {
+        return n == 0 || (x != nullptr && y != nullptr && std::memcmp(x, y, n * sizeof(*x)) == 0);
+    };
+    if (a->nodeCount != b->nodeCount || a->edgeCount != b->edgeCount ||
+        a->payloadWordCount != b->payloadWordCount || a->normPortCount != b->normPortCount ||
+        a->withPortCount != b->withPortCount || a->closureCount != b->closureCount ||
+        a->branchArmCount != b->branchArmCount || a->entryNode != b->entryNode ||
+        a->exitNode != b->exitNode || a->outputNode != b->outputNode ||
+        a->returnNode != b->returnNode || a->returnKind != b->returnKind ||
+        before.funcType() != after.funcType() || before.closureType() != after.closureType() ||
+        before.staticDataType() != after.staticDataType() ||
+        before.hasNodePermissions() != after.hasNodePermissions()) {
+        return false;
+    }
+    if (!sameArray(a->nodes, b->nodes, size_t(a->nodeCount) + 1) ||
+        !sameArray(a->inputs, b->inputs, a->edgeCount) ||
+        !sameArray(a->normPorts, b->normPorts, a->normPortCount) ||
+        !sameArray(a->withPorts, b->withPorts, a->withPortCount) ||
+        !sameArray(a->closure, b->closure, a->closureCount) ||
+        !sameArray(a->branchArms, b->branchArms, a->branchArmCount) ||
+        (before.hasNodePermissions() && !sameArray(a->permissions, b->permissions, a->nodeCount))) {
+        return false;
+    }
+    // Payloads, node by node: an OPER's cached implementation pointer is not content.
+    for (gc_node_ref_t ref = 0; ref < before.nodeCount(); ++ref) {
+        if (before.node(ref)->kind == GCNodeKind::Oper) {
+            if (before.nodeBodyAs<GCOperBody>(ref)->oper != after.nodeBodyAs<GCOperBody>(ref)->oper) {
+                return false;
+            }
+            continue;
+        }
+        const auto pa = before.nodePayloadBytes(ref), pb = after.nodePayloadBytes(ref);
+        if (pa.size() != pb.size() || !sameArray(pa.data(), pb.data(), pa.size())) {
+            return false;
+        }
+    }
+    // The frame: the same slot types.
+    const TupleType *fa = before.runtimeDataType(), *fb = after.runtimeDataType();
+    if ((fa == nullptr) != (fb == nullptr) || (fa && fa->size() != fb->size())) {
+        return false;
+    }
+    for (size_t i = 0; fa && i < fa->size(); ++i) {
+        if (fa->typeAt(i) != fb->typeAt(i)) {
+            return false;
+        }
+    }
+    // The graphs referred to, each by its copy, with the same roles.
+    if (before.refs().size() != after.refs().size()) {
+        return false;
+    }
+    for (size_t i = 0; i < before.refs().size(); ++i) {
+        auto it = rewritten.find(before.refs()[i]);
+        if (it == rewritten.end() || it->second != after.refs()[i] ||
+            before.refRoles(i) != after.refRoles(i)) {
+            return false;
+        }
+    }
+    // The static values.
+    if (const TupleType *statics = before.staticDataType()) {
+        const auto sa = before.staticSlots(), sb = after.staticSlots();
+        if (sa.size() != sb.size()) {
+            return false;
+        }
+        for (size_t i = 1; i < sa.size() && i < statics->size(); ++i) {
+            if (!sameStaticValue(sa[i], sb[i], statics->typeAt(i), rewritten)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 size_t RuntimeSpecializationKeyHasher::operator()(const RuntimeSpecializationKey &key) const {
@@ -657,9 +800,45 @@ GraphDraft &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
     return *it->second->draft;
 }
 
-GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) { return ensureDraft(graph); }
+GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) {
+    edited_.insert(graph);
+    return ensureDraft(graph);
+}
 
-GraphDraft &RuntimeGraphDraftSession::rootDraft() { return ensureDraft(runtimeRoot_); }
+GraphDraft &RuntimeGraphDraftSession::rootDraft() { return edit(runtimeRoot_); }
+
+std::unordered_set<GCGraph *>
+RuntimeGraphDraftSession::changedGraphs(const std::vector<GCGraph *> &closure) const {
+    // A graph changed when it was edited, or when a graph it refers to changed (the serial is
+    // transitive, see GCGraph::serial): walk the references backwards from the edited ones.
+    std::unordered_map<GCGraph *, std::vector<GCGraph *>> referrers;
+    for (GCGraph *graph : closure) {
+        visitDraftGraphs(context_, *drafts_.at(graph)->draft, [&](GCGraph *ref) {
+            if (ref) {
+                referrers[ref].push_back(graph);
+            }
+        });
+    }
+    std::unordered_set<GCGraph *> changed;
+    std::vector<GCGraph *> work;
+    for (GCGraph *graph : closure) {
+        if (edited_.contains(graph) && changed.insert(graph).second) {
+            work.push_back(graph);
+        }
+    }
+    while (!work.empty()) {
+        GCGraph *graph = work.back();
+        work.pop_back();
+        if (auto it = referrers.find(graph); it != referrers.end()) {
+            for (GCGraph *referrer : it->second) {
+                if (changed.insert(referrer).second) {
+                    work.push_back(referrer);
+                }
+            }
+        }
+    }
+    return changed;
+}
 
 GCGraph *RuntimeGraphDraftSession::findSpecialization(const RuntimeSpecializationKey &key) const {
     if (auto it = specializationCache_.find(key); it != specializationCache_.end()) {
@@ -740,7 +919,7 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectReachableRuntimeGraphs()
     return collectCommitClosure();
 }
 
-GCGraph *RuntimeGraphDraftSession::commit() {
+GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
     if (!runtimeRoot_) {
         return nullptr;
     }
@@ -749,7 +928,9 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     ASSERT(!closure.empty(), "Runtime draft commit received an empty closure.");
     for (GCGraph *graph : closure) {
         // Rewrites may leave gates that wait on nothing; they are plain forwarding.
-        (void)ensureDraft(graph).dissolveUnorderedGates();
+        if (ensureDraft(graph).dissolveUnorderedGates() > 0) {
+            edited_.insert(graph);
+        }
     }
 
     GCGraph *oldRuntimeRoot = runtimeRoot_;
@@ -778,22 +959,41 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     for (GCGraph *graph : closure) {
         validateRuntimeGraphCalls(rewritten.at(graph));
     }
+    // The copy is the same graph to the fact store; a new revision only where it changed: a
+    // graph edited (and not encoded back to the same content), or one referring to such a graph.
+    std::erase_if(edited_, [&](GCGraph *graph) {
+        auto it = rewritten.find(graph);
+        return it != rewritten.end() && sameContent(*graph, *it->second, rewritten);
+    });
+    const std::unordered_set<GCGraph *> changed = changedGraphs(closure);
+    for (GCGraph *graph : closure) {
+        GCGraphBuildAccess::inheritIdentity(rewritten.at(graph), graph, changed.contains(graph));
+    }
 
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
     // program is left as it is.
-    if (context_->currentRuntimeRoot() == oldRuntimeRoot) {
+    if (!detached && context_->currentRuntimeRoot() == oldRuntimeRoot) {
         runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
     } else {
         runtimeRoot_ = rewritten.at(oldRuntimeRoot);
+        // A private copy of a program: each copy of a graph the program had (not of one the
+        // rewrite made) remembers that graph, for the operators that read graphs
+        // (GCGraph::originalGraph).
+        const std::vector<GCGraph *> programGraphs = collectReachableGraphs(oldRuntimeRoot);
+        const std::unordered_set<GCGraph *> fromProgram(programGraphs.begin(), programGraphs.end());
         std::vector<GCGraph *> graphs;
         graphs.reserve(rewritten.size());
-        for (const auto &[_, graph] : rewritten) {
+        for (const auto &[source, graph] : rewritten) {
+            if (fromProgram.contains(source)) {
+                GCGraphBuildAccess::setOriginal(graph, source);
+            }
             graphs.push_back(graph);
         }
         context_->trackDetachedRuntimeGraphs(graphs);
     }
     drafts_.clear();
+    edited_.clear();
     return runtimeRoot_;
 }
 

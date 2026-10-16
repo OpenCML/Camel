@@ -78,6 +78,18 @@ bool TimeModule::load() {
             {"strftime", false},
             {"strptime", false},
         });
+    // What each touches (docs/design/op-semantics 8): the clock; the time zone of the process.
+    {
+        using camel::core::sem::AccessMode;
+        using camel::core::sem::externalAmbient;
+        camel::core::OperatorTable::instance().declareResources(
+            "time",
+            {
+                {"now", externalAmbient("time:clock", AccessMode::Read)},
+                {"strftime", externalAmbient("process:environment", AccessMode::Read)},
+                {"strptime", externalAmbient("process:environment", AccessMode::Read)},
+            });
+    }
     loaded_ = true;
     return true;
 }

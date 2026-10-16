@@ -186,6 +186,17 @@ string recordLabel(
         return "SYNC";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
+    case camel::runtime::GCNodeKind::Loop: {
+        // `LOOP while cond=f.loop1.cond body=f.loop1.body` (graph model 3.5, the LOOP card).
+        const auto *cond = graph->loopCondGraphOf(nodeRef);
+        const auto *body = graph->loopBodyGraphOf(nodeRef);
+        std::string text =
+            std::format("LOOP {}", camel::core::loopKindName(graph->loopKindOf(nodeRef)));
+        if (cond) {
+            text += " cond=" + cond->name();
+        }
+        return text + " body=" + (body ? body->name() : std::string("?"));
+    }
     default:
         return "NODE";
     }
@@ -219,6 +230,8 @@ string recordType(const camel::runtime::GCNode &record) {
         return "SYNC";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
+    case camel::runtime::GCNodeKind::Loop:
+        return "LOOP";
     default:
         return "NODE";
     }
@@ -238,6 +251,7 @@ string recordShape(const camel::runtime::GCNode &record) {
     case camel::runtime::GCNodeKind::Gate:
         return "diamond";
     case camel::runtime::GCNodeKind::Func:
+    case camel::runtime::GCNodeKind::Loop:
         return "Mdiamond";
     default:
         return "circle";

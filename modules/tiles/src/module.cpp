@@ -412,6 +412,58 @@ class TilesModule final : public BuiltinModule {
              {"benchmark", false},
              {"available", false},
              {"device", false}});
+        // These compile the graph of the function value they receive: a back end that runs a
+        // private copy of the program with its loops lowered hands them the program's own
+        // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
+        for (const char *name : {"run", "run_device", "source", "inspect", "benchmark"}) {
+            core::OperatorTable::instance().set(
+                std::string("tiles:") + name,
+                {.pure = false, .inspectsGraphs = true});
+        }
+        // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
+        // resource `tiles:device` (upload makes one; run and run_device read the device values
+        // among their inputs, run_device returns new ones that may be inputs again); the driver
+        // and the device are ambient state `tiles:driver`. Every operator is an effect outside
+        // the program, as its traits say.
+        {
+            using namespace core::sem;
+            const Resource device{.cls = ResourceClass::Foreign, .name = "tiles:device"};
+            const auto readsDevice = [&] {
+                return operandAccess(ResourceClass::Foreign, 0, AccessMode::Read, device.name);
+            };
+            const auto driver = [](AccessMode mode) { return ambientAccess("tiles:driver", mode); };
+            core::OperatorTable::instance().declareResources(
+                "tiles",
+                {
+                    {"upload",
+                     ResourceSpec{
+                         .accesses       = {driver(AccessMode::ReadModifyWrite)},
+                         .allocates      = device,
+                         .externalEffect = true}},
+                    {"download",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .externalEffect = true}},
+                    {"run",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .externalEffect = true}},
+                    {"run_device",
+                     ResourceSpec{
+                         .accesses  = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .result    = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},
+                         .allocates = device,
+                         .externalEffect = true}},
+                    {"benchmark",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .externalEffect = true}},
+                    {"source", externalAmbient("tiles:driver", AccessMode::Read)},
+                    {"inspect", externalAmbient("tiles:driver", AccessMode::Read)},
+                    {"available", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
+                    {"device", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
+                });
+        }
         loaded_ = true;
         return true;
     }

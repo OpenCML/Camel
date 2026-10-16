@@ -1,4 +1,4 @@
 func main(): int sync {
-    let total = loop acc = 0 { acc + 1 }
+    let total = loop acc = 0 do acc + 1
     return 0
 }

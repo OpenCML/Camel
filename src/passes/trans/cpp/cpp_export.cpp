@@ -18,6 +18,7 @@
  */
 
 #include "cpp_export.h"
+#include "camel/runtime/loop_lowering.h"
 
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/source/manager.h"
@@ -44,6 +45,9 @@ const char *passName(CppEmitMode mode) {
 
 camel::runtime::GCGraph *CppDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     ASSERT(graph != nullptr, "C++ dump requires a non-null runtime root graph.");
+    // A loop is emitted as the tail recursion it means (camel/runtime/loop_lowering.h), on a
+    // private copy of the program; the generated tail calls do not grow the stack.
+    graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
 
     camel::passes::cpp::ProgramEmitter emitter(context_, mode_);
     try {

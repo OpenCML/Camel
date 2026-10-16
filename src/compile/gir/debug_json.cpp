@@ -95,6 +95,8 @@ std::string nodeKindName(GCNodeKind kind) {
         return "GATE";
     case GCNodeKind::Dref:
         return "DREF";
+    case GCNodeKind::Loop:
+        return "LOOP";
     }
     return "UNKNOWN";
 }
@@ -142,6 +144,13 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
     }
     if (header && header->kind == GCNodeKind::Oper) {
         j["operName"] = graph->operTarget(node)->name();
+    }
+    if (header && header->kind == GCNodeKind::Loop) {
+        const auto &target = graph->loopTarget(node);
+        if (target.cond) {
+            j["loopCondGraphId"] = target.cond->stableId();
+        }
+        j["loopBodyGraphId"] = target.body->stableId();
     }
     if (auto *sourceContext = sourceContextForGraph(graph)) {
         auto origin = sourceContext->resolveGirNodeOrigin(

@@ -28,6 +28,7 @@
 
  */
 
+#include "camel/runtime/loop.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/capacity.h"
 #include "camel/runtime/draft.h"
@@ -328,6 +329,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
         case GCNodeKind::Brch:
         case GCNodeKind::Join:
         case GCNodeKind::Oper:
+        case GCNodeKind::Loop:
             if (!node->hasPayload()) {
                 throw std::runtime_error(std::format(
                     "Runtime graph '{}' has node {} of a kind with a payload without one.",
@@ -384,6 +386,24 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                         "Runtime graph '{}' has FUNC node {} without callee graph.",
                         graph->name(),
                         ref));
+            }
+        }
+        if (node->kind == GCNodeKind::Loop) {
+            // The two graphs are entries of the reference table, marked callee (I12/I13): the
+            // condition exactly when the form has one.
+            const auto *body     = graph->nodeBodyAs<GCLoopRef>(ref);
+            const auto validLoop = [&](uint32_t index) {
+                return index < graph->refs().size() && graph->refs()[index] &&
+                       (graph->refRoles(index) & kGraphRefCallee) != 0;
+            };
+            const bool hasCond = camel::core::loopHasCondition(body->kind);
+            if (static_cast<uint8_t>(body->kind) > static_cast<uint8_t>(camel::core::LoopKind::ForWhile) ||
+                !validLoop(body->bodyRef) ||
+                (hasCond ? !validLoop(body->condRef) : body->condRef != kNoLoopGraph)) {
+                throw std::runtime_error(std::format(
+                    "Runtime graph '{}' has LOOP node {} without its condition or body graph.",
+                    graph->name(),
+                    ref));
             }
         }
         if (node->kind == GCNodeKind::Call) {
@@ -538,6 +558,9 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
         break;
     case GCNodeKind::Join:
         bodyBytes = sizeof(GCJoinBody);
+        break;
+    case GCNodeKind::Loop:
+        bodyBytes = sizeof(GCLoopRef);
         break;
     default:
         return 0;
@@ -762,6 +785,40 @@ void emitDraftPayload(
                 writeBody(payload.payload, header, GCFuncRef{.ref = found->second});
             }
             break;
+        case GCNodeKind::Loop: {
+            // The draft holds the two graphs; the frozen node names them by their indexes in
+            // the reference table, as a FUNC node names its callee.
+            ASSERT(payloadBytes.size_bytes() >= sizeof(GCLoopBody), "Draft LOOP payload is missing.");
+            GCLoopBody body = *reinterpret_cast<const GCLoopBody *>(payloadBytes.data());
+            if (resolveRuntimeGraph) {
+                body.condGraph = body.condGraph ? resolveRuntimeGraph(body.condGraph) : nullptr;
+                body.bodyGraph = resolveRuntimeGraph(body.bodyGraph);
+            }
+            const auto *refIndex = payload.refIndex;
+            const auto indexOf   = [&](GCGraph *target) -> uint32_t {
+                if (target == nullptr) {
+                    return kNoLoopGraph;
+                }
+                const auto found =
+                    refIndex ? refIndex->find(target)
+                             : std::unordered_map<const GCGraph *, uint32_t>::const_iterator{};
+                if (refIndex == nullptr || found == refIndex->end()) {
+                    throw std::runtime_error(std::format(
+                        "LOOP node {} names a graph that is not among the graphs this graph "
+                        "calls (its reference table).",
+                        planned.ref));
+                }
+                return found->second;
+            };
+            writeBody(
+                payload.payload,
+                header,
+                GCLoopRef{
+                    .kind    = body.kind,
+                    .condRef = indexOf(body.condGraph),
+                    .bodyRef = indexOf(body.bodyGraph),
+                });
+        } break;
         case GCNodeKind::Call:
             writeBody(
                 payload.payload,
@@ -1174,7 +1231,13 @@ GCGraph::GCGraph(
     : debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
       staticDataType_(staticDataType), closureType_(closureType), outerGraph_(outerGraph),
       refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),
-      staticArea_(staticArea) {}
+      staticArea_(staticArea) {
+    // A new graph: a lineage and a revision of its own (graph facts, facts.h). A commit that
+    // encoded it as the copy of another graph replaces them (GCGraphBuildAccess::inheritIdentity).
+    static std::atomic<uint64_t> serials{0};
+    serial_  = serials.fetch_add(1, std::memory_order_relaxed) + 1;
+    lineage_ = serial_;
+}
 
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft) {
     return describeDraftPayload(draft, planDraftPayload(draft));
@@ -1199,6 +1262,12 @@ void validateRuntimeGraphCalls(const GCGraph *graph) {
     }
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         const GCNode *node = *it;
+        if (node && node->kind == GCNodeKind::Loop) {
+            // I13, I19 (docs/design/op-semantics 11.2): the node's inputs and the two graphs'
+            // ports agree; the types are checked with the graph's types (I18).
+            validateRuntimeLoopInterface(graph, it.ref());
+            continue;
+        }
         if (!node || node->kind != GCNodeKind::Func) {
             continue;
         }
@@ -1399,6 +1468,9 @@ std::span<const std::byte> GCGraph::nodePayloadBytes(gc_node_ref_t ref) const {
     case GCNodeKind::Join:
         bytes = sizeof(GCJoinBody);
         break;
+    case GCNodeKind::Loop:
+        bytes = sizeof(GCLoopRef);
+        break;
     default:
         return {};
     }
@@ -1412,6 +1484,24 @@ GCGraph *GCGraph::directCalleeGraphOf(gc_node_ref_t ref) const {
         return nullptr;
     }
     const uint32_t index = nodeBodyAs<GCFuncRef>(ref)->ref;
+    return index < refCount_ ? refs_[index] : nullptr;
+}
+
+GCGraph *GCGraph::loopCondGraphOf(gc_node_ref_t ref) const {
+    const GCNode *n = node(ref);
+    if (!n || n->kind != GCNodeKind::Loop || !n->hasPayload()) {
+        return nullptr;
+    }
+    const uint32_t index = nodeBodyAs<GCLoopRef>(ref)->condRef;
+    return index < refCount_ ? refs_[index] : nullptr;
+}
+
+GCGraph *GCGraph::loopBodyGraphOf(gc_node_ref_t ref) const {
+    const GCNode *n = node(ref);
+    if (!n || n->kind != GCNodeKind::Loop || !n->hasPayload()) {
+        return nullptr;
+    }
+    const uint32_t index = nodeBodyAs<GCLoopRef>(ref)->bodyRef;
     return index < refCount_ ? refs_[index] : nullptr;
 }
 
@@ -1578,6 +1668,9 @@ camel::core::rtdata::Object *GCGraph::clone(
         refCount_,
         nativePayload_,
         staticArea_);
+    graph->originalGraph_ = originalGraph_;
+    graph->lineage_       = lineage_; // the same content: the same graph and revision
+    graph->serial_        = serial_;
     for (size_t i = 0; i < kExtraSlotCount; ++i) {
         graph->extraSlots_[i] = extraSlots_[i];
     }
@@ -1619,12 +1712,26 @@ void GCGraph::updateRefs(
     for (gc_cnt_t i = 0; i < refCount_; ++i) {
         traceEdge(refs_[i]);
     }
+    traceEdge(originalGraph_);
 }
 
 void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
     std::vector<GCGraph *> newGraphs =
         rootGraph ? collectReachableGraphs(rootGraph) : std::vector<GCGraph *>{};
     std::unordered_set<GCGraph *> keep(newGraphs.begin(), newGraphs.end());
+    // A private copy still tracked (a back end's lowered program) names the program graph it was
+    // copied from (GCGraph::originalGraph): that graph and what it refers to stay, owned as part
+    // of the program, until a later replacement finds no copy pointing at them.
+    for (GCGraph *copy : detached_) {
+        GCGraph *original = copy ? copy->originalGraph_ : nullptr;
+        if (original && !keep.contains(original)) {
+            for (GCGraph *graph : collectReachableGraphs(original)) {
+                if (keep.insert(graph).second) {
+                    newGraphs.push_back(graph);
+                }
+            }
+        }
+    }
 
     for (GCGraph *graph : graphs_) {
         if (!graph || keep.contains(graph)) {
@@ -1655,6 +1762,18 @@ void GCGraphManager::rebuildGcRoots() {
     }
     for (GCGraph *graph : detached_) {
         gcRoots_.push_back(graph);
+    }
+    for (GCGraph *graph : pinned_) {
+        gcRoots_.push_back(graph);
+    }
+}
+
+void GCGraphManager::pin(std::span<GCGraph *const> graphs) {
+    for (GCGraph *graph : graphs) {
+        if (graph && std::find(pinned_.begin(), pinned_.end(), graph) == pinned_.end()) {
+            pinned_.push_back(graph);
+            gcRoots_.push_back(graph);
+        }
     }
 }
 
@@ -1699,6 +1818,13 @@ void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
 GCGraphManager::~GCGraphManager() {
     releaseDetached();
     clear();
+    for (GCGraph *graph : pinned_) {
+        delete graph->debug_;
+        graph->~GCGraph();
+        mm::graphSpace().free(graph);
+    }
+    pinned_.clear();
+    gcRoots_.clear();
 }
 
 std::vector<GCGraph *> GCGraphManager::roots() const {
@@ -1725,6 +1851,8 @@ void GCGraphManager::clear() {
     debugRecords_.clear();
     graphs_.clear();
     root_ = nullptr;
+    // The pinned graphs belong to no program: they stay, and stay traced.
+    gcRoots_.insert(gcRoots_.end(), pinned_.begin(), pinned_.end());
 }
 
 void collectStaticGraphRefsRecursive(

@@ -347,27 +347,32 @@ Tuple patterns, struct patterns, and identifier patterns on values of ordinary t
 
 `try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph): writing it gives `SemanticDiag::TryCatchNotInLanguage`. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 
-### 6.8.3 `loop` (provisional notation, not implemented)
+### 6.8.3 `loop`
 
-A loop is an expression with a state (design principles 2.10). The state is written in the head of the loop, the value of the body is the state of the next round, and the value of the whole loop is the last state.
+A loop is an expression with a state (design principles 2.10, 2.13). The state is written in the head of the loop: each name is declared once with its first value. The expression after `do` is the body; its value is the state of the next round, and the value of the whole loop is the last state.
 
 ```
-loop state = init (for name in sequence)? (while condition)? { body }
+loop name = init (, name = init)* (for name in array)? (while condition)? do expression
 ```
 
 ```cml
-let (i, acc) = loop (i, acc) = (1, 0) while i <= n { (i + 1, acc + i) }
-let total    = loop acc = 0 for x in xs { acc + x * x }
-let found    = loop found = -1 for x in xs while found < 0 { if x > 9 then x else found }
+let total    = loop acc = 0 for x in xs do acc + x * x
+let (i, acc) = loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)
+let p        = loop p = { x: 0 } for d in ds do { x: p.x + d }
+let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else hit
 ```
 
-- The state is one name, or several names in parentheses (the state is then a tuple).
-- `for` takes one element of the sequence per round, `while` goes on as long as its condition holds; with both, the loop ends when the elements are used up or the condition fails. At least one of them is written. There is no `break` and no `continue`: ending early is written as the `while` condition.
-- The first value and the sequence are evaluated once, and the names of the state are not visible in them; the condition and the body see the names of the state and the name bound by `for`.
-- The first value, the sequence and the condition are operator expressions; an `if`, a `match` or an assignment goes in parentheses. The body is always a block; a struct literal as its value takes a second pair of braces: `{ { x: 1 } }`.
-- `loop` and `while` are keywords.
+- **State.** With one name the body's value and the loop's value are that value; with several names (separated by commas) the body gives the tuple of them in the order of the head, and the loop's value is that tuple, taken apart with `let (a, b) = loop ...` or `.0`, `.1`. The state has the type of its first value; the body's value must have that type (or enter it, as an `int` enters an `int?`), otherwise `SemanticDiag::LoopBodyTypeMismatch`. `null` and the empty array `[]` have no type of their own as first values: write `null as T?`, or bind the empty array with its type first (`let none: int[] = []`) and start from that name (`SemanticDiag::LoopStateWithoutType`).
+- **`for x in xs`** takes one element of the array `xs` per round, in order; `xs` must be an array (`SemanticDiag::LoopSequenceNotArray`), and `range(a, b)` is one. **`while c`** goes on as long as the condition holds; the condition is a `bool` (`SemanticDiag::LoopConditionNotBool`). With both, each round looks at the condition first and then takes the next element: the loop ends when the condition fails or the elements are used up. At least one of them is written.
+- **No `break` and no `continue`**: ending early is written as the `while` condition, skipping the rest of a round as an `if`.
+- **Scope.** The first values and the array are evaluated once, where the loop is, and do not see the names of the head; the condition sees the names of the state, the body those and the name of `for`. A name of the head is given once (`SemanticDiag::LoopNameRepeated`). The condition and the body see the names around the loop (a `var` is read anew in every round).
+- **After `do`** comes an expression, read as after `then`: `{ x: 1 }` is a struct, `{ 5 }` and `sync { ... }` are blocks. A `return` in such a block ends the block with the next state; it does not leave the function.
+- **Effects.** Whether the body is a sync block is up to the body (2.4). Written `do sync { println(x); acc + x }`, its effects run in order every round. A loop in a block that is not a sync block, whose value nothing uses, does not run, with `EffectNotExecuted`, as for an unused call.
+- **Order and depth.** The rounds run strictly one after the other. A loop is not a recursion: no number of rounds takes call depth, `--max-recursion-depth` does not count them, and a loop that does not end runs on.
+- **Numeric permissions.** `@numeric(...)` on a function or a block covers the bodies and conditions of the loops written in it (2.13).
+- `loop`, `while`, `do`, `for` and `in` are keywords.
 
-The syntax and the abstract syntax tree are in place; compiling a loop to the graph is not: using one gives `SemanticDiag::ConstructNotSupported`.
+On the graph a loop is one `LOOP` node in the graph it is written in; the condition and the body are a subgraph each, sharing one table of captured values (design principles 2.12; `docs/design/graph-model` 3.5).
 
 ## 6.9 Lambdas and function types
 

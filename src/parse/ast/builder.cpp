@@ -3067,18 +3067,17 @@ Value Builder::visitIdentRef(cst::IdentRef context) {
 }
 
 /*
-loopExpr : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock ;
+loopExpr : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr ;
+loopState : identDef '=' logicalOrExpr ;
 The children of the node are described at LoopExprLoad.
 */
 Value Builder::visitLoopExpr(cst::LoopExpr context) {
     std::vector<Reference> state;
-    const auto tuple = context->get<cst::ParentIdents>();
-    if (tuple) {
-        for (const auto ident : tuple->get<cst::IdentList>()->all<cst::IdentDef>()) {
-            state.emplace_back(ident->text());
-        }
-    } else {
-        state.emplace_back(context->get<cst::IdentDef>()->text());
+    node_ptr_t inits = createNodeAs<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(inits, context);
+    for (const auto entry : context->all<cst::LoopState>()) {
+        state.emplace_back(entry->get<cst::IdentDef>()->text());
+        *inits << any2node(visitExpr(entry->expr()));
     }
     const auto forClause   = context->get<cst::LoopFor>();
     const auto whileClause = context->get<cst::LoopWhile>();
@@ -3086,9 +3085,9 @@ Value Builder::visitLoopExpr(cst::LoopExpr context) {
     if (forClause) {
         binder = Reference(forClause->get<cst::IdentDef>()->text());
     }
-    node_ptr_t loopNode = createNodeAs<LoopExprLoad>(state, static_cast<bool>(tuple), binder);
+    node_ptr_t loopNode = createNodeAs<LoopExprLoad>(state, binder);
     setNodeTokenRangeByContext(loopNode, context);
-    *loopNode << any2node(visitExpr(context->expr()));
+    *loopNode << inits;
     node_ptr_t sequence = createNodeAs<OptionalLoad>("Data");
     if (forClause) {
         setNodeTokenRangeByContext(sequence, forClause);
@@ -3100,7 +3099,8 @@ Value Builder::visitLoopExpr(cst::LoopExpr context) {
         *condition << any2node(visitExpr(whileClause->expr()));
     }
     *loopNode << sequence << condition;
-    *loopNode << any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
+    // The expression after `do`, read as the arm of an `if` is: always a block on the AST.
+    *loopNode << any2node(visitBlockExpr(context->lastChild().node()));
     return loopNode;
 }
 

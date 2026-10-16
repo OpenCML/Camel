@@ -90,6 +90,13 @@ class Builder {
     /// the warnings that need them). False when a module is in error.
     bool buildProgram();
 
+    /// Steps two and three for a library: the module `module` (declared with declareModule on
+    /// this builder) and what it imports, built as buildProgram builds a program, without the
+    /// call of an entry function. The definition libraries of operators are built so, by a
+    /// builder of their own (UserDefinedModule::compileAsLibrary). False when a module is in
+    /// error.
+    bool buildLibrary(const camel::core::module::module_ptr_t &module);
+
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
 
   private:
@@ -216,6 +223,9 @@ class Builder {
     // Switches the builder to the top level of a module for as long as it lives, and back.
     class UnitContext;
     friend class UnitContext;
+    // Steps two and three from `entry` (buildProgram, buildLibrary): every module it imports,
+    // directly or not, then it; the call of `main` only when `callEntry`.
+    bool buildFrom(ModuleUnit &entry, bool callEntry);
     // Step two for one module: its top-level declarations in the order they are written.
     void buildModuleBody(ModuleUnit &unit);
     // Builds the top-level value declaration `declaration` unless it is built: in its own
@@ -837,6 +847,19 @@ class Builder {
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
+    /// A loop (design principles 2.10, 2.12, 2.13; camel/runtime/loop.h): the first values and
+    /// the array where the loop is, a graph for the condition and one for the body, and one
+    /// LOOP node calling them. The two graphs share one capture table (captureTwins_).
+    node_handle_t visitLoopNode(const GCT::node_ptr_t &gct);
+    /// Builds `graph`, a loop's condition or body graph made with its ports, from `exec`: the
+    /// names of its Norm ports are declared in it, and its result is the value of the block.
+    void buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec);
+    /// The condition and the body graph of a loop capture the same values in the same order
+    /// (design principles 2.12: one capture table): a capture made into one is made into the
+    /// other (captureInto).
+    std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> captureTwins_;
+    /// How many loops each graph has, for the names of their graphs (`f.loop2.body`).
+    std::unordered_map<DraftGraphBuilder *, size_t> loopCounts_;
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
     /// `gct`, or, when `arms` is given, are those graphs in order (built by buildArmGraph).
     /// No arm is added to those the program wrote (design principles 2.10).

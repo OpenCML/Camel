@@ -128,6 +128,13 @@ bool ParaModule::load() {
     camel::core::OperatorTable::instance().declare(
         "",
         {{"mark/unordered_foreach_arr", false}, {"mark/unordered_reduce_arr", false}});
+    // The one meeting point of the process (docs/design/op-semantics 8).
+    camel::core::OperatorTable::instance().declareResources(
+        "para",
+        {{"rendezvous",
+          camel::core::sem::externalAmbient(
+              "para:rendezvous",
+              camel::core::sem::AccessMode::ReadModifyWrite)}});
     loaded_ = true;
     return true;
 }

@@ -1,0 +1,10 @@
+// A loop is not a recursion: running many rounds takes no depth, and a loop inside a deep (non-
+// tail) recursion still runs. The recursion limit counts the recursion only.
+func deep(n: int): int {
+    return if n == 0 then (loop s = 0 for x in range(0, 5000) do s + x) else 1 + deep(n - 1)
+}
+
+func main(): int sync {
+    println(deep(500))
+    return 0
+}

@@ -1181,6 +1181,8 @@ void queries(std::ostream &os) {
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(2)});
     query(os, "show_slice", "tensor:slice", {T(StaticShape{-1, 7}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(1), Arg::integerArg(1), Arg::integerArg(-1), Arg::integerArg(2)});
+    query(os, "slice_out_of_range", "tensor:slice", {T(StaticShape{5}), integer, integer, integer},
+          {std::nullopt, Arg::integerArg(0), Arg::integerArg(2), Arg::integerArg(6)});
     query(os, "slice_step_zero", "tensor:slice", {T(StaticShape{5}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(5), Arg::integerArg(0)});
     query(os, "reshape_unknown_input", "tensor:reshape", {T(StaticShape{-1, 4}), ints},

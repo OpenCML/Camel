@@ -53,16 +53,17 @@ uint8_t OperatorTable::encode(OperatorTraits traits) {
     return static_cast<uint8_t>(
         kDeclared | (traits.pure ? kPure : 0) | (traits.elementwise ? kElementwise : 0) |
         (traits.stateOnly ? kStateOnly : 0) | (traits.mayFault ? 0 : kNoFault) |
-        (traits.callsGraphs ? kCallsGraphs : 0));
+        (traits.callsGraphs ? kCallsGraphs : 0) | (traits.inspectsGraphs ? kInspectsGraphs : 0));
 }
 
 OperatorTraits OperatorTable::decode(uint8_t bits) {
     return OperatorTraits{
-        .pure        = (bits & kPure) != 0,
-        .elementwise = (bits & kElementwise) != 0,
-        .stateOnly   = (bits & kStateOnly) != 0,
-        .mayFault    = (bits & kNoFault) == 0,
-        .callsGraphs = (bits & kCallsGraphs) != 0,
+        .pure           = (bits & kPure) != 0,
+        .elementwise    = (bits & kElementwise) != 0,
+        .stateOnly      = (bits & kStateOnly) != 0,
+        .mayFault       = (bits & kNoFault) == 0,
+        .callsGraphs    = (bits & kCallsGraphs) != 0,
+        .inspectsGraphs = (bits & kInspectsGraphs) != 0,
     };
 }
 
@@ -269,6 +270,49 @@ std::string checkSemantics(
             return *problem;
         }
     }
+    // 5. The resources: consistent in themselves, and with the traits (design 4.4, check 2): a
+    //    pure operator touches no resource; any other touches one, allocates one or has an
+    //    external effect; an external effect only where the traits allow one (not pure, not
+    //    state-only). The converse is a refinement (design 8.3): the traits of an assignment
+    //    count it as external (no trait says "writes a variable"), its resources say it writes
+    //    the program's own cell and nothing outside. The effect summaries stay computed from
+    //    the traits.
+    if (record.resources) {
+        const sem::ResourceSpec &r = *record.resources;
+        if (auto problem = sem::checkResources(r)) {
+            return "resources: " + *problem;
+        }
+        if (traits) {
+            if (traits->pure && (!r.accesses.empty() || r.allocates || r.externalEffect)) {
+                return "resources: a pure operator touches no resource";
+            }
+            if (!traits->pure && r.accesses.empty() && !r.allocates && !r.externalEffect) {
+                return "resources: an operator that is not pure touches, allocates or affects "
+                       "something (declare it pure instead)";
+            }
+            if (r.externalEffect && (traits->pure || traits->stateOnly)) {
+                return "resources: its traits give it no external effect";
+            }
+        }
+    }
+    // 6. The definition names a function of a library module and binds each parameter to an
+    //    operand. That the function's signature agrees with the operator's, that its effects
+    //    are within the operator's and that no definition reaches its own operator is checked
+    //    when the library is compiled (camel/runtime/definitions.h): it is code in a file.
+    if (record.definition) {
+        const sem::Definition &d = *record.definition;
+        if (d.module.empty() || d.function.empty()) {
+            return "definition: it names a library module and a function";
+        }
+        if (d.params.size() >= 0xFF) {
+            return "definition: too many parameters";
+        }
+        for (const sem::DefinitionParam &param : d.params) {
+            if (param.operand == 0xFF) {
+                return "definition: every parameter is bound to an operand";
+            }
+        }
+    }
     return {};
 }
 
@@ -299,6 +343,46 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
     declarations_.push_back(std::make_unique<const sem::OperatorSemantics>(std::move(semantics)));
     entry.semantics.store(declarations_.back().get(), std::memory_order_release);
     epoch_.fetch_add(1, std::memory_order_acq_rel);
+}
+
+void OperatorTable::declareResources(std::string_view uri, sem::ResourceSpec resources) {
+    // A record of its own when the operator has none; otherwise the same record with the
+    // resources added, one minor version up (facts added, design 4.1). Load time only: the read
+    // of the old record and the declaration are not one step, as for every declaration.
+    sem::OperatorSemantics record;
+    if (const auto id = lookup(uri); id && semantics(*id) != nullptr) {
+        record = *semantics(*id);
+        if (record.resources != resources) {
+            ++record.key.minor;
+        }
+    } else {
+        record.key = sem::OperatorKey::of(uri);
+    }
+    record.resources = std::move(resources);
+    declareSemantics(uri, std::move(record));
+}
+
+void OperatorTable::declareDefinition(std::string_view uri, sem::Definition definition) {
+    // As declareResources: a record of its own, or the existing one a minor version up.
+    sem::OperatorSemantics record;
+    if (const auto id = lookup(uri); id && semantics(*id) != nullptr) {
+        record = *semantics(*id);
+        if (record.definition != definition) {
+            ++record.key.minor;
+        }
+    } else {
+        record.key = sem::OperatorKey::of(uri);
+    }
+    record.definition = std::move(definition);
+    declareSemantics(uri, std::move(record));
+}
+
+void OperatorTable::declareResources(
+    std::string_view protocol,
+    std::initializer_list<std::pair<std::string_view, sem::ResourceSpec>> operators) {
+    for (const auto &[name, resources] : operators) {
+        declareResources(std::string(protocol) + ":" + std::string(name), resources);
+    }
 }
 
 std::optional<sem::OperatorKey> OperatorTable::key(OperId id) const {

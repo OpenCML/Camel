@@ -634,6 +634,9 @@ size_t GraphDraft::payloadBytesForSourceNode(const GCGraph *graph, gc_node_ref_t
     if (sourceNode->kind == GCNodeKind::Func) {
         return sizeof(GCFuncBody); // the callee itself, not the frozen index (see decode)
     }
+    if (sourceNode->kind == GCNodeKind::Loop) {
+        return sizeof(GCLoopBody); // the two graphs themselves, as for a FUNC
+    }
     return graph->nodePayloadBytes(sourceRef).size();
 }
 
@@ -699,6 +702,8 @@ DraftNode *GraphDraft::createDecodedNode(
         // A frozen FUNC names its callee by reference-table index; a draft holds the callee.
         *DraftNodeView::payloadAs<GCFuncBody>(draftNode) =
             GCFuncBody{.calleeGraph = graph->directCalleeGraphOf(sourceRef)};
+    } else if (sourceNode->kind == GCNodeKind::Loop) {
+        *DraftNodeView::payloadAs<GCLoopBody>(draftNode) = loopBodyOf(*graph, sourceRef);
     } else if (const auto body = graph->nodePayloadBytes(sourceRef); !body.empty()) {
         std::memcpy(DraftNodeView::payload(draftNode).data(), body.data(), body.size());
         if (sourceNode->kind == GCNodeKind::Join) {

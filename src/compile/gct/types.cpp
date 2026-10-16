@@ -60,6 +60,8 @@ std::string to_string(NodeKind kind) {
         return "EXEC";
     case NodeKind::EXPT:
         return "EXPT";
+    case NodeKind::LOOP:
+        return "LOOP";
     default:
         ASSERT(false, "Unknown NodeKind");
     }
