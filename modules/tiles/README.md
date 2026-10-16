@@ -252,8 +252,8 @@ Physical matrix tile loads use structured buffer accesses: an index expression
 and a Boolean validity mask travel together through coordinate substitution.
 Host evaluation short-circuits masks and skips invalid addresses; CUDA lowering
 prints conditional loads with exact fallback bits. The host evaluator is useful
-for checking mappings but is not a symbolic bounds proof. Kernel loops, stores,
-barriers still need migration to a complete structured kernel IR.
+for checking mappings but is not a symbolic bounds proof. Kernel loops, stores
+and barriers now use the structured statement representation described below.
 
 Elementwise f32 and scalar f64 arithmetic now use immutable, typed `ScalarExpr`
 trees. Conversions and FMA are explicit operations; basic CUDA arithmetic uses
@@ -318,8 +318,10 @@ or loops. There is no raw CUDA statement node. Address bounds, races and shared
 value initialization remain the lowering's proof obligations, checked by GPU
 edge-shape and canonical FMA-chain regressions rather than claimed by this validator.
 The accumulator survives across panels and padded K contributions are excluded.
-Row-region kernels still use their existing emitter; moving them to the same
-statement representation is subsequent work. Fault-reporting scalar chains use
+Row-region kernels use the same statement representation, including shared
+stage values, lane trees, integer exponent bounds and mutually exclusive exact
+tree/canonical-chain paths. All kernel families now use structured statements;
+the final CUDA printer owns statement syntax. Fault-reporting scalar chains use
 typed IEEE comparison conditions, an explicit status-word resource, fault reports
 and early-return statements. The validator rejects status-word aliasing, invalid
 fault ordinals, mistyped conditions and kernels mixing early exits with barriers

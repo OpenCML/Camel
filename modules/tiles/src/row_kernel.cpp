@@ -11,7 +11,6 @@
 // Generic row-local tensor DAGs; shared values are computed once and reused across reductions.
 #include "tiles/internal/row_kernel.h"
 #include <algorithm>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -120,82 +119,5 @@ std::optional<RowKernel> rowKernel(const Program &p) {
         48 * 1024)
         return std::nullopt;
     return plan;
-}
-std::string emitRowKernel(const Program &p, const RowKernel &plan, const std::string &name) {
-    std::ostringstream code;
-    code << "extern \"C\" __global__ void " << name << "(float** v){\n"
-         << "__shared__ float values[" << plan.sharedElements << "], scratch[32];\n"
-         << "__shared__ double sums[32]; __shared__ int lo[32],hi[32];\n"
-         << "unsigned t=threadIdx.x;\nfor(unsigned long long row=blockIdx.x;row<" << plan.rows
-         << "ULL;row+=gridDim.x){\n";
-    auto read = [&](size_t id, const std::string &col) {
-        if (plan.offsets[id] != SIZE_MAX)
-            return "values[" + std::to_string(plan.offsets[id]) + "+" +
-                   (plan.widths[id] == 1 ? "0" : col) + "]";
-        const auto &n     = p.nodes[id];
-        const bool perRow = n.shape.size() == 2 && n.shape[0] == static_cast<int64_t>(plan.rows);
-        const auto at     = (perRow ? "row*" + std::to_string(plan.widths[id]) + "ULL+" : "") +
-                            (plan.widths[id] == 1 ? "0" : col);
-        return n.dtype == DType::F64
-                   ? "reinterpret_cast<double*>(v[" + std::to_string(id) + "])[" + at + "]"
-                   : "v[" + std::to_string(id) + "][" + at + "]";
-    };
-    for (const auto &stage : plan.stages) {
-        const auto &n          = p.nodes[stage.node];
-        const auto destination = "values[" + std::to_string(plan.offsets[stage.node]) + "+";
-        if (stage.reduction) {
-            const auto &law = *stage.reduction;
-            if (law.kind == sem::LawKind::Max) {
-                code << "{float best=__uint_as_float(0xff800000U);\nfor(unsigned col=t;col<"
-                     << plan.width << ";col+=32) best=tiles_maximum(best,"
-                     << read(n.inputs[0], "col") << ");\n"
-                     << "scratch[t]=best;__syncthreads();\nfor(unsigned s=16;s;s/=2){if(t<s) "
-                        "scratch[t]=tiles_maximum(scratch[t],scratch[t+s]);__syncthreads();}\n"
-                     << "if(t==0)" << destination << "0]=scratch[0];}\n";
-            } else {
-                size_t countBits = 0;
-                while ((size_t(1) << countBits) < plan.width)
-                    ++countBits;
-                // Every finite f32 is an integer multiple of 2^lo. If the
-                // largest possible partial sum needs at most 53 lattice bits,
-                // every f64 addition is exact, in any grouping. This proves
-                // equivalence without a reassociation grant. Nonfinite or wide
-                // exponent ranges use the canonical ascending chain instead.
-                code << "{double partial=0.0; int lower=4096,upper=-4096;\n"
-                     << "for(unsigned col=t;col<" << plan.width
-                     << ";col+=32){float x=" << read(n.inputs[0], "col")
-                     << "; unsigned bits=__float_as_uint(x)&0x7fffffffU; unsigned "
-                        "exponent=bits>>23;\n"
-                     << "if(exponent==255) upper=4096; else if(bits){int "
-                        "l=exponent?(int)exponent-150:-149; int h=exponent?(int)exponent-126:-126; "
-                        "lower=lower<l?lower:l;upper=upper>h?upper:h;}\n"
-                     << "partial=__dadd_rn(partial,(double)x); }\n"
-                     << "sums[t]=partial;lo[t]=lower;hi[t]=upper;__syncthreads();\n"
-                     << "for(unsigned "
-                        "s=16;s;s/"
-                        "=2){if(t<s){sums[t]=__dadd_rn(sums[t],sums[t+s]);lo[t]=lo[t]<lo[t+s]?lo[t]"
-                        ":lo[t+s];hi[t]=hi[t]>hi[t+s]?hi[t]:hi[t+s];}__syncthreads();}\n"
-                     << "if(t==0){double acc=0.0; if(hi[0]==-4096 || (hi[0]<1024 && hi[0]-lo[0]+"
-                     << countBits << "<=53)) acc=sums[0]; else {\nfor(unsigned col=0;col<"
-                     << plan.width << ";++col) acc=__dadd_rn(acc,(double)"
-                     << read(n.inputs[0], "col") << ");}\n";
-                if (law.finalize == sem::LawFinalize::DivideByCount)
-                    code << "acc=__ddiv_rn(acc," << plan.width << ".0);\n";
-                code << destination << "0]=__double2float_rn(acc); }}\n";
-            }
-        } else {
-            code << "for(unsigned col=t;col<" << plan.widths[stage.node] << ";col+=32){\n"
-                 << (n.op == "cast_f32" ? "double" : "float") << " a=" << read(n.inputs[0], "col")
-                 << ";\n";
-            if (n.inputs.size() == 2)
-                code << "float b=" << read(n.inputs[1], "col") << ";\n";
-            code << destination << "col]=" << stage.expression->cuda() << ";}\n";
-        }
-        code << "__syncthreads();\n";
-    }
-    const auto root = p.outputs[0];
-    code << "for(unsigned col=t;col<" << plan.width << ";col+=32) v[" << root << "][row*"
-         << plan.width << "ULL+col]=" << read(root, "col") << ";\n__syncthreads();\n}\n}\n";
-    return code.str();
 }
 } // namespace camel::tiles::kernel
