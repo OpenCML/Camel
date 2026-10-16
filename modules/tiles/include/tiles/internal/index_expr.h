@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -14,6 +14,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace camel::tiles::kernel {
 class IndexExpr {
@@ -27,6 +28,7 @@ class IndexExpr {
     static IndexExpr variable(std::string name);
     uint64_t evaluate(const std::unordered_map<std::string, uint64_t> &bindings) const;
     IndexExpr substitute(const std::string &name, const IndexExpr &replacement) const;
+    std::unordered_set<std::string> symbols() const;
     std::string cuda() const;
     friend IndexExpr operator+(IndexExpr lhs, IndexExpr rhs);
     friend IndexExpr operator*(IndexExpr lhs, IndexExpr rhs);

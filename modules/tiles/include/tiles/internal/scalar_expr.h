@@ -55,6 +55,7 @@ class ScalarExpr {
     DType type() const;
     ScalarValue evaluate(const std::unordered_map<std::string, ScalarValue> &bindings) const;
     ScalarExpr substitute(const std::string &name, const ScalarExpr &replacement) const;
+    std::unordered_map<std::string, DType> symbols() const;
     std::string cuda() const;
 };
 // Build the arithmetic body of a lowered elementwise instruction, using symbols a/b.

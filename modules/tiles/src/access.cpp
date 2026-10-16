@@ -15,6 +15,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace camel::tiles::kernel {
@@ -87,6 +88,19 @@ Predicate Predicate::substitute(const std::string &name, const IndexExpr &replac
         return !Predicate(node->a).substitute(name, replacement);
     }
 }
+std::unordered_set<std::string> Predicate::symbols() const {
+    if (node->operation == 't' || node->operation == 'f')
+        return {};
+    if (node->operation == '<' || node->operation == '=') {
+        auto result = node->lhs.symbols();
+        result.merge(node->rhs.symbols());
+        return result;
+    }
+    auto result = Predicate(node->a).symbols();
+    if (node->b)
+        result.merge(Predicate(node->b).symbols());
+    return result;
+}
 std::string Predicate::cuda() const {
     switch (node->operation) {
     case 't':
@@ -113,9 +127,5 @@ Access::evaluate(const std::unordered_map<std::string, uint64_t> &bindings) cons
 }
 Access Access::substitute(const std::string &name, const IndexExpr &replacement) const {
     return {buffer, address.substitute(name, replacement), mask.substitute(name, replacement)};
-}
-std::string Access::loadF32(uint32_t fallbackBits) const {
-    return "(" + mask.cuda() + "?v[" + std::to_string(buffer) + "][" + address.cuda() +
-           "]:__uint_as_float(" + std::to_string(fallbackBits) + "U))";
 }
 } // namespace camel::tiles::kernel

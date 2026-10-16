@@ -12,6 +12,7 @@
 #include "tiles/internal/access.h"
 #include "tiles/internal/codegen_cache.h"
 #include "tiles/internal/index_expr.h"
+#include "tiles/internal/kernel_ir.h"
 #include "tiles/internal/row_kernel.h"
 #include "tiles/internal/scalar_expr.h"
 #include "tiles/program.h"
@@ -254,43 +255,7 @@ void kernel::emitCUDA(Program &p) {
                  << "if(t==0)" << load(id, "row") << "=values[0];\n"
                  << "__syncthreads();\n}\n";
         } else if (n.op == "matmul") {
-            const auto &a = p.nodes[n.inputs[0]].shape;
-            const auto &b = p.nodes[n.inputs[1]].shape;
-            size_t m = a[0], k = a[1], cols = b[1];
-            const size_t gx = (cols + 15) / 16, gy = (m + 15) / 16;
-            if (gx > 2147483647 || gy > 65535)
-                throw std::runtime_error("matrix launch exceeds CUDA grid limits");
-            launch.blockX = launch.blockY = 16;
-            launch.gridX                  = static_cast<unsigned>(std::max(gx, size_t(1)));
-            launch.gridY                  = static_cast<unsigned>(std::max(gy, size_t(1)));
-            const auto row = IndexExpr::variable("row"), col = IndexExpr::variable("col");
-            const auto base = IndexExpr::variable("base");
-            const auto ak   = base + IndexExpr::variable("tx");
-            const auto bk   = base + IndexExpr::variable("ty");
-            using kernel::Predicate;
-            const kernel::Access lhs{
-                n.inputs[0],
-                row * IndexExpr(k) + ak,
-                Predicate::less(row, IndexExpr(m)) && Predicate::less(ak, IndexExpr(k))};
-            const kernel::Access rhs{
-                n.inputs[1],
-                bk * IndexExpr(cols) + col,
-                Predicate::less(bk, IndexExpr(k)) && Predicate::less(col, IndexExpr(cols))};
-            // Matmul's normative algorithm is an increasing-k FMA chain from +0.
-            // Keep one accumulator across tiles and exclude padded K iterations.
-            code << "__shared__ float a[16][16], b[16][16];\n"
-                 << "unsigned long long tx=threadIdx.x,ty=threadIdx.y;\n"
-                 << "unsigned long long row=(unsigned long long)blockIdx.y*16+threadIdx.y;\n"
-                 << "unsigned long long col=(unsigned long long)blockIdx.x*16+threadIdx.x;\n"
-                 << "float acc=0.0f;\nfor(unsigned long long base=0; base<" << literal(k)
-                 << "; base+=16) {\n"
-                 << "a[threadIdx.y][threadIdx.x]=" << lhs.loadF32() << ";\n"
-                 << "b[threadIdx.y][threadIdx.x]=" << rhs.loadF32() << ";\n"
-                 << "__syncthreads();\n#pragma unroll\nfor(int t=0;t<16;++t)"
-                 << " if(base+t<" << literal(k)
-                 << ") acc=fmaf(a[threadIdx.y][t],b[t][threadIdx.x],acc);\n"
-                 << "__syncthreads();\n}\nif(row<" << literal(m) << " && col<" << literal(cols)
-                 << ") " << load(id, "row*" + literal(cols) + "+col") << "=acc;\n";
+            code << emitBody(matmulBody(p, launch));
         } else {
             launch.gridX = static_cast<unsigned>(std::clamp<size_t>((count + 255) / 256, 1, 65535));
             code << "for(unsigned long long i=(unsigned long "
