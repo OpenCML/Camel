@@ -732,6 +732,8 @@ byte/object paging currently uses the profiler's contiguous bump-region API. Inv
 requests while running and requests after termination fail explicitly.
 
 Allocation stops require a build without NDEBUG. Release reports `supported:false` and refuses
-enabling them. The native hook stops before allocation on the program thread, filters named
-spaces and skips index maintenance/reentrant hooks. `camel/stopped.allocation` identifies the
-space, requested size and `phase:"before"`; inspection uses that same stopped worker.
+enabling them. The native hook stops after the outermost allocator has released its locks on the program
+thread, filters named spaces and skips index maintenance/reentrant hooks. Nested allocators
+report one completed allocation at that boundary, so heap inspection cannot wait on a lock
+held by its own paused allocation. `camel/stopped.allocation` identifies the
+space, requested size and `phase:"after"`; inspection uses that same stopped worker.

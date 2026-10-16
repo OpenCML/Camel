@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -73,25 +73,26 @@ GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
               .limitEnv         = "",
               .sizesFromHeaders = true,
           }),
-      largeObjSpace_("auto.large"),
-      promotionAgeThreshold_(config.promotionAgeThreshold),
+      largeObjSpace_("auto.large"), promotionAgeThreshold_(config.promotionAgeThreshold),
       largeObjThreshold_(config.largeObjThreshold),
       largeObjMinBudget_(config.largeObjCollectionBudget),
       largeObjGrowthPercent_(config.largeObjGrowthPercent),
-      largeObjBudget_(config.largeObjCollectionBudget),
-      elderMinBudget_(config.elderGenSize), elderBudget_(config.elderGenSize),
+      largeObjBudget_(config.largeObjCollectionBudget), elderMinBudget_(config.elderGenSize),
+      elderBudget_(config.elderGenSize),
       minorTriggerBytes_(
           static_cast<size_t>(
               static_cast<double>(config.birthSize) *
               std::clamp(static_cast<double>(config.minorGCTriggerRatio), 0.1, 1.0))),
-      heapLimitBytes_(config.heapLimitBytes),
-      enableYoungGenCopying_(config.enableYoungGenCopying) {
+      heapLimitBytes_(config.heapLimitBytes), enableYoungGenCopying_(config.enableYoungGenCopying) {
     // Reserve the first elder segment now (untouched pages cost nothing), so the space shows
     // up in snapshots from the start as it did when it was a single block.
     elderGenSpace_.free(elderGenSpace_.alloc(sizeof(slot_t)));
 }
 
 void *GenerationalAllocatorWithGC::alloc(size_t payloadSize, size_t align) {
+#ifndef NDEBUG
+    AllocationDebugScope debugScope;
+#endif
     std::lock_guard<std::mutex> lock(mutex_);
     return allocUnlocked(payloadSize, align);
 }
@@ -172,9 +173,8 @@ void GenerationalAllocatorWithGC::unlinkRootHandle(RootHandle *handle) {
 }
 
 void GenerationalAllocatorWithGC::forEachRootSourceUnlocked(
-    const std::function<
-        void(std::string_view name, const std::function<void(const RefRelocator &)> &trace)>
-        &visit) {
+    const std::function<void(
+        std::string_view name, const std::function<void(const RefRelocator &)> &trace)> &visit) {
     for (const auto &entry : externalRootTracers_) {
         visit(entry.name, entry.tracer);
     }
@@ -272,8 +272,7 @@ void GenerationalAllocatorWithGC::publishSafepointSlowPathUnlocked() {
     // The one predicate the schedulers read before they enter the allocator (gen.h).
     detail::autoSpaceSafepointSlowPath.store(
         debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
-            debugConfig_.poisonAtSafepoints ||
-            pendingSafepointCollection_ != CollectionKind::None,
+            debugConfig_.poisonAtSafepoints || pendingSafepointCollection_ != CollectionKind::None,
         std::memory_order_release);
 }
 
@@ -293,6 +292,9 @@ class SafepointScope {
 } // namespace
 
 void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
+#ifndef NDEBUG
+    AllocationDebugScope debugScope;
+#endif
     {
         std::lock_guard<std::mutex> lock(mutex_);
         SafepointScope atSafepoint(atSafepoint_);
@@ -332,6 +334,9 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
 }
 
 void GenerationalAllocatorWithGC::minorGC() {
+#ifndef NDEBUG
+    AllocationDebugScope debugScope;
+#endif
     {
         std::lock_guard<std::mutex> lock(mutex_);
         SafepointScope atSafepoint(atSafepoint_);
@@ -349,6 +354,9 @@ void GenerationalAllocatorWithGC::minorGC() {
 }
 
 void GenerationalAllocatorWithGC::majorGC() {
+#ifndef NDEBUG
+    AllocationDebugScope debugScope;
+#endif
     {
         std::lock_guard<std::mutex> lock(mutex_);
         SafepointScope atSafepoint(atSafepoint_);
@@ -521,7 +529,7 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
     }
 
     // Try allocating in the birth space first.
-    void *ptr = birthSpace_.alloc(payloadSize, align);
+    void *ptr               = birthSpace_.alloc(payloadSize, align);
     const bool minorPending = pendingSafepointCollection_ == CollectionKind::Minor ||
                               pendingSafepointCollection_ == CollectionKind::MinorAndMajor;
     if (UNLIKELY(!ptr)) {
@@ -559,7 +567,8 @@ void GenerationalAllocatorWithGC::checkHeapLimitUnlocked(size_t requestBytes) {
     // exceeded afterwards. What is refused on the spot is what no collection can make fit (a
     // request larger than the limit) and a run past one and a half times the limit before any
     // safepoint is reached.
-    if (requestBytes > heapLimitBytes_ || held + requestBytes > heapLimitBytes_ + heapLimitBytes_ / 2) {
+    if (requestBytes > heapLimitBytes_ ||
+        held + requestBytes > heapLimitBytes_ + heapLimitBytes_ / 2) {
         throw MemoryExhausted(
             "auto",
             "run-time values",
@@ -587,7 +596,13 @@ void *GenerationalAllocatorWithGC::allocLargeUnlocked(size_t payloadSize, size_t
         ptr = nullptr;
     }
     if (UNLIKELY(!ptr)) {
-        throw MemoryExhausted("auto", "run-time values", payloadSize, oldBytesHeldUnlocked(), 0, {});
+        throw MemoryExhausted(
+            "auto",
+            "run-time values",
+            payloadSize,
+            oldBytesHeldUnlocked(),
+            0,
+            {});
     }
     auto *header = headerOf(ptr);
     header->setRegion(AllocRegion::LargeObj);
@@ -712,10 +727,10 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
         break;
     }
     {
-        const auto pause = static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now() - begin)
-                .count());
+        const auto pause =
+            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                      std::chrono::steady_clock::now() - begin)
+                                      .count());
         if (kind == CollectionKind::Minor) {
             stats_.minorPauseNs += pause;
             stats_.minorPauseMaxNs = std::max(stats_.minorPauseMaxNs, pause);
@@ -777,12 +792,9 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
 
         minorTracedGraphs_.clear();
         minorGraphScan_.clear();
-        auto relocateYoung = [this](
-                                 rtdata::Object *ref,
-                                 const type::Type *refType,
-                                 const rtdata::RefTraceInfo &info) -> rtdata::Object * {
-            return relocateForMinor(ref, refType, info);
-        };
+        auto relocateYoung =
+            [this](rtdata::Object *ref, const type::Type *refType, const rtdata::RefTraceInfo &info)
+            -> rtdata::Object * { return relocateForMinor(ref, refType, info); };
 
         // 2. Forward young-gen objects referenced from roots. The root set currently stores
         // runtime GCGraph carriers, which live in graphSpace rather than autoSpace; tracing the
@@ -987,8 +999,9 @@ bool GenerationalAllocatorWithGC::hasYoungRefsUnlocked(
     rtdata::Object *object, const type::Type *objectType) const {
     bool found = false;
     object->updateRefs(
-        [&](rtdata::Object *ref, const type::Type *, const rtdata::RefTraceInfo &)
-            -> rtdata::Object * {
+        [&](rtdata::Object *ref,
+            const type::Type *,
+            const rtdata::RefTraceInfo &) -> rtdata::Object * {
             if (!found && ref) {
                 // Range checks first: the lookup of a large object takes that space's lock.
                 found = birthSpace_.contains(ref) || havenSpace_.contains(ref) ||
@@ -1133,7 +1146,8 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
 }
 
 bool GenerationalAllocatorWithGC::youngOrFreshUnlocked(ObjectHeader *header) const {
-    return header && (inYoungGenSpace(header) || (!freshOld_.empty() && freshOld_.contains(header)));
+    return header &&
+           (inYoungGenSpace(header) || (!freshOld_.empty() && freshOld_.contains(header)));
 }
 
 rtdata::Object *GenerationalAllocatorWithGC::relocateForMinor(
@@ -1184,7 +1198,8 @@ GenerationalAllocatorWithGC::forwardYoungRef(rtdata::Object *ref, const type::Ty
         // self-describing object, or an untyped reference) it is scanned through every
         // reference that reaches it, and a later typed one still finds it here.
         if (auto it = freshOld_.find(refHeader); it != freshOld_.end()) {
-            const type::Type *type = isPreciseGCType(refType) ? refType : knownObjectTypeUnlocked(refHeader);
+            const type::Type *type =
+                isPreciseGCType(refType) ? refType : knownObjectTypeUnlocked(refHeader);
             if (isPreciseGCType(type)) {
                 freshOld_.erase(it);
                 recordObjectTypeUnlocked(ref, type);
@@ -1196,12 +1211,9 @@ GenerationalAllocatorWithGC::forwardYoungRef(rtdata::Object *ref, const type::Ty
 }
 
 void GenerationalAllocatorWithGC::scanRelocatedObjects() {
-    const auto relocate = [this](
-                              rtdata::Object *ref,
-                              const type::Type *refType,
-                              const rtdata::RefTraceInfo &info) -> rtdata::Object * {
-        return relocateForMinor(ref, refType, info);
-    };
+    const auto relocate =
+        [this](rtdata::Object *ref, const type::Type *refType, const rtdata::RefTraceInfo &info)
+        -> rtdata::Object * { return relocateForMinor(ref, refType, info); };
     for (;;) {
         if (relocationScanIndex_ < relocationScan_.size()) {
             TraceEntry entry = relocationScan_[relocationScanIndex_++];
@@ -1234,9 +1246,10 @@ void GenerationalAllocatorWithGC::markPhase() {
             }
         }
     }
-    const RefRelocator markRef =
-        [this](rtdata::Object *ref, const type::Type *refType, const rtdata::RefTraceInfo &)
-        -> rtdata::Object * {
+    const RefRelocator markRef = [this](
+                                     rtdata::Object *ref,
+                                     const type::Type *refType,
+                                     const rtdata::RefTraceInfo &) -> rtdata::Object * {
         if (ref) {
             markObject(ref, refType);
         }
