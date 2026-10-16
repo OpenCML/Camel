@@ -173,12 +173,15 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
         if (!module) {
             problem = std::format("its library '{}' is not a module written in Camel", name);
         } else if (!module->compileAsLibrary()) {
-            problem = std::format("its library '{}' does not compile: {}", name, firstError(*module));
+            problem =
+                std::format("its library '{}' does not compile: {}", name, firstError(*module));
             module.reset();
         }
     } catch (const core::error::Diagnostic &d) {
         problem = std::format(
-            "its library '{}' cannot be loaded: {}", name, d.message.substr(0, d.message.find('\n')));
+            "its library '{}' cannot be loaded: {}",
+            name,
+            d.message.substr(0, d.message.find('\n')));
         module.reset();
     } catch (const std::exception &e) {
         problem = std::format("its library '{}' cannot be loaded: {}", name, e.what());
@@ -189,20 +192,21 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
 }
 
 DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
-    const auto &table               = core::OperatorTable::instance();
-    const sem::OperatorSemantics *s = table.semantics(oper);
-    const std::optional<sem::OperatorKey> key =
-        s != nullptr ? std::optional(s->key) : std::nullopt;
+    const auto &table                         = core::OperatorTable::instance();
+    const sem::OperatorSemantics *s           = table.semantics(oper);
+    const std::optional<sem::OperatorKey> key = s != nullptr ? std::optional(s->key) : std::nullopt;
     // Built (or refused) for the declaration in force: a declaration replaced since (a new
     // version of the operator, another definition) is built again.
-    if (auto it = entries_.find(oper); it != entries_.end() && it->second.key == key) {
+    if (auto it = entries_.find(oper);
+        it != entries_.end() && it->second.key == key && it->second.declaration == s) {
         return it->second;
     }
     entries_.erase(oper);
     const std::string uri(table.uri(oper));
     const auto fresh = [&]() -> Entry & {
-        Entry &entry = entries_[oper];
-        entry.key    = key;
+        Entry &entry      = entries_[oper];
+        entry.key         = key;
+        entry.declaration = s;
         return entry;
     };
     const auto refuse = [&](std::string why) -> Entry & {
@@ -229,7 +233,8 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
         return refuse(std::format("'{}' exports no '{}'", d.module, d.function));
     }
     if (Access::isGenericTemplate(*entity)) {
-        return refuse(std::format("'{}::{}' is generic; a definition has one graph", d.module, d.function));
+        return refuse(
+            std::format("'{}::{}' is generic; a definition has one graph", d.module, d.function));
     }
     if (!Access::isGraphSet(*entity) || !Access::graphSet(*entity)) {
         return refuse(std::format("'{}::{}' is not a function", d.module, d.function));
@@ -244,11 +249,12 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
         }
     }
     if (!function) {
-        return refuse(std::format(
-            "'{}::{}' has no overload of {} ordinary parameters and no with parameter",
-            d.module,
-            d.function,
-            d.params.size()));
+        return refuse(
+            std::format(
+                "'{}::{}' has no overload of {} ordinary parameters and no with parameter",
+                d.module,
+                d.function,
+                d.params.size()));
     }
     GCGraph *graph = camel::compile::gir::encodeToRuntimeGraph(function);
     if (graph == nullptr) {
@@ -265,13 +271,12 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
         return refuse("its graph does not take exactly the declared parameters");
     }
     // The effects (design 9.2): within the operator's.
-    const auto traits            = table.find(oper);
-    const EffectSummary effects  = effectSummaryOf(graph);
+    const auto traits           = table.find(oper);
+    const EffectSummary effects = effectSummaryOf(graph);
     if (traits && traits->pure && (effects.external || effects.writesVariables)) {
         return refuse("the operator is pure and its definition has an effect");
     }
-    const bool neverFaults =
-        (traits && !traits->mayFault) || (s->faults && s->faults->empty());
+    const bool neverFaults = (traits && !traits->mayFault) || (s->faults && s->faults->empty());
     if (neverFaults && effects.mayFault) {
         return refuse("the operator never faults and its definition may");
     }
@@ -290,7 +295,8 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
 // ---- Expansion -----------------------------------------------------------------------------
 
 ExpandResult expandDefinition(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t node, ExpandOptions options) {
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t node,
+    ExpandOptions options) {
     ExpandResult result;
     const DraftNodeHeader *header = draft.header(node);
     if (header == nullptr || header->kind != GCNodeKind::Oper) {
@@ -313,13 +319,17 @@ ExpandResult expandDefinition(
     // The arguments: the node's operands, by the declared binding, each of a type the
     // definition takes (an operator may accept more than its definition does: a softmax of an
     // integer tensor is not expanded). Checked before the draft is changed.
-    const std::vector<gc_node_ref_t> norm(draft.normInputsOf(node).begin(), draft.normInputsOf(node).end());
-    const std::vector<gc_node_ref_t> with(draft.withInputsOf(node).begin(), draft.withInputsOf(node).end());
+    const std::vector<gc_node_ref_t> norm(
+        draft.normInputsOf(node).begin(),
+        draft.normInputsOf(node).end());
+    const std::vector<gc_node_ref_t> with(
+        draft.withInputsOf(node).begin(),
+        draft.withInputsOf(node).end());
     const auto ports = definition->graph->normPorts();
     std::vector<std::optional<gc_node_ref_t>> bound;
     for (size_t i = 0; i < definition->definition.params.size(); ++i) {
         const sem::DefinitionParam &param = definition->definition.params[i];
-        const auto &operands = param.kind == sem::DefinitionParam::Kind::Norm ? norm : with;
+        const auto &operands       = param.kind == sem::DefinitionParam::Kind::Norm ? norm : with;
         core::type::Type *portType = definition->graph->node(ports[i])->dataType();
         if (param.operand < operands.size()) {
             core::type::Type *argType = draft.header(operands[param.operand])->dataType;
@@ -335,7 +345,8 @@ ExpandResult expandDefinition(
             continue;
         }
         if (!param.fallback) {
-            result.problem = std::format("the call leaves out operand {}, which has no default", param.operand);
+            result.problem =
+                std::format("the call leaves out operand {}, which has no default", param.operand);
             return result;
         }
         bound.push_back(std::nullopt);
@@ -354,7 +365,9 @@ ExpandResult expandDefinition(
     // source position.
     const uint8_t permissions = draft.nodePermissions(node);
     const uint64_t origin     = draft.nodeOrigin(node);
-    const std::vector<gc_node_ref_t> ctrl(draft.ctrlInputsOf(node).begin(), draft.ctrlInputsOf(node).end());
+    const std::vector<gc_node_ref_t> ctrl(
+        draft.ctrlInputsOf(node).begin(),
+        draft.ctrlInputsOf(node).end());
     const gc_node_ref_t call = draft.addFuncNode(definition->graph, resultType);
     draft.setNormInputs(call, arguments);
     draft.setCtrlInputs(call, ctrl);

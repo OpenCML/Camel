@@ -32,6 +32,7 @@ for (const [uri, key, graph, params] of [
 }
 for (const l of [
   'DEFINITION built_once yes',
+  'DEFINITION same_version_replacement yes',
   "DEFINITION none refused: 'tensor:matmul' declares no definition",
   "DEFINITION without_function rejected: The semantics declared for the operator 'tensor:tanh' are rejected: definition: it names a library module and a function.",
   "DEFINITION cycle refused: the definition of 'tensor:exp' is refused: a cycle of definitions (tensor:exp -> tensor:softmax -> tensor:exp)",

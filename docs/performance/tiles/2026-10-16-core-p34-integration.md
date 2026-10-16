@@ -17,6 +17,10 @@ The integration is validated on `wzj-dev` before promotion to `develop`.
   tracking. Existing synchronous device ownership remains in force.
 - Definition graphs are opt-in. Their introduction does not silently replace Tiles
   arithmetic. GPU lowering of generic expanded definitions remains follow-up work.
+  Review found that the definition cache compared only semantic keys although the
+  registry permits same-version replacement. It now also checks the immutable
+  declaration record; the regression replaces a valid definition by a missing
+  function at the same version, verifies refusal, restores it and verifies rebuilding.
 - Slice bounds now fault instead of clamping. Tiles already invokes core inference
   and index instantiation, so it inherits the correction. A manual `source` call
   with extent 3 and stop 9 reports the bounds error even with an invalid GPU device;

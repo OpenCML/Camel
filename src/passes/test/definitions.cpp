@@ -66,7 +66,8 @@ std::string answer(camel::core::context::Context &context, std::string_view uri)
 
 } // namespace
 
-camel::runtime::GCGraph *DefinitionsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *
+DefinitionsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     OperatorTable &table = OperatorTable::instance();
 
     // ---- The definitions the tensor module declares. ----
@@ -80,22 +81,40 @@ camel::runtime::GCGraph *DefinitionsTestPass::apply(camel::runtime::GCGraph *gra
     os << "DEFINITION built_once " << (first != nullptr && first == again ? "yes" : "no") << "\n";
     os << "DEFINITION none " << answer(*context_, "tensor:matmul") << "\n";
 
+    // Same-version replacement is legal in the registry. Neither a previously built
+    // graph nor a remembered refusal may survive a different declaration record.
+    const auto original           = *table.semantics(softmax);
+    auto replaced                 = original;
+    replaced.definition->function = "no_such_definition";
+    table.declareSemantics("tensor:softmax", replaced);
+    std::string replacementProblem;
+    const bool refused =
+        context_->definitions().definitionOf(softmax, &replacementProblem) == nullptr;
+    table.declareSemantics("tensor:softmax", original);
+    const bool recovered = context_->definitions().definitionOf(softmax) != nullptr;
+    os << "DEFINITION same_version_replacement " << (refused && recovered ? "yes" : "no") << "\n";
+    if (!refused || !recovered)
+        throw std::runtime_error("stale definition after same-version replacement");
+
     // ---- Registration (check 6). ----
     try {
-        table.declareDefinition("tensor:tanh", Definition{.module = "bad_definitions", .params = {operand(0)}});
+        table.declareDefinition(
+            "tensor:tanh",
+            Definition{.module = "bad_definitions", .params = {operand(0)}});
         os << "DEFINITION without_function accepted\n";
     } catch (const std::invalid_argument &e) {
         os << "DEFINITION without_function rejected: " << e.what() << "\n";
     }
 
     // ---- Refused when built: each declared on a tensor operator, from bad_definitions. ----
-    const auto declare = [&](const char *uri, const char *module, const char *function, size_t arity) {
-        Definition d{.module = module, .function = function};
-        for (size_t i = 0; i < arity; ++i) {
-            d.params.push_back(operand(static_cast<uint8_t>(i)));
-        }
-        table.declareDefinition(uri, std::move(d));
-    };
+    const auto declare =
+        [&](const char *uri, const char *module, const char *function, size_t arity) {
+            Definition d{.module = module, .function = function};
+            for (size_t i = 0; i < arity; ++i) {
+                d.params.push_back(operand(static_cast<uint8_t>(i)));
+            }
+            table.declareDefinition(uri, std::move(d));
+        };
     declare("tensor:exp", "bad_definitions", "exp_through_softmax", 1);
     declare("tensor:abs", "bad_definitions", "abs_itself", 1);
     declare("tensor:neg", "bad_definitions", "two", 1);

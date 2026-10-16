@@ -117,6 +117,8 @@ class DefinitionStore {
     struct Entry {
         /// The key of the declaration it was built for (nullopt: the operator had none).
         std::optional<camel::core::sem::OperatorKey> key;
+        /// Immutable process-lifetime record: equal versions can still replace a declaration.
+        const camel::core::sem::OperatorSemantics *declaration = nullptr;
         /// The graph and its facts, once built (also when a cycle refuses it since).
         std::unique_ptr<DefinitionGraph> built;
         /// Why it is refused; empty when it is accepted.
