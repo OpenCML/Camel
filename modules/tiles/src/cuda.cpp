@@ -10,6 +10,7 @@
 
 // Scoped execution, resident allocation ownership and GPU benchmark measurements.
 #include "tiles/device.h"
+#include "tiles/internal/capability.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <chrono>
@@ -513,7 +514,7 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
 #else
 namespace camel::tiles {
 std::string deviceInfo() {
-    throw std::runtime_error(
+    throw BackendUnavailable(
         "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
 }
 bool available() { return false; }

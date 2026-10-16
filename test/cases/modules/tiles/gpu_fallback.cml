@@ -1,0 +1,15 @@
+module tiles_gpu_fallback
+import { gpu, available } from tiles
+@gpu
+func add(a: float, b: float): float { return a + b }
+@gpu
+func effect(x: float): float sync {
+    println("cpu effect")
+    return x + x
+}
+func main(): int sync {
+    println(available())
+    println(add(2.0, 3.0))
+    println(effect(4.0))
+    return 0
+}

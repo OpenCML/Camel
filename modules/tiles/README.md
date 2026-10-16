@@ -21,7 +21,7 @@ func main(): int sync {
 
 ## API
 
-`gpu` is a function decorator for explicit automatic dispatch:
+`gpu` is a function decorator that prefers GPU execution:
 
 ```cml
 import { Tensor } from tensor
@@ -37,8 +37,11 @@ capture. Unary and multiple arguments, function values, aggregate results and
 nested decorated calls are supported. Inside a GPU compilation, a nested dispatch
 is lowered as the underlying computation, without host execution or a nested GPU
 launch. Numeric permissions remain attached to the original operator nodes.
-The same supported computation subset and device errors as `run` apply; there is
-no CPU fallback. Functions with mutable parameters, unbound context parameters or
+When the backend is unavailable or compilation identifies an unsupported computation,
+the original function runs on the current CPU execution backend. This is graph
+execution, not a fused CPU JIT kernel. Configuration errors, malformed graphs,
+compilation failures and device execution faults are reported; an executed GPU
+region is never replayed on CPU. `run` continues to require the GPU. Functions with mutable parameters, unbound context parameters or
 no ordinary inputs are currently rejected. This is separate from the planned
 `@kernel` block-kernel validation annotation and from automatic region placement.
 The annotation also supports local functions with captured values. Use `gpu(lambda)`

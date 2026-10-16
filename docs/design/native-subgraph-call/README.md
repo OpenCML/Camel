@@ -114,7 +114,7 @@ This does not replace explicit boundary transfers, device-resident values,
 symbolic compilation or cache identities required by the route. Those remain
 part of the production pass. `run` currently retains explicit GPU semantics. The user-directed multi-target
 redesign makes `@gpu` a GPU preference with capability-based CPU fallback; this
-policy is not implemented yet. See [the multi-target design](../tiles-targets/README.md).
+policy now uses this invocation service in NVM, FVM, JIT and Taskflow. See [the multi-target design](../tiles-targets/README.md).
 
 ## Acceptance tests
 

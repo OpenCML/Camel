@@ -8,7 +8,7 @@ name = "direct_and_nested"
 kind = "behavior"
 case = "../../cases/modules/tiles/gpu_decorator.cml"
 args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit"]
+backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 0
 expect_stdout_exact = "66.0\n14.0\n28.0\n66.0\n12.0 14.0\ntrue\ntrue\ntrue\n66.0\n66.0\n"
 timeout_ms = 60000
@@ -31,3 +31,13 @@ envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
 expect_output_contains = ["CAMEL_TILES_DEVICE must be a nonnegative device ordinal"]
 timeout_ms = 10000
+
+[[tests]]
+name = "unsupported_computation_fallback"
+kind = "behavior"
+case = "../../cases/modules/tiles/gpu_fallback.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+expect_exit = 0
+expect_stdout_exact = "true\n5.0\ncpu effect\n8.0\n"
+timeout_ms = 60000

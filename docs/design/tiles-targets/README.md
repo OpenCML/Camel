@@ -1,7 +1,9 @@
 # Tiles multi-target compilation
 
 Status: architecture direction accepted by the user on 2026-10-16; concrete public
-signatures and implementation remain in progress. This extends the approved
+signatures and implementation remain in progress. The existing `@gpu` decorator
+now uses capability-based CPU fallback; target descriptors and compiled CPU
+kernels remain pending. This extends the approved
 [Tiles route](../tiles-route/README.cn.md), preserving its graph semantics and
 numerical contract. CUDA is currently the only compiled device backend.
 

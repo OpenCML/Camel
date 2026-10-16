@@ -10,9 +10,10 @@
 
 // Load the NVIDIA APIs, select the device and cache compiled kernel modules.
 #include "tiles/internal/cuda_backend.h"
+#include "tiles/internal/capability.h"
 
-#include <vector>
 #include <memory>
+#include <vector>
 #ifdef CAMEL_TILES_CUDA
 #include <algorithm>
 #include <cstdlib>
@@ -52,7 +53,7 @@ Library::Library(const std::vector<std::string> &paths) {
             return;
         }
     }
-    throw std::runtime_error(
+    throw BackendUnavailable(
         "cannot load " + paths.front() + "; install the NVIDIA driver/CUDA NVRTC runtime");
 }
 Library::~Library() {
@@ -188,15 +189,11 @@ Current::~Current() {
     api.cuCtxPopCurrent(&popped);
 }
 Backend::Backend() {
-    api.check(api.cuInit(0), "initialize CUDA");
-    int ordinal = 0;
-    if (auto *value = std::getenv("CAMEL_TILES_DEVICE")) {
-        char *end     = nullptr;
-        long selected = std::strtol(value, &end, 10);
-        if (!*value || *end || selected < 0 || selected > 65535)
-            throw std::runtime_error("CAMEL_TILES_DEVICE must be a nonnegative device ordinal");
-        ordinal = static_cast<int>(selected);
-    }
+    const auto initialized = api.cuInit(0);
+    if (initialized == CUDA_ERROR_NO_DEVICE)
+        throw BackendUnavailable("no CUDA device is available");
+    api.check(initialized, "initialize CUDA");
+    const int ordinal = configuredCudaOrdinal();
     api.check(api.cuDeviceGet(&device, ordinal), "select CUDA device");
     char name[256]{};
     api.check(api.cuDeviceGetName(name, sizeof(name), device), "query CUDA device");

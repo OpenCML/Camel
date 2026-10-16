@@ -47,9 +47,12 @@ Function *gpuFunction(Function *source, operator_t run) {
     auto packed = inputs.front();
     if (inputs.size() > 1)
         packed = packGraphTuple(draft, inputs);
-    auto *resultType = signature->exitType();
-    const auto output =
-        draft.addOperNode(resultType, run, "tiles:run", draft.allocateRuntimeSlot(resultType));
+    auto *resultType  = signature->exitType();
+    const auto output = draft.addOperNode(
+        resultType,
+        run,
+        "tiles:prefer_gpu",
+        draft.allocateRuntimeSlot(resultType));
     draft.setWithInputs(output, std::span(&original, 1));
     draft.setNormInputs(output, std::span(&packed, 1));
     draft.setOutputNode(output);
