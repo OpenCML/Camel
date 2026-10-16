@@ -199,6 +199,18 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
                 "IEEE 754-2019 minimum over the axis (exactly associative and commutative: any "
                 "order gives the same bits); an empty axis is a fault"));
         t.emplace(
+            "argmax_axis",
+            exactFloat(
+                "the position (int64) of the first maximum over the axis by IEEE 754-2019 "
+                "maximum: the first NaN if there is one, +0 above -0, the earlier position on a "
+                "tie; an empty axis is a fault"));
+        t.emplace(
+            "argmin_axis",
+            exactFloat(
+                "the position (int64) of the first minimum over the axis by IEEE 754-2019 "
+                "minimum: the first NaN if there is one, -0 below +0, the earlier position on a "
+                "tie; an empty axis is a fault"));
+        t.emplace(
             "sum_to",
             rounded(
                 f32,

@@ -123,15 +123,16 @@ TensorObject *reduceAxis(
     const size_t axis     = normalizeAxis(axisArg, input->rank());
     const AxisSplit split = splitAt(input->shapeSpan(), axis);
     const Shape outShape  = reducedShape(input->shapeSpan(), axis, keepDims);
-    if ((op == ReduceOp::Max || op == ReduceOp::Min || op == ReduceOp::ArgMax) &&
+    if ((op == ReduceOp::Max || op == ReduceOp::Min || op == ReduceOp::ArgMax ||
+         op == ReduceOp::ArgMin) &&
         split.extent == 0) {
-        throw std::invalid_argument("Cannot take max/min/argmax over an empty axis");
+        throw std::invalid_argument("Cannot take max/min/argmax/argmin over an empty axis");
     }
 
     TypeCode outType = input->dtype();
     if (op == ReduceOp::Mean) {
         outType = TypeCode::Float32;
-    } else if (op == ReduceOp::ArgMax) {
+    } else if (op == ReduceOp::ArgMax || op == ReduceOp::ArgMin) {
         outType = TypeCode::Int64;
     } else if (op == ReduceOp::Sum && outType == TypeCode::Bool) {
         outType = TypeCode::Int64;
@@ -186,15 +187,17 @@ TensorObject *reduceAxis(
                 out->dataAs<T>()[lane] = best;
                 break;
             }
-            case ReduceOp::ArgMax: {
-                // The index of the first element greater than every earlier one. Unchanged by
-                // the maximum rule above: which index a NaN or a tie of -0 and +0 yields is
-                // not settled (docs/design/op-semantics, phase 1 questions).
+            case ReduceOp::ArgMax:
+            case ReduceOp::ArgMin: {
+                // The position of the first maximum (minimum) by IEEE 754-2019 maximum
+                // (minimum): the first NaN if there is one, +0 above -0, the first on a tie
+                // (design principles 2.14; beyondExtreme in minmax.h).
+                const bool max  = op == ReduceOp::ArgMax;
                 T best          = src[base];
                 int64_t bestIdx = 0;
                 for (int64_t k = 1; k < split.extent; ++k) {
                     const T v = src[base + k * stride];
-                    if (v > best) {
+                    if (max ? beyondExtreme<true>(v, best) : beyondExtreme<false>(v, best)) {
                         best    = v;
                         bestIdx = k;
                     }

@@ -42,6 +42,7 @@ enum class ReduceOp {
     Max,
     Min,
     ArgMax,
+    ArgMin,
 };
 
 /// Normalizes a possibly negative axis against `rank`; throws when out of range.
@@ -52,7 +53,7 @@ Shape reducedShape(std::span<const int64_t> shape, size_t axis, bool keepDims);
 
 /**
  * Reduces one axis. Result dtypes: Sum/Max/Min keep the input dtype (bool sums
- * become int64), Mean is float32, ArgMax is int64.
+ * become int64), Mean is float32, ArgMax and ArgMin are int64.
  */
 TensorObject *reduceAxis(
     ReduceOp op, const TensorObject *input, int64_t axis, bool keepDims, mm::IAllocator &allocator);

@@ -533,6 +533,23 @@ std::optional<Num> fold(const sem::ReductionLaw &law, const std::vector<std::vec
     if (contributions.empty() && law.empty == sem::LawEmpty::Fault) {
         return std::nullopt;
     }
+    if (law.kind == sem::LawKind::ArgMax || law.kind == sem::LawKind::ArgMin) {
+        // The position, in canonical order, of the first contribution equal (bit for bit, a
+        // NaN as NaN) to the IEEE maximum (minimum) of them all, written from the standard's
+        // operation rather than from the kernel's comparison (design principles 2.14).
+        const bool max = law.kind == sem::LawKind::ArgMax;
+        Num extreme    = convert(contributions[0][0], law.accumulator);
+        for (size_t k = 1; k < contributions.size(); ++k) {
+            extreme = maximumOf(extreme, convert(contributions[k][0], law.accumulator), max);
+        }
+        for (size_t k = 0; k < contributions.size(); ++k) {
+            const Num v = convert(contributions[k][0], law.accumulator);
+            if (isNan(extreme) ? isNan(v) : bitsOf(v) == bitsOf(extreme)) {
+                return i64(static_cast<int64_t>(k));
+            }
+        }
+        return std::nullopt; // unreachable: the extreme is one of the contributions
+    }
     Num acc;
     size_t first = 0;
     if (law.init == sem::LawInit::Constant) {
@@ -1253,6 +1270,8 @@ camel::runtime::GCGraph *IndexEvalTestPass::apply(camel::runtime::GCGraph *graph
         {"tensor:mean_axis", reduceAxisCases(), 120},
         {"tensor:max_axis", reduceAxisCases(), 120},
         {"tensor:min_axis", reduceAxisCases(), 120},
+        {"tensor:argmax_axis", reduceAxisCases(), 120},
+        {"tensor:argmin_axis", reduceAxisCases(), 120},
         {"tensor:sum_to", sumToCases(), 100},
         {"tensor:matmul", matmulCases(), 150},
         {"nn:max_pool2d", poolCases(), 80},

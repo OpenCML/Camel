@@ -39,6 +39,7 @@
 #pragma once
 
 #include <bit>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <type_traits>
@@ -75,6 +76,30 @@ template <typename T> inline T minimum(T a, T b) {
     } else {
         return b < a ? b : a;
     }
+}
+
+/**
+ * argmax (Max) and argmin (design principles 2.14): true when `v`, met after `best` (the
+ * extreme so far), takes its place. The order is the one of IEEE 754-2019 maximum and minimum:
+ * a NaN is beyond every number (so the first NaN is kept), +0 is above -0, and on a tie the
+ * earlier position stays. The result is the position of the first element equal to the
+ * maximum (minimum) of the whole sequence, or of its first NaN.
+ */
+template <bool Max, typename T> inline bool beyondExtreme(T v, T best) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (best != best) {
+            return false;
+        }
+        if (v != v) {
+            return true;
+        }
+        if (v == best) {
+            // Only +0 and -0 compare equal with different bits.
+            return v == 0 && (Max ? (std::signbit(best) && !std::signbit(v))
+                                  : (!std::signbit(best) && std::signbit(v)));
+        }
+    }
+    return Max ? best < v : v < best;
 }
 
 /// relu(x) = maximum(x, +0): NaN gives the canonical NaN, -0 gives +0.

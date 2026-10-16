@@ -391,3 +391,14 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "9007199254740996.0\n3002399751580332.0\ntensor(9007199254740995, dtype=int64)\ntensor([-9223372036854775804,      -4], dtype=int64)\n-9.223372036854776e+18\ntensor([-4.612e+18,      -2.], dtype=float32)\n"
+
+[[tests]]
+name = "argmax_ieee"
+desc = "argmax and argmin compare by IEEE 754-2019 maximum and minimum (design principles 2.14): the first of equal extremes, the first NaN when there is one (for both), +0 above -0 (argmax of [-0, +0, -0, +0] is 1, argmin 0), integers by value."
+kind = "behavior"
+case = "../../../cases/modules/tensor/argmax_ieee.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "tensor(      1, dtype=int64)\ntensor(      3, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      0, dtype=int64)\ntensor(      0, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      3, dtype=int64)\ntensor([      0,       0], dtype=int64)\ntensor([      1,       2], dtype=int64)\ntensor([[      0,       0,       1]], dtype=int64)\n"

@@ -231,6 +231,24 @@ ReductionLaw extremumLaw(std::string name, bool max, TypeCode type, LawEmpty emp
     };
 }
 
+/// argmax / argmin: the position (int64) of the first extreme, from the first contribution.
+/// The pair (value, position) ordered by the IEEE maximum (minimum) and then the earlier
+/// position is exactly associative and commutative (the positions are distinct), so a back end
+/// may regroup it if it carries the positions; an empty axis is a fault.
+ReductionLaw positionLaw(std::string name, bool max, TypeCode type) {
+    return ReductionLaw{
+        .name             = std::move(name),
+        .kind             = max ? LawKind::ArgMax : LawKind::ArgMin,
+        .input            = type,
+        .accumulator      = type,
+        .result           = TypeCode::Int64,
+        .init             = LawInit::FirstContribution,
+        .empty            = LawEmpty::Fault,
+        .exactAssociative = true,
+        .exactCommutative = true,
+    };
+}
+
 // ---- Elementwise ----------------------------------------------------------------------------
 
 /**
@@ -845,6 +863,22 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
                 {extremumLaw("min_axis_f32", false, f32, LawEmpty::Fault),
                  extremumLaw("min_axis_i64", false, i64, LawEmpty::Fault),
                  extremumLaw("min_axis_bool", false, boolean, LawEmpty::Fault)}});
+        // argmax and argmin over an axis: the position of the first extreme by IEEE maximum
+        // (minimum), the first NaN if any, +0 above -0 (design principles 2.14).
+        t.emplace(
+            "argmax_axis",
+            Indexing{
+                reduceAxisIndexing,
+                {positionLaw("argmax_axis_f32", true, f32),
+                 positionLaw("argmax_axis_i64", true, i64),
+                 positionLaw("argmax_axis_bool", true, boolean)}});
+        t.emplace(
+            "argmin_axis",
+            Indexing{
+                reduceAxisIndexing,
+                {positionLaw("argmin_axis_f32", false, f32),
+                 positionLaw("argmin_axis_i64", false, i64),
+                 positionLaw("argmin_axis_bool", false, boolean)}});
         // sum_to converts g to f32 and accumulates in f32 from +0.
         t.emplace(
             "sum_to",

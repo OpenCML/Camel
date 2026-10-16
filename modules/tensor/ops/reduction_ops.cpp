@@ -66,7 +66,7 @@ InferFn reduceAxisInfer(k::ReduceOp op) {
         std::optional<TypeCode> dtype = in.dtype;
         if (op == k::ReduceOp::Mean) {
             dtype = TypeCode::Float32;
-        } else if (op == k::ReduceOp::ArgMax) {
+        } else if (op == k::ReduceOp::ArgMax || op == k::ReduceOp::ArgMin) {
             dtype = TypeCode::Int64;
         } else if (op == k::ReduceOp::Sum && dtype == TypeCode::Bool) {
             dtype = TypeCode::Int64;
@@ -331,6 +331,7 @@ std::vector<OpDef> reductionOps() {
     defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max"));
     defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min"));
     defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMin>("argmin_axis", "argmin"));
 
     defs.push_back(OpDef{
         .name      = "softmax",
@@ -376,6 +377,7 @@ std::vector<OpDef> reductionOps() {
     setVjp(defs, "max_axis", &extremumAxisVjp);
     setVjp(defs, "min_axis", &extremumAxisVjp);
     setVjp(defs, "argmax_axis", &camel::core::noGradient);
+    setVjp(defs, "argmin_axis", &camel::core::noGradient);
     setVjp(defs, "softmax", &softmaxVjp);
     setVjp(defs, "log_softmax", &logSoftmaxVjp);
     setVjp(defs, "layer_norm", &layerNormVjp);
