@@ -10,7 +10,7 @@
 
 // Block-local row regions: ordered stages, shared lifetimes and explicit reduction laws.
 #pragma once
-#include "tiles/internal/scalar_expr.h"
+#include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
 #include <cstddef>
 #include <optional>
@@ -31,5 +31,5 @@ struct RowKernel {
     std::vector<size_t> members() const;
 };
 std::optional<RowKernel> rowKernel(const Program &program);
-std::string emitRowKernel(const Program &program, const RowKernel &kernel, const std::string &name);
+KernelBody rowBody(const Program &program, const RowKernel &kernel, Launch &launch);
 } // namespace camel::tiles::kernel
