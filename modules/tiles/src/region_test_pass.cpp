@@ -64,8 +64,19 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
     }
 };
 } // namespace
-void registerRegionTestPasses(operator_t run, RegionDeviceOps device) {
+void registerRegionTestPasses(
+    operator_t run, RegionDeviceOps device, RegionDeviceOps host, RegionDeviceOps preferred) {
     if (std::getenv("CAMEL_ENABLE_TEST_PASSES")) {
+        registerModulePass(
+            "tiles::test_outline_preferred",
+            [preferred](const core::context::context_ptr_t &ctx) {
+                return std::make_unique<RegionOutlineTestPass>(ctx, preferred.execute, preferred);
+            });
+        registerModulePass(
+            "tiles::test_outline_host_resident",
+            [host](const core::context::context_ptr_t &ctx) {
+                return std::make_unique<RegionOutlineTestPass>(ctx, host.execute, host);
+            });
         registerModulePass(
             "tiles::test_outline_resident",
             [device](const core::context::context_ptr_t &ctx) {

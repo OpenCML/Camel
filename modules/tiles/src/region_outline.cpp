@@ -50,7 +50,7 @@ runtime::GCGraph *outlineRegions(
                 auto upload      = draft.addOperNode(
                     type,
                     device->upload,
-                    "tiles:upload",
+                    device->uploadUri,
                     draft.allocateRuntimeSlot(type));
                 draft.setNormInputs(upload, std::span(&input, 1));
                 draft.setNodeOrigin(upload, graph->nodeOrigin(input));
@@ -92,7 +92,7 @@ runtime::GCGraph *outlineRegions(
                 call              = draft.addOperNode(
                     type,
                     run,
-                    device ? "tiles:run_device" : uri,
+                    device ? device->executeUri : uri,
                     draft.allocateRuntimeSlot(type));
                 draft.setNormInputs(call, std::span(&packed, 1));
             } else {
@@ -124,7 +124,7 @@ runtime::GCGraph *outlineRegions(
                         auto download  = draft.addOperNode(
                             hostType,
                             device->download,
-                            "tiles:download",
+                            device->downloadUri,
                             draft.allocateRuntimeSlot(hostType));
                         draft.setNormInputs(download, std::span(&replacement, 1));
                         draft.setNodeOrigin(download, graph->nodeOrigin(old));

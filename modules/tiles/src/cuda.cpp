@@ -246,6 +246,19 @@ double elapsed(Clock::time_point start) {
 } // namespace
 
 std::string deviceInfo() { return backend().description; }
+std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceValue> value) {
+    if (!value)
+        throw std::invalid_argument("missing resident value");
+    const auto allocation = std::dynamic_pointer_cast<OwnedAllocation>(value->owner);
+    const auto target     = sharedBackend();
+    if (allocation && allocation->backend == target) {
+        if (allocation->pointer != value->address ||
+            bytes(Node{.shape = value->shape, .dtype = value->dtype}) > allocation->capacity)
+            throw std::runtime_error("resident CUDA storage metadata mismatch");
+        return value;
+    }
+    return uploadValue(value->shape, value->dtype, downloadValue(*value));
+}
 std::shared_ptr<DeviceValue>
 uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
     if (bytes(Node{.shape = shape, .dtype = dtype}) != data.size() ||
@@ -519,6 +532,10 @@ std::string deviceInfo() {
         "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
 }
 bool available() { return false; }
+std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceValue>) {
+    (void)deviceInfo();
+    return {};
+}
 std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program>) {
     (void)deviceInfo();
     return {};

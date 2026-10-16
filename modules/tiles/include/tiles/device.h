@@ -32,6 +32,8 @@ struct DeviceValue {
 std::shared_ptr<DeviceValue>
 uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data);
 std::vector<std::byte> downloadValue(const DeviceValue &value);
+// Reuse storage on the selected device, otherwise transfer through its owning backend.
+std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceValue> value);
 // Own a native host snapshot for portable execution; no moving-heap references.
 std::shared_ptr<DeviceValue>
 retainHostValue(const Shape &shape, DType dtype, std::span<const std::byte> data);

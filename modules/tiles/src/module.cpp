@@ -11,6 +11,7 @@
 // Public module boundary: function graphs are inspected, never traced by executing the body.
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm/gen.h"
+#include "camel/core/mm/root_handle.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/func.h"
@@ -217,9 +218,9 @@ Type *residentType(Type *type) {
     types.emplace(type, result);
     return result;
 }
-slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t runResidentPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
     return checked([&] {
-        auto values = executeResident(std::make_shared<const Program>(prepare(with, norm, ctx)));
+        auto values = executeResident(std::move(program));
         core::mm::NoCollectionScope noCollection;
         auto *resultType = residentType(static_cast<FunctionType *>(with.type(0))->exitType());
         size_t leaf      = 0;
@@ -241,6 +242,14 @@ slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         };
         return rebuild(rebuild, resultType);
     });
+}
+slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    std::shared_ptr<const Program> program;
+    checked([&] {
+        program = std::make_shared<const Program>(prepare(with, norm, ctx));
+        return slot_t{};
+    });
+    return runResidentPrepared(with, std::move(program));
 }
 slot_t uploadKernel(ArgsView &, ArgsView &norm, Context &) {
     return checked([&] {
@@ -280,6 +289,150 @@ slot_t downloadKernel(ArgsView &, ArgsView &norm, Context &) {
             std::memcpy(out->rawData(), data.data(), data.size());
         return td::toSlot(out);
     });
+}
+// Called only while collection is inhibited; aggregates are rebuilt with exact types.
+slot_t hostResidentValue(Type *hostType, slot_t value, bool retain) {
+    if (hostType->code() == TypeCode::Tuple || hostType->code() == TypeCode::Struct) {
+        const bool tuple   = hostType->code() == TypeCode::Tuple;
+        const size_t count = tuple ? static_cast<TupleType *>(hostType)->size()
+                                   : static_cast<StructType *>(hostType)->size();
+        auto *outType      = retain ? residentType(hostType) : hostType;
+        if (tuple) {
+            auto *input  = td::fromSlot<::Tuple *>(value);
+            auto *output = ::Tuple::create(count, core::mm::autoSpace());
+            for (size_t i = 0; i < count; ++i)
+                output->set(
+                    i,
+                    hostResidentValue(
+                        static_cast<TupleType *>(hostType)->typeAt(i),
+                        input->get<slot_t>(i),
+                        retain),
+                    static_cast<TupleType *>(outType));
+            return td::toSlot(output);
+        }
+        auto *input  = td::fromSlot<::Struct *>(value);
+        auto *output = ::Struct::create(count, core::mm::autoSpace());
+        for (size_t i = 0; i < count; ++i)
+            output->set(
+                i,
+                hostResidentValue(
+                    static_cast<StructType *>(hostType)->typeAt(i),
+                    input->get<slot_t>(i),
+                    retain),
+                static_cast<StructType *>(outType));
+        return td::toSlot(output);
+    }
+    if (retain) {
+        if (hostType->code() == TypeCode::Float64) {
+            const double scalar = td::fromSlot<double>(value);
+            return wrapDevice(
+                retainHostValue({}, DType::F64, std::as_bytes(std::span(&scalar, 1))));
+        }
+        auto *tensor = td::fromSlot<tensor::TensorObject *>(value);
+        if (tensor->dtype() != TypeCode::Float32)
+            throw std::runtime_error("host resident tensors require f32 elements");
+        const auto shape = tensor->shapeVector();
+        return wrapDevice(retainHostValue(
+            shape,
+            DType::F32,
+            std::as_bytes(std::span(tensor->dataAs<float>(), elements(shape)))));
+    }
+    auto *wrapper       = td::fromSlot<td::ForeignResourceObject *>(value);
+    const auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
+    const auto data     = downloadValue(*resident);
+    if (hostType->code() == TypeCode::Float64) {
+        if (resident->dtype != DType::F64 || data.size() != sizeof(double))
+            throw std::runtime_error("resident scalar type mismatch");
+        double scalar;
+        std::memcpy(&scalar, data.data(), sizeof(scalar));
+        return td::toSlot(scalar);
+    }
+    if (resident->dtype != DType::F32)
+        throw std::runtime_error("resident tensor type mismatch");
+    auto *tensor =
+        tensor::TensorObject::create(TypeCode::Float32, resident->shape, core::mm::autoSpace());
+    if (!data.empty())
+        std::memcpy(tensor->rawData(), data.data(), data.size());
+    return td::toSlot(tensor);
+}
+slot_t retainHostKernel(ArgsView &, ArgsView &norm, Context &) {
+    return checked([&] {
+        core::mm::NoCollectionScope noCollection;
+        return hostResidentValue(norm.type(0), norm.slot(0), true);
+    });
+}
+slot_t runHostResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    auto *type = static_cast<FunctionType *>(with.type(0));
+    core::mm::RootHandle root(core::mm::autoSpace(), "tiles.host.arguments");
+    std::vector<slot_t> arguments;
+    checked([&] {
+        core::mm::NoCollectionScope noCollection;
+        type_vec_t fields;
+        for (size_t i = 0; i < type->normTypesCount(); ++i)
+            fields.push_back(type->normTypeAt(i));
+        auto *tupleType = TupleType::create(fields);
+        auto *tuple     = ::Tuple::create(fields.size(), core::mm::autoSpace());
+        root.reset(tuple, tupleType);
+        for (size_t i = 0; i < fields.size(); ++i) {
+            const auto value =
+                fields.size() == 1 ? norm.slot(0) : norm.get<::Tuple *>(0)->get<slot_t>(i);
+            const auto host = hostResidentValue(fields[i], value, false);
+            tuple->set(i, host, tupleType);
+            arguments.push_back(host);
+        }
+        return slot_t{};
+    });
+    // Binding precedes the callee's first safepoint. Do not suppress GC through
+    // graph execution, and do not translate/replay faults from the original graph.
+    const auto result = execute::invokeFunction(ctx, with.get<::Function *>(0), {}, arguments);
+    return checked([&] {
+        core::mm::NoCollectionScope noCollection;
+        return hostResidentValue(type->exitType(), result, true);
+    });
+}
+slot_t retainPreferredKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const bool gpu = checked([&] {
+        (void)configuredCudaOrdinal();
+        try {
+            (void)deviceInfo();
+            return true;
+        } catch (const BackendUnavailable &) {
+            return false;
+        }
+    });
+    return gpu ? uploadKernel(with, norm, ctx) : retainHostKernel(with, norm, ctx);
+}
+slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    std::shared_ptr<Program> program;
+    const bool gpu = checked([&] {
+        (void)configuredCudaOrdinal();
+        try {
+            (void)deviceInfo();
+            program = std::make_shared<Program>(prepare(with, norm, ctx));
+            return true;
+        } catch (const BackendUnavailable &) {
+            return false;
+        } catch (const UnsupportedComputation &) {
+            return false;
+        }
+    });
+    if (!gpu)
+        return runHostResidentKernel(with, norm, ctx);
+    // Selection is complete before transfers. Transfer/compile/launch faults
+    // propagate; none trigger replay of the graph on another target.
+    checked([&] {
+        std::unordered_map<const DeviceValue *, std::shared_ptr<const DeviceValue>> placed;
+        for (auto &node : program->nodes)
+            if (node.resident) {
+                const auto *key = node.resident.get();
+                auto found      = placed.find(key);
+                if (found == placed.end())
+                    found = placed.emplace(key, placeOnDevice(node.resident)).first;
+                node.resident = found->second;
+            }
+        return slot_t{};
+    });
+    return runResidentPrepared(with, std::move(program));
 }
 slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
     return checked([] { return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace())); });
@@ -363,7 +516,21 @@ class TilesModule final : public BuiltinModule {
   public:
     explicit TilesModule(context_ptr_t ctx) : BuiltinModule("tiles", ctx) {
         tensor::ops::registerTensorOps();
-        registerRegionTestPasses(&runKernel, {&uploadKernel, &runDeviceKernel, &downloadKernel});
+        registerRegionTestPasses(
+            &runKernel,
+            {&uploadKernel, &runDeviceKernel, &downloadKernel},
+            {&retainHostKernel,
+             &runHostResidentKernel,
+             &downloadKernel,
+             "tiles:retain_host",
+             "tiles:run_host_resident",
+             "tiles:download"},
+            {&retainPreferredKernel,
+             &runPreferredResidentKernel,
+             &downloadKernel,
+             "tiles:retain_preferred",
+             "tiles:run_preferred_resident",
+             "tiles:download"});
         exportType(Reference("Device"), DeviceType::get(tensor::TensorType::Default()));
         exportEntity(
             "gpu",
@@ -480,6 +647,10 @@ class TilesModule final : public BuiltinModule {
                     {"test_call", &testNativeCall},
                     {"gpu", &gpuKernel},
                     {"run_device", &runDeviceKernel},
+                    {"retain_host", &retainHostKernel},
+                    {"retain_preferred", &retainPreferredKernel},
+                    {"run_preferred_resident", &runPreferredResidentKernel},
+                    {"run_host_resident", &runHostResidentKernel},
                     {"upload", &uploadKernel},
                     {"download", &downloadKernel},
                     {"source", &sourceKernel},
@@ -489,6 +660,14 @@ class TilesModule final : public BuiltinModule {
                     {"available", &availableKernel},
                     {"device", &deviceKernel}});
         });
+        core::OperatorTable::instance().set("tiles:retain_host", {.pure = false});
+        core::OperatorTable::instance().set(
+            "tiles:run_host_resident",
+            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+        core::OperatorTable::instance().set("tiles:retain_preferred", {.pure = false});
+        core::OperatorTable::instance().set(
+            "tiles:run_preferred_resident",
+            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
         // run may initialize a driver/compile code; never execute it in constant folding.
         core::OperatorTable::instance().declare(
             "tiles",

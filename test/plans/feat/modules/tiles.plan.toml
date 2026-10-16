@@ -255,6 +255,17 @@ timeout_ms = 10000
 
 
 [[tests]]
+name = "host_resident_region_execution"
+kind = "behavior"
+case = "../../../cases/modules/tiles/region_execution.cml"
+args = ["${case}", "tiles::test_outline_host_resident", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CUDA_VISIBLE_DEVICES=-1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
+timeout_ms = 60000
+
+[[tests]]
 name = "outlined_region_execution"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
@@ -285,6 +296,16 @@ args = ["${case}", "tiles::test_outline_native", "std::jit"]
 envs = ["CAMEL_JIT_HOT_THRESHOLD=0", "CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "host_resident_parallel"
+kind = "behavior"
+case = "../../../cases/modules/tiles/native_parallel.cml"
+args = ["${case}", "tiles::test_outline_host_resident", "std::prl"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CUDA_VISIBLE_DEVICES=-1", "CAMEL_TF_BYTECODE=0", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 10000
 
 [[tests]]
@@ -337,3 +358,14 @@ envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
 expect_output_contains = ["CAMEL_TILES_DEVICE must be a nonnegative device ordinal"]
 timeout_ms = 10000
+
+[[tests]]
+name = "preferred_resident_execution"
+kind = "behavior"
+case = "../../../cases/modules/tiles/region_execution.cml"
+args = ["${case}", "tiles::test_outline_preferred", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
+timeout_ms = 60000

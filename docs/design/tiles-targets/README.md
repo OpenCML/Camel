@@ -88,7 +88,22 @@ or test-enablement checks. Test passes use the same rewriting implementation.
 With explicit device operators this component inserts typed uploads, resident
 calls and host-visible downloads. `tiles::test_outline_resident` exercises this
 GPU-required path. It is not yet the complete `std::tiles` pass: automatic target
-selection and portable resident values for CPU fallback remain pending.
+selection and automatic host/device routing remain pending.
+
+`tiles::test_outline_host_resident` uses the same transfer graph with host-owned
+snapshots. It restores arguments into a rooted typed tuple, invokes the original
+region through the active scheduler without suppressing collection across the
+call, and retains its result as native host storage. This validates the portable
+execution boundary on NVM, FVM, JIT and Taskflow; it is interpretation, not a CPU
+kernel compiler.
+
+The internal `tiles::test_outline_preferred` path now selects GPU execution or
+host interpretation at runtime. Missing GPU capability selects host storage;
+unsupported computation falls back before launch. Once selected, transfer,
+compilation and execution faults propagate without replay. `placeOnDevice`
+reuses storage already owned by the selected CUDA backend and otherwise copies
+through the source storage's read interface. Public pass registration, mixed
+host/GPU fallback-chain tests and complete dispatch inspection remain pending.
 
 The single-target transfer planner computes deduplicated uploads, host-visible
 downloads and resident producer/consumer edges from the live graph. Embedded
