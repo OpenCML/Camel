@@ -69,3 +69,8 @@ case = "../../../cases/tools/debugger/dap_pipeline.test.mjs"
 name = "debugger.dap_memory"
 desc = "Paused memory overview, bounded byte/object paging, lossless addresses, invalid requests, Release capability and session end."
 case = "../../../cases/tools/debugger/dap_memory.test.mjs"
+
+[[tests]]
+name = "debugger.dap_node_breakpoints"
+desc = "GIR origins set at compiler entry hit the transformed runtime node on NodeVM/FastVM; paused origin/source, actual GIR, clear and resume."
+case = "../../../cases/tools/debugger/dap_node_breakpoints.test.mjs"
