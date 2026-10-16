@@ -18,61 +18,11 @@
 #include "tiles/program.h"
 #include <algorithm>
 #include <cstdint>
-#include <functional>
 #include <sstream>
 #include <stdexcept>
 
 namespace camel::tiles {
-namespace {
-using kernel::IndexExpr;
-std::string literal(size_t n) { return std::to_string(n) + "ULL"; }
-IndexExpr broadcastIndex(
-    const Shape &input, const Shape &output, const IndexExpr &at = IndexExpr::variable("i")) {
-    if (input == output)
-        return at;
-    if (input.size() > output.size())
-        throw std::runtime_error("invalid broadcast rank");
-    size_t inStride = 1, outStride = 1;
-    IndexExpr expr(0);
-    for (size_t d = output.size(); d-- > 0;) {
-        if (d >= output.size() - input.size()) {
-            size_t j = d - (output.size() - input.size());
-            if (input[j] != 1 && input[j] != output[d])
-                throw std::runtime_error("invalid broadcast shape");
-            if (input[j] > 1)
-                expr = expr +
-                       ((at / IndexExpr(outStride)) % IndexExpr(input[j])) * IndexExpr(inStride);
-            inStride *= std::max<int64_t>(input[j], 1);
-        }
-        outStride *= std::max<int64_t>(output[d], 1);
-    }
-    return expr;
-}
-IndexExpr mappedIndex(const Node &n, const IndexExpr &at) {
-    size_t stride = 1;
-    IndexExpr address(n.offset);
-    for (size_t d = n.shape.size(); elements(n.shape) && d-- > 0;) {
-        const size_t extent = std::max<size_t>(n.shape[d], 1);
-        address =
-            address + ((at / IndexExpr(stride)) % IndexExpr(extent)) * IndexExpr(n.strides[d]);
-        stride *= extent;
-    }
-    return address;
-}
-} // namespace
-
 void kernel::emitCUDA(Program &p) {
-    auto canContract = [&](const Node &node) {
-        if (!(node.permissions & core::sem::kContract) || node.semantic >= p.contracts.size())
-            return false;
-        const auto *declaration = p.contracts[node.semantic].declaration;
-        if (!declaration)
-            return false;
-        const auto &numeric = declaration->numeric;
-        return numeric.cls == core::sem::NumericClass::CorrectlyRounded &&
-               numeric.compute == core::type::TypeCode::Float32 &&
-               (numeric.sensitiveTo & core::sem::kContract);
-    };
     auto load = [&](size_t id, const std::string &at) {
         if (p.nodes[id].dtype == DType::F64)
             return "reinterpret_cast<double*>(v[" + std::to_string(id) + "])[" + at + "]";
@@ -93,104 +43,9 @@ void kernel::emitCUDA(Program &p) {
         const Node &n = p.nodes[id];
         if (n.op == "input")
             continue;
-        const size_t count = elements(n.shape);
-        size_t reduction   = SIZE_MAX;
-        if (launch.implementation == "ordered_reduce")
-            for (auto member : launch.members)
-                if (p.nodes[member].op == "sum_axis" || p.nodes[member].op == "mean_axis")
-                    reduction = member;
         code << "// " << n.op << "\nextern \"C\" __global__ void " << launch.name
              << "(float** v) {\n";
-        // Every node retains its f32 rounding point. NVRTC's --fmad=false
-        // prevents contraction across these assignments.
-        std::function<std::string(size_t, const std::string &)> emit;
-        emit = [&](size_t member, const std::string &at) -> std::string {
-            if (member == reduction)
-                return "reduced_value";
-            if (std::find(launch.members.begin(), launch.members.end(), member) ==
-                launch.members.end())
-                return load(member, at);
-            code << "float t" << member << ";\n";
-            const auto &value     = p.nodes[member];
-            const auto coordinate = "q" + std::to_string(member);
-            code << "unsigned long long " << coordinate << "=" << at << ";\n";
-            auto input = [&](size_t in) {
-                const auto index = value.op == "reindex"
-                                       ? mappedIndex(value, IndexExpr::variable(coordinate))
-                                   : value.op == "reshape" ? IndexExpr::variable(coordinate)
-                                                           : broadcastIndex(
-                                                                 p.nodes[in].shape,
-                                                                 value.shape,
-                                                                 IndexExpr::variable(coordinate));
-                return emit(in, index.cuda());
-            };
-            // Contract only a private multiply in this launch, with permission
-            // on both original operations. Keep all other f32 rounding points.
-            if (value.op == "add" && canContract(value)) {
-                for (size_t side = 0; side < 2; ++side) {
-                    const auto productId = value.inputs[side];
-                    const auto &product  = p.nodes[productId];
-                    if (product.op != "multiply" || !canContract(product) ||
-                        std::find(launch.members.begin(), launch.members.end(), productId) ==
-                            launch.members.end())
-                        continue;
-                    const auto atProduct =
-                        broadcastIndex(product.shape, value.shape, IndexExpr::variable(coordinate));
-                    const auto left = emit(
-                        product.inputs[0],
-                        broadcastIndex(p.nodes[product.inputs[0]].shape, product.shape, atProduct)
-                            .cuda());
-                    const auto right = emit(
-                        product.inputs[1],
-                        broadcastIndex(p.nodes[product.inputs[1]].shape, product.shape, atProduct)
-                            .cuda());
-                    const auto other = input(value.inputs[1 - side]);
-                    const auto fused = ScalarExpr::apply(
-                        ScalarOp::Fma,
-                        {ScalarExpr::symbol("a", DType::F32),
-                         ScalarExpr::symbol("b", DType::F32),
-                         ScalarExpr::symbol("c", DType::F32)});
-                    code << "{float a=" << left << ",b=" << right << ",c=" << other << ";\n"
-                         << "t" << member << "=" << fused.cuda() << ";}\n";
-                    return "t" + std::to_string(member);
-                }
-            }
-            const auto a = input(value.inputs[0]);
-            const auto b = value.inputs.size() == 2 ? input(value.inputs[1]) : "";
-            code << (value.op == "cast_f32" ? "{ double a=" : "{ float a=") << a << ";\n";
-            if (value.inputs.size() == 2)
-                code << "float b=" << b << ";\n";
-            const auto expr = elementwiseExpression(value.op).cuda();
-            code << "t" << member << "=" << expr << "; }\n";
-            return "t" + std::to_string(member);
-        };
-
-        if (launch.implementation == "ordered_reduce") {
-            const auto &reducer = p.nodes[reduction];
-            const auto &shape   = p.nodes[reducer.inputs[0]].shape;
-            const size_t axis = reducer.attributes[0], width = shape[axis];
-            size_t inner = 1;
-            for (size_t d = axis + 1; d < shape.size(); ++d)
-                inner *= shape[d];
-            const auto safeInner = std::max(inner, size_t(1));
-            launch.gridX = static_cast<unsigned>(std::clamp<size_t>((count + 31) / 32, 1, 65535));
-            // Parallelize independent output rows. Each thread preserves every
-            // f32 producer rounding point and the ordered f64 accumulation.
-            code << "for(unsigned long long row=(unsigned long "
-                    "long)blockIdx.x*blockDim.x+threadIdx.x;row<"
-                 << literal(count) << ";row+=(unsigned long long)gridDim.x*blockDim.x){\n"
-                 << "unsigned long long base=(row/" << literal(safeInner) << ")*"
-                 << literal(width * inner) << "+row%" << literal(safeInner) << ";\n"
-                 << "double acc=0.0;\nfor(unsigned long long r=0;r<" << literal(width)
-                 << ";++r){\n";
-            const auto value = emit(reducer.inputs[0], "base+r*" + literal(inner));
-            code << "acc+=(double)" << value << ";\n}\nfloat reduced_value=(float)(acc";
-            if (reducer.op == "mean_axis")
-                code << "/" << (width ? std::to_string(width) + ".0" : "0.0");
-            code << ");\n";
-            const auto result = emit(id, "row");
-            code << load(id, "row") << "=" << result << ";\n}\n";
-        } else if (n.op.starts_with("scalar_")) {
+        if (n.op.starts_with("scalar_")) {
             launch.blockX = launch.gridX = 1;
             auto operand                 = [&](size_t in) {
                 return std::find(launch.members.begin(), launch.members.end(), in) !=
@@ -221,114 +76,12 @@ void kernel::emitCUDA(Program &p) {
                 code << "t" << member << "=" << expr << ";}\n";
             }
             code << load(id, "0") << "=t" << id << ";\n";
-        } else if (n.op == "sum_all" || n.op == "mean_all") {
-            launch.blockX = launch.gridX = 1;
-            const size_t size            = elements(p.nodes[n.inputs[0]].shape);
-            code << "double acc=0.0;\nfor(unsigned long long r=0;r<" << literal(size)
-                 << ";++r) acc+=(double)" << load(n.inputs[0], "r") << ";\n"
-                 << load(id, "0") << "=acc";
-            if (n.op == "mean_all")
-                code << "/" << std::to_string(size) << ".0";
-            code << ";\n";
-        } else if (n.op == "constant64") {
-            launch.blockX = launch.gridX = 1;
-            code << load(id, "0") << "=__longlong_as_double("
-                 << std::to_string(static_cast<uint64_t>(n.attributes[0])) << "ULL);\n";
-        } else if (n.op == "cast_f32") {
-            launch.blockX = launch.gridX = 1;
-            code << "double a=" << load(n.inputs[0], "0") << ";\n"
-                 << load(id, "0") << "=" << elementwiseExpression("cast_f32").cuda() << ";\n";
         } else if (launch.implementation == "parallel_max") {
-            const auto width = p.nodes[n.inputs[0]].shape.back();
-            launch.gridX     = static_cast<unsigned>(std::clamp<size_t>(count, 1, 65535));
-            // Canonical NaNs and IEEE signed-zero ordering make every merge
-            // bitwise associative and commutative, including idle lanes.
-            code << "__shared__ float values[256];\n"
-                 << "unsigned t=threadIdx.x;\nfor(unsigned long long row=blockIdx.x;row<"
-                 << literal(count) << ";row+=gridDim.x){\nunsigned long long base=row*"
-                 << literal(width) << ";\nfloat best=__uint_as_float(0xff800000U);\n"
-                 << "for(unsigned long long r=t;r<" << literal(width)
-                 << ";r+=256){best=tiles_maximum(best," << load(n.inputs[0], "base+r") << ");}\n"
-                 << "values[t]=best;__syncthreads();\n"
-                 << "for(unsigned stride=128;stride;stride/=2){\nif(t<stride)"
-                 << "values[t]=tiles_maximum(values[t],values[t+stride]);\n__syncthreads();\n}\n"
-                 << "if(t==0)" << load(id, "row") << "=values[0];\n"
-                 << "__syncthreads();\n}\n";
+            code << emitBody(parallelMaxBody(p, launch));
         } else if (n.op == "matmul") {
             code << emitBody(matmulBody(p, launch));
         } else {
-            launch.gridX = static_cast<unsigned>(std::clamp<size_t>((count + 255) / 256, 1, 65535));
-            code << "for(unsigned long long i=(unsigned long "
-                    "long)blockIdx.x*blockDim.x+threadIdx.x; i<"
-                 << literal(count) << "; i+=(unsigned long long)blockDim.x*gridDim.x) {\n";
-            if (launch.members.size() > 1) {
-                emit(id, "i");
-                code << load(id, "i") << "=t" << id << ";\n";
-            } else if (n.op == "reindex") {
-                code << load(id, "i") << "="
-                     << load(n.inputs[0], mappedIndex(n, IndexExpr::variable("i")).cuda()) << ";\n";
-            } else if (n.op == "sum_to") {
-                // Match tensor sum_to's row-major f32 accumulation, not sum_axis's f64 policy.
-                const auto &shape  = p.nodes[n.inputs[0]].shape;
-                const size_t shift = shape.size() - n.shape.size();
-                size_t inputStride = 1, outputStride = 1, reducedStride = 1, reductions = 1;
-                std::string base = "0ULL", reduced = "0ULL";
-                for (size_t d = shape.size(); d-- > 0;) {
-                    const bool reduce = d < shift || n.shape[d - shift] == 1;
-                    if (reduce) {
-                        reduced += "+((r/" + literal(reducedStride) + ")%" +
-                                   literal(std::max<int64_t>(shape[d], 1)) + ")*" +
-                                   literal(inputStride);
-                        reductions *= size_t(shape[d]);
-                        reducedStride *= size_t(std::max<int64_t>(shape[d], 1));
-                    } else {
-                        base += "+((i/" + literal(outputStride) + ")%" +
-                                literal(std::max<int64_t>(shape[d], 1)) + ")*" +
-                                literal(inputStride);
-                        outputStride *= size_t(std::max<int64_t>(shape[d], 1));
-                    }
-                    inputStride *= size_t(std::max<int64_t>(shape[d], 1));
-                }
-                code << "unsigned long long base=" << base << ";\nfloat acc=0.0f;\n"
-                     << "for(unsigned long long r=0;r<" << literal(reductions)
-                     << ";++r) acc+=" << load(n.inputs[0], "base+" + reduced) << ";\n"
-                     << load(id, "i") << "=acc;\n";
-            } else if (n.op == "sum_axis" || n.op == "mean_axis" || n.op == "max_axis") {
-                const auto &shape = p.nodes[n.inputs[0]].shape;
-                size_t axis = n.attributes[0], width = shape[axis], inner = 1;
-                for (size_t d = axis + 1; d < shape.size(); ++d)
-                    inner *= shape[d];
-                const size_t safeInner = std::max(inner, size_t(1));
-                code << "unsigned long long base=(i/" << literal(safeInner) << ")*"
-                     << literal(width * inner) << "+i%" << literal(safeInner) << ";\n";
-                if (n.op == "max_axis")
-                    code << "float acc=__uint_as_float(0xff800000U);\n";
-                else
-                    code << "double acc=0.0;\n";
-                code << "for(unsigned long long r=" << "0" << ";r<" << literal(width)
-                     << ";++r) { float x=" << load(n.inputs[0], "base+r*" + literal(inner))
-                     << ";\n";
-                code << (n.op == "max_axis" ? "acc=tiles_maximum(acc,x);\n" : "acc+=(double)x;\n");
-                code << "}\n" << load(id, "i") << "=(float)(acc";
-                if (n.op == "mean_axis")
-                    code << "/" << (width ? std::to_string(width) + ".0" : "0.0");
-                code << ");\n";
-            } else {
-                const auto a = load(
-                    n.inputs[0],
-                    n.op == "reshape" ? "i"
-                                      : broadcastIndex(p.nodes[n.inputs[0]].shape, n.shape).cuda());
-                code << "float a=" << a << ";\n";
-                if (n.inputs.size() == 2) {
-                    const auto b = load(
-                        n.inputs[1],
-                        broadcastIndex(p.nodes[n.inputs[1]].shape, n.shape).cuda());
-                    code << "float b=" << b << ";\n";
-                }
-                const auto expr = elementwiseExpression(n.op).cuda();
-                code << load(id, "i") << "=" << expr << ";\n";
-            }
-            code << "}\n";
+            code << emitBody(serialBody(p, launch));
         }
         code << "}\n";
     }
