@@ -19,7 +19,6 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/graph.h"
-#include "modules/tensor/ops/indexing.h"
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/ops/support.h"
 #include "modules/tensor/tensor.h"
@@ -44,6 +43,9 @@ namespace {
 struct Value {
     ty::Type *type = nullptr;
     std::optional<ConstArg> constant;
+    // Borrowed only during extraction under NoCollectionScope. The core's
+    // instantiator consumes the original static value; Program never retains it.
+    std::optional<slot_t> staticSlot;
     size_t tensor = SIZE_MAX;
     std::vector<Value> fields;
 };
@@ -137,7 +139,7 @@ class Compiler {
             node.scalarBits = std::bit_cast<uint64_t>(std::get<double>(*constant));
             return {.type = type, .tensor = append(std::move(node))};
         }
-        return {.type = type, .constant = std::move(constant)};
+        return {.type = type, .constant = std::move(constant), .staticSlot = slot};
     }
 
     int64_t integer(const Value &v) {
@@ -314,17 +316,7 @@ class Compiler {
                 // casts or constants introduced while lowering its arguments.
                 if (out.tensor != SIZE_MAX && out.tensor >= first &&
                     !program.nodes[out.tensor].indexing) {
-                    if (const auto *def = tensor::ops::OpRegistry::instance().find(oper)) {
-                        std::vector<ty::Type *> types;
-                        std::vector<std::optional<ConstArg>> constants;
-                        for (const auto &arg : args) {
-                            types.push_back(arg.type);
-                            constants.push_back(arg.constant);
-                        }
-                        program.nodes[out.tensor].indexing = tensor::ops::instantiate(
-                            *def,
-                            tensor::ops::InferContext(types, constants));
-                    }
+                    program.nodes[out.tensor].indexing = instance(oper, args);
                 }
                 break;
             }
@@ -338,6 +330,19 @@ class Compiler {
         } catch (const std::exception &e) {
             throw std::runtime_error(g->name() + " node " + std::to_string(id) + ": " + e.what());
         }
+    }
+
+    std::optional<core::sem::IndexedInstance>
+    instance(core::OperId id, const std::vector<Value> &args) {
+        std::vector<ty::Type *> types;
+        std::vector<ty::StaticArg> statics;
+        for (const auto &arg : args) {
+            types.push_back(arg.type);
+            statics.emplace_back(arg.staticSlot);
+        }
+        // Use the declaration in the core operator table, including its current
+        // law validation, rather than bypassing it through Tensor's private IndexFn.
+        return core::sem::instantiate(id, {.norm = types, .statics = statics});
     }
 
     Value operation(core::OperId id, const std::vector<Value> &args) {
@@ -468,17 +473,12 @@ class Compiler {
             // The physical primitive has its own indexing/law, not the three-operand
             // gradient operator's instance. Keep both contracts in the dependency set.
             static const auto matmulId = core::OperatorTable::instance().intern("tensor:matmul");
-            const auto *matmul         = tensor::ops::OpRegistry::instance().find(matmulId);
-            if (!matmul)
-                throw std::runtime_error("missing core matmul declaration");
-            std::vector<ty::Type *> matrixTypes;
+            std::vector<Value> matrixArgs;
             for (auto in : n.inputs)
-                matrixTypes.push_back(
-                    tensor::TensorType::get(ty::TypeCode::Float32, program.nodes[in].shape));
-            std::vector<std::optional<ConstArg>> matrixConstants(2);
-            n.indexing = tensor::ops::instantiate(
-                *matmul,
-                tensor::ops::InferContext(matrixTypes, matrixConstants));
+                matrixArgs.push_back(
+                    {.type =
+                         tensor::TensorType::get(ty::TypeCode::Float32, program.nodes[in].shape)});
+            n.indexing = instance(matmulId, matrixArgs);
             n.semantic = contract(matmulId);
             return {.type = *inferred, .tensor = append(std::move(n))};
         }
@@ -505,8 +505,7 @@ class Compiler {
         } else if (n.op == "transpose" || n.op == "permute" || n.op == "slice") {
             n.inputs          = {tensorValue(args.at(0))};
             const auto &shape = program.nodes[n.inputs[0]].shape;
-            auto instance =
-                tensor::ops::instantiate(*def, tensor::ops::InferContext(types, constants));
+            auto instance     = this->instance(id, args);
             if (!instance || instance->norm.empty() ||
                 instance->output.mode != core::sem::WriteMode::Unique ||
                 instance->output.indirect || !instance->output.valid.empty() ||
