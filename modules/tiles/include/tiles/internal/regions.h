@@ -52,6 +52,11 @@ struct RegionAnalysis {
     std::vector<std::string> exclusions;
 };
 RegionAnalysis analyzeRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
+// Rewrites a reachable graph set; null executor produces ordinary CPU CALL nodes.
+// Non-null executors use the supplied stable operator URI and packed arguments.
+runtime::GCGraph *outlineRegions(
+    core::context::Context &context, runtime::GCGraph *root, operator_t executor,
+    const std::string &uri, size_t &count);
 // Register semantic-equivalence checks only when CAMEL_ENABLE_TEST_PASSES is enabled.
 void registerRegionTestPasses(operator_t run);
 slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &context);

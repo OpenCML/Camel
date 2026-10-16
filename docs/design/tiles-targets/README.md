@@ -67,3 +67,16 @@ basic arithmetic and bounded transcendental error, cache separation by target,
 and independent timing of compilation, transfers and execution. CPU performance
 must be measured against unfused CPU execution; GPU performance remains validated
 on the RTX 4060 Ti and RTX 3090.
+
+## Region rewriting boundary
+
+`outlineRegions` in `modules/tiles/src/region_outline.cpp` owns extraction,
+function materialization, multi-output tuple projection and inter-region edge
+rewiring. Its executor and stable operator URI are supplied by its caller; a null
+executor creates ordinary CPU calls. It has no CUDA initialization, test output
+or test-enablement checks. Test passes use the same rewriting implementation.
+
+This component does not yet insert transfers or propagate resident buffers, and
+therefore is not the complete `std::tiles` pass. The production planner must add
+those boundaries and target decisions explicitly rather than hide transfers
+inside every extracted call.
