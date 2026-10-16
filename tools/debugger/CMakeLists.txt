@@ -18,6 +18,8 @@ add_executable(camel-debugger
     src/command/dispatcher.cpp
     src/command/commands.cpp
     src/core/debug_core.cpp
+    src/core/memory.cpp
+    src/core/pipeline.cpp
     src/core/frames.cpp
     src/core/program_index.cpp
     src/core/values.cpp

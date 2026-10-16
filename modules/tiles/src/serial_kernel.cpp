@@ -12,6 +12,7 @@
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
 #include <algorithm>
+#include <cstdint>
 #include <stdexcept>
 
 namespace camel::tiles::kernel {
@@ -148,41 +149,11 @@ KernelBody serialBody(const Program &p, Launch &launch) {
     } else if (
         op == "sum_axis" || op == "mean_axis" || op == "max_axis" || op == "sum_all" ||
         op == "mean_all" || op == "sum_to") {
-        const auto &shape = p.nodes[reducer->inputs[0]].shape;
-        size_t width      = elements(shape);
-        IndexExpr at      = r;
-        if (op == "sum_to") {
-            const auto shift = shape.size() - root.shape.size();
-            size_t inStride = 1, outStride = 1, redStride = 1;
-            width = 1;
-            at    = IndexExpr(0);
-            for (size_t d = shape.size(); d-- > 0;) {
-                if (d < shift || root.shape[d - shift] == 1) {
-                    at = at +
-                         ((r / IndexExpr(redStride)) % IndexExpr(std::max<int64_t>(shape[d], 1))) *
-                             IndexExpr(inStride);
-                    width *= shape[d];
-                    redStride *= std::max<int64_t>(shape[d], 1);
-                } else {
-                    at = at + ((row / IndexExpr(outStride)) %
-                               IndexExpr(std::max<int64_t>(shape[d], 1))) *
-                                  IndexExpr(inStride);
-                    outStride *= std::max<int64_t>(shape[d], 1);
-                }
-                inStride *= std::max<int64_t>(shape[d], 1);
-            }
-        } else if (op.ends_with("_axis")) {
-            const size_t axis = reducer->attributes.at(0);
-            width             = shape[axis];
-            size_t inner      = 1;
-            for (size_t d = axis + 1; d < shape.size(); ++d)
-                inner *= shape[d];
-            const auto safeInner = IndexExpr(std::max(inner, size_t(1)));
-            at                   = (row / safeInner) * IndexExpr(width * inner) + row % safeInner +
-                                   r * IndexExpr(inner);
-        }
-        const auto dtype = (op == "max_axis" || op == "sum_to") ? DType::F32 : DType::F64;
-        const auto acc   = ScalarExpr::symbol("k_acc", dtype);
+        const auto access = reductionAccess(p, *reducer, row, r);
+        const auto width  = access.count;
+        const auto &at    = access.address;
+        const auto dtype  = (op == "max_axis" || op == "sum_to") ? DType::F32 : DType::F64;
+        const auto acc    = ScalarExpr::symbol("k_acc", dtype);
         body.push_back(
             ScalarBinding{
                 "k_acc",

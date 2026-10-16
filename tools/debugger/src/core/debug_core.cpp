@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,6 +42,7 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/core/error/runtime.h"
+#include "camel/passes/trans/json/gir.h"
 
 #include <algorithm>
 #include <chrono>
@@ -117,7 +118,9 @@ void DebugCore::pushEvent(json event) {
 
 json DebugCore::events(uint64_t after, int timeoutMs) {
     std::unique_lock<std::mutex> lock(mutex_);
-    const auto ready = [&] { return !events_.empty() && events_.back()["seq"].get<uint64_t>() > after; };
+    const auto ready = [&] {
+        return !events_.empty() && events_.back()["seq"].get<uint64_t>() > after;
+    };
     if (timeoutMs > 0) {
         eventCond_.wait_for(lock, std::chrono::milliseconds(timeoutMs), ready);
     }
@@ -167,15 +170,16 @@ void DebugCore::beginRun(const std::string &notice) {
     instructionCache_.clear();
     explainedLines_.clear();
     hitBreakpoints_.clear();
-    pending_          = Pending::None;
-    runIndexed_       = false;
-    step_             = Step{};
-    seenConfig_       = 0;
+    pending_    = Pending::None;
+    runIndexed_ = false;
+    step_       = Step{};
+    seenConfig_ = 0;
     abort_.store(0);
     pauseRequested_.store(false);
     {
         std::lock_guard<std::mutex> lock(mutex_);
         state_            = State::Running;
+        programThread_    = std::this_thread::get_id();
         entryStopPending_ = stopOnEntry_ || stopOnEntryOnce_;
         stopOnEntryOnce_  = false;
         resumePending_    = false;
@@ -255,8 +259,8 @@ void DebugCore::verify(LineBreakpoint &bp) {
         // will not be hit (said again at the end, reportUnhitBreakpoints).
         bp.message = "Nothing in the program calls `" + r.names.front() + "`.";
     }
-    bp.origins       = std::move(r.origins);
-    bp.resolution    = std::move(r);
+    bp.origins    = std::move(r.origins);
+    bp.resolution = std::move(r);
 }
 
 void DebugCore::verify(FunctionBreakpoint &bp) {
@@ -464,8 +468,8 @@ DebugCore::ShadowFrame &DebugCore::pushFrame(GCGraph *graph, Frame *frame) {
 }
 
 DebugCore::ShadowFrame &DebugCore::pushCallee(GCGraph *graph, Frame *frame) {
-    const bool called    = !stack_.empty();
-    ShadowFrame &f       = pushFrame(graph, frame);
+    const bool called = !stack_.empty();
+    ShadowFrame &f    = pushFrame(graph, frame);
     // After the push: pushing may have moved the frames.
     ShadowFrame *caller = called ? &stack_[stack_.size() - 2] : nullptr;
     placeCallee(f, caller);
@@ -500,8 +504,8 @@ DebugCore::ShadowFrame &DebugCore::replaceTop(GCGraph *graph, Frame *frame) {
 void DebugCore::beforeNode(GCGraph *graph, Frame *frame, gc_node_ref_t node) {
     if (pending_ == Pending::Enter || stack_.empty()) {
         pushCallee(graph, frame);
-    } else if (pending_ == Pending::Tail || stack_.back().frame != frame ||
-               stack_.back().graph != graph) {
+    } else if (
+        pending_ == Pending::Tail || stack_.back().frame != frame || stack_.back().graph != graph) {
         // A tail call: the callee's frame takes the caller's place (5.2).
         replaceTop(graph, frame);
     }
@@ -663,8 +667,8 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
     // once per visit, not once per node of the line. With frames folded the frame is the
     // activation of the function: a line it is on is not entered again when an arm of it
     // starts, and is when the activation comes back to it after the arm (5.4).
-    const LinePosition on = foldsFrames() ? f.activationLine
-                                          : LinePosition{f.lastFile, f.lastLine, f.lastFunction};
+    const LinePosition on =
+        foldsFrames() ? f.activationLine : LinePosition{f.lastFile, f.lastLine, f.lastFunction};
     const bool entering = located && !(on.file == f.loc.file && on.line == f.loc.line);
     std::string reason;
     json details = json::object();
@@ -676,7 +680,7 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
     }
     if (f.awaitingEntry && located) [[unlikely]] {
         // The first located node of an activation: the entry of its function (3.3).
-        f.awaitingEntry = false;
+        f.awaitingEntry           = false;
         const GraphInfo *function = f.function != nullptr ? f.function : f.info;
         if (auto it = functionBreakpointByGraph_.find(function->stableId);
             it != functionBreakpointByGraph_.end() && reason.empty()) {
@@ -785,9 +789,9 @@ json DebugCore::stackJson() {
 }
 
 json DebugCore::describeStop(const std::string &reason, json details) {
-    json j       = std::move(details);
-    j["reason"]  = reason;
-    j["depth"]   = stack_.size();
+    json j      = std::move(details);
+    j["reason"] = reason;
+    j["depth"]  = stack_.size();
     if (!stack_.empty()) {
         j["frame"] = frameJson(chainOf(stack_.back()), true);
     }
@@ -795,8 +799,9 @@ json DebugCore::describeStop(const std::string &reason, json details) {
 }
 
 void DebugCore::stop(const std::string &reason, json details) {
-    entryStopPending_ = false;
-    step_             = Step{};
+    if (!details.contains("pipeline"))
+        entryStopPending_ = false;
+    step_ = Step{};
     handles_.clear();
     json description = describeStop(reason, std::move(details));
     std::function<void(const json *)> listener;
@@ -810,7 +815,7 @@ void DebugCore::stop(const std::string &reason, json details) {
     if (listener) {
         listener(&description);
     }
-    json event  = description;
+    json event    = description;
     event["type"] = "stopped";
     pushEvent(std::move(event));
 
@@ -823,7 +828,7 @@ void DebugCore::stop(const std::string &reason, json details) {
                 return resumePending_ || !requests_.empty() || abort_.load() != 0;
             });
             if (!requests_.empty()) {
-                request     = std::move(requests_.front());
+                request = std::move(requests_.front());
                 requests_.pop_front();
                 haveRequest = true;
             } else if (abort_.load() != 0) {
@@ -886,16 +891,32 @@ json DebugCore::resume(Step step, bool stepping) {
     if (stepping) {
         // The step starts from where the program is: read that on its thread.
         json answer = runWhileStopped([this, step]() mutable {
+            if (step.kind == StepKind::Pass) {
+                if (pipelineGir_.empty())
+                    return fail("nextPass: not stopped at a compiler boundary");
+                // If no later pass returns a graph, stop at execution entry instead of
+                // silently running the program to completion.
+                entryStopPending_ = true;
+                std::lock_guard<std::mutex> lock(mutex_);
+                resumeStep_    = step;
+                resumePending_ = true;
+                return json{{"ok", true}};
+            }
+            if (!pipelineGir_.empty())
+                return fail(
+                    "Use nextPass at a compiler boundary; source stepping requires a runtime "
+                    "frame.");
             if (stack_.empty()) {
                 return fail("no frame");
             }
             ShadowFrame &f = stack_.back();
             // A step counts what the stack shows when it starts: activations of functions
             // with frames folded, shadow frames otherwise (5.4).
-            step.folded = foldsFrames();
+            step.folded       = foldsFrames();
             const auto lineOf = [&](const ShadowFrame &frame) {
-                return step.folded ? frame.activationLine
-                                   : LinePosition{frame.lastFile, frame.lastLine, frame.lastFunction};
+                return step.folded
+                           ? frame.activationLine
+                           : LinePosition{frame.lastFile, frame.lastLine, frame.lastFunction};
             };
             const LinePosition at = lineOf(f);
             step.startActivation  = f.activation;
@@ -954,7 +975,7 @@ DebugCore::nodeVariable(ShadowFrame &f, const NodeInfo &n, std::string name) {
         return std::nullopt;
     }
     Variable v;
-    v.name      = std::move(name);
+    v.name             = std::move(name);
     v.view.type        = node->dataType();
     const size_t index = static_cast<size_t>(&n - f.info->nodes.data());
     // Constants and ports have their values from the start; everything else once it ran.
@@ -978,7 +999,7 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
     const GraphInfo *function = folded && inner.function != nullptr ? inner.function : inner.info;
     std::vector<Variable> out;
     std::unordered_map<std::string, size_t> shown; // name -> index in out
-    std::unordered_set<std::string> fromArmPort;  // names shown for a port of an arm
+    std::unordered_set<std::string> fromArmPort;   // names shown for a port of an arm
 
     // The values the function captured are in the Captured scope; an arm passed one of them
     // has a port of the same name.
@@ -993,8 +1014,8 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
     // after what its caller passed). The innermost frame's value is the one the running code
     // sees.
     for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
-        ShadowFrame &f   = **it;
-        const bool arm   = f.info->folds();
+        ShadowFrame &f     = **it;
+        const bool arm     = f.info->folds();
         const auto addPort = [&](gc_node_ref_t ref) {
             if (!arm && f.info->capturePorts.count(ref) != 0) {
                 return; // a captured value: the Captured scope
@@ -1104,8 +1125,9 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
         }
         if (known != byDeclaration.end()) {
             out[known->second] = std::move(*v); // replaces "not in the graph" of another instance
-        } else if (auto port = shown.find(b->name);
-                   port != shown.end() && fromArmPort.count(b->name) != 0) {
+        } else if (
+            auto port = shown.find(b->name);
+            port != shown.end() && fromArmPort.count(b->name) != 0) {
             // The arm's port was this name, passed in: one entry, from the binding.
             byDeclaration.emplace(b->decl, port->second);
             out[port->second] = std::move(*v);
@@ -1212,10 +1234,9 @@ std::vector<DebugCore::Variable> DebugCore::nodesOf(const Chain &chain) {
     const ShadowFrame &inner  = *chain.front();
     const GraphInfo *function = inner.function != nullptr ? inner.function : inner.info;
     for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
-        ShadowFrame &f           = **it;
-        const std::string prefix = chain.size() > 1 && f.info != function
-                                       ? f.info->display + " "
-                                       : std::string();
+        ShadowFrame &f = **it;
+        const std::string prefix =
+            chain.size() > 1 && f.info != function ? f.info->display + " " : std::string();
         for (const NodeInfo &n : f.info->nodes) {
             std::string name =
                 prefix + "%" + std::to_string(n.ref) + " " + kindName(n.kind) + " " + n.label;
@@ -1261,13 +1282,14 @@ json DebugCore::scopesJson(uint64_t frameId) {
     if (f == nullptr) {
         return fail("no such frame");
     }
-    json scopes = json::array();
+    json scopes    = json::array();
     const auto add = [&](const char *name, Handle::Kind kind, size_t count, bool expensive) {
-        scopes.push_back(json{
-            {"name", name},
-            {"reference", newHandle({kind, frameId, {}})},
-            {"count", count},
-            {"expensive", expensive}});
+        scopes.push_back(
+            json{
+                {"name", name},
+                {"reference", newHandle({kind, frameId, {}})},
+                {"count", count},
+                {"expensive", expensive}});
     };
     const Chain chain = chainOf(*f);
     add("Locals", Handle::Kind::Locals, localsOf(chain).size(), false);
@@ -1315,12 +1337,13 @@ json DebugCore::handleJson(int reference) {
         }
         variables = variablesJson(std::move(children), handle.frame);
         if (total > kMaxChildren) {
-            variables.push_back(json{
-                {"name", "..."},
-                {"value", std::to_string(total - kMaxChildren) + " more not shown"},
-                {"type", ""},
-                {"reference", 0},
-                {"evaluated", true}});
+            variables.push_back(
+                json{
+                    {"name", "..."},
+                    {"value", std::to_string(total - kMaxChildren) + " more not shown"},
+                    {"type", ""},
+                    {"reference", 0},
+                    {"evaluated", true}});
         }
     } break;
     }
@@ -1335,7 +1358,8 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
     // name ( '::' name )* ( '.' member | '[' index ']' )*: a full name such as
     // `lib::Config::limit` names a value of a module's top level (design principles 2.12).
     const auto isNameChar = [](char c) {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+               c == '_';
     };
     std::string text;
     for (char c : expression) {
@@ -1395,9 +1419,9 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
                 }
             }
             const bool matches =
-                shown == name ||
-                (match == Match::FullName && shown.size() > name.size() + 2 &&
-                 shown.ends_with(name) && shown.substr(0, shown.size() - name.size()).ends_with("::"));
+                shown == name || (match == Match::FullName && shown.size() > name.size() + 2 &&
+                                  shown.ends_with(name) &&
+                                  shown.substr(0, shown.size() - name.size()).ends_with("::"));
             if (!matches) {
                 continue;
             }
@@ -1428,7 +1452,7 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
             {"reference", 0},
             {"evaluated", false}};
     }
-    ValueView view = found->view;
+    ValueView view     = found->view;
     std::string walked = name;
     for (const auto &step : path) {
         auto next = member(view, step);
@@ -1459,7 +1483,8 @@ json DebugCore::graphJson(uint64_t frameId) {
     json nodes = json::array();
     json edges = json::array();
     std::ostringstream dot;
-    dot << "digraph \"" << f->info->name << "\" {\n  rankdir=TB;\n  node [shape=box, style=filled, "
+    dot << "digraph \"" << f->info->name
+        << "\" {\n  rankdir=TB;\n  node [shape=box, style=filled, "
            "fontname=\"monospace\"];\n";
     for (size_t i = 0; i < f->info->nodes.size(); ++i) {
         const NodeInfo &n = f->info->nodes[i];
@@ -1602,17 +1627,50 @@ json DebugCore::command(const std::string &name, const json &args) {
             configVersion_.fetch_add(1);
             return json{{"ok", true}};
         }
+        if (name == "setPassBreakpoints") {
+            const auto values = args.find("indices");
+            if (values == args.end() || !values->is_array())
+                return fail("indices must be an array");
+            std::set<size_t> indices;
+            for (const auto &v : *values) {
+                if (!v.is_number_integer() || v.get<int64_t>() < 0)
+                    return fail("pass indices must be nonnegative integers");
+                indices.insert(v.get<size_t>());
+            }
+            std::lock_guard<std::mutex> lock(mutex_);
+            passBreakpoints_ = std::move(indices);
+            return json{{"ok", true}};
+        }
+        if (name == "nextPass") {
+            Step step;
+            step.kind = StepKind::Pass;
+            return resume(step, true);
+        }
+        if (name == "pipelineGraph") {
+            return runWhileStopped([this] {
+                if (pipelineGir_.empty())
+                    return fail("not stopped at a compiler boundary");
+                return json{
+                    {"ok", true},
+                    {"gir", pipelineGir_},
+                    {"pipeline", lastStop_["pipeline"]}};
+            });
+        }
         if (name == "configure") {
             if (auto frames = args.find("frames"); frames != args.end()) {
                 // How the stack shows the subgraphs of a function (5.4); takes effect at the
                 // next question about the stack, also while the program is stopped.
-                if (!frames->is_string() ||
-                    (*frames != "functions" && *frames != "subgraphs")) {
+                if (!frames->is_string() || (*frames != "functions" && *frames != "subgraphs")) {
                     return fail("configure: frames is \"functions\" or \"subgraphs\"");
                 }
                 foldFrames_.store(*frames == "functions");
             }
             std::lock_guard<std::mutex> lock(mutex_);
+            if (auto it = args.find("stopOnPassEntry"); it != args.end()) {
+                if (!it->is_boolean())
+                    return fail("stopOnPassEntry must be boolean");
+                stopOnPassEntry_ = it->get<bool>();
+            }
             if (args.contains("stopOnEntry") && args["stopOnEntry"].is_boolean()) {
                 stopOnEntry_ = args["stopOnEntry"].get<bool>();
             }
@@ -1679,6 +1737,26 @@ json DebugCore::command(const std::string &name, const json &args) {
             const std::string expression = args.value("expression", "");
             return runWhileStopped(
                 [this, frame, expression] { return evaluateJson(frame, expression); });
+        }
+        if (name == "memorySnapshot" || name == "regionMemory" || name == "regionObjects" ||
+            name == "allocationBreakpoints") {
+            return memoryCommand(name, args);
+        }
+        if (name == "structuredGraph") {
+            const uint64_t frame = args.value("frame", uint64_t{0});
+            return runWhileStopped([this, frame] {
+                if (!pipelineGir_.empty())
+                    return json{
+                        {"ok", true},
+                        {"gir", pipelineGir_},
+                        {"pipeline", lastStop_["pipeline"]}};
+                auto *f = frame == 0 && !stack_.empty() ? &stack_.back() : frameById(frame);
+                if (!f)
+                    return fail("no runtime frame");
+                return json{
+                    {"ok", true},
+                    {"gir", dumpJsonRuntimeGraph(f->graph, index_.context())}};
+            });
         }
         if (name == "graph") {
             const uint64_t frame = args.value("frame", uint64_t{0});

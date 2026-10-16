@@ -37,7 +37,10 @@ KernelBody parallelMaxBody(const Program &p, Launch &launch) {
             lane,
             IndexExpr(width),
             256,
-            {Load{"k_input", {0, row * IndexExpr(width) + r, Predicate(true)}, negativeInfinity},
+            {Load{
+                 "k_input",
+                 {0, reductionAccess(p, n, row, r).address, Predicate(true)},
+                 negativeInfinity},
              Assignment{
                  "k_best",
                  ScalarExpr::apply(ScalarOp::Maximum, {symbol("k_best"), symbol("k_input")})}}},

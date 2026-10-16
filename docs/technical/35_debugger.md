@@ -679,3 +679,59 @@ activation per element, each of which now loads the observer pointer twice (the 
 the node hook that was there before). On `std::fvm` the loop of a normal run is the trunk's
 machine code (7.1); the version with a hook in the loop measured 1.13-1.19 on `fib` and
 `tail` by the same method and was replaced.
+
+### Plugin migration: native DAP graph inspection
+
+OpenCML-Ext uses `camel-db --dap` directly. The selected VS Code session identifies the
+worker; clients need not discover its HTTP port. `camel/passGraphs` returns the immutable
+snapshot list (`graphs`, each with `index`, `pass`, `consumed`); `camel/passGraph` accepts
+`index` (a nonnegative integer) and returns that entry with its `dot`. `camel/setNodeBreakpoints`
+passes an `origins` array to the same debug core that owns source and function breakpoints.
+These requests do not create a second debug controller. The existing `camel/graph` inspects
+the actual stopped frame. The migration ledger lives in OpenCML-Ext's
+`docs/debugger-migration.md`; standalone UI retirement follows its acceptance gates.
+
+### Release compiler boundaries
+
+`launch.stopOnPassEntry` pauses at initial GIR, after binding main arguments and before the
+first pass. `launch.passBreakpoints` is an array of nonnegative snapshot indices: 0 is the
+initial graph; N identifies the Nth returned graph across the run, including fallback passes.
+Repeated pass names have distinct indices. These stops use DebugCore in every build mode,
+not the NDEBUG-only pipeline type hooks. The boundaries are explicitly initial / after;
+they are not instructions inside a pass and do not interrupt a pass halfway through.
+
+`camel/nextPass` advances to the next returned graph. If a scheduler is next, it hands off at
+execution entry instead of silently running the whole program. A consuming translation pass
+can end the session without another graph; failure has diagnostics and an exit status, not a
+fake snapshot. Continue resumes normally. Source/node stepping at a compiler stop is rejected
+with an explanation. Compiler stops have no runtime call frames or variables.
+
+The `camel/stopped` event includes `pipeline: {index, pass, boundary}` at compiler stops.
+`camel/structuredGraph` reads the current worker's graph as versioned GIR JSON (`gir` text),
+serialized on the stopped program thread; it works at a compiler boundary or runtime frame.
+`camel/pipelineGraph` additionally rejects runtime stops. `camel/setPassBreakpoints {indices}`
+updates the configured indices. Snapshot responses also include `gir` alongside DOT so the
+plugin's current and historical views share typed graph metadata.
+
+
+### Paused memory inspection over DAP
+
+OpenCML-Ext offers **Camel: Inspect Debug Memory** (`camel.showMemory`) for the selected native
+DAP session. It requests region aggregates once when first opened at a stop, then refreshes
+explicitly. Continuing, changing stops or selecting another session invalidates old responses.
+The overview does not construct or transfer per-object arrays. Hex/object pages are bounded.
+
+- `camel/memorySnapshot`: paused program-thread region aggregates and allocation capability.
+- `camel/regionMemory {region, offset, limit}`: byte page, limit 1..4096.
+- `camel/regionObjects {region, offset, limit}`: object page, limit 1..200.
+- `camel/allocationBreakpoints`: capability/configuration; set with `{enabled, spaces}`.
+
+Offsets are nonnegative integers, regions are backend names, and pointer fields are hexadecimal
+strings so JavaScript never rounds an address. Non-contiguous regions retain aggregate usage;
+byte/object paging currently uses the profiler's contiguous bump-region API. Invalid requests,
+requests while running and requests after termination fail explicitly.
+
+Allocation stops require a build without NDEBUG. Release reports `supported:false` and refuses
+enabling them. The native hook stops before allocation on the program thread, filters named
+spaces and skips index maintenance/reentrant hooks. `camel/stopped.allocation` identifies the
+space, requested size and `phase:"before"`; inspection uses that same stopped worker.

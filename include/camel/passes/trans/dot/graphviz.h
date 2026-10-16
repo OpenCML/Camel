@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,7 @@
 #include <vector>
 
 struct GraphVizDumpConfig {
-    bool readableOnly = false;
+    bool rich = false;
     /// Marks nodes with their boundary roles (camel/runtime/node_roles.h): a `role` attribute,
     /// and in the styled dump a fill color per role and a legend.
     bool annotateRoles = false;
@@ -65,17 +65,17 @@ class GraphVizDumpPass : public RuntimeGraphTranslatePass {
     GraphVizDumpPass(const camel::core::context::context_ptr_t &context, GraphVizDumpConfig config);
     virtual ~GraphVizDumpPass() = default;
 
-    /// One-shot readable dump (rgir-style DOT: label/type only, plus origin/span/srcfile
+    /// One-shot compact dump (gir-style DOT: label/type and semantic metadata, including
     /// attributes) of an arbitrary runtime graph. Single-call use by tooling such as
     /// camel-db; pass instances are normally used via apply() instead.
-    std::string dumpReadable(camel::runtime::GCGraph *graph);
+    std::string dumpDot(camel::runtime::GCGraph *graph);
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };
 
-/// Reusable entry point for tooling (e.g. camel-db): dumps a runtime graph as rgir-style
+/// Reusable entry point for tooling (e.g. camel-db): dumps a runtime graph as gir-style
 /// readable DOT via a temporary readable-only GraphVizDumpPass bound to ctx. Returns an
 /// empty string when the graph is null or has no materialized node payload. The graph must
 /// stay rooted by the caller for the duration of the call.
-std::string dumpReadableRuntimeGraph(
+std::string dumpCompactRuntimeGraph(
     camel::runtime::GCGraph *graph, const camel::core::context::context_ptr_t &ctx);

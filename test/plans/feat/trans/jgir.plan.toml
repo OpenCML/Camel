@@ -1,0 +1,15 @@
+id = "trans.jgir"
+order = 338
+tier = "feat"
+tags = ["feat", "trans", "dump", "json"]
+
+[[tests]]
+name = "gir_formats_and_json"
+desc = "Compact/rich/annotated semantics and versioned runtime JSON: graph IDs, explicit subgraphs, real node types, typed edges and source metadata. Retired aliases are rejected."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/jgir_contract.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["GIR formats and JSON v1: PASS"]
+timeout_ms = 20000

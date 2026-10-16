@@ -13,7 +13,10 @@
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
 #include <algorithm>
+#include <cstdint>
+#include <optional>
 #include <stdexcept>
+#include <vector>
 
 namespace camel::tiles::kernel {
 namespace {

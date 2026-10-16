@@ -37,7 +37,7 @@ tool = "python"
 case = "../../../cases/modules/tiles/plan_check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected"]
+expect_stdout_contains = ["tiles regions: convexity, boundaries, liveness and dependency order passed", "tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected"]
 timeout_ms = 10000
 
 [[tests]]
@@ -161,4 +161,179 @@ args = ["${case}", "std::prl"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
 expect_output_contains = ["node 3: unsupported graph node kind 15"]
+timeout_ms = 10000
+
+[[tests]]
+name = "regions.nvm"
+kind = "behavior"
+case = "../../../cases/modules/tiles/regions.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const plans = input.stdout.trim().split(/\r?\n/).map(JSON.parse)
+assert(plans.length === 6, "expected six graph region analyses")
+assert(plans[0].transfers.uploads.length === 1 && plans[0].transfers.downloads.length === 1, "chain needs one upload and one download")
+assert(plans[1].transfers.uploads.length === 0 && plans[1].transfers.downloads.length === 0, "CPU-only graph needs no transfers")
+assert(plans[2].transfers.uploads.length === 2 && plans[2].transfers.downloads.length === 2 && plans[2].transfers.resident.length === 1, "CPU detour must retain its direct resident edge")
+assert(!plans[2].transfers.uploads.includes(plans[2].transfers.resident[0].value), "resident edge must not upload again")
+assert(plans[5].transfers.uploads.length === 1, "embedded axis and keepdims must not upload")
+const [chain, dynamic, detour, ordered, sharedValues, constantAxis] = plans
+assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
+assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
+assert(chain.regions[0].parameters.length === 1, "one external value must become one function parameter")
+assert(sharedValues.regions.length === 1 && sharedValues.regions[0].result_arity === 2 && sharedValues.regions[0].extracted_nodes === 5, "shared external results must be packed into a tuple")
+assert(constantAxis.regions.length === 1 && constantAxis.regions[0].inputs.length === 3 && constantAxis.regions[0].parameters.length === 1, "axis and keepdims must remain constants in extracted graphs")
+assert(dynamic.regions.length === 0 && dynamic.excluded.some(n => n.reason === "unresolved_type"), "unknown shapes must not claim static compilation")
+assert(detour.regions.length === 2 && detour.regions.every(r => r.members.length === 1), "CPU detour must prevent cyclic contraction")
+assert(detour.regions[1].inputs.length === 2, "second region must retain both CPU and GPU dependencies")
+assert(ordered.excluded.some(n => n.reason === "control_edge") && ordered.regions.every(r => r.members.length === 1), "control endpoints must remain outside GPU regions")
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "regions.fvm"
+kind = "behavior"
+case = "../../../cases/modules/tiles/regions.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const plans = input.stdout.trim().split(/\r?\n/).map(JSON.parse)
+assert(plans.length === 6, "expected six graph region analyses")
+assert(plans[0].transfers.uploads.length === 1 && plans[0].transfers.downloads.length === 1, "chain needs one upload and one download")
+assert(plans[1].transfers.uploads.length === 0 && plans[1].transfers.downloads.length === 0, "CPU-only graph needs no transfers")
+assert(plans[2].transfers.uploads.length === 2 && plans[2].transfers.downloads.length === 2 && plans[2].transfers.resident.length === 1, "CPU detour must retain its direct resident edge")
+assert(!plans[2].transfers.uploads.includes(plans[2].transfers.resident[0].value), "resident edge must not upload again")
+assert(plans[5].transfers.uploads.length === 1, "embedded axis and keepdims must not upload")
+const [chain, dynamic, detour, ordered, sharedValues, constantAxis] = plans
+assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
+assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
+assert(chain.regions[0].parameters.length === 1, "one external value must become one function parameter")
+assert(sharedValues.regions.length === 1 && sharedValues.regions[0].result_arity === 2 && sharedValues.regions[0].extracted_nodes === 5, "shared external results must be packed into a tuple")
+assert(constantAxis.regions.length === 1 && constantAxis.regions[0].inputs.length === 3 && constantAxis.regions[0].parameters.length === 1, "axis and keepdims must remain constants in extracted graphs")
+assert(dynamic.regions.length === 0 && dynamic.excluded.some(n => n.reason === "unresolved_type"), "unknown shapes must not claim static compilation")
+assert(detour.regions.length === 2 && detour.regions.every(r => r.members.length === 1), "CPU detour must prevent cyclic contraction")
+assert(detour.regions[1].inputs.length === 2, "second region must retain both CPU and GPU dependencies")
+assert(ordered.excluded.some(n => n.reason === "control_edge") && ordered.regions.every(r => r.members.length === 1), "control endpoints must remain outside GPU regions")
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "regions.jit"
+kind = "behavior"
+case = "../../../cases/modules/tiles/regions.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const plans = input.stdout.trim().split(/\r?\n/).map(JSON.parse)
+assert(plans.length === 6, "expected six graph region analyses")
+assert(plans[0].transfers.uploads.length === 1 && plans[0].transfers.downloads.length === 1, "chain needs one upload and one download")
+assert(plans[1].transfers.uploads.length === 0 && plans[1].transfers.downloads.length === 0, "CPU-only graph needs no transfers")
+assert(plans[2].transfers.uploads.length === 2 && plans[2].transfers.downloads.length === 2 && plans[2].transfers.resident.length === 1, "CPU detour must retain its direct resident edge")
+assert(!plans[2].transfers.uploads.includes(plans[2].transfers.resident[0].value), "resident edge must not upload again")
+assert(plans[5].transfers.uploads.length === 1, "embedded axis and keepdims must not upload")
+const [chain, dynamic, detour, ordered, sharedValues, constantAxis] = plans
+assert(chain.regions.length === 1 && chain.regions[0].members.length === 2, "static pointwise chain must form one region")
+assert(chain.regions[0].inputs.length === 1 && chain.regions[0].outputs.length === 1, "region boundary must deduplicate inputs")
+assert(chain.regions[0].parameters.length === 1, "one external value must become one function parameter")
+assert(sharedValues.regions.length === 1 && sharedValues.regions[0].result_arity === 2 && sharedValues.regions[0].extracted_nodes === 5, "shared external results must be packed into a tuple")
+assert(constantAxis.regions.length === 1 && constantAxis.regions[0].inputs.length === 3 && constantAxis.regions[0].parameters.length === 1, "axis and keepdims must remain constants in extracted graphs")
+assert(dynamic.regions.length === 0 && dynamic.excluded.some(n => n.reason === "unresolved_type"), "unknown shapes must not claim static compilation")
+assert(detour.regions.length === 2 && detour.regions.every(r => r.members.length === 1), "CPU detour must prevent cyclic contraction")
+assert(detour.regions[1].inputs.length === 2, "second region must retain both CPU and GPU dependencies")
+assert(ordered.excluded.some(n => n.reason === "control_edge") && ordered.regions.every(r => r.members.length === 1), "control endpoints must remain outside GPU regions")
+}
+"""
+timeout_ms = 10000
+
+
+[[tests]]
+name = "outlined_region_execution"
+kind = "behavior"
+case = "../../../cases/modules/tiles/region_execution.cml"
+args = ["${case}", "tiles::test_outline", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
+timeout_ms = 10000
+
+
+[[tests]]
+name = "native_region_invocation"
+kind = "behavior"
+case = "../../../cases/modules/tiles/region_execution.cml"
+args = ["${case}", "tiles::test_outline_native", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "native_region_invocation.jit_hot"
+kind = "behavior"
+case = "../../../cases/modules/tiles/region_execution.cml"
+args = ["${case}", "tiles::test_outline_native", "std::jit"]
+envs = ["CAMEL_JIT_HOT_THRESHOLD=0", "CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "native_parallel"
+kind = "behavior"
+case = "../../../cases/modules/tiles/native_parallel.cml"
+args = ["${case}", "tiles::test_outline_native", "std::prl"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "native_parallel.scheduler"
+kind = "behavior"
+case = "../../../cases/modules/tiles/native_parallel.cml"
+args = ["${case}", "tiles::test_outline_native", "std::prl"]
+envs = ["CAMEL_TF_BYTECODE=0", "CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "native_parallel.linear"
+kind = "behavior"
+case = "../../../cases/modules/tiles/native_parallel.cml"
+args = ["${case}", "tiles::test_outline_native", "std::prl"]
+envs = ["CAMEL_TF_LINEAR=1", "CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "gpu_preference.no_device"
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_fallback.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_JIT_HOT_THRESHOLD=0", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "gpu_preference.invalid_configuration"
+kind = "negative"
+case = "../../../cases/modules/tiles/gpu_fallback.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["CAMEL_TILES_DEVICE must be a nonnegative device ordinal"]
 timeout_ms = 10000

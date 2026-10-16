@@ -200,7 +200,7 @@ int main() {
             .input=camel::core::type::TypeCode::Float32,
             .accumulator=camel::core::type::TypeCode::Float32,
             .result=camel::core::type::TypeCode::Float32,
-            .initBits=0xff800000U, .exactAssociative=true, .exactCommutative=true,
+            .initBits=0xff800000U, .empty=sem::LawEmpty::Fault, .exactAssociative=true, .exactCommutative=true,
             .hasIdentity=true, .identityBits=0xff800000U};
         sem::OperatorSemantics maximumDeclaration{.key=sem::OperatorKey::of(maximumUri), .laws={maximumLaw}};
         operators.declareSemantics(maximumUri,maximumDeclaration);
@@ -235,6 +235,13 @@ int main() {
         rejects(rowPlan, [](auto &x){ x.launches[0].blockX=64; }, "invalid row region plan");
         rejects(rowPlan, [](auto &x){ x.launches[0].members.erase(x.launches[0].members.begin()); }, "invalid row region plan");
         rejects(rowPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "invalid row region plan");
+        auto mappedRow = rowPlan;
+        mappedRow.nodes[1].indexing->norm[0].coords[1]=mappedRow.nodes[1].indexing->exprs.constant(0);
+        rejects(mappedRow, [](auto &){}, "invalid row region plan");
+        generate(mappedRow);
+        if(mappedRow.launches.size()<2 || mappedRow.launches[0].implementation!="parallel_max" ||
+           mappedRow.source==rowPlan.source)
+            throw std::runtime_error("noncanonical reduction incorrectly reused row-local loads");
         std::cout << "tiles row region: shared values and invalid launch mutations checked\n";
         maximumPlan.nodes[1].indexing.reset();
         generate(maximumPlan);

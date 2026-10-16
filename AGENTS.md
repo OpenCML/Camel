@@ -80,9 +80,10 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 
 | Pass | Description |
 |------|-------------|
-| `std::gir` | Translation pass: prints the current GIR and returns an empty graph |
-| `std::rgir` | Translation pass: prints an AI-readable GIR DOT with only `label` and `type` attributes, then returns an empty graph |
-| `std::agir` / `std::argir` | Translation passes: `std::gir` / `std::rgir` with boundary roles (scalar boundary, branch contract, effect, export capability) from the node-role registry: fill colors and a legend, or a `role` attribute |
+| `std::gir` | Translation pass: prints compact GIR DOT with semantic metadata and returns an empty graph |
+| `std::rgir` | Translation pass: prints rich GIR DOT with Graphviz styling and returns an empty graph |
+| `std::agir` / `std::argir` | Translation passes: `std::gir` / `std::rgir` with boundary roles (scalar boundary, branch contract, effect, export capability) from the node-role registry: a `role` attribute and legend, with fill colors in the rich variant |
+| `std::jgir` | Translation pass: prints versioned JSON GIR with explicit graph references for tooling |
 | `std::stats` | Prints `GRAPH_STATS {json}` (graphs, nodes, edges, operators, calls, closures, branches) and passes the graph on unchanged |
 | `std::nvm` | Scheduling pass: executes on the node VM linearly, then returns an empty graph |
 | `std::fvm` | Scheduling pass: high-performance bytecode VM, returns an empty graph |
@@ -90,8 +91,8 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 | `std::inline` | Optimization pass: inlines small functions into larger graphs to reduce call overhead; returns an optimized graph |
 
 ### Graph Inspection Preference
-- Prefer `std::rgir` when inspecting graphs in terminal output, snapshots intended for AI review, or structural debugging where visual styling is noise.
-- Use `std::gir` when Graphviz-oriented styling, shapes, sizing, or richer rendering metadata is specifically needed for human visualization.
+- Prefer `std::gir` when inspecting graphs in terminal output, snapshots intended for AI review, or structural debugging where visual styling is noise.
+- Use `std::rgir` when Graphviz-oriented styling, shapes, sizing, or richer rendering metadata is specifically needed for human visualization.
 
 ### Examples
 ```powershell

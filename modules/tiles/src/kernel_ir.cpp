@@ -10,10 +10,13 @@
 
 // Validation and final CUDA printing for structured physical statements.
 #include "tiles/internal/kernel_ir.h"
+#include <cstdint>
 #include <sstream>
 #include <stdexcept>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 
 namespace camel::tiles::kernel {
 namespace {

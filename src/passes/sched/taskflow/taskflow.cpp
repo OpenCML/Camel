@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "taskflow.h"
+#include "camel/execute/function_call.h"
 #include "camel/runtime/loop_lowering.h"
 #include "handoff.h"
 
@@ -207,8 +208,7 @@ struct OpenCall {
 // afterwards it has what it had (a worker that picked the task up while waiting inside another
 // call).
 struct InheritedDepth {
-    InheritedDepth(
-        TaskflowGcGate::ThreadState &thread, uint32_t depth, TaskflowFaultDomain *domain)
+    InheritedDepth(TaskflowGcGate::ThreadState &thread, uint32_t depth, TaskflowFaultDomain *domain)
         : thread_(thread), savedDepth_(thread.callDepth), savedDomain_(thread.faultDomain),
           isolation_(domain ? domain->isolationDepth : 0) {
         thread.callDepth   = depth;
@@ -335,9 +335,9 @@ void TaskflowGcGate::collect(ThreadState &ts, std::string_view reason) {
     using namespace std::chrono_literals;
     // How long the collector waits for the other threads to leave their regions, and how long
     // polls are ignored after it gave up (doubling up to the maximum while it keeps failing).
-    constexpr auto kPatience           = 500ms;
-    constexpr int64_t kFirstBackoffNs  = 10'000'000;
-    constexpr int64_t kMaxBackoffNs    = 1'000'000'000;
+    constexpr auto kPatience          = 500ms;
+    constexpr int64_t kFirstBackoffNs = 10'000'000;
+    constexpr int64_t kMaxBackoffNs   = 1'000'000'000;
     static std::atomic<int64_t> backoffNs{kFirstBackoffNs};
 
     stats_.pendingPolls.fetch_add(1, std::memory_order_relaxed);
@@ -363,7 +363,7 @@ void TaskflowGcGate::collect(ThreadState &ts, std::string_view reason) {
     }
 
     stopRequested_.store(true, std::memory_order_seq_cst);
-    bool quiet = false;
+    bool quiet              = false;
     const int64_t waitBegin = steadyNowNs();
     {
         std::lock_guard registry(registryMutex_);
@@ -592,15 +592,15 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
 
     // Tail position, by the rule of the node-by-node evaluator: the tail value must be the
     // last thing in the linear order except for forwarding GATEs.
-    plan->lastNode       = camel::execute::resolveRuntimeTailValueRef(graph);
-    plan->lastNodeIsJoin = plan->lastNode != kInvalidNodeRef &&
-                           graph->node(plan->lastNode)->kind == GCNodeKind::Join;
+    plan->lastNode = camel::execute::resolveRuntimeTailValueRef(graph);
+    plan->lastNodeIsJoin =
+        plan->lastNode != kInvalidNodeRef && graph->node(plan->lastNode)->kind == GCNodeKind::Join;
     const auto anchor = std::find(plan->topo.begin(), plan->topo.end(), plan->lastNode);
-    plan->anchorOk    = anchor != plan->topo.end() &&
-                     camel::execute::hasOnlyTrivialRuntimeTailSuffixAfter(
-                         graph,
-                         plan->topo,
-                         static_cast<size_t>(anchor - plan->topo.begin()));
+    plan->anchorOk =
+        anchor != plan->topo.end() && camel::execute::hasOnlyTrivialRuntimeTailSuffixAfter(
+                                          graph,
+                                          plan->topo,
+                                          static_cast<size_t>(anchor - plan->topo.begin()));
     if (plan->anchorOk) {
         // A call that feeds an inner JOIN of nested branches in tail position (what inlining
         // a recursive function into itself leaves) is a tail call too: taken as an ordinary
@@ -692,8 +692,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
         }
         pos[topo[i]] = static_cast<uint32_t>(i);
     }
-    const uint32_t anchorPos =
-        plan.anchorOk && plan.lastNode < blocks ? pos[plan.lastNode] : kNo;
+    const uint32_t anchorPos = plan.anchorOk && plan.lastNode < blocks ? pos[plan.lastNode] : kNo;
 
     const auto isElided = [](GCNodeKind kind) {
         return kind == GCNodeKind::Data || kind == GCNodeKind::Port || kind == GCNodeKind::Sync;
@@ -725,96 +724,98 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
     // The scope tree, read off the linear order exactly as the node-by-node evaluator walks
     // it: an arm is the range from its entry to its tail, the JOIN follows the arms, and what
     // lies between a BRCH and its JOIN outside every arm range never runs.
-    std::function<void(int32_t, size_t, size_t)> parse = [&](int32_t scopeIdx, size_t lo,
-                                                             size_t hi) {
-        for (size_t i = lo; i < hi;) {
-            const gc_node_ref_t ref = topo[i];
-            const auto *node        = requireNode(graph, ref);
-            if (isElided(node->kind)) {
-                ++i;
-                continue;
-            }
-            PlanItem item;
-            item.node = ref;
-            auto &items = plan.scopes[static_cast<size_t>(scopeIdx)]->items;
-            const auto itemIdx = static_cast<uint32_t>(items.size());
+    std::function<void(int32_t, size_t, size_t)> parse =
+        [&](int32_t scopeIdx, size_t lo, size_t hi) {
+            for (size_t i = lo; i < hi;) {
+                const gc_node_ref_t ref = topo[i];
+                const auto *node        = requireNode(graph, ref);
+                if (isElided(node->kind)) {
+                    ++i;
+                    continue;
+                }
+                PlanItem item;
+                item.node          = ref;
+                auto &items        = plan.scopes[static_cast<size_t>(scopeIdx)]->items;
+                const auto itemIdx = static_cast<uint32_t>(items.size());
 
-            if (node->kind == GCNodeKind::Join) {
-                throw PlanMismatch{"a JOIN is reached outside its branch region"};
-            }
-            if (node->kind == GCNodeKind::Brch) {
-                const auto *body = graph->nodeBodyAs<camel::runtime::GCBrchBody>(ref);
-                const gc_node_ref_t join = body ? body->join : kInvalidNodeRef;
-                if (join >= blocks || pos[join] == kNo) {
-                    throw PlanMismatch{"a BRCH has no reachable JOIN"};
+                if (node->kind == GCNodeKind::Join) {
+                    throw PlanMismatch{"a JOIN is reached outside its branch region"};
                 }
-                const size_t joinPos = pos[join];
-                if (joinPos <= i || joinPos >= hi) {
-                    throw PlanMismatch{"a JOIN lies outside the range of its BRCH"};
+                if (node->kind == GCNodeKind::Brch) {
+                    const auto *body         = graph->nodeBodyAs<camel::runtime::GCBrchBody>(ref);
+                    const gc_node_ref_t join = body ? body->join : kInvalidNodeRef;
+                    if (join >= blocks || pos[join] == kNo) {
+                        throw PlanMismatch{"a BRCH has no reachable JOIN"};
+                    }
+                    const size_t joinPos = pos[join];
+                    if (joinPos <= i || joinPos >= hi) {
+                        throw PlanMismatch{"a JOIN lies outside the range of its BRCH"};
+                    }
+                    const auto branchIdx = static_cast<uint32_t>(plan.branches.size());
+                    plan.branches.push_back(PlanBranch{.brch = ref, .join = join, .armScopes = {}});
+                    item.kind      = ItemKind::Branch;
+                    item.branch    = branchIdx;
+                    item.afterTail = plan.anchorOk && join == plan.lastNode;
+                    items.push_back(item);
+                    place(ref, scopeIdx, itemIdx);
+                    place(join, scopeIdx, itemIdx);
+
+                    const auto arms = graph->branchArmsOf(ref);
+                    std::vector<int32_t> armScopes;
+                    armScopes.reserve(arms.size());
+                    for (size_t arm = 0; arm < arms.size(); ++arm) {
+                        const gc_node_ref_t entry =
+                            camel::execute::resolveRuntimeBranchArmEntry(graph, ref, arm, topo);
+                        if (entry == join) {
+                            armScopes.push_back(-1);
+                            continue;
+                        }
+                        const gc_node_ref_t tail = arms[arm].tail;
+                        if (entry >= blocks || tail >= blocks || pos[entry] == kNo ||
+                            pos[tail] == kNo) {
+                            throw PlanMismatch{"a branch arm is not in the linear order"};
+                        }
+                        const size_t entryPos = pos[entry];
+                        const size_t tailPos  = pos[tail];
+                        if (!(i < entryPos && entryPos <= tailPos && tailPos < joinPos)) {
+                            throw PlanMismatch{"a branch arm is not a range between BRCH and JOIN"};
+                        }
+                        const int32_t armScope = newScope(scopeIdx, itemIdx);
+                        parse(armScope, entryPos, tailPos + 1);
+                        armScopes.push_back(armScope);
+                    }
+                    plan.branches[branchIdx].armScopes = std::move(armScopes);
+                    i                                  = joinPos + 1;
+                    continue;
                 }
-                const auto branchIdx = static_cast<uint32_t>(plan.branches.size());
-                plan.branches.push_back(PlanBranch{.brch = ref, .join = join, .armScopes = {}});
-                item.kind      = ItemKind::Branch;
-                item.branch    = branchIdx;
-                item.afterTail = plan.anchorOk && join == plan.lastNode;
+
+                switch (node->kind) {
+                case GCNodeKind::Func:
+                    item.kind     = ItemKind::Call;
+                    item.tailCall = plan.isTailCall(ref);
+                    break;
+                case GCNodeKind::Call:
+                    item.kind = ItemKind::Call;
+                    break;
+                case GCNodeKind::Oper: {
+                    const auto *body  = graph->nodeBodyAs<GCOperBody>(ref);
+                    const auto &table = OperatorTable::instance();
+                    item.kind         = table.isMarked(body->oper)      ? ItemKind::Mark
+                                        : table.callsGraphs(body->oper) ? ItemKind::NativeCall
+                                                                        : ItemKind::Leaf;
+                    item.leaveAfter   = !table.isBuiltin(body->oper);
+                    break;
+                }
+                default:
+                    item.kind = ItemKind::Leaf;
+                    break;
+                }
+                item.afterTail = anchorPos != kNo && i > anchorPos;
                 items.push_back(item);
                 place(ref, scopeIdx, itemIdx);
-                place(join, scopeIdx, itemIdx);
-
-                const auto arms = graph->branchArmsOf(ref);
-                std::vector<int32_t> armScopes;
-                armScopes.reserve(arms.size());
-                for (size_t arm = 0; arm < arms.size(); ++arm) {
-                    const gc_node_ref_t entry =
-                        camel::execute::resolveRuntimeBranchArmEntry(graph, ref, arm, topo);
-                    if (entry == join) {
-                        armScopes.push_back(-1);
-                        continue;
-                    }
-                    const gc_node_ref_t tail = arms[arm].tail;
-                    if (entry >= blocks || tail >= blocks || pos[entry] == kNo ||
-                        pos[tail] == kNo) {
-                        throw PlanMismatch{"a branch arm is not in the linear order"};
-                    }
-                    const size_t entryPos = pos[entry];
-                    const size_t tailPos  = pos[tail];
-                    if (!(i < entryPos && entryPos <= tailPos && tailPos < joinPos)) {
-                        throw PlanMismatch{"a branch arm is not a range between BRCH and JOIN"};
-                    }
-                    const int32_t armScope = newScope(scopeIdx, itemIdx);
-                    parse(armScope, entryPos, tailPos + 1);
-                    armScopes.push_back(armScope);
-                }
-                plan.branches[branchIdx].armScopes = std::move(armScopes);
-                i                                  = joinPos + 1;
-                continue;
+                ++i;
             }
-
-            switch (node->kind) {
-            case GCNodeKind::Func:
-                item.kind     = ItemKind::Call;
-                item.tailCall = plan.isTailCall(ref);
-                break;
-            case GCNodeKind::Call:
-                item.kind = ItemKind::Call;
-                break;
-            case GCNodeKind::Oper: {
-                const auto *body = graph->nodeBodyAs<GCOperBody>(ref);
-                const auto &table = OperatorTable::instance();
-                item.kind         = table.isMarked(body->oper) ? ItemKind::Mark : ItemKind::Leaf;
-                item.leaveAfter   = !table.isBuiltin(body->oper);
-                break;
-            }
-            default:
-                item.kind = ItemKind::Leaf;
-                break;
-            }
-            item.afterTail = anchorPos != kNo && i > anchorPos;
-            items.push_back(item);
-            place(ref, scopeIdx, itemIdx);
-            ++i;
-        }
-    };
+        };
     (void)newScope(-1, 0);
     parse(0, 0, topo.size());
 
@@ -828,7 +829,9 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
             const gc_node_ref_t ref = work.back();
             work.pop_back();
             for (auto outputs :
-                 {graph->normOutputsOf(ref), graph->withOutputsOf(ref), graph->ctrlOutputsOf(ref)}) {
+                 {graph->normOutputsOf(ref),
+                  graph->withOutputsOf(ref),
+                  graph->ctrlOutputsOf(ref)}) {
                 for (gc_node_ref_t out : outputs) {
                     if (out >= blocks || seen[out] != 0) {
                         continue;
@@ -929,6 +932,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
             bool worth           = false;
             switch (item.kind) {
             case ItemKind::Mark:
+            case ItemKind::NativeCall:
                 worth = true;
                 break;
             case ItemKind::Call:
@@ -1209,17 +1213,9 @@ slot_t TaskflowExecSchedPass::evalGraph(
                 // replaces the one open for this activation, so the count is the thread's as
                 // it stands. (A serial graph tail-calls serial graphs only: nothing comes back
                 // here.)
-                return handoff_->call(
-                    targetPlan->bytecodeEntry,
-                    target,
-                    region,
-                    [&](Frame *dest) {
-                        camel::execute::fillFrameForDirectInvoke(
-                            lastFrame,
-                            dest,
-                            callerGraph,
-                            tailRef);
-                    });
+                return handoff_->call(targetPlan->bytecodeEntry, target, region, [&](Frame *dest) {
+                    camel::execute::fillFrameForDirectInvoke(lastFrame, dest, callerGraph, tailRef);
+                });
             }
             if (tailFrames.count < tailFrames.entries.size()) {
                 entry = &tailFrames.entries[tailFrames.count];
@@ -1270,36 +1266,35 @@ void TaskflowExecSchedPass::runScope(
         std::vector<tf::Task> tasks;
         tasks.reserve(scope.chains.size());
         for (size_t chain = 0; chain < scope.chains.size(); ++chain) {
-            tasks.push_back(
-                instance->flow
-                    .emplace([this, self, planPtr = &plan, scopePtr = &scope, chain]() {
-                        // Nothing may escape into the executor: the first failure is kept
-                        // for the thread that runs this scope, and the chains of the scope
-                        // that have not started are skipped.
-                        if (self->failed.load(std::memory_order_acquire)) [[unlikely]] {
-                            return;
-                        }
-                        try {
-                            TaskflowGcRegion taskRegion;
-                            InheritedDepth inherited(
-                                taskRegion.thread(),
-                                self->parentDepth,
-                                self->parentDomain);
-                            runItems(
-                                *planPtr,
-                                scopePtr->chains[chain],
-                                self->frame,
-                                *self->tailNode,
-                                taskRegion);
-                        } catch (...) {
-                            self->failed.store(true, std::memory_order_release);
-                            std::lock_guard lock(self->errorMutex);
-                            if (!self->error) {
-                                self->error = std::current_exception();
-                            }
-                        }
-                    })
-                    .name("CHAIN"));
+            tasks.push_back(instance->flow
+                                .emplace([this, self, planPtr = &plan, scopePtr = &scope, chain]() {
+                                    // Nothing may escape into the executor: the first failure is
+                                    // kept for the thread that runs this scope, and the chains of
+                                    // the scope that have not started are skipped.
+                                    if (self->failed.load(std::memory_order_acquire)) [[unlikely]] {
+                                        return;
+                                    }
+                                    try {
+                                        TaskflowGcRegion taskRegion;
+                                        InheritedDepth inherited(
+                                            taskRegion.thread(),
+                                            self->parentDepth,
+                                            self->parentDomain);
+                                        runItems(
+                                            *planPtr,
+                                            scopePtr->chains[chain],
+                                            self->frame,
+                                            *self->tailNode,
+                                            taskRegion);
+                                    } catch (...) {
+                                        self->failed.store(true, std::memory_order_release);
+                                        std::lock_guard lock(self->errorMutex);
+                                        if (!self->error) {
+                                            self->error = std::current_exception();
+                                        }
+                                    }
+                                })
+                                .name("CHAIN"));
         }
         for (const auto &[from, to] : scope.chainEdges) {
             tasks[from].precede(tasks[to]);
@@ -1307,8 +1302,8 @@ void TaskflowExecSchedPass::runScope(
     }
 
     taskGraphsRun_.fetch_add(1, std::memory_order_relaxed);
-    instance->frame       = frame;
-    instance->tailNode    = &tailNode;
+    instance->frame        = frame;
+    instance->tailNode     = &tailNode;
     instance->parentDepth  = region.thread().callDepth;
     instance->parentDomain = region.thread().faultDomain;
     region.leave(); // the calling thread waits for (and helps with) the tasks from here on
@@ -1325,8 +1320,8 @@ void TaskflowExecSchedPass::runScope(
 }
 
 void TaskflowExecSchedPass::runItems(
-    GraphPlan &plan, std::span<const PlanItem> items, Frame *frame,
-    std::atomic<uint32_t> &tailNode, TaskflowGcRegion &region) {
+    GraphPlan &plan, std::span<const PlanItem> items, Frame *frame, std::atomic<uint32_t> &tailNode,
+    TaskflowGcRegion &region) {
     GCGraph *graph = plan.graph;
     for (const PlanItem &item : items) {
         switch (item.kind) {
@@ -1349,6 +1344,13 @@ void TaskflowExecSchedPass::runItems(
                 break;
             }
             executeCallNode(graph, item.node, frame, region);
+            break;
+        case ItemKind::NativeCall:
+            if (item.afterTail && tailNode.load(std::memory_order_acquire) != kInvalidNodeRef) {
+                continue;
+            }
+            region.leave();
+            (void)executePreparedOperator(graph, item.node, frame, &plan);
             break;
         case ItemKind::Mark:
             region.leave();
@@ -1454,6 +1456,12 @@ void TaskflowExecSchedPass::runLinearBody(
             if (OperatorTable::instance().isMarked(graph->nodeBodyAs<GCOperBody>(nodeRef)->oper)) {
                 region.leave();
                 (void)executeLinearMarkedOperator(graph, nodeRef, frame);
+                break;
+            }
+            if (OperatorTable::instance().callsGraphs(
+                    graph->nodeBodyAs<GCOperBody>(nodeRef)->oper)) {
+                region.leave();
+                (void)executePreparedOperator(graph, nodeRef, frame, &plan);
                 break;
             }
             region.enter();
@@ -1572,8 +1580,8 @@ slot_t TaskflowExecSchedPass::callGraph(
 template <typename FillArgs, typename Sink>
 void TaskflowExecSchedPass::callClosure(
     TaskflowGcRegion &region, const ElementCallSite &site, GCGraph *targetGraph,
-    GraphPlan *targetPlan, Frame *funcFrame, camel::runtime::gc_data_idx_t funcIdx,
-    size_t argCount, FillArgs &&fillArgs, Sink &&sink) {
+    GraphPlan *targetPlan, Frame *funcFrame, camel::runtime::gc_data_idx_t funcIdx, size_t argCount,
+    FillArgs &&fillArgs, Sink &&sink) {
     std::array<slot_t, 2> args{NullSlot, NullSlot};
     ASSERT(argCount <= args.size(), "Taskflow closure call takes at most two arguments.");
     requireCallRoom(region.thread(), site.graph, site.node);
@@ -1792,9 +1800,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
         if (OperatorTable::instance().isMarked(body->oper)) {
             return executeLinearMarkedOperator(graph, nodeRef, frame);
         }
-        const slot_t result = executePreparedOperator(graph, nodeRef, frame, plan);
-        frame->set(node->dataIndex, result);
-        return result;
+        return executePreparedOperator(graph, nodeRef, frame, plan);
     }
 
     case GCNodeKind::Brch:
@@ -1868,6 +1874,39 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
     ASSERT(graph != nullptr, "Taskflow operator execution requires a graph.");
     ASSERT(frame != nullptr, "Taskflow operator execution requires a frame.");
+    // Graph-calling operators own the region so the callee can reach safepoints.
+    TaskflowGcRegion region;
+    region.enter();
+    camel::execute::FunctionInvoker invoker;
+    const auto *operatorBody = graph->nodeBodyAs<GCOperBody>(nodeRef);
+    if (OperatorTable::instance().callsGraphs(operatorBody->oper)) {
+        invoker =
+            [&](Function *function, std::span<const slot_t> with, std::span<const slot_t> normal) {
+                requireCallRoom(region.thread(), graph, nodeRef);
+                OpenCall openCall(region.thread().callDepth);
+                auto *target = function->graph();
+                try {
+                    return callGraph(target, nullptr, region, [&](Frame *dest) {
+                        fillClosureCallFrame(dest, target, function->tuple(), normal);
+                        const auto ports = target->withPorts();
+                        for (size_t i = 0; i < ports.size(); ++i) {
+                            dest->set(dataIndexOf(target, ports[i]), with[i]);
+                        }
+                    });
+                } catch (...) {
+                    // Native code may catch and inspect its rooted arguments before invoking again.
+                    region.enter();
+                    throw;
+                }
+            };
+    }
+    camel::execute::FunctionCallScope invocation(*context_, std::move(invoker));
+    auto invoke = [&](operator_t function, ArgsView &with, ArgsView &normal) {
+        const slot_t result = function(with, normal, *context_);
+        // Publish before this region is released, including on the task-graph path.
+        frame->set(dataIndexOf(graph, nodeRef), result);
+        return result;
+    };
 
     // An operator that ran before on this plan: its function and the places of its arguments
     // are known. Looking the operator up by URI on every execution (two string copies, two
@@ -1891,7 +1930,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
                 camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
             }
             try {
-                return resolved(withView, normView, *context_);
+                return invoke(resolved, withView, normView);
             } catch (const RuntimeFault &fault) {
                 raiseFault(fault, graph, nodeRef);
             }
@@ -1928,7 +1967,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
     }
     try {
-        return (*opFunc)(withView, normView, *context_);
+        return invoke(*opFunc, withView, normView);
     } catch (const RuntimeFault &fault) {
         // Reported at the operator, as on the other back ends (it used to be the start of
         // the enclosing graph).
@@ -2128,9 +2167,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         case oper::Isolate:
             return executeIsolateNode(graph, nodeRef, frame);
         default: {
-            const slot_t result = executePreparedOperator(graph, nodeRef, frame);
-            frame->set(node->dataIndex, result);
-            return result;
+            return executePreparedOperator(graph, nodeRef, frame);
         }
         }
         return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
@@ -2579,8 +2616,7 @@ void TaskflowExecSchedPass::runElements(
                 if (claimed >= n) {
                     return true;
                 }
-                probedLeft =
-                    took * static_cast<int64_t>(n - claimed) / static_cast<int64_t>(count);
+                probedLeft = took * static_cast<int64_t>(n - claimed) / static_cast<int64_t>(count);
                 if (probedLeft >= kSpawnNs && probedNs >= kProbeNs &&
                     (probedChunks >= 2 || took >= 10 * kSpawnNs)) {
                     return false;
@@ -2600,9 +2636,8 @@ void TaskflowExecSchedPass::runElements(
         size_t helpers       = std::min(workers, n - claimed);
         if (probedChunks != 0) {
             // As many as the work left can keep busy for kSpawnNs each.
-            helpers = std::min(
-                helpers,
-                static_cast<size_t>(std::max<int64_t>(2, probedLeft / kSpawnNs)));
+            helpers =
+                std::min(helpers, static_cast<size_t>(std::max<int64_t>(2, probedLeft / kSpawnNs)));
         }
         tf::Taskflow flow;
         for (size_t helper = 0; helper < helpers; ++helper) {
@@ -2774,7 +2809,9 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
     // Folds `count` values into `acc` inside the caller's region: between two calls the
     // accumulator is in no frame, so the region is not left in between.
     const auto fold = [this, graph, nodeRef, target, frame, funcIdx](
-                          TaskflowGcRegion &foldRegion, slot_t acc, size_t count,
+                          TaskflowGcRegion &foldRegion,
+                          slot_t acc,
+                          size_t count,
                           const std::function<slot_t(size_t)> &valueAt) {
         for (size_t i = 0; i < count; ++i) {
             requireCallRoom(foldRegion.thread(), graph, nodeRef);
@@ -2799,8 +2836,18 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
             continue;
         }
         level
-            .emplace([frame, arrIdx, begin, end, chunk, arrType, depth, domain, &partialsRoot,
-                      &hasPartial, &fold, &faults]() {
+            .emplace([frame,
+                      arrIdx,
+                      begin,
+                      end,
+                      chunk,
+                      arrType,
+                      depth,
+                      domain,
+                      &partialsRoot,
+                      &hasPartial,
+                      &fold,
+                      &faults]() {
                 faults.run(chunk, [&] {
                     TaskflowGcRegion chunkRegion;
                     InheritedDepth inherited(chunkRegion.thread(), depth, domain);
@@ -2908,8 +2955,8 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
 // starts inherit the domain. Every flow is joined by the thread that started it, so when a
 // fault arrives here as an exception, no task of the boundary is still running: the node gives
 // its error value only after everything that had started inside the boundary has ended.
-slot_t TaskflowExecSchedPass::executeIsolateNode(
-    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+slot_t
+TaskflowExecSchedPass::executeIsolateNode(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     const auto *node = requireNode(graph, nodeRef);
     TaskflowGcRegion region;
     auto &thread = region.thread();

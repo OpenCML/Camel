@@ -21,6 +21,32 @@ func main(): int sync {
 
 ## API
 
+`gpu` is a function decorator that prefers GPU execution:
+
+```cml
+import { Tensor } from tensor
+import { gpu } from tiles
+
+@gpu
+func add(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> { return x + y }
+// add(x, y) now executes through Tiles and returns host tensors.
+```
+
+It preserves the function signature and wraps the original function as a traced
+capture. Unary and multiple arguments, function values, aggregate results and
+nested decorated calls are supported. Inside a GPU compilation, a nested dispatch
+is lowered as the underlying computation, without host execution or a nested GPU
+launch. Numeric permissions remain attached to the original operator nodes.
+When the backend is unavailable or compilation identifies an unsupported computation,
+the original function runs on the current CPU execution backend. This is graph
+execution, not a fused CPU JIT kernel. Configuration errors, malformed graphs,
+compilation failures and device execution faults are reported; an executed GPU
+region is never replayed on CPU. `run` continues to require the GPU. Functions with mutable parameters, unbound context parameters or
+no ordinary inputs are currently rejected. This is separate from the planned
+`@kernel` block-kernel validation annotation and from automatic region placement.
+The annotation also supports local functions with captured values. Use `gpu(lambda)`
+when constructing a GPU-dispatched function value directly.
+
 NVRTC always receives `--fmad=false`, `--prec-div=true`, `--prec-sqrt=true`
 and `--ftz=false`. The in-process module cache compares the source and all compiler
 options, including the target architecture; device/context and NVRTC library are
@@ -383,3 +409,42 @@ receive their own matmul contract while retaining the original gradient contract
 as a compilation dependency. The source-template key now serializes the complete
 owned indexing instance, including expressions, parameters, predicates and law
 selection; changing a map cannot reuse previously generated addresses.
+
+Axis sum/mean/maximum lowering validates the core iteration roles, direct output
+projection and full numerical law (accumulator, initial value, order, empty result
+and finalization). Its serial and parallel-maximum loads use the core operand
+map, with the same bounds checks as pointwise and matrix accesses. Canonical
+maps retain the compact row/axis address. Noncanonical affine reads are supported
+by those kernels but excluded from row regions, whose shared-memory accesses
+assume canonical rows. Guarded, indirect and negative-stride reads are rejected.
+Full-tensor sum/mean and sum-to use the same traversal and mapping checks.
+Reduction dimensions are traversed lexicographically in domain order, preserving
+the canonical row-major contribution sequence even for nonadjacent sum-to axes.
+Full sums retain f64 results and accumulators; sum-to retains its f32 accumulator.
+Only direct output projections and unconditional nonnegative affine reads are
+supported; symbolic or guarded domains still require further lowering.
+
+## Graph region analysis
+
+`regions<fn>()` returns JSON describing static GPU candidate regions of `fn`:
+member node IDs in dependency order, distinct boundary inputs and outputs, and
+exclusion reasons. It inspects the function graph without calling it or loading
+CUDA. Candidate selection uses core declarations, type/instance facts and the
+same physical index-contract checks as lowering. The current coverage is static
+f32 pointwise operations, rank-2 matrix multiplication and supported reductions;
+dynamic shapes, scalar arithmetic, layouts and other node kinds remain boundaries.
+This is analysis for the graph pass, not automatic GPU execution.
+
+Each candidate is also extracted into a function draft. Runtime boundary values
+become distinct parameters; constant boundary values (including reduction axes)
+stay constants. Multiple exits are packed into a tuple. Operator types, source
+origins and numerical permissions are preserved. Inspection reports `parameters`,
+`result_arity` and `extracted_nodes`; it does not install or execute these drafts.
+
+Regions are connected and dependency-convex: replacing each region by one call
+must leave the complete CPU/GPU dependency graph acyclic. In particular, a direct
+GPU edge cannot justify fusion across a CPU detour. Shared values used outside a
+region remain explicit outputs; unreachable nodes are omitted. Control-edge
+endpoints are excluded, and this analysis does not descend into calls, branch
+arms or LOOP bodies. The internal planner is deterministic and produces maximal
+legal contractions for its greedy order, not a globally optimal cost partition.

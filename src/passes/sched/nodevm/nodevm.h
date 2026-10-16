@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,6 +90,9 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 
   private:
+    __attribute__((noinline)) slot_t evalNativeOperator(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame &frame,
+        operator_t op);
     /// Runs a marked operator (camel/core/operator_table.h), which calls the function values it
     /// receives. Kept out of line on purpose: call() recurses on the native stack once per Camel
     /// call, and these helpers run once per higher-order operator, so inlining them (with their

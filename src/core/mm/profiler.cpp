@@ -6,7 +6,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 16, 2026
  */
 
 #include "camel/core/mm.h"
@@ -26,7 +26,7 @@ namespace profiler {
 using json = nlohmann::json;
 
 // BumpPointer region snapshot.
-static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc) {
+static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc, bool detailed) {
     auto *start     = alloc.start();
     auto *top       = alloc.top();
     auto *end       = alloc.end();
@@ -35,17 +35,20 @@ static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc
 
     std::vector<json> objects;
     size_t objectBytes = 0;
+    size_t objectCount = 0;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
         // Skip forwarded objects (logically moved out and represented by the target).
         if (hdr->forwarded())
             return;
         objectBytes += hdr->size();
-        objects.push_back({
-            {"addr", reinterpret_cast<uintptr_t>(hdr)},
-            {"size", hdr->size()},
-            {"age", static_cast<int>(hdr->age())},
-            {"region", static_cast<int>(hdr->region())},
-        });
+        ++objectCount;
+        if (detailed)
+            objects.push_back({
+                {"addr", reinterpret_cast<uintptr_t>(hdr)},
+                {"size", hdr->size()},
+                {"age", static_cast<int>(hdr->age())},
+                {"region", static_cast<int>(hdr->region())},
+            });
     });
 
     return {
@@ -57,14 +60,14 @@ static json bumpRegionToJson(const char *name, const BumpPointerAllocator &alloc
         {"capacity", capacity},
         {"used", used},
         {"available", alloc.available()},
-        {"objectCount", objects.size()},
+        {"objectCount", objectCount},
         {"objectBytes", objectBytes},
         {"objects", objects},
     };
 }
 
 // FreeList region snapshot (distinguish allocated blocks and free blocks).
-static json freeListRegionToJson(const char *name, const FreeListAllocator &alloc) {
+static json freeListRegionToJson(const char *name, const FreeListAllocator &alloc, bool detailed) {
     auto *start      = alloc.start();
     auto *end        = alloc.end();
     size_t capacity  = (end && start) ? static_cast<size_t>(end - start) : 0;
@@ -73,14 +76,17 @@ static json freeListRegionToJson(const char *name, const FreeListAllocator &allo
 
     std::vector<json> objects;
     size_t objectBytes = 0;
+    size_t objectCount = 0;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
         objectBytes += hdr->size();
-        objects.push_back({
-            {"addr", reinterpret_cast<uintptr_t>(hdr)},
-            {"size", hdr->size()},
-            {"age", static_cast<int>(hdr->age())},
-            {"region", static_cast<int>(hdr->region())},
-        });
+        ++objectCount;
+        if (detailed)
+            objects.push_back({
+                {"addr", reinterpret_cast<uintptr_t>(hdr)},
+                {"size", hdr->size()},
+                {"age", static_cast<int>(hdr->age())},
+                {"region", static_cast<int>(hdr->region())},
+            });
     });
 
     return {
@@ -91,7 +97,7 @@ static json freeListRegionToJson(const char *name, const FreeListAllocator &allo
         {"capacity", capacity},
         {"used", used},
         {"available", available},
-        {"objectCount", objects.size()},
+        {"objectCount", objectCount},
         {"objectBytes", objectBytes},
         {"objects", objects},
     };
@@ -129,23 +135,26 @@ static std::string segmentRegionName(const char *space, size_t index) {
 }
 
 // LargeObject region: no contiguous blocks, only an object list.
-static json largeObjRegionToJson(const LargeObjectAllocator &alloc) {
+static json largeObjRegionToJson(const LargeObjectAllocator &alloc, bool detailed) {
     std::vector<json> objects;
     size_t objectBytes = 0;
+    size_t objectCount = 0;
     alloc.iterateAllocated([&](ObjectHeader *hdr) {
         objectBytes += hdr->size();
-        objects.push_back({
-            {"addr", reinterpret_cast<uintptr_t>(hdr)},
-            {"size", hdr->size()},
-            {"age", static_cast<int>(hdr->age())},
-            {"region", static_cast<int>(hdr->region())},
-        });
+        ++objectCount;
+        if (detailed)
+            objects.push_back({
+                {"addr", reinterpret_cast<uintptr_t>(hdr)},
+                {"size", hdr->size()},
+                {"age", static_cast<int>(hdr->age())},
+                {"region", static_cast<int>(hdr->region())},
+            });
     });
 
     return {
         {"name", "largeObj"},
         {"type", "largeobj"},
-        {"objectCount", objects.size()},
+        {"objectCount", objectCount},
         {"objectBytes", objectBytes},
         {"objects", objects},
     };
@@ -186,7 +195,7 @@ std::string configToJson() {
     return root.dump(2);
 }
 
-std::string snapshotToJson() {
+std::string snapshotToJson(bool detailed) {
     auto &autoSp = autoSpace();
     auto &metaSp = metaSpace();
     auto &permSp = permSpace();
@@ -194,29 +203,30 @@ std::string snapshotToJson() {
     json regions = json::array();
 
     // Young Gen: birth, haven, cache.
-    regions.push_back(bumpRegionToJson("birthSpace", autoSp.birthSpace()));
-    regions.push_back(bumpRegionToJson("havenSpace", autoSp.havenSpace()));
-    regions.push_back(bumpRegionToJson("cacheSpace", autoSp.cacheSpace()));
+    regions.push_back(bumpRegionToJson("birthSpace", autoSp.birthSpace(), detailed));
+    regions.push_back(bumpRegionToJson("havenSpace", autoSp.havenSpace(), detailed));
+    regions.push_back(bumpRegionToJson("cacheSpace", autoSp.cacheSpace(), detailed));
 
     // Elder Gen.
     for (size_t i = 0; i < autoSp.elderGenSpace().segmentCount(); ++i) {
         const std::string name = segmentRegionName("elderGenSpace", i);
-        regions.push_back(freeListRegionToJson(name.c_str(), autoSp.elderGenSpace().segment(i)));
+        regions.push_back(
+            freeListRegionToJson(name.c_str(), autoSp.elderGenSpace().segment(i), detailed));
     }
 
     // Large Object.
-    regions.push_back(largeObjRegionToJson(autoSp.largeObjSpace()));
+    regions.push_back(largeObjRegionToJson(autoSp.largeObjSpace(), detailed));
 
     // Meta Space.
     for (size_t i = 0; i < metaSp.segmentCount(); ++i) {
         const std::string name = segmentRegionName("metaSpace", i);
-        regions.push_back(freeListRegionToJson(name.c_str(), metaSp.segment(i)));
+        regions.push_back(freeListRegionToJson(name.c_str(), metaSp.segment(i), detailed));
     }
 
     // Perm Space.
     for (size_t i = 0; i < permSp.segmentCount(); ++i) {
         const std::string name = segmentRegionName("permSpace", i);
-        regions.push_back(bumpRegionToJson(name.c_str(), permSp.segment(i)));
+        regions.push_back(bumpRegionToJson(name.c_str(), permSp.segment(i), detailed));
     }
 
     size_t totalObjectCount = 0;

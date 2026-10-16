@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -213,12 +213,12 @@ static void writeComputedGotoFillSlots(
 } // namespace
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
-    Frame *currFrame                = rootFrame;
-    Frame *rootActiveFrame          = rootFrame;
-    const Bytecode *base            = bytecodes_.data();
-    const Bytecode *bc              = nullptr;
-    const size_t stackDepthBase     = stackDepth_;
-    const size_t nestedCallsBase    = nestedCalls_;
+    Frame *currFrame             = rootFrame;
+    Frame *rootActiveFrame       = rootFrame;
+    const Bytecode *base         = bytecodes_.data();
+    const Bytecode *bc           = nullptr;
+    const size_t stackDepthBase  = stackDepth_;
+    const size_t nestedCallsBase = nestedCalls_;
 #if ENABLE_FASTVM_JIT
     const bool useJit = jitEnabled();
 #endif
@@ -482,7 +482,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         // The call nests on the native stack: it is counted, and checked before the frame
         // is taken.
         requireNestedCallRoom(currFrame);
-        Frame *funcFrame         = framePool_.acquire(runtimeTarget);
+        Frame *funcFrame = framePool_.acquire(runtimeTarget);
         populateIndirectCallFrame(currFrame, funcFrame, function, nargs, wargs);
 
         _timer.pause();
@@ -685,8 +685,8 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 // does not grow that stack.
                 return CallResult{NullSlot, newFrame, reinterpret_cast<void *>(fn)};
             }
-            currFrame     = newFrame;
-            slot_t result = invokeOwnedJitFrame(fn, newFrame, currentJitCtx_);
+            currFrame                = newFrame;
+            slot_t result            = invokeOwnedJitFrame(fn, newFrame, currentJitCtx_);
             auto [lastPC, lastFrame] = pop();
             pc                       = lastPC;
             bc                       = &bytecodes_[pc];
@@ -749,15 +749,10 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         opperf::ScopeTimer _timer(bc->opcode);
 
         {
-            const data_arr_t nargs = bc->nargs();
-            const data_arr_t wargs = bc->wargs();
-            auto func              = bc->extra()->func;
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                 "FastVM",
                 "Executing operator {}.",
-                context_->execMgr().getNameOfAnOperator(func)));
-            FrameArgsView withView(*currFrame, wargs);
-            FrameArgsView normView(*currFrame, nargs);
+                context_->execMgr().getNameOfAnOperator(bc->extra()->func)));
             slot_t result;
             if (camel::core::effect_trace::enabled()) [[unlikely]] {
                 if (auto sc = context_->sourceContext()) {
@@ -765,7 +760,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 }
             }
             try {
-                result = func(withView, normView, *context_);
+                result = invokeNativeOperator(*bc, *currFrame);
             } catch (const RuntimeFault &fault) {
                 OBSERVE_RUNTIME_FAULT(fault);
                 throw reportRuntimeFault(

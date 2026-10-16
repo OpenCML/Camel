@@ -25,6 +25,7 @@
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
+#include "tiles/internal/capability.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <bit>
@@ -49,6 +50,8 @@ struct Value {
     std::optional<slot_t> staticSlot;
     size_t tensor = SIZE_MAX;
     std::vector<Value> fields;
+    // Borrowed function graph and captured values, used only while reading the graph.
+    rt::GCGraph *function = nullptr;
 };
 struct Frame {
     rt::GCGraph *graph;
@@ -62,6 +65,7 @@ class Compiler {
     rt::fact::FactStore &facts;
     explicit Compiler(rt::fact::FactStore &store) : facts(store) {}
     std::unordered_set<rt::GCGraph *> active;
+    std::unordered_set<::Function *> loadingFunctions;
     std::unordered_map<core::OperId, size_t> contracts;
 
     size_t contract(core::OperId id) {
@@ -91,6 +95,30 @@ class Compiler {
     }
 
     Value host(slot_t slot, ty::Type *type, bool runtimeInput = false) {
+        if (type->code() == ty::TypeCode::Function) {
+            auto *fn = td::fromSlot<::Function *>(slot);
+            if (!fn || !fn->graph())
+                throw std::runtime_error("missing function value");
+            if (loadingFunctions.size() >= 64 || !loadingFunctions.insert(fn).second)
+                throw std::runtime_error("cyclic or excessively deep captured function values");
+            struct CaptureScope {
+                std::unordered_set<::Function *> &active;
+                ::Function *function;
+                ~CaptureScope() { active.erase(function); }
+            } captureScope{loadingFunctions, fn};
+            Value value{.type = type, .function = fn->graph()};
+            if (auto *captures = fn->tuple()) {
+                for (size_t i = 0; i < captures->size(); ++i) {
+                    auto *fieldType  = fn->tupleType()->typeAt(i);
+                    const auto field = captures->get<slot_t>(i);
+                    value.fields.push_back(
+                        field == NullSlot && ty::isGCTraced(fieldType->code())
+                            ? Value{.type = fieldType}
+                            : host(field, fieldType, true));
+                }
+            }
+            return value;
+        }
         if (asDeviceType(type)) {
             auto *wrapper = td::fromSlot<td::ForeignResourceObject *>(slot);
             auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
@@ -125,7 +153,7 @@ class Compiler {
         if (tensor::asTensorType(type)) {
             const auto *t = td::fromSlot<tensor::TensorObject *>(slot);
             if (!t || t->dtype() != ty::TypeCode::Float32)
-                throw std::runtime_error("tiles currently requires f32 tensors");
+                throw UnsupportedComputation("tiles currently requires f32 tensors");
             Node node{.op = "input", .shape = t->shapeVector()};
             const size_t n = elements(node.shape);
             if (n)
@@ -135,7 +163,7 @@ class Compiler {
         }
         auto constant = tensor::ops::constArgOf(slot, type);
         if (!constant)
-            throw std::runtime_error("unsupported captured/static value: " + type->toString());
+            throw UnsupportedComputation("unsupported captured/static value: " + type->toString());
         if (runtimeInput && type->code() == ty::TypeCode::Float64) {
             Node node{.op = "input", .shape = {}};
             node.dtype      = DType::F64;
@@ -173,7 +201,7 @@ class Compiler {
         rt::GCGraph *g, const std::vector<Value> &with, const std::vector<Value> &norm,
         const std::vector<Value> &captures = {}) {
         if (!g || active.contains(g) || active.size() >= 64)
-            throw std::runtime_error(
+            throw UnsupportedComputation(
                 "recursive or excessively deep calls are not supported by tiles yet");
         if (with.size() != g->withPorts().size() || norm.size() != g->normPorts().size() ||
             captures.size() != g->closureNodes().size())
@@ -231,16 +259,17 @@ class Compiler {
                 break;
             case rt::GCNodeKind::Brch:
                 if (!g->withInputsOf(id).empty())
-                    throw std::runtime_error("tiles match lowering is not implemented");
+                    throw UnsupportedComputation("tiles match lowering is not implemented");
                 out = eval(f, ins.front());
                 if (!out.constant || !std::holds_alternative<bool>(*out.constant))
-                    throw std::runtime_error(
+                    throw UnsupportedComputation(
                         "tiles branch condition must be a boolean known when specializing");
                 break;
             case rt::GCNodeKind::Join: {
                 const auto condition = eval(f, ins.front());
                 if (!condition.constant || !std::holds_alternative<bool>(*condition.constant))
-                    throw std::runtime_error("tiles join requires a specialized boolean branch");
+                    throw UnsupportedComputation(
+                        "tiles join requires a specialized boolean branch");
                 const auto arms  = g->withInputsOf(id);
                 const size_t arm = std::get<bool>(*condition.constant) ? 0 : 1;
                 if (arms.size() != 2)
@@ -266,9 +295,26 @@ class Compiler {
                 out = call(g->directCalleeGraphOf(id), with, norm);
                 break;
             }
+            case rt::GCNodeKind::Call: {
+                const auto context = g->withInputsOf(id);
+                if (context.empty())
+                    throw std::runtime_error("function call has no callable value");
+                auto fn = eval(f, context.front());
+                if (!fn.function)
+                    throw UnsupportedComputation(
+                        "call target must be known during GPU specialization");
+                std::vector<Value> with, norm;
+                for (size_t i = 1; i < context.size(); ++i)
+                    with.push_back(eval(f, context[i]));
+                for (auto input : ins)
+                    norm.push_back(eval(f, input));
+                out = call(fn.function, with, norm, fn.fields);
+                break;
+            }
             case rt::GCNodeKind::Fill: {
                 if (node->dataType()->code() != ty::TypeCode::Tuple &&
-                    node->dataType()->code() != ty::TypeCode::Struct)
+                    node->dataType()->code() != ty::TypeCode::Struct &&
+                    node->dataType()->code() != ty::TypeCode::Function)
                     throw std::runtime_error(
                         "tiles supports only tuple/struct aggregate construction");
                 out               = eval(f, ins.front());
@@ -298,13 +344,44 @@ class Compiler {
                 break;
             }
             case rt::GCNodeKind::Oper: {
+                const auto oper       = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
+                static const auto gpu = core::OperatorTable::instance().intern("tiles:gpu");
+                static const auto run = core::OperatorTable::instance().intern("tiles:run");
+                static const auto prefer =
+                    core::OperatorTable::instance().intern("tiles:prefer_gpu");
+                // Dispatch inside an already GPU-compiled graph is a call to the original
+                // computation. Read it structurally; never execute a decorator or launch CUDA.
+                if (oper == gpu) {
+                    if (ins.size() != 1 || !g->withInputsOf(id).empty())
+                        throw std::runtime_error("invalid GPU decorator arguments");
+                    out = eval(f, ins.front());
+                    if (!out.function)
+                        throw std::runtime_error("GPU decorator requires a known function");
+                    break;
+                }
+                if (oper == run || oper == prefer) {
+                    const auto context = g->withInputsOf(id);
+                    if (context.size() != 1 || ins.size() != 1)
+                        throw std::runtime_error("invalid nested GPU dispatch arguments");
+                    const auto fn = eval(f, context.front());
+                    if (!fn.function)
+                        throw std::runtime_error("GPU dispatch requires a known function");
+                    auto args = eval(f, ins.front());
+                    out       = call(
+                        fn.function,
+                        {},
+                        fn.function->normPorts().size() == 1 ? std::vector<Value>{args}
+                                                             : args.fields,
+                        fn.fields);
+                    break;
+                }
                 std::vector<Value> args;
                 if (!g->withInputsOf(id).empty())
-                    throw std::runtime_error("operator context arguments are not supported yet");
+                    throw UnsupportedComputation(
+                        "operator context arguments are not supported yet");
                 for (auto in : ins)
                     args.push_back(eval(f, in));
                 const auto first    = program.nodes.size();
-                const auto oper     = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
                 const auto semantic = contract(oper);
                 auto indexed        = graphInstance(*g, id, args);
                 out                 = operation(oper, args, indexed);
@@ -325,12 +402,15 @@ class Compiler {
                 break;
             }
             default:
-                throw std::runtime_error(
+                throw UnsupportedComputation(
                     "unsupported graph node kind " + std::to_string(int(node->kind)));
             }
             f.visiting.erase(id);
             f.values.emplace(id, out);
             return out;
+        } catch (const UnsupportedComputation &e) {
+            throw UnsupportedComputation(
+                g->name() + " node " + std::to_string(id) + ": " + e.what());
         } catch (const std::exception &e) {
             throw std::runtime_error(g->name() + " node " + std::to_string(id) + ": " + e.what());
         }
@@ -415,7 +495,7 @@ class Compiler {
         }
         const auto *def = tensor::ops::OpRegistry::instance().find(id);
         if (!def || !def->traits.pure)
-            throw std::runtime_error("unsupported or effectful operator '" + uri() + "'");
+            throw UnsupportedComputation("unsupported or effectful operator '" + uri() + "'");
         std::vector<ty::Type *> types;
         std::vector<std::optional<ConstArg>> constants;
         for (const auto &v : args) {
@@ -437,7 +517,7 @@ class Compiler {
         }
         const auto *result = inferred ? tensor::asTensorType(*inferred) : nullptr;
         if (!result || result->dtype() != ty::TypeCode::Float32 || !result->isStaticShape())
-            throw std::runtime_error(
+            throw UnsupportedComputation(
                 "operator '" + uri() + "' needs a statically known f32 tensor result");
         Node n{.op = std::string(def->name), .shape = *result->shape()};
         if (n.op == "sum_to" || n.op == "cast_like") {
@@ -491,7 +571,7 @@ class Compiler {
             size_t lhs = tensorValue(args.at(1)), rhs = tensorValue(args.at(2));
             const auto a = program.nodes[lhs].shape, b = program.nodes[rhs].shape;
             if (a.size() != 2 || b.size() != 2)
-                throw std::runtime_error("tiles matmul gradient requires rank 2");
+                throw UnsupportedComputation("tiles matmul gradient requires rank 2");
             const bool left   = n.op == "matmul_grad_lhs";
             const auto &shape = left ? b : a;
             size_t transposed = append(
@@ -523,7 +603,7 @@ class Compiler {
             n.inputs = {tensorValue(args.at(0)), tensorValue(args.at(1))};
             if (n.op == "matmul" && (program.nodes[n.inputs[0]].shape.size() != 2 ||
                                      program.nodes[n.inputs[1]].shape.size() != 2))
-                throw std::runtime_error("tiles matmul currently requires two rank-2 tensors");
+                throw UnsupportedComputation("tiles matmul currently requires two rank-2 tensors");
         } else if (n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis") {
             n.inputs          = {tensorValue(args.at(0))};
             int64_t axis      = integer(args.at(1));
@@ -567,7 +647,7 @@ class Compiler {
                 n.offset = static_cast<size_t>(view->offset);
                 for (auto stride : view->strides) {
                     if (stride < 0)
-                        throw std::runtime_error("negative physical strides are not supported");
+                        throw UnsupportedComputation("negative physical strides are not supported");
                     n.strides.push_back(static_cast<size_t>(stride));
                 }
             }
@@ -578,7 +658,7 @@ class Compiler {
             if (elements(program.nodes[n.inputs[0]].shape) != elements(n.shape))
                 throw std::runtime_error("reshape changes the number of elements");
         } else {
-            throw std::runtime_error("no CUDA lowering for '" + uri() + "'");
+            throw UnsupportedComputation("no CUDA lowering for '" + uri() + "'");
         }
         return {.type = *inferred, .tensor = append(std::move(n))};
     }

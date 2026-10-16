@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,7 +57,7 @@ namespace ctx = camel::core::context;
  */
 struct FastVmSafepointHook {
     void (*poll)(void *host, std::string_view reason) = nullptr;
-    void *host                                         = nullptr;
+    void *host                                        = nullptr;
 };
 
 /// The hook of the calling thread (thread-local; hosted.cpp).
@@ -301,6 +301,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 #endif
     slot_t call(size_t pc, ctx::Frame *rootFrame);
 
+    // Shared by interpreted and JIT native-operator paths.
+    slot_t invokeNativeOperator(const Bytecode &bc, ctx::Frame &frame);
+
     // ---- Hosted interpreters (hosted.cpp) --------------------------------------------------
     //
     // A scheduler that evaluates graphs itself (the parallel scheduler) can run some of them
@@ -368,8 +371,8 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
         uint32_t callCount = 0);
 #else
     /// Without the JIT a call is a call of the interpreter.
-    inline slot_t invokeCallOrJit(
-        size_t pc, camel::runtime::GCGraph *, ctx::Frame *frame, void *, uint32_t = 0) {
+    inline slot_t
+    invokeCallOrJit(size_t pc, camel::runtime::GCGraph *, ctx::Frame *frame, void *, uint32_t = 0) {
         return call(pc, frame);
     }
 #endif

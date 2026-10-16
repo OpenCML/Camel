@@ -12,6 +12,9 @@
 #pragma once
 #include "tiles/internal/access.h"
 #include "tiles/internal/scalar_expr.h"
+#include <cstdint>
+#include <optional>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -88,6 +91,13 @@ void validateBody(const KernelBody &body);
 std::string emitBody(const KernelBody &body);
 IndexExpr
 pointwiseAddress(const Program &program, const Node &node, size_t operand, const IndexExpr &linear);
+struct ReductionAccess {
+    size_t count;
+    IndexExpr address;
+};
+ReductionAccess reductionAccess(
+    const Program &program, const Node &node, const IndexExpr &row, const IndexExpr &reduction);
+bool canonicalAxisReduction(const Program &program, const Node &node);
 bool canonicalPointwise(const Program &program, const Node &node);
 void validateMatmulContract(const Program &program, const Node &node);
 KernelBody scalarBody(const Program &program, Launch &launch);

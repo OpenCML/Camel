@@ -12,7 +12,10 @@
 // canonical ascending fallback. Physical choices do not relax numeric contracts.
 #include "tiles/internal/row_kernel.h"
 #include <algorithm>
+#include <cstdint>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace camel::tiles::kernel {
 namespace {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -340,7 +340,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // An edge between nodes of different items orders the two items in their innermost common
     // scope. A scope whose items are totally ordered runs inline on the calling thread; any
     // other scope runs as a Taskflow graph (one task per chain) on the shared executor.
-    enum class ItemKind : uint8_t { Leaf, Call, Mark, Branch };
+    enum class ItemKind : uint8_t { Leaf, Call, Mark, NativeCall, Branch };
     struct PlanItem {
         camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
         uint32_t branch                    = 0; // index into GraphPlan::branches (Branch items)
@@ -585,10 +585,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // that is too deep is reported there) and the calls open on the thread that started the
     // operator, which every element continues from on the thread that runs it.
     struct ElementCallSite {
-        camel::runtime::GCGraph *graph      = nullptr;
+        camel::runtime::GCGraph *graph     = nullptr;
         camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
-        uint32_t depth                      = 0;
-        TaskflowFaultDomain *domain         = nullptr;
+        uint32_t depth                     = 0;
+        TaskflowFaultDomain *domain        = nullptr;
     };
     // Calls the function value held in slot `funcIdx` of `funcFrame` (its graph is
     // `targetGraph`, with plan `targetPlan`) on the calling thread: `fillArgs(span)` reads the
@@ -598,16 +598,14 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // operator sets them with InheritedDepth).
     template <typename FillArgs, typename Sink>
     void callClosure(
-        TaskflowGcRegion &region, const ElementCallSite &site,
-        camel::runtime::GCGraph *targetGraph, GraphPlan *targetPlan, ctx::Frame *funcFrame,
-        camel::runtime::gc_data_idx_t funcIdx, size_t argCount, FillArgs &&fillArgs,
-        Sink &&sink);
+        TaskflowGcRegion &region, const ElementCallSite &site, camel::runtime::GCGraph *targetGraph,
+        GraphPlan *targetPlan, ctx::Frame *funcFrame, camel::runtime::gc_data_idx_t funcIdx,
+        size_t argCount, FillArgs &&fillArgs, Sink &&sink);
     // Runs `body(region, i)` once for every i in [0, n), in no particular order: the element
     // calls of an unordered higher-order operator (see "Higher-order operators" in
     // taskflow.cpp for how the elements are grouped and when other workers are asked to help).
     template <typename Body>
-    void runElements(
-        const ElementCallSite &site, GraphPlan *targetPlan, size_t n, Body &&body);
+    void runElements(const ElementCallSite &site, GraphPlan *targetPlan, size_t n, Body &&body);
     camel::runtime::gc_node_ref_t branchArmEntryForLinear(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef, size_t armIndex,
         std::span<const camel::runtime::gc_node_ref_t> topoNodes);

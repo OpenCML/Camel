@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 13, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -232,8 +232,10 @@ class OperatorTable {
     bool isPure(OperId id) const;
     bool isPure(std::string_view uri) const;
 
-    /// True when the operator reads the graphs of the function values it receives
-    /// (OperatorTraits::inspectsGraphs). Lock-free.
+    /// True when execution can invoke function inputs. Lock-free.
+    bool callsGraphs(OperId id) const { return (traitBits(id) & kCallsGraphs) != 0; }
+
+    /// True when the operator reads the graphs of the function values it receives.
     bool inspectsGraphs(OperId id) const { return (traitBits(id) & kInspectsGraphs) != 0; }
 
     /// True when running the operator is an effect visible outside the program's variables:

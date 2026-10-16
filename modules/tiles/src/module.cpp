@@ -21,10 +21,14 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/function_call.h"
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
+#include "tiles/internal/capability.h"
+#include "tiles/internal/dispatch.h"
+#include "tiles/internal/regions.h"
 #include "tiles/program.h"
 #include <cstring>
 #include <mutex>
@@ -64,6 +68,14 @@ Program prepare(ArgsView &with, ArgsView &norm, Context &ctx) {
     return compile(fn, args, ctx.facts());
 }
 
+slot_t regionsKernel(ArgsView &with, ArgsView &, Context &ctx) {
+    return checked([&] {
+        core::mm::NoCollectionScope noCollection;
+        auto text = inspectRegions(*with.get<::Function *>(0)->graph(), ctx.facts());
+        return td::toSlot(::String::from(text, core::mm::autoSpace()));
+    });
+}
+
 slot_t sourceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return checked([&] {
         auto program = prepare(with, norm, ctx);
@@ -83,48 +95,83 @@ slot_t benchmarkKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                 core::mm::autoSpace()));
     });
 }
+slot_t runPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
+    auto data = execute(program);
+    // Prevent collection of partially assembled aggregates while allocating leaves.
+    core::mm::NoCollectionScope noCollection;
+    size_t leaf = 0, offset = 0;
+    auto rebuild = [&](auto &&self, Type *type) -> slot_t {
+        if (type->code() == TypeCode::Float64) {
+            ++leaf;
+            double value;
+            std::memcpy(&value, data.data() + offset, sizeof(value));
+            offset += sizeof(value);
+            return td::toSlot(value);
+        }
+        if (tensor::asTensorType(type)) {
+            const auto &shape  = program->nodes[program->outputs.at(leaf++)].shape;
+            const size_t count = elements(shape);
+            auto *out =
+                tensor::TensorObject::create(TypeCode::Float32, shape, core::mm::autoSpace());
+            if (count)
+                std::memcpy(out->rawData(), data.data() + offset, count * sizeof(float));
+            offset += count * sizeof(float);
+            return td::toSlot(static_cast<td::Object *>(out));
+        }
+        if (type->code() == TypeCode::Tuple) {
+            auto *types = static_cast<TupleType *>(type);
+            auto *tuple = ::Tuple::create(types->size(), core::mm::autoSpace());
+            for (size_t i = 0; i < types->size(); ++i)
+                tuple->set(i, self(self, types->typeAt(i)), types);
+            return td::toSlot(tuple);
+        }
+        auto *types  = static_cast<StructType *>(type);
+        auto *object = ::Struct::create(types->size(), core::mm::autoSpace());
+        for (size_t i = 0; i < types->size(); ++i)
+            object->set(i, self(self, types->typeAt(i)), types);
+        return td::toSlot(object);
+    };
+    return rebuild(rebuild, static_cast<FunctionType *>(with.type(0))->exitType());
+}
 slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return checked([&] {
-        auto program = std::make_shared<const Program>(prepare(with, norm, ctx));
-        auto data    = execute(program);
-        // Prevent collection of partially assembled aggregates while allocating leaves.
-        core::mm::NoCollectionScope noCollection;
-        size_t leaf = 0, offset = 0;
-        auto rebuild = [&](auto &&self, Type *type) -> slot_t {
-            if (type->code() == TypeCode::Float64) {
-                ++leaf;
-                double value;
-                std::memcpy(&value, data.data() + offset, sizeof(value));
-                offset += sizeof(value);
-                return td::toSlot(value);
-            }
-            if (tensor::asTensorType(type)) {
-                const auto &shape  = program->nodes[program->outputs.at(leaf++)].shape;
-                const size_t count = elements(shape);
-                auto *out =
-                    tensor::TensorObject::create(TypeCode::Float32, shape, core::mm::autoSpace());
-                if (count)
-                    std::memcpy(out->rawData(), data.data() + offset, count * sizeof(float));
-                offset += count * sizeof(float);
-                return td::toSlot(static_cast<td::Object *>(out));
-            }
-            if (type->code() == TypeCode::Tuple) {
-                auto *types = static_cast<TupleType *>(type);
-                auto *tuple = ::Tuple::create(types->size(), core::mm::autoSpace());
-                for (size_t i = 0; i < types->size(); ++i)
-                    tuple->set(i, self(self, types->typeAt(i)), types);
-                return td::toSlot(tuple);
-            }
-            auto *types  = static_cast<StructType *>(type);
-            auto *object = ::Struct::create(types->size(), core::mm::autoSpace());
-            for (size_t i = 0; i < types->size(); ++i)
-                object->set(i, self(self, types->typeAt(i)), types);
-            return td::toSlot(object);
-        };
-        return rebuild(rebuild, static_cast<FunctionType *>(with.type(0))->exitType());
+        return runPrepared(with, std::make_shared<const Program>(prepare(with, norm, ctx)));
     });
 }
+slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    std::shared_ptr<const Program> program;
+    const bool supported = checked([&] {
+        (void)configuredCudaOrdinal();
+        try {
+            (void)deviceInfo();
+            program = std::make_shared<const Program>(prepare(with, norm, ctx));
+            return true;
+        } catch (const UnsupportedComputation &) {
+            return false;
+        } catch (const BackendUnavailable &) {
+            return false;
+        }
+    });
+    if (supported)
+        return checked([&] { return runPrepared(with, std::move(program)); });
+    // No device work has executed. Keep the original function and arguments rooted in
+    // their caller frame; the backend binds them before reaching a safepoint.
+    auto *function = with.get<::Function *>(0);
+    std::vector<slot_t> arguments;
+    if (function->graph()->normPorts().size() == 1) {
+        arguments.push_back(norm.slot(0));
+    } else {
+        auto *tuple = norm.get<::Tuple *>(0);
+        for (size_t i = 0; i < function->graph()->normPorts().size(); ++i)
+            arguments.push_back(tuple->get<slot_t>(i));
+    }
+    return execute::invokeFunction(ctx, function, {}, arguments);
+}
 slot_t availableKernel(ArgsView &, ArgsView &, Context &) { return td::toSlot(available()); }
+slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &) {
+    return checked(
+        [&] { return td::toSlot(gpuFunction(norm.get<::Function *>(0), &preferGpuKernel)); });
+}
 slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     auto *owner = new std::shared_ptr<DeviceValue>(std::move(resident));
     td::ForeignResourceDescriptor descriptor;
@@ -316,7 +363,30 @@ class TilesModule final : public BuiltinModule {
   public:
     explicit TilesModule(context_ptr_t ctx) : BuiltinModule("tiles", ctx) {
         tensor::ops::registerTensorOps();
+        registerRegionTestPasses(&runKernel);
         exportType(Reference("Device"), DeviceType::get(tensor::TensorType::Default()));
+        exportEntity(
+            "gpu",
+            OperatorGroup::create(
+                "gpu",
+                {{"tiles:gpu",
+                  DynamicFuncTypeResolver::create(
+                      {{0, {}}, {1, {false}}},
+                      "(fn: Function) => Function",
+                      [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
+                          if (!with.empty() || norm.size() != 1 ||
+                              norm[0]->code() != TypeCode::Function)
+                              return std::nullopt;
+                          auto *fn = static_cast<FunctionType *>(norm[0]);
+                          if (fn->withTypesCount() || !fn->normTypesCount() ||
+                              !supportedLeaves(fn->exitType()))
+                              return std::nullopt;
+                          for (size_t i = 0; i < fn->normTypesCount(); ++i)
+                              if (fn->normIsVarAt(i) || !supportedLeaves(fn->normTypeAt(i)))
+                                  return std::nullopt;
+                          return fn;
+                      })}}));
         for (const std::string name : {"upload", "download"}) {
             exportEntity(
                 name,
@@ -373,6 +443,21 @@ class TilesModule final : public BuiltinModule {
                           })}}));
         }
         exportEntity(
+            "regions",
+            OperatorGroup::create(
+                "regions",
+                {{"tiles:regions",
+                  DynamicFuncTypeResolver::create(
+                      {{1, {false}}, {0, {}}},
+                      "<fn: Function>() => string",
+                      [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
+                          if (with.size() != 1 || !norm.empty() ||
+                              with[0]->code() != TypeCode::Function)
+                              return std::nullopt;
+                          return Type::String();
+                      })}}));
+        exportEntity(
             "available",
             OperatorGroup::create(
                 "available",
@@ -391,11 +476,15 @@ class TilesModule final : public BuiltinModule {
                 ctx,
                 std::unordered_map<std::string, operator_t>{
                     {"run", &runKernel},
+                    {"prefer_gpu", &preferGpuKernel},
+                    {"test_call", &testNativeCall},
+                    {"gpu", &gpuKernel},
                     {"run_device", &runDeviceKernel},
                     {"upload", &uploadKernel},
                     {"download", &downloadKernel},
                     {"source", &sourceKernel},
                     {"inspect", &inspectKernel},
+                    {"regions", &regionsKernel},
                     {"benchmark", &benchmarkKernel},
                     {"available", &availableKernel},
                     {"device", &deviceKernel}});
@@ -404,22 +493,28 @@ class TilesModule final : public BuiltinModule {
         core::OperatorTable::instance().declare(
             "tiles",
             {{"run", false},
+             {"gpu", false},
              {"run_device", false},
              {"upload", false},
              {"download", false},
              {"source", false},
              {"inspect", false},
+             {"regions", false},
              {"benchmark", false},
              {"available", false},
              {"device", false}});
         // These compile the graph of the function value they receive: a back end that runs a
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
-        for (const char *name : {"run", "run_device", "source", "inspect", "benchmark"}) {
+        for (const char *name :
+             {"run", "run_device", "source", "inspect", "benchmark", "regions", "gpu"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
                 {.pure = false, .inspectsGraphs = true});
         }
+        core::OperatorTable::instance().set(
+            "tiles:prefer_gpu",
+            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
         // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
         // resource `tiles:device` (upload makes one; run and run_device read the device values
         // among their inputs, run_device returns new ones that may be inputs again); the driver
