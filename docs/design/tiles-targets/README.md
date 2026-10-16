@@ -102,8 +102,13 @@ host interpretation at runtime. Missing GPU capability selects host storage;
 unsupported computation falls back before launch. Once selected, transfer,
 compilation and execution faults propagate without replay. `placeOnDevice`
 reuses storage already owned by the selected CUDA backend and otherwise copies
-through the source storage's read interface. Public pass registration, mixed
-host/GPU fallback-chain tests and complete dispatch inspection remain pending.
+through the source storage's read interface. The GPU suite exercises a device
+input through an effectful CPU fallback and back into a supported GPU region,
+checking both the retained host result and the original device input. A separate
+division-fault case checks that CPU effects occur once and the original fault
+location is preserved across all four schedulers. The resident invocation is
+exported only with `CAMEL_ENABLE_TEST_PASSES` for these checks. Public pass
+registration and complete dispatch inspection remain pending.
 
 The single-target transfer planner computes deduplicated uploads, host-visible
 downloads and resident producer/consumer edges from the live graph. Embedded

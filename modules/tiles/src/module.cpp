@@ -31,6 +31,7 @@
 #include "tiles/internal/dispatch.h"
 #include "tiles/internal/regions.h"
 #include "tiles/program.h"
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
@@ -584,7 +585,13 @@ class TilesModule final : public BuiltinModule {
                                             : std::nullopt;
                           })}}));
         }
-        for (const std::string name : {"run", "run_device", "source", "inspect", "benchmark"}) {
+        std::vector<std::string>
+            executionNames{"run", "run_device", "source", "inspect", "benchmark"};
+        if (std::getenv("CAMEL_ENABLE_TEST_PASSES"))
+            executionNames.push_back("run_preferred_resident");
+        for (const std::string &name : executionNames) {
+            const bool residentResult = name == "run_device" || name == "run_preferred_resident";
+            const bool textResult     = name != "run" && !residentResult;
             exportEntity(
                 name,
                 OperatorGroup::create(
@@ -594,11 +601,10 @@ class TilesModule final : public BuiltinModule {
                           {{1, {false}}, {1, {false}}},
                           "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => " +
                               std::string(
-                                  name == "run_device" ? "DeviceAggregate"
-                                  : name != "run"      ? "string"
-                                                       : "NumericAggregate"),
-                          [source   = name != "run" && name != "run_device",
-                           resident = name == "run_device"](
+                                  residentResult ? "DeviceAggregate"
+                                  : textResult   ? "string"
+                                                 : "NumericAggregate"),
+                          [source = textResult, resident = residentResult](
                               const type_vec_t &with,
                               const type_vec_t &norm,
                               const ModifierSet &) -> std::optional<Type *> {
