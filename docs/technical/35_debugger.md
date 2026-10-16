@@ -712,3 +712,26 @@ serialized on the stopped program thread; it works at a compiler boundary or run
 `camel/pipelineGraph` additionally rejects runtime stops. `camel/setPassBreakpoints {indices}`
 updates the configured indices. Snapshot responses also include `gir` alongside DOT so the
 plugin's current and historical views share typed graph metadata.
+
+
+### Paused memory inspection over DAP
+
+OpenCML-Ext offers **Camel: Inspect Debug Memory** (`camel.showMemory`) for the selected native
+DAP session. It requests region aggregates once when first opened at a stop, then refreshes
+explicitly. Continuing, changing stops or selecting another session invalidates old responses.
+The overview does not construct or transfer per-object arrays. Hex/object pages are bounded.
+
+- `camel/memorySnapshot`: paused program-thread region aggregates and allocation capability.
+- `camel/regionMemory {region, offset, limit}`: byte page, limit 1..4096.
+- `camel/regionObjects {region, offset, limit}`: object page, limit 1..200.
+- `camel/allocationBreakpoints`: capability/configuration; set with `{enabled, spaces}`.
+
+Offsets are nonnegative integers, regions are backend names, and pointer fields are hexadecimal
+strings so JavaScript never rounds an address. Non-contiguous regions retain aggregate usage;
+byte/object paging currently uses the profiler's contiguous bump-region API. Invalid requests,
+requests while running and requests after termination fail explicitly.
+
+Allocation stops require a build without NDEBUG. Release reports `supported:false` and refuses
+enabling them. The native hook stops before allocation on the program thread, filters named
+spaces and skips index maintenance/reentrant hooks. `camel/stopped.allocation` identifies the
+space, requested size and `phase:"before"`; inspection uses that same stopped worker.

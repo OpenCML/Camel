@@ -59,6 +59,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace debugger::core {
@@ -90,6 +91,9 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     /// A materialized graph boundary, called synchronously on the program thread.
     /// Index 0 precedes all passes; later indices identify a returned graph, not a name.
     void pipelineBoundary(size_t index, const std::string &pass, camel::runtime::GCGraph *graph);
+
+    /// Debug allocation hooks: true when handled by the native core (including filtered events).
+    bool allocationEvent(size_t size, const char *space, const void *ptr);
 
     // ---- control; any thread ----
 
@@ -266,6 +270,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     json handleJson(int reference);
     json evaluateJson(uint64_t frameId, const std::string &expression);
     json graphJson(uint64_t frameId);
+    json memoryCommand(const std::string &name, const json &args);
     int newHandle(Handle handle);
 
     // any thread
@@ -292,8 +297,11 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     std::vector<LineBreakpoint> lineBreakpoints_;
     std::vector<FunctionBreakpoint> functionBreakpoints_;
     std::vector<origin_t> nodeBreakpoints_;
-    bool stopOnUncaught_  = true;
-    bool stopOnIsolated_  = false;
+    bool stopOnUncaught_    = true;
+    bool stopOnIsolated_    = false;
+    bool allocationEnabled_ = false;
+    std::set<std::string> allocationSpaces_;
+    std::thread::id programThread_;
     bool stopOnPassEntry_ = false;
     std::set<size_t> passBreakpoints_;
     bool stopOnEntry_     = false;

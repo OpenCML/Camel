@@ -376,8 +376,13 @@ class Adapter {
                                           ? "Before compiler passes"
                                           : "After " + stage["pass"].get<std::string>();
             }
+            if (e.contains("allocation"))
+                body["description"] =
+                    "Before allocation in " + e["allocation"].value("space", std::string());
             // The graph-node view of the stop, for clients that know Camel.
             json camel{{"reason", reason}, {"threadId", kThreadId}};
+            if (e.contains("allocation"))
+                camel["allocation"] = e["allocation"];
             if (e.contains("pipeline"))
                 camel["pipeline"] = e["pipeline"];
             if (auto f = e.find("frame"); f != e.end()) {
@@ -785,7 +790,9 @@ class Adapter {
         // Read immutable per-pass snapshots through this session's worker. The plugin
         // does not discover worker ports or choose a process by file name.
         if (command == "camel/nextPass" || command == "camel/pipelineGraph" ||
-            command == "camel/setPassBreakpoints" || command == "camel/structuredGraph") {
+            command == "camel/setPassBreakpoints" || command == "camel/structuredGraph" ||
+            command == "camel/memorySnapshot" || command == "camel/regionMemory" ||
+            command == "camel/regionObjects" || command == "camel/allocationBreakpoints") {
             const std::string action = command.substr(6);
             auto answer              = ask(action, args);
             if (answer) {
@@ -862,7 +869,11 @@ class Adapter {
             "camel/nextPass",
             "camel/pipelineGraph",
             "camel/setPassBreakpoints",
-            "camel/structuredGraph"};
+            "camel/structuredGraph",
+            "camel/memorySnapshot",
+            "camel/regionMemory",
+            "camel/regionObjects",
+            "camel/allocationBreakpoints"};
         for (const char *k : known) {
             if (command == k) {
                 return true;

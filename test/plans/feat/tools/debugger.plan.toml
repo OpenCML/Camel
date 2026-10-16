@@ -64,3 +64,8 @@ timeout_ms = 300000
 name = "debugger.dap_pipeline"
 desc = "Release compiler boundary stops, live JSON GIR, pass stepping, repeated pass names, runtime handoff, invalid configuration and terminate/consumed graphs."
 case = "../../../cases/tools/debugger/dap_pipeline.test.mjs"
+
+[[tests]]
+name = "debugger.dap_memory"
+desc = "Paused memory overview, bounded byte/object paging, lossless addresses, invalid requests, Release capability and session end."
+case = "../../../cases/tools/debugger/dap_memory.test.mjs"

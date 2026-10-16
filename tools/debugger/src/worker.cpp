@@ -250,13 +250,15 @@ int runWorkerMode(int argc, char *argv[]) {
                 return;
             if (std::strcmp(type, "alloc_before") == 0) {
                 auto *evt = static_cast<const mm::PreAllocEvent *>(ctx);
-                if (evt)
+                if (evt &&
+                    !core::DebugCore::instance().allocationEvent(evt->size, evt->space, nullptr))
                     getServer().pauseAndWaitForContinue(nullptr, evt->size, evt->space);
                 return;
             }
             if (std::strcmp(type, "alloc") == 0) {
                 auto *evt = static_cast<const mm::AllocEvent *>(ctx);
-                if (evt)
+                if (evt &&
+                    !core::DebugCore::instance().allocationEvent(evt->size, evt->space, evt->ptr))
                     getServer().pauseAndWaitForContinue(evt->ptr, evt->size, evt->space);
                 return;
             }

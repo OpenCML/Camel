@@ -179,6 +179,7 @@ void DebugCore::beginRun(const std::string &notice) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         state_            = State::Running;
+        programThread_    = std::this_thread::get_id();
         entryStopPending_ = stopOnEntry_ || stopOnEntryOnce_;
         stopOnEntryOnce_  = false;
         resumePending_    = false;
@@ -1736,6 +1737,10 @@ json DebugCore::command(const std::string &name, const json &args) {
             const std::string expression = args.value("expression", "");
             return runWhileStopped(
                 [this, frame, expression] { return evaluateJson(frame, expression); });
+        }
+        if (name == "memorySnapshot" || name == "regionMemory" || name == "regionObjects" ||
+            name == "allocationBreakpoints") {
+            return memoryCommand(name, args);
         }
         if (name == "structuredGraph") {
             const uint64_t frame = args.value("frame", uint64_t{0});
