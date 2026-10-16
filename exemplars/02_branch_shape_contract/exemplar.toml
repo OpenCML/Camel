@@ -3,9 +3,9 @@ summary = "Arms of different static shapes join to Tensor<float32, [?, ?]>; the 
 
 [[runs]]
 name = "dump"
-args = ["std::argir"]
+args = ["std::agir"]
 exit = 0
-stdout = "expected/dump.argir.dot"
+stdout = "expected/dump.agir.dot"
 output_contains = ["role=\"branch-contract\""]
 
 [[runs]]

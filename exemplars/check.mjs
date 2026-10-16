@@ -8,7 +8,7 @@
  *
  *   [[runs]]
  *   name = "dump"                     # names the run in reports and run.log
- *   args = ["std::argir"]             # after `camel program.cml`
+ *   args = ["std::agir"]              # after `camel program.cml`
  *   env = ["MODE=static", "ONNX_OUT={tmp}/model.onnx"]   # {tmp}: a fresh directory
  *   exit = 0
  *   stdout = "expected/dump.dot"      # exact (normalized) stdout

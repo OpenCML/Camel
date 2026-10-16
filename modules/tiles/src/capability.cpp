@@ -11,6 +11,7 @@
 // Explicit target configuration is an error, never a capability miss.
 #include "tiles/internal/capability.h"
 #include <cstdlib>
+#include <stdexcept>
 namespace camel::tiles {
 int configuredCudaOrdinal() {
     const char *value = std::getenv("CAMEL_TILES_DEVICE");

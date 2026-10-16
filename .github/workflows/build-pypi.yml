@@ -95,6 +95,7 @@ jobs:
           cache: npm
 
       - name: Set up Python
+        id: python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -170,6 +171,9 @@ jobs:
           HUSKY: "0"
 
       - name: Native Release build + wheel
+        # Use the exact matrix interpreter; Windows shell lookup can break Python's -c probe.
+        env:
+          CAMEL_PYPI_PYTHON: ${{ steps.python.outputs.python-path }}
         run: npm run pypi:rollup
 
       - name: Smoke-install wheel (same interpreter as build)

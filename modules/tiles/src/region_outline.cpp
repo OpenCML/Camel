@@ -19,6 +19,7 @@
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
 #include <algorithm>
+#include <mutex>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -35,6 +36,12 @@ runtime::GCGraph *outlineRegions(
         (!device->upload || !device->execute || !device->download || run != device->execute))
         throw std::invalid_argument(
             "resident region rewriting requires matching transfer and execution operators");
+    // Decorators can run on different Taskflow workers. A rewrite publishes detached
+    // graphs into Context's graph registry, whose vectors are not concurrently mutable.
+    // Serialize Tiles rewrites (not kernel execution) until that registry supports
+    // concurrent publication. Acquire before suppressing collection for extraction.
+    static std::mutex rewriteMutex;
+    std::lock_guard rewriteLock(rewriteMutex);
     core::mm::NoCollectionScope noCollection;
     rt::RuntimeGraphDraftSession session(context.shared_from_this(), root);
     count = 0;

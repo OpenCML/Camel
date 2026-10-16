@@ -71,7 +71,7 @@ golden = "golden/comprehension_values.txt"
 name = "comprehension.graph_comprehension"
 desc = "The graph of `[x * x for x in xs if x % 2 == 0]`, against the golden graph of the next test."
 case = "../../../cases/consistency/comprehension/graph_comprehension.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 backends = ["nvm"]
 backends_agree = []
 snapshot_compare = "gir_dot_isomorphic"
@@ -81,7 +81,7 @@ golden = "golden/comprehension_graph.dot"
 name = "comprehension.graph_written_out"
 desc = "The graph of `xs->filter<(x: int) => x % 2 == 0>->map<(x: int) => x * x>`: the same golden graph."
 case = "../../../cases/consistency/comprehension/graph_written_out.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 backends = ["nvm"]
 backends_agree = []
 snapshot_compare = "gir_dot_isomorphic"

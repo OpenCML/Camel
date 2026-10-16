@@ -10,7 +10,12 @@
 
 // Backend-independent resident reads and immutable native host snapshots.
 #include "tiles/device.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <span>
 #include <stdexcept>
+#include <vector>
 
 namespace camel::tiles {
 namespace {

@@ -1,0 +1,73 @@
+digraph GraphIR {
+    subgraph cluster_F01 {
+        label="main";
+        subgraph cluster_F02 {
+            label="pick";
+            subgraph cluster_F03 {
+                label="__g_4__";
+                O03 [label="EXIT", type="EXIT"];
+                N00 [label="[2, 3]", type="DATA", origin=160, span="13:30-13:36", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
+                N01 [label="tensor:zeros", type="OPER", origin=161, span="13:24-13:29", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [2, 3]>"];
+                N01 -> O03 [label="0", type="EXIT"];
+                N00 -> N01 [label="0|0", type="NORM"];
+            }
+            subgraph cluster_F04 {
+                label="__g_6__";
+                O04 [label="EXIT", type="EXIT"];
+                N02 [label="[3, 2]", type="DATA", origin=164, span="13:48-13:54", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
+                N03 [label="tensor:ones", type="OPER", origin=165, span="13:43-13:47", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [3, 2]>"];
+                N03 -> O04 [label="0", type="EXIT"];
+                N02 -> N03 [label="0|0", type="NORM"];
+            }
+            F02 [label="ARGS", type="ARGS"];
+            O02 [label="EXIT", type="EXIT"];
+            N04 [label="flag", type="PORT", param_name="flag", param_kind="normal", param_index="0", value_type="bool"];
+            N05 [label="JOIN", type="JOIN", role="branch-contract", origin=157, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [?, ?]>"];
+            N06 [label="BRCH", type="BRCH", origin=156, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
+            N07 [label="__g_4__", type="FUNC", origin=158, span="13:24-13:37", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [2, 3]>"];
+            N08 [label="__g_6__", type="FUNC", origin=162, span="13:43-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [3, 2]>"];
+            F02 -> N04 [label="0", type="NORM_PORT"];
+            N05 -> O02 [label="0", type="EXIT"];
+            N07 -> N05 [label="0|0", type="WITH"];
+            N08 -> N05 [label="0|1", type="WITH"];
+            N06 -> N05 [label="0|0", type="NORM"];
+            N04 -> N06 [label="0|0", type="NORM"];
+            N06 -> N07 [label="0|0", type="CTRL"];
+            N06 -> N08 [label="1|0", type="CTRL"];
+        }
+        O01 [label="EXIT", type="EXIT"];
+        N09 [label="[3, 4]", type="DATA", origin=168, span="17:17-17:23", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
+        N0A [label="tensor:ones", type="OPER", origin=169, span="17:12-17:16", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [3, 4]>"];
+        N0B [label="FLAG", type="DATA", origin=175, span="18:25-18:31", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
+        N0C [label="sys:get_env", type="OPER", role="effect", origin=176, span="18:17-18:24", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
+        N0D [label="true", type="DATA", origin=177, span="18:36-18:42", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
+        N0E [label=":op/eq_s", type="OPER", origin=178, span="18:33-18:35", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="bool"];
+        N0F [label="pick", type="FUNC", origin=179, span="18:16-18:43", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
+        N10 [label="tensor:matmul", type="OPER", origin=180, span="18:44-18:45", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
+        N11 [label=":io/println", type="OPER", role="effect", origin=181, span="18:4-18:11", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
+        N12 [label="0", type="DATA", origin=182, span="19:11-19:12", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
+        N13 [label="GATE", type="GATE", value_type="int"];
+        N13 -> O01 [label="0", type="EXIT"];
+        N09 -> N0A [label="0|0", type="NORM"];
+        N0B -> N0C [label="0|0", type="NORM"];
+        N0A -> N0C [label="0|0", type="CTRL"];
+        N0C -> N0E [label="0|0", type="NORM"];
+        N0D -> N0E [label="0|1", type="NORM"];
+        N0E -> N0F [label="0|0", type="NORM"];
+        N0F -> N10 [label="0|0", type="NORM"];
+        N0A -> N10 [label="0|1", type="NORM"];
+        N10 -> N11 [label="0|0", type="NORM"];
+        N12 -> N13 [label="0|0", type="NORM"];
+        N11 -> N13 [label="0|0", type="CTRL"];
+    }
+    O00 [label="EXIT", type="EXIT"];
+    N14 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=166, span="16:0-20:1", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="() => int"];
+    N15 [label="CALL", type="CALL", value_type="int"];
+    N15 -> O00 [label="0", type="EXIT"];
+    N14 -> N15 [label="0|0", type="WITH"];
+    subgraph cluster_legend {
+        label="roles";
+        "legend_branch-contract" [label="branch contract (arms agree on the result type)", type="LEGEND", role="branch-contract"];
+        "legend_effect" [label="effect (ordered, never folded or removed)", type="LEGEND", role="effect"];
+    }
+}

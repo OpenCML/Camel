@@ -8,7 +8,7 @@ graph-based ML stack end to end. Every directory holds:
   produce: exit status, output, diagnostic name and source position, the
   operators and inputs/outputs of an exported ONNX model;
 - `expected/` - expected outputs compared exactly (program output, annotated
-  graph dumps from `std::argir`);
+  compact annotated graph dumps from `std::agir`);
 - `run.log` - the full record of the last recorded run.
 
 `node exemplars/check.mjs` re-runs every exemplar and checks it (the test plan
