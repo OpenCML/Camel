@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Syntax-based reading aids and compiler-validated typo corrections.
+#include "camel/parse/syntax/token.h"
 #include "server.h"
 #include <algorithm>
 #include <regex>
@@ -136,15 +137,42 @@ json Server::readingSupport(const std::string &method, const json &params) {
             const auto r = tokens[i]->range;
             return file.text.substr(r.start, r.length());
         };
-        for (size_t i = 1; i + 1 < tokens.size(); ++i) {
+        using TK = camel::parse::syntax::TokenKind;
+        std::vector<size_t> delimiters;
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            const auto kind = static_cast<TK>(tokens[i]->type);
+            if (kind == TK::LParen || kind == TK::LBracket || kind == TK::LBrace ||
+                kind == TK::LAngle) {
+                delimiters.push_back(i);
+                continue;
+            }
+            if (kind == TK::RParen || kind == TK::RBracket || kind == TK::RBrace ||
+                (kind == TK::Gt && !delimiters.empty() &&
+                 static_cast<TK>(tokens[delimiters.back()]->type) == TK::LAngle)) {
+                if (!delimiters.empty())
+                    delimiters.pop_back();
+                continue;
+            }
+            if (i == 0 || i + 1 == tokens.size() || delimiters.empty())
+                continue;
+            const auto open = delimiters.back();
+            if (open == 0 || static_cast<TK>(tokens[open]->type) != TK::LParen ||
+                tokens[open - 1]->range.end != tokens[open]->range.start)
+                continue;
+            // signatureHelp deliberately finds an enclosing call inside arrays and
+            // tuples. A hint must instead belong to a direct argument of this call,
+            // never to an element of its nested literal or a grouping expression.
+            const auto *callee = file.syntax.refAt(tokens[open - 1]->range.start);
+            if (!callee || !callee->callee || callee->nameRange() != tokens[open - 1]->range)
+                continue;
             const auto r = tokens[i]->range;
             if (r.start < start || r.end > end)
                 continue;
             const auto before = spelling(i - 1), after = spelling(i + 1), text = spelling(i);
             if ((before != "(" && before != ",") || (after != ")" && after != ",") || text.empty())
                 continue;
-            if (!(text.front() == '"' || (text.front() >= '0' && text.front() <= '9') ||
-                  text == "true" || text == "false"))
+            if (kind != TK::String && kind != TK::MultiStr && kind != TK::Integer &&
+                kind != TK::Real && kind != TK::KwTrue && kind != TK::KwFalse)
                 continue;
             const auto help = model.signatureHelp(r.start);
             if (!help || help->signatures.size() != 1 ||
