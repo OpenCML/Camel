@@ -58,13 +58,24 @@ capture. Unary and multiple arguments, function values, aggregate results and
 nested decorated calls are supported. Inside a GPU compilation, a nested dispatch
 is lowered as the underlying computation, without host execution or a nested GPU
 launch. Numeric permissions remain attached to the original operator nodes.
-When the backend is unavailable or compilation identifies an unsupported computation,
-the original function runs on the current CPU execution backend. This is graph
+For statically shaped eligible tensor regions, decorating the function uses the
+same region extraction and resident transfers as `std::tiles`. Unsupported nodes
+stay on CPU while supported regions prefer GPU; captures and CPU effects are
+preserved. Partitioning happens once when the decorated function value is built.
+Static regions now generate their launch plans and CUDA source from parameter types
+when outlined, without allocating placeholder input tensors or initializing CUDA.
+The process-local plan/source cache retains this work. NVRTC compilation still happens
+at execution time, as do graph extraction and binding validation; cached artifacts are
+not yet attached directly to graph calls. Symbolic and unknown shapes do not use this regional path.
+When no static region can be extracted, the existing whole-function, call-site
+specialization remains: an unavailable backend or unsupported computation runs
+the original function on the current CPU execution backend. Regional execution
+also falls back independently when its backend is unavailable. This is graph
 execution, not a fused CPU JIT kernel. Configuration errors, malformed graphs,
 compilation failures and device execution faults are reported; an executed GPU
 region is never replayed on CPU. `run` continues to require the GPU. Functions with mutable parameters, unbound context parameters or
 no ordinary inputs are currently rejected. This is separate from the planned
-`@kernel` block-kernel validation annotation and from automatic region placement.
+`@kernel` block-kernel validation annotation.
 The annotation also supports local functions with captured values. Use `gpu(lambda)`
 when constructing a GPU-dispatched function value directly.
 
@@ -131,10 +142,13 @@ FMA selection additionally requires the core declaration of correctly rounded
 f32 arithmetic sensitive to contraction; an opaque declaration grants no such
 optimization capability.
 
-A separate process-local source-template LRU looks up the exact lowered plan
-before printing CUDA. Runtime scalar/tensor contents and device owners are excluded;
-graph literals, shapes, indexing and launch choices are included. Storage planning
-and validation run on every call. It retains at most 32 entries and 16 MiB of
+A separate process-local plan/source LRU looks up the exact lowered computation
+before fusion scheduling or CUDA printing. Runtime scalar/tensor contents and device
+owners are excluded; graph literals, shapes, indexing, numeric permissions, operator
+declaration revisions and scheduling options are included. A hit restores the launch
+plan and source; storage planning and validation run on every call so host and
+resident inputs can share kernels without sharing allocation ownership.
+It retains at most 32 entries and 16 MiB of
 accounted entry payload (excluding allocator overhead), with synchronized access.
 This is not a persistent semantic fingerprint or a cache of graph compilation.
 

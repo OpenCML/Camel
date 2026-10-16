@@ -170,10 +170,7 @@ slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return execute::invokeFunction(ctx, function, {}, arguments);
 }
 slot_t availableKernel(ArgsView &, ArgsView &, Context &) { return td::toSlot(available()); }
-slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &) {
-    return checked(
-        [&] { return td::toSlot(gpuFunction(norm.get<::Function *>(0), &preferGpuKernel)); });
-}
+slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &ctx);
 slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     auto *owner = new std::shared_ptr<DeviceValue>(std::move(resident));
     td::ForeignResourceDescriptor descriptor;
@@ -434,6 +431,20 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
         return slot_t{};
     });
     return runResidentPrepared(with, std::move(program));
+}
+slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    return checked([&] {
+        return td::toSlot(gpuFunction(
+            norm.get<::Function *>(0),
+            &preferGpuKernel,
+            ctx,
+            {&retainPreferredKernel,
+             &runPreferredResidentKernel,
+             &downloadKernel,
+             "tiles:retain_preferred",
+             "tiles:run_preferred_resident",
+             "tiles:download"}));
+    });
 }
 slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
     return checked([] { return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace())); });

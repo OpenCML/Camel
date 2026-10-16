@@ -1119,3 +1119,13 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["Arithmetic bits: six operations, four schedulers, signed zeros and subnormals PASS"]
 timeout_ms = 60000
+
+[[tests]]
+name = "transcendental_ulp_contract"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/math_ulp.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["Transcendental declared ULP bounds: four schedulers PASS"]
+timeout_ms = 60000

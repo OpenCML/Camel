@@ -10,8 +10,12 @@
 
 // Typed function wrappers for explicit GPU dispatch decorators.
 #pragma once
+#include "camel/core/context/context.h"
 #include "camel/core/operator.h"
 class Function;
 namespace camel::tiles {
-Function *gpuFunction(Function *source, operator_t run);
-}
+struct RegionDeviceOps;
+Function *gpuFunction(
+    Function *source, operator_t run, core::context::Context &context,
+    const RegionDeviceOps &preferred);
+} // namespace camel::tiles
