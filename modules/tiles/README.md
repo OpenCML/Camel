@@ -139,10 +139,13 @@ FMA selection additionally requires the core declaration of correctly rounded
 f32 arithmetic sensitive to contraction; an opaque declaration grants no such
 optimization capability.
 
-A separate process-local source-template LRU looks up the exact lowered plan
-before printing CUDA. Runtime scalar/tensor contents and device owners are excluded;
-graph literals, shapes, indexing and launch choices are included. Storage planning
-and validation run on every call. It retains at most 32 entries and 16 MiB of
+A separate process-local plan/source LRU looks up the exact lowered computation
+before fusion scheduling or CUDA printing. Runtime scalar/tensor contents and device
+owners are excluded; graph literals, shapes, indexing, numeric permissions, operator
+declaration revisions and scheduling options are included. A hit restores the launch
+plan and source; storage planning and validation run on every call so host and
+resident inputs can share kernels without sharing allocation ownership.
+It retains at most 32 entries and 16 MiB of
 accounted entry payload (excluding allocator overhead), with synchronized access.
 This is not a persistent semantic fingerprint or a cache of graph compilation.
 

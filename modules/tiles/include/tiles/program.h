@@ -104,6 +104,8 @@ void generate(Program &program, ScheduleOptions options = {});
 bool elementwise(const std::string &op);
 void validate(const Program &program);
 void schedule(Program &program, ScheduleOptions options = {});
+// Rebind a cached launch plan to this invocation's host/resident allocation needs.
+void planStorage(Program &program);
 void validatePlan(const Program &program);
 std::string inspect(const Program &program);
 std::vector<std::byte> execute(std::shared_ptr<const Program> program);

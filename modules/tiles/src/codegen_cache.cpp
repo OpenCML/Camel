@@ -107,7 +107,7 @@ class Key {
 };
 std::string planKey(const Program &p, ScheduleOptions options) {
     Key key;
-    key.number(4); // Process-local key schema; not a persistent semantic fingerprint.
+    key.number(5); // Process-local key schema; not a persistent semantic fingerprint.
     key.number(options.fuseElementwise);
     key.number(options.parallelMax);
     key.number(p.contracts.size());
@@ -136,18 +136,6 @@ std::string planKey(const Program &p, ScheduleOptions options) {
         // contents. Physical allocation slots are recomputed on every call.
     }
     key.numbers(p.outputs);
-    key.number(p.launches.size());
-    for (const auto &s : p.launches) {
-        key.number(s.node);
-        key.numbers(s.members);
-        key.number(s.elements);
-        key.text(s.name);
-        key.text(s.implementation);
-        key.number(s.blockX);
-        key.number(s.blockY);
-        key.number(s.gridX);
-        key.number(s.gridY);
-    }
     return key.finish();
 }
 struct Entry {
@@ -180,7 +168,7 @@ kernel::GenerationCacheStats kernel::generationCacheStats() {
 }
 
 void generate(Program &p, ScheduleOptions options) {
-    schedule(p, options);
+    validate(p);
     auto key = planKey(p, options);
     auto &c  = cache();
     {
@@ -193,13 +181,14 @@ void generate(Program &p, ScheduleOptions options) {
             p.launches = found->launches;
             c.entries.splice(c.entries.begin(), c.entries, found);
             ++c.hits;
-            validatePlan(p);
+            planStorage(p);
             return;
         }
         ++c.misses;
     }
     // Expensive printing does not hold the shared cache lock. Duplicate racing
     // misses are harmless; only one copy will be retained below.
+    schedule(p, options);
     kernel::emitCUDA(p);
     validatePlan(p);
     Entry entry{std::move(key), p.source, p.launches};

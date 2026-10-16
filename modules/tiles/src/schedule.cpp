@@ -383,8 +383,13 @@ void schedule(Program &p, ScheduleOptions options) {
                 .gridX          = static_cast<unsigned>(std::min<size_t>(region->rows, 65535))}};
         }
     }
-    const auto life = lifetimes(p);
-    p.storage       = {};
+    planStorage(p);
+}
+
+void planStorage(Program &p) {
+    const size_t count = p.nodes.size();
+    const auto life    = lifetimes(p);
+    p.storage          = {};
     p.storage.slots.assign(count, SIZE_MAX);
     std::vector<size_t> order;
     for (size_t id = 0; id < count; ++id)
