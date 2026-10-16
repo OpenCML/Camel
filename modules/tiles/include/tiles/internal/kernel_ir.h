@@ -60,24 +60,32 @@ struct Loop {
     bool unroll = false;
 };
 struct Conditional {
-    Predicate condition;
+    std::variant<Predicate, ScalarPredicate> condition;
     Block body;
 };
 struct Barrier {};
-struct Statement
-    : std::variant<
-          IndexBinding, ScalarBinding, Assignment, Load, Store, Loop, Conditional, Barrier> {
+// Device faults use a separately declared unsigned status word. Smaller source
+// ordinals win; reporting and termination are separate structured operations.
+struct ReportFault {
+    uint32_t source;
+};
+struct Return {};
+struct Statement : std::variant<
+                       IndexBinding, ScalarBinding, Assignment, Load, Store, Loop, Conditional,
+                       Barrier, ReportFault, Return> {
     using variant::variant;
 };
 struct KernelBody {
     std::vector<Buffer> buffers;
     Block statements;
+    std::optional<size_t> faultSlot;
 };
 // Checks lexical bindings, types, memory permissions and block-uniform barriers.
 // Memory bounds and producer/consumer races remain the physical planner's proof obligation.
 void validateBody(const KernelBody &body);
 std::string emitBody(const KernelBody &body);
 void validateMatmulContract(const Program &program, const Node &node);
+KernelBody scalarBody(const Program &program, Launch &launch);
 KernelBody parallelMaxBody(const Program &program, Launch &launch);
 KernelBody serialBody(const Program &program, Launch &launch);
 KernelBody matmulBody(const Program &program, Launch &launch);

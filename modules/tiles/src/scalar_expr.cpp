@@ -269,6 +269,44 @@ std::string ScalarExpr::cuda() const {
     }
     throw std::runtime_error("invalid scalar CUDA operation");
 }
+namespace {
+const char *comparison(ScalarCompare op) {
+    switch (op) {
+    case ScalarCompare::Equal:
+        return "==";
+    case ScalarCompare::NotEqual:
+        return "!=";
+    case ScalarCompare::Less:
+        return "<";
+    case ScalarCompare::LessEqual:
+        return "<=";
+    }
+    throw std::invalid_argument("invalid scalar comparison");
+}
+} // namespace
+bool ScalarPredicate::evaluate(const std::unordered_map<std::string, ScalarValue> &bindings) const {
+    if (lhs.type() != rhs.type())
+        throw std::invalid_argument("scalar comparison type mismatch");
+    const auto a = lhs.evaluate(bindings), b = rhs.evaluate(bindings);
+    const double x = a.type == DType::F32 ? a.asF32() : a.asF64();
+    const double y = b.type == DType::F32 ? b.asF32() : b.asF64();
+    switch (compare) {
+    case ScalarCompare::Equal:
+        return x == y;
+    case ScalarCompare::NotEqual:
+        return x != y;
+    case ScalarCompare::Less:
+        return x < y;
+    case ScalarCompare::LessEqual:
+        return x <= y;
+    }
+    throw std::invalid_argument("invalid scalar comparison");
+}
+std::string ScalarPredicate::cuda() const {
+    if (lhs.type() != rhs.type())
+        throw std::invalid_argument("scalar comparison type mismatch");
+    return "(" + lhs.cuda() + comparison(compare) + rhs.cuda() + ")";
+}
 ScalarExpr elementwiseExpression(std::string_view op, DType type) {
     const auto a = ScalarExpr::symbol("a", type), b = ScalarExpr::symbol("b", type);
     if (op == "cast_f32")

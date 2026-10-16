@@ -58,6 +58,14 @@ class ScalarExpr {
     std::unordered_map<std::string, DType> symbols() const;
     std::string cuda() const;
 };
+enum class ScalarCompare { Equal, NotEqual, Less, LessEqual };
+// IEEE ordered comparisons: NaNs compare unequal, either signed zero equals zero.
+struct ScalarPredicate {
+    ScalarCompare compare;
+    ScalarExpr lhs, rhs;
+    bool evaluate(const std::unordered_map<std::string, ScalarValue> &bindings) const;
+    std::string cuda() const;
+};
 // Build the arithmetic body of a lowered elementwise instruction, using symbols a/b.
 ScalarExpr elementwiseExpression(std::string_view op, DType type = DType::F32);
 std::string scalarCudaPreamble();
