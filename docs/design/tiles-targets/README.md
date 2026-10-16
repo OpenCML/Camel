@@ -76,14 +76,15 @@ rewiring. Its executor and stable operator URI are supplied by its caller; a nul
 executor creates ordinary CPU calls. It has no CUDA initialization, test output
 or test-enablement checks. Test passes use the same rewriting implementation.
 
-This component does not yet insert transfers or propagate resident buffers, and
-therefore is not the complete `std::tiles` pass. The production planner must add
-those boundaries and target decisions explicitly rather than hide transfers
-inside every extracted call.
+With explicit device operators this component inserts typed uploads, resident
+calls and host-visible downloads. `tiles::test_outline_resident` exercises this
+GPU-required path. It is not yet the complete `std::tiles` pass: automatic target
+selection and portable resident values for CPU fallback remain pending.
 
 The single-target transfer planner computes deduplicated uploads, host-visible
 downloads and resident producer/consumer edges from the live graph. Embedded
 constants require no transfer. A value used by both a CPU node and another region
 has a host copy and a retained device copy; a CPU detour does not force its direct
 region-to-region edge through a redundant upload. `regions` exposes this candidate
-plan. Actual transfer nodes and cross-target routing are still pending.
+plan. The rewriting component realizes these edges without downloading and
+re-uploading shared region results. Cross-target routing is still pending.

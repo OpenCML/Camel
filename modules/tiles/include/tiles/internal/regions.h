@@ -66,13 +66,16 @@ struct RegionAnalysis {
     RegionTransfers transfers;
 };
 RegionAnalysis analyzeRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
+struct RegionDeviceOps {
+    operator_t upload, execute, download;
+};
 // Rewrites a reachable graph set; null executor produces ordinary CPU CALL nodes.
 // Non-null executors use the supplied stable operator URI and packed arguments.
 runtime::GCGraph *outlineRegions(
     core::context::Context &context, runtime::GCGraph *root, operator_t executor,
-    const std::string &uri, size_t &count);
+    const std::string &uri, size_t &count, const RegionDeviceOps *device = nullptr);
 // Register semantic-equivalence checks only when CAMEL_ENABLE_TEST_PASSES is enabled.
-void registerRegionTestPasses(operator_t run);
+void registerRegionTestPasses(operator_t run, RegionDeviceOps device);
 slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &context);
 
 // Inspect one function graph without executing it or initializing CUDA. This is
