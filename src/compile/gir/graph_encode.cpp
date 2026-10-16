@@ -354,6 +354,19 @@ class EncodeSession {
     }
 
   private:
+    /// The prepared graph of `graph` when it is part of the encoded set; nullptr otherwise.
+    PreparedGraph *findPreparedGraph(const graph_ptr_t &graph) {
+        if (auto it = preparedBySource_.find(graph.get()); it != preparedBySource_.end()) {
+            return it->second;
+        }
+        if (!graph->stableId().empty()) {
+            if (auto it = preparedByStableId_.find(graph->stableId()); it != preparedByStableId_.end()) {
+                return it->second;
+            }
+        }
+        return nullptr;
+    }
+
     PreparedGraph *resolvePreparedGraph(const graph_ptr_t &graph) {
         ASSERT(graph != nullptr, "Cannot resolve a null compile graph.");
         if (auto it = preparedBySource_.find(graph.get()); it != preparedBySource_.end()) {
@@ -444,6 +457,7 @@ class EncodeSession {
                 .kind         = header->kind,
                 .runtimeFlags = header->runtimeFlags,
                 .origin       = header->origin,
+                .permissions  = header->permissions,
             };
             std::vector<std::byte> payloadStorage;
 
@@ -453,6 +467,12 @@ class EncodeSession {
                     .calleeGraph = nullptr,
                 };
                 payloadStorage = toPayloadBytes(body);
+            } break;
+            case GCNodeKind::Loop: {
+                // The graphs are patched in once every runtime graph has its place
+                // (patchPreparedFuncPayloads), as for a FUNC node.
+                payloadStorage = toPayloadBytes(*reinterpret_cast<const camel::runtime::GCLoopBody *>(
+                    graph->draft().payloadOf(sourceId).data()));
             } break;
             case GCNodeKind::Oper:
                 payloadStorage = toOperPayloadBytes(graph->operTarget(sourceId));
@@ -655,6 +675,14 @@ class EncodeSession {
                 ASSERT(body != nullptr, "Prepared FUNC payload cannot be null.");
                 body->calleeGraph =
                     resolvePreparedGraph(prepared.source->funcTarget(sourceId))->runtime;
+            }
+            if (header->kind == GCNodeKind::Loop) {
+                auto *body = reinterpret_cast<camel::runtime::GCLoopBody *>(
+                    prepared.draft->mutablePayloadOf(preparedId).data());
+                const auto &target = prepared.source->loopTarget(sourceId);
+                body->condGraph =
+                    target.cond ? resolvePreparedGraph(target.cond)->runtime : nullptr;
+                body->bodyGraph = resolvePreparedGraph(target.body)->runtime;
             }
             ++preparedId;
         }
@@ -945,14 +973,16 @@ class EncodeSession {
         }
         GCGraph *runtimeOuterGraph = nullptr;
         if (const auto &outer = source->outerGraph(); outer != nullptr) {
-            auto *outerPrepared = resolvePreparedGraph(outer);
+            // A graph encoded without the graph it is written in (a function of a library
+            // encoded on its own, camel/runtime/definitions.h) has no outer graph at runtime.
+            auto *outerPrepared = findPreparedGraph(outer);
             CAMEL_LOG_INFO_S(
                 "GIREncode",
                 "Resolve outer graph for '{}': outer='{}' prepared={}.",
                 source->name(),
                 outer->name(),
                 outerPrepared != nullptr);
-            runtimeOuterGraph = outerPrepared->runtime;
+            runtimeOuterGraph = outerPrepared != nullptr ? outerPrepared->runtime : nullptr;
         }
         CAMEL_LOG_INFO_S(
             "GIREncode",

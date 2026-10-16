@@ -23,6 +23,7 @@
  */
 
 #include "camel/compile/gct/tree.h"
+#include "camel/core/operator_semantics.h"
 
 #include <algorithm>
 #include <bit>
@@ -279,6 +280,25 @@ node_ptr_t Tree::makeExpt(const std::vector<Reference> &exports) {
     return node;
 }
 
+node_ptr_t Tree::makeLoop(
+    camel::core::LoopKind kind, const std::vector<std::string> &state,
+    const std::string &element) {
+    const bool hasElement = camel::core::loopHasIterable(kind);
+    const size_t count    = state.size() + (hasElement ? 1 : 0);
+    Node *node            = makeNode(NodeKind::LOOP);
+    node->tag_            = static_cast<uint16_t>(kind);
+    auto *list  = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(count)));
+    list->count = count;
+    for (size_t i = 0; i < state.size(); ++i) {
+        list->items[i] = intern(state[i]);
+    }
+    if (hasElement) {
+        list->items[count - 1] = intern(element);
+    }
+    node->payload_.names = list;
+    return node;
+}
+
 node_ptr_t Tree::clone(const Node *node) {
     Node *copy    = makeNode(node->kind_);
     copy->flags_  = static_cast<uint8_t>(node->flags_ & ~Node::kAttached);
@@ -304,7 +324,8 @@ node_ptr_t Tree::clone(const Node *node) {
             copy->payload_.name = intern(*node->payload_.name);
         }
         break;
-    case NodeKind::EXPT: {
+    case NodeKind::EXPT:
+    case NodeKind::LOOP: {
         const Node::NameList *names = node->payload_.names;
         auto *list =
             static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(names->count)));
@@ -385,8 +406,25 @@ std::string Node::toString() const {
         return "CAST: " + targetType()->toString();
     case NodeKind::EXIT:
         return "EXIT: " + to_string(exitType());
-    case NodeKind::EXEC:
-        return synced() ? "SYNC" : "EXEC";
+    case NodeKind::EXEC: {
+        std::string text = synced() ? "SYNC" : "EXEC";
+        if (numericPermissions() != 0) {
+            // Only when granted, so that the dump of a program without @numeric is unchanged.
+            text += ": numeric(" + camel::core::sem::permissionsText(numericPermissions()) + ")";
+        }
+        return text;
+    }
+    case NodeKind::LOOP: {
+        std::string text = std::string("LOOP: ") + camel::core::loopKindName(loopKind()) + " (";
+        for (size_t j = 0; j < loopStateCount(); ++j) {
+            text += (j == 0 ? "" : ", ") + loopStateName(j);
+        }
+        text += ")";
+        if (camel::core::loopHasIterable(loopKind())) {
+            text += " in " + loopElementName();
+        }
+        return text;
+    }
     case NodeKind::EXPT: {
         std::string text = "EXPT: [";
         for (size_t i = 0; i < exportCount(); ++i) {

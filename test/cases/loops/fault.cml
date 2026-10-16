@@ -1,0 +1,6 @@
+// A fault in a round of a loop is reported where it happens, in the body, with its position.
+func main(): int sync {
+    let r = loop acc = 0, i = 10 while i > -3 do (acc + 100 / i, i - 1)
+    println(r.0)
+    return 0
+}

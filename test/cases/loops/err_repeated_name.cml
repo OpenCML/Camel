@@ -1,0 +1,5 @@
+func main(): int sync {
+    let r = loop x = 0 for x in [1, 2] do x
+    println(r)
+    return 0
+}

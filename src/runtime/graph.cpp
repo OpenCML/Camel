@@ -28,6 +28,7 @@
 
  */
 
+#include "camel/runtime/loop.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/capacity.h"
 #include "camel/runtime/draft.h"
@@ -137,6 +138,8 @@ struct GraphArenaLayout {
     size_t refRoleBytes        = 0; // its roles, padded to the next array's alignment
     size_t tupleBytes          = 0;
     size_t nodeBytes           = 0;
+    size_t originBytes         = 0;
+    size_t permissionBytes     = 0;
     size_t payloadBytes        = 0;
     size_t inputBytes          = 0;
     size_t normPortBytes       = 0;
@@ -167,6 +170,16 @@ GraphArenaLayout planGraphArenaLayout(
                                 alignof(::Tuple)),
         // nodeCount records and the sentinel; a multiple of 16 bytes.
         .nodeBytes    = sizeof(GCNode) * (static_cast<size_t>(payload.nodeCount) + 1),
+        // The origin column, padded to the payload words that follow it.
+        .originBytes = camel::core::mm::alignUp(
+            sizeof(uint32_t) * static_cast<size_t>(payload.nodeCount),
+            alignof(gc_payload_word_t)),
+        // The permission column, only when some node has permissions.
+        .permissionBytes = payload.permissions
+                               ? camel::core::mm::alignUp(
+                                     static_cast<size_t>(payload.nodeCount),
+                                     alignof(gc_payload_word_t))
+                               : 0,
         .payloadBytes = bytesForArray<gc_payload_word_t>(payload.payloadWordCount),
         .inputBytes   = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.edgeCount),
@@ -186,7 +199,7 @@ GraphArenaLayout planGraphArenaLayout(
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.nodeBytes + layout.payloadBytes + layout.inputBytes + layout.normPortBytes +
+        layout.nodeBytes + layout.originBytes + layout.permissionBytes + layout.payloadBytes + layout.inputBytes + layout.normPortBytes +
         layout.withPortBytes + layout.closureBytes + layout.branchArmBytes;
     // The frame layout comes last. The arrays before it may end at any 2-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
@@ -316,6 +329,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
         case GCNodeKind::Brch:
         case GCNodeKind::Join:
         case GCNodeKind::Oper:
+        case GCNodeKind::Loop:
             if (!node->hasPayload()) {
                 throw std::runtime_error(std::format(
                     "Runtime graph '{}' has node {} of a kind with a payload without one.",
@@ -372,6 +386,24 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                         "Runtime graph '{}' has FUNC node {} without callee graph.",
                         graph->name(),
                         ref));
+            }
+        }
+        if (node->kind == GCNodeKind::Loop) {
+            // The two graphs are entries of the reference table, marked callee (I12/I13): the
+            // condition exactly when the form has one.
+            const auto *body     = graph->nodeBodyAs<GCLoopRef>(ref);
+            const auto validLoop = [&](uint32_t index) {
+                return index < graph->refs().size() && graph->refs()[index] &&
+                       (graph->refRoles(index) & kGraphRefCallee) != 0;
+            };
+            const bool hasCond = camel::core::loopHasCondition(body->kind);
+            if (static_cast<uint8_t>(body->kind) > static_cast<uint8_t>(camel::core::LoopKind::ForWhile) ||
+                !validLoop(body->bodyRef) ||
+                (hasCond ? !validLoop(body->condRef) : body->condRef != kNoLoopGraph)) {
+                throw std::runtime_error(std::format(
+                    "Runtime graph '{}' has LOOP node {} without its condition or body graph.",
+                    graph->name(),
+                    ref));
             }
         }
         if (node->kind == GCNodeKind::Call) {
@@ -527,6 +559,9 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     case GCNodeKind::Join:
         bodyBytes = sizeof(GCJoinBody);
         break;
+    case GCNodeKind::Loop:
+        bodyBytes = sizeof(GCLoopRef);
+        break;
     default:
         return 0;
     }
@@ -644,6 +679,10 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
         .withPortCount    = narrowIntegral<gc_cnt_t>(draft.withPorts().size(), "'with' parameters"),
         .closureCount   = narrowIntegral<gc_cnt_t>(draft.closureNodes().size(), "captured values"),
         .branchArmCount = plan.branchArmCount,
+        .permissions    = std::any_of(
+            plan.nodes.begin(),
+            plan.nodes.end(),
+            [&](const auto &planned) { return draft.nodePermissions(planned.draftId) != 0; }),
     };
 }
 
@@ -703,6 +742,14 @@ void emitDraftPayload(
         record.withBegin     = appendInputs(draft.withInputsOf(planned.draftId));
         record.ctrlBegin     = appendInputs(draft.ctrlInputsOf(planned.draftId));
         record.payload       = planned.payload;
+        // Origin ids index the origin table of the source manager, a vector of records: they
+        // fit 32 bits long before memory runs out (design 3.8: a 32-bit OriginId per node).
+        const uint64_t origin = draft.nodeOrigin(planned.draftId);
+        ASSERT(origin <= std::numeric_limits<uint32_t>::max(), "Origin id beyond 32 bits.");
+        payload.origins[planned.ref] = static_cast<uint32_t>(origin);
+        if (payload.permissions) {
+            payload.permissions[planned.ref] = draft.nodePermissions(planned.draftId);
+        }
         const GCNode &header = record;
 
         const auto payloadBytes = draft.payloadOf(planned.draftId);
@@ -738,6 +785,40 @@ void emitDraftPayload(
                 writeBody(payload.payload, header, GCFuncRef{.ref = found->second});
             }
             break;
+        case GCNodeKind::Loop: {
+            // The draft holds the two graphs; the frozen node names them by their indexes in
+            // the reference table, as a FUNC node names its callee.
+            ASSERT(payloadBytes.size_bytes() >= sizeof(GCLoopBody), "Draft LOOP payload is missing.");
+            GCLoopBody body = *reinterpret_cast<const GCLoopBody *>(payloadBytes.data());
+            if (resolveRuntimeGraph) {
+                body.condGraph = body.condGraph ? resolveRuntimeGraph(body.condGraph) : nullptr;
+                body.bodyGraph = resolveRuntimeGraph(body.bodyGraph);
+            }
+            const auto *refIndex = payload.refIndex;
+            const auto indexOf   = [&](GCGraph *target) -> uint32_t {
+                if (target == nullptr) {
+                    return kNoLoopGraph;
+                }
+                const auto found =
+                    refIndex ? refIndex->find(target)
+                             : std::unordered_map<const GCGraph *, uint32_t>::const_iterator{};
+                if (refIndex == nullptr || found == refIndex->end()) {
+                    throw std::runtime_error(std::format(
+                        "LOOP node {} names a graph that is not among the graphs this graph "
+                        "calls (its reference table).",
+                        planned.ref));
+                }
+                return found->second;
+            };
+            writeBody(
+                payload.payload,
+                header,
+                GCLoopRef{
+                    .kind    = body.kind,
+                    .condRef = indexOf(body.condGraph),
+                    .bodyRef = indexOf(body.bodyGraph),
+                });
+        } break;
         case GCNodeKind::Call:
             writeBody(
                 payload.payload,
@@ -875,15 +956,6 @@ void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
         return;
     }
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
-    const DraftPayloadPlan plan = planDraftPayload(draft);
-    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!draft.alive(id) || plan.runtimeRefsByDraftId[id] == kInvalidNodeRef) {
-            continue;
-        }
-        if (const uint64_t origin = draft.nodeOrigin(id)) {
-            record->nodeOrigins[plan.runtimeRefsByDraftId[id]] = origin;
-        }
-    }
 }
 
 GCGraphNativePayload
@@ -892,6 +964,18 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
     payload.nodes            = static_cast<GCNode *>(arena.alloc(
         sizeof(GCNode) * (static_cast<size_t>(shape.nodeCount) + 1),
         alignof(gc_payload_word_t)));
+    payload.origins = static_cast<uint32_t *>(arena.alloc(
+        camel::core::mm::alignUp(
+            sizeof(uint32_t) * static_cast<size_t>(shape.nodeCount),
+            alignof(gc_payload_word_t)),
+        alignof(gc_payload_word_t)));
+    if (shape.permissions && shape.nodeCount > 0) {
+        payload.permissions = static_cast<uint8_t *>(arena.alloc(
+            camel::core::mm::alignUp(
+                static_cast<size_t>(shape.nodeCount),
+                alignof(gc_payload_word_t)),
+            alignof(gc_payload_word_t)));
+    }
     payload.payload          = arenaAllocArray<gc_payload_word_t>(arena, shape.payloadWordCount);
     payload.inputs           = arenaAllocArray<gc_node_ref_t>(arena, shape.edgeCount);
     payload.normPorts      = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
@@ -911,6 +995,8 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
 GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload) {
     return GCGraphPayloadArena{
         .nodes            = payload.nodes,
+        .origins          = payload.origins,
+        .permissions      = payload.permissions,
         .inputs           = payload.inputs,
         .payload          = payload.payload,
         .normPorts        = payload.normPorts,
@@ -1145,7 +1231,13 @@ GCGraph::GCGraph(
     : debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
       staticDataType_(staticDataType), closureType_(closureType), outerGraph_(outerGraph),
       refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),
-      staticArea_(staticArea) {}
+      staticArea_(staticArea) {
+    // A new graph: a lineage and a revision of its own (graph facts, facts.h). A commit that
+    // encoded it as the copy of another graph replaces them (GCGraphBuildAccess::inheritIdentity).
+    static std::atomic<uint64_t> serials{0};
+    serial_  = serials.fetch_add(1, std::memory_order_relaxed) + 1;
+    lineage_ = serial_;
+}
 
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft) {
     return describeDraftPayload(draft, planDraftPayload(draft));
@@ -1170,6 +1262,12 @@ void validateRuntimeGraphCalls(const GCGraph *graph) {
     }
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         const GCNode *node = *it;
+        if (node && node->kind == GCNodeKind::Loop) {
+            // I13, I19 (docs/design/op-semantics 11.2): the node's inputs and the two graphs'
+            // ports agree; the types are checked with the graph's types (I18).
+            validateRuntimeLoopInterface(graph, it.ref());
+            continue;
+        }
         if (!node || node->kind != GCNodeKind::Func) {
             continue;
         }
@@ -1239,12 +1337,13 @@ std::span<const camel::core::SymId> GCGraph::captureNames() const {
                   : std::span<const camel::core::SymId>();
 }
 
+uint8_t GCGraph::nodePermissions(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) && nativePayload_.permissions ? nativePayload_.permissions[ref]
+                                                              : 0;
+}
+
 uint64_t GCGraph::nodeOrigin(gc_node_ref_t ref) const {
-    if (!debug_) {
-        return 0;
-    }
-    auto it = debug_->nodeOrigins.find(ref);
-    return it == debug_->nodeOrigins.end() ? 0 : it->second;
+    return containsNodeRef(ref) && nativePayload_.origins ? nativePayload_.origins[ref] : 0;
 }
 
 camel::core::type::FunctionType *GCGraph::funcType() const { return funcType_; }
@@ -1369,6 +1468,9 @@ std::span<const std::byte> GCGraph::nodePayloadBytes(gc_node_ref_t ref) const {
     case GCNodeKind::Join:
         bytes = sizeof(GCJoinBody);
         break;
+    case GCNodeKind::Loop:
+        bytes = sizeof(GCLoopRef);
+        break;
     default:
         return {};
     }
@@ -1382,6 +1484,24 @@ GCGraph *GCGraph::directCalleeGraphOf(gc_node_ref_t ref) const {
         return nullptr;
     }
     const uint32_t index = nodeBodyAs<GCFuncRef>(ref)->ref;
+    return index < refCount_ ? refs_[index] : nullptr;
+}
+
+GCGraph *GCGraph::loopCondGraphOf(gc_node_ref_t ref) const {
+    const GCNode *n = node(ref);
+    if (!n || n->kind != GCNodeKind::Loop || !n->hasPayload()) {
+        return nullptr;
+    }
+    const uint32_t index = nodeBodyAs<GCLoopRef>(ref)->condRef;
+    return index < refCount_ ? refs_[index] : nullptr;
+}
+
+GCGraph *GCGraph::loopBodyGraphOf(gc_node_ref_t ref) const {
+    const GCNode *n = node(ref);
+    if (!n || n->kind != GCNodeKind::Loop || !n->hasPayload()) {
+        return nullptr;
+    }
+    const uint32_t index = nodeBodyAs<GCLoopRef>(ref)->bodyRef;
     return index < refCount_ ? refs_[index] : nullptr;
 }
 
@@ -1548,6 +1668,9 @@ camel::core::rtdata::Object *GCGraph::clone(
         refCount_,
         nativePayload_,
         staticArea_);
+    graph->originalGraph_ = originalGraph_;
+    graph->lineage_       = lineage_; // the same content: the same graph and revision
+    graph->serial_        = serial_;
     for (size_t i = 0; i < kExtraSlotCount; ++i) {
         graph->extraSlots_[i] = extraSlots_[i];
     }
@@ -1589,12 +1712,26 @@ void GCGraph::updateRefs(
     for (gc_cnt_t i = 0; i < refCount_; ++i) {
         traceEdge(refs_[i]);
     }
+    traceEdge(originalGraph_);
 }
 
 void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
     std::vector<GCGraph *> newGraphs =
         rootGraph ? collectReachableGraphs(rootGraph) : std::vector<GCGraph *>{};
     std::unordered_set<GCGraph *> keep(newGraphs.begin(), newGraphs.end());
+    // A private copy still tracked (a back end's lowered program) names the program graph it was
+    // copied from (GCGraph::originalGraph): that graph and what it refers to stay, owned as part
+    // of the program, until a later replacement finds no copy pointing at them.
+    for (GCGraph *copy : detached_) {
+        GCGraph *original = copy ? copy->originalGraph_ : nullptr;
+        if (original && !keep.contains(original)) {
+            for (GCGraph *graph : collectReachableGraphs(original)) {
+                if (keep.insert(graph).second) {
+                    newGraphs.push_back(graph);
+                }
+            }
+        }
+    }
 
     for (GCGraph *graph : graphs_) {
         if (!graph || keep.contains(graph)) {
@@ -1625,6 +1762,18 @@ void GCGraphManager::rebuildGcRoots() {
     }
     for (GCGraph *graph : detached_) {
         gcRoots_.push_back(graph);
+    }
+    for (GCGraph *graph : pinned_) {
+        gcRoots_.push_back(graph);
+    }
+}
+
+void GCGraphManager::pin(std::span<GCGraph *const> graphs) {
+    for (GCGraph *graph : graphs) {
+        if (graph && std::find(pinned_.begin(), pinned_.end(), graph) == pinned_.end()) {
+            pinned_.push_back(graph);
+            gcRoots_.push_back(graph);
+        }
     }
 }
 
@@ -1669,6 +1818,13 @@ void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
 GCGraphManager::~GCGraphManager() {
     releaseDetached();
     clear();
+    for (GCGraph *graph : pinned_) {
+        delete graph->debug_;
+        graph->~GCGraph();
+        mm::graphSpace().free(graph);
+    }
+    pinned_.clear();
+    gcRoots_.clear();
 }
 
 std::vector<GCGraph *> GCGraphManager::roots() const {
@@ -1695,6 +1851,8 @@ void GCGraphManager::clear() {
     debugRecords_.clear();
     graphs_.clear();
     root_ = nullptr;
+    // The pinned graphs belong to no program: they stay, and stay traced.
+    gcRoots_.insert(gcRoots_.end(), pinned_.begin(), pinned_.end());
 }
 
 void collectStaticGraphRefsRecursive(

@@ -56,6 +56,17 @@ bool SysModule::load() {
             {"get_env", false},
             {"get_cwd", false},
         });
+    // What each touches (docs/design/op-semantics 8): the environment of the process.
+    {
+        using camel::core::sem::AccessMode;
+        using camel::core::sem::externalAmbient;
+        camel::core::OperatorTable::instance().declareResources(
+            "sys",
+            {
+                {"get_env", externalAmbient("process:environment", AccessMode::Read)},
+                {"get_cwd", externalAmbient("process:environment", AccessMode::Read)},
+            });
+    }
     loaded_ = true;
     return true;
 }

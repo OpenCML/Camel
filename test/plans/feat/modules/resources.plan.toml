@@ -1,0 +1,117 @@
+id = "modules.resources"
+order = 373
+tier = "feat"
+tags = ["feat", "modules", "semantics", "resources"]
+desc = "The resources of operators (camel/core/resource_semantics.h, camel/runtime/resources.h; docs/design/op-semantics section 8): the declarations and their registration checks, mapped regions, and their resolution in a program: the accesses of each node, the footprint of each graph, and the pairs of nodes that must keep their order, kept apart from data dependence."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "core"
+desc = "test::resources (CAMEL_ENABLE_TEST_PASSES): one rejected declaration per rule of check 5 (an access of unknown class, an ambient resource without a name, a named variable, an ambient resource bound to an operand and a variable bound to none, an operator bound to a capture, a same result without its operand, a pure operator that touches something, an effectful one that touches nothing, an external effect for a state-only operator, an ambient allocation), the refinement of an operator its traits count as external, the minor version a declaration of resources adds to an existing record; the bounds of mapped regions and which overlap. In the program: assignments write their cell, reads read it, a var parameter, a capture and a recursion (a fixpoint) carry the access to the caller's cell, an array sorted in place is an object read and written, the generator, the console and the file system are ambient and external; pairs that conflict are ordered by data or by control edges, the arms of a branch are not a pair, and the program's output is unchanged."
+kind = "behavior"
+case = "../../../cases/resources/effects.cml"
+args = ["${case}", "test::resources"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const [check, reason] of [
+  ['unknown_class', 'an access names the class of its resource'],
+  ['ambient_without_name', 'a resource of class ambient has a name'],
+  ['variable_with_name', "a resource of class variable has no name ('x')"],
+  ['ambient_bound_to_operand', 'an ambient resource is named by no operand'],
+  ['variable_unbound', 'only an ambient resource is named by no operand'],
+  ['operator_bound_to_capture', "an operator's access is bound to an operand, not a capture"],
+  ['same_without_operand', 'a result that is same names its operand'],
+  ['pure_touches', 'a pure operator touches no resource'],
+  ['effectful_touches_nothing', 'an operator that is not pure touches, allocates or affects something'],
+  ['external_against_state_only', 'its traits give it no external effect'],
+  ['allocates_ambient', 'an operator allocates a variable, an object or a foreign resource'],
+]) {
+  const m = out.match(new RegExp(`RESOURCES ${check} (.*)`))
+  assert(m && m[1].startsWith('rejected:') && m[1].includes(reason), `${check}: ${m ? m[1] : 'missing'}`)
+}
+for (const l of [
+  'RESOURCES valid accepted', 'RESOURCES refines_external accepted', 'RESOURCES pure_touches_none accepted',
+  'RESOURCES version semtest:pure@1.5 semtest:cell_write@1.0',
+  'RESOURCES text write variable norm 0 whole',
+  'RESOURCES conservative rmw unknown norm 0 region unknown; rmw unknown norm 1 region unknown; rmw unknown with 0 region unknown; result unknown; external',
+  'RESOURCES conservative_pure none',
+  'RESOURCES bounds [2, 5] [6, 9] [5, 7] empty [0, 6] unknown',
+  'RESOURCES overlap a-b 0 a-c 1 a-empty 0 a-unknown 1',
+  'RESOURCES footprint bump rmw variable norm 0 whole',
+  'RESOURCES footprint countdown rmw variable norm 0 whole',
+  'RESOURCES footprint __g_9__ rmw variable capture 0 whole',
+  'RESOURCES footprint main rmw ambient rand:generator; write ambient io:stdout; read ambient fs; rmw object (any); external',
+  'RESOURCES node main 2 :var/new: allocates variable',
+  'RESOURCES node main 9 :op/assn_l: write variable (node 2); result may_alias 1',
+  'RESOURCES node main 10 FUNC bump: rmw variable (node 2); result unknown',
+  'RESOURCES node main 12 FUNC countdown: rmw variable (node 5); result unknown',
+  'RESOURCES node main 15 CALL: rmw variable (node 2); result unknown',
+  'RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0',
+  'RESOURCES node main 20 algo:sort_in_place: rmw object (node 19); result same 0',
+  'RESOURCES node main 23 rand:seed: write ambient rand:generator; external',
+  'RESOURCES node main 29 fs:exists: read ambient fs; external',
+  'RESOURCES node countdown 10 FUNC __g_7__: rmw variable (node 0); result unknown',
+  'RESOURCES order main 8 9 resource ordered by data',
+  'RESOURCES order main 9 10 resource ordered by control',
+  'RESOURCES order main 12 34 resource ordered by control',
+  'RESOURCES order main 19 21 resource ordered by data',
+  'RESOURCES order main 23 24 external ordered by control',
+  'RESOURCES order countdown 4 10 resource ordered by control',
+  'true', 'false', '4', '16', '[1, 2, 3]',
+]) line(l)
+assert(!out.includes('RESOURCES order countdown 9 10'), 'the two arms of a branch are not a pair')
+assert(!/RESOURCES order main (2|5|18) /.test(out), 'making a cell conflicts with nothing')
+assert(!/RESOURCES order main 12 (8|9|10|15|32) /.test(out), 'the cells of c and d are different resources')
+assert(!out.includes(' unordered'), 'the program orders every conflicting pair')
+}
+"""
+
+[[tests]]
+name = "core_test_pass_needs_the_environment"
+desc = "test::resources is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
+kind = "negative"
+case = "../../../cases/resources/effects.cml"
+args = ["${case}", "test::resources"]
+expect_exit = 1
+expect_output_not_contains = ["RESOURCES "]
+
+[[tests]]
+name = "declared_resources"
+desc = "`camel inspect --ops` shows the declared resources in each operator's semantics: the variable operators and the assignments (state, no external effect), the console, the file system and the generator (ambient, external)."
+kind = "behavior"
+case = "../../../cases/resources/effects.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
+const byUri = new Map(ops.map((o) => [o.uri, o]))
+const expect = {
+  ':var/new': 'allocates variable',
+  ':var/get': 'read variable norm 0 whole; result may_alias 0',
+  ':var/take': 'rmw variable norm 0 whole; result may_alias 0',
+  ':op/assn_l': 'write variable norm 0 whole; result may_alias 1',
+  ':op/assn_add_l': 'rmw variable norm 0 whole',
+  ':op/assn_append': 'rmw variable norm 0 whole; result may_alias 0',
+  ':io/println': 'write ambient io:stdout; external',
+  ':io/input': 'rmw ambient io:stdin; external',
+  'fs:read_text': 'read ambient fs; external',
+  'fs:write_text': 'rmw ambient fs; external',
+  'rand:seed': 'write ambient rand:generator; external',
+  'rand:rand': 'rmw ambient rand:generator; external',
+}
+for (const [uri, text] of Object.entries(expect)) {
+  const op = byUri.get(uri)
+  assert(op && op.semantics, `${uri} has no semantics`)
+  assert(op.semantics.resources === text, `${uri}: ${op.semantics.resources}`)
+  assert(op.semantics.key === `${uri}@1.0`, `${uri}: key ${op.semantics.key}`)
+}
+}
+"""

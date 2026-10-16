@@ -57,6 +57,11 @@ bool NnModule::load() {
     }
     // Writes a file.
     camel::core::OperatorTable::instance().declare("nn", {{"save_params", false}});
+    // It writes files (docs/design/op-semantics 8).
+    camel::core::OperatorTable::instance().declareResources(
+        "nn",
+        {{"save_params",
+          camel::core::sem::externalAmbient("fs", camel::core::sem::AccessMode::ReadModifyWrite)}});
     loaded_ = true;
     return true;
 }

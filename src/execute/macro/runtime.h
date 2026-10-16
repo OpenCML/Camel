@@ -127,6 +127,11 @@ class MacroEvaluator {
             &fillArgs,
         bool requireMacroGraph);
     slot_t executeGraph(camel::core::context::Frame *frame, camel::runtime::GCGraph *runtimeGraph);
+    /// The LOOP node `node` of `graph` run in `frame` (camel/runtime/loop.h), round by round:
+    /// the loop is not a recursion, so it takes no depth, only kMaxMacroLoopRounds rounds.
+    slot_t executeLoop(
+        camel::core::context::Frame *frame, camel::runtime::GCGraph *graph,
+        camel::runtime::gc_node_ref_t node);
 };
 
 std::vector<MacroCandidate>

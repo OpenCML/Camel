@@ -308,6 +308,11 @@ class Walker {
         case NK::FuncData:
             return funcData(cst::FuncData(node));
         case NK::FuncAnno:
+            // `@numeric(...)` names permissions, not values (design principles 2.13); only a
+            // decorator (`@name`, `@name<args>`) refers to a function.
+            if (node.get<cst::ParentIdents>()) {
+                return;
+            }
             addRef(node.get<cst::IdentRef>(), RefKind::Value, true);
             return walk(node.get<cst::AngledValues>());
         case NK::FuncDecl:
@@ -683,29 +688,32 @@ class Walker {
         popScope();
     }
 
-    /// loop state = init for x in xs while c { body }: init and xs are outside the scope of the
-    /// state names and of x; c and the body are inside.
+    /// loop s = init, t = init for x in xs while c do body: the first values and xs are
+    /// outside the scope of the state names and of x; c and the body are inside.
     void loopExpr(cst::LoopExpr ctx) {
         const auto forClause   = ctx.get<cst::LoopFor>();
         const auto whileClause = ctx.get<cst::LoopWhile>();
-        walk(ctx.expr());
+        for (const auto state : ctx.all<cst::LoopState>()) {
+            walk(state.expr());
+        }
         walk(forClause.expr());
         const Range whole = rangeOf(ctx);
         pushScope(ScopeKind::Arm, whole);
-        if (auto tuple = ctx.get<cst::ParentIdents>()) {
-            for (const auto ident : tuple.get<cst::IdentList>().all<cst::IdentDef>()) {
-                if (nameOf(ident)) {
-                    declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
-                }
+        for (const auto state : ctx.all<cst::LoopState>()) {
+            if (auto ident = state.get<cst::IdentDef>(); ident && nameOf(ident)) {
+                declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
             }
-        } else if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
-            declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
         }
         if (auto ident = forClause.get<cst::IdentDef>(); ident && nameOf(ident)) {
             declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
         }
         walk(whileClause.expr());
-        walkBlockBody(ctx.get<cst::StmtBlock>());
+        const syn::Node body = ctx.lastChild().node();
+        if (body && body.is(NK::StmtBlock)) {
+            walkBlockBody(cst::StmtBlock(body));
+        } else {
+            walk(body);
+        }
         popScope();
     }
 

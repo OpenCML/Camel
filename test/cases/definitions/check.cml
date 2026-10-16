@@ -1,0 +1,8 @@
+// The program test::definitions runs on (src/passes/test/definitions.h): what it checks is in
+// the pass; the libraries it declares definitions from are next to this file.
+import { Tensor, reshape, softmax } from tensor
+
+func main(): int sync {
+    println(softmax(reshape([1.0, 2.0], [2])))
+    return 0
+}

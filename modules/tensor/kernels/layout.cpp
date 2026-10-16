@@ -243,6 +243,15 @@ concat(std::span<const TensorObject *const> inputs, int64_t axisArg, mm::IAlloca
     return out;
 }
 
+std::optional<SliceRange> normalizeSliceBounds(int64_t extent, int64_t start, int64_t end) {
+    const int64_t s = start < 0 ? start + extent : start;
+    const int64_t e = end < 0 ? end + extent : end;
+    if (s < 0 || s > extent || e < 0 || e > extent) {
+        return std::nullopt;
+    }
+    return SliceRange{s, e};
+}
+
 TensorObject *slice(
     const TensorObject *input, int64_t axisArg, int64_t start, int64_t end, int64_t step,
     mm::IAllocator &allocator) {
@@ -255,14 +264,12 @@ TensorObject *slice(
         throw std::invalid_argument("slice axis out of range");
     }
     const int64_t extent = input->dim(static_cast<size_t>(axis));
-    auto clampIndex      = [extent](int64_t v) {
-        if (v < 0) {
-            v += extent;
-        }
-        return std::clamp<int64_t>(v, 0, extent);
-    };
-    start                               = clampIndex(start);
-    end                                 = clampIndex(end);
+    const auto range     = normalizeSliceBounds(extent, start, end);
+    if (!range) {
+        throw std::out_of_range("slice bounds out of range");
+    }
+    start = range->start;
+    end   = range->end;
     const int64_t count                 = end > start ? (end - start + step - 1) / step : 0;
     Shape outShape                      = input->shapeVector();
     outShape[static_cast<size_t>(axis)] = count;

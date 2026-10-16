@@ -26,7 +26,7 @@ digraph GraphIR {
             }
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N04 [label="flag", type="PORT"];
+            N04 [label="flag", type="PORT", param_name="flag", param_kind="normal", param_index="0", value_type="bool"];
             N05 [label="JOIN", type="JOIN", role="branch-contract", origin=157, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml"];
             N06 [label="BRCH", type="BRCH", origin=156, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml"];
             N07 [label="__g_4__", type="FUNC", origin=158, span="13:24-13:37", srcfile="exemplars/02_branch_shape_contract/program.cml"];

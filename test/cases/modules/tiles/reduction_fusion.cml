@@ -1,0 +1,56 @@
+module tiles_reduction_fusion
+import { Tensor, reshape, sum, mean, transpose, save_npy } from tensor
+import { get_env } from sys
+import { run, inspect } from tiles
+
+func sample(i: int): float { return float(i % 17 - 8) * 0.125 }
+func rows(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+    return sum((x + b) * 0.5, 1)
+}
+func columns(x: Tensor<f32>): Tensor<f32> {
+    return mean(transpose(x) * 0.25, 0)
+}
+func middle(x: Tensor<f32>): Tensor<f32> { return sum(x * 0.5, 1) }
+func epilogue(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+    return (sum(x * 0.5, 1) + b) * 0.25
+}
+func two_reductions(x: Tensor<f32>): Tensor<f32> { return sum(x * 0.5, 1) + mean(x, 1) }
+func rounded(x: Tensor<f32>): Tensor<f32> { return sum(x, 1) - 16777216.0 }
+func main(): int sync {
+    let folder = get_env('TILES_TEST_OUT')
+    let x = reshape(range(0, 17 * 513)->map<sample>, [17, 513])
+    let b = reshape(range(0, 513)->map<sample>, [1, 513])
+    let y = reshape(range(0, 2 * 257 * 3)->map<sample>, [2, 257, 3])
+    println(inspect<rows>((x, b)))
+    save_npy(rows(x, b), folder + '/rows_cpu.npy')
+    save_npy(run<rows>((x, b)), folder + '/rows_gpu.npy')
+    println(inspect<columns>(x))
+    save_npy(columns(x), folder + '/columns_cpu.npy')
+    save_npy(run<columns>(x), folder + '/columns_gpu.npy')
+    println(inspect<middle>(y))
+    save_npy(middle(y), folder + '/middle_cpu.npy')
+    save_npy(run<middle>(y), folder + '/middle_gpu.npy')
+    let cancellation = reshape([16777216.0, 1.0, -16777216.0], [1, 3])
+    let zeros = reshape([0.0, 0.0, 0.0], [1, 3])
+    save_npy(rows(cancellation, zeros), folder + '/ordered_cpu.npy')
+    save_npy(run<rows>((cancellation, zeros)), folder + '/ordered_gpu.npy')
+    let empty = reshape(range(0, 0)->map<sample>, [5, 0])
+    let empty_bias = reshape(range(0, 0)->map<sample>, [1, 0])
+    save_npy(rows(empty, empty_bias), folder + '/empty_cpu.npy')
+    save_npy(run<rows>((empty, empty_bias)), folder + '/empty_gpu.npy')
+    let no_rows = reshape(range(0, 0)->map<sample>, [0, 513])
+    save_npy(rows(no_rows, b), folder + '/no_rows_cpu.npy')
+    save_npy(run<rows>((no_rows, b)), folder + '/no_rows_gpu.npy')
+    let bias = reshape(range(0, 17)->map<sample>, [17])
+    println(inspect<epilogue>((x, bias)))
+    save_npy(epilogue(x, bias), folder + '/epilogue_cpu.npy')
+    save_npy(run<epilogue>((x, bias)), folder + '/epilogue_gpu.npy')
+    println(inspect<two_reductions>(x))
+    save_npy(two_reductions(x), folder + '/two_reductions_cpu.npy')
+    save_npy(run<two_reductions>(x), folder + '/two_reductions_gpu.npy')
+    let rounding = reshape([16777216.0, 1.0], [1, 2])
+    println(inspect<rounded>(rounding))
+    save_npy(rounded(rounding), folder + '/rounding_cpu.npy')
+    save_npy(run<rounded>(rounding), folder + '/rounding_gpu.npy')
+    return 0
+}

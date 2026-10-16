@@ -1,0 +1,8 @@
+// A library that does not compile (test::definitions): its definitions are refused.
+module broken_definitions
+
+import { Tensor } from tensor
+
+export func gelu(x: Tensor<f32>): Tensor<f32> {
+    return x + undefined_name
+}

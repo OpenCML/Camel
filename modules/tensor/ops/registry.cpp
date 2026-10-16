@@ -28,6 +28,8 @@
 
 #include "op_stats.h"
 
+#include "indexing.h"
+
 #include "../dtype.h"
 #include "camel/core/derivative.h"
 #include "camel/core/operator_traits.h"
@@ -183,6 +185,23 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
         camel::core::OperatorTable::instance().set(
             uri,
             {.pure = def.traits.pure, .elementwise = def.traits.elementwise});
+        if (def.semantics) {
+            // After the traits, which the declaration is checked against. A rejected
+            // declaration is a defect of this module: say so with the module's name.
+            core::sem::OperatorSemantics semantics = *def.semantics;
+            if (semantics.key.name == core::kEmptySym) {
+                semantics.key =
+                    core::sem::OperatorKey::of(uri, semantics.key.major, semantics.key.minor);
+            }
+            if (def.index) {
+                semantics.indexing = indexingFrom(def.index);
+            }
+            try {
+                camel::core::OperatorTable::instance().declareSemantics(uri, std::move(semantics));
+            } catch (const std::invalid_argument &e) {
+                throw std::logic_error("module " + std::string(protocol) + ": " + e.what());
+            }
+        }
         if (def.vjp) {
             camel::core::DerivativeRegistry::instance().setRule(uri, def.vjp);
         }

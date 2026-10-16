@@ -21,18 +21,77 @@ func main(): int sync {
 
 ## API
 
+NVRTC always receives `--fmad=false`, `--prec-div=true`, `--prec-sqrt=true`
+and `--ftz=false`. The in-process module cache compares the source and all compiler
+options, including the target architecture; device/context and NVRTC library are
+fixed for each cache owner's lifetime. Benchmark reports expose `compile_options`.
+These defaults do not grant numerical relaxation permissions. Explicit FMA
+operations are independent of the flag that disables implicit contraction.
+
+Tiles retains the core graph's lexical `@numeric` permission byte per lowered
+node, exposes it as `numeric_permissions` in `inspect`, and includes it in source
+cache identity. It emits explicit f32 FMA for an elementwise multiply/add pair
+only when both operations grant `contract` and the product is private to that
+launch. Broadcasting is preserved. Returned/shared products retain their rounding
+point, and a caller's grant never widens an unannotated callee's permissions.
+The other permission bits are retained but do not yet select relaxed algorithms;
+f64 scalar contraction is also not implemented. NVRTC implicit contraction stays
+disabled. Matmul's normative increasing-k FMA chain needs no relaxation grant.
+
+The benchmark's existing numerical gate compares against unfused execution with
+a tolerance. Contraction can legitimately exceed that tolerance for cancellation
+cases; such a benchmark still refuses to report a speedup. A reference for each
+selected relaxed algorithm is needed before relaxing this gate. `run` and
+`run_device` execute the granted contraction independently of that benchmark gate.
+
+`inspect` also lists `operator_contracts`: stable operator keys and their numeric
+classification, or an explicit undeclared/opaque dependency for a known lowering
+whose core declaration is not available yet. Compilation supports semantic major
+version 1; incompatible versions are refused. Plans retain the core's immutable,
+process-lifetime declaration record as a revision token (not a GC pointer).
+Validation before generation/execution rebinds keys and rejects replaced records,
+including same-version replacements and declarations newly added to opaque
+operators. The source cache includes both stable keys and these process-local
+revision tokens. Tokens are never persisted or presented as portable cache keys.
+
+Tensor lowering now retains the core's owned index instances specialized from the
+same operand types and constants used for shape inference. `inspect` lists their
+result nodes in `indexed_nodes`. Instances are structurally validated against the
+captured declaration before scheduling. The parallel maximum implementation also
+requires a compatible f32 maximum law and the core's regroup, permute and block
+identity freedoms. Missing declarations choose the ordered implementation.
+Transpose, permutation and slice now derive their physical offset and strides
+from the core access map via `rowMajorView`; their duplicate index inference has
+been removed. The domain must write output coordinates directly and read an
+unconditional affine source. Empty domains retain zero physical strides without
+evaluating unused addresses. CUDA still prints these physical maps; other
+operators and graph facts have not yet migrated to generic domain-driven lowering.
+
+FMA selection additionally requires the core declaration of correctly rounded
+f32 arithmetic sensitive to contraction; an opaque declaration grants no such
+optimization capability.
+
+A separate process-local source-template LRU looks up the exact lowered plan
+before printing CUDA. Runtime scalar/tensor contents and device owners are excluded;
+graph literals, shapes, indexing and launch choices are included. Storage planning
+and validation run on every call. It retains at most 32 entries and 16 MiB of
+accounted entry payload (excluding allocator overhead), with synchronized access.
+This is not a persistent semantic fingerprint or a cache of graph compilation.
+
 - `run_device<fn>(inputs)` executes the same graph and returns `Device<Tensor<...>>` or `Device<float>`
   leaves in the result's original tuple/struct structure. Outputs retain their
   allocations instead of downloading; feed them directly into subsequent graph
   calls and use `download` only when host values are needed. Returned inputs and
   repeated leaves share native ownership. Completion is synchronous. Scalar leaves
   retain f64 storage, including mixed loss/gradient results. Device scalar inputs
-  are runtime values; ordinary host scalar inputs are specialized constants.
+  and ordinary host `float` inputs are runtime values with exact f64 payloads.
 - `run<fn>(inputs)` specializes a function graph for actual input shapes, compiles
   CUDA with NVRTC, executes on the GPU, and returns host `Tensor<f32>` or `float` leaves
   in the function's original tuple/struct structure. Nested nonempty tuples and
-  structs of these values are supported as parameters and results. Scalar input
-  values are specialized constants at this stage. Pass the single
+  structs of these values are supported as parameters and results. Host `float`
+  arguments and captured floats are uploaded as runtime inputs, so changing their
+  values does not change generated code. Graph DATA literals remain constants;
+  integer attributes and static branch conditions still specialize the graph. Pass the single
   parameter directly for a unary function, or a tuple for multiple parameters.
 - `source<fn>(inputs)` returns generated CUDA without initializing CUDA or
   executing the function body. It performs the same graph validation as `run`.
@@ -95,8 +154,8 @@ generated-source cache cannot substitute the other arm's implementation.
 The compiler snapshots inputs into an owned IR, retaining no Camel GC pointers
 across CUDA work. Shape inference reuses the tensor operation registry.
 Intermediates remain on the device. Single-use indexed scalar chains
-are fused into groups of at most 64 operations. Shared results and reductions
-retain materialization boundaries. Each fused node keeps an f32 rounding point;
+are fused into groups of at most 64 operations. Shared results retain materialization
+boundaries; axis sum/mean may absorb their single-use producers. Each fused node keeps an f32 rounding point;
 the scheduler does not reassociate expressions or reorder reductions. Allocation
 slots are reused only after their last reader on the ordered stream has finished;
 a kernel cannot overwrite storage it reads. Inputs start live at upload time.
@@ -107,8 +166,8 @@ uses the normal typed write barriers; no GC pointers survive in the CUDA cache.
 Plan validation checks topology, shapes, stage boundaries, launch dimensions,
 storage capacities and nonoverlapping lifetimes. Matmul uses masked 16x16 shared-memory tiles and explicit
 f32 FMA. Last-axis maximum uses a block-parallel implementation for widths of at
-least 128, with original-index tie breaking. It preserves the first element's
-NaN and signed-zero ties according to the serial tensor operation. Other axis
+least 128. Extrema propagate any NaN to canonical f32 `0x7fc00000` and order
+negative zero below positive zero, matching the CPU numeric contract. Other axis
 reductions are serial per output, with f64 accumulation for sum/mean.
 There is no fast-math mode; GPU transcendental results need not be bitwise equal
 to CPU results. Floating-point agreement is tested with tolerances.
@@ -184,13 +243,65 @@ CUDA execution, including arithmetic overflow. Empty domains do not dereference
 addresses. Transpose, permutation, slice and reshape can fuse with each other
 and with elementwise operations across different domains. Generated loads
 compose each edge's coordinates, including broadcasting, while preserving f32
-rounding points. Shared results and non-scalar operations remain materialization
-boundaries; there is no storage aliasing. This representation
+rounding points. Shared results remain materialization boundaries; supported
+axis reductions may consume mapped producers directly. There is no storage aliasing. This representation
 separates logical indexing from thread placement and is a foundation for later
 map composition and view elimination, not the complete indexed-domain design.
 
-First-class index domains, masks, layouts, schedule/resource graphs, loop and
-branch lowering, parallel reductions, cross-reduction fusion, asynchronous memory planning,
+Physical matrix tile loads use structured buffer accesses: an index expression
+and a Boolean validity mask travel together through coordinate substitution.
+Host evaluation short-circuits masks and skips invalid addresses; CUDA lowering
+prints conditional loads with exact fallback bits. The host evaluator is useful
+for checking mappings but is not a symbolic bounds proof. Kernel loops, stores,
+barriers still need migration to a complete structured kernel IR.
+
+Elementwise f32 and scalar f64 arithmetic now use immutable, typed `ScalarExpr`
+trees. Conversions and FMA are explicit operations; basic CUDA arithmetic uses
+round-to-nearest intrinsics so each retained node preserves its rounding point.
+The host evaluator preserves intermediate IEEE bit patterns and checks the host
+rounding mode. It covers arithmetic bodies, not complete kernels or graph faults:
+scalar division's zero check remains in the surrounding kernel control flow.
+A native GPU differential check compares 5,120 f32/f64 arithmetic results
+against this evaluator, including random bit patterns, signed zeros, subnormals,
+infinities, NaNs and explicit casts. Extrema compare canonical NaN bits; other
+arithmetic compares NaN classification because its payload is unspecified.
+Host transcendental results are not a proof of CUDA's declared ulp bounds.
+The selected FMA still requires the original nodes' permissions and operator
+contracts; constructing a physical FMA expression does not grant permission.
+
+Single-use pointwise and index-map producers can fuse into axis sum/mean. Each
+output thread computes its producer values in f32 and folds them in increasing
+axis order with the existing f64 accumulator, then rounds the result to f32.
+This removes producer buffers without granting reassociation or contraction.
+Same-shape pointwise consumers can also join the reduction stage: its f32 result
+rounding remains explicit before the epilogue runs. An epilogue group contains
+one reduction; shape-changing consumers and multiple reductions remain separate.
+The ordered reduction uses 32-thread blocks; expensive math is kept in a separate
+pointwise stage when fewer than 2048 output rows exist, to avoid serializing it into
+too few lanes. Shared results and observable producer outputs remain boundaries.
+`reduction_benchmark.cml` measures three shapes and two affine epilogues against the unfused CUDA schedule;
+this heuristic is not an autotuner and does not guarantee every shape improves.
+
+Rank-two row-local DAGs can now share intermediate values across multiple reductions
+inside one CUDA block. This covers softmax and small layernorm expressions, including
+row/column broadcasts and multiply-used intermediates. A structured row plan owns
+typed arithmetic stages, core reduction laws and inclusive shared-memory lifetimes;
+the launch validator reconstructs and checks that plan before execution.
+Maximum uses its declared exact reduction freedom. Sum/mean retain the f64
+accumulator: a runtime exponent-range proof allows a parallel tree only when every
+addition is exact in f64. Wide ranges and nonfinite inputs execute the canonical
+ascending chain instead. This grants no extra numerical permission.
+
+The initial row scheduler supports one full-graph output, 2–2048 columns, at most
+64 stages and 48 KiB of static shared memory. It selects row fusion only when the
+sum of additive reduction widths is at most 1024: larger strict reductions can
+serialize heavily when cancellation defeats the exactness proof. Other graphs use
+the existing stages. This is a measured heuristic, not an autotuner. Row programs
+are tested with signed zeros, subnormals, nonfinite values, cancellation and random
+finite bit patterns on NodeVM, FastVM and JIT (`gpu/tiles_rows.plan.toml`).
+
+First-class public index domains, masks, layouts, schedule/resource graphs, loop and
+branch lowering, general region fusion, asynchronous memory planning,
 asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.

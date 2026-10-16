@@ -40,6 +40,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
+#include "camel/runtime/loop.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -67,6 +68,11 @@ namespace {
 
 // Why a macro call is not evaluated when it nests deeper than the limit of the evaluator
 // (camel/execute/limits.h), with the limit and how to change it.
+/// The rounds one loop may run while std::macro evaluates it ahead of time: a loop that would
+/// not end makes the compilation fail instead of hang (design of loops, Q9; the bound is a
+/// question to the language author, this is the narrow reading meanwhile).
+constexpr size_t kMaxMacroLoopRounds = 1'000'000;
+
 std::string tooManyNestedCalls(size_t limit, std::string_view graphName) {
     return std::format(
         "the evaluation needs more than {} nested calls (at '{}'). The limit is set with {} <n> "
@@ -707,6 +713,90 @@ slot_t MacroEvaluator::executeFunction(
     }
 }
 
+slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t node) {
+    const camel::runtime::LoopView loop(*graph, node);
+    const size_t k = loop.stateCount();
+    // The state lives in a tuple held by a root: the condition and the body run safepoints.
+    std::vector<Type *> stateTypes;
+    for (size_t j = 0; j < k; ++j) {
+        stateTypes.push_back(loop.stateType(j));
+    }
+    auto *stateTupleType = TupleType::create(stateTypes);
+    mm::RootHandle state(
+        mm::autoSpace(),
+        ::Tuple::create(k, mm::autoSpace()),
+        stateTupleType,
+        "MacroEvaluator.loop");
+    for (size_t j = 0; j < k; ++j) {
+        state.getAs<::Tuple>()->set(
+            j,
+            frame->get<slot_t>(dataIndexOf(graph, loop.initialState(j))),
+            stateTupleType);
+    }
+    const auto captures = loop.captures();
+    const auto run      = [&](GCGraph *callee, std::optional<slot_t> element) {
+        auto *funcObj = ::Function::create(callee, ensureMacroClosureType(callee), mm::autoSpace());
+        return executeFunction(
+            funcObj,
+            [&](Frame *calleeFrame, GCGraph *) {
+                const auto norm = callee->normPorts();
+                size_t port     = 0;
+                if (element) {
+                    calleeFrame->set(callee->node(norm[port++])->dataIndex, *element);
+                }
+                for (size_t j = 0; j < k; ++j) {
+                    calleeFrame->set(
+                        callee->node(norm[port++])->dataIndex,
+                        state.getAs<::Tuple>()->get<slot_t>(j));
+                }
+                const auto with = callee->withPorts();
+                for (size_t c = 0; c < captures.size(); ++c) {
+                    calleeFrame->set(
+                        callee->node(with[c])->dataIndex,
+                        frame->get<slot_t>(dataIndexOf(graph, captures[c])));
+                }
+            },
+            false);
+    };
+    const auto iterable = loop.iterable();
+    for (size_t round = 0;; ++round) {
+        if (round >= kMaxMacroLoopRounds) {
+            throw MacroExecutionError(
+                std::format(
+                    "the loop in '{}' runs more than {} rounds ahead of time",
+                    graph->name(),
+                    kMaxMacroLoopRounds));
+        }
+        mm::safepoint("macro loop round");
+        if (loop.condGraph() && !fromSlot<Bool>(run(loop.condGraph(), std::nullopt))) {
+            break;
+        }
+        std::optional<slot_t> element;
+        if (iterable) {
+            auto *array = frame->get<::Array *>(dataIndexOf(graph, *iterable));
+            if (round >= array->size()) {
+                break;
+            }
+            element = array->get<slot_t>(round);
+        }
+        const slot_t next = run(loop.bodyGraph(), element);
+        if (k == 1) {
+            state.getAs<::Tuple>()->set(0, next, stateTupleType);
+        } else {
+            auto *tuple = fromSlot<::Tuple *>(next);
+            for (size_t j = 0; j < k; ++j) {
+                state.getAs<::Tuple>()->set(j, tuple->get<slot_t>(j), stateTupleType);
+            }
+        }
+    }
+    // The value of the loop: the state, or the tuple of its values (a new object: the one the
+    // loop kept is the evaluator's).
+    if (k == 1) {
+        return state.getAs<::Tuple>()->get<slot_t>(0);
+    }
+    return toSlot<Object *>(state.getAs<::Tuple>()->clone(mm::autoSpace(), stateTupleType, false));
+}
+
 slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     ASSERT(runtimeGraph != nullptr, "Macro runtime graph execution requires a runtime graph.");
     if (recursionDepth_ > maxDepth_) {
@@ -919,6 +1009,10 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             slot_t result = (*op)(withView, normView, *context_);
             frame->set(node->dataIndex, result);
         } break;
+
+        case GCNodeKind::Loop:
+            frame->set(node->dataIndex, executeLoop(frame, runtimeGraph, runtimeNodeIndex));
+            break;
 
         case GCNodeKind::Data:
         case GCNodeKind::Port:

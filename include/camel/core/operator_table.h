@@ -28,6 +28,9 @@
  *   traits         what the operator's module declared about it (OperatorTraits)
  *   resolver       its type rule, re-run by passes that change what is known about arguments
  *   type folder    the value its result has whenever the argument types fix it
+ *   semantics      the versioned record of what it computes (camel/core/operator_semantics.h):
+ *                  its stable key "protocol:name@major.minor", its numeric semantics and
+ *                  faults (docs/design/op-semantics, section 4)
  *
  * Generic graph passes (constant folding, CSE, DCE) must not know about any particular
  * module, yet they need to know whether an operator may be evaluated early, merged or
@@ -56,12 +59,15 @@
  * queries by OperId take no lock (the parallel scheduler asks them while it runs graphs);
  * traits are one atomic byte per entry, so a declaration racing a query yields either the old
  * or the new traits, never a mixture. The lookups by URI text and the resolver/folder fields
- * are guarded by a reader/writer lock; they are compile-time paths.
+ * are guarded by a reader/writer lock; they are compile-time paths. A semantics record is
+ * published through an atomic pointer once it has passed its checks and is never changed or
+ * freed afterwards (a replacement publishes a new record), so semantics() is lock-free too.
  */
 
 #pragma once
 
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/resolver.h"
@@ -79,6 +85,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace camel::core {
 
@@ -148,6 +155,14 @@ struct OperatorTraits {
     /// While it runs, the operator calls function values it received as arguments (the
     /// higher-order operators and `attempt`), so what it does depends on those functions.
     bool callsGraphs = false;
+    /// The operator reads the graphs of the function values it receives as arguments (it
+    /// compiles, exports or differentiates them) instead of only calling them. Such an operator
+    /// is given the program's own graphs, with their structure (a LOOP node: docs/design/
+    /// op-semantics 11.4), also on a back end that runs a private, lowered copy of the program:
+    /// lowerLoopsToTailRecursion (camel/runtime/loop_lowering.h) passes each of its operands of
+    /// function type through `:graph/original`, which takes a function value of the copy back
+    /// to the program's graph it was copied from (GCGraph::originalGraph).
+    bool inspectsGraphs = false;
 };
 
 /**
@@ -217,6 +232,10 @@ class OperatorTable {
     bool isPure(OperId id) const;
     bool isPure(std::string_view uri) const;
 
+    /// True when the operator reads the graphs of the function values it receives
+    /// (OperatorTraits::inspectsGraphs). Lock-free.
+    bool inspectsGraphs(OperId id) const { return (traitBits(id) & kInspectsGraphs) != 0; }
+
     /// True when running the operator is an effect visible outside the program's variables:
     /// it is neither pure nor state-only. True for an undeclared operator.
     bool hasExternalEffect(OperId id) const;
@@ -261,6 +280,79 @@ class OperatorTable {
     const TypeFolder *typeFolder(OperId id) const;
     const TypeFolder *typeFolder(std::string_view uri) const;
 
+    // ---- Semantics (docs/design/op-semantics, section 4) ------------------------------------
+
+    /**
+     * Declares (or replaces) the semantics of the operator `uri`, at module load time. The
+     * record is checked before it is published (design section 4.4); a record that fails is
+     * rejected with std::invalid_argument naming the operator and the reason, and the table
+     * is left as it was. The checks:
+     *
+     *   1. `semantics.key` names `uri`; a replacement does not lower the version.
+     *   2. It does not contradict the traits: an operator declared never to fault declares no
+     *      fault.
+     *   3. The numeric part is consistent: Bounded has a positive ulpBound and is sensitive to
+     *      approx_math; Exact and CorrectlyRounded have no ulpBound; Exact is sensitive at most
+     *      to the finite_math assumptions (it has no rounding a permission could change);
+     *      Opaque is sensitive to everything; CorrectlyRounded and Bounded name the type
+     *      (Float32 or Float64) their steps are rounded in.
+     *   4. Every reduction law is consistent in itself (sem::checkLaw): its constants fit the
+     *      accumulator, a float add or multiply does not claim exact associativity, a law that
+     *      starts from its first contribution faults on an empty domain.
+     *   5. The resources are consistent in themselves (sem::checkResources) and with the
+     *      traits: a pure operator touches none; any other touches, allocates or affects
+     *      something; an external effect only where the traits allow one (not pure, not
+     *      state-only), while an operator the traits count as external may declare none (a
+     *      refinement: an assignment writes the program's own cell). Checked against the
+     *      traits declared so far: declare them first.
+     *   6. A definition names a library module and a function, and binds every parameter to
+     *      an operand (the rest is checked when the library is compiled).
+     *
+     * The instances an instantiation function returns cannot be checked here (it is code);
+     * sem::instantiate validates each one structurally, and the property tests compare the
+     * declarations with the kernels (docs/design/op-semantics, section 12).
+     *
+     * Every declaration, new or replacing, increments declarationEpoch().
+     */
+    void declareSemantics(std::string_view uri, sem::OperatorSemantics semantics);
+
+    /// Declares the resources of the operator `uri` (docs/design/op-semantics, section 8): its
+    /// semantics record gets them, a record of its own (`uri@1.0`, nothing else declared) when
+    /// it has none, otherwise the same record one minor version up. Checked as
+    /// declareSemantics checks (check 5); throws std::invalid_argument when rejected.
+    void declareResources(std::string_view uri, sem::ResourceSpec resources);
+
+    /// Declares the definition of the operator `uri` (docs/design/op-semantics, section 9): a
+    /// function of a library module written in Camel that is its normative definition. Its
+    /// semantics record gets it, as declareResources gives resources (a record of its own, or
+    /// the existing one a minor version up: a definition is a fact added). Checked as
+    /// declareSemantics checks (check 6); the definition itself is compiled and checked when it
+    /// is first asked for (camel/runtime/definitions.h).
+    void declareDefinition(std::string_view uri, sem::Definition definition);
+
+    /// declareResources for `protocol:name`, one `{name, resources}` each (a module's load).
+    void declareResources(
+        std::string_view protocol,
+        std::initializer_list<std::pair<std::string_view, sem::ResourceSpec>> operators);
+
+    /// The declared semantics, or nullptr when nobody declared any. Lock-free; the record
+    /// stays valid until the process exits.
+    const sem::OperatorSemantics *semantics(OperId id) const {
+        return entries_[id].semantics.load(std::memory_order_acquire);
+    }
+
+    /// The stable key of an operator that has semantics, nullopt otherwise.
+    std::optional<sem::OperatorKey> key(OperId id) const;
+
+    /// The process-local id of a stable key read back from outside the process (a cache):
+    /// nullopt when the operator is unknown, has no semantics, or its version cannot satisfy
+    /// `key` (another major version, or a lower minor version than the one recorded).
+    std::optional<OperId> bind(const sem::OperatorKey &key) const;
+
+    /// Incremented whenever a semantics declaration is added or replaced (module load). A fact
+    /// derived from declarations records it and is stale when it changed.
+    uint64_t declarationEpoch() const { return epoch_.load(std::memory_order_acquire); }
+
   private:
     OperatorTable();
 
@@ -268,12 +360,13 @@ class OperatorTable {
     // declared it". kNoFault is stored inverted so that an all-zero byte is the conservative
     // reading of every trait.
     enum : uint8_t {
-        kDeclared    = 1 << 0,
-        kPure        = 1 << 1,
-        kElementwise = 1 << 2,
-        kStateOnly   = 1 << 3,
-        kNoFault     = 1 << 4,
-        kCallsGraphs = 1 << 5,
+        kDeclared       = 1 << 0,
+        kPure           = 1 << 1,
+        kElementwise    = 1 << 2,
+        kStateOnly      = 1 << 3,
+        kNoFault        = 1 << 4,
+        kCallsGraphs    = 1 << 5,
+        kInspectsGraphs = 1 << 6,
     };
 
     // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isMarked).
@@ -293,6 +386,8 @@ class OperatorTable {
         std::unique_ptr<TypeFolder> folder;
         /// The in-place form (setInPlaceForm); kEmptySym when there is none.
         SymId inPlace = kEmptySym;
+        /// The published semantics record (owned by declarations_), or nullptr.
+        std::atomic<const sem::OperatorSemantics *> semantics{nullptr};
     };
 
     static uint8_t encode(OperatorTraits traits);
@@ -307,6 +402,10 @@ class OperatorTable {
     mutable std::shared_mutex mutex_;
     std::unordered_map<SymId, OperId> ids_; // URI symbol -> entry index
     camel::utils::AppendOnlyTable<Entry> entries_;
+    /// Every semantics record ever published, replaced ones included (a reader may still hold
+    /// one). Guarded by mutex_.
+    std::vector<std::unique_ptr<const sem::OperatorSemantics>> declarations_;
+    std::atomic<uint64_t> epoch_{0};
 };
 
 } // namespace camel::core

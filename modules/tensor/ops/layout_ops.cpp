@@ -28,6 +28,7 @@
 
 #include "../interop.h"
 #include "../kernels/layout.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/type/composite/array.h"
 #include "catalog.h"
 #include "support.h"
@@ -39,6 +40,8 @@ namespace camel::tensor::ops {
 
 using namespace camel::core::type;
 namespace k = camel::tensor::kernels;
+using camel::core::error::RuntimeDiag;
+using camel::core::error::throwRuntimeFault;
 
 namespace {
 
@@ -275,15 +278,28 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
 
 // slice(t, axis, start, end, step = 1)
 slot_t sliceKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    // Bounds outside the axis are a located fault, as for an array's slice (design principles
+    // 2.10); checked before the kernel so the diagnostic is SliceOutOfRange, not a kernel error.
+    // A malformed axis or step is left to the kernel.
+    const TensorObject *input = tensorArg(norm, 0);
+    const int64_t axisArg     = intArg(norm, 1);
+    const int64_t start = intArg(norm, 2), end = intArg(norm, 3);
+    const auto rank     = static_cast<int64_t>(input->rank());
+    const int64_t axis  = axisArg < 0 ? axisArg + rank : axisArg;
+    if (axis >= 0 && axis < rank) {
+        const int64_t extent = input->dim(static_cast<size_t>(axis));
+        if (!k::normalizeSliceBounds(extent, start, end)) {
+            throwRuntimeFault(
+                RuntimeDiag::SliceOutOfRange,
+                start,
+                end,
+                std::format("axis {} of a tensor", axis),
+                extent);
+        }
+    }
     return runKernel("slice", [&] {
         const int64_t step = hasArg(norm, 4) ? intArg(norm, 4) : 1;
-        return wrap(k::slice(
-            tensorArg(norm, 0),
-            intArg(norm, 1),
-            intArg(norm, 2),
-            intArg(norm, 3),
-            step,
-            resultAllocator()));
+        return wrap(k::slice(input, axisArg, start, end, step, resultAllocator()));
     });
 }
 
@@ -305,13 +321,10 @@ std::optional<Type *> sliceInfer(const InferContext &ctx) {
         return tensorOf(in);
     }
     // Extent and bounds are known at compile time: an interval that leaves the axis is an
-    // error here (design principles 2.7). With an unknown extent or bounds the kernel clamps,
-    // as NumPy slicing and ONNX Slice do.
-    const auto inside = [ext](int64_t v) {
-        const int64_t n = v < 0 ? v + ext : v;
-        return n >= 0 && n <= ext;
-    };
-    if (!inside(*start) || !inside(*end)) {
+    // error here (design principles 2.7). With an unknown extent or bounds the operator checks
+    // at run time and faults with SliceOutOfRange (2.10).
+    const auto range = k::normalizeSliceBounds(ext, *start, *end);
+    if (!range) {
         throw ShapeError(
             std::format(
                 "slice bounds {}..{} are outside axis {} of extent {}",
@@ -320,9 +333,8 @@ std::optional<Type *> sliceInfer(const InferContext &ctx) {
                 a,
                 ext));
     }
-    auto clamp      = [ext](int64_t v) { return std::clamp<int64_t>(v < 0 ? v + ext : v, 0, ext); };
-    const int64_t s = clamp(*start), e = clamp(*end);
-    (*in.shape)[a] = e > s ? (e - s + *step - 1) / *step : 0;
+    const int64_t s = range->start, e = range->end;
+    (*in.shape)[a]  = e > s ? (e - s + *step - 1) / *step : 0;
     return tensorOf(in);
 }
 

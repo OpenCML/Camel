@@ -56,7 +56,20 @@ Shape concatShape(std::span<const std::span<const int64_t>> inputs, int64_t axis
 TensorObject *
 concat(std::span<const TensorObject *const> inputs, int64_t axis, mm::IAllocator &allocator);
 
-/// Slice [start, end) with `step` along one axis. Bounds clamp like Python slices.
+/// The bounds of a slice along an axis of `extent` elements, normalized: a negative bound
+/// counts from the end of the axis. A bound still outside [0, extent] after that is out of
+/// range: nullopt, and the operator faults (design principles 2.10: a `slice` out of bounds at
+/// run time is a fault, as an index out of bounds is). An end before the start is the empty
+/// range, not a fault (2.11).
+struct SliceRange {
+    int64_t start;
+    int64_t end;
+};
+std::optional<SliceRange> normalizeSliceBounds(int64_t extent, int64_t start, int64_t end);
+
+/// Slice [start, end) with `step` along one axis. A bound out of range throws
+/// std::out_of_range (normalizeSliceBounds); the operator checks first and faults with
+/// SliceOutOfRange.
 TensorObject *slice(
     const TensorObject *input, int64_t axis, int64_t start, int64_t end, int64_t step,
     mm::IAllocator &allocator);

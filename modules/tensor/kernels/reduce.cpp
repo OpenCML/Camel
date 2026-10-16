@@ -28,14 +28,15 @@
 #include "reduce.h"
 
 #include "elementwise.h"
+#include "minmax.h"
 #include "parallel.h"
-#include "vmath.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace camel::tensor::kernels {
 
@@ -161,22 +162,32 @@ TensorObject *reduceAxis(
                 break;
             }
             case ReduceOp::Max:
-            case ReduceOp::Min:
+            case ReduceOp::Min: {
+                // IEEE 754-2019 maximum / minimum folded from the identity (minmax.h). The
+                // operation is exactly associative and commutative, so this order is one of
+                // many that give the same bits; a NaN anywhere gives the canonical NaN.
+                T best = op == ReduceOp::Max ? maximumIdentity<T>() : minimumIdentity<T>();
+                for (int64_t k = 0; k < split.extent; ++k) {
+                    const T v = src[base + k * stride];
+                    best      = op == ReduceOp::Max ? maximum(best, v) : minimum(best, v);
+                }
+                out->dataAs<T>()[lane] = best;
+                break;
+            }
             case ReduceOp::ArgMax: {
+                // The index of the first element greater than every earlier one. Unchanged by
+                // the maximum rule above: which index a NaN or a tie of -0 and +0 yields is
+                // not settled (docs/design/op-semantics, phase 1 questions).
                 T best          = src[base];
                 int64_t bestIdx = 0;
                 for (int64_t k = 1; k < split.extent; ++k) {
                     const T v = src[base + k * stride];
-                    if (op == ReduceOp::Min ? v < best : v > best) {
+                    if (v > best) {
                         best    = v;
                         bestIdx = k;
                     }
                 }
-                if (op == ReduceOp::ArgMax) {
-                    out->dataAs<int64_t>()[lane] = bestIdx;
-                } else {
-                    out->dataAs<T>()[lane] = best;
-                }
+                out->dataAs<int64_t>()[lane] = bestIdx;
                 break;
             }
             }
@@ -200,6 +211,25 @@ namespace {
 
 enum class SoftmaxKind { Softmax, LogSoftmax };
 
+/**
+ * softmax and log_softmax along `axis`.
+ *
+ * softmax is computed exactly as its definition (design principles 2.13: the definition is
+ * canonical, a fused kernel must agree with it bit for bit):
+ *
+ *     m = max(x, axis, keepdims)          IEEE maximum (minmax.h)
+ *     e = exp(x - m)                      f32 subtraction, then the exp operator's own loop
+ *     s = sum(e, axis, keepdims)          f64 accumulation from +0 in ascending order, one
+ *                                         rounding to f32 at the end (sum_axis)
+ *     softmax = e / s                     f32 division (not a multiplication by 1 / s)
+ *
+ * log_softmax shares the first three steps and returns (x - m) - log(s): s rounded to f32 as
+ * above, its logarithm by the loop of the log operator, one f32 subtraction (its definition in
+ * stdlib/tensor_definitions.cml, d - log(sum(exp(d), axis, keepdims)) with d = x - m).
+ *
+ * The work is three passes so the middle one can call the vectorized exp loop on the whole
+ * tensor: per lane, the maximum and x - m; exp in place; per lane, the sum and the result.
+ */
 TensorObject *softmaxImpl(
     SoftmaxKind kind, const TensorObject *input, int64_t axisArg, mm::IAllocator &allocator) {
     const size_t axis     = normalizeAxis(axisArg, input->rank());
@@ -208,33 +238,44 @@ TensorObject *softmaxImpl(
     TensorObject *out     = TensorObject::create(TypeCode::Float32, input->shapeSpan(), allocator);
     const float *src      = x->dataAs<float>();
     float *dst            = out->dataAs<float>();
-    forEachLane(split, [&](int64_t, int64_t base) {
-        const int64_t stride = split.inner;
-        float maxValue       = -std::numeric_limits<float>::infinity();
+    const int64_t stride  = split.inner;
+
+    // Pass 1: m per lane (kept for log_softmax) and dst = x - m.
+    std::vector<float> laneMax(static_cast<size_t>(split.outer * split.inner));
+    forEachLane(split, [&](int64_t lane, int64_t base) {
+        float m = maximumIdentity<float>();
         for (int64_t k = 0; k < split.extent; ++k) {
-            maxValue = std::max(maxValue, src[base + k * stride]);
+            m = maximum(m, src[base + k * stride]);
         }
-        // exp is evaluated once per element into dst. It runs in its own reduction-free loop,
-        // so the vectorizable vmath::exp is actually vectorized; the sum is accumulated in
-        // double separately.
+        laneMax[static_cast<size_t>(lane)] = m;
         for (int64_t k = 0; k < split.extent; ++k) {
             const int64_t idx = base + k * stride;
-            dst[idx]          = vmath::exp(src[idx] - maxValue);
+            dst[idx]          = src[idx] - m;
         }
+    });
+
+    // Pass 2: e = exp(x - m), in place, by the loop of the exp operator.
+    unaryF32(UnaryOp::Exp, dst, dst, static_cast<int64_t>(out->numel()));
+
+    // Pass 3: s and the result.
+    forEachLane(split, [&](int64_t lane, int64_t base) {
         double sum = 0.0;
         for (int64_t k = 0; k < split.extent; ++k) {
-            sum += dst[base + k * stride];
+            sum += static_cast<double>(dst[base + k * stride]);
         }
         if (kind == SoftmaxKind::Softmax) {
-            const float inv = static_cast<float>(1.0 / sum);
+            const auto s = static_cast<float>(sum);
             for (int64_t k = 0; k < split.extent; ++k) {
-                dst[base + k * stride] *= inv;
+                dst[base + k * stride] /= s;
             }
         } else {
-            const float logSum = static_cast<float>(std::log(sum));
+            const float m = laneMax[static_cast<size_t>(lane)];
+            const float s = static_cast<float>(sum);
+            float logSum  = 0.0f;
+            unaryF32(UnaryOp::Log, &s, &logSum, 1);
             for (int64_t k = 0; k < split.extent; ++k) {
                 const int64_t idx = base + k * stride;
-                dst[idx]          = src[idx] - maxValue - logSum;
+                dst[idx]          = src[idx] - m - logSum;
             }
         }
     });

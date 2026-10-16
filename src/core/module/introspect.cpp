@@ -24,6 +24,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <format>
 #include <ostream>
 
 namespace camel::core::module {
@@ -55,6 +56,92 @@ std::string jsonString(std::string_view text) {
     return out;
 }
 
+/// A JSON list of strings, from a ", "-separated list (permissionsText).
+std::string jsonList(std::string_view commaSeparated) {
+    std::string out = "[";
+    size_t start    = 0;
+    while (start < commaSeparated.size()) {
+        size_t end = commaSeparated.find(", ", start);
+        end        = end == std::string_view::npos ? commaSeparated.size() : end;
+        out += (out.size() > 1 ? "," : "") + jsonString(commaSeparated.substr(start, end - start));
+        start = end + 2;
+    }
+    return out + "]";
+}
+
+/// The "semantics" member of an OPERATOR line (introspect.h).
+std::string semanticsJson(const sem::OperatorSemantics &s) {
+    const sem::NumericSemantics &n = s.numeric;
+    std::string out                = "{\"key\":" + jsonString(s.key.toString()) +
+                      ",\"numeric\":" + jsonString(sem::numericClassName(n.cls));
+    if (n.compute == type::TypeCode::Float32) {
+        out += ",\"compute\":\"f32\"";
+    } else if (n.compute == type::TypeCode::Float64) {
+        out += ",\"compute\":\"f64\"";
+    }
+    if (n.cls == sem::NumericClass::Bounded) {
+        out += std::format(",\"ulp\":{}", n.ulpBound);
+    }
+    out += ",\"sensitive_to\":" + jsonList(sem::permissionsText(n.sensitiveTo));
+    std::string departures;
+    for (const auto &[ieee, name] : {std::pair{n.specials.nans, "nans"},
+                                     std::pair{n.specials.infinities, "infinities"},
+                                     std::pair{n.specials.signedZeros, "signed_zeros"},
+                                     std::pair{n.specials.subnormals, "subnormals"}}) {
+        if (!ieee) {
+            departures += (departures.empty() ? "" : ", ") + std::string(name);
+        }
+    }
+    if (!departures.empty()) {
+        out += ",\"not_ieee\":" + jsonList(departures);
+    }
+    if (s.faults) {
+        std::string faults;
+        for (const sem::FaultSpec &f : *s.faults) {
+            faults += (faults.empty() ? "" : ", ") + std::string(sem::faultKindName(f.kind));
+        }
+        out += ",\"faults\":" + jsonList(faults);
+    }
+    if (s.indexing) {
+        out += ",\"indexing\":true";
+    }
+    if (!s.laws.empty()) {
+        std::string laws;
+        for (const sem::ReductionLaw &law : s.laws) {
+            laws += (laws.empty() ? "" : ", ") + law.name;
+        }
+        out += ",\"laws\":" + jsonList(laws);
+    }
+    if (s.resources) {
+        out += ",\"resources\":" + jsonString(sem::toString(*s.resources));
+    }
+    if (s.definition) {
+        // "library::function(norm 0, norm 1 = -1)": the function and how operands bind it.
+        std::string params;
+        for (const sem::DefinitionParam &p : s.definition->params) {
+            params += std::format(
+                "{}{} {}",
+                params.empty() ? "" : ", ",
+                p.kind == sem::DefinitionParam::Kind::Norm ? "norm" : "with",
+                p.operand);
+            if (p.fallback) {
+                params += " = " + std::visit(
+                                      [](const auto &v) {
+                                          if constexpr (std::is_same_v<std::decay_t<decltype(v)>, bool>) {
+                                              return std::string(v ? "true" : "false");
+                                          } else {
+                                              return std::format("{}", v);
+                                          }
+                                      },
+                                      *p.fallback);
+            }
+        }
+        out += ",\"definition\":" +
+               jsonString(std::format("{}::{}({})", s.definition->module, s.definition->function, params));
+    }
+    return out + ",\"algorithm\":" + jsonString(n.algorithm) + "}";
+}
+
 } // namespace
 
 std::vector<OperatorDescription> describeOperators(const Module &module) {
@@ -81,6 +168,9 @@ std::vector<OperatorDescription> describeOperators(const Module &module) {
                 auto *dynamic = dynamic_cast<type::DynamicFuncTypeResolver *>(resolver.get())) {
                 d.withCount = dynamic->withCount();
                 d.normCount = dynamic->normCount();
+            }
+            if (const auto id = traits.lookup(uri)) {
+                d.semantics = traits.semantics(*id);
             }
             if (const auto declared = traits.find(uri)) {
                 d.purity = declared->pure        ? OperatorPurity::Pure
@@ -119,7 +209,11 @@ void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {
                << ",\"name\":" << jsonString(d.name) << ",\"uri\":" << jsonString(d.uri)
                << ",\"with\":" << d.withCount << ",\"norm\":" << d.normCount
                << ",\"purity\":" << jsonString(to_string(d.purity))
-               << ",\"signature\":" << jsonString(d.signature) << "}\n";
+               << ",\"signature\":" << jsonString(d.signature);
+            if (d.semantics) {
+                os << ",\"semantics\":" << semanticsJson(*d.semantics);
+            }
+            os << "}\n";
         }
     }
 }

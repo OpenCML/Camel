@@ -15,13 +15,16 @@ import subprocess
 root = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
 parser.add_argument('--runs', type=int, default=3)
+parser.add_argument('--suite', choices=['default', 'rows'], default='default')
 parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--source-revision', help='Full commit ID for an exported source archive without .git')
 options = parser.parse_args()
 if not 1 <= options.runs <= 30:
     parser.error('--runs must be between 1 and 30')
 binary = root / 'out/latest/bin' / ('camel.exe' if os.name == 'nt' else 'camel')
-case = root / 'test/cases/modules/tiles/benchmark.cml'
+case = root / 'test/cases/modules/tiles' / ('row_benchmark.cml' if options.suite == 'rows' else 'benchmark.cml')
+workloads = (['softmax_128x257', 'softmax_1024x1024', 'layernorm_128x257', 'layernorm_1024x1024']
+             if options.suite == 'rows' else ['elementwise', 'softmax', 'matmul', 'maximum'])
 env = os.environ.copy()
 env['CAMEL_HOME'] = str(root / 'out/latest')
 env['PATH'] = str(binary.parent) + os.pathsep + env.get('PATH', '')
@@ -41,7 +44,7 @@ for run in range(options.runs):
     reports = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
     if len(reports) != 4:
         raise RuntimeError(f'expected four workloads, got {result.stdout!r}; {result.stderr}')
-    for workload, report in zip(['elementwise', 'softmax', 'matmul', 'maximum'], reports):
+    for workload, report in zip(workloads, reports):
         report.update(workload=workload, run=run, git_revision=revision,
                       revision_source='archive_argument' if options.source_revision else 'git',
                       tiles_source_sha256=fingerprint.hexdigest())

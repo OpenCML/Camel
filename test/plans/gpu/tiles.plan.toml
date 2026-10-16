@@ -4,6 +4,59 @@ tier = "gpu"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]
+name = "runtime_scalars"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/runtime_scalars.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: runtime scalar values", "std::fvm: runtime scalar values", "std::jit: runtime scalar values"]
+timeout_ms = 180000
+
+[[tests]]
+name = "ordered_reduction_fusion"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/reduction_fusion.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: fused reduction bytes", "std::fvm: fused reduction bytes", "std::jit: fused reduction bytes"]
+timeout_ms = 180000
+
+[[tests]]
+name = "matmul_rounding.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_rounding.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === "-1.4210854715202004e-14,1.0", "matmul must follow a continuous increasing-k FMA chain") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_rounding.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_rounding.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === "-1.4210854715202004e-14,1.0", "matmul must follow a continuous increasing-k FMA chain") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_rounding.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_rounding.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === "-1.4210854715202004e-14,1.0", "matmul must follow a continuous increasing-k FMA chain") }
+"""
+timeout_ms = 60000
+
+[[tests]]
 name = "max_special_values"
 kind = "behavior"
 tool = "python"
@@ -41,6 +94,7 @@ assert(records.length === 4, 'expected four benchmark workloads')
 for (const r of records) {
   assert(r.schema === 1 && r.repetitions === 21 && r.warmups === 5, 'unexpected measurement protocol')
   assert(r.device && r.driver_version > 0 && r.nvrtc_version, 'missing hardware/compiler provenance')
+  assert(JSON.stringify(r.compile_options) === JSON.stringify([r.target, '--std=c++14', '--fmad=false', '--prec-div=true', '--prec-sqrt=true', '--ftz=false']), 'unexpected numerical compiler policy')
   assert(r.correctness_before.mismatches === 0 && r.correctness_after.mismatches === 0, 'correctness gate failed')
   for (const name of ['optimized', 'unfused']) {
     const v = r[name]
@@ -860,5 +914,36 @@ tool = "python"
 case = "../../cases/modules/tiles/module_lease.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed"]
+expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed", "tiles resources: cross-thread drain, release and context restoration passed", "tiles precision: subnormals, rounding and explicit FMA bits passed", "tiles scalar device: 5120 typed host/CUDA results matched"]
 timeout_ms = 60000
+
+[[tests]]
+name = "extrema_canonical_bits"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/extrema_bits.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: canonical extrema", "std::fvm: canonical extrema", "std::jit: canonical extrema"]
+timeout_ms = 60000
+
+[[tests]]
+name = "numeric_permission_boundaries"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/numeric_permissions.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::fvm: numeric permission boundaries", "std::jit: numeric permission boundaries", "std::inline std::fvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
+timeout_ms = 180000
+
+[[tests]]
+name = "numeric_permissions_moving_gc"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/numeric_permissions.py"
+args = ["${case}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
+timeout_ms = 180000

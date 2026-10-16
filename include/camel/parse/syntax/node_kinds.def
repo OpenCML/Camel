@@ -28,9 +28,9 @@ CAMEL_NODE(ImportItem, Other)          // identDef ('as' identDef)?
 CAMEL_NODE(ExportDecl, Other)          // 'export' (dataDecl | typeDecl | bracedIdents)
 CAMEL_NODE(UsingNamespaceDecl, Other)  // 'using' 'namespace' identRef
 CAMEL_NODE(NamespaceDecl, Other)       // 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
-CAMEL_NODE(BlockStmt, Other)           // 'wait' stmtBlock
+CAMEL_NODE(BlockStmt, Other)           // 'wait' stmtBlock | funcAnno+ stmtBlock
 CAMEL_NODE(StmtBlock, Other)           // 'sync'? '{' stmtList? '}'
-CAMEL_NODE(FuncAnno, Other)            // '@' identRef angledValues?
+CAMEL_NODE(FuncAnno, Other)            // '@' identRef (angledValues | parentIdents)?
 CAMEL_NODE(FuncDecl, Other)            // funcAnno* ('with' angledParams)? 'export'? implMark? modifiers? 'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
 CAMEL_NODE(OperatorName, Other)        // IDENTIFIER (OPERATOR | '[' ']'): the name `operator`, read so only after 'func' (provisional notation)
 CAMEL_NODE(DataDecl, Other)            // ('let' | 'var') carrier (':' typeList)? '=' dataList
@@ -68,7 +68,8 @@ CAMEL_NODE(WaitExpr, Expr)             // 'wait' assignExpr
 CAMEL_NODE(IfExpr, Expr)               // 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 CAMEL_NODE(MatchExpr, Expr)            // 'match' identRef '{' matchCase+ '}'
 CAMEL_NODE(TryExpr, Expr)              // 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
-CAMEL_NODE(LoopExpr, Expr)             // 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
+CAMEL_NODE(LoopExpr, Expr)             // 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
+CAMEL_NODE(LoopState, Other)           // identDef '=' logicalOrExpr
 CAMEL_NODE(LoopFor, Other)             // 'for' identDef 'in' logicalOrExpr
 CAMEL_NODE(LoopWhile, Other)           // 'while' logicalOrExpr
 CAMEL_NODE(AssignExpr, Expr)           // logicalOrExpr (('=' | '+=' | ...) logicalOrExpr)?

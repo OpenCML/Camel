@@ -96,7 +96,7 @@ decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usin
                      | dataDecl | funcDecl | typeDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt
-blockStmt          : 'wait'? stmtBlock
+blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
 stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
@@ -110,7 +110,7 @@ usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
                      | typeDecl | dataDecl
-funcAnno           : '@' identRef angledValues?
+funcAnno           : '@' identRef (angledValues | parentIdents)?
 funcDecl           : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
                      'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
@@ -178,8 +178,8 @@ funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' 
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef identDef? | literal | '(' (dataList | identList)? ','? ')'
                      | '{' (pairedValues | identList)? ','? '}' | '_'
-loopExpr           : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
-loopState          : identDef | parentIdents
+loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
+loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
 catchClause        : 'catch' identDef ':' typeExpr stmtBlock
@@ -253,7 +253,6 @@ typeList           : typeExpr (',' typeExpr)*
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
 | `typeof e`、`T ? U`、`名字 of T` | `FeatureNotSupported` | 无 |
 | `keyof`、`enum` | 语法错误 | 无 |
-| `loop 状态 = 初值 (for x in xs)? (while 条件)? { 体 }` | `ConstructNotSupported`（语法与 AST 已有，图上的 `LOOP` 节点尚未实现；写法是暂定的） | 递归；`map`/`filter`/`reduce`/`foreach` |
 | 修饰符 `atomic`、`shared`、`inner`、`outer` | 无诊断；没有语义 | 不写 |
 
 此外有几处“能写出来但目前用不了”：联合类型 `A | B`（成员类型的值不能进入它）、带函数类型的声明 `let f: (x: int) => int = g`。

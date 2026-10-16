@@ -1,0 +1,37 @@
+// The resources the nodes of a program touch (docs/design/op-semantics, section 8): variable
+// cells through assignments, var parameters, captures and a recursion; an array sorted in
+// place; the generator, the file system and the console.
+import { exists } from fs
+import { seed, rand } from random
+import { sort } from algo
+
+/// Writes the cell it is given.
+func bump(var t: int): int sync {
+    t = t + 1
+    return t
+}
+
+/// A recursion through a var parameter: its footprint is a fixpoint.
+func countdown(var t: int, n: int): int sync {
+    t = t + n
+    return if n <= 0 then t else countdown(t, n - 1)
+}
+
+func main(): int sync {
+    var c = 0
+    var d = 10
+    c = c + 2
+    bump(c)
+    countdown(d, 3)
+    let inc = sync () => { c += 1 }
+    inc()
+    var xs = [3, 1, 2]
+    xs = xs->sort
+    seed(4)
+    println(rand() < 1.0)
+    println(exists("no/such/file"))
+    println(c)
+    println(d)
+    println(xs)
+    return 0
+}

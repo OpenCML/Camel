@@ -1,0 +1,4 @@
+name, uuid, utilization.gpu [%], utilization.memory [%], memory.used [MiB], memory.total [MiB], clocks.current.sm [MHz], clocks.current.memory [MHz], power.draw [W], temperature.gpu
+NVIDIA GeForce RTX 3090, GPU-e15188d4-f31d-3c62-dfe6-a89e2754a5ff, 100 %, 75 %, 2289 MiB, 24576 MiB, 1920 MHz, 9501 MHz, 336.71 W, 55
+pid, process_name, used_gpu_memory [MiB]
+266369, /opt/anaconda3/bin/python, 2266 MiB

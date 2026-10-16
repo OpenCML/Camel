@@ -97,6 +97,10 @@ class Builder {
     Value visitStmtBlock(syntax::cst::StmtBlock context);
     Value visitFuncData(syntax::cst::FuncData context);
     Value visitFuncAnno(syntax::cst::FuncAnno context);
+    /// The permissions of a `@numeric(...)` annotation; nullopt for a decorator (`@name`,
+    /// `@name<args>`). Any other annotation with names in parentheses, an unknown permission
+    /// and an empty list are reported (SemanticDiag::InvalidAnnotation) and grant nothing.
+    std::optional<uint8_t> numericAnnotationOf(syntax::cst::FuncAnno context);
     Value visitFuncDecl(syntax::cst::FuncDecl context);
     Value visitNamespaceDecl(syntax::cst::NamespaceDecl context);
     /// `topLevel`: a declaration of the module or of a namespace block, whose names take the

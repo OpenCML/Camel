@@ -42,6 +42,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::runtime {
@@ -115,6 +116,8 @@ class RuntimeGraphDraftSession {
         const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot);
 
     GCGraph *runtimeRoot() const { return runtimeRoot_; }
+    /// The context of the program the session rewrites.
+    const camel::core::context::context_ptr_t &context() const { return context_; }
 
     bool hasDraft(const GCGraph *graph) const;
     GraphDraft *tryDraft(const GCGraph *graph);
@@ -132,7 +135,11 @@ class RuntimeGraphDraftSession {
     void noteTypeSpecialization(const std::string &rootStableId);
 
     std::vector<GCGraph *> collectReachableRuntimeGraphs() const;
-    GCGraph *commit();
+    /// Encodes the edited closure and returns its root. A session over the program's root
+    /// replaces the program with it; with `detached` (a back end's private rewrite, such as
+    /// lowering loops before it runs) the program is left as it is and the new graphs are kept
+    /// alive as detached graphs (Context::trackDetachedRuntimeGraphs).
+    GCGraph *commit(bool detached = false);
 
   private:
     struct DraftEntry {
@@ -142,10 +149,16 @@ class RuntimeGraphDraftSession {
 
     GraphDraft &ensureDraft(GCGraph *graph);
     std::vector<GCGraph *> collectCommitClosure() const;
+    /// The graphs of `closure` whose copy gets a new revision (GCGraph::serial): edited, or
+    /// referring at any depth to an edited one.
+    std::unordered_set<GCGraph *> changedGraphs(const std::vector<GCGraph *> &closure) const;
 
     camel::core::context::context_ptr_t context_;
     GCGraph *runtimeRoot_ = nullptr;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
+    /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself.
+    /// The commit drops those it encodes back to the same content (sameContent).
+    std::unordered_set<GCGraph *> edited_;
     std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
         specializationCache_;
     std::unordered_map<std::string, size_t> typeSpecializationCounts_;

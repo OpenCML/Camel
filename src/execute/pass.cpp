@@ -41,7 +41,12 @@
 #include "passes/sched/fastvm/jit/dump/mirdump.h"
 #include "passes/sched/nodevm/nodevm.h"
 #include "passes/sched/taskflow/taskflow.h"
+#include "passes/test/definitions.h"
+#include "passes/test/facts.h"
 #include "passes/test/fault.h"
+#include "passes/test/index_semantics.h"
+#include "passes/test/resources.h"
+#include "passes/test/semantics.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/stats/stats.h"
@@ -671,6 +676,51 @@ PassFactory lookupPassFactory(const std::string &name) {
     if (resolved == kShareBranchArmPass && std::getenv(kTestPassesEnvVar) != nullptr) {
         return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
             return std::make_unique<ShareBranchArmTestPass>(ctx);
+        };
+    }
+    if (resolved == kOperatorSemanticsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<OperatorSemanticsTestPass>(ctx);
+        };
+    }
+    if (resolved == kIndexSemanticsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<IndexSemanticsTestPass>(ctx);
+        };
+    }
+    if (resolved == kDefinitionsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<DefinitionsTestPass>(ctx);
+        };
+    }
+    if (resolved == kExpandDefinitionsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<ExpandDefinitionsTestPass>(ctx);
+        };
+    }
+    if (resolved == kResourcesTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<ResourcesTestPass>(ctx);
+        };
+    }
+    if (resolved == kFactStoreTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<FactStoreTestPass>(ctx);
+        };
+    }
+    if (resolved == kFactSeedTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<FactSeedTestPass>(ctx);
+        };
+    }
+    if (resolved == kFactCheckTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<FactCheckTestPass>(ctx);
+        };
+    }
+    if (resolved == kFactPersistTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<FactPersistTestPass>(ctx);
         };
     }
     return nullptr;

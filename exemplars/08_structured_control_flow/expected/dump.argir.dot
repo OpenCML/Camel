@@ -7,7 +7,7 @@ digraph GraphIR {
                 label="__g_4__";
                 F03 [label="ARGS", type="ARGS"];
                 O03 [label="EXIT", type="EXIT"];
-                N00 [label="PORT", type="PORT"];
+                N00 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor"];
                 N01 [label="tensor:relu", type="OPER", origin=309, span="14:30-14:34", srcfile="exemplars/08_structured_control_flow/program.cml"];
                 N02 [label="2.0", type="DATA", origin=310, span="14:40-14:43", srcfile="exemplars/08_structured_control_flow/program.cml"];
                 N03 [label="tensor:multiply", type="OPER", origin=311, span="14:38-14:39", srcfile="exemplars/08_structured_control_flow/program.cml"];
@@ -21,7 +21,7 @@ digraph GraphIR {
                 label="__g_6__";
                 F04 [label="ARGS", type="ARGS"];
                 O04 [label="EXIT", type="EXIT"];
-                N04 [label="PORT", type="PORT"];
+                N04 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor"];
                 N05 [label="1", type="DATA", origin=317, span="14:56-14:57", srcfile="exemplars/08_structured_control_flow/program.cml"];
                 N06 [label="tensor:idx", type="OPER", role="scalar-boundary", origin=318, span="14:55-14:56", srcfile="exemplars/08_structured_control_flow/program.cml"];
                 N07 [label="2.0", type="DATA", origin=319, span="14:61-14:64", srcfile="exemplars/08_structured_control_flow/program.cml"];
@@ -42,7 +42,7 @@ digraph GraphIR {
             }
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N0C [label="t", type="PORT"];
+            N0C [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="Tensor"];
             N0D [label="0", type="DATA", origin=300, span="14:16-14:17", srcfile="exemplars/08_structured_control_flow/program.cml"];
             N0E [label="tensor:idx", type="OPER", role="scalar-boundary", origin=301, span="14:15-14:16", srcfile="exemplars/08_structured_control_flow/program.cml"];
             N0F [label="0.5", type="DATA", origin=302, span="14:21-14:24", srcfile="exemplars/08_structured_control_flow/program.cml"];
@@ -71,7 +71,7 @@ digraph GraphIR {
             label="__g_8__";
             F05 [label="ARGS", type="ARGS"];
             O05 [label="EXIT", type="EXIT"];
-            N15 [label="t", type="PORT"];
+            N15 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="Tensor"];
             N16 [label="gate", type="FUNC", origin=351, span="21:40-21:47", srcfile="exemplars/08_structured_control_flow/program.cml"];
             F05 -> N15 [label="0", type="NORM_PORT"];
             N16 -> O05 [label="0", type="EXIT"];

@@ -912,30 +912,41 @@ void ParserImpl::parseTry() {
     close(m, NK::TryExpr);
 }
 
-/// loopExpr : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
-/// loopState : identDef | parentIdents
+/// loopExpr : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
+/// loopState : identDef '=' logicalOrExpr
 /// loopFor : 'for' identDef 'in' logicalOrExpr
 /// loopWhile : 'while' logicalOrExpr
-/// A loop is an expression with a state (design principles 2.10): the state is named after
-/// `loop` and given its first value; the block is evaluated once per round and its value is
-/// the state of the next round; the value of the loop is the last state. `for` takes the
-/// elements of a sequence one per round, `while` goes on as long as its condition holds, and
-/// with both the loop ends when either does.
-/// The first value, the sequence and the condition are operator expressions, not `if`, `match`
-/// or an assignment (write those in parentheses), so each ends at the keyword or the `{` that
-/// follows, since a `{` can never continue an expression. The body is always a block.
+/// A loop is an expression with a state (design principles 2.10, written as 2.13 rules): each
+/// name of the state is declared once in the head with its first value, several separated by
+/// commas; the expression after `do` is evaluated once per round and its value is the state of
+/// the next round (a tuple when the state has several names); the value of the loop is the last
+/// state. `for` takes the elements of a sequence one per round, `while` goes on as long as its
+/// condition holds, and with both the loop ends when either does.
+/// The first values, the sequence and the condition are operator expressions, not `if`, `match`
+/// or an assignment (write those in parentheses), so each ends at the comma or keyword that
+/// follows. A comma after a first value starts another name of the state only when a name and
+/// `=` follow; otherwise it belongs to what the loop is written in (`f(loop a = 0 for ..., 5)`).
+/// What follows `do` is read as what follows `then`: `{ x: 1 }` is a struct, `{ 5 }` a block.
+/// A loop needs `for` or `while` (one that has neither could not end; a question to the
+/// language author, the narrow reading meanwhile).
 void ParserImpl::parseLoop() {
     const size_t m = mark();
     bump();
-    if (cur_ == TK::LParen) {
-        parseBracketedIdents(TK::RParen, NK::ParentIdents);
-    } else {
+    for (;;) {
+        const size_t sm = mark();
         parseIdentDef();
+        if (panic_ || !expect(TK::Assign)) {
+            close(sm, NK::LoopState);
+            return close(m, NK::LoopExpr);
+        }
+        parseLogicalOr();
+        close(sm, NK::LoopState);
+        if (cur_ == TK::Comma && peek(1) == TK::Identifier && peek(2) == TK::Assign && !panic_) {
+            bump();
+            continue;
+        }
+        break;
     }
-    if (panic_ || !expect(TK::Assign)) {
-        return close(m, NK::LoopExpr);
-    }
-    parseLogicalOr();
     bool clause = false;
     if (cur_ == TK::KwFor && !panic_) {
         const size_t fm = mark();
@@ -957,8 +968,8 @@ void ParserImpl::parseLoop() {
     if (!clause && !panic_) {
         unexpected({e(TK::KwFor), e(TK::KwWhile)});
     }
-    if (!panic_) {
-        parseStmtBlock();
+    if (!panic_ && expect(TK::KwDo)) {
+        parseBlockExpr();
     }
     close(m, NK::LoopExpr);
 }

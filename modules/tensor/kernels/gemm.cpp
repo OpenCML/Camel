@@ -31,6 +31,7 @@
 
 #include "cpu.h"
 #include "elementwise.h"
+#include "minmax.h"
 #include "parallel.h"
 
 #include <algorithm>
@@ -306,7 +307,7 @@ void reluInPlace(TensorObject *t) {
         T *data = t->dataAs<T>();
         parallelFor(static_cast<int64_t>(t->numel()), 1 << 15, [&](int64_t begin, int64_t end) {
             for (int64_t i = begin; i < end; ++i) {
-                data[i] = data[i] > T{} ? data[i] : T{};
+                data[i] = relu(data[i]); // the relu operator's own rule (minmax.h)
             }
         });
     });

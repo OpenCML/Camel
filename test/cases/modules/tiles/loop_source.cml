@@ -1,0 +1,18 @@
+// Tiles reads the graph of the function it is given as the program wrote it: a `loop` in it is
+// the LOOP node on every back end, also where the back end runs a private copy of the program
+// with its loops lowered to tail recursion (std::fvm, std::jit, std::prl; op-semantics 11.4).
+// Tiles does not compile LOOP yet, so the observable is its refusal naming the node kind (15).
+module tiles_loop_source
+import { Tensor, reshape } from tensor
+import { source } from tiles
+
+func twice(a: Tensor<f32>): Tensor<f32> {
+    return loop y = a for k in [1, 2] do y + a
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    println(twice(x))
+    println(source<twice>(x))
+    return 0
+}

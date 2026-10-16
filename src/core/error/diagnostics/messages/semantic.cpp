@@ -276,6 +276,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::InvalidAnnotation,
+            {
+                "InvalidAnnotation",
+                "The annotation '@{0}' is not accepted: {1}.",
+                "A line that starts with '@' annotates the function declaration or the block "
+                "that follows. '@name' and '@name<args>' are decorators of a function; "
+                "'@numeric(...)' grants numeric permissions to a function or a block (design "
+                "principles 2.13).",
+            },
+        },
+        {
             SemanticDiag::ConstructNotSupported,
             {
                 "ConstructNotSupported",
@@ -798,6 +809,57 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "converted on the way (a number does not become a float by itself). Convert "
                 "the value explicitly, e.g. 'float(n)' or 'v as T', or change the declared "
                 "type.",
+            },
+        },
+        {
+            SemanticDiag::LoopSequenceNotArray,
+            {
+                "LoopSequenceNotArray",
+                "'for' takes the elements of an array; '{0}' has type '{1}'.",
+                "A loop's 'for x in xs' visits the elements of the array xs in order (design "
+                "principles 2.10). 'range(a, b)' is the array of the integers from a to b; a "
+                "string, a map or a tensor is not iterated by 'for'.",
+            },
+        },
+        {
+            SemanticDiag::LoopBodyTypeMismatch,
+            {
+                "LoopBodyTypeMismatch",
+                "The body of this loop gives a value of type '{0}'; the state of the loop has type "
+                "'{1}'.",
+                "The value after 'do' is the state of the next round, so it has the type of "
+                "the state, which the first values in the loop head give (design principles "
+                "2.10, 2.13); with several names it is the tuple of them, in the order of the "
+                "head. Convert the first value where it is written ('0.0' rather than '0', "
+                "'null as int?') or the value the body gives ('v as T').",
+            },
+        },
+        {
+            SemanticDiag::LoopStateWithoutType,
+            {
+                "LoopStateWithoutType",
+                "The first value of the loop state '{0}' does not give it a type ('{1}').",
+                "The state of a loop has the type of its first value. 'null' and the empty "
+                "array '[]' have none of their own: write 'null as T?', or bind the empty "
+                "array with its type first ('let none: int[] = []') and start from that name.",
+            },
+        },
+        {
+            SemanticDiag::LoopConditionNotBool,
+            {
+                "LoopConditionNotBool",
+                "The condition after 'while' has type '{0}'; a condition is a 'bool'.",
+                "There is no truth-value conversion: compare explicitly ('n != 0', "
+                "'len(s) > 0', 'x != null').",
+            },
+        },
+        {
+            SemanticDiag::LoopNameRepeated,
+            {
+                "LoopNameRepeated",
+                "The name '{0}' is declared twice in this loop head.",
+                "The names of a loop's state and the name 'for' binds to the element are "
+                "declared together, for the condition and the body; each is given once.",
             },
         },
         {

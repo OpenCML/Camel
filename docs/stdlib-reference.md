@@ -1490,7 +1490,8 @@ x without its fraction (rounded toward zero), as a float.
 min: (a: i32 | int | f32 | float, b: i32 | int | f32 | float) => i32 | int | f32 | float
 ```
 
-The smaller of two numbers of one type. With a NaN on either side the result is NaN.
+The smaller of two numbers of one type (IEEE 754 minimum). With a NaN on either side
+the result is NaN; -0 is below +0.
 
 - Pure.
 - Example: `min(3, 5)` gives `3`
@@ -1501,7 +1502,8 @@ The smaller of two numbers of one type. With a NaN on either side the result is 
 max: (a: i32 | int | f32 | float, b: i32 | int | f32 | float) => i32 | int | f32 | float
 ```
 
-The larger of two numbers of one type. With a NaN on either side the result is NaN.
+The larger of two numbers of one type (IEEE 754 maximum). With a NaN on either side
+the result is NaN; -0 is below +0.
 
 - Pure.
 - Example: `max(3, 5)` gives `5`

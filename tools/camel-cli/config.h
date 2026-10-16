@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.2.11"
+#define VERSION "0.2.12"
 
 #include <string>
 #include <vector>
@@ -108,6 +108,8 @@ extern bool dumpGCT;    // Whether to dump Graph Construction Tree
 extern bool dumpGIR;    // Whether to dump Graph Intermediate Representation
 extern bool dumpTNS;    // Whether to dump Topological Node Sequence
 extern bool dumpOps;    // Whether to dump the operators of the imported modules
+extern bool dumpInstances; // Whether to dump the index semantics of every operator node
+extern bool dumpFacts;     // Whether to compute and dump the graph facts of the program
 extern bool geneCode;   // Whether to dump generate code from GIR
 extern int passUntil;   // Pass until the given pass
 } // namespace Inspect

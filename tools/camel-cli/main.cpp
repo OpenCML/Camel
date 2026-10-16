@@ -32,6 +32,8 @@
 #include "camel/init.h"
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/parse.h"
+#include "camel/runtime/facts.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
@@ -339,7 +341,8 @@ int runCommand(int argc, char *argv[]) {
                     os << generator.generate(ast);
                 }
             }
-            if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps) {
+            if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps &&
+                !Inspect::dumpInstances && !Inspect::dumpFacts) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -350,7 +353,8 @@ int runCommand(int argc, char *argv[]) {
             if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
                 mainModule->compile(CompileStage::GCT);
             }
-            if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps) {
+            if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps || Inspect::dumpInstances ||
+                Inspect::dumpFacts) {
                 mainModule->compile(CompileStage::Done);
             }
         } else {
@@ -371,6 +375,18 @@ int runCommand(int argc, char *argv[]) {
                 auto *entry = ctx->runtimeRootGraph();
                 TopoNodeSeqDumpPass pass(ctx);
                 (void)pass.apply(entry, os);
+            }
+            if (Inspect::dumpInstances) {
+                if (auto *root = ctx->runtimeRootGraph()) {
+                    camel::runtime::dumpOperatorInstances(root, os);
+                }
+            }
+            if (Inspect::dumpFacts) {
+                if (auto *root = ctx->runtimeRootGraph()) {
+                    camel::runtime::fact::FactStore &facts = ctx->facts();
+                    camel::runtime::fact::computeFacts(facts, root);
+                    camel::runtime::fact::dumpFacts(facts, root, os);
+                }
             }
             if (Inspect::dumpOps) {
                 // An import that names nothing the program uses is loaded here, so that the

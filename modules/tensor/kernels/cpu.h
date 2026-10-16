@@ -21,6 +21,10 @@
  * Runtime CPU feature detection for the kernels compiled per instruction set
  * (GEMM, elementwise). Units built with wider vector ISAs are only called
  * after these checks confirm both CPU and OS support.
+ *
+ * The environment variable CAMEL_TENSOR_ISA=generic hides every feature, so the
+ * portable units run on any processor. Tests use it to check that the GEMM
+ * gives the same bits in every unit (design principles 2.13).
  */
 
 #pragma once
@@ -32,7 +36,8 @@ struct CpuFeatures {
     bool avx512f = false; // AVX-512F with OS-enabled ZMM and opmask state
 };
 
-/// Features of the running CPU (detected once; all false off x86-64).
+/// Features of the running CPU (detected once; all false off x86-64 and under
+/// CAMEL_TENSOR_ISA=generic).
 const CpuFeatures &cpuFeatures();
 
 } // namespace camel::tensor::kernels

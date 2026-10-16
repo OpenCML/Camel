@@ -18,6 +18,8 @@
  */
 
 #include "fastvm.h"
+#include "camel/execute/observer.h"
+#include "camel/runtime/loop_lowering.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/core/module/module.h"
 #include "camel/runtime/graph.h"
@@ -474,6 +476,18 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     (void)os;
     ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");
 
+    // Loops. By default they run as the tail recursion they mean, on a private copy of the
+    // program (camel/runtime/loop_lowering.h): today that is faster here than the native
+    // instruction (evalLoop), which enters the interpreter again for each of its two calls a
+    // round (docs/technical/39_loops.md, section 5). Under a debugger, and with
+    // CAMEL_FVM_NATIVE_LOOP=1, the program's own LOOP nodes run natively, so that the frames
+    // shown are the loop's condition and body (folded into their function). Making the native
+    // loop a bytecode loop, at least as fast as the lowering, is the next step.
+    const char *nativeLoops = std::getenv("CAMEL_FVM_NATIVE_LOOP");
+    if (camel::execute::executionObserver() == nullptr &&
+        !(nativeLoops != nullptr && std::string_view(nativeLoops) == "1")) {
+        graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
+    }
     camel::runtime::GCGraph *runtimeRoot = graph;
     precompile(runtimeRoot);
 
@@ -620,6 +634,79 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     }
 
     currFrame.get<Array *>(self)->shrinkToFit(resultType);
+}
+
+void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
+    const MarkOpCode mark  = bc.extra()->mark;
+    const auto *words      = reinterpret_cast<const uint64_t *>(&bc + bc.opsize - 3);
+    auto *cond             = reinterpret_cast<camel::runtime::GCGraph *>(words[0]);
+    auto *body             = reinterpret_cast<camel::runtime::GCGraph *>(words[1]);
+    const bool iterates    = mark != MarkOpCode::LoopWhile;
+    const data_arr_t nargs = bc.nargs();
+    const data_arr_t wargs = bc.wargs();
+    const data_idx_t self  = bc.result;
+    const size_t first     = iterates ? 1 : 0;
+    const size_t k         = nargs.size() - first;
+    auto *tupleType =
+        k > 1 ? static_cast<const TupleType *>(currFrame.typeAt<Type>(self)) : nullptr;
+
+    // The state: the value itself (k = 1) or a tuple of the k values, in the result slot.
+    if (k == 1) {
+        currFrame.set(self, currFrame.get<slot_t>(nargs[first]));
+    } else {
+        Tuple *state = Tuple::create(k, mm::autoSpace());
+        for (size_t j = 0; j < k; ++j) {
+            state->set(j, currFrame.get<slot_t>(nargs[first + j]), tupleType);
+        }
+        currFrame.set(self, state);
+    }
+    // The ports of a round: (the element,) the values of the state, the captures.
+    const auto bind = [&](Frame *frame, camel::runtime::GCGraph *target, const slot_t *element) {
+        const auto norm = target->normPorts();
+        size_t port     = 0;
+        if (element != nullptr) {
+            frame->set(target->node(norm[port++])->dataIndex, *element);
+        }
+        if (k == 1) {
+            frame->set(target->node(norm[port])->dataIndex, currFrame.get<slot_t>(self));
+        } else {
+            Tuple *state = currFrame.get<Tuple *>(self);
+            for (size_t j = 0; j < k; ++j) {
+                frame->set(target->node(norm[port + j])->dataIndex, state->get<slot_t>(j));
+            }
+        }
+        const auto with = target->withPorts();
+        for (size_t c = 0; c < wargs.size(); ++c) {
+            frame->set(target->node(with[c])->dataIndex, currFrame.get<slot_t>(wargs[c]));
+        }
+    };
+    const HigherOrderCallSite condSite{
+        .runtimeGraph = cond,
+        .entryPc      = cond ? graphEntryPc(cond) : 0};
+    const HigherOrderCallSite bodySite{.runtimeGraph = body, .entryPc = graphEntryPc(body)};
+    for (size_t round = 0;; ++round) {
+        // Each round: the condition first, then the next element (camel/core/loop_kind.h).
+        if (cond != nullptr) {
+            requireNestedCallRoom(&currFrame);
+            Frame *frame = framePool_.acquire(cond);
+            bind(frame, cond, nullptr);
+            if (!fromSlot<Bool>(callElement(condSite, frame))) {
+                break;
+            }
+        }
+        slot_t element = NullSlot;
+        if (iterates) {
+            Array *array = currFrame.get<Array *>(nargs[0]);
+            if (round >= array->size()) {
+                break;
+            }
+            element = array->data()[round];
+        }
+        requireNestedCallRoom(&currFrame);
+        Frame *frame = framePool_.acquire(body);
+        bind(frame, body, iterates ? &element : nullptr);
+        currFrame.set(self, callElement(bodySite, frame));
+    }
 }
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
@@ -941,7 +1028,9 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                 case x64::JitExitKind::Interp: {
                     const data_arr_t nargs = bc->nargs();
                     const data_arr_t wargs = bc->wargs();
-                    if (bc->opcode == OpCode::SCHD) {
+                    if (bc->opcode == OpCode::SCHD && isLoopMark(bc->extra()->mark)) {
+                        evalLoop(*bc, *cur);
+                    } else if (bc->opcode == OpCode::SCHD) {
                         evalMarkedOperator(bc->extra()->mark, bc->result, nargs, wargs, *cur);
                     } else {
                         ASSERT(bc->opcode == OpCode::CALL, "Unexpected bytecode at a JIT exit.");

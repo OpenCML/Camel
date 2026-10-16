@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-143 diagnostics: 129 errors, 14 warnings.
+149 diagnostics: 135 errors, 14 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -116,6 +116,12 @@ prints one entry.
 | `0x030000F4` | [SemanticDiag::AmbiguousOperatorCall](#ambiguousoperatorcall) | Error |
 | `0x03000110` | [SemanticDiag::DeclaredTypeMismatch](#declaredtypemismatch) | Error |
 | `0x03000111` | [SemanticDiag::ModuleTypeCycle](#moduletypecycle) | Error |
+| `0x03000112` | [SemanticDiag::InvalidAnnotation](#invalidannotation) | Error |
+| `0x03000120` | [SemanticDiag::LoopSequenceNotArray](#loopsequencenotarray) | Error |
+| `0x03000121` | [SemanticDiag::LoopBodyTypeMismatch](#loopbodytypemismatch) | Error |
+| `0x03000122` | [SemanticDiag::LoopStateWithoutType](#loopstatewithouttype) | Error |
+| `0x03000123` | [SemanticDiag::LoopConditionNotBool](#loopconditionnotbool) | Error |
+| `0x03000124` | [SemanticDiag::LoopNameRepeated](#loopnamerepeated) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -2810,6 +2816,182 @@ Each of these types needs the next one to be declared first, and the last needs 
 import { A } from cycle_a
 
 func main(): int sync {
+    return 0
+}
+```
+
+### InvalidAnnotation
+
+`0x03000112` · Error · `SemanticDiag::InvalidAnnotation`
+
+**Message**
+
+```text
+The annotation '@{0}' is not accepted: {1}.
+```
+
+**Help**
+
+```text
+A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function; '@numeric(...)' grants numeric permissions to a function or a block (design principles 2.13).
+```
+
+**Example** (`test/cases/compile/numeric/invalid.cml`, run as `camel test/cases/compile/numeric/invalid.cml`)
+
+```camel
+module invalid
+
+func twice(f: (x: int) => int): (x: int) => int {
+    return (x: int) => f(f(x))
+}
+
+@numeric(reassociate, fast)
+func a(x: float): float { return x * 2.0 }
+
+@kernelish(reassociate)
+func b(x: float): float { return x * 2.0 }
+
+@numeric()
+func c(x: float): float { return x * 2.0 }
+
+func d(x: float): float {
+    @twice
+    {
+        return x * 2.0
+    }
+}
+
+func main(): int sync {
+    return 0
+}
+```
+
+### LoopSequenceNotArray
+
+`0x03000120` · Error · `SemanticDiag::LoopSequenceNotArray`
+
+**Message**
+
+```text
+'for' takes the elements of an array; '{0}' has type '{1}'.
+```
+
+**Help**
+
+```text
+A loop's 'for x in xs' visits the elements of the array xs in order (design principles 2.10). 'range(a, b)' is the array of the integers from a to b; a string, a map or a tensor is not iterated by 'for'.
+```
+
+**Example** (`test/cases/loops/err_not_array.cml`, run as `camel -E short test/cases/loops/err_not_array.cml`)
+
+```camel
+func main(): int sync {
+    let n = loop s = 0 for c in 'abc' do s + 1
+    println(n)
+    return 0
+}
+```
+
+### LoopBodyTypeMismatch
+
+`0x03000121` · Error · `SemanticDiag::LoopBodyTypeMismatch`
+
+**Message**
+
+```text
+The body of this loop gives a value of type '{0}'; the state of the loop has type '{1}'.
+```
+
+**Help**
+
+```text
+The value after 'do' is the state of the next round, so it has the type of the state, which the first values in the loop head give (design principles 2.10, 2.13); with several names it is the tuple of them, in the order of the head. Convert the first value where it is written ('0.0' rather than '0', 'null as int?') or the value the body gives ('v as T').
+```
+
+**Example** (`test/cases/loops/err_body_type.cml`, run as `camel -E short test/cases/loops/err_body_type.cml`)
+
+```camel
+func main(): int sync {
+    let x = loop s = 0 for v in [1.5, 2.5] do v
+    println(x)
+    return 0
+}
+```
+
+### LoopStateWithoutType
+
+`0x03000122` · Error · `SemanticDiag::LoopStateWithoutType`
+
+**Message**
+
+```text
+The first value of the loop state '{0}' does not give it a type ('{1}').
+```
+
+**Help**
+
+```text
+The state of a loop has the type of its first value. 'null' and the empty array '[]' have none of their own: write 'null as T?', or bind the empty array with its type first ('let none: int[] = []') and start from that name.
+```
+
+**Example** (`test/cases/loops/err_untyped_state.cml`, run as `camel -E short test/cases/loops/err_untyped_state.cml`)
+
+```camel
+func main(): int sync {
+    let best = loop b = null for x in [1, 2] do x
+    println(best)
+    return 0
+}
+```
+
+### LoopConditionNotBool
+
+`0x03000123` · Error · `SemanticDiag::LoopConditionNotBool`
+
+**Message**
+
+```text
+The condition after 'while' has type '{0}'; a condition is a 'bool'.
+```
+
+**Help**
+
+```text
+There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 'x != null').
+```
+
+**Example** (`test/cases/loops/err_condition.cml`, run as `camel -E short test/cases/loops/err_condition.cml`)
+
+```camel
+func main(): int sync {
+    let n = loop s = 3 while s do s - 1
+    println(n)
+    return 0
+}
+```
+
+### LoopNameRepeated
+
+`0x03000124` · Error · `SemanticDiag::LoopNameRepeated`
+
+**Message**
+
+```text
+The name '{0}' is declared twice in this loop head.
+```
+
+**Help**
+
+```text
+The names of a loop's state and the name 'for' binds to the element are declared together, for the condition and the body; each is given once.
+```
+
+**Example** (`test/cases/loops/err_repeated_name.cml`, run as `camel -E short test/cases/loops/err_repeated_name.cml`)
+
+```camel
+func main(): int sync {
+    let r = loop x = 0 for x in [1, 2] do x
+    println(r)
     return 0
 }
 ```

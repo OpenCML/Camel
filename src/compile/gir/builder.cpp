@@ -940,6 +940,8 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return nullptr;
     case GCT::NodeKind::CAST:
         return visitCastNode(node);
+    case GCT::NodeKind::LOOP:
+        return visitLoopNode(node);
     default:
         ASSERT(false, "Unknown GCT NodeType");
     }
@@ -1015,9 +1017,22 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     return graph;
 }
 
+void Builder::stampPermissions(node_handle_t operNode) const {
+    if (operNode != nullptr) {
+        operNode->header.permissions = numericPermissions_;
+    }
+}
+
 void Builder::buildFuncBody(
     const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
     const std::string &name) {
+    // The function's graph has the permissions of its own body (which include those of the
+    // code it is written in), not those of the place that asked for it to be built (a call
+    // that instantiates a generic function, a block that declares it).
+    const GCT::node_ptr_t body = gct->size() > 1 ? gct->at(1) : nullptr;
+    NumericPermissionScope permissions(
+        numericPermissions_,
+        body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0);
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -2502,6 +2517,12 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         const auto callee = withInputsOf(node);
         return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->node(callee[0])));
     }
+    case runtime::GCNodeKind::Loop: {
+        // Each round calls the condition and the body graph.
+        const auto &target = graph->loopTarget(node);
+        return (target.cond && effectfulGraphs_.contains(target.cond.get())) ||
+               effectfulGraphs_.contains(target.body.get());
+    }
     case runtime::GCNodeKind::Join: {
         for (draft_node_ref_t arm : withInputsOf(node)) {
             node_handle_t armNode = nodeDraftOf(node)->node(arm);
@@ -2625,6 +2646,9 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             break;
         case runtime::GCNodeKind::Join:
             subject = "The branch";
+            break;
+        case runtime::GCNodeKind::Loop:
+            subject = "The loop";
             break;
         default:
             subject = "The call";
@@ -3746,6 +3770,7 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     try {
         bodyStates_[graph.get()] = BodyState::Open;
         node_handle_t call       = graph->addOperNode(op, 0);
+        stampPermissions(call);
         if (opType->modifiers().macro()) {
             setNodeMacro(call, true);
         }
@@ -5105,6 +5130,7 @@ node_handle_t Builder::variableOperator(const std::string &group, node_handle_t 
     const auto op = entity->operGroup()->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
     ASSERT(op.has_value(), "Variable operator rejected its operand.");
     node_handle_t node = currGraph_->addOperNode(*op, 0);
+    stampPermissions(node);
     linkNodes(LinkType::Norm, input, node);
     return node;
 }
@@ -5800,6 +5826,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             targetNode = currGraph_->addOperNode(targetOperator, 0);
+            stampPermissions(targetNode);
             // An operator whose resolved type is macro runs in std::macro once its inputs are
             // static, like a call of a macro function.
             if (targetOperator->funcType()->modifiers().macro()) {
@@ -7245,6 +7272,221 @@ node_handle_t Builder::buildBranch(
     return joinNode;
 }
 
+void Builder::buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec) {
+    // The graph is written inside the current one, like an arm: its scope is entered from
+    // here, so the names of the enclosing code are visible in it (and captured).
+    const bool atRoot = currGraph_ == rootGraph_;
+    enterGraphScope(graph, "");
+    if (atRoot) {
+        rootSubGraphOwners_[graph.get()] = unit_;
+    }
+    registerGraphOrigin(context_, graph, exec, "gir.loop.graph");
+    bodyStates_[graph.get()] = BodyState::Open;
+    try {
+        for (draft_node_ref_t portId : graph->draft().normPorts()) {
+            node_handle_t port = graph->draft().node(portId);
+            insertNode(graph->nodePortName(port), port);
+            if (recorder_) {
+                recordDeclaration(graph->nodePortName(port), port, exec);
+            }
+        }
+        setBodyResult(graph, visitBodyNode(exec));
+    } catch (...) {
+        bodyStates_[graph.get()] = BodyState::Built;
+        failedBodies_.insert(graph.get());
+        leaveScope();
+        throw;
+    }
+    bodyStates_[graph.get()] = BodyState::Built;
+    unit_->builtBodies.push_back(graph);
+    leaveScope();
+}
+
+node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
+    ENTER("LOOP");
+    using camel::core::LoopKind;
+    const LoopKind kind    = gct->loopKind();
+    const size_t k         = gct->loopStateCount();
+    const bool hasIterable = camel::core::loopHasIterable(kind);
+
+    // The names of the head are declared once, together (design principles 2.13).
+    {
+        std::unordered_set<std::string> names;
+        for (size_t j = 0; j < k + (hasIterable ? 1 : 0); ++j) {
+            const std::string &name = j < k ? gct->loopStateName(j) : gct->loopElementName();
+            if (!names.insert(name).second) {
+                diags_->of(SemanticDiag::LoopNameRepeated).atOrigin(gct->origin()).commit(name);
+                throw BuildAbortException();
+            }
+        }
+    }
+
+    // The first values and the array: evaluated once, where the loop is (they do not see the
+    // names of the head).
+    std::vector<node_handle_t> initial;
+    std::vector<Type *> stateTypes;
+    for (size_t j = 0; j < k; ++j) {
+        const auto &expr   = gct->loopInitial(j);
+        node_handle_t node = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        Type *type         = valueTypeOf(nodeTypeOf(node));
+        const bool untyped = type == nullptr || type->code() == TypeCode::Void ||
+                             (type->code() == TypeCode::Array &&
+                              tt::as_ptr<ArrayType>(type)->elemType()->code() == TypeCode::Void);
+        if (untyped) {
+            diags_->of(SemanticDiag::LoopStateWithoutType)
+                .atOrigin(expr->origin())
+                .commit(gct->loopStateName(j), type ? type->toString() : std::string("void"));
+            throw BuildAbortException();
+        }
+        initial.push_back(node);
+        stateTypes.push_back(type);
+    }
+    node_handle_t sequence = nullptr;
+    Type *elementType      = nullptr;
+    if (hasIterable) {
+        const auto &expr = gct->loopSequence();
+        sequence         = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        Type *type       = valueTypeOf(nodeTypeOf(sequence));
+        if (type == nullptr || type->code() != TypeCode::Array) {
+            diags_->of(SemanticDiag::LoopSequenceNotArray)
+                .atOrigin(expr->origin())
+                .commit(sourceTextOf(expr), type ? type->toString() : std::string("void"));
+            throw BuildAbortException();
+        }
+        elementType = tt::as_ptr<ArrayType>(type)->elemType();
+    }
+    Type *stateType = k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
+
+    // The two graphs, made before either is built so that every capture is made in both in
+    // the same order (captureTwins_). They take the state (the body the element first) as
+    // ordinary parameters; their captures become with-ports once they are built.
+    const size_t ordinal         = ++loopCounts_[currGraph_.get()];
+    const std::string graphBase  = std::format("{}.loop{}", currGraph_->name(), ordinal);
+    const auto makeLoopGraph     = [&](bool withElement, const char *role) {
+        FunctionTypeFactory factory;
+        if (withElement) {
+            factory.addNormArg(gct->loopElementName(), elementType, false);
+        }
+        for (size_t j = 0; j < k; ++j) {
+            factory.addNormArg(gct->loopStateName(j), stateTypes[j], false);
+        }
+        return createCompileGraph(factory.build(), currGraph_, std::format("{}.{}", graphBase, role));
+    };
+    compile_graph_ptr_t condGraph =
+        camel::core::loopHasCondition(kind) ? makeLoopGraph(false, "cond") : nullptr;
+    compile_graph_ptr_t bodyGraph = makeLoopGraph(hasIterable, "body");
+    if (condGraph) {
+        captureTwins_[condGraph.get()] = bodyGraph;
+        captureTwins_[bodyGraph.get()] = condGraph;
+    }
+
+    if (condGraph) {
+        buildLoopGraph(condGraph, gct->loopCondition());
+        Type *condType = condGraph->funcType()->exitType();
+        if (condType == nullptr || condType->code() != TypeCode::Bool) {
+            diags_->of(SemanticDiag::LoopConditionNotBool)
+                .atOrigin(gct->loopCondition()->origin())
+                .commit(condType ? condType->toString() : std::string("void"));
+            throw BuildAbortException();
+        }
+    }
+    buildLoopGraph(bodyGraph, gct->loopBody());
+    // The body gives the next state: of the state's type, or a value that enters it (an
+    // `int` where the state is an `int?`, design principles 2.10).
+    Type *bodyType = bodyGraph->funcType()->exitType();
+    if (bodyType == nullptr || !stateType->assignableFrom(bodyType)) {
+        if (bodyType != nullptr && entersImplicitly(stateType, bodyType)) {
+            coerceArmExit(bodyGraph, stateType, gct->loopBody());
+        } else {
+            diags_->of(SemanticDiag::LoopBodyTypeMismatch)
+                .atOrigin(gct->loopBody()->origin())
+                .commit(
+                    bodyType ? bodyType->toString() : std::string("void"),
+                    stateType->toString());
+            throw BuildAbortException();
+        }
+    }
+
+    // Called by the LOOP node: the captures are with-ports, in the order both graphs share.
+    for (const compile_graph_ptr_t &graph : {condGraph, bodyGraph}) {
+        if (!graph) {
+            continue;
+        }
+        const std::vector<draft_node_ref_t> closureNodes(
+            graph->draft().closureNodes().begin(),
+            graph->draft().closureNodes().end());
+        for (draft_node_ref_t closureId : closureNodes) {
+            graph->draft().removeNormPort(closureId);
+            graph->draft().appendWithPort(closureId);
+            graph->draft().removeClosureNode(closureId);
+        }
+        graph->setParameterized(true);
+    }
+
+    node_handle_t loopNode =
+        currGraph_->addLoopNode(kind, DraftGraphBuilder::LoopTarget{condGraph, bodyGraph}, stateType);
+    registerNodeOrigin(context_, loopNode, gct, "gir.loop");
+    stampPermissions(loopNode);
+    if (sequence != nullptr) {
+        linkNodes(LinkType::Norm, sequence, loopNode);
+    }
+    for (node_handle_t node : initial) {
+        linkNodes(LinkType::Norm, node, loopNode);
+    }
+    // The captured values are the With inputs, linked by the link step in the graphs' order
+    // (the condition graph has the same captures as the body graph).
+    addCaptureSite(loopNode, bodyGraph, nullptr);
+
+    // Running the loop is like calling its graphs (and entering an arm): it uses every
+    // variable they captured and writes those they write.
+    std::vector<CapturedUse> captured;
+    for (const compile_graph_ptr_t &graph : {condGraph, bodyGraph}) {
+        if (!graph) {
+            continue;
+        }
+        for (const CapturedUse &use : capturedUsesOf(graph)) {
+            auto known = std::ranges::find(captured, use.variable, &CapturedUse::variable);
+            if (known == captured.end()) {
+                captured.push_back(use);
+            } else {
+                known->written |= use.written;
+            }
+        }
+    }
+    std::vector<node_handle_t> capturedWrites;
+    for (const CapturedUse &use : captured) {
+        orderAfterLastWriter(use.variable, loopNode);
+        if (use.written) {
+            capturedWrites.push_back(use.origin);
+        }
+    }
+    if (!capturedWrites.empty() && !waited_ && !synced_) {
+        std::vector<DraftGraphBuilder *> graphs{bodyGraph.get()};
+        if (condGraph) {
+            graphs.push_back(condGraph.get());
+        }
+        unit_->pendingIgnoredWrites.push_back(
+            {graphs, capturedWrites, gct->origin(), "The loop", "its body writes"});
+    }
+    for (const CapturedUse &use : captured) {
+        if (use.written) {
+            recordWrite(use.variable, loopNode, loopNode, true);
+        } else {
+            pendingUses_[use.variable].push_back({loopNode, false});
+        }
+    }
+
+    if (synced_) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, loopNode)) {
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, loopNode);
+        }
+        lastSyncedNode_ = loopNode;
+        chainedNodes_.insert(loopNode);
+    }
+    LEAVE("LOOP");
+    return loopNode;
+}
+
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
     ENTER("ANNO");
     ASSERT(gct->size() == 1, "ANNO node should have exactly one child.");
@@ -7478,6 +7720,9 @@ void Builder::checkDeclaredReturn(
 
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     ENTER("EXEC");
+    // The permissions of this scope (they include those of the enclosing ones) are in force
+    // for everything built in it, arms and lambdas included.
+    NumericPermissionScope permissions(numericPermissions_, gct->numericPermissions());
     // The `using namespace` written in this block are in force in it (design principles 2.12).
     UsingScope usings(*this, GCT::Tree::of(gct)->usingsOf(gct));
     bool old                  = synced_;

@@ -102,6 +102,11 @@ class Tree {
     node_ptr_t makeExit(ExitType type = ExitType::Return);
     node_ptr_t makeExec(bool synced = false, bool operands = false);
     node_ptr_t makeExpt(const std::vector<Reference> &exports);
+    /// A LOOP node: `state` the names of the state, `element` the name of the element (empty
+    /// for a While loop). The children are appended by the caller (Node::loopKind).
+    node_ptr_t makeLoop(
+        camel::core::LoopKind kind, const std::vector<std::string> &state,
+        const std::string &element);
 
     /// A copy, made by this tree, of `node` and of everything below it, with the origins of
     /// the original and without a parent: for a subtree that is needed in two places. The

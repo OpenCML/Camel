@@ -172,6 +172,17 @@ bool AlgoModule::load() {
         table.set(uri + "_in_place", {.stateOnly = true, .mayFault = true});
         table.setInPlaceForm(uri, uri + "_in_place");
     }
+    // An in-place form changes the array it is given and returns it (docs/design/op-semantics
+    // 8): a read-modify-write of its first operand, an object, whole.
+    for (const char *name : {"sort", "insert_sort", "quick_sort", "merge_sort"}) {
+        using namespace camel::core::sem;
+        table.declareResources(
+            std::string("algo:") + name + "_in_place",
+            ResourceSpec{
+                .accesses = {operandAccess(ResourceClass::Object, 0, AccessMode::ReadModifyWrite)},
+                .result   = ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0},
+            });
+    }
     loaded_ = true;
     return true;
 }

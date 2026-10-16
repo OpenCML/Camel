@@ -10,6 +10,8 @@ test/cases/trans/cpp/exec_mod_scalar.cml
 test/cases/consistency/values/int_wrap.cml
 test/cases/consistency/values/int_min_div.cml
 test/cases/consistency/values/float_special.cml
+test/cases/consistency/values/max_min_special.cml
+test/cases/compile/numeric/permissions.cml
 test/cases/consistency/values/strings.cml
 test/cases/linear/operators/string_ordering.cml
 test/cases/compile/literals/real_literals.cml
@@ -73,3 +75,8 @@ test/cases/compile/entry_args/scalars.cml
 test/cases/compile/entry_args/scalars.cml --arg n=x --arg rate=0.5 --arg name=hi --arg loud=true
 test/cases/compile/entry_args/scalars.cml --arg m=1
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg n=4
+
+# Loops (design principles 2.13), run through the private lowering to tail recursion.
+test/cases/loops/shapes.cml
+test/cases/loops/effects.cml
+test/cases/loops/captures.cml

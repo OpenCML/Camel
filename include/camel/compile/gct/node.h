@@ -39,8 +39,11 @@
  *     CASE              payload: the name bound; tag: CaseType
  *     CAST              payload: the target type; flag: written on a declaration
  *     EXIT              tag: ExitType
- *     EXEC              flags: sync block, scope of operands
+ *     EXEC              flags: sync block, scope of operands; tag: the numeric permissions
+ *                       in force in it (design principles 2.13)
  *     EXPT              payload: the list of exported names
+ *     LOOP              payload: the names of the state, then the name of the element with
+ *                       `for`; tag: camel::core::LoopKind
  *     VARI, WAIT, ANNO  nothing
  *
  * Ownership and lifetime. Nodes are made by a Tree (tree.h) in its arena and are never freed
@@ -68,6 +71,7 @@
 #include "camel/core/data.h"
 #include "camel/core/func.h"
 #include "camel/core/impl.h"
+#include "camel/core/loop_kind.h"
 #include "camel/core/source/ids.h"
 #include "camel/utils/assert.h"
 
@@ -167,6 +171,21 @@ class Node {
         return (flags_ & kFlagB) != 0;
     }
 
+    /// EXEC: the numeric permissions (camel/core/operator_semantics.h, PermissionMask) in
+    /// force in this scope: those `@numeric(...)` grants on it, on the function whose body it
+    /// is, and on every block and function it is lexically nested in (design principles 2.13:
+    /// an arm, a loop body or a lambda written in the code is part of the code). Every EXEC
+    /// the GCT builder makes carries them, so the graph builder reads them from the nearest
+    /// EXEC whatever order it builds graphs in. 0 when none is granted.
+    uint8_t numericPermissions() const {
+        check(NodeKind::EXEC);
+        return static_cast<uint8_t>(tag_);
+    }
+    void setNumericPermissions(uint8_t permissions) {
+        check(NodeKind::EXEC);
+        tag_ = permissions;
+    }
+
     /// EXPT: the exported names.
     size_t exportCount() const {
         check(NodeKind::EXPT);
@@ -176,6 +195,43 @@ class Node {
         check(NodeKind::EXPT);
         ASSERT(index < payload_.names->count, "No exported name at this index");
         return *payload_.names->items[index];
+    }
+
+    /// LOOP: `loop s1 = a1, ..., sk = ak (for x in xs)? (while c)? do b` (design principles
+    /// 2.10, 2.13). The children, in order: the k first values a1 ... ak; with `for`, the
+    /// sequence xs; with `while`, an EXEC holding the condition c; last, the EXEC of the body b.
+    /// The first values and the sequence are evaluated once, where the loop is; the condition
+    /// sees the state names, the body the state names and the element.
+    camel::core::LoopKind loopKind() const {
+        check(NodeKind::LOOP);
+        return static_cast<camel::core::LoopKind>(tag_);
+    }
+    /// LOOP: the number of names of the state (k).
+    size_t loopStateCount() const {
+        check(NodeKind::LOOP);
+        return payload_.names->count - (camel::core::loopHasIterable(loopKind()) ? 1 : 0);
+    }
+    /// LOOP: the j-th name of the state.
+    const std::string &loopStateName(size_t j) const {
+        ASSERT(j < loopStateCount(), "No state name at this index");
+        return *payload_.names->items[j];
+    }
+    /// LOOP with `for`: the name of the element.
+    const std::string &loopElementName() const {
+        ASSERT(camel::core::loopHasIterable(loopKind()), "The loop has no element");
+        return *payload_.names->items[payload_.names->count - 1];
+    }
+    /// LOOP: the children, by role (see loopKind).
+    node_ptr_t loopInitial(size_t j) const { return at(j); }
+    node_ptr_t loopSequence() const {
+        return camel::core::loopHasIterable(loopKind()) ? at(loopStateCount()) : nullptr;
+    }
+    node_ptr_t loopCondition() const {
+        return camel::core::loopHasCondition(loopKind()) ? at(size() - 2) : nullptr;
+    }
+    node_ptr_t loopBody() const {
+        check(NodeKind::LOOP);
+        return back();
     }
 
     /// ACCS: an element by position (`t.0`) or a field by name (`s.x`).

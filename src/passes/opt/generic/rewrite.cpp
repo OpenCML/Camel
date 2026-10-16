@@ -125,6 +125,7 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
     case camel::runtime::GCNodeKind::Join:
     case camel::runtime::GCNodeKind::Brch:
     case camel::runtime::GCNodeKind::Sync:
+    case camel::runtime::GCNodeKind::Loop: // runs its graphs, which may have effects
         return true;
     case camel::runtime::GCNodeKind::Gate:
         return !draft.ctrlInputsOf(id).empty();

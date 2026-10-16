@@ -42,8 +42,6 @@ struct GCGraphDebugRecord {
     std::string stableId;
     std::string mangledName;
     std::string name;
-    // Source origin of each node that has one, by runtime node ref.
-    std::unordered_map<gc_node_ref_t, uint64_t> nodeOrigins;
     // The names the graph captures, in the order it captured them (GCGraph::captureNames).
     std::vector<camel::core::SymId> captureNames;
 };
@@ -56,6 +54,8 @@ struct GCGraphPayloadShape {
     gc_cnt_t withPortCount  = 0;
     gc_cnt_t closureCount   = 0;
     gc_cnt_t branchArmCount = 0;
+    // Whether some node has numeric permissions: only then the graph has a permission column.
+    bool permissions = false;
 };
 
 struct GCGraphPayloadArena {
@@ -65,6 +65,8 @@ struct GCGraphPayloadArena {
     const std::unordered_map<const GCGraph *, uint32_t> *refIndex = nullptr;
 
     GCNode *nodes              = nullptr; // nodeCount + 1 records
+    uint32_t *origins          = nullptr; // nodeCount source origins
+    uint8_t *permissions       = nullptr; // nodeCount numeric permissions, or null
     gc_node_ref_t *inputs      = nullptr;
     gc_payload_word_t *payload = nullptr;
     gc_node_ref_t *normPorts = nullptr;
@@ -90,9 +92,9 @@ struct GCGraphPayloadArena {
 GCGraphDebugRecord *
 createGraphDebugRecord(std::string stableId, std::string mangledName, std::string name);
 
-/// Records the cold data of `draft` in `record`: the source origins of its nodes, keyed by the
-/// runtime node refs the draft encodes to, and the names it captures. Every encoding of a draft
-/// calls it, so that nothing of the draft's debug data is lost on a commit.
+/// Records the cold data of `draft` in `record`: the names it captures. (The source origins of
+/// its nodes are a column of the frozen graph, written with the records.) Every encoding of a
+/// draft calls it, so that nothing of the draft's debug data is lost on a commit.
 void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft);
 
 /// The frame layout of a graph being built: the slot types, slot 0 included, or nullopt for a
@@ -124,6 +126,23 @@ struct GCGraphBuildAccess {
         std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
         const std::function<void(GCGraphPayloadArena &)> &emitPayload,
         std::span<const slot_t> staticSlots);
+
+    /// Records that `copy` is a private copy of `source` (GCGraph::originalGraph): the original
+    /// of `source` when it is a copy itself, else `source`. Set by a detached commit before
+    /// anything can see `copy`.
+    static void setOriginal(GCGraph *copy, GCGraph *source) {
+        copy->originalGraph_ = source->originalGraph_ ? source->originalGraph_ : source;
+    }
+
+    /// Makes `copy`, a commit's encoding of `source`, the same graph to the fact store
+    /// (GCGraph::lineage) and, when the commit did not change it, the same revision
+    /// (GCGraph::serial). Set before anything can see `copy`.
+    static void inheritIdentity(GCGraph *copy, const GCGraph *source, bool changed) {
+        copy->lineage_ = source->lineage_;
+        if (!changed) {
+            copy->serial_ = source->serial_;
+        }
+    }
 };
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft);
 void emitDraftNativePayload(

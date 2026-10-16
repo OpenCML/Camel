@@ -136,6 +136,12 @@ bool mayHaveEffects(const GCGraph *graph, std::unordered_set<const GCGraph *> &s
                 return true;
             }
         }
+        if (node->kind == GCNodeKind::Loop) {
+            if (mayHaveEffects(graph->loopCondGraphOf(it.ref()), seen) ||
+                mayHaveEffects(graph->loopBodyGraphOf(it.ref()), seen)) {
+                return true;
+            }
+        }
     }
     for (GCGraph *sub : graph->subGraphs()) {
         if (mayHaveEffects(sub, seen)) {
@@ -391,16 +397,23 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> 
             continue;
         }
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            GCGraph *callee = graph->directCalleeGraphOf(it.ref());
-            if (!callee) {
-                continue;
+            // A LOOP node calls its condition and body graphs as a FUNC node calls its
+            // callee: a function called from a loop body that calls the function the loop is
+            // in is a recursion through the loop.
+            for (GCGraph *callee :
+                 {graph->directCalleeGraphOf(it.ref()),
+                  graph->loopCondGraphOf(it.ref()),
+                  graph->loopBodyGraphOf(it.ref())}) {
+                if (!callee) {
+                    continue;
+                }
+                auto calleeIt = indexOf.find(callee);
+                if (calleeIt == indexOf.end()) {
+                    continue;
+                }
+                edges[i].push_back(calleeIt->second);
+                reverseEdges[calleeIt->second].push_back(i);
             }
-            auto calleeIt = indexOf.find(callee);
-            if (calleeIt == indexOf.end()) {
-                continue;
-            }
-            edges[i].push_back(calleeIt->second);
-            reverseEdges[calleeIt->second].push_back(i);
         }
     }
 

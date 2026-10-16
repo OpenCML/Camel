@@ -1,0 +1,113 @@
+[36m[INFO][0m camel executable: D:\Projects\Camel\out\latest\bin\camel.exe
+[36m[INFO][0m discovered plans: 5
+
+[36m[PLAN][0m feat.modules.tensor: modules.tensor
+[32m[PASS][0m broadcast_ops                                         33.86 ms
+[32m[PASS][0m reductions                                            17.54 ms
+[32m[PASS][0m linalg_layout                                         18.21 ms
+[32m[PASS][0m shape_error                                           16.42 ms
+[32m[PASS][0m static_types                                          17.75 ms
+[32m[PASS][0m gemm_consistency                                      19.71 ms
+[32m[PASS][0m gc_tail_chain                                         18.70 ms
+[32m[PASS][0m struct_covariance                                     18.29 ms
+[32m[PASS][0m transcendentals                                       17.48 ms
+[32m[PASS][0m fuse_linear_reference                                 18.10 ms
+[32m[PASS][0m fuse_linear_pass                                      17.04 ms
+[32m[PASS][0m fuse_linear_graph                                     16.00 ms
+[32m[PASS][0m static_shape_error                                    15.90 ms
+[32m[PASS][0m runtime_shape_column.nvm                              17.86 ms
+[32m[PASS][0m runtime_shape_column.fvm                              17.44 ms
+[32m[PASS][0m reshape_view_gc.nvm                                   21.77 ms
+[32m[PASS][0m reshape_view_gc.fvm                                   20.38 ms
+[32m[PASS][0m reshape_view_gc.jit                                   22.81 ms
+[32m[PASS][0m gradient_broadcast_axes                               18.88 ms
+[32m[PASS][0m numeric_contract.nvm                                  17.43 ms
+[32m[PASS][0m numeric_contract.fvm                                  18.16 ms
+[32m[PASS][0m numeric_contract.jit                                  18.12 ms
+[32m[PASS][0m numeric_contract.prl                                  23.81 ms
+[32m[PASS][0m gemm_canonical                                        26.47 ms
+[32m[PASS][0m gemm_canonical.fused                                  19.40 ms
+[32m[PASS][0m gemm_canonical.generic_unit                           21.71 ms
+[32m[PASS][0m numeric_contract.generic_unit                         19.08 ms
+
+[36m[PLAN][0m feat.modules.tiles: modules.tiles
+[32m[PASS][0m plan                                                  18.05 ms
+[32m[PASS][0m plan_validation                                      161.12 ms
+[32m[PASS][0m source                                                18.77 ms
+[32m[PASS][0m reject_effect                                         28.22 ms
+[32m[PASS][0m selected_branch_effect                                17.60 ms
+[32m[PASS][0m empty_mean                                            16.58 ms
+
+[36m[PLAN][0m gpu.tiles: gpu.tiles
+[32m[PASS][0m runtime_scalars                                      778.58 ms
+[32m[PASS][0m ordered_reduction_fusion                             994.37 ms
+[32m[PASS][0m matmul_rounding.nvm                                  187.78 ms
+[32m[PASS][0m matmul_rounding.fvm                                  187.34 ms
+[32m[PASS][0m matmul_rounding.jit                                  195.09 ms
+[32m[PASS][0m max_special_values                                   765.30 ms
+[32m[PASS][0m max_grid_stride                                      244.10 ms
+[32m[PASS][0m benchmark_protocol                                   417.59 ms
+[32m[PASS][0m fusion.nvm                                           182.46 ms
+[32m[PASS][0m fusion.fvm                                           227.04 ms
+[32m[PASS][0m fusion.jit                                           184.59 ms
+[32m[PASS][0m boundaries.nvm                                       215.99 ms
+[32m[PASS][0m boundaries.fvm                                       215.87 ms
+[32m[PASS][0m boundaries.jit                                       212.52 ms
+[32m[PASS][0m vector_add                                           160.10 ms
+[32m[PASS][0m softmax                                              169.71 ms
+[32m[PASS][0m matmul                                               164.72 ms
+[32m[PASS][0m consistency.nvm                                      236.18 ms
+[32m[PASS][0m consistency.fvm                                      236.53 ms
+[32m[PASS][0m consistency.jit                                      249.26 ms
+[32m[PASS][0m index_maps.nvm                                       213.63 ms
+[32m[PASS][0m index_maps.fvm                                       206.21 ms
+[32m[PASS][0m index_maps.jit                                       206.92 ms
+[32m[PASS][0m mapped_fusion.nvm                                    212.78 ms
+[32m[PASS][0m mapped_fusion.fvm                                    205.04 ms
+[32m[PASS][0m mapped_fusion.jit                                    211.10 ms
+[32m[PASS][0m aggregate_outputs.nvm                                238.17 ms
+[32m[PASS][0m aggregate_outputs.fvm                                240.96 ms
+[32m[PASS][0m aggregate_outputs.jit                                242.41 ms
+[32m[PASS][0m gradients.nvm                                        291.99 ms
+[32m[PASS][0m gradients.fvm                                        283.77 ms
+[32m[PASS][0m gradients.jit                                        289.08 ms
+[32m[PASS][0m specialized_branches.nvm                             218.06 ms
+[32m[PASS][0m specialized_branches.fvm                             222.01 ms
+[32m[PASS][0m specialized_branches.jit                             222.39 ms
+[32m[PASS][0m value_gradient.nvm                                   269.23 ms
+[32m[PASS][0m value_gradient.fvm                                   280.57 ms
+[32m[PASS][0m value_gradient.jit                                   276.59 ms
+[32m[PASS][0m resident_transfers.nvm                               144.19 ms
+[32m[PASS][0m resident_transfers.fvm                               153.17 ms
+[32m[PASS][0m resident_transfers.jit                               154.18 ms
+[32m[PASS][0m resident_compute.nvm                                 208.57 ms
+[32m[PASS][0m resident_compute.fvm                                 204.62 ms
+[32m[PASS][0m resident_compute.jit                                 214.27 ms
+[32m[PASS][0m resident_outputs.nvm                                 228.83 ms
+[32m[PASS][0m resident_outputs.fvm                                 230.08 ms
+[32m[PASS][0m resident_outputs.jit                                 230.21 ms
+[32m[PASS][0m resident_scalars.nvm                                 245.24 ms
+[32m[PASS][0m resident_scalars.fvm                                 233.81 ms
+[32m[PASS][0m resident_scalars.jit                                 239.26 ms
+[32m[PASS][0m scalar_arithmetic.nvm                                230.94 ms
+[32m[PASS][0m scalar_zero.nvm                                      157.05 ms
+[32m[PASS][0m scalar_arithmetic.fvm                                229.12 ms
+[32m[PASS][0m scalar_zero.fvm                                      153.69 ms
+[32m[PASS][0m scalar_arithmetic.jit                                229.79 ms
+[32m[PASS][0m scalar_zero.jit                                      162.28 ms
+[32m[PASS][0m scalar_zero_positive                                 162.99 ms
+[32m[PASS][0m scalar_zero_control.nvm                              154.71 ms
+[32m[PASS][0m scalar_zero_control.fvm                              153.83 ms
+[32m[PASS][0m scalar_zero_control.jit                              156.20 ms
+[32m[PASS][0m module_lease                                         893.63 ms
+[32m[PASS][0m extrema_canonical_bits                                  3.97 s
+[32m[PASS][0m numeric_permission_boundaries                           1.06 s
+[32m[PASS][0m numeric_permissions_moving_gc                           1.07 s
+
+[36m[PLAN][0m gpu.tiles_transfer: gpu.tiles_transfer
+[32m[PASS][0m large_upload_completion                              340.31 ms
+
+[36m[PLAN][0m feat.tools.portability: Properties of the sources that one platform's toolchain does not check for the others.
+[32m[PASS][0m portability.std_includes                                1.18 s
+
+[36m[SUMMARY][0m total: 99, pass: 99, fail: 0

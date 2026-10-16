@@ -19,6 +19,7 @@
 
 #include "camel/parse/ast/builder.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/operator_semantics.h"
 
 #include "camel/utils/scope.h"
 #include "camel/utils/token.h"
@@ -519,6 +520,20 @@ Value Builder::visitBlockStmt(cst::BlockStmt context) {
     if (context->tok(TK::KwWait)) {
         unwrapNodeAs<StmtBlockLoad>(res)->wait();
     }
+    // `@numeric(...)` before a block grants its permissions to the block (design principles
+    // 2.13). A decorator takes a function and gives one; a block is not a function.
+    for (const auto &anno : context->all<cst::FuncAnno>()) {
+        if (const auto permissions = numericAnnotationOf(anno)) {
+            unwrapNodeAs<StmtBlockLoad>(res)->grantNumeric(*permissions);
+        } else {
+            diags_->of(SemanticDiag::InvalidAnnotation)
+                .at(rangeOf(anno->firstToken(), anno->lastToken()))
+                .commit(
+                    anno->get<cst::IdentRef>()->text(),
+                    "a decorator applies to a function, and this is a block; a block takes "
+                    "only '@numeric(...)'");
+        }
+    }
     LEAVE("BlockStmt");
     return res;
 }
@@ -666,8 +681,49 @@ Value Builder::visitFuncData(cst::FuncData context) {
 }
 
 /*
-funcAnno   : '@' identRef angledValues? ;
+funcAnno   : '@' identRef (angledValues | parentIdents)? ;
+`@numeric(name, ...)`: the numeric permissions the program grants (design principles 2.13).
 */
+std::optional<uint8_t> Builder::numericAnnotationOf(cst::FuncAnno context) {
+    const auto names = context->get<cst::ParentIdents>();
+    if (!names) {
+        return std::nullopt;
+    }
+    const std::string annotation = context->get<cst::IdentRef>()->text();
+    auto reject = [&](const std::string &why) {
+        diags_->of(SemanticDiag::InvalidAnnotation)
+            .at(rangeOf(context->firstToken(), context->lastToken()))
+            .commit(annotation, why);
+    };
+    if (annotation != "numeric") {
+        reject(
+            "the only annotation that takes names in parentheses is '@numeric(...)'; a "
+            "decorator takes its arguments as '@name<args>'");
+        return uint8_t{0};
+    }
+    uint8_t granted = 0;
+    const auto list = names->get<cst::IdentList>();
+    if (!list) {
+        reject("it names no permission; write one or more of reassociate, contract, "
+               "approx_math, change_precision, finite_math, no_nans, no_infs, "
+               "no_signed_zeros, flush_subnormals");
+        return uint8_t{0};
+    }
+    for (const auto &ident : list->all<cst::IdentDef>()) {
+        const std::string name(ident->text());
+        if (const auto permission = camel::core::sem::parsePermission(name)) {
+            granted |= *permission;
+        } else {
+            reject(
+                "'" + name +
+                "' is not a permission; the permissions are reassociate, contract, "
+                "approx_math, change_precision, finite_math (no_nans, no_infs, "
+                "no_signed_zeros, flush_subnormals)");
+        }
+    }
+    return granted;
+}
+
 Value Builder::visitFuncAnno(cst::FuncAnno context) {
     ENTER("FuncAnno");
 
@@ -701,12 +757,19 @@ funcDecl   :
 Value Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");
 
+    // Decorators are applied to the function; `@numeric(...)` grants its permissions to the
+    // function's body (design principles 2.13), which is where the GCT builder reads them.
     node_ptr_t annoListNode = nullptr;
-    if (!context->all<cst::FuncAnno>().empty()) {
-        annoListNode = createNodeAs<RepeatedLoad>("FuncAnno");
-        for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
-            *annoListNode << any2node(visitFuncAnno(funcAnno));
+    uint8_t numericPermissions = 0;
+    for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
+        if (const auto permissions = numericAnnotationOf(funcAnno)) {
+            numericPermissions |= *permissions;
+            continue;
         }
+        if (!annoListNode) {
+            annoListNode = createNodeAs<RepeatedLoad>("FuncAnno");
+        }
+        *annoListNode << any2node(visitFuncAnno(funcAnno));
     }
 
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
@@ -797,6 +860,7 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     }
 
     node_ptr_t blockNode = any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
+    unwrapNodeAs<StmtBlockLoad>(blockNode)->grantNumeric(numericPermissions);
 
     node_ptr_t funcNode = createNodeAs<FuncDataLoad>(ref);
     setNodeTokenRangeByContext(funcNode, context);
@@ -3003,18 +3067,17 @@ Value Builder::visitIdentRef(cst::IdentRef context) {
 }
 
 /*
-loopExpr : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock ;
+loopExpr : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr ;
+loopState : identDef '=' logicalOrExpr ;
 The children of the node are described at LoopExprLoad.
 */
 Value Builder::visitLoopExpr(cst::LoopExpr context) {
     std::vector<Reference> state;
-    const auto tuple = context->get<cst::ParentIdents>();
-    if (tuple) {
-        for (const auto ident : tuple->get<cst::IdentList>()->all<cst::IdentDef>()) {
-            state.emplace_back(ident->text());
-        }
-    } else {
-        state.emplace_back(context->get<cst::IdentDef>()->text());
+    node_ptr_t inits = createNodeAs<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(inits, context);
+    for (const auto entry : context->all<cst::LoopState>()) {
+        state.emplace_back(entry->get<cst::IdentDef>()->text());
+        *inits << any2node(visitExpr(entry->expr()));
     }
     const auto forClause   = context->get<cst::LoopFor>();
     const auto whileClause = context->get<cst::LoopWhile>();
@@ -3022,9 +3085,9 @@ Value Builder::visitLoopExpr(cst::LoopExpr context) {
     if (forClause) {
         binder = Reference(forClause->get<cst::IdentDef>()->text());
     }
-    node_ptr_t loopNode = createNodeAs<LoopExprLoad>(state, static_cast<bool>(tuple), binder);
+    node_ptr_t loopNode = createNodeAs<LoopExprLoad>(state, binder);
     setNodeTokenRangeByContext(loopNode, context);
-    *loopNode << any2node(visitExpr(context->expr()));
+    *loopNode << inits;
     node_ptr_t sequence = createNodeAs<OptionalLoad>("Data");
     if (forClause) {
         setNodeTokenRangeByContext(sequence, forClause);
@@ -3036,7 +3099,8 @@ Value Builder::visitLoopExpr(cst::LoopExpr context) {
         *condition << any2node(visitExpr(whileClause->expr()));
     }
     *loopNode << sequence << condition;
-    *loopNode << any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
+    // The expression after `do`, read as the arm of an `if` is: always a block on the AST.
+    *loopNode << any2node(visitBlockExpr(context->lastChild().node()));
     return loopNode;
 }
 

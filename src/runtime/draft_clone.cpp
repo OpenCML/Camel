@@ -90,6 +90,12 @@ std::vector<std::byte> clonePayloadBytes(
         std::memcpy(bytes.data(), &callee, sizeof(callee));
         return bytes;
     }
+    if (sourceNode->kind == GCNodeKind::Loop) {
+        const GCLoopBody loop = loopBodyOf(*sourceGraph, sourceRef);
+        std::vector<std::byte> bytes(sizeof(GCLoopBody));
+        std::memcpy(bytes.data(), &loop, sizeof(loop));
+        return bytes;
+    }
     const auto body = sourceGraph->nodePayloadBytes(sourceRef);
     std::vector<std::byte> bytes(body.begin(), body.end());
     if (sourceNode->kind == GCNodeKind::Join && bytes.size() >= sizeof(GCJoinBody)) {
@@ -315,6 +321,7 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
             .kind         = sourceNode->kind,
             .runtimeFlags = sourceNode->flags,
             .origin       = sourceGraph->nodeOrigin(sourceRef),
+            .permissions  = sourceGraph->nodePermissions(sourceRef),
             .payload      = payload,
         };
         CAMEL_LOG_INFO_S("DraftClone", "Clone addNode for sourceRef={}.", sourceRef);
@@ -451,6 +458,7 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDra
             .kind         = sourceNode->kind,
             .runtimeFlags = sourceNode->runtimeFlags,
             .origin       = sourceNode->origin,
+            .permissions  = sourceNode->permissions,
             .payload      = payload,
         };
         const gc_node_ref_t clonedId = owner.addNode(init);

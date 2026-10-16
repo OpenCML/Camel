@@ -119,6 +119,23 @@ bool RandomModule::load() {
             {"sample", false},
             {"shuffle", false},
         });
+    // What each touches (docs/design/op-semantics 8): the module's generator. Its draws are
+    // effects the program orders like any other (the operators are not pure).
+    {
+        using camel::core::sem::AccessMode;
+        using camel::core::sem::externalAmbient;
+        camel::core::OperatorTable::instance().declareResources(
+            "rand",
+            {
+                {"seed", externalAmbient("rand:generator", AccessMode::Write)},
+                {"rand", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
+                {"randn", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
+                {"randint", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
+                {"choice", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
+                {"sample", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
+                {"shuffle", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
+            });
+    }
     loaded_ = true;
     return true;
 }

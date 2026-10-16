@@ -1,4 +1,4 @@
-"""Check selection semantics, including NaNs and signed-zero ties, without NumPy."""
+"""Check canonical extrema bits, including NaNs and signed zeros, without NumPy."""
 import ast
 import json
 import math
@@ -20,7 +20,7 @@ def read_values(path):
     size = struct.unpack_from('<H', raw, 8)[0]
     header = ast.literal_eval(raw[10:10 + size].decode())
     assert header['descr'] == '<f4' and header['shape'] == (8,), header
-    return struct.unpack('<8f', raw[10 + size:])
+    return struct.unpack('<8I', raw[10 + size:])
 
 with tempfile.TemporaryDirectory(prefix='camel-tiles-max-') as folder:
     env['TILES_TEST_OUT'] = folder
@@ -34,10 +34,6 @@ with tempfile.TemporaryDirectory(prefix='camel-tiles-max-') as folder:
         expected = 'parallel_max' if width >= 128 else 'standard'
         assert plan['stages'][0]['implementation'] == expected, plan
         cpu, gpu = [read_values(Path(folder) / f'{name}.npy') for name in ['cpu', 'gpu']]
-        for a, b in zip(cpu, gpu):
-            assert (math.isnan(a) and math.isnan(b)) or struct.pack('<f', a) == struct.pack('<f', b), (width, cpu, gpu)
-        assert math.isnan(gpu[0]) and math.isnan(gpu[6]), gpu
-        assert gpu[1] == 4 and gpu[4] == -math.inf and gpu[5] == math.inf and gpu[7] == 9, gpu
-        assert struct.pack('<f', gpu[2]) == b'\0\0\0\0', gpu
-        assert struct.pack('<f', gpu[3]) == b'\0\0\0\x80', gpu
+        expected_bits = (0x7fc00000, 0x7fc00000, 0, 0, 0xff800000, 0x7f800000, 0x7fc00000, 0x41100000)
+        assert cpu == gpu == expected_bits, (width, cpu, gpu)
         print(f'max width={width}: NaNs, infinities and signed-zero ties match')

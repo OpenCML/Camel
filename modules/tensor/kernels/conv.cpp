@@ -31,6 +31,7 @@
 
 #include "elementwise.h"
 #include "gemm.h"
+#include "minmax.h"
 #include "parallel.h"
 
 #include <algorithm>
@@ -320,7 +321,9 @@ TensorObject *pool2d(
             float *dst       = out->dataAs<float>() + p * OH * OW;
             for (int64_t oh = 0; oh < OH; ++oh) {
                 for (int64_t ow = 0; ow < OW; ++ow) {
-                    float best = -std::numeric_limits<float>::infinity();
+                    // Max pooling is a maximum reduction over the window's inside elements
+                    // (IEEE maximum from its identity -inf: a NaN in the window gives NaN).
+                    float best = maximumIdentity<float>();
                     double sum = 0.0;
                     for (int64_t kh = 0; kh < window.kernelH; ++kh) {
                         const int64_t ih = oh * window.strideH - window.padH + kh;
@@ -329,7 +332,7 @@ TensorObject *pool2d(
                             const bool inside = ih >= 0 && ih < H && iw >= 0 && iw < W;
                             const float v     = inside ? src[ih * W + iw] : 0.0f;
                             if (inside) {
-                                best = std::max(best, v);
+                                best = maximum(best, v);
                             }
                             sum += v; // zero padding counts toward the average (count_include_pad)
                         }

@@ -92,11 +92,16 @@ CAMEL_MATH_FN2(hypot)
 
 // ---- min, max, clamp, sign: the four numeric types ----
 
-// A NaN argument gives NaN, whichever side it is on (std::min and std::max depend on the order).
+// min and max are IEEE 754-2019 minimum and maximum (design principles 2.13), as the tensor
+// operators are (modules/tensor/kernels/minmax.h): a NaN argument gives the canonical quiet
+// NaN, whichever side it is on, and -0 is below +0 (std::min and std::max depend on the order
+// for both). Equal floats are identical except for the sign of zero, which decides between them.
 template <typename T> T minOf(T a, T b) {
     if constexpr (std::is_floating_point_v<T>) {
         if (std::isnan(a) || std::isnan(b))
             return std::numeric_limits<T>::quiet_NaN();
+        if (a == b)
+            return std::signbit(a) ? a : b;
     }
     return b < a ? b : a;
 }
@@ -105,6 +110,8 @@ template <typename T> T maxOf(T a, T b) {
     if constexpr (std::is_floating_point_v<T>) {
         if (std::isnan(a) || std::isnan(b))
             return std::numeric_limits<T>::quiet_NaN();
+        if (a == b)
+            return std::signbit(a) ? b : a;
     }
     return a < b ? b : a;
 }

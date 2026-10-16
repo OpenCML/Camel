@@ -18,6 +18,7 @@
  */
 
 #include "graphviz.h"
+#include "camel/core/operator_semantics.h"
 
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
@@ -185,6 +186,17 @@ string recordLabel(
         return "SYNC";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
+    case camel::runtime::GCNodeKind::Loop: {
+        // `LOOP while cond=f.loop1.cond body=f.loop1.body` (graph model 3.5, the LOOP card).
+        const auto *cond = graph->loopCondGraphOf(nodeRef);
+        const auto *body = graph->loopBodyGraphOf(nodeRef);
+        std::string text =
+            std::format("LOOP {}", camel::core::loopKindName(graph->loopKindOf(nodeRef)));
+        if (cond) {
+            text += " cond=" + cond->name();
+        }
+        return text + " body=" + (body ? body->name() : std::string("?"));
+    }
     default:
         return "NODE";
     }
@@ -218,6 +230,8 @@ string recordType(const camel::runtime::GCNode &record) {
         return "SYNC";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
+    case camel::runtime::GCNodeKind::Loop:
+        return "LOOP";
     default:
         return "NODE";
     }
@@ -237,6 +251,7 @@ string recordShape(const camel::runtime::GCNode &record) {
     case camel::runtime::GCNodeKind::Gate:
         return "diamond";
     case camel::runtime::GCNodeKind::Func:
+    case camel::runtime::GCNodeKind::Loop:
         return "Mdiamond";
     default:
         return "circle";
@@ -547,8 +562,16 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         const string valueType = node->kind == camel::runtime::GCNodeKind::Fill && node->dataType()
                                      ? node->dataType()->toString()
                                      : "";
+        // The numeric permissions the program granted with @numeric(...) (design principles
+        // 2.13): an attribute only on the nodes that have any, so that the dump of a program
+        // without the annotation is unchanged.
+        const uint8_t permissions = graph->nodePermissions(nodeRef);
         const string valueAttr =
-            valueType.empty() ? "" : std::format(", value_type=\"{}\"", escape(valueType));
+            (valueType.empty() ? "" : std::format(", value_type=\"{}\"", escape(valueType))) +
+            (permissions == 0 ? ""
+                              : std::format(
+                                    ", numeric=\"{}\"",
+                                    camel::core::sem::permissionsText(permissions)));
         // Boundary roles: a role attribute; styled dumps also fill the node with its first role's
         // color and list every role in the tooltip.
         string roleAttr, roleFill, roleTooltip;

@@ -205,14 +205,16 @@ inner func trunc(x: f32 | float): f32 | float {
 
 // ---- comparing ----
 
-/// The smaller of two numbers of one type. With a NaN on either side the result is NaN.
+/// The smaller of two numbers of one type (IEEE 754 minimum). With a NaN on either side
+/// the result is NaN; -0 is below +0.
 /// @pure
 /// @example min(3, 5)    // 3
 inner func min(a: i32 | int | f32 | float, b: i32 | int | f32 | float): i32 | int | f32 | float {
     return 'math:min_*'
 }
 
-/// The larger of two numbers of one type. With a NaN on either side the result is NaN.
+/// The larger of two numbers of one type (IEEE 754 maximum). With a NaN on either side
+/// the result is NaN; -0 is below +0.
 /// @pure
 /// @example max(3, 5)    // 5
 inner func max(a: i32 | int | f32 | float, b: i32 | int | f32 | float): i32 | int | f32 | float {

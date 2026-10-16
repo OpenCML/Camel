@@ -23,12 +23,15 @@
 
 #include "fuse.h"
 
+#include "index_eval.h"
+
 #include "../ops/registry.h"
 
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <array>
 #include <format>
 #include <optional>
@@ -103,14 +106,18 @@ std::optional<Match> findMatch(const GraphDraft &draft) {
         // Float addition is commutative, so the product may be either operand.
         for (size_t k = 0; k < 2; ++k) {
             const gc_node_ref_t mm = ins[k];
+            // The fused node stands for the whole pattern, so every node of it must have been
+            // granted the same numeric permissions (design principles 2.13), which it keeps.
             if (operOf(draft, mm) != ops.matmul || draft.normInputsOf(mm).size() != 2 ||
-                !isPrivateIntermediate(draft, mm, id)) {
+                !isPrivateIntermediate(draft, mm, id) ||
+                draft.nodePermissions(mm) != draft.nodePermissions(id)) {
                 continue;
             }
             Match m{.matmul = mm, .add = id, .relu = kInvalidNodeRef, .bias = ins[1 - k]};
             const auto users = draft.normUsersOf(id);
             if (users.size() == 1 && operOf(draft, users[0]) == ops.relu &&
-                isPrivateIntermediate(draft, id, users[0])) {
+                isPrivateIntermediate(draft, id, users[0]) &&
+                draft.nodePermissions(users[0]) == draft.nodePermissions(id)) {
                 m.relu = users[0];
             }
             return m;
@@ -145,6 +152,7 @@ void fuse(GraphDraft &draft, const Match &m) {
     const gc_node_ref_t fused = draft.addOperNode(draft.header(root)->dataType, def->kernel, uri);
     draft.setNormInputs(fused, inputs);
     draft.setCtrlInputs(fused, ctrl);
+    draft.setNodePermissions(fused, draft.nodePermissions(m.add));
 
     draft.replaceAllValueUses(root, fused);
     draft.replaceAllCtrlUses(root, fused);
@@ -186,6 +194,13 @@ void registerTensorPasses() {
     registerModulePass("tensor::fuse", [](const core::context::context_ptr_t &ctx) {
         return std::make_unique<TensorFusePass>(ctx);
     });
+    // The declaration evaluator is a test (index_eval.h): it exists only when test passes are
+    // enabled, as the core's test passes do (CAMEL_ENABLE_TEST_PASSES).
+    if (std::getenv("CAMEL_ENABLE_TEST_PASSES") != nullptr) {
+        registerModulePass("tensor::test_index_eval", [](const core::context::context_ptr_t &ctx) {
+            return std::make_unique<IndexEvalTestPass>(ctx);
+        });
+    }
 }
 
 } // namespace camel::tensor::passes

@@ -72,6 +72,19 @@ type Pair<T> = (T, T)
 - **A zero divisor is a fault** (`RuntimeDiag::DivisionByZero`), for integers and floating-point numbers alike: `1.0 / 0.0` does not give infinity. Floating-point overflow gives `inf`.
 - `^` is power: `7 ^ 2` is `49`, `2.0 ^ 0.5` is `1.41421`; a negative exponent on integers gives `0`.
 
+### 3.2.1 The numeric contract of floating point
+
+The result of floating-point arithmetic is fixed by a **canonical algorithm**, not by the implementation of some machine (design principles 2.13):
+
+- Addition, subtraction, multiplication, division and square root are each rounded correctly as IEEE 754 says, strictly in the order written, and `a * b + c` is not contracted into one fused multiply-add. Within this scope every back end and every device gives the same bits.
+- **`max` and `min` are IEEE 754-2019 `maximum` and `minimum`**: a NaN on either side gives NaN, and `-0` is below `+0`, whichever side each value is on. This holds for `math::max`/`math::min`, the tensor `maximum`/`minimum`, the `max`/`min` reductions along an axis, max pooling and the maximum inside `softmax`. A maximum or minimum reduction gives the same bits in any order.
+- **`relu(x)` is `maximum(x, +0)`**: `relu(NaN)` is NaN, `relu(-0)` is `+0`.
+- **The canonical algorithm of matrix multiplication** is one chain of fused multiply-adds per element, in ascending k: `acc = +0`, then `acc = fma(a[i][k], b[k][j], acc)` for each k. A fused multiply-add is itself one correctly rounded operation, so this is reproducible bit for bit as well. `linear` and `x @ w + b` add the bias after the chain.
+- **The definition of an operator is canonical**: `softmax(x)` is `exp(x - m) / sum(exp(x - m))` (`m` the maximum, the sum accumulated in f64 and rounded once to f32), and the fused implementation gives the same bits.
+- Transcendental functions (`exp`, `log`, ...) are not required to give the same bits everywhere, only to stay within a stated error bound (`exp` and `log`: 2 ulp), with NaN, infinities and zeros exact. `camel inspect --ops` shows the semantics each operator declares.
+
+Faster computation whose results may differ is granted explicitly by the program, with `@numeric(...)` on a function or a block ([7.6.1](07_statements.md#761-numeric-numeric-permissions)). Without a grant, the canonical algorithm is used; there is no module-wide default and no command-line switch.
+
 ## 3.3 Compound values
 
 ### 3.3.1 Arrays

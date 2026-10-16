@@ -115,6 +115,11 @@ node_handle_t Builder::captureInto(
         variables_.insert(port);
         captures_[graph.get()].variables.push_back(origin);
     }
+    // The other graph of a loop takes the same capture at the same position: both lists grow
+    // together, so the LOOP node's With inputs serve both (design principles 2.12).
+    if (auto twin = captureTwins_.find(graph.get()); twin != captureTwins_.end()) {
+        (void)captureInto(twin->second, origin, name);
+    }
     return port;
 }
 

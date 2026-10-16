@@ -137,6 +137,10 @@ bool isVarArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, siz
             reinterpret_cast<const GCFuncBody *>(draft.payloadOf(user).data())->calleeGraph;
         return callee && isVarParam(callee->funcType(), isWith, index);
     }
+    case GCNodeKind::Loop:
+        // The With inputs are the captures of the loop's graphs: a variable among them may be
+        // written by the body. The Norm inputs (the array, the first values) are values.
+        return isWith;
     case GCNodeKind::Call: {
         // The first with input is the callee; the others are its with arguments.
         const auto withInputs = draft.withInputsOf(user);

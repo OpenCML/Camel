@@ -1,0 +1,317 @@
+id = "linear.loops"
+order = 348
+tier = "feat"
+tags = ["feat", "linear", "loops"]
+desc = "The structured loop (design principles 2.10, 2.12, 2.13): the `do` form compiled to a LOOP node, run by every back end (nvm natively, fvm/jit/prl through the private lowering to tail recursion, fvm/jit natively under a debugger or with CAMEL_FVM_NATIVE_LOOP=1), its diagnostics, and the refusals of the consumers that do not handle it yet."
+
+[[tests]]
+name = "loops.shapes"
+desc = "The four shapes of 2.13 on the four back ends: one state over an array (14), two states under a condition whose value is their tuple (5 10), a struct as the state and as the body (11), `for ... while` with an `if` body that stops at the first element above 9 (12) or runs out of elements (-1)."
+kind = "behavior"
+case = "../../../cases/loops/shapes.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["14 5 10 11 12 -1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.effects"
+desc = "A body that is a sync block runs its effects every round, in order, and its last value is the next state; a loop in a sync function returns its last state (countdown 0)."
+kind = "behavior"
+case = "../../../cases/loops/effects.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["0 a\n1 b\n2 c\nrounds 3\ntick 3\ntick 2\ntick 1\ncountdown 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.captures"
+desc = "One capture table for the condition and the body (2.12): the condition captures `limit`, the body `step` and `scale`; a `var` read in the body; nested loops whose inner graphs capture the outer state, in a `for` and in a two-state `while` (24 306 42 25 4)."
+kind = "behavior"
+case = "../../../cases/loops/captures.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["24 306 42 25 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.edges"
+desc = "An empty array and a false first condition leave the first state (7 5); three values of state (fib 30 = 832040); a loop at the top level of the module building an array round by round; a million rounds."
+kind = "behavior"
+case = "../../../cases/loops/edges.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["7 5 832040 [1, 4, 9, 16, 25] 2999997"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "loops.not_recursion"
+desc = "A loop is not a recursion: with --max-recursion-depth 3 the million-round loops still run on every back end."
+kind = "behavior"
+case = "../../../cases/loops/edges.cml"
+args = ["--max-recursion-depth", "3", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["7 5 832040 [1, 4, 9, 16, 25] 2999997"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "loops.inside_recursion"
+desc = "A 5000-round loop at the bottom of a 500-deep non-tail recursion: the rounds take no depth."
+kind = "behavior"
+case = "../../../cases/loops/recursion.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["12498000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.tuple_state"
+desc = "`let (q, r) = loop ...` takes the tuple of the state apart; a bisection whose body is an `if` giving the tuple (9 2 44 45)."
+kind = "behavior"
+case = "../../../cases/loops/tuple_destructure.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["9 2 44 45"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.passes.inline"
+desc = "The passes treat a LOOP node as opaque and keep it: after std::inline the loops give the same results."
+kind = "behavior"
+case = "../../../cases/loops/captures.cml"
+args = ["${case}", "std::inline", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["24 306 42 25 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.passes.simplify"
+desc = "After std::macro std::opt::simplify (fold, inline, specialization) the loops give the same results."
+kind = "behavior"
+case = "../../../cases/loops/captures.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["24 306 42 25 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.macro"
+desc = "std::macro runs a loop in a macro function round by round: a thousand rounds take no evaluation depth (its nesting limit is 64), and the call folds to 500500."
+kind = "behavior"
+case = "../../../cases/loops/macro.cml"
+args = ["${case}", "std::macro", "std::rgir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\"500500\", type=\"DATA\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.rgir"
+desc = "On the graph a loop is one LOOP node naming its form and its two graphs (`LOOP while cond=main.loop2.cond body=main.loop2.body`); `for` has no condition graph."
+kind = "behavior"
+case = "../../../cases/parse/rulings/loop_forms.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+expect_stdout_contains = ["LOOP for body=main.loop1.body", "LOOP while cond=main.loop2.cond body=main.loop2.body", "LOOP for body=main.loop3.body", "LOOP for-while cond=main.loop4.cond body=main.loop4.body", "label=\"main.loop2.cond\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.stats"
+desc = "std::stats counts the LOOP nodes."
+kind = "behavior"
+case = "../../../cases/loops/shapes.cml"
+args = ["${case}", "std::stats", "std::null"]
+expect_exit = 0
+expect_stdout_contains = ["\"loops\":5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.fault"
+desc = "A fault in a round is reported at the expression in the body, on every back end."
+kind = "negative"
+case = "../../../cases/loops/fault.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 61
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.dropped_effect"
+desc = "A loop whose value nothing uses, outside a sync block, does not run and is reported as `The loop` not executed; the function's own value is printed."
+kind = "behavior"
+case = "../../../cases/loops/dropped_effect.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_output_contains = ["The loop has side effects but is never executed", "SemanticDiag::EffectNotExecuted"]
+expect_stdout_contains = ["5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.err_body_type"
+desc = "The body gives a float where the state is an int."
+kind = "negative"
+case = "../../../cases/loops/err_body_type.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopBodyTypeMismatch"
+expect_diagnostic_line = 2
+expect_output_contains = ["gives a value of type 'float'; the state of the loop has type 'int'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.err_not_array"
+desc = "`for` over a string."
+kind = "negative"
+case = "../../../cases/loops/err_not_array.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopSequenceNotArray"
+expect_diagnostic_line = 2
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.err_condition"
+desc = "A `while` condition that is an int."
+kind = "negative"
+case = "../../../cases/loops/err_condition.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopConditionNotBool"
+expect_diagnostic_line = 2
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.err_untyped_state"
+desc = "`null` as a first value gives the state no type."
+kind = "negative"
+case = "../../../cases/loops/err_untyped_state.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopStateWithoutType"
+expect_diagnostic_line = 2
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.err_repeated_name"
+desc = "The element of `for` named like the state."
+kind = "negative"
+case = "../../../cases/loops/err_repeated_name.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopNameRepeated"
+expect_diagnostic_line = 2
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.onnx_refused"
+desc = "onnx.export_model of a function with a loop is refused at the loop (line 8): the LOOP to ONNX Loop translation is the next step."
+kind = "negative"
+case = "../../../cases/loops/onnx_refused.cml"
+args = ["-E", "short", "${case}", "std::macro"]
+expect_exit = 1
+expect_output_contains = ["a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.grad_refused"
+desc = "grad of a function with a loop is refused at the loop (line 7)."
+kind = "negative"
+case = "../../../cases/loops/grad_refused.cml"
+args = ["-E", "short", "${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_line = 7
+expect_output_contains = ["cannot differentiate through a 'loop' expression yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.grad_refused_lowered"
+desc = "grad run by std::fvm without std::macro: the back end lowered the loop in its private copy, but grad reads the program's own graph (OperatorTraits::inspectsGraphs) and refuses the loop at line 7 as std::nvm does."
+kind = "negative"
+case = "../../../cases/loops/grad_refused.cml"
+args = ["-E", "short", "${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_line = 7
+expect_output_contains = ["cannot differentiate through a 'loop' expression yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.onnx_refused_lowered"
+desc = "export_model run by std::prl, which lowers loops in a private copy: the export reads the program's own graph and refuses the loop at line 8."
+kind = "negative"
+case = "../../../cases/loops/onnx_refused.cml"
+args = ["-E", "short", "${case}", "std::prl"]
+expect_exit = 1
+expect_output_contains = ["a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.native_fvm"
+desc = "The native loop instruction of std::fvm and std::jit (CAMEL_FVM_NATIVE_LOOP=1; it is also what a debugger runs): the four shapes, captures and nesting, the edges, give what the lowering gives."
+kind = "behavior"
+case = "../../../cases/loops/captures.cml"
+args = ["${case}", "${backend}"]
+envs = ["CAMEL_FVM_NATIVE_LOOP=1"]
+backends = ["fvm", "jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["24 306 42 25 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.native_fvm_shapes"
+desc = "The four shapes and the edges (a million rounds, a recursion limit of 3) on the native loop instruction of std::fvm and std::jit."
+kind = "behavior"
+case = "../../../cases/loops/edges.cml"
+args = ["--max-recursion-depth", "3", "${case}", "${backend}"]
+envs = ["CAMEL_FVM_NATIVE_LOOP=1"]
+backends = ["fvm", "jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["7 5 832040 [1, 4, 9, 16, 25] 2999997"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

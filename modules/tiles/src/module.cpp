@@ -77,12 +77,15 @@ slot_t inspectKernel(ArgsView &with, ArgsView &norm, Context &) {
 }
 slot_t benchmarkKernel(ArgsView &with, ArgsView &norm, Context &) {
     return checked([&] {
-        return td::toSlot(::String::from(benchmark(prepare(with, norm)), core::mm::autoSpace()));
+        return td::toSlot(
+            ::String::from(
+                benchmark(std::make_shared<const Program>(prepare(with, norm))),
+                core::mm::autoSpace()));
     });
 }
 slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
     return checked([&] {
-        auto program = prepare(with, norm);
+        auto program = std::make_shared<const Program>(prepare(with, norm));
         auto data    = execute(program);
         // Prevent collection of partially assembled aggregates while allocating leaves.
         core::mm::NoCollectionScope noCollection;
@@ -96,7 +99,7 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
                 return td::toSlot(value);
             }
             if (tensor::asTensorType(type)) {
-                const auto &shape  = program.nodes[program.outputs.at(leaf++)].shape;
+                const auto &shape  = program->nodes[program->outputs.at(leaf++)].shape;
                 const size_t count = elements(shape);
                 auto *out =
                     tensor::TensorObject::create(TypeCode::Float32, shape, core::mm::autoSpace());
@@ -169,7 +172,7 @@ Type *residentType(Type *type) {
 }
 slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &) {
     return checked([&] {
-        auto values = executeResident(prepare(with, norm));
+        auto values = executeResident(std::make_shared<const Program>(prepare(with, norm)));
         core::mm::NoCollectionScope noCollection;
         auto *resultType = residentType(static_cast<FunctionType *>(with.type(0))->exitType());
         size_t leaf      = 0;
@@ -409,6 +412,58 @@ class TilesModule final : public BuiltinModule {
              {"benchmark", false},
              {"available", false},
              {"device", false}});
+        // These compile the graph of the function value they receive: a back end that runs a
+        // private copy of the program with its loops lowered hands them the program's own
+        // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
+        for (const char *name : {"run", "run_device", "source", "inspect", "benchmark"}) {
+            core::OperatorTable::instance().set(
+                std::string("tiles:") + name,
+                {.pure = false, .inspectsGraphs = true});
+        }
+        // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
+        // resource `tiles:device` (upload makes one; run and run_device read the device values
+        // among their inputs, run_device returns new ones that may be inputs again); the driver
+        // and the device are ambient state `tiles:driver`. Every operator is an effect outside
+        // the program, as its traits say.
+        {
+            using namespace core::sem;
+            const Resource device{.cls = ResourceClass::Foreign, .name = "tiles:device"};
+            const auto readsDevice = [&] {
+                return operandAccess(ResourceClass::Foreign, 0, AccessMode::Read, device.name);
+            };
+            const auto driver = [](AccessMode mode) { return ambientAccess("tiles:driver", mode); };
+            core::OperatorTable::instance().declareResources(
+                "tiles",
+                {
+                    {"upload",
+                     ResourceSpec{
+                         .accesses       = {driver(AccessMode::ReadModifyWrite)},
+                         .allocates      = device,
+                         .externalEffect = true}},
+                    {"download",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .externalEffect = true}},
+                    {"run",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .externalEffect = true}},
+                    {"run_device",
+                     ResourceSpec{
+                         .accesses  = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .result    = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},
+                         .allocates = device,
+                         .externalEffect = true}},
+                    {"benchmark",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .externalEffect = true}},
+                    {"source", externalAmbient("tiles:driver", AccessMode::Read)},
+                    {"inspect", externalAmbient("tiles:driver", AccessMode::Read)},
+                    {"available", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
+                    {"device", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
+                });
+        }
         loaded_ = true;
         return true;
     }

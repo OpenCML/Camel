@@ -1,0 +1,31 @@
+// Definitions the core must refuse when it builds them (test::definitions, src/passes/test/
+// definitions.h): each is declared there as the definition of a tensor operator.
+module bad_definitions
+
+import { Tensor, softmax, abs } from tensor
+
+/// Declared for tensor:exp: softmax's definition uses exp, so the two form a cycle.
+export func exp_through_softmax(x: Tensor<f32>): Tensor<f32> {
+    return softmax(x, -1) + x
+}
+
+/// Declared for tensor:abs: reaches its own operator.
+export func abs_itself(x: Tensor<f32>): Tensor<f32> {
+    return abs(x)
+}
+
+/// Declared for tensor:neg, which has one operand.
+export func two(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> {
+    return x + y
+}
+
+/// Declared for tensor:sqrt, which is pure: this prints.
+export func noisy(x: Tensor<f32>): Tensor<f32> sync {
+    println(1)
+    return x
+}
+
+/// Declared for tensor:log: generic, so not one graph.
+export func generic(x: typeas T): T {
+    return x
+}

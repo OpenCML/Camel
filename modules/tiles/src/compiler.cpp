@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -19,6 +19,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/graph.h"
+#include "modules/tensor/ops/indexing.h"
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/ops/support.h"
 #include "modules/tensor/tensor.h"
@@ -29,7 +30,6 @@
 #include <bit>
 #include <cmath>
 #include <limits>
-#include <numeric>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -57,6 +57,25 @@ class Compiler {
   public:
     Program program;
     std::unordered_set<rt::GCGraph *> active;
+    std::unordered_map<core::OperId, size_t> contracts;
+
+    size_t contract(core::OperId id) {
+        if (const auto found = contracts.find(id); found != contracts.end())
+            return found->second;
+        auto &table = core::OperatorTable::instance();
+        Program::OperatorContract snapshot{.uri = std::string(table.uri(id))};
+        if (const auto *semantics = table.semantics(id)) {
+            if (semantics->key.major != 1)
+                throw std::runtime_error(
+                    "unsupported operator semantic version " + semantics->key.toString());
+            snapshot.key         = semantics->key;
+            snapshot.declaration = semantics;
+        }
+        const auto index = program.contracts.size();
+        program.contracts.push_back(std::move(snapshot));
+        contracts.emplace(id, index);
+        return index;
+    }
 
     size_t append(Node node) {
         if (program.nodes.size() >= 4096)
@@ -66,7 +85,7 @@ class Compiler {
         return program.nodes.size() - 1;
     }
 
-    Value host(slot_t slot, ty::Type *type) {
+    Value host(slot_t slot, ty::Type *type, bool runtimeInput = false) {
         if (asDeviceType(type)) {
             auto *wrapper = td::fromSlot<td::ForeignResourceObject *>(slot);
             auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
@@ -94,7 +113,7 @@ class Compiler {
                 value.fields.push_back(
                     field == NullSlot && ty::isGCTraced(fieldType->code())
                         ? Value{.type = fieldType}
-                        : host(field, fieldType));
+                        : host(field, fieldType, runtimeInput));
             }
             return value;
         }
@@ -112,6 +131,12 @@ class Compiler {
         auto constant = tensor::ops::constArgOf(slot, type);
         if (!constant)
             throw std::runtime_error("unsupported captured/static value: " + type->toString());
+        if (runtimeInput && type->code() == ty::TypeCode::Float64) {
+            Node node{.op = "input", .shape = {}};
+            node.dtype      = DType::F64;
+            node.scalarBits = std::bit_cast<uint64_t>(std::get<double>(*constant));
+            return {.type = type, .tensor = append(std::move(node))};
+        }
         return {.type = type, .constant = std::move(constant)};
     }
 
@@ -273,7 +298,33 @@ class Compiler {
                     throw std::runtime_error("operator context arguments are not supported yet");
                 for (auto in : ins)
                     args.push_back(eval(f, in));
-                out = operation(g->nodeBodyAs<rt::GCOperBody>(id)->oper, args);
+                const auto first    = program.nodes.size();
+                const auto oper     = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
+                const auto semantic = contract(oper);
+                out                 = operation(oper, args);
+                // Only this operator's lowering inherits its lexical grant.
+                // Arguments and separately called functions have already been
+                // lowered with their own permissions and must remain unchanged.
+                for (size_t i = first; i < program.nodes.size(); ++i) {
+                    program.nodes[i].permissions = g->nodePermissions(id);
+                    program.nodes[i].semantic    = semantic;
+                }
+                // An operator's instance describes its result, never synthetic
+                // casts or constants introduced while lowering its arguments.
+                if (out.tensor != SIZE_MAX && out.tensor >= first &&
+                    !program.nodes[out.tensor].indexing) {
+                    if (const auto *def = tensor::ops::OpRegistry::instance().find(oper)) {
+                        std::vector<ty::Type *> types;
+                        std::vector<std::optional<ConstArg>> constants;
+                        for (const auto &arg : args) {
+                            types.push_back(arg.type);
+                            constants.push_back(arg.constant);
+                        }
+                        program.nodes[out.tensor].indexing = tensor::ops::instantiate(
+                            *def,
+                            tensor::ops::InferContext(types, constants));
+                    }
+                }
                 break;
             }
             default:
@@ -438,58 +489,42 @@ class Compiler {
         } else if (n.op == "transpose" || n.op == "permute" || n.op == "slice") {
             n.inputs          = {tensorValue(args.at(0))};
             const auto &shape = program.nodes[n.inputs[0]].shape;
-            std::vector<size_t> strides(shape.size());
-            for (size_t d = 0; d < shape.size(); ++d)
-                strides[d] = elements(Shape(shape.begin() + d + 1, shape.end()));
-            if (n.op == "slice") {
-                int64_t axis = integer(args.at(1));
-                if (axis < 0)
-                    axis += static_cast<int64_t>(shape.size());
-                if (axis < 0 || size_t(axis) >= shape.size())
-                    throw std::runtime_error("slice axis out of bounds");
-                int64_t start = integer(args.at(2));
-                if (start < 0)
-                    start += shape[axis];
-                const int64_t step = args.size() > 4 ? integer(args.at(4)) : 1;
-                if (start < 0 || start > shape[axis] || step <= 0)
-                    throw std::runtime_error("invalid static slice interval");
-                // Empty domains never dereference an address. Canonicalize their map
-                // to avoid overflowing unused endpoint/stride products.
-                if (elements(n.shape)) {
-                    n.offset = size_t(start) * strides[axis];
-                    if (size_t(step) > SIZE_MAX / std::max(strides[axis], size_t(1)))
-                        throw std::runtime_error("slice stride overflows");
-                    strides[axis] *= size_t(step);
-                } else {
-                    std::fill(strides.begin(), strides.end(), 0);
-                }
-                n.strides = std::move(strides);
+            auto instance =
+                tensor::ops::instantiate(*def, tensor::ops::InferContext(types, constants));
+            if (!instance || instance->norm.empty() ||
+                instance->output.mode != core::sem::WriteMode::Unique ||
+                instance->output.indirect || !instance->output.valid.empty() ||
+                !instance->domain.guard.empty() ||
+                instance->extents() != std::optional<Shape>(n.shape) ||
+                instance->output.coords.size() != n.shape.size())
+                throw std::runtime_error("layout operator lacks a direct core index domain");
+            for (size_t d = 0; d < n.shape.size(); ++d) {
+                const auto &coordinate = instance->exprs[instance->output.coords[d]];
+                if (instance->domain.dims[d].role != core::sem::DimRole::Parallel ||
+                    coordinate.op != core::sem::ExprOp::Dim ||
+                    coordinate.value != static_cast<int64_t>(d))
+                    throw std::runtime_error("layout output is not an identity iteration map");
+            }
+            const auto &access = instance->norm[0];
+            if (access.kind != core::sem::AccessKind::Affine || !access.valid.empty())
+                throw std::runtime_error("layout input is not an unconditional affine access");
+            if (elements(n.shape) == 0) {
+                // Empty views never evaluate an address, including overflowing unused strides.
+                n.strides.assign(n.shape.size(), 0);
             } else {
-                std::vector<int64_t> permutation(shape.size());
-                std::iota(permutation.begin(), permutation.end(), 0);
-                if (n.op == "transpose") {
-                    if (shape.size() < 2)
-                        throw std::runtime_error("transpose needs rank >= 2");
-                    std::swap(permutation[shape.size() - 1], permutation[shape.size() - 2]);
-                } else {
-                    if (!args.at(1).constant ||
-                        !std::holds_alternative<std::vector<int64_t>>(*args.at(1).constant))
-                        throw std::runtime_error("permutation must be known when specializing");
-                    permutation = std::get<std::vector<int64_t>>(*args.at(1).constant);
-                }
-                if (permutation.size() != shape.size())
-                    throw std::runtime_error("permutation rank mismatch");
-                std::vector<bool> seen(shape.size());
-                for (auto axis : permutation) {
-                    if (axis < 0)
-                        axis += static_cast<int64_t>(shape.size());
-                    if (axis < 0 || size_t(axis) >= shape.size() || seen[axis])
-                        throw std::runtime_error("invalid permutation");
-                    seen[axis] = true;
-                    n.strides.push_back(strides[axis]);
+                const auto view = core::sem::rowMajorView(*instance, access, shape);
+                if (!view || view->offset < 0)
+                    throw std::runtime_error(
+                        "core layout map cannot be represented by physical strides");
+                n.offset = static_cast<size_t>(view->offset);
+                for (auto stride : view->strides) {
+                    if (stride < 0)
+                        throw std::runtime_error("negative physical strides are not supported");
+                    n.strides.push_back(static_cast<size_t>(stride));
                 }
             }
-            n.op = "reindex";
+            n.indexing = std::move(instance);
+            n.op       = "reindex";
         } else if (n.op == "reshape") {
             n.inputs = {tensorValue(args.at(0))};
             if (elements(program.nodes[n.inputs[0]].shape) != elements(n.shape))
@@ -512,10 +547,10 @@ Program compile(Function *function, const std::vector<Argument> &arguments) {
         if (!types)
             throw std::runtime_error("closure type is missing");
         for (size_t i = 0; i < closure->size(); ++i)
-            with.push_back(c.host(closure->get<slot_t>(i), types->typeAt(i)));
+            with.push_back(c.host(closure->get<slot_t>(i), types->typeAt(i), true));
     }
     for (const auto &a : arguments)
-        norm.push_back(c.host(a.value, a.type));
+        norm.push_back(c.host(a.value, a.type, true));
     auto out = c.call(function->graph(), {}, norm, with);
     c.program.outputs.clear();
     auto collect = [&](auto &&self, const Value &value) -> void {

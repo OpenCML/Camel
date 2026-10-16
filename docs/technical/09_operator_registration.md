@@ -181,6 +181,29 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 `tensor` 模块不分别书写上述各表，而是用一份 `OpDef`（`modules/tensor/ops/op_def.h`）描述一个算子：名字（URI suffix）、导出名、参数、类型推断函数、kernel、性质、反向规则、类型折叠函数。`OpRegistry::add()`（`modules/tensor/ops/registry.cpp`）据此向各核心注册表登记，`OpRegistry::operatorGroups()` 与 `kernelMap()` 再分别生成模块导出的算子组和 Executor 的 opsMap。同一 URI 重复登记会抛出错误。详见 [25_tensor_stack_and_onnx_export.md](25_tensor_stack_and_onnx_export.md)。
 
+### 4.2 算子语义：数值、下标与归约律
+
+traits 之外，算子表的每一项可以带一份只读、带版本的语义记录 `sem::OperatorSemantics`（`include/camel/core/operator_semantics.h`；设计见 [算子语义协议](../design/op-semantics/README.cn.md)），由模块在加载时用 `OperatorTable::declareSemantics(uri, record)` 登记，登记前检查（键与 URI 一致、版本不降、数值部分自洽、归约律自洽；失败抛 `std::invalid_argument`）。查询 `semantics(id)` 无锁；没有记录、或记录缺某一部分，读法都是保守的。
+
+| 部分 | 内容 |
+|------|------|
+| `key` | `protocol:name@主.次`，跨进程的稳定标识；结果、故障、访问改变时主版本加一，只增加事实时次版本加一 |
+| `numeric` | 精确、正确舍入（规范算法）、有 ulp 上界、不透明；舍入所在类型；对哪些 `@numeric` 许可敏感 |
+| `faults` | 会出的故障（可缺省，缺省时看 `mayFault`） |
+| `indexing` | 实例化函数（`include/camel/core/index_semantics.h`）：一次调用的迭代域、各操作数的访问映射、写映射 |
+| `laws` | 归约律（每种元素类型一条）：运算、输入/累加/结果类型、初值、顺序、空域、确切的结合与交换性、单位元 |
+
+**下标语义是函数，不是数据**：同一个算子在不同秩、不同常量实参下的映射不同，所以登记的是 `InstantiateFn`，它对一次调用的类型（张量类型带形状，未知维为 -1）与常量实参返回 `IndexedInstance`，事实不足时返回 `nullopt`（秩未知、常量不是常量、某一维可能是 1 的广播）。表达式是准仿射的（常数、维、参数、和、乘以常数或参数、按正常数或正参数的 floordiv 与 mod），按实例驻留。查询：
+
+- `sem::instantiate(id, InstanceContext{norm 类型, with 类型, statics})`：调用实例化函数，再做结构检查（`sem::validate`）；抛异常或检查不过都当作没有实例。
+- `runtime::instanceOf(graph, node)`（`include/camel/runtime/operator_instance.h`）：冻结图上一个 `OPER` 节点的实例，事实取自输入节点的类型与静态 `DATA` 输入；`runtime::reorderFreedomOf(graph, node)` 再结合节点的许可列给出这次归约能否分组、置换（`sem::reorderFreedom`）。
+- `sem::toString(instance, semantics)`：规范的文本形式；`camel inspect --instances <文件>` 对程序里每个声明了下标语义的算子节点打印一行 `INSTANCE {json}`。
+- `sem::splitDims`（分块，原来的界成为 `guard`）、`sem::rowMajorView`（访问与行主序存储复合得到偏移与步长）。
+
+`tensor` 模块的声明：数值部分在 `modules/tensor/ops/semantics.cpp` 的一张表里；下标语义与归约律在 `modules/tensor/ops/indexing.cpp`，与类型推断用同一个 `InferContext`，放在 `OpDef::index`（与 `OpDef::infer` 并列），注册时由 `OpRegistry::add` 包成 `indexing` 交给算子表。共用的构造工具是 `IndexBuilder`（`ops/indexing.h`；`nn` 模块的池化也用它）。已经持有 `InferContext` 的后端可以直接调 `ops::instantiate(def, ctx)`。内建的 `:op/` 标量算子与 `:mark/unordered_reduce_arr` 的记录在 `src/builtin/executors/builtin_semantics.cpp`。
+
+**声明是代码，登记时查不出它与内核是否一致**，所以每个声明都要过声明求值器：`CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/modules/tensor/index_semantics.cml tensor::test_index_eval` 对每个已声明的算子生成大量随机调用（空、长度 1、广播、负轴、可选参数缺省、NaN、±∞、±0、次正规数、int64 与 bool），只按声明（域、访问映射及其越界策略、写映射、归约律）算出结果，与 CPU 内核逐位比较（有上界的 `exp`、`log` 按上界），并顺带检查映射的健全性（读不越界、写落在结果内、唯一写恰好写一次）。新增或修改一个声明时，在 `index_eval.cpp` 的表里加上它的用例生成器；测试计划 `test/plans/feat/modules/index_semantics.plan.toml` 要求全部一致。
+
 ## 5. 注册流程
 
 ### 5.1 全局内置算子
@@ -260,6 +283,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 - `include/camel/core/operator.h`：`operator_t`、`ArgsView`、`OperatorGroup`、`OperatorIndex`。
 - `include/camel/core/operator_table.h`：`OperId`、`OperatorTraits`、`OperatorTable`（性质、类型解析器、类型折叠）；`include/camel/core/symbol.h`：符号表。
+- `include/camel/core/operator_semantics.h`、`include/camel/core/index_semantics.h`、`include/camel/runtime/operator_instance.h`：算子语义的记录、下标语义与归约律、节点上的实例（4.2 节）。
 - `include/camel/core/operator_traits.h`：`ValueTypeRefinerRegistry`。
 - `include/camel/core/type/resolver.h`：`FuncTypeResolver`、`StaticFuncTypeResolver`、`DynamicFuncTypeResolver`。
 - `include/camel/execute/executor.h`、`src/execute/executor.cpp`：`Executor`、`ExecutorManager`，URI 解析与分派。

@@ -37,6 +37,9 @@ std::vector<OpDef> linalgOps();      // matmul, linear
 std::vector<OpDef> utilityOps();     // indexing, show, threading controls
 std::vector<OpDef> gradientOps();    // operators derivative rules emit; zeros_like, numel, ...
 
+/// Gives the operators of `defs` that have a declaration their semantics (semantics.cpp).
+void attachSemantics(std::vector<OpDef> &defs);
+
 /// Publishes the tangent space of tensors in the core derivative registry.
 void registerTensorTangentSpace();
 

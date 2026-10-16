@@ -23,6 +23,9 @@
 
 #include "cpu.h"
 
+#include <cstdlib>
+#include <string_view>
+
 #if defined(_MSC_VER) && !defined(__clang__)
 #include <intrin.h>
 #endif
@@ -73,7 +76,13 @@ CpuFeatures detectCpuFeatures() { return {}; }
 } // namespace
 
 const CpuFeatures &cpuFeatures() {
-    static const CpuFeatures features = detectCpuFeatures();
+    static const CpuFeatures features = [] {
+        const char *isa = std::getenv("CAMEL_TENSOR_ISA");
+        if (isa != nullptr && std::string_view(isa) == "generic") {
+            return CpuFeatures{};
+        }
+        return detectCpuFeatures();
+    }();
     return features;
 }
 

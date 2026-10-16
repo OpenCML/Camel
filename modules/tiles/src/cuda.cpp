@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -15,16 +15,21 @@
 #include <chrono>
 #include <climits>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include <span>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #ifdef CAMEL_TILES_CUDA
 #include "tiles/internal/cuda_backend.h"
+#include "tiles/internal/cuda_resources.h"
 
 namespace camel::tiles {
 using namespace cuda_detail;
@@ -43,54 +48,11 @@ struct OwnedAllocation {
     }
 };
 
-// The stream is drained before buffers are freed, including on a failed launch.
-struct Resources {
-    Api &api;
-    CUstream stream = nullptr;
-    std::vector<CUdeviceptr> buffers;
-    std::vector<void *> hostBuffers;
-    explicit Resources(Api &a) : api(a) {
-        api.check(api.cuStreamCreate(&stream, CU_STREAM_NON_BLOCKING), "create stream");
-    }
-    ~Resources() {
-        if (stream)
-            api.cuStreamSynchronize(stream);
-        for (auto ptr : buffers)
-            if (ptr)
-                api.cuMemFree(ptr);
-        for (auto ptr : hostBuffers)
-            api.cuMemFreeHost(ptr);
-        if (stream)
-            api.cuStreamDestroy(stream);
-    }
-    CUdeviceptr allocate(size_t size) {
-        CUdeviceptr ptr = 0;
-        api.check(api.cuMemAlloc(&ptr, std::max(size, size_t(1))), "allocate device memory");
-        try {
-            buffers.push_back(ptr);
-        } catch (...) {
-            api.cuMemFree(ptr);
-            throw;
-        }
-        return ptr;
-    }
-    void *allocateHost(size_t size) {
-        void *ptr = nullptr;
-        api.check(api.cuMemHostAlloc(&ptr, size, 0), "allocate pinned host memory");
-        try {
-            hostBuffers.push_back(ptr);
-        } catch (...) {
-            api.cuMemFreeHost(ptr);
-            throw;
-        }
-        return ptr;
-    }
-};
-
 // Both normal execution and benchmarking use this exact upload/launch/download path.
 // Allocation reuse can overwrite inputs, so every repetition must restore them.
 class DeviceRun {
     ModuleLease moduleLease; // Outlives stream draining and all execution resources.
+    std::shared_ptr<const Program> programOwner; // Includes borrowed device input owners.
     const Program &program;
     Api &api;
     Resources resources;
@@ -102,8 +64,10 @@ class DeviceRun {
     void *clearFault  = nullptr;
 
   public:
-    DeviceRun(const Program &p, Api &a, ModuleLease module)
-        : moduleLease(std::move(module)), program(p), api(a), resources(a) {
+    DeviceRun(std::shared_ptr<const Program> snapshot, Api &a, ModuleLease module)
+        : moduleLease(std::move(module)), programOwner(std::move(snapshot)), program(*programOwner),
+          api(a), resources(moduleLease.backend) {
+        const auto &p = program;
         std::vector<CUdeviceptr> allocations;
         for (auto bytes : p.storage.bytes)
             allocations.push_back(resources.allocate(bytes));
@@ -135,11 +99,12 @@ class DeviceRun {
             "upload argument table");
         hostInputs.assign(p.nodes.size(), nullptr);
         for (size_t id = 0; id < p.nodes.size(); ++id) {
-            const auto &data = p.nodes[id].data;
-            if (data.empty())
+            const auto &node = p.nodes[id];
+            const auto *data = hostData(node);
+            if (!data)
                 continue;
-            hostInputs[id] = resources.allocateHost(data.size() * sizeof(float));
-            std::memcpy(hostInputs[id], data.data(), data.size() * sizeof(float));
+            hostInputs[id] = resources.allocateHost(bytes(node));
+            std::memcpy(hostInputs[id], data, bytes(node));
         }
         for (const auto &launch : p.launches) {
             CUfunction kernel;
@@ -157,13 +122,9 @@ class DeviceRun {
                 "clear scalar fault");
         for (size_t id = 0; id < program.nodes.size(); ++id) {
             const auto &n = program.nodes[id];
-            if (!n.data.empty())
+            if (hostInputs[id])
                 api.check(
-                    api.cuMemcpyHtoDAsync(
-                        pointers[id],
-                        hostInputs[id],
-                        n.data.size() * sizeof(float),
-                        resources.stream),
+                    api.cuMemcpyHtoDAsync(pointers[id], hostInputs[id], bytes(n), resources.stream),
                     "upload input");
         }
         // Pageable synchronous copies can return after staging, before DMA completes.
@@ -283,7 +244,7 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
     b->api.check(
         b->api.cuMemAlloc(&allocation->pointer, std::max(size_t(1), data.size())),
         "allocate resident tensor");
-    Resources staging(b->api);
+    Resources staging(b);
     if (!data.empty()) {
         const size_t size = data.size();
         void *pinned      = staging.allocateHost(size);
@@ -323,7 +284,10 @@ bool available() {
     }
 }
 
-std::vector<std::byte> execute(const Program &p) {
+std::vector<std::byte> execute(std::shared_ptr<const Program> snapshot) {
+    if (!snapshot)
+        throw std::invalid_argument("missing Tiles program snapshot");
+    const auto &p = *snapshot;
     validatePlan(p);
     Backend &b = backend();
     std::lock_guard lock(b.mutex);
@@ -338,33 +302,40 @@ std::vector<std::byte> execute(const Program &p) {
         })) {
         std::vector<std::byte> result;
         for (auto output : p.outputs) {
-            const auto &data = p.nodes[output].data;
-            if (!data.empty()) {
-                auto *begin = reinterpret_cast<const std::byte *>(data.data());
-                result.insert(result.end(), begin, begin + data.size() * sizeof(float));
+            const auto &node = p.nodes[output];
+            if (const auto *data = hostData(node)) {
+                auto *begin = static_cast<const std::byte *>(data);
+                result.insert(result.end(), begin, begin + bytes(node));
             }
         }
         return result;
     }
     auto module = b.module(p.source);
-    DeviceRun run(p, b.api, module);
+    DeviceRun run(std::move(snapshot), b.api, module);
     run.upload();
     run.launch();
     return run.download();
 }
 
-std::vector<std::shared_ptr<DeviceValue>> executeResident(const Program &p) {
+std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program> snapshot) {
+    if (!snapshot)
+        throw std::invalid_argument("missing Tiles program snapshot");
+    const auto &p = *snapshot;
     validatePlan(p);
     auto b = sharedBackend();
     std::lock_guard lock(b->mutex);
     Current current(b->api, b->context);
-    DeviceRun run(p, b->api, b->module(p.source));
+    auto module = b->module(p.source);
+    DeviceRun run(std::move(snapshot), b->api, std::move(module));
     run.upload();
     run.launch();
     return run.retainOutputs(b);
 }
 
-std::string benchmark(const Program &program) {
+std::string benchmark(std::shared_ptr<const Program> snapshot) {
+    if (!snapshot)
+        throw std::invalid_argument("missing Tiles program snapshot");
+    const auto &program = *snapshot;
     using nlohmann::json;
     validatePlan(program);
     if (std::none_of(program.outputs.begin(), program.outputs.end(), [&](size_t id) {
@@ -389,6 +360,7 @@ std::string benchmark(const Program &program) {
         {"target", b.architecture},
         {"dtype", "f32"},
         {"fmad", false},
+        {"compile_options", b.compileOptions()},
         {"initialization_host_ms", initializationMs},
         {"warmups", 5},
         {"repetitions", 21},
@@ -413,21 +385,23 @@ std::string benchmark(const Program &program) {
     for (const auto &n : program.nodes)
         if (n.op == "input")
             report["input_shapes"].push_back(n.shape);
-    const Program *plans[] = {&program, &reference};
-    const char *names[]    = {"optimized", "unfused"};
+    const std::shared_ptr<const Program> plans[] = {
+        std::move(snapshot),
+        std::make_shared<const Program>(std::move(reference))};
+    const char *names[] = {"optimized", "unfused"};
     std::unique_ptr<DeviceRun> runs[2];
     for (size_t i = 0; i < 2; ++i) {
         const auto &p             = *plans[i];
         auto &r                   = report[names[i]];
         r["plan"]                 = json::parse(inspect(p));
         r["compile_cache_hit"]    = std::any_of(b.cache.begin(), b.cache.end(), [&](const auto &c) {
-            return c->source == p.source;
+            return c->source == p.source && c->options == b.compileOptions();
         });
         start                     = Clock::now();
         auto module               = b.module(p.source);
         r["compile_load_host_ms"] = elapsed(start);
         start                     = Clock::now();
-        runs[i]                   = std::make_unique<DeviceRun>(p, b.api, module);
+        runs[i]                   = std::make_unique<DeviceRun>(plans[i], b.api, module);
         r["allocation_setup_host_ms"] = elapsed(start);
         r["device_ms"]                = json::array();
         r["upload_host_ms"]           = json::array();
@@ -543,7 +517,7 @@ std::string deviceInfo() {
         "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
 }
 bool available() { return false; }
-std::vector<std::shared_ptr<DeviceValue>> executeResident(const Program &) {
+std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program>) {
     (void)deviceInfo();
     return {};
 }
@@ -555,11 +529,11 @@ std::vector<std::byte> downloadValue(const DeviceValue &) {
     (void)deviceInfo();
     return {};
 }
-std::vector<std::byte> execute(const Program &) {
+std::vector<std::byte> execute(std::shared_ptr<const Program>) {
     (void)deviceInfo();
     return {};
 }
-std::string benchmark(const Program &) {
+std::string benchmark(std::shared_ptr<const Program>) {
     (void)deviceInfo();
     return {};
 }

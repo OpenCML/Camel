@@ -35,7 +35,11 @@
  *    offset the record names.
  * 4. Users (the reverse direction) are not stored: GCGraph::uses() builds the index the first
  *    time anything asks for it and keeps it for the graph's lifetime.
- * 6. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
+ * 6. The source position of each node is a column parallel to the records (nodeOrigin): one
+ *    32-bit origin id per node, 0 when the node has none. Beside it, only in a graph where some
+ *    node has any, the numeric permissions the program granted with @numeric(...): one byte per
+ *    node (nodePermissions; design principles 2.13, docs/design/op-semantics 6.3).
+ * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
  *    FUNC node names its callee by an index into it (GCFuncRef), and the graphs the function
  *    constants of the static area point to, the graphs written inside this one and the graphs
  *    it calls directly are entries of it, each marked with the roles it has (GCGraphRefRole).
@@ -44,6 +48,7 @@
 
 #pragma once
 
+#include "camel/core/loop_kind.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/tuple.h"
@@ -106,6 +111,14 @@ enum class GCNodeKind : uint8_t {
     Sync = 12,
     Gate = 13,
     Dref = 14, // build-time only, see above
+    // A loop (design principles 2.10, 2.12, 2.13; docs/design/graph-model 3.5, the LOOP card):
+    // Norm inputs the array (For, ForWhile) then the k first values of the state; With inputs
+    // the m captured values, shared by the condition graph and the body graph; Ctrl inputs
+    // ordering. Its payload names the two graphs (GCLoopRef / GCLoopBody). Its value is the
+    // last state: the value when k = 1, the k-tuple when k > 1. Consumers read it through
+    // camel/runtime/loop.h (LoopView); those that do not run it natively lower it to a tail
+    // recursion first (lowerLoopsToTailRecursion), never in the shared program.
+    Loop = 15,
 };
 
 enum class GCReturnKind : uint8_t {
@@ -140,6 +153,12 @@ struct GCBranchArm {
     gc_node_ref_t head = kInvalidNodeRef;
     gc_node_ref_t tail = kInvalidNodeRef;
 };
+
+/// The operator a back end's private copy of the program applies to a function value before an
+/// operator that reads graphs gets it (GCGraph::originalGraph, OperatorTraits::inspectsGraphs):
+/// the same function over the program's own graph. Implemented by the built-in executor
+/// (src/builtin/operators/graph.h); a program cannot name it.
+inline constexpr std::string_view kGraphOriginalUri = ":graph/original";
 
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
 inline constexpr gc_off_t kNoPayload = static_cast<gc_off_t>(-1);
@@ -195,6 +214,35 @@ struct GCFuncRef {
     uint32_t reserved = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCFuncRef>);
+
+/// "No graph" in a GCLoopRef: the condition of a For loop.
+inline constexpr uint32_t kNoLoopGraph = UINT32_MAX;
+
+/// Payload of a LOOP node in a frozen graph: its form and the indexes of its condition graph
+/// (kNoLoopGraph for For) and of its body graph in the graph's reference table, where both are
+/// marked callee and nested (the LOOP node calls them each round; they are written inside the
+/// graph). (A draft's LOOP payload is a GCLoopBody, holding the graphs themselves.)
+struct GCLoopRef {
+    camel::core::LoopKind kind = camel::core::LoopKind::While;
+    uint8_t reserved0          = 0;
+    uint16_t reserved1         = 0;
+    uint32_t condRef           = kNoLoopGraph;
+    uint32_t bodyRef           = kNoLoopGraph;
+    uint32_t reserved2         = 0;
+};
+static_assert(std::is_trivially_copyable_v<GCLoopRef>);
+static_assert(sizeof(GCLoopRef) == 16, "A LOOP payload is two words.");
+
+/// Payload of a LOOP node in a draft (see GCLoopRef for frozen graphs).
+struct GCLoopBody {
+    class GCGraph *condGraph   = nullptr; // nullptr for a For loop
+    class GCGraph *bodyGraph   = nullptr;
+    camel::core::LoopKind kind = camel::core::LoopKind::While;
+    uint8_t reserved0          = 0;
+    uint16_t reserved1         = 0;
+    uint32_t reserved2         = 0;
+};
+static_assert(std::is_trivially_copyable_v<GCLoopBody>);
 
 /// Payload of a FUNC node in a draft (see GCFuncRef for frozen graphs).
 struct GCFuncBody {
@@ -293,6 +341,8 @@ struct GCGraphNativePayload {
     // Arrays of the graph's own block, in the graph space (see GCGraphBuildAccess). Released
     // with the graph.
     GCNode *nodes              = nullptr; // nodeCount + 1 records (the last is a sentinel)
+    uint32_t *origins          = nullptr; // nodeCount source origins (0: none)
+    uint8_t *permissions       = nullptr; // nodeCount numeric permissions; null when all are 0
     gc_node_ref_t *inputs      = nullptr; // edgeCount entries
     gc_payload_word_t *payload = nullptr; // payloadWordCount words
     gc_node_ref_t *normPorts   = nullptr;
@@ -350,6 +400,11 @@ class GCGraph : public camel::core::rtdata::Object {
     const std::string &name() const;
     /// Source origin (camel::source::origin_id_t) of node `ref`, 0 when unknown.
     uint64_t nodeOrigin(gc_node_ref_t ref) const;
+    /// Numeric permissions (camel/core/operator_semantics.h, PermissionMask) the program granted
+    /// to node `ref`, 0 when none; the graph has no permission column when no node has any.
+    uint8_t nodePermissions(gc_node_ref_t ref) const;
+    /// True when some node of the graph has numeric permissions.
+    bool hasNodePermissions() const { return nativePayload_.permissions != nullptr; }
     /// The names of the values the function captures from where it was written, in the order
     /// it captured them (symbols of camel/core/symbol.h). Compile and debug metadata: what a
     /// capture is bound to at run time is the closure tuple and the with-inputs of a call.
@@ -363,6 +418,23 @@ class GCGraph : public camel::core::rtdata::Object {
     size_t frameSize() const;
     bool isMacro() const;
     GCGraph *outerGraph() const;
+    /// The graph of the program this graph is a private copy of, nullptr when it is not one.
+    /// A back end that runs a rewritten copy of the program (lowerLoopsToTailRecursion, which
+    /// commits its session detached) gets a copy of every graph; each copy names the graph it
+    /// was made from, followed back to the first graph that is not a copy. Operators that read
+    /// the graphs of function values (OperatorTraits::inspectsGraphs) are handed these, so that
+    /// they see the program as it was written (op-semantics 11.4). Traced: the copy keeps it
+    /// alive.
+    GCGraph *originalGraph() const { return originalGraph_; }
+    /// The graph's identity across rewrites, standing in for the design's GraphId until
+    /// graph-model step 5 (graph facts, camel/runtime/facts.h): a commit gives the copy it
+    /// encodes of a graph that graph's lineage; any other new graph gets a new one.
+    uint64_t lineage() const { return lineage_; }
+    /// The graph's revision, standing in for the design's Revision until graph-model step 5
+    /// (facts.h): a process-wide serial number. A commit keeps it for a graph it did not change
+    /// and gives a new one to a graph it changed: one a pass edited into different content, or
+    /// one that refers (at any depth) to a graph that changed. Equal serials mean equal content.
+    uint64_t serial() const { return serial_; }
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
     uintptr_t extraSlot(size_t index) const;
@@ -408,10 +480,18 @@ class GCGraph : public camel::core::rtdata::Object {
     /// The NodeId of a record of this graph, kInvalidNodeRef for any other pointer.
     gc_node_ref_t nodeRef(const GCNode *node) const;
     GCGraph *directCalleeGraphOf(gc_node_ref_t ref) const;
+    /// LOOP node `ref`: its condition graph (nullptr for a For loop, or when `ref` is not a
+    /// LOOP node) and its body graph (nullptr when `ref` is not a LOOP node).
+    GCGraph *loopCondGraphOf(gc_node_ref_t ref) const;
+    GCGraph *loopBodyGraphOf(gc_node_ref_t ref) const;
+    /// LOOP node `ref`: its form. The node must be a LOOP node.
+    camel::core::LoopKind loopKindOf(gc_node_ref_t ref) const {
+        return nodeBodyAs<GCLoopRef>(ref)->kind;
+    }
     gc_node_ref_t matchedJoinOutputOf(gc_node_ref_t ref) const;
 
     /// The payload of node `ref` as a `Body` (see the payload structs above). The node must
-    /// have one: every node of the kinds FUNC, CALL, ACCS, FILL, BRCH, JOIN and OPER does.
+    /// have one: every node of the kinds FUNC, CALL, ACCS, FILL, BRCH, JOIN, OPER and LOOP does.
     template <typename Body> const Body *nodeBodyAs(gc_node_ref_t ref) const {
         static_assert(
             std::is_trivially_copyable_v<Body>,
@@ -522,6 +602,9 @@ class GCGraph : public camel::core::rtdata::Object {
     camel::core::type::TupleType *staticDataType_  = nullptr;
     camel::core::type::TupleType *closureType_     = nullptr;
     GCGraph *outerGraph_                           = nullptr;
+    GCGraph *originalGraph_                        = nullptr; // see originalGraph()
+    uint64_t lineage_                              = 0;       // see lineage()
+    uint64_t serial_                               = 0;       // see serial()
     GCGraph **refs_                                = nullptr;
     uint8_t *refRoles_                             = nullptr;
     gc_cnt_t refCount_                             = 0;
@@ -535,6 +618,15 @@ class GCGraph : public camel::core::rtdata::Object {
     mutable std::atomic<GCUseIndex *> uses_{nullptr};
     uintptr_t extraSlots_[kExtraSlotCount]{};
 };
+
+/// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.
+inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
+    return GCLoopBody{
+        .condGraph = graph.loopCondGraphOf(ref),
+        .bodyGraph = graph.loopBodyGraphOf(ref),
+        .kind      = graph.loopKindOf(ref),
+    };
+}
 
 class GCGraphManager {
   public:
@@ -556,12 +648,17 @@ class GCGraphManager {
     void trackDetached(std::span<GCGraph *const> graphs);
     /// Frees the tracked detached graphs that the program does not reach.
     void releaseDetached();
+    /// Keeps graphs that belong to no program alive and traced for as long as the manager:
+    /// the definition graphs of operators (camel/runtime/definitions.h). Neither clear() nor
+    /// releaseDetached() frees them; a rewrite that uses one encodes a copy into the program.
+    void pin(std::span<GCGraph *const> graphs);
 
   private:
     void rebuildGcRoots();
 
     std::vector<GCGraph *> graphs_;
     std::vector<GCGraph *> detached_;
+    std::vector<GCGraph *> pinned_;
     std::vector<GCGraphDebugRecord *> debugRecords_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
     GCGraph *root_ = nullptr;

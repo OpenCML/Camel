@@ -25,7 +25,10 @@
 
 #include "camel/utils/assert.h"
 
+#include <format>
 #include <mutex>
+#include <stdexcept>
+#include <tuple>
 
 namespace camel::core {
 
@@ -50,16 +53,17 @@ uint8_t OperatorTable::encode(OperatorTraits traits) {
     return static_cast<uint8_t>(
         kDeclared | (traits.pure ? kPure : 0) | (traits.elementwise ? kElementwise : 0) |
         (traits.stateOnly ? kStateOnly : 0) | (traits.mayFault ? 0 : kNoFault) |
-        (traits.callsGraphs ? kCallsGraphs : 0));
+        (traits.callsGraphs ? kCallsGraphs : 0) | (traits.inspectsGraphs ? kInspectsGraphs : 0));
 }
 
 OperatorTraits OperatorTable::decode(uint8_t bits) {
     return OperatorTraits{
-        .pure        = (bits & kPure) != 0,
-        .elementwise = (bits & kElementwise) != 0,
-        .stateOnly   = (bits & kStateOnly) != 0,
-        .mayFault    = (bits & kNoFault) == 0,
-        .callsGraphs = (bits & kCallsGraphs) != 0,
+        .pure           = (bits & kPure) != 0,
+        .elementwise    = (bits & kElementwise) != 0,
+        .stateOnly      = (bits & kStateOnly) != 0,
+        .mayFault       = (bits & kNoFault) == 0,
+        .callsGraphs    = (bits & kCallsGraphs) != 0,
+        .inspectsGraphs = (bits & kInspectsGraphs) != 0,
     };
 }
 
@@ -195,6 +199,208 @@ const TypeFolder *OperatorTable::typeFolder(OperId id) const {
 const TypeFolder *OperatorTable::typeFolder(std::string_view uri) const {
     const auto id = lookup(uri);
     return id ? typeFolder(*id) : nullptr;
+}
+
+// ---- Semantics -----------------------------------------------------------------------------
+
+namespace {
+
+/// Why `record`, declared for `uri` with the declared traits `traits` (nullopt when the traits
+/// are not declared), cannot be published; empty when it can. The checks of design section 4.4
+/// that apply to the parts declared so far (operator_table.h, declareSemantics).
+std::string checkSemantics(
+    std::string_view uri, const sem::OperatorSemantics &record,
+    const std::optional<OperatorTraits> &traits) {
+    using sem::NumericClass;
+    // 1. The key names this operator.
+    if (record.key.uri() != uri) {
+        return std::format("its key {} names another operator", record.key.toString());
+    }
+    // 2. Not contradicting the traits.
+    if (traits && !traits->mayFault && record.faults && !record.faults->empty()) {
+        return "it declares faults, but its traits say it never faults";
+    }
+    // 3. The numeric part.
+    const sem::NumericSemantics &n = record.numeric;
+    const bool floatCompute =
+        n.compute == type::TypeCode::Float32 || n.compute == type::TypeCode::Float64;
+    switch (n.cls) {
+    case NumericClass::Opaque:
+        if (n.sensitiveTo != sem::kAllPermissions) {
+            return "an opaque operator is sensitive to every permission";
+        }
+        break;
+    case NumericClass::Exact:
+        if (n.ulpBound != 0) {
+            return "an exact operator has no ulp bound";
+        }
+        if ((n.sensitiveTo & ~sem::kFiniteMath) != 0) {
+            return std::format(
+                "an exact operator has no rounding for {} to change",
+                sem::permissionsText(n.sensitiveTo & ~sem::kFiniteMath));
+        }
+        break;
+    case NumericClass::CorrectlyRounded:
+        if (n.ulpBound != 0) {
+            return "a correctly rounded operator has no ulp bound";
+        }
+        if (!floatCompute) {
+            return "a correctly rounded operator names the type its steps are rounded in";
+        }
+        break;
+    case NumericClass::Bounded:
+        if (!(n.ulpBound > 0)) {
+            return "a bounded operator declares a positive ulp bound";
+        }
+        if ((n.sensitiveTo & sem::kApproxMath) == 0) {
+            return "a bounded operator is sensitive to approx_math";
+        }
+        if (!floatCompute) {
+            return "a bounded operator names the type it computes in";
+        }
+        break;
+    }
+    // 4. The reduction laws: each consistent in itself, and at most kNoLaw of them (an
+    //    instance names one by a byte).
+    if (record.laws.size() >= sem::kNoLaw) {
+        return "it declares more reduction laws than an instance can name";
+    }
+    for (const sem::ReductionLaw &law : record.laws) {
+        if (auto problem = sem::checkLaw(law)) {
+            return *problem;
+        }
+    }
+    // 5. The resources: consistent in themselves, and with the traits (design 4.4, check 2): a
+    //    pure operator touches no resource; any other touches one, allocates one or has an
+    //    external effect; an external effect only where the traits allow one (not pure, not
+    //    state-only). The converse is a refinement (design 8.3): the traits of an assignment
+    //    count it as external (no trait says "writes a variable"), its resources say it writes
+    //    the program's own cell and nothing outside. The effect summaries stay computed from
+    //    the traits.
+    if (record.resources) {
+        const sem::ResourceSpec &r = *record.resources;
+        if (auto problem = sem::checkResources(r)) {
+            return "resources: " + *problem;
+        }
+        if (traits) {
+            if (traits->pure && (!r.accesses.empty() || r.allocates || r.externalEffect)) {
+                return "resources: a pure operator touches no resource";
+            }
+            if (!traits->pure && r.accesses.empty() && !r.allocates && !r.externalEffect) {
+                return "resources: an operator that is not pure touches, allocates or affects "
+                       "something (declare it pure instead)";
+            }
+            if (r.externalEffect && (traits->pure || traits->stateOnly)) {
+                return "resources: its traits give it no external effect";
+            }
+        }
+    }
+    // 6. The definition names a function of a library module and binds each parameter to an
+    //    operand. That the function's signature agrees with the operator's, that its effects
+    //    are within the operator's and that no definition reaches its own operator is checked
+    //    when the library is compiled (camel/runtime/definitions.h): it is code in a file.
+    if (record.definition) {
+        const sem::Definition &d = *record.definition;
+        if (d.module.empty() || d.function.empty()) {
+            return "definition: it names a library module and a function";
+        }
+        if (d.params.size() >= 0xFF) {
+            return "definition: too many parameters";
+        }
+        for (const sem::DefinitionParam &param : d.params) {
+            if (param.operand == 0xFF) {
+                return "definition: every parameter is bound to an operand";
+            }
+        }
+    }
+    return {};
+}
+
+} // namespace
+
+void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantics semantics) {
+    std::unique_lock lock(mutex_);
+    const OperId id = internLocked(uri);
+    Entry &entry    = entries_[id];
+    const uint8_t bits = entry.traits.load(std::memory_order_relaxed);
+    const std::optional<OperatorTraits> traits =
+        (bits & kDeclared) != 0 ? std::optional(decode(bits)) : std::nullopt;
+    std::string problem = checkSemantics(uri, semantics, traits);
+    if (problem.empty()) {
+        if (const sem::OperatorSemantics *old = entry.semantics.load(std::memory_order_relaxed);
+            old != nullptr && std::tie(semantics.key.major, semantics.key.minor) <
+                                  std::tie(old->key.major, old->key.minor)) {
+            problem = std::format(
+                "it would replace {} by the lower version {}",
+                old->key.toString(),
+                semantics.key.toString());
+        }
+    }
+    if (!problem.empty()) {
+        throw std::invalid_argument(
+            std::format("The semantics declared for the operator '{}' are rejected: {}.", uri, problem));
+    }
+    declarations_.push_back(std::make_unique<const sem::OperatorSemantics>(std::move(semantics)));
+    entry.semantics.store(declarations_.back().get(), std::memory_order_release);
+    epoch_.fetch_add(1, std::memory_order_acq_rel);
+}
+
+void OperatorTable::declareResources(std::string_view uri, sem::ResourceSpec resources) {
+    // A record of its own when the operator has none; otherwise the same record with the
+    // resources added, one minor version up (facts added, design 4.1). Load time only: the read
+    // of the old record and the declaration are not one step, as for every declaration.
+    sem::OperatorSemantics record;
+    if (const auto id = lookup(uri); id && semantics(*id) != nullptr) {
+        record = *semantics(*id);
+        if (record.resources != resources) {
+            ++record.key.minor;
+        }
+    } else {
+        record.key = sem::OperatorKey::of(uri);
+    }
+    record.resources = std::move(resources);
+    declareSemantics(uri, std::move(record));
+}
+
+void OperatorTable::declareDefinition(std::string_view uri, sem::Definition definition) {
+    // As declareResources: a record of its own, or the existing one a minor version up.
+    sem::OperatorSemantics record;
+    if (const auto id = lookup(uri); id && semantics(*id) != nullptr) {
+        record = *semantics(*id);
+        if (record.definition != definition) {
+            ++record.key.minor;
+        }
+    } else {
+        record.key = sem::OperatorKey::of(uri);
+    }
+    record.definition = std::move(definition);
+    declareSemantics(uri, std::move(record));
+}
+
+void OperatorTable::declareResources(
+    std::string_view protocol,
+    std::initializer_list<std::pair<std::string_view, sem::ResourceSpec>> operators) {
+    for (const auto &[name, resources] : operators) {
+        declareResources(std::string(protocol) + ":" + std::string(name), resources);
+    }
+}
+
+std::optional<sem::OperatorKey> OperatorTable::key(OperId id) const {
+    const sem::OperatorSemantics *declared = semantics(id);
+    return declared ? std::optional(declared->key) : std::nullopt;
+}
+
+std::optional<OperId> OperatorTable::bind(const sem::OperatorKey &key) const {
+    const auto id = lookup(key.uri());
+    if (!id) {
+        return std::nullopt;
+    }
+    const sem::OperatorSemantics *declared = semantics(*id);
+    // A result recorded against key.minor may use facts added in that minor version.
+    if (declared == nullptr || declared->key.major != key.major || declared->key.minor < key.minor) {
+        return std::nullopt;
+    }
+    return id;
 }
 
 } // namespace camel::core

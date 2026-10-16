@@ -119,6 +119,7 @@ DraftNodeInit makeInitFromNode(const DraftNode *node) {
     init.kind         = node->header.kind;
     init.runtimeFlags = node->header.runtimeFlags;
     init.origin       = node->header.origin;
+    init.permissions  = node->header.permissions;
     init.payload      = DraftNodeView::payload(node);
     init.normInputs   = DraftNodeView::normInputs(node);
     init.withInputs   = DraftNodeView::withInputs(node);
@@ -149,6 +150,7 @@ void initializeNodeStorage(
     draftNode->header.kind           = init.kind;
     draftNode->header.runtimeFlags   = init.runtimeFlags;
     draftNode->header.origin         = init.origin;
+    draftNode->header.permissions    = init.permissions;
     draftNode->header.storageCls     = storageClass;
 
     if (capacityBytes != 0) {
@@ -632,6 +634,9 @@ size_t GraphDraft::payloadBytesForSourceNode(const GCGraph *graph, gc_node_ref_t
     if (sourceNode->kind == GCNodeKind::Func) {
         return sizeof(GCFuncBody); // the callee itself, not the frozen index (see decode)
     }
+    if (sourceNode->kind == GCNodeKind::Loop) {
+        return sizeof(GCLoopBody); // the two graphs themselves, as for a FUNC
+    }
     return graph->nodePayloadBytes(sourceRef).size();
 }
 
@@ -677,6 +682,7 @@ DraftNode *GraphDraft::createDecodedNode(
     draftNode->header.kind             = sourceNode->kind;
     draftNode->header.runtimeFlags     = sourceNode->flags;
     draftNode->header.origin           = graph->nodeOrigin(sourceRef);
+    draftNode->header.permissions      = graph->nodePermissions(sourceRef);
     draftNode->header.storageCls       = storageClass;
 
     if (sourceNode->kind == GCNodeKind::Brch) {
@@ -696,6 +702,8 @@ DraftNode *GraphDraft::createDecodedNode(
         // A frozen FUNC names its callee by reference-table index; a draft holds the callee.
         *DraftNodeView::payloadAs<GCFuncBody>(draftNode) =
             GCFuncBody{.calleeGraph = graph->directCalleeGraphOf(sourceRef)};
+    } else if (sourceNode->kind == GCNodeKind::Loop) {
+        *DraftNodeView::payloadAs<GCLoopBody>(draftNode) = loopBodyOf(*graph, sourceRef);
     } else if (const auto body = graph->nodePayloadBytes(sourceRef); !body.empty()) {
         std::memcpy(DraftNodeView::payload(draftNode).data(), body.data(), body.size());
         if (sourceNode->kind == GCNodeKind::Join) {
@@ -823,6 +831,7 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
             .kind         = init.kind,
             .runtimeFlags = init.runtimeFlags,
             .origin       = init.origin,
+            .permissions  = init.permissions,
             .payload      = payloadCopy,
             .normInputs   = normInputsCopy,
             .withInputs   = withInputsCopy,
@@ -931,6 +940,17 @@ uint64_t GraphDraft::firstNodeOrigin() const {
         }
     }
     return 0;
+}
+
+uint8_t GraphDraft::nodePermissions(gc_node_ref_t id) const {
+    const DraftNodeHeader *h = header(id);
+    return h ? h->permissions : 0;
+}
+
+void GraphDraft::setNodePermissions(gc_node_ref_t id, uint8_t permissions) {
+    DraftNode *draftNode = node(id);
+    ASSERT(draftNode != nullptr, "Cannot set the permissions of a missing draft node.");
+    draftNode->header.permissions = permissions;
 }
 
 void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {

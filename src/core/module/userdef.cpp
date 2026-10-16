@@ -195,6 +195,44 @@ bool UserDefinedModule::compile(CompileStage till) {
     return true;
 }
 
+bool UserDefinedModule::compileAsLibrary() {
+    if (stage_ == CompileStage::Done) {
+        return true;
+    }
+    if (compiling_ || stage_ != CompileStage::None || !compile(CompileStage::GCT)) {
+        return false;
+    }
+    for (const auto &site : importSites()) {
+        if (std::dynamic_pointer_cast<UserDefinedModule>(site.mod) && site.mod.get() != this) {
+            diagnostics_->of(SemanticDiag::ModuleNotFound)
+                .commit(
+                    site.mod->name(),
+                    "a library compiled on its own (" + name_ +
+                        ") imports modules written in C++ only");
+            return false;
+        }
+    }
+    struct Compiling {
+        bool &flag;
+        explicit Compiling(bool &f) : flag(f) { flag = true; }
+        ~Compiling() { flag = false; }
+    } compiling(compiling_);
+    camel::utils::phase::Scope phaseScope("library", name_);
+    auto builder = std::make_shared<camel::compile::gir::Builder>(context_);
+    builder->declareModule(shared_from_this(), *gct_, diagnostics_);
+    if (diagnostics_->hasErrors()) {
+        return false;
+    }
+    stage_ = CompileStage::Declared;
+    if (!builder->buildLibrary(shared_from_this()) || diagnostics_->hasErrors()) {
+        return false;
+    }
+    // buildLibrary set the program graph (stage Done); the builder owns what the graphs of
+    // the module refer to and lives as long as the module.
+    libraryBuilder_ = builder;
+    return stage_ == CompileStage::Done;
+}
+
 void UserDefinedModule::setProgramGraph(
     const std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root) {
     compileGraph_ = root;
