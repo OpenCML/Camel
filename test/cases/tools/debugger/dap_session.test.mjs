@@ -39,6 +39,17 @@ await runTest(async (t) => {
         )
         check(s.configurationDone.success, on('configurationDone starts the program'), s.configurationDone)
 
+        const snapshots = await dap.request('camel/passGraphs');
+        check(snapshots.success && snapshots.body?.graphs?.[0]?.pass === null,
+            on('native DAP exposes the initial GIR snapshot'), snapshots);
+        const initialGraph = await dap.request('camel/passGraph', { index: 0 });
+        check(initialGraph.success && initialGraph.body?.dot?.includes('origin='),
+            on('snapshot preserves source origins'), initialGraph);
+        const invalidSnapshot = await dap.request('camel/passGraph', { index: -1 });
+        check(!invalidSnapshot.success, on('negative snapshot index is rejected'));
+        check((await dap.request('camel/setNodeBreakpoints', { origins: [] })).success,
+            on('node breakpoint configuration uses native DAP'));
+
         // ---- the stop ----------------------------------------------------------------
         const stop = await dap.waitStop()
         check(stop, on('the program stops'))

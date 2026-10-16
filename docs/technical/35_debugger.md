@@ -679,3 +679,14 @@ activation per element, each of which now loads the observer pointer twice (the 
 the node hook that was there before). On `std::fvm` the loop of a normal run is the trunk's
 machine code (7.1); the version with a hook in the loop measured 1.13-1.19 on `fib` and
 `tail` by the same method and was replaced.
+
+### Plugin migration: native DAP graph inspection
+
+OpenCML-Ext uses `camel-db --dap` directly. The selected VS Code session identifies the
+worker; clients need not discover its HTTP port. `camel/passGraphs` returns the immutable
+snapshot list (`graphs`, each with `index`, `pass`, `consumed`); `camel/passGraph` accepts
+`index` (a nonnegative integer) and returns that entry with its `dot`. `camel/setNodeBreakpoints`
+passes an `origins` array to the same debug core that owns source and function breakpoints.
+These requests do not create a second debug controller. The existing `camel/graph` inspects
+the actual stopped frame. The migration ledger lives in OpenCML-Ext's
+`docs/debugger-migration.md`; standalone UI retirement follows its acceptance gates.
