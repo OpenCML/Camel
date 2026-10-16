@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,7 +47,7 @@ template <class F> slot_t checked(F &&body) {
     }
 }
 
-Program prepare(ArgsView &with, ArgsView &norm) {
+Program prepare(ArgsView &with, ArgsView &norm, Context &ctx) {
     // Only extraction holds GC pointers. CUDA work uses owned host snapshots and releases
     // them after execution; the cache never retains Camel objects or shape-only identities.
     core::mm::NoCollectionScope noCollection;
@@ -61,31 +61,31 @@ Program prepare(ArgsView &with, ArgsView &norm) {
         for (size_t i = 0; i < type->size(); ++i)
             args.push_back({tuple->get<slot_t>(i), type->typeAt(i)});
     }
-    return compile(fn, args);
+    return compile(fn, args, ctx.facts());
 }
 
-slot_t sourceKernel(ArgsView &with, ArgsView &norm, Context &) {
+slot_t sourceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return checked([&] {
-        auto program = prepare(with, norm);
+        auto program = prepare(with, norm, ctx);
         return td::toSlot(::String::from(program.source, core::mm::autoSpace()));
     });
 }
-slot_t inspectKernel(ArgsView &with, ArgsView &norm, Context &) {
+slot_t inspectKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return checked([&] {
-        return td::toSlot(::String::from(inspect(prepare(with, norm)), core::mm::autoSpace()));
+        return td::toSlot(::String::from(inspect(prepare(with, norm, ctx)), core::mm::autoSpace()));
     });
 }
-slot_t benchmarkKernel(ArgsView &with, ArgsView &norm, Context &) {
+slot_t benchmarkKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return checked([&] {
         return td::toSlot(
             ::String::from(
-                benchmark(std::make_shared<const Program>(prepare(with, norm))),
+                benchmark(std::make_shared<const Program>(prepare(with, norm, ctx))),
                 core::mm::autoSpace()));
     });
 }
-slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
+slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return checked([&] {
-        auto program = std::make_shared<const Program>(prepare(with, norm));
+        auto program = std::make_shared<const Program>(prepare(with, norm, ctx));
         auto data    = execute(program);
         // Prevent collection of partially assembled aggregates while allocating leaves.
         core::mm::NoCollectionScope noCollection;
@@ -170,9 +170,9 @@ Type *residentType(Type *type) {
     types.emplace(type, result);
     return result;
 }
-slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &) {
+slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return checked([&] {
-        auto values = executeResident(std::make_shared<const Program>(prepare(with, norm)));
+        auto values = executeResident(std::make_shared<const Program>(prepare(with, norm, ctx)));
         core::mm::NoCollectionScope noCollection;
         auto *resultType = residentType(static_cast<FunctionType *>(with.type(0))->exitType());
         size_t leaf      = 0;
@@ -442,21 +442,21 @@ class TilesModule final : public BuiltinModule {
                          .externalEffect = true}},
                     {"download",
                      ResourceSpec{
-                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .externalEffect = true}},
                     {"run",
                      ResourceSpec{
-                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .externalEffect = true}},
                     {"run_device",
                      ResourceSpec{
-                         .accesses  = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
-                         .result    = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},
-                         .allocates = device,
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .result   = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},
+                         .allocates      = device,
                          .externalEffect = true}},
                     {"benchmark",
                      ResourceSpec{
-                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .externalEffect = true}},
                     {"source", externalAmbient("tiles:driver", AccessMode::Read)},
                     {"inspect", externalAmbient("tiles:driver", AccessMode::Read)},

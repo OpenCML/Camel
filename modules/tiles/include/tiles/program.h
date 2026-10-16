@@ -26,6 +26,10 @@ namespace camel::core::type {
 class Type;
 }
 
+namespace camel::runtime::fact {
+class FactStore;
+}
+
 namespace camel::tiles {
 
 using Shape = std::vector<int64_t>;
@@ -88,12 +92,14 @@ struct Program {
     std::string source;
     std::vector<Launch> launches;
     StoragePlan storage;
+    size_t graphFactInstances = 0, specializedInstances = 0;
 };
 
 size_t elements(const Shape &shape);
 size_t bytes(const Node &node);
 const void *hostData(const Node &node);
-Program compile(Function *function, const std::vector<Argument> &arguments);
+Program compile(
+    Function *function, const std::vector<Argument> &arguments, runtime::fact::FactStore &facts);
 void generate(Program &program, ScheduleOptions options = {});
 bool elementwise(const std::string &op);
 void validate(const Program &program);

@@ -1,0 +1,111 @@
+[36m[INFO][0m camel executable: D:\Projects\Camel\out\latest\bin\camel.exe
+[36m[INFO][0m discovered plans: 5
+
+[36m[PLAN][0m feat.modules.tiles: modules.tiles
+[32m[PASS][0m slice_bounds_rejected_before_cuda                     30.46 ms
+[32m[PASS][0m plan                                                  16.26 ms
+[32m[PASS][0m plan_validation                                      173.10 ms
+[32m[PASS][0m source                                                16.36 ms
+[32m[PASS][0m reject_effect                                         17.51 ms
+[32m[PASS][0m selected_branch_effect                                16.56 ms
+[32m[PASS][0m empty_mean                                            16.62 ms
+[32m[PASS][0m loop_structure_nvm                                    20.91 ms
+[32m[PASS][0m loop_structure_fvm                                    18.99 ms
+[32m[PASS][0m loop_structure_jit                                    17.76 ms
+[32m[PASS][0m loop_structure_prl                                    20.27 ms
+[32m[PASS][0m loop_structure_closure_nvm                            16.47 ms
+[32m[PASS][0m loop_structure_closure_fvm                            16.62 ms
+[32m[PASS][0m loop_structure_closure_prl                            19.90 ms
+
+[36m[PLAN][0m feat.modules.graph_facts: Graph facts (camel/runtime/facts.h, docs/design/op-semantics section 10, docs/technical/40_graph_facts.md): the registry of kinds and its rules, the store and its stamps checked on every read, the core's kinds as `camel inspect --facts` prints them, how rewrites make facts stale and nothing stale is reused, and the persistence hooks.
+[32m[PASS][0m registry_and_store                                    14.27 ms
+[32m[PASS][0m test_passes_need_the_environment                      14.79 ms
+[32m[PASS][0m inspect_facts                                         15.47 ms
+[32m[PASS][0m rewrite_inline                                        18.40 ms
+[32m[PASS][0m rewrite_opt                                           19.97 ms
+[32m[PASS][0m rewrite_macro_simplify                                21.16 ms
+[32m[PASS][0m persistence_round_trip                                17.69 ms
+
+[36m[PLAN][0m gpu.tiles: gpu.tiles
+[32m[PASS][0m runtime_scalars                                      725.16 ms
+[32m[PASS][0m ordered_reduction_fusion                             992.55 ms
+[32m[PASS][0m matmul_rounding.nvm                                  178.61 ms
+[32m[PASS][0m matmul_rounding.fvm                                  186.67 ms
+[32m[PASS][0m matmul_rounding.jit                                  182.31 ms
+[32m[PASS][0m max_special_values                                   704.16 ms
+[32m[PASS][0m max_grid_stride                                      235.21 ms
+[32m[PASS][0m benchmark_protocol                                   444.74 ms
+[32m[PASS][0m fusion.nvm                                           168.92 ms
+[32m[PASS][0m fusion.fvm                                           186.29 ms
+[32m[PASS][0m fusion.jit                                           166.20 ms
+[32m[PASS][0m boundaries.nvm                                       203.32 ms
+[32m[PASS][0m boundaries.fvm                                       206.32 ms
+[32m[PASS][0m boundaries.jit                                       208.70 ms
+[32m[PASS][0m vector_add                                           155.84 ms
+[32m[PASS][0m softmax                                              177.50 ms
+[32m[PASS][0m matmul                                               152.46 ms
+[32m[PASS][0m consistency.nvm                                      250.63 ms
+[32m[PASS][0m consistency.fvm                                      250.83 ms
+[32m[PASS][0m consistency.jit                                      363.62 ms
+[32m[PASS][0m index_maps.nvm                                       201.54 ms
+[32m[PASS][0m index_maps.fvm                                       197.71 ms
+[32m[PASS][0m index_maps.jit                                       199.88 ms
+[32m[PASS][0m mapped_fusion.nvm                                    190.59 ms
+[32m[PASS][0m mapped_fusion.fvm                                    192.21 ms
+[32m[PASS][0m mapped_fusion.jit                                    203.20 ms
+[32m[PASS][0m aggregate_outputs.nvm                                232.23 ms
+[32m[PASS][0m aggregate_outputs.fvm                                228.95 ms
+[32m[PASS][0m aggregate_outputs.jit                                227.09 ms
+[32m[PASS][0m gradients.nvm                                        278.18 ms
+[32m[PASS][0m gradients.fvm                                        352.62 ms
+[32m[PASS][0m gradients.jit                                        295.54 ms
+[32m[PASS][0m specialized_branches.nvm                             200.89 ms
+[32m[PASS][0m specialized_branches.fvm                             219.80 ms
+[32m[PASS][0m specialized_branches.jit                             205.55 ms
+[32m[PASS][0m value_gradient.nvm                                   271.66 ms
+[32m[PASS][0m value_gradient.fvm                                   267.56 ms
+[32m[PASS][0m value_gradient.jit                                   266.68 ms
+[32m[PASS][0m resident_transfers.nvm                               138.43 ms
+[32m[PASS][0m resident_transfers.fvm                               146.09 ms
+[32m[PASS][0m resident_transfers.jit                               146.20 ms
+[32m[PASS][0m resident_compute.nvm                                 197.94 ms
+[32m[PASS][0m resident_compute.fvm                                 203.83 ms
+[32m[PASS][0m resident_compute.jit                                 200.83 ms
+[32m[PASS][0m resident_outputs.nvm                                 235.58 ms
+[32m[PASS][0m resident_outputs.fvm                                 229.79 ms
+[32m[PASS][0m resident_outputs.jit                                 230.48 ms
+[32m[PASS][0m resident_scalars.nvm                                 232.93 ms
+[32m[PASS][0m resident_scalars.fvm                                 233.51 ms
+[32m[PASS][0m resident_scalars.jit                                 221.59 ms
+[32m[PASS][0m scalar_arithmetic.nvm                                221.59 ms
+[32m[PASS][0m scalar_zero.nvm                                      149.67 ms
+[32m[PASS][0m scalar_arithmetic.fvm                                228.37 ms
+[32m[PASS][0m scalar_zero.fvm                                      151.51 ms
+[32m[PASS][0m scalar_arithmetic.jit                                233.26 ms
+[32m[PASS][0m scalar_zero.jit                                      152.92 ms
+[32m[PASS][0m scalar_zero_positive                                 145.22 ms
+[32m[PASS][0m scalar_zero_control.nvm                              147.41 ms
+[32m[PASS][0m scalar_zero_control.fvm                              157.87 ms
+[32m[PASS][0m scalar_zero_control.jit                              162.91 ms
+[32m[PASS][0m module_lease                                         884.48 ms
+[32m[PASS][0m extrema_canonical_bits                                  3.82 s
+[32m[PASS][0m numeric_permission_boundaries                           1.03 s
+[32m[PASS][0m numeric_permissions_moving_gc                           1.03 s
+[32m[PASS][0m matmul_edges.nvm                                     259.93 ms
+[32m[PASS][0m matmul_edges.fvm                                     269.96 ms
+[32m[PASS][0m matmul_edges.jit                                     267.11 ms
+[32m[PASS][0m scalar_predicates.nvm                                157.76 ms
+[32m[PASS][0m scalar_predicates.fvm                                148.39 ms
+[32m[PASS][0m scalar_predicates.jit                                177.25 ms
+[32m[PASS][0m graph_facts.nvm                                      216.02 ms
+[32m[PASS][0m graph_facts.fvm                                      209.51 ms
+[32m[PASS][0m graph_facts.jit                                      220.16 ms
+
+[36m[PLAN][0m gpu.tiles_transfer: gpu.tiles_transfer
+[32m[PASS][0m large_upload_completion                              364.81 ms
+
+[36m[PLAN][0m gpu.tiles_rows: gpu.tiles_rows
+[32m[PASS][0m shared_row_regions                                   470.91 ms
+[32m[PASS][0m strict_sum_bits                                         2.31 s
+
+[36m[SUMMARY][0m total: 97, pass: 97, fail: 0

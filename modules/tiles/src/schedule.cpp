@@ -563,7 +563,8 @@ std::string inspect(const Program &p) {
             out << ',';
         out << p.outputs[i];
     }
-    out << "],\"numeric_permissions\":[";
+    out << "],\"graph_fact_instances\":" << p.graphFactInstances
+        << ",\"specialized_instances\":" << p.specializedInstances << ",\"numeric_permissions\":[";
     for (size_t i = 0; i < p.nodes.size(); ++i) {
         if (i)
             out << ',';

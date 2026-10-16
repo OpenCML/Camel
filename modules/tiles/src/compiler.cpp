@@ -18,6 +18,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/ops/support.h"
@@ -58,6 +59,8 @@ struct Frame {
 class Compiler {
   public:
     Program program;
+    rt::fact::FactStore &facts;
+    explicit Compiler(rt::fact::FactStore &store) : facts(store) {}
     std::unordered_set<rt::GCGraph *> active;
     std::unordered_map<core::OperId, size_t> contracts;
 
@@ -303,7 +306,8 @@ class Compiler {
                 const auto first    = program.nodes.size();
                 const auto oper     = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
                 const auto semantic = contract(oper);
-                out                 = operation(oper, args);
+                auto indexed        = graphInstance(*g, id, args);
+                out                 = operation(oper, args, indexed);
                 // Only this operator's lowering inherits its lexical grant.
                 // Arguments and separately called functions have already been
                 // lowered with their own permissions and must remain unchanged.
@@ -316,7 +320,7 @@ class Compiler {
                 // casts or constants introduced while lowering its arguments.
                 if (out.tensor != SIZE_MAX && out.tensor >= first &&
                     !program.nodes[out.tensor].indexing) {
-                    program.nodes[out.tensor].indexing = instance(oper, args);
+                    program.nodes[out.tensor].indexing = std::move(indexed);
                 }
                 break;
             }
@@ -332,6 +336,30 @@ class Compiler {
         }
     }
 
+    std::optional<core::sem::IndexedInstance> graphInstance(
+        const rt::GCGraph &graph, rt::gc_node_ref_t node, const std::vector<Value> &args) {
+        const auto inputs = graph.normInputsOf(node);
+        bool sameTypes    = inputs.size() == args.size();
+        for (size_t i = 0; sameTypes && i < args.size(); ++i)
+            sameTypes = graph.node(inputs[i])->dataType() == args[i].type;
+        if (sameTypes) {
+            const rt::fact::Anchor anchor{&graph, node};
+            const auto fact =
+                facts.obtain<rt::fact::NodeInstance>(rt::fact::coreKinds().instance, {&anchor, 1});
+            if (fact && fact->instance &&
+                std::all_of(
+                    fact->instance->domain.params.begin(),
+                    fact->instance->domain.params.end(),
+                    [](const auto &param) { return param.value.has_value(); })) {
+                ++program.graphFactInstances;
+                return fact->instance; // Owned copy; no graph/store pointer survives extraction.
+            }
+        }
+        // A shared graph's unknowns must not be filled in with one invocation's
+        // shapes. Specialize separately and keep the result in the owned plan.
+        return instance(graph.nodeBodyAs<rt::GCOperBody>(node)->oper, args);
+    }
+
     std::optional<core::sem::IndexedInstance>
     instance(core::OperId id, const std::vector<Value> &args) {
         std::vector<ty::Type *> types;
@@ -342,10 +370,15 @@ class Compiler {
         }
         // Use the declaration in the core operator table, including its current
         // law validation, rather than bypassing it through Tensor's private IndexFn.
-        return core::sem::instantiate(id, {.norm = types, .statics = statics});
+        auto result = core::sem::instantiate(id, {.norm = types, .statics = statics});
+        if (result)
+            ++program.specializedInstances;
+        return result;
     }
 
-    Value operation(core::OperId id, const std::vector<Value> &args) {
+    Value operation(
+        core::OperId id, const std::vector<Value> &args,
+        const std::optional<core::sem::IndexedInstance> &indexed) {
         static const auto scalarOps = [] {
             auto &table = core::OperatorTable::instance();
             return std::unordered_map<core::OperId, std::string>{
@@ -505,7 +538,7 @@ class Compiler {
         } else if (n.op == "transpose" || n.op == "permute" || n.op == "slice") {
             n.inputs          = {tensorValue(args.at(0))};
             const auto &shape = program.nodes[n.inputs[0]].shape;
-            auto instance     = this->instance(id, args);
+            auto instance     = indexed;
             if (!instance || instance->norm.empty() ||
                 instance->output.mode != core::sem::WriteMode::Unique ||
                 instance->output.indirect || !instance->output.valid.empty() ||
@@ -552,10 +585,11 @@ class Compiler {
 };
 } // namespace
 
-Program compile(Function *function, const std::vector<Argument> &arguments) {
+Program
+compile(Function *function, const std::vector<Argument> &arguments, rt::fact::FactStore &facts) {
     if (!function || !function->graph())
         throw std::runtime_error("expected a function graph");
-    Compiler c;
+    Compiler c(facts);
     std::vector<Value> with, norm;
     if (auto *closure = function->tuple()) {
         const auto *types = function->tupleType();
