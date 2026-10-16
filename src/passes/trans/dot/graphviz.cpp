@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -558,20 +558,20 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         string style   = recordStyle(*node);
         string size    = recordSize(*node);
         string type    = recordType(*node);
-        // FILL produces this concrete aggregate/function type; never infer it from input labels.
-        const string valueType = node->kind == camel::runtime::GCNodeKind::Fill && node->dataType()
-                                     ? node->dataType()->toString()
-                                     : "";
+        // Every real node carries its output value type. Export the compiler's type, including
+        // static slots, rather than inferring it from the label or from the input types.
+        const auto *outputType = nodeStaticSlotType(graph, *node);
+        const string valueType =
+            outputType ? camel::core::type::sourceTypeSpelling(outputType->toString()) : "";
         // The numeric permissions the program granted with @numeric(...) (design principles
         // 2.13): an attribute only on the nodes that have any, so that the dump of a program
         // without the annotation is unchanged.
         const uint8_t permissions = graph->nodePermissions(nodeRef);
         const string valueAttr =
             (valueType.empty() ? "" : std::format(", value_type=\"{}\"", escape(valueType))) +
-            (permissions == 0 ? ""
-                              : std::format(
-                                    ", numeric=\"{}\"",
-                                    camel::core::sem::permissionsText(permissions)));
+            (permissions == 0
+                 ? ""
+                 : std::format(", numeric=\"{}\"", camel::core::sem::permissionsText(permissions)));
         // Boundary roles: a role attribute; styled dumps also fill the node with its first role's
         // color and list every role in the tooltip.
         string roleAttr, roleFill, roleTooltip;
