@@ -319,11 +319,11 @@ int main() {
         if (guarded.source.find("=fmaf(") == std::string::npos)
             throw std::runtime_error("ignored the supported arithmetic declaration");
         std::cout << "tiles operator contracts: absent, replaced and incompatible declarations rejected\n";
-        std::weak_ptr<int> cacheOwner;
+        std::weak_ptr<DeviceStorage> cacheOwner;
         {
             Program borrowed;
             auto value = std::make_shared<DeviceValue>();
-            auto owner = std::make_shared<int>(1);
+            auto owner = std::make_shared<DeviceStorage>();
             cacheOwner = owner;
             value->owner = owner;
             value->address = 1;
@@ -433,7 +433,7 @@ int main() {
         auto resident = std::make_shared<DeviceValue>();
         resident->shape = {2,3};
         resident->address = 1; // Validator-only sentinel, never passed to CUDA.
-        resident->owner = std::make_shared<int>(0);
+        resident->owner = std::make_shared<DeviceStorage>();
         borrowed.nodes[0].resident = resident;
         borrowed.nodes[0].data.clear();
         schedule(borrowed);

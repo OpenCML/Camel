@@ -35,10 +35,10 @@
 namespace camel::tiles {
 using namespace cuda_detail;
 namespace {
-struct OwnedAllocation {
+struct OwnedAllocation final : DeviceStorage {
     std::shared_ptr<Backend> backend;
     CUdeviceptr pointer = 0;
-    ~OwnedAllocation() {
+    ~OwnedAllocation() override {
         // No Camel references or allocator locks. The owner outlives every use;
         // transfers are synchronous before publishing the value.
         if (pointer && backend->api.cuCtxPushCurrent(backend->context) == CUDA_SUCCESS) {
@@ -76,8 +76,8 @@ class DeviceRun {
         for (size_t id = 0; id < p.nodes.size(); ++id)
             if (p.nodes[id].resident) {
                 auto allocation =
-                    std::static_pointer_cast<OwnedAllocation>(p.nodes[id].resident->owner);
-                if (&allocation->backend->api != &a ||
+                    std::dynamic_pointer_cast<OwnedAllocation>(p.nodes[id].resident->owner);
+                if (!allocation || !allocation->backend || &allocation->backend->api != &a ||
                     allocation->pointer != p.nodes[id].resident->address)
                     throw std::runtime_error("resident input belongs to another CUDA backend");
                 pointers[id] = allocation->pointer;
@@ -265,8 +265,10 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
 std::vector<std::byte> downloadValue(const DeviceValue &tensor) {
     if (!tensor.owner || !tensor.address)
         throw std::runtime_error("invalid resident tensor");
-    auto allocation = std::static_pointer_cast<OwnedAllocation>(tensor.owner);
-    auto b          = allocation->backend;
+    auto allocation = std::dynamic_pointer_cast<OwnedAllocation>(tensor.owner);
+    if (!allocation || !allocation->backend || allocation->pointer != tensor.address)
+        throw std::runtime_error("resident value does not belong to CUDA storage");
+    auto b = allocation->backend;
     std::lock_guard lock(b->mutex);
     Current current(b->api, b->context);
     std::vector<std::byte> result(bytes(Node{.shape = tensor.shape, .dtype = tensor.dtype}));

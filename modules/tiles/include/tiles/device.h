@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -17,11 +17,16 @@
 #include <span>
 
 namespace camel::tiles {
+// Backend-owned storage has a checked dynamic type. It must never retain Camel
+// heap pointers; concrete backends own their context and native allocation.
+struct DeviceStorage {
+    virtual ~DeviceStorage() = default;
+};
 struct DeviceValue {
     Shape shape;
     DType dtype      = DType::F32;
     uint64_t address = 0;
-    std::shared_ptr<void> owner;
+    std::shared_ptr<DeviceStorage> owner;
 };
 std::shared_ptr<DeviceValue>
 uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data);
