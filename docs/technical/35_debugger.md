@@ -197,10 +197,15 @@ with F not S or line(N) not L. It enters a callee when the next node is a call.
 ### 4.1 Tail calls
 
 A tail call replaces the frame (section 5.2): the callee takes the place of S at the same
-depth. For stepping, the replacement is a new frame at depth `d`, so a line step at
-`return loop(n - 1, acc)` stops at the first line of `loop`, and step out runs until the whole
-chain of tail calls has returned to the real caller. A recursion written as tail calls is thus
-stepped like the loop it is. `DESIGN-QUESTION(step-over-tail-call)`.
+depth. Step in (F11) stops at its first executable source location with the new arguments.
+Step over (F10) and step out run until the chain returns to the real caller; a breakpoint,
+fault or explicit pause can still interrupt them. This also applies to node-granularity
+step over. The source author's ruling on 2026-10-16 resolves `step-over-tail-call` this way.
+
+The top frame in `camel/stopped` includes its `activation`, `functionId`, `entry` flag and
+bounded `arguments` snapshots (name, type, value, evaluated). These are immutable display
+values, not heap handles. Graph clients can show changed arguments between activations of
+the same function without inventing a stack frame or requesting values after resume.
 
 ### 4.2 Lines that did not execute
 
@@ -603,8 +608,8 @@ has ruled since, which say so.
    node of the line.
 2. `line-step-order`: the next line in execution order, or in the text. **Ruled** (design
    principles 2.11): in execution order.
-3. `step-over-tail-call`: a line step over a tail call stops in the callee (recommended), or
-   runs until the chain returns to the caller.
+3. `step-over-tail-call`: **Ruled 2026-10-16**: F10 runs until the chain returns to the
+   caller; F11 enters the callee at its first executable location. Breakpoints still apply.
 4. `tail-call-stack`: show the stack as it is, marking replaced frames (recommended), or keep
    a shadow record of replaced callers for display.
 5. `inlined-frames`: one frame marked as inlined code, stepping by source function

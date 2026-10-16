@@ -245,6 +245,10 @@ code nothing depends on does not run at all.
   shows which one. DAP clients can also ask per request with `granularity: "instruction"`.
   The `camel/stopped` event that accompanies every stop carries the node
   (`%20 OPER :op/add_l`).
+- **Tail recursion.** F10 steps over the recursive call until the tail-call chain returns to
+  its real caller; F11 enters the next activation at its first executable location. Breakpoints,
+  faults and manual pauses still interrupt F10. The extension's GIR stop context shows the
+  new arguments and their previous values without inventing extra stack frames.
 - **Lines that did not execute.** When a line step goes past a line that did not execute
   because nothing uses its result, the debugger says so, once: in the debug console (and in
   the REPL, under the stop): *line 18 was not executed: nothing uses the value of `unused`*.
