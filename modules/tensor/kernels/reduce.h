@@ -24,8 +24,10 @@
  * reduces the middle dimension. Negative axes count from the end. With
  * `keepDims` the reduced axis stays as extent 1; otherwise it is removed.
  *
- * Float sums accumulate in double so results do not depend on the thread
- * split or on summation order within a row.
+ * Float sums accumulate in double from +0 in ascending order; int64 and bool
+ * sums accumulate exactly in int64, wrapping on overflow (design principles
+ * 2.10, 2.14). The thread split never changes a result: each lane is summed
+ * by one thread.
  */
 
 #pragma once
@@ -55,7 +57,8 @@ Shape reducedShape(std::span<const int64_t> shape, size_t axis, bool keepDims);
 TensorObject *reduceAxis(
     ReduceOp op, const TensorObject *input, int64_t axis, bool keepDims, mm::IAllocator &allocator);
 
-/// Sum of all elements as double.
+/// Sum of all elements as double: f32 elements accumulated in f64 in row-major order; int64
+/// and bool elements accumulated exactly in int64 (wrapping), converted to double once.
 double sumAll(const TensorObject *input);
 
 /// Softmax along `axis` (float32 result).

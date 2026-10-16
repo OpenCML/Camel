@@ -145,15 +145,27 @@ TensorObject *reduceAxis(
             switch (op) {
             case ReduceOp::Sum:
             case ReduceOp::Mean: {
-                // double accumulation for floats, exact int64 accumulation otherwise
-                using Acc = std::conditional_t<std::is_same_v<T, float>, double, int64_t>;
+                // f64 accumulation for floats; integers and bools exactly in int64, wrapping on
+                // overflow as integer arithmetic does (design principles 2.10, 2.14): the
+                // addition is done on uint64_t, where it is defined to wrap.
+                using Acc = std::conditional_t<std::is_same_v<T, float>, double, uint64_t>;
                 Acc acc   = 0;
                 for (int64_t k = 0; k < split.extent; ++k) {
-                    acc += static_cast<Acc>(src[base + k * stride]);
+                    if constexpr (std::is_same_v<T, float>) {
+                        acc += static_cast<double>(src[base + k * stride]);
+                    } else {
+                        acc += static_cast<uint64_t>(static_cast<int64_t>(src[base + k * stride]));
+                    }
                 }
                 if (op == ReduceOp::Mean) {
-                    out->dataAs<float>()[lane] = static_cast<float>(
-                        static_cast<double>(acc) / static_cast<double>(split.extent));
+                    double total = 0.0;
+                    if constexpr (std::is_same_v<T, float>) {
+                        total = acc;
+                    } else {
+                        total = static_cast<double>(static_cast<int64_t>(acc));
+                    }
+                    out->dataAs<float>()[lane] =
+                        static_cast<float>(total / static_cast<double>(split.extent));
                 } else if (outType == TypeCode::Int64) {
                     out->dataAs<int64_t>()[lane] = static_cast<int64_t>(acc);
                 } else {
@@ -199,11 +211,21 @@ TensorObject *reduceAxis(
 double sumAll(const TensorObject *input) {
     return dispatchDType(input->dtype(), [&]<typename T>() {
         const T *src = input->dataAs<T>();
-        double acc   = 0.0;
-        for (uint64_t i = 0; i < input->numel(); ++i) {
-            acc += static_cast<double>(src[i]);
+        if constexpr (std::is_same_v<T, float>) {
+            double acc = 0.0;
+            for (uint64_t i = 0; i < input->numel(); ++i) {
+                acc += static_cast<double>(src[i]);
+            }
+            return acc;
+        } else {
+            // int64 and bool: exactly in int64, wrapping on overflow (design principles 2.10,
+            // 2.14), then converted to the float result once.
+            uint64_t acc = 0;
+            for (uint64_t i = 0; i < input->numel(); ++i) {
+                acc += static_cast<uint64_t>(static_cast<int64_t>(src[i]));
+            }
+            return static_cast<double>(static_cast<int64_t>(acc));
         }
-        return acc;
     });
 }
 

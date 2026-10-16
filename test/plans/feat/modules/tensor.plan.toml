@@ -380,3 +380,14 @@ expect_exit = 0
 expect_stdout_contains = ["matmul fma_step=0.0004883408546447754\nmatmul chain=16777216.0\nsoftmax equal=0.0\nsoftmax nan_count=3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "int64_sum_exact"
+desc = "The sum of an int64 tensor accumulates exactly in int64 and wraps on overflow (design principles 2.10, 2.14): 2^53 + 1 + 1 + 1 is 9007199254740995 by axis and 9007199254740996.0 (the exact sum rounded once) in full, where an f64 accumulator gave 9007199254740992.0; INT64_MAX + 1 wraps to INT64_MIN in the full sum too (it used to come out positive)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/int64_sum.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "9007199254740996.0\n3002399751580332.0\ntensor(9007199254740995, dtype=int64)\ntensor([-9223372036854775804,      -4], dtype=int64)\n-9.223372036854776e+18\ntensor([-4.612e+18,      -2.], dtype=float32)\n"

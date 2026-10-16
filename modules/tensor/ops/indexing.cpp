@@ -798,22 +798,23 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
         t.emplace("broadcast_like", Indexing{broadcastLikeIndexing, {}});
         t.emplace("expand_axis", Indexing{expandAxisIndexing, {}});
 
-        // sum and mean of everything: the kernel adds every element converted to f64, the
-        // int64 and bool ones too (so an int64 sum rounds beyond 2^53).
+        // sum and mean of everything: f32 elements are added in f64; int64 and bool elements
+        // exactly in int64, wrapping (design principles 2.14), and the result converted to f64
+        // once (mean divides in f64 first).
         t.emplace(
             "sum",
             Indexing{
                 reduceAllIndexing,
                 {sumLaw("sum_f32", f32, f64, f64),
-                 sumLaw("sum_i64", i64, f64, f64),
-                 sumLaw("sum_bool", boolean, f64, f64)}});
+                 sumLaw("sum_i64", i64, i64, f64),
+                 sumLaw("sum_bool", boolean, i64, f64)}});
         t.emplace(
             "mean",
             Indexing{
                 reduceAllIndexing,
                 {meanLaw("mean_f32", f32, f64, f64, LawEmpty::Fault),
-                 meanLaw("mean_i64", i64, f64, f64, LawEmpty::Fault),
-                 meanLaw("mean_bool", boolean, f64, f64, LawEmpty::Fault)}});
+                 meanLaw("mean_i64", i64, i64, f64, LawEmpty::Fault),
+                 meanLaw("mean_bool", boolean, i64, f64, LawEmpty::Fault)}});
         // By axis: floats in f64 rounded once to f32, integers and bools exactly in int64.
         t.emplace(
             "sum_axis",

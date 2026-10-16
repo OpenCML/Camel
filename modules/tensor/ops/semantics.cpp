@@ -164,14 +164,16 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
                 f64,
                 kReduce,
                 "every element converted to f64 and added to an f64 accumulator from +0 in "
-                "row-major order; the result is the f64 sum"));
+                "row-major order; the result is the f64 sum (int64 and bool elements: added "
+                "exactly in int64, wrapping, and converted to f64 once)"));
         t.emplace(
             "mean",
             rounded(
                 f64,
                 kReduce,
-                "the f64 sum of `sum`, divided by the element count in f64; an empty tensor is a "
-                "fault"));
+                "the sum of `sum` (f64; int64 for int64 and bool elements) converted to f64 and "
+                "divided by the element count in f64; an empty tensor is a fault "
+                "(DivisionByZero, as its definition divides by zero)"));
         t.emplace(
             "sum_axis",
             rounded(
