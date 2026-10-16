@@ -1,7 +1,7 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
 add_camel_module(
   NAME tiles
-  SOURCES src/resident_storage.cpp src/module.cpp src/dispatch.cpp src/graph_values.cpp src/graph_regions.cpp src/region_extract.cpp src/region_outline.cpp src/region_test_pass.cpp src/compiler.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/parallel_kernel.cpp src/cuda.cpp src/cuda_backend.cpp src/capability.cpp src/cuda_resources.cpp src/schedule.cpp src/device.cpp
+  SOURCES src/resident_storage.cpp src/module.cpp src/dispatch.cpp src/graph_values.cpp src/graph_regions.cpp src/region_extract.cpp src/region_outline.cpp src/region_test_pass.cpp src/region_pass.cpp src/compiler.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/parallel_kernel.cpp src/cuda.cpp src/cuda_backend.cpp src/capability.cpp src/cuda_resources.cpp src/schedule.cpp src/device.cpp
   EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include
   EXTRA_LIBS tensor_cmo nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS}
 )

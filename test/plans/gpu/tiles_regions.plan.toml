@@ -78,3 +78,14 @@ envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000
+
+[[tests]]
+name = "public_region_pass"
+kind = "behavior"
+case = "../../cases/modules/tiles/public_pass.cml"
+args = ["${case}", "std::tiles", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
+timeout_ms = 60000

@@ -517,6 +517,13 @@ class TilesModule final : public BuiltinModule {
   public:
     explicit TilesModule(context_ptr_t ctx) : BuiltinModule("tiles", ctx) {
         tensor::ops::registerTensorOps();
+        registerRegionPass(
+            {&retainPreferredKernel,
+             &runPreferredResidentKernel,
+             &downloadKernel,
+             "tiles:retain_preferred",
+             "tiles:run_preferred_resident",
+             "tiles:download"});
         registerRegionTestPasses(
             &runKernel,
             {&uploadKernel, &runDeviceKernel, &downloadKernel},

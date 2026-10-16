@@ -71,6 +71,7 @@ struct RegionDeviceOps {
     std::string uploadUri = "tiles:upload", executeUri = "tiles:run_device",
                 downloadUri = "tiles:download";
 };
+void registerRegionPass(RegionDeviceOps preferred);
 // Rewrites a reachable graph set; null executor produces ordinary CPU CALL nodes.
 // Non-null executors use the supplied stable operator URI and packed arguments.
 runtime::GCGraph *outlineRegions(

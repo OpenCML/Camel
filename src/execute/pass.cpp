@@ -419,6 +419,8 @@ PassScopePtr initPassScope() {
 const PassScopePtr passScope = initPassScope();
 
 std::unordered_map<std::string, std::string> passAliases = {
+    // The implementation and executor remain in the bundled Tiles module.
+    {"std::tiles", "tiles::compile"},
     // Standard scheduler aliases
     {"std::default", "std::nodevm"},
     {"std::linear", "std::nodevm"},

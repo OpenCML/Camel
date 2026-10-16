@@ -21,6 +21,27 @@ func main(): int sync {
 
 ## API
 
+For programs with static f32 tensor shapes, the experimental region pass avoids
+wrapping individual functions:
+
+```text
+camel program.cml std::tiles std::fvm
+```
+
+`std::tiles` loads the bundled module automatically (`tiles::compile` is its full
+module name). It extracts supported, pure, dependency-convex regions and inserts
+explicit resident inputs, calls and host reads. Shared device results remain
+resident across regions. Other nodes execute normally on the selected scheduler.
+The rewrite itself does not initialize CUDA; runtime prefers CUDA and falls back
+to the original CPU graph for missing capability. Faults after target selection
+are not retried. No special import or test environment variable is required.
+
+Current limits: dynamically shaped tensors, symbolic dimensions and unsupported
+operators remain outside selected regions; CPU fallback interprets the region
+through the current scheduler. Compiled CPU kernels, device cost-based placement
+and shape-polymorphic compilation are not yet implemented. Use `std::tiles std::gir`
+or `std::tiles std::jgir` to inspect the rewritten graph.
+
 `gpu` is a function decorator that prefers GPU execution:
 
 ```cml

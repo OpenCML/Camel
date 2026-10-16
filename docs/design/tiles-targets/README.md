@@ -87,8 +87,10 @@ or test-enablement checks. Test passes use the same rewriting implementation.
 
 With explicit device operators this component inserts typed uploads, resident
 calls and host-visible downloads. `tiles::test_outline_resident` exercises this
-GPU-required path. It is not yet the complete `std::tiles` pass: automatic target
-selection and automatic host/device routing remain pending.
+GPU-required path. The public `std::tiles` alias loads `tiles::compile`, which
+uses preferred resident execution without test output or CUDA initialization
+during rewriting. This is the static-shape region implementation; symbolic
+shape compilation and cost-based target selection remain pending.
 
 `tiles::test_outline_host_resident` uses the same transfer graph with host-owned
 snapshots. It restores arguments into a rooted typed tuple, invokes the original
@@ -107,8 +109,8 @@ input through an effectful CPU fallback and back into a supported GPU region,
 checking both the retained host result and the original device input. A separate
 division-fault case checks that CPU effects occur once and the original fault
 location is preserved across all four schedulers. The resident invocation is
-exported only with `CAMEL_ENABLE_TEST_PASSES` for these checks. Public pass
-registration and complete dispatch inspection remain pending.
+exported only with `CAMEL_ENABLE_TEST_PASSES` for these checks. Complete dispatch
+inspection remains pending; graph exports expose the inserted transfer/call nodes.
 
 The single-target transfer planner computes deduplicated uploads, host-visible
 downloads and resident producer/consumer edges from the live graph. Embedded
@@ -116,4 +118,5 @@ constants require no transfer. A value used by both a CPU node and another regio
 has a host copy and a retained device copy; a CPU detour does not force its direct
 region-to-region edge through a redundant upload. `regions` exposes this candidate
 plan. The rewriting component realizes these edges without downloading and
-re-uploading shared region results. Cross-target routing is still pending.
+re-uploading shared region results. Routing currently supports host storage and
+the selected CUDA device; other device backends are not implemented.
