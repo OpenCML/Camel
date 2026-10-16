@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Apr. 06, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -344,7 +344,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ImportNameConflict",
                 "The name '{0}' is imported from the modules '{1}' and '{2}' with {3}.",
                 "Two imports that bring the same name with the same parameter types conflict, "
-                "and so do two that bring a value of the same name; neither is chosen silently. Give one of them another name where it is imported "
+                "and so do two that bring a value of the same name; neither is chosen silently. "
+                "Give one of them another name where it is imported "
                 "('import {{ name as other_name }} from m'), or import the name from one of the "
                 "modules only and reach the other through its module ('import m', then "
                 "'m::name').",
@@ -514,7 +515,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "TaggedValueNotOpened",
                 "A value of type '{0}' cannot be used here: {1}.",
                 "A value that may be null ('T?') or may have failed ('T!') is opened only by "
-                "'?" "?', '!!', '?->' and by 'match' with 'case null' / 'case error e'.",
+                "'?"
+                "?', '!!', '?->' and by 'match' with 'case null' / 'case error e'.",
             },
         },
         {
@@ -623,7 +625,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ExportedVariable",
                 "The variable '{0}' cannot be exported.",
                 "A 'var' of the top level of a module is read and written only by the module's own "
-                "functions (design principles 2.11): export the functions that read and write it "
+                "functions: export the functions that read and write it "
                 "('export sync func bump(): int sync {{ wait cnt += 1; return cnt }}'). A 'let' "
                 "can be exported.",
             },
@@ -634,7 +636,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ModuleValueCycle",
                 "The value '{0}' depends on itself: {1}.",
                 "The values of the top level of modules are computed before 'main' starts, each "
-                "from the values it uses (design principles 2.11): directly, through the "
+                "from the values it uses: directly, through the "
                 "functions its initializer calls, and through the values those use, in any "
                 "module. A value cannot be computed from itself. Compute one of the values in "
                 "the chain without the other, or turn it into a function.",
@@ -646,7 +648,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "AmbiguousName",
                 "The name '{0}' is ambiguous here: {1}.",
                 "Two 'using namespace' in force bring something of this name that cannot be told "
-                "apart (design principles 2.12): a value or a type from each, or functions of the "
+                "apart: a value or a type from each, or functions of the "
                 "same parameter types. Write the qualified name of the one meant.",
             },
         },
@@ -679,8 +681,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "AnyNotAllowed",
                 "'any' is not a type a program can write: {0}.",
-                "Every value has a definite type after compilation (design principles 2.11, "
-                "2.12). A type parameter ('typeas T') takes values of several types, a tuple or "
+                "Every value has a definite type after compilation. A type parameter ('typeas T') "
+                "takes values of several types, a tuple or "
                 "a struct holds values of different types side by side, and 'decode_as' of "
                 "the json module reads JSON of a known shape.",
             },
@@ -700,7 +702,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "MatchCaseTypeMismatch",
                 "This case of a 'match' on a value of type '{0}' is a value of type '{1}'.",
                 "A case is compared with the value matched, so the type of that value must "
-                "accept it (design principles 2.13). Write the case as a value of that type, or "
+                "accept it. Write the case as a value of that type, or "
                 "convert the value matched first.",
             },
         },
@@ -827,11 +829,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "LoopBodyTypeMismatch",
                 "The body of this loop gives a value of type '{0}'; the state of the loop has type "
                 "'{1}'.",
-                "The value after 'do' is the state of the next round, so it has the type of "
-                "the state, which the first values in the loop head give (design principles "
-                "2.10, 2.13); with several names it is the tuple of them, in the order of the "
-                "head. Convert the first value where it is written ('0.0' rather than '0', "
-                "'null as int?') or the value the body gives ('v as T').",
+                "The initial state fixes the state type. Return that type after 'do', or "
+                "change the initial value (for example, '0.0' instead of '0' for a float state). "
+                "With multiple state names, return a tuple in the same order.",
             },
         },
         {
