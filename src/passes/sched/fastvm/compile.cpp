@@ -357,9 +357,9 @@ static bytecode_vec_t compileRuntimeGraph(
             const auto *srcRecord = graph->node(sourceRef);
             const auto *accBody   = graph->nodeBodyAs<camel::runtime::GCAccsBody>(runtimeNodeIndex);
             ASSERT(
-                srcRecord != nullptr && srcRecord->dataType != nullptr,
+                srcRecord != nullptr && srcRecord->dataType() != nullptr,
                 "ACCS source node must exist.");
-            ASSERT(srcRecord->dataType->isComposite(), "ACCS source node must be composite.");
+            ASSERT(srcRecord->dataType()->isComposite(), "ACCS source node must be composite.");
 
             size_t index = 0;
 
