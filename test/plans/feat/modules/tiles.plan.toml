@@ -237,3 +237,15 @@ assert(ordered.excluded.some(n => n.reason === "control_edge") && ordered.region
 }
 """
 timeout_ms = 10000
+
+
+[[tests]]
+name = "outlined_region_execution"
+kind = "behavior"
+case = "../../../cases/modules/tiles/region_execution.cml"
+args = ["${case}", "tiles::test_outline", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
+timeout_ms = 10000

@@ -46,6 +46,14 @@ struct RegionDraft {
 // encoding/attaching the graph. The returned draft is not a GC root by itself.
 RegionDraft extractRegion(const runtime::GCGraph &source, const Region &region);
 
+struct RegionAnalysis {
+    std::vector<Region> regions;
+    std::vector<std::string> exclusions;
+};
+RegionAnalysis analyzeRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
+// Register semantic-equivalence checks only when CAMEL_ENABLE_TEST_PASSES is enabled.
+void registerRegionTestPasses();
+
 // Inspect one function graph without executing it or initializing CUDA. This is
 // candidate analysis with extracted drafts, not automatic graph execution.
 std::string inspectRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);

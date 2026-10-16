@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <sstream>
 #include <unordered_map>
+#include <utility>
 
 namespace camel::tiles {
 namespace {
@@ -166,7 +167,7 @@ void ids(std::ostream &out, const std::vector<size_t> &values) {
     out << ']';
 }
 } // namespace
-std::string inspectRegions(const rt::GCGraph &graph, rt::fact::FactStore &facts) {
+RegionAnalysis analyzeRegions(const rt::GCGraph &graph, rt::fact::FactStore &facts) {
     std::vector<RegionNode> nodes(graph.nodeCount());
     std::vector<std::string> reasons(nodes.size());
     for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
@@ -176,7 +177,12 @@ std::string inspectRegions(const rt::GCGraph &graph, rt::fact::FactStore &facts)
             nodes[id].inputs.insert(nodes[id].inputs.end(), edges.begin(), edges.end());
         nodes[id].output = id == graph.outputNodeRef() || id == graph.exitNodeRef();
     }
-    const auto regions = partitionRegions(nodes);
+    return {partitionRegions(nodes), std::move(reasons)};
+}
+std::string inspectRegions(const rt::GCGraph &graph, rt::fact::FactStore &facts) {
+    const auto analysis = analyzeRegions(graph, facts);
+    const auto &regions = analysis.regions;
+    const auto &reasons = analysis.exclusions;
     std::ostringstream out;
     out << "{\"schema\":1,\"regions\":[";
     bool first = true;
