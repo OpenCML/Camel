@@ -13,7 +13,7 @@
 #include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft.h"
-#include <numeric>
+#include "tiles/internal/graph_values.h"
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -36,7 +36,6 @@ Function *gpuFunction(Function *source, operator_t run) {
     const auto original = draft.addPortNode(signature, draft.allocateRuntimeSlot(signature));
     draft.appendClosureNode(original);
     std::vector<rt::gc_node_ref_t> inputs;
-    std::vector<ty::Type *> types;
     for (size_t i = 0; i < signature->normTypesCount(); ++i) {
         if (signature->normIsVarAt(i))
             throw std::runtime_error("@gpu does not accept mutable input parameters");
@@ -44,22 +43,10 @@ Function *gpuFunction(Function *source, operator_t run) {
         const auto port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
         draft.appendNormPort(port);
         inputs.push_back(port);
-        types.push_back(type);
     }
     auto packed = inputs.front();
-    if (inputs.size() > 1) {
-        auto *tupleType = ty::TupleType::create(types);
-        auto *empty     = ::Tuple::create(inputs.size(), core::mm::autoSpace());
-        const auto base = draft.materializeStaticValue(td::toSlot(empty), tupleType);
-        std::vector<size_t> slots(inputs.size());
-        std::iota(slots.begin(), slots.end(), 0);
-        packed = draft.addFillNode(
-            tupleType,
-            rt::makeFillPayload(rt::GCFillKind::Tuple, slots),
-            draft.allocateRuntimeSlot(tupleType));
-        draft.setNormInputs(packed, std::span(&base, 1));
-        draft.setWithInputs(packed, inputs);
-    }
+    if (inputs.size() > 1)
+        packed = packGraphTuple(draft, inputs);
     auto *resultType = signature->exitType();
     const auto output =
         draft.addOperNode(resultType, run, "tiles:run", draft.allocateRuntimeSlot(resultType));

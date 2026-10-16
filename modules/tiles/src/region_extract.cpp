@@ -13,8 +13,8 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
-#include <numeric>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -106,17 +106,8 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Region &region) {
     auto output      = outputs.front();
     auto *resultType = types.front();
     if (outputs.size() > 1) {
-        resultType      = ty::TupleType::create(types);
-        auto *empty     = ::Tuple::create(outputs.size(), core::mm::autoSpace());
-        const auto base = draft.materializeStaticValue(core::rtdata::toSlot(empty), resultType);
-        std::vector<size_t> slots(outputs.size());
-        std::iota(slots.begin(), slots.end(), 0);
-        output = draft.addFillNode(
-            resultType,
-            rt::makeFillPayload(rt::GCFillKind::Tuple, slots),
-            draft.allocateRuntimeSlot(resultType));
-        draft.setWithInputs(output, std::span<const rt::gc_node_ref_t>(&base, 1));
-        draft.setNormInputs(output, outputs);
+        output     = packGraphTuple(draft, outputs);
+        resultType = draft.header(output)->dataType;
     }
     signature.setExitType(resultType);
     draft.setFuncType(signature.build());
