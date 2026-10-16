@@ -132,9 +132,8 @@ bool DebugCore::allocationEvent(size_t size, const char *space, const void *ptr)
             return true;
     }
     // An allocation inside index maintenance must not stop while the index lock is held.
-    if (!indexMutex_.try_lock())
+    if (indexMutex_.busy())
         return true;
-    indexMutex_.unlock();
     static thread_local bool inside = false;
     if (inside)
         return true;
