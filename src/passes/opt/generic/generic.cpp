@@ -19,7 +19,7 @@
  */
 
 /*
- * The generic optimization passes std::opt::{fold, cse, dce} (see generic.h).
+ * The generic optimization passes std::opt::{fold, cse, dce, ctrl} (see generic.h).
  */
 
 #include "generic.h"
@@ -36,6 +36,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/pass/warnings.h"
+#include "camel/runtime/control.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
@@ -411,10 +412,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         }
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, brch);
         for (gc_node_ref_t pred : preds) {
-            const auto existing = draft.ctrlInputsOf(user);
-            if (pred != user && std::ranges::find(existing, pred) == existing.end()) {
-                draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
-            }
+            camel::runtime::appendControlDependency(draft, pred, user);
         }
     }
 
@@ -446,10 +444,8 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     if (!resultInArm) {
         for (gc_node_ref_t user : joinValueUsers) {
             for (gc_node_ref_t pred : after) {
-                const auto existing = draft.ctrlInputsOf(user);
-                if (pred != user && pred != result && !dropped[pred] &&
-                    std::ranges::find(existing, pred) == existing.end()) {
-                    draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
+                if (pred != result && !dropped[pred]) {
+                    camel::runtime::appendControlDependency(draft, pred, user);
                 }
             }
         }
@@ -457,10 +453,8 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     for (gc_node_ref_t user : joinCtrlUsers) {
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, join);
         for (gc_node_ref_t pred : after) {
-            const auto existing = draft.ctrlInputsOf(user);
-            if (pred != user && !dropped[pred] &&
-                std::ranges::find(existing, pred) == existing.end()) {
-                draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
+            if (!dropped[pred]) {
+                camel::runtime::appendControlDependency(draft, pred, user);
             }
         }
     }
@@ -911,6 +905,12 @@ GCGraph *DeadCodePass::apply(GCGraph *graph, std::ostream &) {
     return rewriteReachableGraphs(context_, graph, "std::opt::dce", dceDraft);
 }
 
+GCGraph *ControlReductionPass::apply(GCGraph *graph, std::ostream &) {
+    return rewriteReachableGraphs(context_, graph, "std::opt::ctrl", [](GraphDraft &draft) {
+        return camel::runtime::reduceControlDependencies(draft);
+    });
+}
+
 GCGraph *simplifyGraph(
     const camel::core::context::context_ptr_t &context, GCGraph *graph,
     const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds) {
@@ -921,6 +921,11 @@ GCGraph *simplifyGraph(
     if (!config.growthSpentNodes) {
         config.growthSpentNodes = &growthSpent;
     }
+    const auto finish = [&](GCGraph *result) {
+        return rewriteReachableGraphs(context, result, "std::opt::ctrl", [](GraphDraft &draft) {
+            return camel::runtime::reduceControlDependencies(draft);
+        });
+    };
     for (size_t round = 0; round < maxRounds; ++round) {
         bool optChanged = false;
         graph           = applyOptimizeRewritePass(context, graph, os, config, &optChanged);
@@ -936,12 +941,12 @@ GCGraph *simplifyGraph(
         graph = rewriteReachableGraphs(context, graph, "std::opt::dce", dceDraft, &removed);
         if (!optChanged && folded == 0 && merged == 0 && removed == 0) {
             CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
-            return graph;
+            return finish(graph);
         }
     }
     CAMEL_LOG_WARN_S(
         "Opt",
         "std::opt: still changing after {} rounds (a recursion of non-static depth?)",
         maxRounds);
-    return graph;
+    return finish(graph);
 }

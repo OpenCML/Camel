@@ -141,6 +141,7 @@ The passes given on the command line run in the order written. Each pass transfo
 - `std::opt::specialize`: runtime-native specialization pass
 - `std::opt`: integrated optimization entry point; repeats call rewriting (`devirtualize`, `specialize`, `inline`), `fold`, `cse`, and `dce` until stable, within shared growth and round limits
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`: standalone constant folding, common-subexpression elimination, and dead-code elimination
+- `std::opt::ctrl`: bounded removal of transitive CTRL edges; `std::opt` runs it once after its other stages finish. Only CTRL paths prove redundancy; branch boundaries and arm anchors are retained
 - `std::inline` (including `small` / `arm` / `hybrid`): alias of `std::opt::inline`
 
 - `std::fvm`: high-performance bytecode VM scheduler

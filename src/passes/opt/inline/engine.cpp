@@ -31,6 +31,7 @@
  */
 
 #include "engine.h"
+#include "camel/runtime/control.h"
 
 #include "../generic/rewrite.h"
 #include "camel/core/operator_traits.h"
@@ -915,10 +916,8 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
         if (camel::passes::generic::operIdOf(draft, source) == camel::core::oper::VarNew) {
             continue;
         }
-        const auto existing = draft.ctrlInputsOf(funcNodeId);
-        if (source != funcNodeId && draft.alive(source) &&
-            std::ranges::find(existing, source) == existing.end()) {
-            draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, funcNodeId, source);
+        if (draft.alive(source)) {
+            camel::runtime::appendControlDependency(draft, source, funcNodeId);
         }
     }
     for (gc_node_ref_t pred : draft.ctrlInputsOf(funcNodeId)) {
@@ -1024,10 +1023,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             continue;
         }
         for (gc_node_ref_t source : sources) {
-            const auto existing = draft.ctrlInputsOf(user);
-            if (std::ranges::find(existing, source) == existing.end()) {
-                draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, source);
-            }
+            camel::runtime::appendControlDependency(draft, source, user);
         }
     }
     return inlineResult;

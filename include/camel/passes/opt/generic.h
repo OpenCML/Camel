@@ -30,8 +30,10 @@
  *                   inputs;
  *   std::opt::dce   removes pure operator (and value-only) nodes whose results
  *                   are unused, and SYNC control joins.
+ *   std::opt::ctrl  removes control edges already implied by other CTRL paths, within a work
+ *                   budget and without changing branch boundaries or arm anchors.
  *
- * std::opt runs call rewriting, fold, cse and dce to a fixpoint.
+ * std::opt runs call rewriting, fold, cse and dce to a fixpoint, then ctrl once at the end.
  *
  * Together with call rewriting (devirtualization, which also turns calls of closures
  * built in the caller into direct calls of a lambda-lifted graph, and
@@ -61,6 +63,12 @@ class CommonSubexpressionPass : public RuntimeGraphRewritePass {
 };
 
 class DeadCodePass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+};
+
+class ControlReductionPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;

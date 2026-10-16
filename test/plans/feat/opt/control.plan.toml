@@ -1,0 +1,36 @@
+id = "opt.control"
+order = 324
+tier = "feat"
+tags = ["feat", "opt", "control"]
+
+[[tests]]
+name = "control.topology"
+desc = "Bounded CTRL proofs, zero/exhausted budgets, predecessor frontiers, branch anchors, value-edge conservatism and dense-chain reduction."
+kind = "behavior"
+case = "../../../cases/opt/generic/control_chain.cml"
+args = ["${case}", "test::control", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["CONTROL topology, budgets, branches, dense chain: PASS"]
+timeout_ms = 8000
+
+[[tests]]
+name = "control.pipeline_contract"
+desc = "Compiler and built-in rewrites avoid redundant controls; integrated cleanup retains the effect chain and all branch/value edges on five backends."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/opt/control_contract.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["Control construction, rewrites, branch protection and linear chain: PASS"]
+timeout_ms = 30000
+
+[[tests]]
+name = "control.test_pass_hidden"
+desc = "The topology test pass is unavailable outside an explicitly enabled test process."
+kind = "behavior"
+case = "../../../cases/opt/generic/control_chain.cml"
+args = ["${case}", "test::control"]
+expect_exit = 1
+expect_stdout_contains = ["UnrecognizedGraphPass"]
+timeout_ms = 4000

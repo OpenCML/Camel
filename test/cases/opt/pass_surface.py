@@ -20,7 +20,7 @@ for suffix in ("", "::small", "::arm", "::hybrid"):
     assert canonical.returncode == shortcut.returncode == 0, canonical.stderr + shortcut.stderr
     assert canonical.stdout == shortcut.stdout, f"inline alias differs: {suffix}"
 
-for stage in ("devirtualize", "specialize", "fold", "cse", "dce"):
+for stage in ("devirtualize", "specialize", "fold", "cse", "dce", "ctrl"):
     result = run("std::opt::" + stage, "std::nvm")
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ["1", "11", "203", "4"], result.stdout

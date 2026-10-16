@@ -34,6 +34,7 @@
  */
 
 #include "camel/runtime/draft_inline.h"
+#include "camel/runtime/control.h"
 
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft_clone.h"
@@ -751,11 +752,7 @@ void bindPortValueUses(GraphDraft &draft, gc_node_ref_t portNodeId, gc_node_ref_
         draft.ctrlUsersOf(portNodeId).end());
     for (gc_node_ref_t user : waiting) {
         draft.unlinkInput(DraftEdgeKind::Ctrl, user, portNodeId);
-        const auto existing = draft.ctrlInputsOf(user);
-        if (user != actualInputId &&
-            std::find(existing.begin(), existing.end(), actualInputId) == existing.end()) {
-            draft.appendInput(DraftEdgeKind::Ctrl, user, actualInputId);
-        }
+        appendControlDependency(draft, actualInputId, user);
     }
 }
 
@@ -961,11 +958,7 @@ bool specializeDirectFuncInDraft(
                 break;
             }
             if (!draft.ctrlInputsOf(current).empty()) {
-                const auto existing = draft.ctrlInputsOf(funcNodeId);
-                if (current != funcNodeId &&
-                    std::find(existing.begin(), existing.end(), current) == existing.end()) {
-                    draft.appendInput(DraftEdgeKind::Ctrl, funcNodeId, current);
-                }
+                appendControlDependency(draft, current, funcNodeId);
                 break;
             }
             if (header->kind != GCNodeKind::Gate && header->kind != GCNodeKind::Copy &&
@@ -1023,11 +1016,7 @@ void keepCalleeOrdering(GraphDraft &draft, gc_node_ref_t funcNodeId, gc_node_ref
     if (!header || draft.ctrlInputsOf(callee).empty()) {
         return;
     }
-    const auto existing = draft.ctrlInputsOf(funcNodeId);
-    if (callee != funcNodeId &&
-        std::find(existing.begin(), existing.end(), callee) == existing.end()) {
-        draft.appendInput(DraftEdgeKind::Ctrl, funcNodeId, callee);
-    }
+    appendControlDependency(draft, callee, funcNodeId);
 }
 
 namespace {
@@ -1899,6 +1888,7 @@ DraftInlineResult inlineCallableInDraft(
             ctrlPreds.push_back(argument);
         }
     }
+    ctrlPreds                  = controlFrontier(draft, ctrlPreds);
     const bool hasExternalCtrl = !ctrlPreds.empty();
 
     DraftGraphCloneResult cloned = calleeDraftView
