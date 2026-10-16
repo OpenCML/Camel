@@ -19,6 +19,37 @@ using namespace camel::tiles;
 using namespace camel::tiles::kernel;
 
 void checkKernelIR() {
+    const auto integer = [](uint32_t value) { return ScalarExpr::literal(ScalarValue::u32(value)); };
+    const auto signedInteger = [](int32_t value) { return ScalarExpr::literal(ScalarValue::i32(value)); };
+    const auto bits = ScalarExpr::bitcast(ScalarType::U32, ScalarExpr::symbol("x",DType::F32));
+    const auto exponent = ScalarExpr::apply(ScalarOp::LogicalShiftRight,
+        {ScalarExpr::apply(ScalarOp::BitAnd,{bits,integer(0x7fffffffU)}),integer(23)});
+    for(const uint32_t payload : {0U,0x80000000U,1U,0x007fffffU,0x00800000U,0x3f800000U,0x7f800000U,0x7fc00042U}) {
+        const std::unordered_map<std::string,ScalarValue> values={{"x",{DType::F32,payload}}};
+        if(exponent.evaluate(values).asU32()!=((payload&0x7fffffffU)>>23) ||
+           ScalarExpr::bitcast(DType::F32,bits).evaluate(values).bits!=payload)
+            throw std::runtime_error("physical bitcast/exponent mismatch");
+    }
+    if(ScalarExpr::apply(ScalarOp::Add,{signedInteger(INT32_MAX),signedInteger(1)}).evaluate({}).asI32()!=INT32_MIN ||
+       ScalarExpr::apply(ScalarOp::Subtract,{integer(0),integer(1)}).evaluate({}).asU32()!=UINT32_MAX ||
+       ScalarExpr::apply(ScalarOp::Multiply,{integer(UINT32_MAX),integer(2)}).evaluate({}).asU32()!=UINT32_MAX-1 ||
+       ScalarExpr::apply(ScalarOp::LogicalShiftRight,{integer(0x80000000U),integer(63)}).evaluate({}).asU32()!=1 ||
+       ScalarExpr::apply(ScalarOp::Minimum,{signedInteger(-149),signedInteger(104)}).evaluate({}).asI32()!=-149)
+        throw std::runtime_error("physical integer arithmetic mismatch");
+    auto invalidInteger=[](auto action) {
+        try { action(); } catch(const std::invalid_argument &) { return; }
+        throw std::runtime_error("accepted invalid physical integer expression");
+    };
+    invalidInteger([&]{ScalarExpr::apply(ScalarOp::Divide,{integer(1),integer(0)});});
+    invalidInteger([&]{ScalarExpr::apply(ScalarOp::Add,{integer(1),signedInteger(1)});});
+    invalidInteger([&]{ScalarExpr::bitcast(ScalarType::U32,ScalarExpr::literal(ScalarValue::f64(1)));});
+    invalidInteger([&]{ScalarExpr::literal({ScalarType::U32,0x100000000ULL});});
+    KernelBody integerBody{{{MemorySpace::Shared,ScalarType::I32,0,32,true}},
+        {ScalarBinding{"k_low",signedInteger(-149)},
+         Store{{0,IndexExpr::variable("thread_x"),Predicate(true)},ScalarExpr::symbol("k_low",ScalarType::I32)},Barrier{}}};
+    validateBody(integerBody);
+    if(emitBody(integerBody).find("__shared__ int")==std::string::npos)
+        throw std::runtime_error("physical integer buffer type lost");
     const auto zero=ScalarExpr::literal(ScalarValue::f32(0));
     const auto i=IndexExpr::variable("k_i");
     KernelBody body{{{MemorySpace::Global,DType::F32,0,17,false},

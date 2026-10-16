@@ -24,7 +24,7 @@ namespace camel::tiles::kernel {
 enum class MemorySpace { Global, Shared };
 struct Buffer {
     MemorySpace space;
-    DType type;
+    ScalarType type;
     size_t slot; // Global: the Program node; shared: local identity.
     size_t extent;
     bool writable;

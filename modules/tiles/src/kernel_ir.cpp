@@ -19,7 +19,7 @@ namespace camel::tiles::kernel {
 namespace {
 struct Binding {
     bool index;
-    DType type;
+    ScalarType type;
     bool uniform;
 };
 using Scope          = std::unordered_map<std::string, Binding>;
@@ -125,7 +125,19 @@ void validateBlock(const KernelBody &kernel, const Block &block, Scope scope, bo
             },
             statement);
 }
-std::string typeName(DType type) { return type == DType::F32 ? "float" : "double"; }
+std::string typeName(ScalarType type) {
+    switch (type.kind) {
+    case ScalarType::F32:
+        return "float";
+    case ScalarType::F64:
+        return "double";
+    case ScalarType::I32:
+        return "int";
+    case ScalarType::U32:
+        return "unsigned";
+    }
+    throw std::runtime_error("invalid physical scalar type");
+}
 std::string location(const KernelBody &kernel, const Access &access) {
     const auto &b   = kernel.buffers[access.buffer];
     const auto base = b.space == MemorySpace::Shared ? "shared_" + std::to_string(access.buffer)
@@ -203,7 +215,7 @@ void controlKinds(const Block &block, bool &returns, bool &barriers) {
 } // namespace
 void validateBody(const KernelBody &body) {
     for (const auto &b : body.buffers) {
-        require(b.type == DType::F32 || b.type == DType::F64, "buffer type");
+        (void)typeName(b.type);
         require(b.space == MemorySpace::Global || b.space == MemorySpace::Shared, "memory space");
         require(b.space != MemorySpace::Shared || b.extent > 0, "empty shared buffer");
     }

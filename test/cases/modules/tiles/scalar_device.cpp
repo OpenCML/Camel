@@ -32,7 +32,7 @@ void testScalarDevice() {
     for (const auto type : {DType::F32, DType::F64}) {
         const bool f32 = type == DType::F32;
         const auto a = ScalarExpr::symbol("a",type), b = ScalarExpr::symbol("b",type), c = ScalarExpr::symbol("c",type);
-        const std::vector<ScalarExpr> expressions = {
+        std::vector<ScalarExpr> expressions = {
             ScalarExpr::apply(ScalarOp::Add,{a,b}), ScalarExpr::apply(ScalarOp::Subtract,{a,b}),
             ScalarExpr::apply(ScalarOp::Multiply,{a,b}), ScalarExpr::apply(ScalarOp::Divide,{a,b}),
             ScalarExpr::apply(ScalarOp::Sqrt,{ScalarExpr::apply(ScalarOp::Abs,{a})}),
@@ -40,6 +40,15 @@ void testScalarDevice() {
             ScalarExpr::apply(ScalarOp::Add,{ScalarExpr::apply(ScalarOp::Multiply,{a,b}),c}),
             ScalarExpr::apply(ScalarOp::Maximum,{a,b}), ScalarExpr::apply(ScalarOp::Minimum,{a,b}),
             ScalarExpr::cast(type, ScalarExpr::cast(f32 ? DType::F64 : DType::F32,a))};
+        if (f32) {
+            for (const auto integerType : {ScalarType::I32,ScalarType::U32}) {
+                const auto ia=ScalarExpr::bitcast(integerType,a), ib=ScalarExpr::bitcast(integerType,b);
+                for (const auto op : {ScalarOp::Add,ScalarOp::Subtract,ScalarOp::Multiply,
+                     ScalarOp::Minimum,ScalarOp::Maximum,ScalarOp::BitAnd,ScalarOp::BitOr,
+                     ScalarOp::BitXor,ScalarOp::LogicalShiftRight})
+                    expressions.push_back(ScalarExpr::bitcast(DType::F32,ScalarExpr::apply(op,{ia,ib})));
+            }
+        }
         constexpr size_t count = 256;
         std::vector<uint64_t> input(count*3), output(count*expressions.size());
         uint64_t random = 0x47c23a918f056dbeULL;
@@ -79,7 +88,7 @@ void testScalarDevice() {
                 const auto expected=expressions[op].evaluate(bindings);
                 const ScalarValue actual{type,output[i*expressions.size()+op]};
                 // Only extrema define canonical payloads; other arithmetic compares NaN classification.
-                const bool nanPair = op != 7 && op != 8 && (f32
+                const bool nanPair = op < 10 && op != 7 && op != 8 && (f32
                     ? std::isnan(expected.asF32()) && std::isnan(actual.asF32())
                     : std::isnan(expected.asF64()) && std::isnan(actual.asF64()));
                 if (expected.bits != actual.bits && !nanPair)
@@ -87,5 +96,5 @@ void testScalarDevice() {
             }
         }
     }
-    std::cout << "tiles scalar device: 5120 typed host/CUDA results matched\n";
+    std::cout << "tiles scalar device: 9728 typed host/CUDA results matched\n";
 }
