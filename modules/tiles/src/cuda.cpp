@@ -38,6 +38,19 @@ namespace {
 struct OwnedAllocation final : DeviceStorage {
     std::shared_ptr<Backend> backend;
     CUdeviceptr pointer = 0;
+    size_t capacity     = 0;
+    std::vector<std::byte> read(uint64_t address, size_t bytes) const override {
+        if (!backend || pointer != address || bytes > capacity)
+            throw std::runtime_error("resident CUDA storage metadata mismatch");
+        std::lock_guard lock(backend->mutex);
+        Current current(backend->api, backend->context);
+        std::vector<std::byte> result(bytes);
+        if (!result.empty())
+            backend->api.check(
+                backend->api.cuMemcpyDtoH(result.data(), pointer, result.size()),
+                "download resident tensor");
+        return result;
+    }
     ~OwnedAllocation() override {
         // No Camel references or allocator locks. The owner outlives every use;
         // transfers are synchronous before publishing the value.
@@ -205,8 +218,9 @@ class DeviceRun {
                 value->address = pointers[id];
                 value->owner   = owner;
                 // Transfer only after every potentially throwing field assignment.
-                owner->pointer = *allocation;
-                *allocation    = 0;
+                owner->capacity = bytes(node);
+                owner->pointer  = *allocation;
+                *allocation     = 0;
             }
             retained.emplace(id, value);
             result.push_back(std::move(value));
@@ -240,8 +254,9 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
     auto b = sharedBackend();
     std::lock_guard lock(b->mutex);
     Current current(b->api, b->context);
-    auto allocation     = std::make_shared<OwnedAllocation>();
-    allocation->backend = b;
+    auto allocation      = std::make_shared<OwnedAllocation>();
+    allocation->backend  = b;
+    allocation->capacity = data.size();
     b->api.check(
         b->api.cuMemAlloc(&allocation->pointer, std::max(size_t(1), data.size())),
         "allocate resident tensor");
@@ -260,22 +275,6 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
     result->dtype   = dtype;
     result->address = allocation->pointer;
     result->owner   = std::move(allocation);
-    return result;
-}
-std::vector<std::byte> downloadValue(const DeviceValue &tensor) {
-    if (!tensor.owner || !tensor.address)
-        throw std::runtime_error("invalid resident tensor");
-    auto allocation = std::dynamic_pointer_cast<OwnedAllocation>(tensor.owner);
-    if (!allocation || !allocation->backend || allocation->pointer != tensor.address)
-        throw std::runtime_error("resident value does not belong to CUDA storage");
-    auto b = allocation->backend;
-    std::lock_guard lock(b->mutex);
-    Current current(b->api, b->context);
-    std::vector<std::byte> result(bytes(Node{.shape = tensor.shape, .dtype = tensor.dtype}));
-    if (!result.empty())
-        b->api.check(
-            b->api.cuMemcpyDtoH(result.data(), allocation->pointer, result.size()),
-            "download resident tensor");
     return result;
 }
 bool available() {
@@ -525,10 +524,6 @@ std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const 
     return {};
 }
 std::shared_ptr<DeviceValue> uploadValue(const Shape &, DType, std::span<const std::byte>) {
-    (void)deviceInfo();
-    return {};
-}
-std::vector<std::byte> downloadValue(const DeviceValue &) {
     (void)deviceInfo();
     return {};
 }

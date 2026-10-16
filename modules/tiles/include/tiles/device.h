@@ -20,7 +20,8 @@ namespace camel::tiles {
 // Backend-owned storage has a checked dynamic type. It must never retain Camel
 // heap pointers; concrete backends own their context and native allocation.
 struct DeviceStorage {
-    virtual ~DeviceStorage() = default;
+    virtual ~DeviceStorage()                                                  = default;
+    virtual std::vector<std::byte> read(uint64_t address, size_t bytes) const = 0;
 };
 struct DeviceValue {
     Shape shape;
@@ -31,6 +32,9 @@ struct DeviceValue {
 std::shared_ptr<DeviceValue>
 uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data);
 std::vector<std::byte> downloadValue(const DeviceValue &value);
+// Own a native host snapshot for portable execution; no moving-heap references.
+std::shared_ptr<DeviceValue>
+retainHostValue(const Shape &shape, DType dtype, std::span<const std::byte> data);
 std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program> program);
 
 class DeviceType final : public core::type::OtherType {

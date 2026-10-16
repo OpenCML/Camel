@@ -52,10 +52,11 @@ explicit. Do not generalize CUDA streams merely by renaming their handles.
 Resident values now own a typed `DeviceStorage` resource rather than an erased
 `void` allocation. CUDA checks the concrete allocation type and backend before
 borrowing its address, and checks the allocation/address pairing on download.
-This is the ownership boundary for additional backends; it does not itself add
-host storage or automatic transfers. Native storage must not hold moving Camel
-heap pointers. CPU fallback storage therefore needs owned native bytes or a
-separate GC-traced value representation, not a hidden `slot_t` in this resource.
+Reads dispatch through the owning storage and validate the requested extent.
+`retainHostValue` creates an immutable native host snapshot, including empty
+tensors; it does not initialize CUDA. Native storage must not hold moving Camel
+heap pointers or hidden `slot_t` values. This establishes storage for CPU fallback,
+but automatic host/device routing and compiled CPU kernels remain pending.
 
 ## Implementation sequence
 
