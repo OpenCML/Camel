@@ -18,7 +18,6 @@
  */
 
 // Syntax-based reading aids and compiler-validated typo corrections.
-#include "camel/parse/syntax/token.h"
 #include "server.h"
 #include <algorithm>
 #include <regex>
@@ -127,73 +126,36 @@ json Server::readingSupport(const std::string &method, const json &params) {
                     {"kind", 1},
                     {"paddingLeft", false}});
         }
-        // Name hints for standalone literal arguments. Complex expressions and
-        // ambiguous overloads intentionally stay quiet rather than guess a parameter.
-        std::vector<const semantic::TokenInfo *> tokens;
-        for (const auto &token : file.syntax.tokens)
-            if (token.channel == 0)
-                tokens.push_back(&token);
-        const auto spelling = [&](size_t i) {
-            const auto r = tokens[i]->range;
-            return file.text.substr(r.start, r.length());
-        };
-        using TK = camel::parse::syntax::TokenKind;
-        std::vector<size_t> delimiters;
-        for (size_t i = 0; i < tokens.size(); ++i) {
-            const auto kind = static_cast<TK>(tokens[i]->type);
-            if (kind == TK::LParen || kind == TK::LBracket || kind == TK::LBrace ||
-                kind == TK::LAngle) {
-                delimiters.push_back(i);
+        // Whole-argument boundaries come from the parser. Signature help is queried
+        // before the first argument, so a nested call/lambda cannot steal its identity.
+        for (const auto &call : file.syntax.calls) {
+            const auto help = model.signatureHelp(call.positional.front().start);
+            if (!help || help->signatures.size() != 1)
                 continue;
+            const auto &signature = help->signatures.front();
+            for (size_t i = 0; i < call.positional.size() && i < signature.parameters.size(); ++i) {
+                const auto r = call.positional[i];
+                if (r.start < start || r.start > end)
+                    continue;
+                const auto bounds = signature.parameters[i];
+                const auto parameter =
+                    signature.label.substr(bounds.first, bounds.second - bounds.first);
+                std::smatch match;
+                if (!std::regex_search(
+                        parameter,
+                        match,
+                        std::regex(R"(^\s*(?:var\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:)")))
+                    continue;
+                const auto name = match[1].str();
+                if (file.text.substr(r.start, r.length()) == name)
+                    continue; // A matching source name already explains this argument.
+                result.push_back(
+                    json{
+                        {"position", position(file, r.start)},
+                        {"label", name + ":"},
+                        {"kind", 2},
+                        {"paddingRight", true}});
             }
-            if (kind == TK::RParen || kind == TK::RBracket || kind == TK::RBrace ||
-                (kind == TK::Gt && !delimiters.empty() &&
-                 static_cast<TK>(tokens[delimiters.back()]->type) == TK::LAngle)) {
-                if (!delimiters.empty())
-                    delimiters.pop_back();
-                continue;
-            }
-            if (i == 0 || i + 1 == tokens.size() || delimiters.empty())
-                continue;
-            const auto open = delimiters.back();
-            if (open == 0 || static_cast<TK>(tokens[open]->type) != TK::LParen ||
-                tokens[open - 1]->range.end != tokens[open]->range.start)
-                continue;
-            // signatureHelp deliberately finds an enclosing call inside arrays and
-            // tuples. A hint must instead belong to a direct argument of this call,
-            // never to an element of its nested literal or a grouping expression.
-            const auto *callee = file.syntax.refAt(tokens[open - 1]->range.start);
-            if (!callee || !callee->callee || callee->nameRange() != tokens[open - 1]->range)
-                continue;
-            const auto r = tokens[i]->range;
-            if (r.start < start || r.end > end)
-                continue;
-            const auto before = spelling(i - 1), after = spelling(i + 1), text = spelling(i);
-            if ((before != "(" && before != ",") || (after != ")" && after != ",") || text.empty())
-                continue;
-            if (kind != TK::String && kind != TK::MultiStr && kind != TK::Integer &&
-                kind != TK::Real && kind != TK::KwTrue && kind != TK::KwFalse)
-                continue;
-            const auto help = model.signatureHelp(r.start);
-            if (!help || help->signatures.size() != 1 ||
-                help->activeParameter >= help->signatures[0].parameters.size())
-                continue;
-            const auto &signature = help->signatures[0];
-            const auto bounds     = signature.parameters[help->activeParameter];
-            const auto parameter =
-                signature.label.substr(bounds.first, bounds.second - bounds.first);
-            std::smatch match;
-            if (!std::regex_search(
-                    parameter,
-                    match,
-                    std::regex(R"(^\s*(?:var\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:)")))
-                continue;
-            result.push_back(
-                json{
-                    {"position", position(file, r.start)},
-                    {"label", match[1].str() + ":"},
-                    {"kind", 2},
-                    {"paddingRight", true}});
         }
     } else if (method == "textDocument/codeAction") {
         if (params.contains("context") && params["context"].contains("only")) {

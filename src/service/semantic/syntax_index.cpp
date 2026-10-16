@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -128,10 +128,10 @@ class Walker {
     const syn::Tree &tree_;
     const syn::TokenBuffer &buffer_;
     std::string_view text_;
-    uint32_t scope_      = 0;
-    int32_t container_   = -1;
-    bool inFuncType_     = false;
-    bool exportNext_     = false;
+    uint32_t scope_    = 0;
+    int32_t container_ = -1;
+    bool inFuncType_   = false;
+    bool exportNext_   = false;
     // The declaration whose signature is being walked: a `typeas` in it makes it generic.
     int32_t signatureOf_ = -1;
 
@@ -144,8 +144,8 @@ class Walker {
         if (!node || node.empty()) {
             return {};
         }
-        Range r           = rangeOf(node.firstToken());
-        const Range stop  = rangeOf(node.lastToken());
+        Range r          = rangeOf(node.firstToken());
+        const Range stop = rangeOf(node.lastToken());
         if (stop.end > r.end) {
             r.end = stop.end;
         }
@@ -265,9 +265,9 @@ class Walker {
             return;
         }
         Ref ref;
-        ref.kind   = kind;
-        ref.scope  = scope_;
-        ref.callee = callee;
+        ref.kind       = kind;
+        ref.scope      = scope_;
+        ref.callee     = callee;
         const size_t n = name.tokCount(TK::Identifier);
         for (size_t i = 0; i < n; ++i) {
             const syn::TokenRef id = name.tok(TK::Identifier, i);
@@ -471,9 +471,9 @@ class Walker {
         for (const auto anno : annos) {
             walk(anno);
         }
-        const Range whole        = rangeOf(ctx);
-        int32_t self             = -1;
-        const auto block         = ctx.get<cst::StmtBlock>();
+        const Range whole = rangeOf(ctx);
+        int32_t self      = -1;
+        const auto block  = ctx.get<cst::StmtBlock>();
         // An operator overload (`func operator +(...)`) is named by its `operator` token.
         syn::Node nameNode = ctx.get<cst::IdentRef>();
         if (!nameNode) {
@@ -553,8 +553,8 @@ class Walker {
     }
 
     void namespaceDecl(cst::NamespaceDecl ctx) {
-        const Range whole = rangeOf(ctx);
-        int32_t self      = -1;
+        const Range whole    = rangeOf(ctx);
+        int32_t self         = -1;
         const syn::Node path = ctx.get<cst::IdentRef>();
         if (const syn::TokenRef name = lastNameOf(path)) {
             Decl &decl = declare(DeclKind::Namespace, name, whole, whole);
@@ -564,7 +564,8 @@ class Walker {
             if (parts > 1) {
                 std::string written;
                 for (size_t i = 0; i < parts; ++i) {
-                    written += (i == 0 ? "" : "::") + std::string(path.tok(TK::Identifier, i).text());
+                    written +=
+                        (i == 0 ? "" : "::") + std::string(path.tok(TK::Identifier, i).text());
                 }
                 const size_t outer = decl.qualified.empty()
                                          ? std::string::npos
@@ -766,7 +767,27 @@ class Walker {
         bool callee = false;
         if (ctx.childCount() >= 2) {
             const syn::Node next = ctx.child(1).node();
-            callee = next && (next.is(NK::ParentArgues) || next.is(NK::AngledValues));
+            callee               = next && (next.is(NK::ParentArgues) || next.is(NK::AngledValues));
+            const auto host      = ctx.child(0).node();
+            // Record argument boundaries from the CST, not from commas in nested
+            // arrays, tuples, lambda parameters, strings or nested calls.
+            if (next.is(NK::ParentArgues) && host &&
+                (host.is(NK::RefData) ||
+                 (host.is(NK::AccessExpr) && !host.has(TK::Dot) && host.node(NK::RefData)))) {
+                CallSite call;
+                const auto list = next.node(NK::ArgumentList);
+                const auto args = list ? list.node(NK::IndexValues) : syn::Node{};
+                if (args) {
+                    for (const auto arg : args.nodes()) {
+                        if (arg.is(NK::SpreadValue))
+                            break; // Later parameter indices depend on the spread's arity.
+                        if (arg.isExpr() && !arg.empty())
+                            call.positional.push_back(rangeOf(arg));
+                    }
+                }
+                if (!call.positional.empty())
+                    index_.calls.push_back(std::move(call));
+            }
         }
         const Range whole = rangeOf(ctx);
         bool first        = true;
@@ -884,8 +905,8 @@ uint32_t SyntaxIndex::scopeAt(uint32_t offset) const {
     return best;
 }
 
-std::vector<uint32_t> SyntaxIndex::lookup(
-    uint32_t scope, std::string_view name, uint32_t offset, bool types) const {
+std::vector<uint32_t>
+SyntaxIndex::lookup(uint32_t scope, std::string_view name, uint32_t offset, bool types) const {
     std::vector<uint32_t> found;
     for (int32_t s = static_cast<int32_t>(scope); s >= 0; s = scopes[s].parent) {
         for (uint32_t id : scopes[s].decls) {
