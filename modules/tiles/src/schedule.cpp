@@ -229,6 +229,9 @@ void validate(const Program &p) {
                 n.op == "matmul" || n.op == "reindex",
             "unknown operation");
         require(n.inputs.size() == (binary(n.op) || n.op == "matmul" ? 2 : 1), "operation arity");
+        if (elementwise(n.op) && n.indexing)
+            for (size_t input = 0; input < n.inputs.size(); ++input)
+                (void)kernel::pointwiseAddress(p, n, input, kernel::IndexExpr(0));
         const auto &a = p.nodes[n.inputs[0]].shape;
         if (n.op == "sum_to")
             require(
@@ -325,7 +328,8 @@ void schedule(Program &p, ScheduleOptions options) {
         bool compatible = true;
         for (size_t member = 0; member < count; ++member)
             if (owner[member] == root &&
-                (!elementwise(p.nodes[member].op) || p.nodes[member].shape != p.nodes[id].shape))
+                (!elementwise(p.nodes[member].op) || p.nodes[member].shape != p.nodes[id].shape ||
+                 !kernel::canonicalPointwise(p, p.nodes[member])))
                 compatible = false;
         if (!compatible)
             continue;
@@ -445,7 +449,8 @@ void validatePlan(const Program &p) {
                 if (member > reduction)
                     require(
                         member < p.nodes.size() && elementwise(p.nodes[member].op) &&
-                            p.nodes[member].shape == p.nodes[reduction].shape,
+                            p.nodes[member].shape == p.nodes[reduction].shape &&
+                            kernel::canonicalPointwise(p, p.nodes[member]),
                         "ordered reduction epilogue domain");
         }
         if (launch.implementation == "parallel_max") {

@@ -86,6 +86,9 @@ struct KernelBody {
 // Memory bounds and producer/consumer races remain the physical planner's proof obligation.
 void validateBody(const KernelBody &body);
 std::string emitBody(const KernelBody &body);
+IndexExpr
+pointwiseAddress(const Program &program, const Node &node, size_t operand, const IndexExpr &linear);
+bool canonicalPointwise(const Program &program, const Node &node);
 void validateMatmulContract(const Program &program, const Node &node);
 KernelBody scalarBody(const Program &program, Launch &launch);
 KernelBody parallelMaxBody(const Program &program, Launch &launch);

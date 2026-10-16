@@ -84,6 +84,8 @@ std::optional<RowKernel> rowKernel(const Program &p) {
         } else {
             if (!elementwise(n.op) && n.op != "cast_f32")
                 return std::nullopt;
+            if (elementwise(n.op) && !canonicalPointwise(p, n))
+                return std::nullopt;
             stage.expression = elementwiseExpression(n.op);
         }
         plan.stages.push_back(std::move(stage));

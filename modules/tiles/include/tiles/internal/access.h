@@ -10,6 +10,7 @@
 
 // Physical access masks and addresses, independent of CUDA statement strings.
 #pragma once
+#include "camel/core/index_semantics.h"
 #include "tiles/internal/index_expr.h"
 #include <cstdint>
 #include <memory>
@@ -19,6 +20,11 @@
 #include <unordered_set>
 
 namespace camel::tiles::kernel {
+// Compose a nonnegative affine core map with row-major storage, checking each
+// operand coordinate's bounds over the whole rectangular iteration domain.
+IndexExpr affineAddress(
+    const core::sem::IndexedInstance &instance, const core::sem::Access &access,
+    const std::vector<int64_t> &shape, const std::vector<IndexExpr> &point);
 class Predicate {
     struct Node;
     std::shared_ptr<const Node> node;
