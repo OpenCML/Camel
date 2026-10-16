@@ -312,10 +312,13 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 
 随后在需要时插入会合用的 `GATE`：
 
-- 外部控制前驱非空，而 `ctrlEntry` 不是能承载控制的节点（`DATA` / `PORT`，见
-  `GraphDraft::isControlAnchor`）时：新建 `GATE`，值输入为 `valueExit`，控制输入为外部控制前驱加
+- 外部控制前驱非空且没有可执行入口根时：如果返回值就是已经等候这些前驱的参数 `GATE`，直接复用；
+  否则新建 `GATE`，值输入为 `valueExit`，控制输入为外部控制前驱加
   `ctrlExit`；`ctrlEntry`、`ctrlExit`、`valueExit` 都指向它；
-- 解析出的控制出口与值出口不是同一节点时：新建 `GATE`，值输入为 `valueExit`，控制输入为 `ctrlExit`；
+- 解析出的控制出口与值出口不是同一节点时：如果 `ctrlExit` 已经是以 `valueExit` 为唯一值输入的
+  `GATE`，直接复用它作为值出口；否则新建 `GATE`，值输入为 `valueExit`，控制输入为 `ctrlExit`。
+  复用避免产生 `GATE(v, ctrl=GATE(v, ...))`，同时保留原有的完成条件。转发不同值的门控不适用此规则，
+  上述无入口根的情形仍须先接好调用方的控制前驱；
   `valueExit` 与 `ctrlExit` 都指向它。
 
 因此返回的结果中，值与控制完成点分离的情形总是被一个 `GATE` 收拢：`valueExit` 与 `ctrlExit`
