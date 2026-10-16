@@ -39,5 +39,5 @@ case = "../../cases/modules/tiles/gpu_fallback.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 0
-expect_stdout_exact = "true\n5.0\ncpu effect\n8.0\n"
+expect_stdout_exact = "true\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
 timeout_ms = 60000
