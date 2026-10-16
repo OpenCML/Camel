@@ -141,7 +141,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "transcendentals"
-desc = "Vectorized exp/tanh/sigmoid/gelu/softmax: accurate ordinary values and IEEE-like saturation at the float range ends."
+desc = "Vectorized exp/tanh/sigmoid/gelu/softmax: accurate ordinary values, IEEE-like saturation at the float range ends, and a subnormal e^-100 (27 * 2^-149, correctly rounded; it used to be flushed to 0)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/transcendentals.cml"
 args = ["${case}"]
@@ -152,7 +152,7 @@ verify_script = """
 const out = input.normalized.stdout
 const e = match(/exp (\S+) (\S+) (\S+) (\S+) (\S+) (\S+)/, out)
 assert(Number(e[1]) === 1 && approx(e[2], Math.E, 1e-6) && approx(e[3], 1 / Math.E, 1e-7), `exp values ${e[0]}`)
-assert(e[4] === 'inf' && Number(e[5]) === 0 && e[6] === 'true', `exp saturation ${e[0]}`)
+assert(e[4] === 'inf' && Number(e[5]) === 27 * 2 ** -149 && e[6] === 'true', `exp saturation ${e[0]}`) // e^-100 is the subnormal 27 * 2^-149, not 0
 const t = match(/tanh (\S+) (\S+) (\S+) (\S+)/, out)
 assert(Number(t[1]) === 0 && approx(t[2], Math.tanh(0.5), 1e-7) && Number(t[3]) === 1 && Number(t[4]) === -1, `tanh ${t[0]}`)
 const s = match(/sigmoid (\S+) (\S+) (\S+)/, out)
@@ -192,7 +192,7 @@ name = "fuse_linear_graph"
 desc = "tensor::fuse rewrites four matmul+add patterns and one relu pattern, and keeps the shared product unfused."
 kind = "behavior"
 case = "../../../cases/modules/tensor/fuse_linear.cml"
-args = ["${case}", "tensor::fuse", "std::rgir"]
+args = ["${case}", "tensor::fuse", "std::gir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -380,3 +380,25 @@ expect_exit = 0
 expect_stdout_contains = ["matmul fma_step=0.0004883408546447754\nmatmul chain=16777216.0\nsoftmax equal=0.0\nsoftmax nan_count=3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "int64_sum_exact"
+desc = "The sum of an int64 tensor accumulates exactly in int64 and wraps on overflow (design principles 2.10, 2.14): 2^53 + 1 + 1 + 1 is 9007199254740995 by axis and 9007199254740996.0 (the exact sum rounded once) in full, where an f64 accumulator gave 9007199254740992.0; INT64_MAX + 1 wraps to INT64_MIN in the full sum too (it used to come out positive)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/int64_sum.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "9007199254740996.0\n3002399751580332.0\ntensor(9007199254740995, dtype=int64)\ntensor([-9223372036854775804,      -4], dtype=int64)\n-9.223372036854776e+18\ntensor([-4.612e+18,      -2.], dtype=float32)\n"
+
+[[tests]]
+name = "argmax_ieee"
+desc = "argmax and argmin compare by IEEE 754-2019 maximum and minimum (design principles 2.14): the first of equal extremes, the first NaN when there is one (for both), +0 above -0 (argmax of [-0, +0, -0, +0] is 1, argmin 0), integers by value."
+kind = "behavior"
+case = "../../../cases/modules/tensor/argmax_ieee.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "tensor(      1, dtype=int64)\ntensor(      3, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      0, dtype=int64)\ntensor(      0, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      3, dtype=int64)\ntensor([      0,       0], dtype=int64)\ntensor([      1,       2], dtype=int64)\ntensor([[      0,       0,       1]], dtype=int64)\n"

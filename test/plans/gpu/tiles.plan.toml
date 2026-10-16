@@ -96,6 +96,10 @@ for (const r of records) {
   assert(r.device && r.driver_version > 0 && r.nvrtc_version, 'missing hardware/compiler provenance')
   assert(JSON.stringify(r.compile_options) === JSON.stringify([r.target, '--std=c++14', '--fmad=false', '--prec-div=true', '--prec-sqrt=true', '--ftz=false']), 'unexpected numerical compiler policy')
   assert(r.correctness_before.mismatches === 0 && r.correctness_after.mismatches === 0, 'correctness gate failed')
+  for (const c of [r.correctness_before, r.correctness_after]) {
+    assert(c.bitwise_elements > 0 && c.relaxed_elements === 0, 'strict benchmark must compare output bits')
+    assert(c.reference === 'same-device unfused execution', 'benchmark reference must be explicit')
+  }
   for (const name of ['optimized', 'unfused']) {
     const v = r[name]
     assert(v.device_ms.length === 21 && v.upload_host_ms.length === 21, 'missing raw samples')
@@ -914,7 +918,7 @@ tool = "python"
 case = "../../cases/modules/tiles/module_lease.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed", "tiles resources: cross-thread drain, release and context restoration passed", "tiles precision: subnormals, rounding and explicit FMA bits passed", "tiles scalar device: 5120 typed host/CUDA results matched"]
+expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed", "tiles resources: cross-thread drain, release and context restoration passed", "tiles precision: subnormals, rounding and explicit FMA bits passed", "tiles scalar device: 9728 typed host/CUDA results matched"]
 timeout_ms = 60000
 
 [[tests]]
@@ -947,3 +951,181 @@ envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
 timeout_ms = 180000
+
+[[tests]]
+name = "matmul_edges.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_edges.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === Array(8).fill("0.0").join(","), "matrix panel boundaries and empty shapes must equal the canonical CPU result") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_edges.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_edges.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === Array(8).fill("0.0").join(","), "matrix panel boundaries and empty shapes must equal the canonical CPU result") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_edges.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_edges.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === Array(8).fill("0.0").join(","), "matrix panel boundaries and empty shapes must equal the canonical CPU result") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_predicates.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_predicates.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({input,assert}) => { assert(input.stdout.trim().split(/\s+/).join(",") === "true,true,0.0,1.0", "fault predicates must preserve NaNs, infinities and nonzero subnormal divisors") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_predicates.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_predicates.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({input,assert}) => { assert(input.stdout.trim().split(/\s+/).join(",") === "true,true,0.0,1.0", "fault predicates must preserve NaNs, infinities and nonzero subnormal divisors") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_predicates.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_predicates.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({input,assert}) => { assert(input.stdout.trim().split(/\s+/).join(",") === "true,true,0.0,1.0", "fault predicates must preserve NaNs, infinities and nonzero subnormal divisors") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "graph_facts.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/graph_facts.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+timeout_ms = 30000
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 12, 'expected seven plans and five comparisons')
+const plans = lines.slice(0,7).map(JSON.parse)
+for (const p of plans.slice(0,2)) {
+  assert(p.graph_fact_instances === 2 && p.specialized_instances === 0, 'static graph facts not reused')
+}
+for (const p of plans.slice(2)) {
+  assert(p.graph_fact_instances === 0 && p.specialized_instances === 2, 'call specialization leaked into shared graph')
+}
+assert(plans[2].logical_bytes === plans[4].logical_bytes && plans[2].logical_bytes !== plans[3].logical_bytes, 'shape specialization not isolated')
+assert(plans[5].logical_bytes !== plans[6].logical_bytes, 'captured axis did not specialize')
+for (const line of lines.slice(7)) assert(Number(line) === 0, 'fact-backed execution differs')
+}
+"""
+
+[[tests]]
+name = "graph_facts.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/graph_facts.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+timeout_ms = 30000
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 12, 'expected seven plans and five comparisons')
+const plans = lines.slice(0,7).map(JSON.parse)
+for (const p of plans.slice(0,2)) {
+  assert(p.graph_fact_instances === 2 && p.specialized_instances === 0, 'static graph facts not reused')
+}
+for (const p of plans.slice(2)) {
+  assert(p.graph_fact_instances === 0 && p.specialized_instances === 2, 'call specialization leaked into shared graph')
+}
+assert(plans[2].logical_bytes === plans[4].logical_bytes && plans[2].logical_bytes !== plans[3].logical_bytes, 'shape specialization not isolated')
+assert(plans[5].logical_bytes !== plans[6].logical_bytes, 'captured axis did not specialize')
+for (const line of lines.slice(7)) assert(Number(line) === 0, 'fact-backed execution differs')
+}
+"""
+
+[[tests]]
+name = "graph_facts.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/graph_facts.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+timeout_ms = 30000
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 12, 'expected seven plans and five comparisons')
+const plans = lines.slice(0,7).map(JSON.parse)
+for (const p of plans.slice(0,2)) {
+  assert(p.graph_fact_instances === 2 && p.specialized_instances === 0, 'static graph facts not reused')
+}
+for (const p of plans.slice(2)) {
+  assert(p.graph_fact_instances === 0 && p.specialized_instances === 2, 'call specialization leaked into shared graph')
+}
+assert(plans[2].logical_bytes === plans[4].logical_bytes && plans[2].logical_bytes !== plans[3].logical_bytes, 'shape specialization not isolated')
+assert(plans[5].logical_bytes !== plans[6].logical_bytes, 'captured axis did not specialize')
+for (const line of lines.slice(7)) assert(Number(line) === 0, 'fact-backed execution differs')
+}
+"""
+
+[[tests]]
+name = "benchmark_permission_gate"
+kind = "behavior"
+case = "../../cases/modules/tiles/numeric_benchmark.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const records = input.normalized.stdout.trim().split(String.fromCharCode(10)).map(JSON.parse)
+  assert(records.length === 2, 'expected strict and contracted records')
+  for (const field of ['correctness_before', 'correctness_after']) {
+    const strict = records[0][field], contracted = records[1][field]
+    assert(strict.bitwise_elements === 1048576 && strict.relaxed_elements === 0, 'missing strict bitwise gate')
+    assert(contracted.bitwise_elements === 0 && contracted.relaxed_elements === 1048576, 'contract permission not reflected')
+    assert(strict.mismatches === 0 && contracted.mismatches === 0, 'correctness failure')
+  }
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "arithmetic_bit_contract"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/arithmetic_bits.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["Arithmetic bits: six operations, four schedulers, signed zeros and subnormals PASS"]
+timeout_ms = 60000
+
+[[tests]]
+name = "transcendental_ulp_contract"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/math_ulp.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["Transcendental declared ULP bounds: four schedulers PASS"]
+timeout_ms = 60000

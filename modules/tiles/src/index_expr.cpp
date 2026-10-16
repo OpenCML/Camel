@@ -16,6 +16,7 @@
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace camel::tiles::kernel {
@@ -102,6 +103,15 @@ IndexExpr IndexExpr::substitute(const std::string &name, const IndexExpr &replac
         node->operation,
         IndexExpr(node->lhs).substitute(name, replacement),
         IndexExpr(node->rhs).substitute(name, replacement));
+}
+std::unordered_set<std::string> IndexExpr::symbols() const {
+    if (node->operation == 'c')
+        return {};
+    if (node->operation == 'v')
+        return {node->name};
+    auto result = IndexExpr(node->lhs).symbols();
+    result.merge(IndexExpr(node->rhs).symbols());
+    return result;
 }
 std::string IndexExpr::cuda() const {
     if (node->operation == 'c')

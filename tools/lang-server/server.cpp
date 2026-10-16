@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -910,7 +910,7 @@ json Server::formatting(const json &params) {
 
 namespace {
 
-// The part of a DOT text printed by std::rgir that belongs to the function `name`: its
+// The part of a DOT text printed by std::gir that belongs to the function `name`: its
 // `subgraph cluster` block, wrapped as a graph of its own. The whole text when there is no
 // such block.
 std::string clusterOf(const std::string &dot, const std::string &name) {
@@ -995,7 +995,7 @@ json Server::graph(const json &params) {
     for (const std::string &pass : passes) {
         command += " " + pass;
     }
-    command += " std::rgir 2>&1";
+    command += " std::gir 2>&1";
 #ifdef _WIN32
     command = "\"" + command + "\""; // cmd.exe strips one pair of quotes
 #endif

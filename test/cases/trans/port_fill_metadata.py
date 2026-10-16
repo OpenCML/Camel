@@ -1,4 +1,4 @@
-"""Verify port names and assembled types in all DOT exporters."""
+"""Verify port metadata and real node output types in all DOT exporters."""
 import os
 import re
 import subprocess
@@ -16,4 +16,11 @@ for export in ("rgir", "gir", "argir", "agir"):
         assert any(row.get("param_name") == name and row.get("param_kind") == kind and row.get("param_index") == index for row in rows), (export, name, kind)
     for value_type in ("int[]", "(int, int)", "{ value: int, size: int }", "() => int[]"):
         assert any(row.get("type") == "FILL" and row.get("value_type") == value_type for row in rows), (export, value_type)
+    for kind, value_type in (("DATA", "int[]"), ("OPER", "bool"), ("CALL", "int[]"), ("FUNC", "int[]"), ("BRCH", "int"), ("JOIN", "int[]"), ("ACCS", "int")):
+        assert any(row.get("type") == kind and row.get("value_type") == value_type for row in rows), (export, kind, value_type)
+    assert not any(row.get("type") in ("ARGS", "EXIT") and row.get("value_type") for row in rows), "synthetic boundaries must not claim a node value type"
+    loops = subprocess.run([EXE, str(ROOT / "test/cases/loops/captures.cml"), "std::" + export], capture_output=True, text=True, env=env, cwd=ROOT)
+    assert loops.returncode == 0, loops.stderr
+    loop_rows = [dict(re.findall(r'(\w+)="([^"]*)"', line)) for line in loops.stdout.splitlines()]
+    assert {row["value_type"] for row in loop_rows if row.get("type") == "LOOP"} == {"int", "(int, int)"}, export
 print("port/fill metadata: PASS")

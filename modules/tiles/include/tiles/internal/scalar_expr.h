@@ -19,6 +19,13 @@
 #include <vector>
 
 namespace camel::tiles::kernel {
+// Physical register/shared-memory types; tensor plans retain their own DType.
+struct ScalarType {
+    enum Kind { F32, F64, I32, U32 } kind;
+    ScalarType(Kind kind);
+    ScalarType(DType type);
+    bool operator==(const ScalarType &) const = default;
+};
 enum class ScalarOp {
     Neg,
     Abs,
@@ -32,13 +39,22 @@ enum class ScalarOp {
     Maximum,
     Minimum,
     Fma,
-    Cast
+    Cast,
+    Bitcast,
+    BitAnd,
+    BitOr,
+    BitXor,
+    LogicalShiftRight
 };
 struct ScalarValue {
-    DType type;
+    ScalarType type;
     uint64_t bits;
     static ScalarValue f32(float value);
     static ScalarValue f64(double value);
+    static ScalarValue i32(int32_t value);
+    static ScalarValue u32(uint32_t value);
+    int32_t asI32() const;
+    uint32_t asU32() const;
     float asF32() const;
     double asF64() const;
 };
@@ -49,12 +65,22 @@ class ScalarExpr {
 
   public:
     static ScalarExpr literal(ScalarValue value);
-    static ScalarExpr symbol(std::string name, DType type);
+    static ScalarExpr symbol(std::string name, ScalarType type);
     static ScalarExpr apply(ScalarOp op, std::vector<ScalarExpr> inputs);
-    static ScalarExpr cast(DType type, ScalarExpr input);
-    DType type() const;
+    static ScalarExpr cast(ScalarType type, ScalarExpr input);
+    static ScalarExpr bitcast(ScalarType type, ScalarExpr input);
+    ScalarType type() const;
     ScalarValue evaluate(const std::unordered_map<std::string, ScalarValue> &bindings) const;
     ScalarExpr substitute(const std::string &name, const ScalarExpr &replacement) const;
+    std::unordered_map<std::string, ScalarType> symbols() const;
+    std::string cuda() const;
+};
+enum class ScalarCompare { Equal, NotEqual, Less, LessEqual };
+// IEEE ordered comparisons: NaNs compare unequal, either signed zero equals zero.
+struct ScalarPredicate {
+    ScalarCompare compare;
+    ScalarExpr lhs, rhs;
+    bool evaluate(const std::unordered_map<std::string, ScalarValue> &bindings) const;
     std::string cuda() const;
 };
 // Build the arithmetic body of a lowered elementwise instruction, using symbols a/b.

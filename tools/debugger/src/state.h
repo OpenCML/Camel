@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -88,6 +88,7 @@ struct PassGraphEntry {
     std::string pass;
     bool consumed = false;
     std::string dot;
+    std::string gir; // Versioned whole-program GIR JSON for editor tooling.
 };
 
 /// 逐 pass GIR 快照存储：runScriptOnce 执行线程经 pass 快照钩子写入，HTTP 请求线程读取。

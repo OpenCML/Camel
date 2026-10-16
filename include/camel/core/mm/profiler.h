@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: May. 24, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,8 @@ namespace camel::core::mm {
 namespace profiler {
 
 // Collect snapshots of all memory regions and return a JSON string.
-std::string snapshotToJson();
+// Set detailed=false for aggregate-only inspection without building object arrays.
+std::string snapshotToJson(bool detailed = true);
 
 // Return a compact JSON object describing GC mode, stress, and verification settings.
 std::string configToJson();
@@ -33,13 +34,13 @@ std::string configToJson();
 // Return a short human-readable GC summary for terminal diagnostics.
 std::string summaryToText();
 
-// ---- Region view API (for the Debugger Web UI) ----
+// ---- Region view API (for debugger clients) ----
 
 // Binary view: read the raw memory range [offset, offset+limit) of a region and return the raw
 // byte array (unformatted).
 // Only contiguous-memory regions are supported (bump: birthSpace/havenSpace/cacheSpace).
 // Returns JSON: { "region", "offset", "limit", "capacity", "used", "data": [0..255], "hasMore" }.
-// limit should not exceed 4096; formatting and pagination are handled by the Web UI.
+// limit should not exceed 4096; formatting and pagination are handled by the client.
 std::string regionMemoryRawToJson(const char *regionName, size_t offset, size_t limit);
 
 // Object view: return the object list for a region, paginated by [offset, offset+limit).

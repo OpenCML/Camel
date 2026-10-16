@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include "camel/core/operator.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
+#include "camel/execute/function_call.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
@@ -259,7 +260,7 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
         if (node) {
             cache->dataIndexByRef[nodeRef] = node->dataIndex;
         }
-        cache->directCallArgOffsets[idx] = static_cast<uint32_t>(cache->directCallArgSlots.size());
+        cache->directCallArgOffsets[idx]  = static_cast<uint32_t>(cache->directCallArgSlots.size());
         cache->branchArmEntryOffsets[idx] = static_cast<uint32_t>(cache->branchArmEntries.size());
         if (node && node->kind == GCNodeKind::Brch) {
             const size_t armCount = runtimeGraph->branchArmsOf(nodeRef).size();
@@ -759,22 +760,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     }
                 }
 
-                operIndices_.clear();
-                for (gc_node_ref_t inputRef : currRuntimeGraph->normInputsOf(nodeRef))
-                    operIndices_.push_back(dataIndexOf(currCache, inputRef));
-                size_t normCnt = operIndices_.size();
-                for (gc_node_ref_t inputRef : currRuntimeGraph->withInputsOf(nodeRef))
-                    operIndices_.push_back(dataIndexOf(currCache, inputRef));
-
-                data_arr_t nargs{operIndices_.data(), normCnt};
-                data_arr_t wargs{operIndices_.data() + normCnt, operIndices_.size() - normCnt};
-                FrameArgsView withView(*currFrame, wargs);
-                FrameArgsView normView(*currFrame, nargs);
-
-                if (camel::core::effect_trace::enabled()) [[unlikely]] {
-                    camel::core::effect_trace::setSite(currRuntimeGraph->nodeOrigin(nodeRef));
-                }
-                slot_t result = (*opFunc)(withView, normView, *context_);
+                slot_t result = evalNativeOperator(currRuntimeGraph, nodeRef, *currFrame, opFunc);
 
                 currFrame->set(n->dataIndex, result);
             } break;
@@ -916,7 +902,7 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
         requireRecursionRoom(graph);
-        Frame *frame   = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         slot_t result = call(func->graph(), frame);
         currFrame.get<Array *>(resultSlot)->set<slot_t>(i, result, resultType);
@@ -936,8 +922,8 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
     const size_t arrSize  = currFrame.get<Array *>(arrSlot)->size();
     // Starts empty: Array::create(n) makes n null elements, and the kept ones were appended
     // after them.
-    Array *filtered       = Array::create(mm::autoSpace(), 0);
-    auto *resultType      = currFrame.typeAt<ArrayType>(resultSlot);
+    Array *filtered  = Array::create(mm::autoSpace(), 0);
+    auto *resultType = currFrame.typeAt<ArrayType>(resultSlot);
     currFrame.set(resultSlot, filtered);
 
     for (size_t i = 0; i < arrSize; ++i) {
@@ -945,7 +931,7 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
         requireRecursionRoom(graph);
-        Frame *frame   = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         slot_t result = call(func->graph(), frame);
         if (fromSlot<bool>(result)) {
@@ -981,7 +967,7 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
         Function *func      = currFrame.get<Function *>(funcSlot);
         const slot_t args[] = {currFrame.get<slot_t>(resultSlot), arr->data()[i]};
         requireRecursionRoom(graph);
-        Frame *frame        = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(args, 2));
         currFrame.set(resultSlot, call(func->graph(), frame));
     }
@@ -1003,7 +989,7 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
         requireRecursionRoom(graph);
-        Frame *frame   = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         call(func->graph(), frame);
     }
@@ -1013,13 +999,13 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
 void NodeVMSchedPass::evalLoop(
     camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
     const camel::runtime::LoopView loop(*graph, nodeRef);
-    const size_t k          = loop.stateCount();
-    const auto stateSlot    = dataIndexOf(graph, nodeRef);
-    const auto captures     = loop.captures();
-    const auto iterable     = loop.iterable();
-    GCGraph *const cond     = loop.condGraph();
-    GCGraph *const body     = loop.bodyGraph();
-    auto *const tupleType   = k > 1 ? static_cast<TupleType *>(loop.valueType()) : nullptr;
+    const size_t k        = loop.stateCount();
+    const auto stateSlot  = dataIndexOf(graph, nodeRef);
+    const auto captures   = loop.captures();
+    const auto iterable   = loop.iterable();
+    GCGraph *const cond   = loop.condGraph();
+    GCGraph *const body   = loop.bodyGraph();
+    auto *const tupleType = k > 1 ? static_cast<TupleType *>(loop.valueType()) : nullptr;
 
     // The state: the value itself (k = 1) or a tuple of the k values, in the node's slot.
     if (k == 1) {
@@ -1124,5 +1110,53 @@ void NodeVMSchedPass::evalMarkedOperator_isolate(
     const Type *calleeResult = target->funcType() ? target->funcType()->exitType() : nullptr;
     currFrame.set(
         resultSlot,
-        camel::execute::wrapIsolatedResult(value, calleeResult, currFrame.typeAt<Type>(resultSlot)));
+        camel::execute::wrapIsolatedResult(
+            value,
+            calleeResult,
+            currFrame.typeAt<Type>(resultSlot)));
+}
+
+// Keep callback state out of call()'s recursive native frame, like marked-operator helpers.
+slot_t NodeVMSchedPass::evalNativeOperator(
+    camel::runtime::GCGraph *currRuntimeGraph, gc_node_ref_t nodeRef, Frame &operatorFrame,
+    operator_t opFunc) {
+    Frame *currFrame = &operatorFrame;
+    operIndices_.clear();
+    for (gc_node_ref_t inputRef : currRuntimeGraph->normInputsOf(nodeRef))
+        operIndices_.push_back(dataIndexOf(currRuntimeGraph, inputRef));
+    size_t normCnt = operIndices_.size();
+    for (gc_node_ref_t inputRef : currRuntimeGraph->withInputsOf(nodeRef))
+        operIndices_.push_back(dataIndexOf(currRuntimeGraph, inputRef));
+
+    const bool callsGraphs = camel::core::OperatorTable::instance().callsGraphs(
+        currRuntimeGraph->nodeBodyAs<GCOperBody>(nodeRef)->oper);
+    // Nested calls reuse operIndices_. Keep this operator's views alive independently.
+    std::vector<runtime_data_idx_t> ownedIndices;
+    if (callsGraphs)
+        ownedIndices = operIndices_;
+    const auto &indices = callsGraphs ? ownedIndices : operIndices_;
+    data_arr_t nargs{indices.data(), normCnt};
+    data_arr_t wargs{indices.data() + normCnt, indices.size() - normCnt};
+    FrameArgsView withView(*currFrame, wargs);
+    FrameArgsView normView(*currFrame, nargs);
+
+    if (camel::core::effect_trace::enabled()) [[unlikely]] {
+        camel::core::effect_trace::setSite(currRuntimeGraph->nodeOrigin(nodeRef));
+    }
+    camel::execute::FunctionInvoker invoker;
+    if (callsGraphs) {
+        invoker = [&](Function *function,
+                      std::span<const slot_t>
+                          withArgs,
+                      std::span<const slot_t>
+                          normalArgs) {
+            requireRecursionRoom(currRuntimeGraph);
+            auto *target = function->graph();
+            Frame *frame = framePool_.acquire(target);
+            bindMarkedFunctionFrame(frame, function, normalArgs, withArgs);
+            return call(target, frame);
+        };
+    }
+    camel::execute::FunctionCallScope callScope(*context_, std::move(invoker));
+    return (*opFunc)(withView, normView, *context_);
 }

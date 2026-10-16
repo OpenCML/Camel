@@ -1,0 +1,80 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license: https://opensource.org/license/mit
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
+ * Author: Camel Contributors
+ * Created: Oct. 16, 2026
+ * Updated: Oct. 16, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
+// Structured scalar chains with explicit device fault and early-return nodes.
+#include "tiles/internal/kernel_ir.h"
+#include "tiles/program.h"
+#include <cstdint>
+#include <string>
+#include <unordered_map>
+
+namespace camel::tiles::kernel {
+KernelBody scalarBody(const Program &p, Launch &launch) {
+    launch.blockX = launch.gridX = 1;
+    KernelBody kernel;
+    kernel.faultSlot = p.nodes.size();
+    for (size_t i = 0; i < p.nodes.size(); ++i)
+        kernel.buffers.push_back(
+            {MemorySpace::Global,
+             p.nodes[i].dtype,
+             i,
+             elements(p.nodes[i].shape),
+             i == launch.node});
+    std::unordered_map<size_t, ScalarExpr> values;
+    auto operand = [&](size_t id) {
+        if (auto it = values.find(id); it != values.end())
+            return it->second;
+        const auto name = "k_input" + std::to_string(id);
+        kernel.statements.push_back(
+            Load{name, {id, IndexExpr(0), Predicate(true)}, ScalarValue::f64(0)});
+        auto value = ScalarExpr::symbol(name, DType::F64);
+        values.emplace(id, value);
+        return value;
+    };
+    for (auto id : launch.members) {
+        const auto &n     = p.nodes[id];
+        const auto name   = "k_value" + std::to_string(id);
+        ScalarExpr result = ScalarExpr::literal(ScalarValue::f64(0));
+        if (n.op == "constant64")
+            result = ScalarExpr::literal({DType::F64, static_cast<uint64_t>(n.attributes.at(0))});
+        else {
+            auto a               = operand(n.inputs.at(0));
+            const auto operation = n.op == "scalar_add"   ? "add"
+                                   : n.op == "scalar_sub" ? "subtract"
+                                   : n.op == "scalar_mul" ? "multiply"
+                                   : n.op == "scalar_div" ? "divide"
+                                                          : "neg";
+            result               = elementwiseExpression(operation, DType::F64).substitute("a", a);
+            if (n.inputs.size() == 2) {
+                auto b = operand(n.inputs[1]);
+                if (n.op == "scalar_div")
+                    kernel.statements.push_back(
+                        Conditional{
+                            ScalarPredicate{
+                                ScalarCompare::Equal,
+                                b,
+                                ScalarExpr::literal(ScalarValue::f64(0))},
+                            {ReportFault{static_cast<uint32_t>(id)},
+                             Store{
+                                 {launch.node, IndexExpr(0), Predicate(true)},
+                                 ScalarExpr::literal(ScalarValue::f64(0))},
+                             Return{}}});
+                result = result.substitute("b", b);
+            }
+        }
+        kernel.statements.push_back(ScalarBinding{name, result});
+        values.emplace(id, ScalarExpr::symbol(name, DType::F64));
+    }
+    kernel.statements.push_back(
+        Store{{launch.node, IndexExpr(0), Predicate(true)}, values.at(launch.node)});
+    validateBody(kernel);
+    return kernel;
+}
+} // namespace camel::tiles::kernel

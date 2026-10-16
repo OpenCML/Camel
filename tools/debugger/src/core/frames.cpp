@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -95,7 +95,7 @@ void DebugCore::placeCallee(ShadowFrame &f, const ShadowFrame *caller) {
     f.activation     = nextActivation_++;
     f.presentedDepth = (caller != nullptr ? caller->presentedDepth : 0) + 1;
     f.awaitingEntry  = true;
-    std::lock_guard<std::mutex> lock(indexMutex_);
+    std::lock_guard lock(indexMutex_);
     f.function = functionOf(*f.info, [this](GCGraph *g) -> GraphInfo & { return index_.graph(g); });
 }
 
@@ -113,7 +113,7 @@ void DebugCore::placeReplacement(ShadowFrame &f, const ShadowFrame &old, const S
     f.activation    = nextActivation_++;
     f.awaitingEntry = true;
     {
-        std::lock_guard<std::mutex> lock(indexMutex_);
+        std::lock_guard lock(indexMutex_);
         f.function =
             functionOf(*f.info, [this](GCGraph *g) -> GraphInfo & { return index_.graph(g); });
     }
@@ -200,7 +200,7 @@ json DebugCore::frameJson(const Chain &chain, bool top) {
         int function;
         std::string path;
         {
-            std::lock_guard<std::mutex> lock(indexMutex_);
+            std::lock_guard lock(indexMutex_);
             function = index_.functionOf(f.loc);
             path     = index_.filePath(f.loc.file);
             if (function != f.info->function && function >= 0) {
@@ -249,7 +249,7 @@ json DebugCore::skippedLines(const ShadowFrame &f, const Arrival &a) {
         return key(s) == step_.frame;
     });
 
-    std::lock_guard<std::mutex> lock(indexMutex_);
+    std::lock_guard lock(indexMutex_);
     const auto add = [&](uint64_t activation, int function, int from, int to) {
         for (DroppedLine &line : index_.droppedLines(function, from, to)) {
             if (!explainedLines_[activation].insert({line.file, line.line}).second) {

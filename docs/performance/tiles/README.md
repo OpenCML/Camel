@@ -73,8 +73,7 @@ system Python multiarch configuration header directory. No system toolchain or
 existing checkout was changed. Standard `npm run build` produced the binaries.
 
 The same isolated directory was rebuilt at revision 8e7be374. All 38 host,
-GPU and tensor checks passed on device 7; the complete
-[test output](2026-10-15-rtx3090-tests.txt) includes special values, grid-stride
+GPU and tensor checks passed on device 7, covering special values, grid-stride
 reduction, large uploads and the three execution engines. The first attempt on
 device 3 passed 34/38: the other four processes failed while retaining a CUDA
 context with `CUDA_ERROR_OUT_OF_MEMORY`, before computing outputs. Device 3 had
@@ -112,3 +111,10 @@ comparisons against Triton or vendor libraries. Clocks were not locked; this is
 a shared server, and an idle-device observation does not reserve the GPU or
 exclude later interference. The larger maximum speedup than on the desktop is
 not evidence that every reduction or every GPU will benefit equally.
+
+## What belongs here
+
+Keep reproducible performance comparisons, benchmark samples and relevant device
+conditions here. Routine test output belongs in local `tmp/` or CI artifacts;
+record the command and result in the functional commit description. Do not add a
+separate dated report for each successful test run.

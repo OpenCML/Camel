@@ -515,7 +515,7 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 
 ### 12.4 变基到 `fsh-dev` 的 `d270689c` 时的改动
 
-- **图的存储。** 算子以 `OperId` 识别：变量与 `:mark/` 算子按 `oper::VarNew`、`oper::VarGet`、`oper::MapArr` 等与 `OperatorTable::isAssignment` 认，不再比较 URI 文字；译法表（第 8 节）仍以 URI 为键，那是算子的公开名字，模块算子也没有固定的 id。函数类型不再带捕获的名字，捕获形参的名字取 `graph->captureNames()`（与 `std::dot` 相同）。帧布局的改动不影响转译器（它不读帧）。
+- **图的存储。** 算子以 `OperId` 识别：变量与 `:mark/` 算子按 `oper::VarNew`、`oper::VarGet`、`oper::MapArr` 等与 `OperatorTable::isAssignment` 认，不再比较 URI 文字；译法表（第 8 节）仍以 URI 为键，那是算子的公开名字，模块算子也没有固定的 id。函数类型不再带捕获的名字，捕获形参的名字取 `graph->captureNames()`（与 `std::gir` 相同）。帧布局的改动不影响转译器（它不读帧）。
 - **模块。** 所有模块的顶层值在同一个根图里，根图的出口是对入口 `main` 的调用；转译器本来就这样找入口，算出来的顶层值照旧写成 `top_level`，导入的字面量值作为实参传给 `main_`（`module_root.plan.toml` 的 `root.values_cpp` 改为检查 `main_(0, 3.14159)`）。
 - **`&&`/`||` 是分支、`x == null`、窄化。** 都落在已有的 `BRCH`/`JOIN` 与 `:op/tag_*` 上，生成代码的写法不用改；清单加入 `consistency/logical/short_circuit.cml`、`pure.cml` 与 `consistency/narrowing/narrow.cml`，与 `std::fvm` 相同【实测】。
 - **`any`。** `TypeCode::Any` 已删除；`Json` 类型不翻译（拒绝，语料里 3 个程序）。

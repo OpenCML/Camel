@@ -1,0 +1,25 @@
+module tiles_gpu_fallback
+import { gpu, available } from tiles
+@gpu
+func add(a: float, b: float): float { return a + b }
+@gpu
+func effect(x: float): float sync {
+    println("cpu effect")
+    return x + x
+}
+@gpu
+func nested(a: float, b: float): float { return add(a, b) * 2.0 }
+@gpu
+func pair(a: float, b: float): (float, float) { return (a + b, a * b) }
+func main(): int sync {
+    println(available())
+    println(add(2.0, 3.0))
+    println(effect(4.0))
+    let offset = 7.0
+    let captured = gpu((x: float): float => x + offset)
+    println(captured(3.0))
+    println(nested(2.0, 3.0))
+    let p = pair(2.0, 3.0)
+    println(p.0, p.1)
+    return 0
+}

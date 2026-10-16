@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,11 +82,11 @@ struct Decl {
     uint32_t id   = 0;
     DeclKind kind = DeclKind::Local;
     std::string name;
-    Range nameRange;  // the identifier
-    Range ownerRange; // the construct the compiler reports the declaration at
-    Range fullRange;  // the whole declaration, for outlines
-    uint32_t scope       = 0; // the scope the name is visible in
-    uint32_t visibleFrom = 0; // offset from which it can be referenced; 0: the whole scope
+    Range nameRange;           // the identifier
+    Range ownerRange;          // the construct the compiler reports the declaration at
+    Range fullRange;           // the whole declaration, for outlines
+    uint32_t scope       = 0;  // the scope the name is visible in
+    uint32_t visibleFrom = 0;  // offset from which it can be referenced; 0: the whole scope
     int32_t container    = -1; // the enclosing function or namespace
     int32_t bodyScope    = -1; // functions, namespaces: the scope they open
     bool exported        = false;
@@ -95,10 +95,10 @@ struct Decl {
     bool generic         = false; // a function whose signature binds a type variable
     bool varParam        = false; // a `var` parameter
     bool lambda          = false; // a parameter of a function literal
-    std::string header;       // functions: the declaration without its body; types: all of it
-    std::string annotation;   // the type written after the name, if any
-    std::string doc;          // the comment lines directly above
-    std::string importedFrom; // Import, Module: the module name as written
+    std::string header;           // functions: the declaration without its body; types: all of it
+    std::string annotation;       // the type written after the name, if any
+    std::string doc;              // the comment lines directly above
+    std::string importedFrom;     // Import, Module: the module name as written
     /// A member of a namespace block (and a namespace): its name with the namespaces around
     /// it, `Tools::inc`, as the language server shows it (design principles 2.13); empty for
     /// any other declaration, which is shown by `name`.
@@ -129,7 +129,7 @@ struct Segment {
 
 struct Ref {
     RefKind kind = RefKind::Value;
-    Range range; // the whole path
+    Range range;               // the whole path
     std::vector<Segment> path; // at least one segment; the last one is the name
     uint32_t scope = 0;
     /// The declaration the first segment names by the scoping rules, or -1. For a path of one
@@ -160,9 +160,15 @@ struct FieldKey {
 
 struct TokenInfo {
     Range range;
-    uint16_t type    = 0; // camel::parse::syntax::TokenKind
-    uint8_t channel  = 0; // 0 default, 2 command, 3 line comment, 4 block comment
-    uint32_t line    = 0; // 0-based line of the first character
+    uint16_t type   = 0; // camel::parse::syntax::TokenKind
+    uint8_t channel = 0; // 0 default, 2 command, 3 line comment, 4 block comment
+    uint32_t line   = 0; // 0-based line of the first character
+};
+
+/// Direct positional arguments of a syntactically named call. Nested expressions
+/// keep their whole range; named arguments and arguments after a spread are omitted.
+struct CallSite {
+    std::vector<Range> positional;
 };
 
 struct SyntaxIndex {
@@ -171,6 +177,7 @@ struct SyntaxIndex {
     std::vector<Ref> refs;       // in source order
     std::vector<Member> members; // in source order
     std::vector<FieldKey> keys;
+    std::vector<CallSite> calls;
     std::vector<TokenInfo> tokens; // every token, comments included, without EOF
     std::string moduleName;        // `module m`
     Range moduleNameRange;
@@ -180,8 +187,8 @@ struct SyntaxIndex {
     uint32_t scopeAt(uint32_t offset) const;
     /// The declarations named `name` that a reference at `offset` in `scope` sees: those of
     /// the innermost scope that has one (several: overloads).
-    std::vector<uint32_t> lookup(
-        uint32_t scope, std::string_view name, uint32_t offset, bool types) const;
+    std::vector<uint32_t>
+    lookup(uint32_t scope, std::string_view name, uint32_t offset, bool types) const;
     /// Every declaration visible at `offset`, innermost first; a name hidden by an inner one
     /// is left out.
     std::vector<uint32_t> visibleAt(uint32_t offset) const;

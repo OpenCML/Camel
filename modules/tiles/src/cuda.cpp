@@ -10,6 +10,7 @@
 
 // Scoped execution, resident allocation ownership and GPU benchmark measurements.
 #include "tiles/device.h"
+#include "tiles/internal/capability.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <chrono>
@@ -34,10 +35,23 @@
 namespace camel::tiles {
 using namespace cuda_detail;
 namespace {
-struct OwnedAllocation {
+struct OwnedAllocation final : DeviceStorage {
     std::shared_ptr<Backend> backend;
     CUdeviceptr pointer = 0;
-    ~OwnedAllocation() {
+    size_t capacity     = 0;
+    std::vector<std::byte> read(uint64_t address, size_t bytes) const override {
+        if (!backend || pointer != address || bytes > capacity)
+            throw std::runtime_error("resident CUDA storage metadata mismatch");
+        std::lock_guard lock(backend->mutex);
+        Current current(backend->api, backend->context);
+        std::vector<std::byte> result(bytes);
+        if (!result.empty())
+            backend->api.check(
+                backend->api.cuMemcpyDtoH(result.data(), pointer, result.size()),
+                "download resident tensor");
+        return result;
+    }
+    ~OwnedAllocation() override {
         // No Camel references or allocator locks. The owner outlives every use;
         // transfers are synchronous before publishing the value.
         if (pointer && backend->api.cuCtxPushCurrent(backend->context) == CUDA_SUCCESS) {
@@ -75,8 +89,8 @@ class DeviceRun {
         for (size_t id = 0; id < p.nodes.size(); ++id)
             if (p.nodes[id].resident) {
                 auto allocation =
-                    std::static_pointer_cast<OwnedAllocation>(p.nodes[id].resident->owner);
-                if (&allocation->backend->api != &a ||
+                    std::dynamic_pointer_cast<OwnedAllocation>(p.nodes[id].resident->owner);
+                if (!allocation || !allocation->backend || &allocation->backend->api != &a ||
                     allocation->pointer != p.nodes[id].resident->address)
                     throw std::runtime_error("resident input belongs to another CUDA backend");
                 pointers[id] = allocation->pointer;
@@ -204,8 +218,9 @@ class DeviceRun {
                 value->address = pointers[id];
                 value->owner   = owner;
                 // Transfer only after every potentially throwing field assignment.
-                owner->pointer = *allocation;
-                *allocation    = 0;
+                owner->capacity = bytes(node);
+                owner->pointer  = *allocation;
+                *allocation     = 0;
             }
             retained.emplace(id, value);
             result.push_back(std::move(value));
@@ -231,6 +246,19 @@ double elapsed(Clock::time_point start) {
 } // namespace
 
 std::string deviceInfo() { return backend().description; }
+std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceValue> value) {
+    if (!value)
+        throw std::invalid_argument("missing resident value");
+    const auto allocation = std::dynamic_pointer_cast<OwnedAllocation>(value->owner);
+    const auto target     = sharedBackend();
+    if (allocation && allocation->backend == target) {
+        if (allocation->pointer != value->address ||
+            bytes(Node{.shape = value->shape, .dtype = value->dtype}) > allocation->capacity)
+            throw std::runtime_error("resident CUDA storage metadata mismatch");
+        return value;
+    }
+    return uploadValue(value->shape, value->dtype, downloadValue(*value));
+}
 std::shared_ptr<DeviceValue>
 uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
     if (bytes(Node{.shape = shape, .dtype = dtype}) != data.size() ||
@@ -239,8 +267,9 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
     auto b = sharedBackend();
     std::lock_guard lock(b->mutex);
     Current current(b->api, b->context);
-    auto allocation     = std::make_shared<OwnedAllocation>();
-    allocation->backend = b;
+    auto allocation      = std::make_shared<OwnedAllocation>();
+    allocation->backend  = b;
+    allocation->capacity = data.size();
     b->api.check(
         b->api.cuMemAlloc(&allocation->pointer, std::max(size_t(1), data.size())),
         "allocate resident tensor");
@@ -259,20 +288,6 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
     result->dtype   = dtype;
     result->address = allocation->pointer;
     result->owner   = std::move(allocation);
-    return result;
-}
-std::vector<std::byte> downloadValue(const DeviceValue &tensor) {
-    if (!tensor.owner || !tensor.address)
-        throw std::runtime_error("invalid resident tensor");
-    auto allocation = std::static_pointer_cast<OwnedAllocation>(tensor.owner);
-    auto b          = allocation->backend;
-    std::lock_guard lock(b->mutex);
-    Current current(b->api, b->context);
-    std::vector<std::byte> result(bytes(Node{.shape = tensor.shape, .dtype = tensor.dtype}));
-    if (!result.empty())
-        b->api.check(
-            b->api.cuMemcpyDtoH(result.data(), allocation->pointer, result.size()),
-            "download resident tensor");
     return result;
 }
 bool available() {
@@ -439,29 +454,62 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
         };
         const auto actual = decode(results[0]), expected = decode(results[1]);
         std::vector<bool> exact;
-        for (auto output : program.outputs)
-            exact.insert(
-                exact.end(),
-                elements(program.nodes[output].shape),
-                program.nodes[output].dtype == DType::F64);
+        std::vector<size_t> offsets, widths;
+        size_t offset          = 0;
+        constexpr auto relaxed = core::sem::kReassociate | core::sem::kContract |
+                                 core::sem::kApproxMath | core::sem::kChangePrecision;
+        for (auto output : program.outputs) {
+            // Permission is local to each operation. Only dependencies of this
+            // output can justify a relaxed optimized/unfused comparison.
+            std::vector<bool> visited(program.nodes.size());
+            std::vector<size_t> pending{output};
+            bool bitwise = true;
+            while (!pending.empty()) {
+                const auto id = pending.back();
+                pending.pop_back();
+                if (visited[id])
+                    continue;
+                visited[id]      = true;
+                const auto &node = program.nodes[id];
+                bitwise &= !(node.permissions & relaxed);
+                pending.insert(pending.end(), node.inputs.begin(), node.inputs.end());
+            }
+            const auto &node   = program.nodes[output];
+            const size_t width = node.dtype == DType::F64 ? sizeof(double) : sizeof(float);
+            for (size_t i = 0; i < elements(node.shape); ++i) {
+                exact.push_back(bitwise);
+                offsets.push_back(offset);
+                widths.push_back(width);
+                offset += width;
+            }
+        }
         double maxAbs = 0, maxRel = 0;
         size_t mismatches = 0;
         for (size_t i = 0; i < actual.size(); ++i) {
             double a = actual[i], r = expected[i];
+            const bool equalBits = std::memcmp(
+                                       results[0].data() + offsets[i],
+                                       results[1].data() + offsets[i],
+                                       widths[i]) == 0;
+            if (exact[i] && !equalBits)
+                ++mismatches;
             if (!std::isfinite(a) || !std::isfinite(r)) {
-                if (!(a == r || (std::isnan(a) && std::isnan(r))))
+                if (!exact[i] && !(a == r || (std::isnan(a) && std::isnan(r))))
                     ++mismatches;
                 continue;
             }
             double diff = std::abs(a - r);
             maxAbs      = std::max(maxAbs, diff);
             maxRel      = std::max(maxRel, diff / std::max(1e-30, std::abs(r)));
-            if (diff > (exact[i] ? 0.0 : 1e-6 + 1e-5 * std::abs(r)))
+            if (!exact[i] && diff > 1e-6 + 1e-5 * std::abs(r))
                 ++mismatches;
         }
         if (mismatches)
             throw std::runtime_error("benchmark correctness gate failed against unfused execution");
         return json{
+            {"bitwise_elements", std::count(exact.begin(), exact.end(), true)},
+            {"relaxed_elements", std::count(exact.begin(), exact.end(), false)},
+            {"reference", "same-device unfused execution"},
             {"max_abs_error", maxAbs},
             {"max_rel_error", maxRel},
             {"mismatches", mismatches}};
@@ -513,19 +561,19 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
 #else
 namespace camel::tiles {
 std::string deviceInfo() {
-    throw std::runtime_error(
+    throw BackendUnavailable(
         "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
 }
 bool available() { return false; }
+std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceValue>) {
+    (void)deviceInfo();
+    return {};
+}
 std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program>) {
     (void)deviceInfo();
     return {};
 }
 std::shared_ptr<DeviceValue> uploadValue(const Shape &, DType, std::span<const std::byte>) {
-    (void)deviceInfo();
-    return {};
-}
-std::vector<std::byte> downloadValue(const DeviceValue &) {
     (void)deviceInfo();
     return {};
 }

@@ -24,6 +24,7 @@
 #include <barrier>
 #include <thread>
 using namespace camel::tiles;
+static const float hostSentinel = 0.0f;
 
 template<class F> void rejects(const Program &original, F mutate, const char *reason) {
     auto p = original;
@@ -36,8 +37,30 @@ template<class F> void rejects(const Program &original, F mutate, const char *re
     throw std::runtime_error(std::string("accepted invalid plan: ") + reason);
 }
 
+void checkKernelIR();
+void checkMatrixContracts();
+
 int main() {
     try {
+        {
+            std::vector<float> input{1.0f, -0.0f};
+            const auto expected = std::as_bytes(std::span(input));
+            const std::vector<std::byte> copy(expected.begin(), expected.end());
+            auto host = retainHostValue({2}, DType::F32, expected);
+            input[0] = 99.0f;
+            if (downloadValue(*host) != copy)
+                throw std::runtime_error("host resident storage must own an immutable snapshot");
+            auto invalid = *host;
+            invalid.shape = {3};
+            bool rejected = false;
+            try { (void)downloadValue(invalid); }
+            catch (const std::runtime_error &) { rejected = true; }
+            if (!rejected) throw std::runtime_error("host resident storage accepted invalid extent");
+            if (!downloadValue(*retainHostValue({0}, DType::F32, {})).empty())
+                throw std::runtime_error("empty resident host storage");
+        }
+        checkKernelIR();
+        checkMatrixContracts();
         using kernel::ScalarExpr;
         using kernel::ScalarValue;
         using kernel::ScalarOp;
@@ -195,7 +218,7 @@ int main() {
             .input=camel::core::type::TypeCode::Float32,
             .accumulator=camel::core::type::TypeCode::Float32,
             .result=camel::core::type::TypeCode::Float32,
-            .initBits=0xff800000U, .exactAssociative=true, .exactCommutative=true,
+            .initBits=0xff800000U, .empty=sem::LawEmpty::Fault, .exactAssociative=true, .exactCommutative=true,
             .hasIdentity=true, .identityBits=0xff800000U};
         sem::OperatorSemantics maximumDeclaration{.key=sem::OperatorKey::of(maximumUri), .laws={maximumLaw}};
         operators.declareSemantics(maximumUri,maximumDeclaration);
@@ -230,6 +253,13 @@ int main() {
         rejects(rowPlan, [](auto &x){ x.launches[0].blockX=64; }, "invalid row region plan");
         rejects(rowPlan, [](auto &x){ x.launches[0].members.erase(x.launches[0].members.begin()); }, "invalid row region plan");
         rejects(rowPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "invalid row region plan");
+        auto mappedRow = rowPlan;
+        mappedRow.nodes[1].indexing->norm[0].coords[1]=mappedRow.nodes[1].indexing->exprs.constant(0);
+        rejects(mappedRow, [](auto &){}, "invalid row region plan");
+        generate(mappedRow);
+        if(mappedRow.launches.size()<2 || mappedRow.launches[0].implementation!="parallel_max" ||
+           mappedRow.source==rowPlan.source)
+            throw std::runtime_error("noncanonical reduction incorrectly reused row-local loads");
         std::cout << "tiles row region: shared values and invalid launch mutations checked\n";
         maximumPlan.nodes[1].indexing.reset();
         generate(maximumPlan);
@@ -307,11 +337,36 @@ int main() {
         if (guarded.source.find("=fmaf(") == std::string::npos)
             throw std::runtime_error("ignored the supported arithmetic declaration");
         std::cout << "tiles operator contracts: absent, replaced and incompatible declarations rejected\n";
-        std::weak_ptr<int> cacheOwner;
+        std::weak_ptr<DeviceStorage> cacheOwner;
+        {
+            Program unbound;
+            unbound.nodes = {{.op="input", .shape={1048576}},
+                             {.op="neg", .shape={1048576}, .inputs={0}}};
+            unbound.outputs = {1};
+            generate(unbound, {}, InputBindings::Deferred);
+            if (!unbound.nodes[0].data.empty() || unbound.source.empty())
+                throw std::runtime_error("shape-only planning allocated an input payload");
+            bool refused = false;
+            try { validatePlan(unbound); } catch (const std::exception &) { refused = true; }
+            if (!refused)
+                throw std::runtime_error("executable validation accepted an unbound input");
+            unbound.nodes[0].data.resize(1048576, 3.0f);
+            const auto beforeBinding = kernel::generationCacheStats();
+            generate(unbound);
+            if (kernel::generationCacheStats().hits != beforeBinding.hits + 1)
+                throw std::runtime_error("binding input data changed the compiled plan identity");
+            unbound.nodes[0].data.resize(1);
+            refused = false;
+            try { generate(unbound, {}, InputBindings::Deferred); }
+            catch (const std::exception &) { refused = true; }
+            if (!refused)
+                throw std::runtime_error("deferred binding hid an invalid provided payload");
+        }
+        std::cout << "tiles deferred inputs: payload-free planning and strict execution checks passed\n";
         {
             Program borrowed;
             auto value = std::make_shared<DeviceValue>();
-            auto owner = std::make_shared<int>(1);
+            auto owner = retainHostValue({1}, DType::F32, std::as_bytes(std::span(&hostSentinel, 1)))->owner;
             cacheOwner = owner;
             value->owner = owner;
             value->address = 1;
@@ -421,7 +476,7 @@ int main() {
         auto resident = std::make_shared<DeviceValue>();
         resident->shape = {2,3};
         resident->address = 1; // Validator-only sentinel, never passed to CUDA.
-        resident->owner = std::make_shared<int>(0);
+        resident->owner = retainHostValue({1}, DType::F32, std::as_bytes(std::span(&hostSentinel, 1)))->owner;
         borrowed.nodes[0].resident = resident;
         borrowed.nodes[0].data.clear();
         schedule(borrowed);

@@ -50,7 +50,7 @@ name = "narrowing.graph"
 desc = "`if s != null then len(s) else 0` on the graph: tag_is_null selects the arm, arm 0 is the null arm, arm 1 starts with tag_null_value."
 kind = "snapshot"
 case = "../../../cases/consistency/narrowing/graph.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"
@@ -61,7 +61,7 @@ name = "narrowing.graph_is_match"
 desc = "`match s { case null => 0  case v => len(v) }` gives the same graph (the same golden)."
 kind = "snapshot"
 case = "../../../cases/consistency/narrowing/graph_match.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"

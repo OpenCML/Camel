@@ -1,0 +1,23 @@
+module tiles_gpu_regions
+import { Tensor, reshape, sum } from tensor
+import { gpu, regions } from tiles
+
+func cpu(x: Tensor<f32, const [3]>): Tensor<f32, const [3]> sync {
+    println('cpu detour once')
+    return x
+}
+
+@gpu
+func mixed(x: Tensor<f32, const [3]>): Tensor<f32, const [3]> {
+    let y = x + x
+    return cpu(y) * y
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3]) as Tensor<f32, const [3]>
+    println(sum(mixed(x)))
+    println(regions<mixed>())
+    let captured = gpu((v: Tensor<f32, const [3]>): Tensor<f32, const [3]> => v + x)
+    println(sum(captured(x)))
+    return 0
+}

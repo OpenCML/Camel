@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -3242,7 +3242,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         return fixed != nullptr && exactFor(fixed->funcType()) &&
                fixed->resolve(withTypes, normTypes, Modifier::None).has_value();
     });
-    const auto where = [&](const void *overload) {
+    const auto where        = [&](const void *overload) {
         const auto it = set.moduleOf.find(overload);
         return it == set.moduleOf.end() ? std::string(" (this module)")
                                         : std::format(" (module '{}')", it->second);
@@ -4537,11 +4537,11 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
     // The overload the call resolves to, as visitLinkNode will resolve it: rewritten only when
     // it has an in-place form and gives an array of the variable's own type.
     const std::vector<StaticArg> statics(1);
-    const auto resolved = group->resolve(withTypes, {arrayType}, statics, Modifier::None);
-    const bool inPlace  = resolved.has_value() &&
-                         table.inPlaceForm((*resolved)->uri()).has_value() &&
-                         (*resolved)->funcType()->exitType() != nullptr &&
-                         (*resolved)->funcType()->exitType()->equals(arrayType);
+    const auto resolved       = group->resolve(withTypes, {arrayType}, statics, Modifier::None);
+    const bool inPlace        = resolved.has_value() &&
+                                table.inPlaceForm((*resolved)->uri()).has_value() &&
+                                (*resolved)->funcType()->exitType() != nullptr &&
+                                (*resolved)->funcType()->exitType()->equals(arrayType);
     GCT::node_ptr_t rebinding = make(tree_->makeLink(2), gct);
     GCT::node_ptr_t applied   = make(tree_->makeLink(1), call);
     if (!inPlace) {
@@ -4943,6 +4943,21 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
 
     // Decorators run at macro time: the graph applying them is a macro that yields the decorated
     // function once its inputs are static.
+    // The factory is a separate graph, not a statement in the enclosing sync chain.
+    // Otherwise applying a local decorator overwrites lastSyncedNode_ with a node
+    // belonging to this factory, and the next enclosing call links across graphs.
+    struct RestoreSync {
+        bool &synced;
+        node_handle_t &last;
+        bool outerSynced;
+        node_handle_t outerLast;
+        ~RestoreSync() {
+            synced = outerSynced;
+            last   = outerLast;
+        }
+    } restoreSync{synced_, lastSyncedNode_, synced_, lastSyncedNode_};
+    synced_                    = false;
+    lastSyncedNode_            = {};
     graph_ptr_t decoratedGraph = enterScope(
         FunctionType::create(param_vec_t{}, param_vec_t{}, nullptr, Modifier::Macro),
         "__decorated__" + funcName + "_" + std::to_string(syntheticRefIndex_++));
@@ -6356,8 +6371,8 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         // 2.13): allowed, with a warning.
         subject = reopenNarrowedName(gct->at(0), subject, gct, "??");
     }
-    Type *subjectType     = valueTypeOf(nodeTypeOf(subject));
-    TupleType *tagged     = asTagged(subjectType);
+    Type *subjectType = valueTypeOf(nodeTypeOf(subject));
+    TupleType *tagged = asTagged(subjectType);
     if (tagged == nullptr || tagged->isNullable() != onNull) {
         // DESIGN-QUESTION(nullable-error) Q6: `?->` is defined for errors only.
         diags_->of(SemanticDiag::TaggedOperandMismatch)
@@ -6878,8 +6893,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         "Unexpected result type from Enter the child of BRCH node.");
     node_handle_t condNode = any_cast<node_handle_t>(res);
     node_handle_t node{};
-    if (asTagged(valueTypeOf(nodeTypeOf(condNode))) == nullptr &&
-        isNarrowedName(gct->at(0))) {
+    if (asTagged(valueTypeOf(nodeTypeOf(condNode))) == nullptr && isNarrowedName(gct->at(0))) {
         // `match x { case null => ...  case v => ... }` where an `if` around it already
         // narrowed `x` to a `T` (design principles 2.13): allowed, with a warning. A match
         // without `case null` is an ordinary match on the `T`.
@@ -7355,14 +7369,15 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
         elementType = tt::as_ptr<ArrayType>(type)->elemType();
     }
-    Type *stateType = k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
+    Type *stateType =
+        k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
 
     // The two graphs, made before either is built so that every capture is made in both in
     // the same order (captureTwins_). They take the state (the body the element first) as
     // ordinary parameters; their captures become with-ports once they are built.
-    const size_t ordinal         = ++loopCounts_[currGraph_.get()];
-    const std::string graphBase  = std::format("{}.loop{}", currGraph_->name(), ordinal);
-    const auto makeLoopGraph     = [&](bool withElement, const char *role) {
+    const size_t ordinal        = ++loopCounts_[currGraph_.get()];
+    const std::string graphBase = std::format("{}.loop{}", currGraph_->name(), ordinal);
+    const auto makeLoopGraph    = [&](bool withElement, const char *role) {
         FunctionTypeFactory factory;
         if (withElement) {
             factory.addNormArg(gct->loopElementName(), elementType, false);
@@ -7370,7 +7385,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         for (size_t j = 0; j < k; ++j) {
             factory.addNormArg(gct->loopStateName(j), stateTypes[j], false);
         }
-        return createCompileGraph(factory.build(), currGraph_, std::format("{}.{}", graphBase, role));
+        return createCompileGraph(
+            factory.build(),
+            currGraph_,
+            std::format("{}.{}", graphBase, role));
     };
     compile_graph_ptr_t condGraph =
         camel::core::loopHasCondition(kind) ? makeLoopGraph(false, "cond") : nullptr;
@@ -7423,8 +7441,10 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         graph->setParameterized(true);
     }
 
-    node_handle_t loopNode =
-        currGraph_->addLoopNode(kind, DraftGraphBuilder::LoopTarget{condGraph, bodyGraph}, stateType);
+    node_handle_t loopNode = currGraph_->addLoopNode(
+        kind,
+        DraftGraphBuilder::LoopTarget{condGraph, bodyGraph},
+        stateType);
     registerNodeOrigin(context_, loopNode, gct, "gir.loop");
     stampPermissions(loopNode);
     if (sequence != nullptr) {

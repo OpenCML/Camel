@@ -10,14 +10,21 @@
 
 // Physical access masks and addresses, independent of CUDA statement strings.
 #pragma once
+#include "camel/core/index_semantics.h"
 #include "tiles/internal/index_expr.h"
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace camel::tiles::kernel {
+// Compose a nonnegative affine core map with row-major storage, checking each
+// operand coordinate's bounds over the whole rectangular iteration domain.
+IndexExpr affineAddress(
+    const core::sem::IndexedInstance &instance, const core::sem::Access &access,
+    const std::vector<int64_t> &shape, const std::vector<IndexExpr> &point);
 class Predicate {
     struct Node;
     std::shared_ptr<const Node> node;
@@ -29,6 +36,7 @@ class Predicate {
     static Predicate equal(IndexExpr lhs, IndexExpr rhs);
     bool evaluate(const std::unordered_map<std::string, uint64_t> &bindings) const;
     Predicate substitute(const std::string &name, const IndexExpr &replacement) const;
+    std::unordered_set<std::string> symbols() const;
     std::string cuda() const;
     friend Predicate operator&&(Predicate lhs, Predicate rhs);
     friend Predicate operator||(Predicate lhs, Predicate rhs);
@@ -43,6 +51,5 @@ struct Access {
     std::optional<uint64_t>
     evaluate(const std::unordered_map<std::string, uint64_t> &bindings) const;
     Access substitute(const std::string &name, const IndexExpr &replacement) const;
-    std::string loadF32(uint32_t fallbackBits = 0) const;
 };
 } // namespace camel::tiles::kernel

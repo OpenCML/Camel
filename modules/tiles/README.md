@@ -21,6 +21,77 @@ func main(): int sync {
 
 ## API
 
+For programs with static f32 tensor shapes, the experimental region pass avoids
+wrapping individual functions:
+
+```text
+camel program.cml std::tiles std::fvm
+```
+
+`std::tiles` loads the bundled module automatically (`tiles::compile` is its full
+module name). It extracts supported, pure, dependency-convex regions and inserts
+explicit resident inputs, calls and host reads. Shared device results remain
+resident across regions. Other nodes execute normally on the selected scheduler.
+The rewrite itself does not initialize CUDA; runtime prefers CUDA and falls back
+to the original CPU graph for missing capability. Faults after target selection
+are not retried. No special import or test environment variable is required.
+
+Current limits: dynamically shaped tensors, symbolic dimensions and unsupported
+operators remain outside selected regions; CPU fallback interprets the region
+through the current scheduler. Compiled CPU kernels, device cost-based placement
+and shape-polymorphic compilation are not yet implemented. Use `std::tiles std::gir`
+or `std::tiles std::jgir` to inspect the rewritten graph.
+
+`gpu` is a function decorator that prefers GPU execution:
+
+```cml
+import { Tensor } from tensor
+import { gpu } from tiles
+
+@gpu
+func add(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> { return x + y }
+// add(x, y) now executes through Tiles and returns host tensors.
+```
+
+It preserves the function signature and wraps the original function as a traced
+capture. Unary and multiple arguments, function values, aggregate results and
+nested decorated calls are supported. Inside a GPU compilation, a nested dispatch
+is lowered as the underlying computation, without host execution or a nested GPU
+launch. Numeric permissions remain attached to the original operator nodes.
+For statically shaped eligible tensor regions, decorating the function uses the
+same region extraction and resident transfers as `std::tiles`. Unsupported nodes
+stay on CPU while supported regions prefer GPU; captures and CPU effects are
+preserved. Partitioning happens once when the decorated function value is built.
+Static regions now generate their launch plans and CUDA source from parameter types
+when outlined, without allocating placeholder input tensors or initializing CUDA.
+The process-local plan/source cache retains this work. NVRTC compilation still happens
+at execution time, as do graph extraction and binding validation; cached artifacts are
+not yet attached directly to graph calls. Symbolic and unknown shapes do not use this regional path.
+When no static region can be extracted, the existing whole-function, call-site
+specialization remains: an unavailable backend or unsupported computation runs
+the original function on the current CPU execution backend. Regional execution
+also falls back independently when its backend is unavailable. This is graph
+execution, not a fused CPU JIT kernel. Configuration errors, malformed graphs,
+compilation failures and device execution faults are reported; an executed GPU
+region is never replayed on CPU. `run` continues to require the GPU. Functions with mutable parameters, unbound context parameters or
+no ordinary inputs are currently rejected. This is separate from the planned
+`@kernel` block-kernel validation annotation.
+The annotation also supports local functions with captured values. Use `gpu(lambda)`
+when constructing a GPU-dispatched function value directly.
+
+CPU fallback may change the last bits of transcendental results such as `exp`
+and `log`: each backend must satisfy the operator's declared ulp bound, rather
+than match the other backend bit for bit. Correctly rounded primitive operations
+and specified reduction algorithms retain their strict numerical contract.
+
+The benchmark correctness gate compares optimized and unfused execution on the
+same device. Without relevant explicit numeric permissions it compares the raw
+output bits, including signed zeros; a tolerance is used only for outputs that
+depend on operations granting `contract`, `reassociate`, `approx_math` or
+`change_precision`. Reports distinguish `bitwise_elements` and `relaxed_elements`.
+This is an optimization equivalence check, not a CPU reference or a proof that
+transcendental functions satisfy their declared ulp bounds.
+
 NVRTC always receives `--fmad=false`, `--prec-div=true`, `--prec-sqrt=true`
 and `--ftz=false`. The in-process module cache compares the source and all compiler
 options, including the target architecture; device/context and NVRTC library are
@@ -71,10 +142,13 @@ FMA selection additionally requires the core declaration of correctly rounded
 f32 arithmetic sensitive to contraction; an opaque declaration grants no such
 optimization capability.
 
-A separate process-local source-template LRU looks up the exact lowered plan
-before printing CUDA. Runtime scalar/tensor contents and device owners are excluded;
-graph literals, shapes, indexing and launch choices are included. Storage planning
-and validation run on every call. It retains at most 32 entries and 16 MiB of
+A separate process-local plan/source LRU looks up the exact lowered computation
+before fusion scheduling or CUDA printing. Runtime scalar/tensor contents and device
+owners are excluded; graph literals, shapes, indexing, numeric permissions, operator
+declaration revisions and scheduling options are included. A hit restores the launch
+plan and source; storage planning and validation run on every call so host and
+resident inputs can share kernels without sharing allocation ownership.
+It retains at most 32 entries and 16 MiB of
 accounted entry payload (excluding allocator overhead), with synchronized access.
 This is not a persistent semantic fingerprint or a cache of graph compilation.
 
@@ -252,8 +326,8 @@ Physical matrix tile loads use structured buffer accesses: an index expression
 and a Boolean validity mask travel together through coordinate substitution.
 Host evaluation short-circuits masks and skips invalid addresses; CUDA lowering
 prints conditional loads with exact fallback bits. The host evaluator is useful
-for checking mappings but is not a symbolic bounds proof. Kernel loops, stores,
-barriers still need migration to a complete structured kernel IR.
+for checking mappings but is not a symbolic bounds proof. Kernel loops, stores
+and barriers now use the structured statement representation described below.
 
 Elementwise f32 and scalar f64 arithmetic now use immutable, typed `ScalarExpr`
 trees. Conversions and FMA are explicit operations; basic CUDA arithmetic uses
@@ -305,3 +379,120 @@ branch lowering, general region fusion, asynchronous memory planning,
 asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.
+
+### Structured kernel bodies
+
+Declared pointwise operands use their core affine access maps in fused serial
+lowering, including both levels of a permitted multiply/add contraction. Operand
+positions are distinct even when two arguments refer to the same graph value.
+The shared affine address composer checks each operand axis over the rectangular
+domain and is also used by tiled matrix loads. Pointwise lowering currently
+requires a direct parallel output domain and unconditional nonnegative affine
+accesses; unsupported maps are rejected rather than replaced with broadcasts.
+Row regions and ordered-reduction epilogues require canonical broadcast maps,
+so cross-row maps stay in the general physical schedule. Explicit internal
+primitives without index declarations retain their built-in physical indexing.
+
+Index instantiation during graph extraction calls the core's `sem::instantiate`
+by `OperId`, using the actual call's types and static slots. Layouts and synthetic
+gradient matrix primitives use that same protocol. Tensor's private index
+callbacks are not invoked directly, so a replaced core declaration supplies both
+the selected maps and the laws against which they are validated. Static slots
+are borrowed only inside extraction's no-collection scope and never retained in
+the owned execution plan. Extraction uses the execution context's FactStore to
+obtain `core.instance` when graph operand types match the concrete call and every
+instance parameter is known. Each read checks the graph revision and declaration
+epoch through the core store. Unknown graph facts remain unknown: call-specific
+instantiation stays in the owned plan and is never published into the shared
+function graph. `inspect` reports `graph_fact_instances` and
+`specialized_instances` as extraction query-result counts, not kernel counts or
+source-cache hit counts. Synthetic gradient primitives still instantiate directly
+because they have no originating graph node.
+
+Matrix multiplication, elementwise/layout fusion, canonical serial reductions
+and parallel maximum lower to a typed physical statement tree before CUDA
+serialization: lexical index/scalar bindings, masked loads and stores, loops,
+conditions, assignments and block barriers. Global and shared buffers have
+explicit element types and write permissions. The validator checks references,
+lexical scope and types, and rejects barriers under thread-dependent conditions
+or loops. There is no raw CUDA statement node. Address bounds, races and shared
+value initialization remain the lowering's proof obligations, checked by GPU
+edge-shape and canonical FMA-chain regressions rather than claimed by this validator.
+The accumulator survives across panels and padded K contributions are excluded.
+Row-region kernels use the same statement representation, including shared
+stage values, lane trees, integer exponent bounds and mutually exclusive exact
+tree/canonical-chain paths. All kernel families now use structured statements;
+the final CUDA printer owns statement syntax. Fault-reporting scalar chains use
+typed IEEE comparison conditions, an explicit status-word resource, fault reports
+and early-return statements. The validator rejects status-word aliasing, invalid
+fault ordinals, mistyped conditions and kernels mixing early exits with barriers
+without a reconvergence proof. Both signed zeros trigger scalar division faults;
+NaNs do not. Tensor division continues to use IEEE arithmetic without this check.
+Conditions carry two independently scoped arms. Both arms may assign existing
+accumulators; arm-local bindings never escape or become visible in the sibling
+arm. Barrier and early-exit checks traverse both arms, including empty-then
+branches. This supports mutually exclusive optimized and canonical reduction
+paths without re-evaluating a mutable condition after the first arm executes.
+Physical scalar registers and buffers additionally support i32/u32, independently
+of the public tensor element types. Integer add/subtract/multiply wrap modulo
+2^32; min/max and comparisons use the declared signedness. Bitwise AND/OR/XOR
+and logical right shift operate on the bit representation; shift counts use
+their low five bits. Explicit equal-width 32-bit bitcasts preserve all payload
+bits, including floating NaNs and signed zero. Integer division and numeric
+float/integer conversions are currently rejected. These are internal physical
+instructions, not new Camel source-language integer semantics. The host oracle
+and CUDA emitter implement the same rules without signed C++ overflow.
+Serial reduction bodies explicitly retain their accumulator type, initial value,
+ordered loop, mean finalization and output rounding. Fused producer and epilogue
+nodes use lexical scalar bindings, with contraction permitted only by both
+original operator declarations and lexical grants. Parallel maximum has typed
+shared accesses and uniform barriers outside each lane predicate.
+
+Matrix kernels now require the core's rank-two matrix domain and ascending f32
+FMA-chain law. Operand addresses are composed from the declared affine maps;
+shared A/B panels require independence from the other output dimension. The
+consumer rejects unsupported guards, indirect maps, out-of-domain coordinates
+and incompatible laws before execution. Synthetic gradient matrix primitives
+receive their own matmul contract while retaining the original gradient contract
+as a compilation dependency. The source-template key now serializes the complete
+owned indexing instance, including expressions, parameters, predicates and law
+selection; changing a map cannot reuse previously generated addresses.
+
+Axis sum/mean/maximum lowering validates the core iteration roles, direct output
+projection and full numerical law (accumulator, initial value, order, empty result
+and finalization). Its serial and parallel-maximum loads use the core operand
+map, with the same bounds checks as pointwise and matrix accesses. Canonical
+maps retain the compact row/axis address. Noncanonical affine reads are supported
+by those kernels but excluded from row regions, whose shared-memory accesses
+assume canonical rows. Guarded, indirect and negative-stride reads are rejected.
+Full-tensor sum/mean and sum-to use the same traversal and mapping checks.
+Reduction dimensions are traversed lexicographically in domain order, preserving
+the canonical row-major contribution sequence even for nonadjacent sum-to axes.
+Full sums retain f64 results and accumulators; sum-to retains its f32 accumulator.
+Only direct output projections and unconditional nonnegative affine reads are
+supported; symbolic or guarded domains still require further lowering.
+
+## Graph region analysis
+
+`regions<fn>()` returns JSON describing static GPU candidate regions of `fn`:
+member node IDs in dependency order, distinct boundary inputs and outputs, and
+exclusion reasons. It inspects the function graph without calling it or loading
+CUDA. Candidate selection uses core declarations, type/instance facts and the
+same physical index-contract checks as lowering. The current coverage is static
+f32 pointwise operations, rank-2 matrix multiplication and supported reductions;
+dynamic shapes, scalar arithmetic, layouts and other node kinds remain boundaries.
+This is analysis for the graph pass, not automatic GPU execution.
+
+Each candidate is also extracted into a function draft. Runtime boundary values
+become distinct parameters; constant boundary values (including reduction axes)
+stay constants. Multiple exits are packed into a tuple. Operator types, source
+origins and numerical permissions are preserved. Inspection reports `parameters`,
+`result_arity` and `extracted_nodes`; it does not install or execute these drafts.
+
+Regions are connected and dependency-convex: replacing each region by one call
+must leave the complete CPU/GPU dependency graph acyclic. In particular, a direct
+GPU edge cannot justify fusion across a CPU detour. Shared values used outside a
+region remain explicit outputs; unreachable nodes are omitted. Control-edge
+endpoints are excluded, and this analysis does not descend into calls, branch
+arms or LOOP bodies. The internal planner is deterministic and produces maximal
+legal contractions for its greedy order, not a globally optimal cost partition.

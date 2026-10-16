@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 20, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,10 +69,10 @@ using namespace camel::jit;
     } break;
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
-    Frame *currFrame                = rootFrame;
-    Frame *rootActiveFrame          = rootFrame;
-    const size_t stackDepthBase     = stackDepth_;
-    const size_t nestedCallsBase    = nestedCalls_;
+    Frame *currFrame             = rootFrame;
+    Frame *rootActiveFrame       = rootFrame;
+    const size_t stackDepthBase  = stackDepth_;
+    const size_t nestedCallsBase = nestedCalls_;
 
     try {
         while (true) {
@@ -351,8 +351,8 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     if (currFrame == rootActiveFrame) {
                         return CallResult{NullSlot, newFrame, reinterpret_cast<void *>(fn)};
                     }
-                    currFrame     = newFrame;
-                    slot_t result = invokeOwnedJitFrame(fn, newFrame, currentJitCtx_);
+                    currFrame                = newFrame;
+                    slot_t result            = invokeOwnedJitFrame(fn, newFrame, currentJitCtx_);
                     auto [lastPC, lastFrame] = pop();
                     pc                       = lastPC;
                     currFrame                = lastFrame;
@@ -387,15 +387,10 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             } break;
 
             case OpCode::OPER: {
-                const data_arr_t nargs = bc.nargs();
-                const data_arr_t wargs = bc.wargs();
-                auto func              = bc.extra()->func;
                 EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                     "FastVM",
                     "Executing operator {}.",
-                    context_->execMgr().getNameOfAnOperator(func)));
-                FrameArgsView withView(*currFrame, wargs);
-                FrameArgsView normView(*currFrame, nargs);
+                    context_->execMgr().getNameOfAnOperator(bc.extra()->func)));
                 slot_t result;
                 if (camel::core::effect_trace::enabled()) [[unlikely]] {
                     if (auto sc = context_->sourceContext()) {
@@ -403,7 +398,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     }
                 }
                 try {
-                    result = func(withView, normView, *context_);
+                    result = invokeNativeOperator(bc, *currFrame);
                 } catch (const RuntimeFault &fault) {
                     throw reportRuntimeFault(
                         *context_,

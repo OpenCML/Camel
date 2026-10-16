@@ -13,17 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "compile.h"
-#include "camel/execute/fault_isolation.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/reachable.h"
 #include "runtime/graph_build.h"
@@ -232,14 +232,12 @@ static bytecode_vec_t compileRuntimeGraph(
     // JOINs in tail position: the tail value when it is a JOIN, and every JOIN whose value it
     // yields through forwarding GATEs. A call ending an arm of one of them is a tail call.
     std::unordered_set<camel::runtime::gc_node_ref_t> tailJoins;
-    if (const auto *tailNode = tailValueNode != camel::runtime::kInvalidNodeRef
-                                   ? graph->node(tailValueNode)
-                                   : nullptr;
+    if (const auto *tailNode =
+            tailValueNode != camel::runtime::kInvalidNodeRef ? graph->node(tailValueNode) : nullptr;
         tailNode && tailNode->kind == camel::runtime::GCNodeKind::Join) {
         auto tailPos = std::find(topoSortedIndices.begin(), topoSortedIndices.end(), tailValueNode);
         if (tailPos != topoSortedIndices.end() &&
-            hasOnlyTrivialSuffixAfter(
-                static_cast<size_t>(tailPos - topoSortedIndices.begin()))) {
+            hasOnlyTrivialSuffixAfter(static_cast<size_t>(tailPos - topoSortedIndices.begin()))) {
             tailJoins.insert(tailValueNode);
             for (const auto value :
                  camel::execute::collectRuntimeTailJoinArmValues(graph, tailValueNode)) {
@@ -258,7 +256,8 @@ static bytecode_vec_t compileRuntimeGraph(
     // into the next arm: every arm tail laid out between its BRCH and JOIN gets a JUMP to the
     // JOIN after it (the one before the JOIN itself is folded away by the optimizer). A tail
     // outside that range is a value computed before the branch; that arm is empty.
-    unordered_map<camel::runtime::gc_node_ref_t, vector<camel::runtime::gc_node_ref_t>> armExitJoins;
+    unordered_map<camel::runtime::gc_node_ref_t, vector<camel::runtime::gc_node_ref_t>>
+        armExitJoins;
     {
         unordered_map<camel::runtime::gc_node_ref_t, size_t> position;
         for (size_t i = 0; i < topoSortedIndices.size(); ++i) {
@@ -358,9 +357,9 @@ static bytecode_vec_t compileRuntimeGraph(
             const auto *srcRecord = graph->node(sourceRef);
             const auto *accBody   = graph->nodeBodyAs<camel::runtime::GCAccsBody>(runtimeNodeIndex);
             ASSERT(
-                srcRecord != nullptr && srcRecord->dataType != nullptr,
+                srcRecord != nullptr && srcRecord->dataType() != nullptr,
                 "ACCS source node must exist.");
-            ASSERT(srcRecord->dataType->isComposite(), "ACCS source node must be composite.");
+            ASSERT(srcRecord->dataType()->isComposite(), "ACCS source node must be composite.");
 
             size_t index = 0;
 
@@ -553,7 +552,7 @@ static bytecode_vec_t compileRuntimeGraph(
                 ctx->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
             }
 
-            appendBytecode(
+            auto *native = appendBytecode(
                 bytecodes,
                 OpCode::OPER,
                 record->dataIndex,
@@ -563,7 +562,10 @@ static bytecode_vec_t compileRuntimeGraph(
                 true,
                 {
                     .func = *opFunc,
-                });
+                },
+                2);
+            *native->extra2() =
+                graph->nodeBodyAs<camel::runtime::GCOperBody>(runtimeNodeIndex)->oper;
             break;
         }
 
@@ -571,12 +573,11 @@ static bytecode_vec_t compileRuntimeGraph(
             // One instruction: the interpreter runs the rounds (FastVMSchedPass::evalLoop),
             // calling the condition and the body graph as a higher-order operator calls its
             // function. Three extra words: the two graphs, then the mark (bytecode.h).
-            const auto kind = graph->loopKindOf(runtimeNodeIndex);
-            const MarkOpCode mark =
-                kind == camel::core::LoopKind::While ? MarkOpCode::LoopWhile
-                : kind == camel::core::LoopKind::For ? MarkOpCode::LoopFor
-                                                     : MarkOpCode::LoopForWhile;
-            Bytecode *bc = appendBytecode(
+            const auto kind       = graph->loopKindOf(runtimeNodeIndex);
+            const MarkOpCode mark = kind == camel::core::LoopKind::While ? MarkOpCode::LoopWhile
+                                    : kind == camel::core::LoopKind::For ? MarkOpCode::LoopFor
+                                                                         : MarkOpCode::LoopForWhile;
+            Bytecode *bc          = appendBytecode(
                 bytecodes,
                 OpCode::SCHD,
                 record->dataIndex,

@@ -90,6 +90,10 @@ npm run build        # 可执行文件在 out/latest/bin/camel
 
 把 `out/latest/bin` 加入 `PATH`（并把 `CAMEL_HOME` 设为 `out/latest`）。同一棵源码树还可以打出名为 `camel-lang` 的 Python wheel，见 [pypi-packaging.md](pypi-packaging.md)。
 
+### VS Code
+
+推荐安装 [OpenCML-Ext 插件](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)，在 VS Code 中使用语法高亮、语言服务、交互式 GIR 浏览和调试。将 `opencmlLanguageServer.camelPath` 设为构建得到的 `camel` 可执行文件路径，插件会在同一目录查找 `camel-ls` 和 `camel-db`。较新的运行时还支持逐遍调试、查看暂停时的 GIR 和内存。配置方法见[插件 README](https://github.com/OpenCML/OpenCML-Ext#readme)，运行时能力见[调试指南](debugging.cn.md)。
+
 ### Hello, Camel
 
 ```camel

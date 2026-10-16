@@ -156,8 +156,11 @@ a request cancelled while it waited is not computed.
   There is no incremental dependency index; scans are bounded at 5000 sources and fail
   explicitly above that limit. Cancellation is checked between compilations, not within one.
 - **Reading features** include scope/comment folding, token/scope selection ranges, explicit
-  named annotation type navigation, inferred local type hints and unambiguous literal argument
-  names. Call hierarchy uses resolved callee references, not guessed indirect runtime calls.
+  named annotation type navigation, inferred local type hints and unambiguous positional argument
+  names. The syntax index records complete argument ranges from the CST, including arrays,
+  lambdas and nested calls. Hints never attach to nested elements; named arguments and positions
+  after a spread are omitted, as are names already identical to the source argument. Call
+  hierarchy uses resolved callee references, not guessed indirect runtime calls.
   Quick fixes only replace a unique one-character unresolved name and must compile successfully.
   File moves invalidate analysis but do not rewrite imports.
 - **Fields** are found by receiver type text, not by a declaration: a struct type has no

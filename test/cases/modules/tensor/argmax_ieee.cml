@@ -1,0 +1,20 @@
+// argmax and argmin compare by IEEE 754-2019 maximum and minimum (design principles 2.14): with a
+// NaN the position of the first NaN; on a tie the position of the first extreme, +0 above -0.
+import { Tensor, reshape, argmax, argmin } from tensor
+
+func main(): int sync {
+    let tie = reshape([1.0, 3.0, 3.0, -2.0, -2.0], [5])
+    let z = reshape([1.0, 0.0, 1.0, 0.0], [4])
+    let nan = reshape([1.0, 5.0, 1.0, -9.0], [4]) * (z / z + 1.0)
+    let zeros = reshape([-0.0, 0.0, -0.0, 0.0], [4])
+    let zeros2 = reshape([0.0, -0.0, 0.0], [3])
+    let ints = reshape([3, 7, 7, 1, 1], [5])
+    let rows = reshape([2.0, -0.0, 0.0, 2.0, 0.0, -0.0], [2, 3])
+    println(argmax(tie, 0)); println(argmin(tie, 0))
+    println(argmax(nan, 0)); println(argmin(nan, 0))
+    println(argmax(zeros, 0)); println(argmin(zeros, 0))
+    println(argmax(zeros2, 0)); println(argmin(zeros2, 0))
+    println(argmax(ints, 0)); println(argmin(ints, 0))
+    println(argmax(rows, 1)); println(argmin(rows, 1)); println(argmin(rows, 0, true))
+    return 0
+}

@@ -5,7 +5,7 @@ tags = ["feat", "trans", "dump"]
 
 [[tests]]
 name = "port_names_and_fill_types"
-desc = "DOT exports preserve normal, with and captured parameter names and concrete aggregate FILL types."
+desc = "DOT exports preserve parameter names and concrete output types of data, operators, calls, functions, aggregates and field access; synthetic boundaries do not claim node types."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/port_fill_metadata.py"

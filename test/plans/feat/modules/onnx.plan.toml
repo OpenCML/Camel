@@ -1532,6 +1532,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
 
 [[tests]]
+name = "ort_slice_bounds"
+desc = "A slice whose end depends on the model input (x[0 : int(sum(x))]) exported alone and inside a branch on the data: on ONNX Runtime, ends within [-n, n] give the NumPy slice (negative ones counted from the end) and ends outside make the run fail, as Camel faults (design principles 2.10). The ONNX Slice alone clamps, so each bound the exporter cannot prove in range goes through a Gather guard; it used to return the clamped slice."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_slice_bounds.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort slice bounds: 0 failing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
 name = "ort_linear_recursion"
 desc = "Three hand-written linear recursions whose depth depends on the model input (the call's result added to; a right fold that post-processes the result with a counter, a changing state and an unchanged argument; one with the arms swapped and a branch in the post-processing) export as paired ONNX Loops and match the recursions written in NumPy on ONNX Runtime for depths 0, 1 and more."
 kind = "behavior"

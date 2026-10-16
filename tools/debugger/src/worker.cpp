@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,12 +35,12 @@
 #include "nlohmann/json.hpp"
 
 #include "camel/core/debug_breakpoint.h"
+#include "camel/core/error/diagnostics/render.h"
 #include "camel/init.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "command/commands.h"
 #include "command/dispatcher.h"
-#include "camel/core/error/diagnostics/render.h"
 #include "compile.h"
 #include "core/debug_core.h"
 #include "gir_json.h"
@@ -130,7 +130,7 @@ static void parseRunBodyAndSetPasses(const std::string &body) {
 
 /// The launch of a debug session: what to run and how (docs/technical/35_debugger.md, 7.3).
 static void applyLaunchOptions(const nlohmann::json &j) {
-    auto &st = getState();
+    auto &st           = getState();
     const auto strings = [&](const char *key, std::vector<std::string> &into) {
         into.clear();
         if (auto it = j.find(key); it != j.end() && it->is_array()) {
@@ -149,18 +149,25 @@ static void applyLaunchOptions(const nlohmann::json &j) {
             camel::core::error::DiagFormat::Rich,
             camel::core::error::ColorMode::Never);
     }
-    nlohmann::json configure{{"stopOnEntry", j.value("stopOnEntry", false)}};
+    nlohmann::json configure{
+        {"stopOnEntry", j.value("stopOnEntry", false)},
+        {"stopOnPassEntry", j.value("stopOnPassEntry", false)}};
     if (auto frames = j.find("frames"); frames != j.end()) {
         configure["frames"] = *frames; // "functions" or "subgraphs" (35_debugger.md, 5.4)
     }
     core::DebugCore::instance().command("configure", configure);
+    core::DebugCore::instance().command(
+        "setPassBreakpoints",
+        {{"indices", j.value("passBreakpoints", nlohmann::json::array())}});
 }
 
 /// What the Web UI polls as the pause of a task (GET /api/step-paused, the lastAlloc of
 /// /api/state), from a stop of the core.
 static std::string pauseJsonOf(const nlohmann::json &stop) {
     nlohmann::json j;
-    j["phase"]  = "gir_node";
+    j["phase"] = stop.contains("pipeline") ? "pipeline" : "gir_node";
+    if (stop.contains("pipeline"))
+        j["pipeline"] = stop["pipeline"];
     j["reason"] = stop.value("reason", "");
     if (auto f = stop.find("frame"); f != stop.end() && f->is_object()) {
         const std::string graphId = f->value("graphId", "");
@@ -237,19 +244,28 @@ int runWorkerMode(int argc, char *argv[]) {
     EXEC_WHEN_DEBUG({
         camel::DebugBreakpoint::RegisterType("alloc");
         camel::DebugBreakpoint::RegisterType("alloc_before");
+        camel::DebugBreakpoint::RegisterType("alloc_boundary");
         camel::DebugBreakpoint::RegisterType("gir_node");
         camel::DebugBreakpoint::SetHandler([](const char *type, const void *ctx) {
             if (!type)
                 return;
+            if (std::strcmp(type, "alloc_boundary") == 0) {
+                auto *evt = static_cast<const mm::AllocEvent *>(ctx);
+                if (evt)
+                    core::DebugCore::instance().allocationEvent(evt->size, evt->space, evt->ptr);
+                return;
+            }
             if (std::strcmp(type, "alloc_before") == 0) {
                 auto *evt = static_cast<const mm::PreAllocEvent *>(ctx);
-                if (evt)
+                if (evt &&
+                    !core::DebugCore::instance().allocationEvent(evt->size, evt->space, nullptr))
                     getServer().pauseAndWaitForContinue(nullptr, evt->size, evt->space);
                 return;
             }
             if (std::strcmp(type, "alloc") == 0) {
                 auto *evt = static_cast<const mm::AllocEvent *>(ctx);
-                if (evt)
+                if (evt &&
+                    !core::DebugCore::instance().allocationEvent(evt->size, evt->space, evt->ptr))
                     getServer().pauseAndWaitForContinue(evt->ptr, evt->size, evt->space);
                 return;
             }

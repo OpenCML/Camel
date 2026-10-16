@@ -11,6 +11,7 @@
 // Checked tensor schedules and interval-based storage reuse for one ordered stream.
 #include "camel/core/operator_table.h"
 #include "tiles/device.h"
+#include "tiles/internal/kernel_ir.h"
 #include "tiles/internal/row_kernel.h"
 #include "tiles/program.h"
 #include <algorithm>
@@ -119,7 +120,7 @@ std::vector<Lifetime> lifetimes(const Program &p) {
 
 bool elementwise(const std::string &op) { return unary(op) || binary(op); }
 
-void validate(const Program &p) {
+void validate(const Program &p, InputBindings bindings) {
     require(!p.nodes.empty() && !p.outputs.empty(), "missing output");
     auto &table                 = core::OperatorTable::instance();
     const auto declarationEpoch = table.declarationEpoch();
@@ -170,6 +171,9 @@ void validate(const Program &p) {
                 n.dtype == DType::F32 || (n.dtype == DType::F64 && n.shape.empty()),
                 "input payload dtype");
             require(n.inputs.empty(), "input has dependencies");
+            if (bindings == InputBindings::Deferred && !n.resident && n.data.empty() &&
+                !n.scalarBits)
+                continue;
             if (n.resident)
                 require(
                     n.data.empty() && !n.scalarBits && n.resident->shape == n.shape &&
@@ -203,6 +207,7 @@ void validate(const Program &p) {
             require(
                 n.op != "mean_all" || elements(p.nodes[n.inputs[0]].shape),
                 "mean of empty tensor");
+            (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
             continue;
         }
         if (n.op == "constant64") {
@@ -228,6 +233,9 @@ void validate(const Program &p) {
                 n.op == "matmul" || n.op == "reindex",
             "unknown operation");
         require(n.inputs.size() == (binary(n.op) || n.op == "matmul" ? 2 : 1), "operation arity");
+        if (elementwise(n.op) && n.indexing)
+            for (size_t input = 0; input < n.inputs.size(); ++input)
+                (void)kernel::pointwiseAddress(p, n, input, kernel::IndexExpr(0));
         const auto &a = p.nodes[n.inputs[0]].shape;
         if (n.op == "sum_to")
             require(
@@ -259,7 +267,10 @@ void validate(const Program &p) {
             const auto &b = p.nodes[n.inputs[1]].shape;
             require(a.size() == 2 && b.size() == 2, "matmul rank");
             require(a[1] == b[0] && n.shape == Shape{a[0], b[1]}, "matmul dimensions");
+            kernel::validateMatmulContract(p, n);
         }
+        if (n.op == "sum_to")
+            (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
         if (reduction) {
             require(
                 n.attributes.size() == 1 && n.attributes[0] >= 0 &&
@@ -271,12 +282,13 @@ void validate(const Program &p) {
             kept[axis] = 1;
             removed.erase(removed.begin() + axis);
             require(n.shape == kept || n.shape == removed, "reduction output shape");
+            (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
         }
     }
 }
 
-void schedule(Program &p, ScheduleOptions options) {
-    validate(p);
+void schedule(Program &p, ScheduleOptions options, InputBindings bindings) {
+    validate(p, bindings);
     const size_t count = p.nodes.size();
     std::vector<size_t> users(count), consumer(count, SIZE_MAX), owner(count), groupSize(count, 1);
     std::iota(owner.begin(), owner.end(), 0);
@@ -323,7 +335,8 @@ void schedule(Program &p, ScheduleOptions options) {
         bool compatible = true;
         for (size_t member = 0; member < count; ++member)
             if (owner[member] == root &&
-                (!elementwise(p.nodes[member].op) || p.nodes[member].shape != p.nodes[id].shape))
+                (!elementwise(p.nodes[member].op) || p.nodes[member].shape != p.nodes[id].shape ||
+                 !kernel::canonicalPointwise(p, p.nodes[member])))
                 compatible = false;
         if (!compatible)
             continue;
@@ -373,8 +386,13 @@ void schedule(Program &p, ScheduleOptions options) {
                 .gridX          = static_cast<unsigned>(std::min<size_t>(region->rows, 65535))}};
         }
     }
-    const auto life = lifetimes(p);
-    p.storage       = {};
+    planStorage(p, bindings);
+}
+
+void planStorage(Program &p, InputBindings bindings) {
+    const size_t count = p.nodes.size();
+    const auto life    = lifetimes(p);
+    p.storage          = {};
     p.storage.slots.assign(count, SIZE_MAX);
     std::vector<size_t> order;
     for (size_t id = 0; id < count; ++id)
@@ -399,11 +417,11 @@ void schedule(Program &p, ScheduleOptions options) {
         until[selected]     = life[id].end;
         p.storage.slots[id] = selected;
     }
-    validatePlan(p);
+    validatePlan(p, bindings);
 }
 
-void validatePlan(const Program &p) {
-    validate(p);
+void validatePlan(const Program &p, InputBindings bindings) {
+    validate(p, bindings);
     require(p.storage.slots.size() == p.nodes.size(), "storage mapping size");
     std::vector<size_t> stageOf(p.nodes.size(), SIZE_MAX);
     for (size_t i = 0; i < p.nodes.size(); ++i)
@@ -443,7 +461,8 @@ void validatePlan(const Program &p) {
                 if (member > reduction)
                     require(
                         member < p.nodes.size() && elementwise(p.nodes[member].op) &&
-                            p.nodes[member].shape == p.nodes[reduction].shape,
+                            p.nodes[member].shape == p.nodes[reduction].shape &&
+                            kernel::canonicalPointwise(p, p.nodes[member]),
                         "ordered reduction epilogue domain");
         }
         if (launch.implementation == "parallel_max") {
@@ -561,7 +580,8 @@ std::string inspect(const Program &p) {
             out << ',';
         out << p.outputs[i];
     }
-    out << "],\"numeric_permissions\":[";
+    out << "],\"graph_fact_instances\":" << p.graphFactInstances
+        << ",\"specialized_instances\":" << p.specializedInstances << ",\"numeric_permissions\":[";
     for (size_t i = 0; i < p.nodes.size(); ++i) {
         if (i)
             out << ',';
@@ -588,8 +608,11 @@ std::string inspect(const Program &p) {
             << std::quoted(
                    core::sem::numericClassName(
                        contract.declaration ? contract.declaration->numeric.cls
-                                            : core::sem::NumericClass::Opaque))
-            << '}';
+                                            : core::sem::NumericClass::Opaque));
+        if (contract.declaration &&
+            contract.declaration->numeric.cls == core::sem::NumericClass::Bounded)
+            out << ",\"ulp_bound\":" << contract.declaration->numeric.ulpBound;
+        out << '}';
     }
     out << "]}";
     return out.str();

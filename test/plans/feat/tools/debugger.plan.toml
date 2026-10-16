@@ -2,7 +2,7 @@ id = "tools.debugger"
 order = 910
 tier = "feat"
 tags = ["feat", "tools", "debugger"]
-desc = "camel-db, the debugger. Each test is a script that starts camel-db and talks to it by protocol (test/tools/debugger/client.mjs): the HTTP API of the Web UI, or the Debug Adapter Protocol over stdio."
+desc = "camel-db, the debugger. Each test is a script that starts camel-db and talks to it by protocol (test/tools/debugger/client.mjs): the retained HTTP gateway API, or the Debug Adapter Protocol over stdio."
 
 [defaults]
 kind = "behavior"
@@ -59,3 +59,18 @@ name = "debugger.loop_frames"
 desc = "A loop in the REPL on both back ends: its body is part of the frame of the function it is written in (design principles 2.11), a breakpoint in the body stops once per round with that round's element and state, and frames subgraphs shows the body as `squares [loop body at line N]`."
 case = "../../../cases/tools/debugger/loop_frames.test.mjs"
 timeout_ms = 300000
+
+[[tests]]
+name = "debugger.dap_pipeline"
+desc = "Release compiler boundary stops, live JSON GIR, pass stepping, repeated pass names, runtime handoff, invalid configuration and terminate/consumed graphs."
+case = "../../../cases/tools/debugger/dap_pipeline.test.mjs"
+
+[[tests]]
+name = "debugger.dap_memory"
+desc = "Paused memory overview, bounded byte/object paging, lossless addresses, invalid requests, Release capability and session end."
+case = "../../../cases/tools/debugger/dap_memory.test.mjs"
+
+[[tests]]
+name = "debugger.dap_node_breakpoints"
+desc = "GIR origins set at compiler entry hit the transformed runtime node on NodeVM/FastVM; paused origin/source, actual GIR, clear and resume."
+case = "../../../cases/tools/debugger/dap_node_breakpoints.test.mjs"

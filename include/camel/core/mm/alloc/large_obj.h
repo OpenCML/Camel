@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -64,6 +64,9 @@ class LargeObjectAllocator : public IAllocator {
     }
 
     void *alloc(size_t size, size_t align = alignof(slot_t)) override {
+#ifndef NDEBUG
+        AllocationDebugScope debugScope;
+#endif
         std::lock_guard<std::mutex> lock(mutex_);
         ASSERT(align == alignof(slot_t), "Alignment other than 8 bytes is not supported");
 

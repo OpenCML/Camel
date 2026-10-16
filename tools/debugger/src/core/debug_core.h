@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -59,6 +59,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace debugger::core {
@@ -87,6 +88,13 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     /// After the run: `outcome` is "completed", "failed" or "terminated".
     void endRun(const std::string &outcome, std::optional<int> exitCode);
 
+    /// A materialized graph boundary, called synchronously on the program thread.
+    /// Index 0 precedes all passes; later indices identify a returned graph, not a name.
+    void pipelineBoundary(size_t index, const std::string &pass, camel::runtime::GCGraph *graph);
+
+    /// Debug allocation hooks: true when handled by the native core (including filtered events).
+    bool allocationEvent(size_t size, const char *space, const void *ptr);
+
     // ---- control; any thread ----
 
     /// Executes one command (see debug_core.cpp for the list). Never throws: an error is
@@ -113,7 +121,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     DebugCore() = default;
 
     enum class State { Idle, Loaded, Running, Stopped, Finished };
-    enum class StepKind { None, Node, Line, Out };
+    enum class StepKind { None, Node, Line, Out, Pass };
     enum class Pending { None, Enter, Tail };
 
     /// Where a frame is in the text: the line it is on (2.1) and the source function of it.
@@ -124,19 +132,19 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     };
 
     struct ShadowFrame {
-        uint64_t id                         = 0;
-        camel::runtime::GCGraph *graph      = nullptr;
-        camel::core::context::Frame *frame  = nullptr;
-        GraphInfo *info                     = nullptr;
-        const NodeInfo *node                = nullptr; // about to run, running, or waited in
-        origin_t origin                     = 0;       // of what is about to run
-        SourceLoc loc;                                 // of that origin
-        int lastFile                        = -1;      // the line the frame is on (2.1)
-        int lastLine                        = 0;
-        int lastFunction                    = -1;
-        int pendingNode                     = -1; // index of the node whose result is due
-        std::vector<bool> done;                   // by node index: has run in this activation
-        uint32_t tailReplaced               = 0;
+        uint64_t id                        = 0;
+        camel::runtime::GCGraph *graph     = nullptr;
+        camel::core::context::Frame *frame = nullptr;
+        GraphInfo *info                    = nullptr;
+        const NodeInfo *node               = nullptr; // about to run, running, or waited in
+        origin_t origin                    = 0;       // of what is about to run
+        SourceLoc loc;                                // of that origin
+        int lastFile     = -1;                        // the line the frame is on (2.1)
+        int lastLine     = 0;
+        int lastFunction = -1;
+        int pendingNode  = -1;  // index of the node whose result is due
+        std::vector<bool> done; // by node index: has run in this activation
+        uint32_t tailReplaced                        = 0;
         camel::execute::InstructionEffect lastEffect = camel::execute::InstructionEffect::None;
 
         // ---- the function activation the frame is part of (5.4) ----
@@ -160,15 +168,15 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         StepKind kind = StepKind::None;
         bool into     = false;
         /// Steps by activation of a function (`frames` is "functions"), or by shadow frame.
-        bool folded   = true;
-        size_t depth  = 0;  // of the frame or of the activation, as `folded` says
-        uint64_t frame = 0; // the frame or the activation the step started in
+        bool folded              = true;
+        size_t depth             = 0; // of the frame or of the activation, as `folded` says
+        uint64_t frame           = 0; // the frame or the activation the step started in
         uint64_t startActivation = 0; // the activation it started in, in both cases
-        int file      = -1;
-        int line      = 0;
-        int function  = -1;
-        bool foreign  = false; // started in code inlined from another function
-        std::string graph;     // node steps of the HTTP API: only nodes of this graph
+        int file                 = -1;
+        int line                 = 0;
+        int function             = -1;
+        bool foreign             = false; // started in code inlined from another function
+        std::string graph;                // node steps of the HTTP API: only nodes of this graph
         /// Where the caller of the start frame was: a line step that returns there may
         /// have gone past lines of the caller as well (4.2).
         uint64_t caller = 0;
@@ -206,7 +214,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
 
     struct Handle {
         enum class Kind { Locals, Captured, Inlined, Nodes, Value } kind = Kind::Value;
-        uint64_t frame = 0;
+        uint64_t frame                                                   = 0;
         ValueView view;
     };
 
@@ -254,13 +262,15 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     std::vector<Variable> capturedOf(const Chain &chain);
     std::vector<Variable> inlinedOf(const Chain &chain);
     std::vector<Variable> nodesOf(const Chain &chain);
-    std::optional<Variable> nodeVariable(ShadowFrame &frame, const NodeInfo &node, std::string name);
+    std::optional<Variable>
+    nodeVariable(ShadowFrame &frame, const NodeInfo &node, std::string name);
     json variablesJson(std::vector<Variable> variables, uint64_t frame);
     json variableJson(const Variable &variable, uint64_t frame);
     json scopesJson(uint64_t frameId);
     json handleJson(int reference);
     json evaluateJson(uint64_t frameId, const std::string &expression);
     json graphJson(uint64_t frameId);
+    json memoryCommand(const std::string &name, const json &args);
     int newHandle(Handle handle);
 
     // any thread
@@ -279,17 +289,22 @@ class DebugCore final : public camel::execute::ExecutionObserver {
 
     // ---- state shared between threads, guarded by mutex_ ----
     std::mutex mutex_;
-    std::condition_variable cond_;       // wakes the stopped program
-    std::condition_variable eventCond_;  // wakes event polls
+    std::condition_variable cond_;      // wakes the stopped program
+    std::condition_variable eventCond_; // wakes event polls
     State state_ = State::Idle;
     std::deque<json> events_;
     uint64_t nextEventSeq_ = 1;
     std::vector<LineBreakpoint> lineBreakpoints_;
     std::vector<FunctionBreakpoint> functionBreakpoints_;
     std::vector<origin_t> nodeBreakpoints_;
-    bool stopOnUncaught_ = true;
-    bool stopOnIsolated_ = false;
-    bool stopOnEntry_    = false;
+    bool stopOnUncaught_    = true;
+    bool stopOnIsolated_    = false;
+    bool allocationEnabled_ = false;
+    std::set<std::string> allocationSpaces_;
+    std::thread::id programThread_;
+    bool stopOnPassEntry_ = false;
+    std::set<size_t> passBreakpoints_;
+    bool stopOnEntry_     = false;
     bool stopOnEntryOnce_ = false;
     int nextBreakpointId_ = 1;
     json lastStop_;
@@ -307,14 +322,27 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     std::atomic<int> abort_{0}; // 0 none, 1 terminate, 2 restart
 
     // ---- the index; guarded by indexMutex_ (never held while waiting) ----
-    std::mutex indexMutex_;
+    // Allocation callbacks can run inside an index update. Track occupancy instead
+    // of try_lock on a mutex the same thread may already own (undefined behavior).
+    class IndexMutex {
+      public:
+        void lock();
+        void unlock();
+        bool busy() const;
+
+      private:
+        std::mutex mutex_;
+        std::atomic<bool> held_{false};
+    } indexMutex_;
     ProgramIndex index_;
 
     // ---- owned by the program's thread ----
     std::vector<ShadowFrame> stack_;
     std::vector<size_t> activationBase_;
-    Pending pending_       = Pending::None;
-    uint64_t nextFrameId_  = 1;
+    Pending pending_      = Pending::None;
+    uint64_t nextFrameId_ = 1;
+    // Serialized only while stopped at a pipeline boundary; no retained GC pointers.
+    std::string pipelineGir_;
     bool runIndexed_       = false;
     bool entryStopPending_ = false;
     Step step_;

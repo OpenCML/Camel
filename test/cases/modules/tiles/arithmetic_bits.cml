@@ -1,0 +1,27 @@
+module tiles_arithmetic_bits
+import { Tensor, load_npy, save_npy, sqrt } from tensor
+import { run } from tiles
+import { get_env } from sys
+func arithmetic(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>) {
+    return (a + b, a - b, a * b, a / b, sqrt(a), a * b + a)
+}
+func main(): int sync {
+    let folder = get_env('TILES_TEST_OUT')
+    let a = load_npy(folder + '/a.npy') as Tensor<f32>
+    let b = load_npy(folder + '/b.npy') as Tensor<f32>
+    let cpu = arithmetic(a, b)
+    let gpu = run<arithmetic>((a, b))
+    save_npy(cpu.0, folder + '/cpu0.npy')
+    save_npy(cpu.1, folder + '/cpu1.npy')
+    save_npy(cpu.2, folder + '/cpu2.npy')
+    save_npy(cpu.3, folder + '/cpu3.npy')
+    save_npy(cpu.4, folder + '/cpu4.npy')
+    save_npy(cpu.5, folder + '/cpu5.npy')
+    save_npy(gpu.0, folder + '/gpu0.npy')
+    save_npy(gpu.1, folder + '/gpu1.npy')
+    save_npy(gpu.2, folder + '/gpu2.npy')
+    save_npy(gpu.3, folder + '/gpu3.npy')
+    save_npy(gpu.4, folder + '/gpu4.npy')
+    save_npy(gpu.5, folder + '/gpu5.npy')
+    return 0
+}

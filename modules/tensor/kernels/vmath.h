@@ -23,8 +23,9 @@
  * libm's expf/tanhf are opaque scalar calls, so loops that use them cannot be
  * vectorized. These versions are branch-free straight-line code (clamp, range
  * reduction, polynomial, exponent assembly by bit manipulation), which the
- * compiler turns into SIMD code inside simple loops. Accuracy: exp within a
- * few ulp over the normal float range (Cephes polynomial); tanh, sigmoid and
+ * compiler turns into SIMD code inside simple loops. Accuracy: exp within its
+ * declared 2 ulp over every float input, subnormal results included (Cephes
+ * polynomial); tanh, sigmoid and
  * gelu are derived from exp with absolute error around 1e-7. NaN inputs are
  * not propagated faithfully (tensor kernels do not rely on NaN semantics).
  */
@@ -37,11 +38,14 @@
 
 namespace camel::tensor::kernels::vmath {
 
-/// e^x for float. Overflow gives +inf and underflow gives 0, as with std::exp (results in the
-/// subnormal range flush to 0).
+/// e^x for float. Overflow gives +inf; results in the subnormal range are subnormal (the scale
+/// 2^n is applied in two normal factors, so only the last multiplication rounds into that
+/// range); below half the smallest subnormal the result is +0.
 inline float exp(float x) {
-    constexpr float kMax   = 88.72283905206835f;  // ln(FLT_MAX)
-    constexpr float kMin   = -87.33654475055310f; // ln(FLT_MIN)
+    constexpr float kMax = 88.72283905206835f; // ln(FLT_MAX)
+    // The smallest float whose e^x exceeds 2^-150, half the smallest subnormal: below it the
+    // correctly rounded result is +0 (ln 2^-150 = -103.97207708399179...).
+    constexpr float kMin   = -103.972076416015625f;
     constexpr float kLog2e = 1.44269504088896341f;
     constexpr float kC1    = 0.693359375f;    // ln 2 split into a high part ...
     constexpr float kC2    = -2.12194440e-4f; // ... and a low part (Cody-Waite)
@@ -62,7 +66,8 @@ inline float exp(float x) {
     p              = p * r + 5.0000001201e-1f;
     const float er = p * r2 + r + 1.0f;
 
-    // 2^n with n in [-126, 128] is assembled as 2^n1 * 2^n2 so both factors are normal floats.
+    // 2^n with n in [-150, 128] is assembled as 2^n1 * 2^n2 so both factors are normal floats;
+    // er * 2^n1 is exact (er is in [0.7, 1.5]), so a subnormal result is rounded once.
     const auto ni        = static_cast<int32_t>(n);
     const int32_t h      = ni >> 1; // arithmetic shift: floor(n / 2)
     const float s1       = std::bit_cast<float>(static_cast<uint32_t>(h + 127) << 23);

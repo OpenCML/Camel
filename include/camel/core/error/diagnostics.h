@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 06, 2025
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,11 +32,11 @@
 #include <iosfwd>
 #include <memory>
 #include <mutex>
-#include <string>
-#include <unordered_map>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 
 namespace camel::core::error {
@@ -332,11 +332,8 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
         }
     }
 
-    EXEC_WHEN_DEBUG({
-        if (severity_ == Severity::Error) {
-            ASSERT(false, d.toText());
-        }
-    });
+    // A language error is an expected diagnostic, in Debug as well as Release.
+    // Keep it on the sink's normal path; internal invariants assert at their fault site.
 
     if (diagnostics_) {
         return diagnostics_->add(std::move(d));

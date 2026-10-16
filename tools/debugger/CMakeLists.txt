@@ -1,5 +1,5 @@
 # Camel Debugger: interactive debugger (lldb-style), links libcamel
-# camel-db 提供 serve（API）；Web UI 由 tools/debugger/serve_ui.py 单独提供
+# Native DAP/REPL/HTTP backend; the graphical frontend is maintained in OpenCML-Ext.
 include(${CMAKE_CURRENT_SOURCE_DIR}/../libcamel_tool.cmake)
 find_package(httplib REQUIRED)
 
@@ -18,6 +18,8 @@ add_executable(camel-debugger
     src/command/dispatcher.cpp
     src/command/commands.cpp
     src/core/debug_core.cpp
+    src/core/memory.cpp
+    src/core/pipeline.cpp
     src/core/frames.cpp
     src/core/program_index.cpp
     src/core/values.cpp

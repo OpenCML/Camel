@@ -26,6 +26,10 @@ namespace camel::core::type {
 class Type;
 }
 
+namespace camel::runtime::fact {
+class FactStore;
+}
+
 namespace camel::tiles {
 
 using Shape = std::vector<int64_t>;
@@ -70,6 +74,8 @@ struct ScheduleOptions {
     bool fuseElementwise = true;
     bool parallelMax     = true;
 };
+// Planning may precede value binding. Execution always requires complete inputs.
+enum class InputBindings { Required, Deferred };
 struct StoragePlan {
     std::vector<size_t> slots; // Node -> physical allocation; SIZE_MAX means register-only.
     std::vector<size_t> bytes;
@@ -88,17 +94,27 @@ struct Program {
     std::string source;
     std::vector<Launch> launches;
     StoragePlan storage;
+    size_t graphFactInstances = 0, specializedInstances = 0;
 };
 
 size_t elements(const Shape &shape);
 size_t bytes(const Node &node);
 const void *hostData(const Node &node);
-Program compile(Function *function, const std::vector<Argument> &arguments);
-void generate(Program &program, ScheduleOptions options = {});
+Program compile(
+    Function *function, const std::vector<Argument> &arguments, runtime::fact::FactStore &facts);
+// Closure-free regions with static f32 tensor or f64 scalar parameters. No input buffers needed.
+Program compileTypes(Function *function, runtime::fact::FactStore &facts);
+void generate(
+    Program &program, ScheduleOptions options = {},
+    InputBindings bindings = InputBindings::Required);
 bool elementwise(const std::string &op);
-void validate(const Program &program);
-void schedule(Program &program, ScheduleOptions options = {});
-void validatePlan(const Program &program);
+void validate(const Program &program, InputBindings bindings = InputBindings::Required);
+void schedule(
+    Program &program, ScheduleOptions options = {},
+    InputBindings bindings = InputBindings::Required);
+// Rebind a cached launch plan to this invocation's host/resident allocation needs.
+void planStorage(Program &program, InputBindings bindings = InputBindings::Required);
+void validatePlan(const Program &program, InputBindings bindings = InputBindings::Required);
 std::string inspect(const Program &program);
 std::vector<std::byte> execute(std::shared_ptr<const Program> program);
 std::string benchmark(std::shared_ptr<const Program> program);

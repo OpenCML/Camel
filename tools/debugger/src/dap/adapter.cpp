@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,8 +35,8 @@
 
 #include "adapter.h"
 
-#include "nlohmann/json.hpp"
 #include "child_process.h"
+#include "nlohmann/json.hpp"
 
 #include <httplib.h>
 
@@ -182,7 +182,7 @@ class Adapter {
                     }
                     continue; // blank lines between messages
                 }
-                sawHeader = true;
+                sawHeader                    = true;
                 static const std::string key = "content-length:";
                 std::string lower;
                 for (char ch : line) {
@@ -194,7 +194,12 @@ class Adapter {
                 }
             }
             if (!haveLength || length > (64u << 20)) {
-                respond(0, "", false, json::object(), "Malformed header: no usable Content-Length.");
+                respond(
+                    0,
+                    "",
+                    false,
+                    json::object(),
+                    "Malformed header: no usable Content-Length.");
                 continue;
             }
             std::string body(length, '\0');
@@ -225,8 +230,7 @@ class Adapter {
             {"success", success}};
         if (!success) {
             r["message"] = message;
-            r["body"]    = json{
-                {"error", json{{"id", 1}, {"format", message}, {"showUser", true}}}};
+            r["body"] = json{{"error", json{{"id", 1}, {"format", message}, {"showUser", true}}}};
         } else {
             r["body"] = std::move(body);
         }
@@ -359,16 +363,28 @@ class Adapter {
                 body["hitBreakpointIds"] = *ids;
             }
             if (reason == "exception") {
-                const json info     = e.value("exception", json::object());
-                body["description"] = info.value("isolated", false)
-                                          ? "Fault (isolated by attempt)"
-                                          : "Fault";
-                body["text"]        = info.value("message", "");
+                const json info = e.value("exception", json::object());
+                body["description"] =
+                    info.value("isolated", false) ? "Fault (isolated by attempt)" : "Fault";
+                body["text"] = info.value("message", "");
             } else if (e.contains("nodeBreakpoint")) {
                 body["description"] = "Paused on a node breakpoint";
             }
+            if (e.contains("pipeline")) {
+                const auto &stage   = e["pipeline"];
+                body["description"] = stage["pass"].is_null()
+                                          ? "Before compiler passes"
+                                          : "After " + stage["pass"].get<std::string>();
+            }
+            if (e.contains("allocation"))
+                body["description"] =
+                    "After allocation in " + e["allocation"].value("space", std::string());
             // The graph-node view of the stop, for clients that know Camel.
             json camel{{"reason", reason}, {"threadId", kThreadId}};
+            if (e.contains("allocation"))
+                camel["allocation"] = e["allocation"];
+            if (e.contains("pipeline"))
+                camel["pipeline"] = e["pipeline"];
             if (auto f = e.find("frame"); f != e.end()) {
                 camel["frame"] = *f;
             }
@@ -440,8 +456,12 @@ class Adapter {
 
     /// Returns true when the session is over and the adapter exits.
     bool handle(const std::string &command, int64_t seq, const json &args) {
-        const auto ok   = [&](json body = json::object()) { respond(seq, command, true, std::move(body)); };
-        const auto fail = [&](const std::string &m) { respond(seq, command, false, json::object(), m); };
+        const auto ok = [&](json body = json::object()) {
+            respond(seq, command, true, std::move(body));
+        };
+        const auto fail = [&](const std::string &m) {
+            respond(seq, command, false, json::object(), m);
+        };
         /// The answer of a core command, or an error response and nullopt.
         const auto ask = [&](const std::string &name, const json &a) -> std::optional<json> {
             json answer = core(name, a);
@@ -453,8 +473,8 @@ class Adapter {
         };
 
         if (command == "initialize") {
-            lineOffset_   = args.value("linesStartAt1", true) ? 0 : 1;
-            columnOffset_ = args.value("columnsStartAt1", true) ? 0 : 1;
+            lineOffset_       = args.value("linesStartAt1", true) ? 0 : 1;
+            columnOffset_     = args.value("columnsStartAt1", true) ? 0 : 1;
             invalidatedEvent_ = args.value("supportsInvalidatedEvent", false);
             ok(json{
                 {"supportsConfigurationDoneRequest", true},
@@ -584,7 +604,8 @@ class Adapter {
             return false;
         }
         if (command == "setExceptionBreakpoints") {
-            if (ask("setExceptionFilters", json{{"filters", args.value("filters", json::array())}})) {
+            if (ask("setExceptionFilters",
+                    json{{"filters", args.value("filters", json::array())}})) {
                 ok();
             }
             return false;
@@ -618,7 +639,10 @@ class Adapter {
                 stepByNode_ || args.value("granularity", "statement") == "instruction";
             json step{
                 {"unit", byNode ? "node" : "line"},
-                {"mode", command == "next" ? "over" : command == "stepIn" ? "in" : "out"}};
+                {"mode",
+                 command == "next"     ? "over"
+                 : command == "stepIn" ? "in"
+                                       : "out"}};
             if (ask("step", step)) {
                 ok();
             }
@@ -711,11 +735,11 @@ class Adapter {
                 fail("evaluate: expression is required.");
                 return false;
             }
-            auto answer = ask(
-                "evaluate",
-                json{
-                    {"frame", args.value("frameId", uint64_t{0})},
-                    {"expression", args["expression"]}});
+            auto answer =
+                ask("evaluate",
+                    json{
+                        {"frame", args.value("frameId", uint64_t{0})},
+                        {"expression", args["expression"]}});
             if (answer) {
                 ok(json{
                     {"result", answer->value("result", "")},
@@ -763,6 +787,55 @@ class Adapter {
             }
             return false;
         }
+        // Read immutable per-pass snapshots through this session's worker. The plugin
+        // does not discover worker ports or choose a process by file name.
+        if (command == "camel/nextPass" || command == "camel/pipelineGraph" ||
+            command == "camel/setPassBreakpoints" || command == "camel/structuredGraph" ||
+            command == "camel/memorySnapshot" || command == "camel/regionMemory" ||
+            command == "camel/regionObjects" || command == "camel/allocationBreakpoints") {
+            const std::string action = command.substr(6);
+            auto answer              = ask(action, args);
+            if (answer) {
+                answer->erase("ok");
+                ok(std::move(*answer));
+            }
+            return false;
+        }
+        if (command == "camel/passGraphs" || command == "camel/passGraph") {
+            std::string url = "/api/pass-graphs";
+            if (command == "camel/passGraph") {
+                auto index = args.find("index");
+                if (index == args.end() || !index->is_number_integer() ||
+                    index->get<int64_t>() < 0) {
+                    fail("camel/passGraph: index is a nonnegative integer.");
+                    return false;
+                }
+                url = "/api/pass-graph?index=" + std::to_string(index->get<int64_t>());
+            }
+            httplib::Client client("127.0.0.1", port_);
+            client.set_connection_timeout(5, 0);
+            client.set_read_timeout(30, 0);
+            auto response = client.Get(url);
+            if (!response) {
+                fail("The program being debugged has ended.");
+                return false;
+            }
+            json answer = json::parse(response->body, nullptr, false);
+            if (response->status != 200 || !answer.is_object()) {
+                fail(answer.is_object() ? errorOf(answer) : "Invalid pass snapshot response.");
+            } else {
+                ok(std::move(answer));
+            }
+            return false;
+        }
+        if (command == "camel/setNodeBreakpoints") {
+            auto answer = ask("setNodeBreakpoints", args);
+            if (answer) {
+                answer->erase("ok");
+                ok(std::move(*answer));
+            }
+            return false;
+        }
         if (command == "camel/graph") {
             auto answer = ask("graph", json{{"frame", args.value("frameId", uint64_t{0})}});
             if (answer) {
@@ -777,9 +850,30 @@ class Adapter {
 
     static bool isKnown(const std::string &command) {
         static const char *const known[] = {
-            "continue",   "next",          "stepIn",      "stepOut",  "pause",       "stackTrace",
-            "scopes",     "variables",     "evaluate",    "terminate", "exceptionInfo",
-            "camel/graph", "camel/setFrames"};
+            "continue",
+            "next",
+            "stepIn",
+            "stepOut",
+            "pause",
+            "stackTrace",
+            "scopes",
+            "variables",
+            "evaluate",
+            "terminate",
+            "exceptionInfo",
+            "camel/graph",
+            "camel/setFrames",
+            "camel/passGraphs",
+            "camel/passGraph",
+            "camel/setNodeBreakpoints",
+            "camel/nextPass",
+            "camel/pipelineGraph",
+            "camel/setPassBreakpoints",
+            "camel/structuredGraph",
+            "camel/memorySnapshot",
+            "camel/regionMemory",
+            "camel/regionObjects",
+            "camel/allocationBreakpoints"};
         for (const char *k : known) {
             if (command == k) {
                 return true;
@@ -789,7 +883,9 @@ class Adapter {
     }
 
     void launch(int64_t seq, const json &args) {
-        const auto fail = [&](const std::string &m) { respond(seq, "launch", false, json::object(), m); };
+        const auto fail = [&](const std::string &m) {
+            respond(seq, "launch", false, json::object(), m);
+        };
         if (port_ != 0) {
             fail("A program was already launched in this session.");
             return;
@@ -864,10 +960,26 @@ class Adapter {
             return;
         }
 
+        if (args.contains("stopOnPassEntry") && !args["stopOnPassEntry"].is_boolean()) {
+            fail("stopOnPassEntry must be boolean.");
+            return;
+        }
+        if (auto points = args.find("passBreakpoints"); points != args.end()) {
+            if (!points->is_array()) {
+                fail("passBreakpoints must be an array.");
+                return;
+            }
+            for (const auto &point : *points) {
+                if (!point.is_number_integer() || point.get<int64_t>() < 0) {
+                    fail("passBreakpoints are nonnegative snapshot indices.");
+                    return;
+                }
+            }
+        }
         ProcessSpec spec;
-        spec.exe  = exePath_;
-        spec.args = {"--run-worker", program.string()};
-        spec.cwd  = cwd;
+        spec.exe       = exePath_;
+        spec.args      = {"--run-worker", program.string()};
+        spec.cwd       = cwd;
         const int port = pickFreeLocalPort();
         if (port == 0) {
             fail("launch: no free local port for the debuggee.");
@@ -882,9 +994,13 @@ class Adapter {
             }
         }
         ProcessCallbacks callbacks;
-        callbacks.onStdout = [this](std::string_view chunk) { output("stdout", stdoutText_.feed(chunk)); };
-        callbacks.onStderr = [this](std::string_view chunk) { output("stderr", stderrText_.feed(chunk)); };
-        callbacks.onExit   = [this](int code, int signal) { onWorkerExit(code, signal); };
+        callbacks.onStdout = [this](std::string_view chunk) {
+            output("stdout", stdoutText_.feed(chunk));
+        };
+        callbacks.onStderr = [this](std::string_view chunk) {
+            output("stderr", stderrText_.feed(chunk));
+        };
+        callbacks.onExit = [this](int code, int signal) { onWorkerExit(code, signal); };
         std::string error;
         auto worker = ChildProcess::spawn(spec, std::move(callbacks), error);
         if (!worker) {
@@ -932,7 +1048,9 @@ class Adapter {
                 {"args", entryArgs},
                 {"quiet", true},
                 {"frames", frames},
-                {"stopOnEntry", args.value("stopOnEntry", false)}},
+                {"stopOnEntry", args.value("stopOnEntry", false)},
+                {"stopOnPassEntry", args.value("stopOnPassEntry", false)},
+                {"passBreakpoints", args.value("passBreakpoints", json::array())}},
             320);
         if (!answer.value("ok", false)) {
             giveUp("launch: " + errorOf(answer));
@@ -970,10 +1088,10 @@ class Adapter {
 
     std::string exePath_;
     std::mutex writeMutex_;
-    int64_t nextSeq_ = 1;
-    int lineOffset_   = 0; // added to a client line to get a 1-based line
-    int columnOffset_ = 0;
-    bool stepByNode_  = false; // launch "stepBy": "node"
+    int64_t nextSeq_       = 1;
+    int lineOffset_        = 0; // added to a client line to get a 1-based line
+    int columnOffset_      = 0;
+    bool stepByNode_       = false; // launch "stepBy": "node"
     bool invalidatedEvent_ = false; // the client takes the `invalidated` event
 
     std::mutex stateMutex_;

@@ -231,6 +231,24 @@ ReductionLaw extremumLaw(std::string name, bool max, TypeCode type, LawEmpty emp
     };
 }
 
+/// argmax / argmin: the position (int64) of the first extreme, from the first contribution.
+/// The pair (value, position) ordered by the IEEE maximum (minimum) and then the earlier
+/// position is exactly associative and commutative (the positions are distinct), so a back end
+/// may regroup it if it carries the positions; an empty axis is a fault.
+ReductionLaw positionLaw(std::string name, bool max, TypeCode type) {
+    return ReductionLaw{
+        .name             = std::move(name),
+        .kind             = max ? LawKind::ArgMax : LawKind::ArgMin,
+        .input            = type,
+        .accumulator      = type,
+        .result           = TypeCode::Int64,
+        .init             = LawInit::FirstContribution,
+        .empty            = LawEmpty::Fault,
+        .exactAssociative = true,
+        .exactCommutative = true,
+    };
+}
+
 // ---- Elementwise ----------------------------------------------------------------------------
 
 /**
@@ -798,22 +816,23 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
         t.emplace("broadcast_like", Indexing{broadcastLikeIndexing, {}});
         t.emplace("expand_axis", Indexing{expandAxisIndexing, {}});
 
-        // sum and mean of everything: the kernel adds every element converted to f64, the
-        // int64 and bool ones too (so an int64 sum rounds beyond 2^53).
+        // sum and mean of everything: f32 elements are added in f64; int64 and bool elements
+        // exactly in int64, wrapping (design principles 2.14), and the result converted to f64
+        // once (mean divides in f64 first).
         t.emplace(
             "sum",
             Indexing{
                 reduceAllIndexing,
                 {sumLaw("sum_f32", f32, f64, f64),
-                 sumLaw("sum_i64", i64, f64, f64),
-                 sumLaw("sum_bool", boolean, f64, f64)}});
+                 sumLaw("sum_i64", i64, i64, f64),
+                 sumLaw("sum_bool", boolean, i64, f64)}});
         t.emplace(
             "mean",
             Indexing{
                 reduceAllIndexing,
                 {meanLaw("mean_f32", f32, f64, f64, LawEmpty::Fault),
-                 meanLaw("mean_i64", i64, f64, f64, LawEmpty::Fault),
-                 meanLaw("mean_bool", boolean, f64, f64, LawEmpty::Fault)}});
+                 meanLaw("mean_i64", i64, i64, f64, LawEmpty::Fault),
+                 meanLaw("mean_bool", boolean, i64, f64, LawEmpty::Fault)}});
         // By axis: floats in f64 rounded once to f32, integers and bools exactly in int64.
         t.emplace(
             "sum_axis",
@@ -844,6 +863,22 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
                 {extremumLaw("min_axis_f32", false, f32, LawEmpty::Fault),
                  extremumLaw("min_axis_i64", false, i64, LawEmpty::Fault),
                  extremumLaw("min_axis_bool", false, boolean, LawEmpty::Fault)}});
+        // argmax and argmin over an axis: the position of the first extreme by IEEE maximum
+        // (minimum), the first NaN if any, +0 above -0 (design principles 2.14).
+        t.emplace(
+            "argmax_axis",
+            Indexing{
+                reduceAxisIndexing,
+                {positionLaw("argmax_axis_f32", true, f32),
+                 positionLaw("argmax_axis_i64", true, i64),
+                 positionLaw("argmax_axis_bool", true, boolean)}});
+        t.emplace(
+            "argmin_axis",
+            Indexing{
+                reduceAxisIndexing,
+                {positionLaw("argmin_axis_f32", false, f32),
+                 positionLaw("argmin_axis_i64", false, i64),
+                 positionLaw("argmin_axis_bool", false, boolean)}});
         // sum_to converts g to f32 and accumulates in f32 from +0.
         t.emplace(
             "sum_to",

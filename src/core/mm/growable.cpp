@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -74,9 +74,9 @@ void MemoryExhausted::compose() {
         advice_  = limitSetting_.empty()
                        ? std::string("the limit is fixed")
                        : std::format(
-                            "set {}=<megabytes> to raise the limit (it is {} now)",
-                            limitSetting_,
-                            limitBytes_ / MB);
+                             "set {}=<megabytes> to raise the limit (it is {} now)",
+                             limitSetting_,
+                             limitBytes_ / MB);
         message_ = std::format(
             "The {} space{} is exhausted{}: an allocation of {} does not fit, {} of the limit "
             "of {} are in use; {}",
@@ -155,6 +155,9 @@ GrowableFreeListAllocator::GrowableFreeListAllocator(const GrowableSpaceConfig &
     : GrowableSpaceBase(config) {}
 
 void *GrowableFreeListAllocator::alloc(size_t size, size_t align) {
+#ifndef NDEBUG
+    AllocationDebugScope debugScope;
+#endif
     const size_t count = segmentCount_.load(std::memory_order_acquire);
     if (LIKELY(count != 0)) {
         const size_t hint = std::min(hint_.load(std::memory_order_relaxed), count - 1);
@@ -302,6 +305,9 @@ GrowableBumpAllocator::GrowableBumpAllocator(const GrowableSpaceConfig &config)
     : GrowableSpaceBase(config) {}
 
 void *GrowableBumpAllocator::alloc(size_t size, size_t align) {
+#ifndef NDEBUG
+    AllocationDebugScope debugScope;
+#endif
     const size_t count = segmentCount_.load(std::memory_order_acquire);
     if (LIKELY(count != 0)) {
         // Only the newest segment is asked: the tail an older one has left is given up, which

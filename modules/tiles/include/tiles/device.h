@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -17,15 +17,26 @@
 #include <span>
 
 namespace camel::tiles {
+// Backend-owned storage has a checked dynamic type. It must never retain Camel
+// heap pointers; concrete backends own their context and native allocation.
+struct DeviceStorage {
+    virtual ~DeviceStorage()                                                  = default;
+    virtual std::vector<std::byte> read(uint64_t address, size_t bytes) const = 0;
+};
 struct DeviceValue {
     Shape shape;
     DType dtype      = DType::F32;
     uint64_t address = 0;
-    std::shared_ptr<void> owner;
+    std::shared_ptr<DeviceStorage> owner;
 };
 std::shared_ptr<DeviceValue>
 uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data);
 std::vector<std::byte> downloadValue(const DeviceValue &value);
+// Reuse storage on the selected device, otherwise transfer through its owning backend.
+std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceValue> value);
+// Own a native host snapshot for portable execution; no moving-heap references.
+std::shared_ptr<DeviceValue>
+retainHostValue(const Shape &shape, DType dtype, std::span<const std::byte> data);
 std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program> program);
 
 class DeviceType final : public core::type::OtherType {

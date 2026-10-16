@@ -21,7 +21,7 @@ stdout = "expected/output.txt"
 
 [[runs]]
 name = "dump"
-args = ["std::macro", "std::opt::simplify", "std::argir"]
+args = ["std::macro", "std::opt::simplify", "std::agir"]
 exit = 0
-stdout = "expected/simplified.argir.dot"
+stdout = "expected/simplified.agir.dot"
 output_contains = ["role=\"effect\""]

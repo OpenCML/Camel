@@ -2,7 +2,7 @@ id = "compile.numeric_permissions"
 order = 214
 tier = "feat"
 tags = ["feat", "compile", "numeric", "semantics"]
-desc = "`@numeric(...)` on a function or a block grants numeric permissions to the code written in it, arms, loop bodies and lambdas included, never to a function it calls (design principles 2.13; docs/design/op-semantics 6.3, 6.4). The graph keeps them in a per-node column beside the source positions; std::rgir shows them as a `numeric` attribute on the nodes that have any. Rewrites keep them, CSE and tensor::fuse do not merge nodes granted different ones, and the CPU back ends compute the canonical results with or without them."
+desc = "`@numeric(...)` on a function or a block grants numeric permissions to the code written in it, arms, loop bodies and lambdas included, never to a function it calls (design principles 2.13; docs/design/op-semantics 6.3, 6.4). The graph keeps them in a per-node column beside the source positions; std::gir shows them as a `numeric` attribute on the nodes that have any. Rewrites keep them, CSE and tensor::fuse do not merge nodes granted different ones, and the CPU back ends compute the canonical results with or without them."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -24,7 +24,7 @@ name = "graph"
 desc = "The OPER nodes of an annotated function have its permissions; those of a lambda and of the arms written in it too; a block's grant joins the function's for the code in the block; a function it calls (plain) and main have none."
 kind = "behavior"
 case = "../../../cases/compile/numeric/permissions.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -52,7 +52,7 @@ name = "graph.inline"
 desc = "std::inline keeps each node's own permissions: the inlined body of plain has none in its annotated caller, the inlined lambda keeps reassociate."
 kind = "behavior"
 case = "../../../cases/compile/numeric/permissions.cml"
-args = ["${case}", "std::inline", "std::rgir"]
+args = ["${case}", "std::inline", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -69,7 +69,7 @@ name = "cse"
 desc = "std::opt::cse merges `a * b` with `a * b` of the same permissions, and not across them: one product without permissions, one with contract."
 kind = "behavior"
 case = "../../../cases/compile/numeric/cse.cml"
-args = ["${case}", "std::opt::cse", "std::rgir"]
+args = ["${case}", "std::opt::cse", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -94,7 +94,7 @@ name = "fuse"
 desc = "tensor::fuse fuses `x @ w + b` when both nodes have the same permissions (the fused node keeps them) and not when they differ (a product inlined from an annotated function, an add without)."
 kind = "behavior"
 case = "../../../cases/compile/numeric/fuse.cml"
-args = ["${case}", "std::inline", "tensor::fuse", "std::rgir"]
+args = ["${case}", "std::inline", "tensor::fuse", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -132,3 +132,29 @@ case = "../../../cases/compile/numeric/invalid.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["'fast' is not a permission", "invalid.cml:11:1", "The annotation '@kernelish' is not accepted", "invalid.cml:14:1", "it names no permission", "invalid.cml:17:1", "The annotation '@twice' is not accepted: a decorator applies to a function", "invalid.cml:21:5"]
+
+[[tests]]
+name = "library_gemm"
+desc = "The optional CBLAS backend (CAMEL_TENSOR_BLAS) does not follow matmul's canonical FMA chain, so it is never the default: tensor::fuse replaces a matmul by tensor:matmul_blas (the library GEMM when the build has one, the canonical kernel otherwise) only when its node was granted both reassociate and change_precision; a plain matmul and one granted reassociate alone stay tensor:matmul. Without a BLAS in the build the three results are the canonical ones."
+kind = "behavior"
+case = "../../../cases/compile/numeric/library_gemm.cml"
+args = ["${case}", "tensor::fuse", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const opers = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
+const blas = opers.filter((l) => l.includes('label="tensor:matmul_blas"'))
+const canonical = opers.filter((l) => l.includes('label="tensor:matmul"'))
+assert(blas.length === 1 && blas[0].includes('numeric="reassociate, change_precision"'), `one library matmul expected: ${blas}`)
+assert(canonical.length === 2 && canonical.some((l) => !l.includes('numeric=')) && canonical.some((l) => l.includes('numeric="reassociate"')), `two canonical matmuls expected: ${canonical}`)
+}
+"""
+
+[[tests]]
+name = "library_gemm.results"
+desc = "The same program run after tensor::fuse prints the canonical results in a build without a BLAS (the default)."
+kind = "behavior"
+case = "../../../cases/compile/numeric/library_gemm.cml"
+args = ["${case}", "tensor::fuse"]
+expect_exit = 0
+expect_stdout_exact = "gemm plain=-12.625 reordered=-12.625 relaxed=-12.625\n"

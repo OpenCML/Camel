@@ -123,15 +123,16 @@ TensorObject *reduceAxis(
     const size_t axis     = normalizeAxis(axisArg, input->rank());
     const AxisSplit split = splitAt(input->shapeSpan(), axis);
     const Shape outShape  = reducedShape(input->shapeSpan(), axis, keepDims);
-    if ((op == ReduceOp::Max || op == ReduceOp::Min || op == ReduceOp::ArgMax) &&
+    if ((op == ReduceOp::Max || op == ReduceOp::Min || op == ReduceOp::ArgMax ||
+         op == ReduceOp::ArgMin) &&
         split.extent == 0) {
-        throw std::invalid_argument("Cannot take max/min/argmax over an empty axis");
+        throw std::invalid_argument("Cannot take max/min/argmax/argmin over an empty axis");
     }
 
     TypeCode outType = input->dtype();
     if (op == ReduceOp::Mean) {
         outType = TypeCode::Float32;
-    } else if (op == ReduceOp::ArgMax) {
+    } else if (op == ReduceOp::ArgMax || op == ReduceOp::ArgMin) {
         outType = TypeCode::Int64;
     } else if (op == ReduceOp::Sum && outType == TypeCode::Bool) {
         outType = TypeCode::Int64;
@@ -145,15 +146,27 @@ TensorObject *reduceAxis(
             switch (op) {
             case ReduceOp::Sum:
             case ReduceOp::Mean: {
-                // double accumulation for floats, exact int64 accumulation otherwise
-                using Acc = std::conditional_t<std::is_same_v<T, float>, double, int64_t>;
+                // f64 accumulation for floats; integers and bools exactly in int64, wrapping on
+                // overflow as integer arithmetic does (design principles 2.10, 2.14): the
+                // addition is done on uint64_t, where it is defined to wrap.
+                using Acc = std::conditional_t<std::is_same_v<T, float>, double, uint64_t>;
                 Acc acc   = 0;
                 for (int64_t k = 0; k < split.extent; ++k) {
-                    acc += static_cast<Acc>(src[base + k * stride]);
+                    if constexpr (std::is_same_v<T, float>) {
+                        acc += static_cast<double>(src[base + k * stride]);
+                    } else {
+                        acc += static_cast<uint64_t>(static_cast<int64_t>(src[base + k * stride]));
+                    }
                 }
                 if (op == ReduceOp::Mean) {
-                    out->dataAs<float>()[lane] = static_cast<float>(
-                        static_cast<double>(acc) / static_cast<double>(split.extent));
+                    double total = 0.0;
+                    if constexpr (std::is_same_v<T, float>) {
+                        total = acc;
+                    } else {
+                        total = static_cast<double>(static_cast<int64_t>(acc));
+                    }
+                    out->dataAs<float>()[lane] =
+                        static_cast<float>(total / static_cast<double>(split.extent));
                 } else if (outType == TypeCode::Int64) {
                     out->dataAs<int64_t>()[lane] = static_cast<int64_t>(acc);
                 } else {
@@ -174,15 +187,17 @@ TensorObject *reduceAxis(
                 out->dataAs<T>()[lane] = best;
                 break;
             }
-            case ReduceOp::ArgMax: {
-                // The index of the first element greater than every earlier one. Unchanged by
-                // the maximum rule above: which index a NaN or a tie of -0 and +0 yields is
-                // not settled (docs/design/op-semantics, phase 1 questions).
+            case ReduceOp::ArgMax:
+            case ReduceOp::ArgMin: {
+                // The position of the first maximum (minimum) by IEEE 754-2019 maximum
+                // (minimum): the first NaN if there is one, +0 above -0, the first on a tie
+                // (design principles 2.14; beyondExtreme in minmax.h).
+                const bool max  = op == ReduceOp::ArgMax;
                 T best          = src[base];
                 int64_t bestIdx = 0;
                 for (int64_t k = 1; k < split.extent; ++k) {
                     const T v = src[base + k * stride];
-                    if (v > best) {
+                    if (max ? beyondExtreme<true>(v, best) : beyondExtreme<false>(v, best)) {
                         best    = v;
                         bestIdx = k;
                     }
@@ -199,11 +214,21 @@ TensorObject *reduceAxis(
 double sumAll(const TensorObject *input) {
     return dispatchDType(input->dtype(), [&]<typename T>() {
         const T *src = input->dataAs<T>();
-        double acc   = 0.0;
-        for (uint64_t i = 0; i < input->numel(); ++i) {
-            acc += static_cast<double>(src[i]);
+        if constexpr (std::is_same_v<T, float>) {
+            double acc = 0.0;
+            for (uint64_t i = 0; i < input->numel(); ++i) {
+                acc += static_cast<double>(src[i]);
+            }
+            return acc;
+        } else {
+            // int64 and bool: exactly in int64, wrapping on overflow (design principles 2.10,
+            // 2.14), then converted to the float result once.
+            uint64_t acc = 0;
+            for (uint64_t i = 0; i < input->numel(); ++i) {
+                acc += static_cast<uint64_t>(static_cast<int64_t>(src[i]));
+            }
+            return static_cast<double>(static_cast<int64_t>(acc));
         }
-        return acc;
     });
 }
 

@@ -499,7 +499,7 @@ name = "macro_constants.graph"
 desc = "After std::macro the collections are DATA nodes of the graph (constants), not calls."
 kind = "behavior"
 case = "../../../cases/compile/collections/macro_constants.cml"
-args = ["${case}", "std::macro", "std::rgir"]
+args = ["${case}", "std::macro", "std::gir"]
 expect_exit = 0
 expect_stdout_contains = ["label=\"{1: one, 2: two, 4: more}\", type=\"DATA\"", "label=\"{alpha, beta, gamma}\", type=\"DATA\"", "label=\"{outer: {xs: [1, 2, 3]}}\", type=\"DATA\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -510,7 +510,7 @@ name = "graph_shape"
 desc = "On the graph the conversion is a CAST node and every operation one OPER node: `m[k]` is `:coll/map_idx`, an array subscript stays `:op/idx_arr`."
 kind = "behavior"
 case = "../../../cases/compile/collections/graph_shape.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 expect_exit = 0
 expect_stdout_contains = ["type=\"CAST\"", "label=\":coll/map_idx\", type=\"OPER\"", "label=\":coll/map_put\", type=\"OPER\"", "label=\":coll/set_contains\", type=\"OPER\"", "label=\":op/idx_arr\", type=\"OPER\"", "label=\":op/tag_is_null\", type=\"OPER\"", "type=\"BRCH\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

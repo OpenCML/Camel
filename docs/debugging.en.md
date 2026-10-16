@@ -88,7 +88,7 @@ stopped.
 | `frames [functions\|subgraphs]` | show or switch how arms of branches are shown ([3.3](#33-the-call-stack-is-a-chain-of-function-calls)) |
 
 A command that lets the program run waits until it stops or ends, and prints on the way what the
-program printed. `help` lists every command (the others are those of the Web UI's tasks);
+program printed. `help` lists every command (the others manage gateway tasks);
 Ctrl+C stops waiting, not the program. A session with
 [`folded.cml`](../test/cases/tools/debugger/fixtures/folded.cml) (each command is echoed as the
 core command it sends, `(camel-db) debug ...`; those lines are left out here):
@@ -184,7 +184,12 @@ with a breakpoint in a tail-recursive function:
 Other editors: configure a DAP client to run `camel-db --dap` with a `launch` request carrying
 the attributes of the table above.
 
-`camel-db` also has a Web UI with a graph view and memory inspection; that is described in
+OpenCML-Ext provides the GIR and memory interface through this native adapter. Configure
+`stopOnPassEntry: true` and `passBreakpoints: [2]` with the pass sequence to stop at initial
+or returned-GIR boundaries. The compact GIR strip separates actual execution from snapshot
+history; selecting history never resumes execution. Use **Camel: Inspect Debug Memory** for
+paused-region usage, paged bytes/objects and explicit refresh. Allocation breakpoints require
+Debug and pause after allocator locks are released. See
 [`tools/debugger/README.md`](../tools/debugger/README.md).
 
 ## 3. What you see, and why
@@ -368,5 +373,6 @@ survive. What changes:
   frame is left by then. It is reported as without a debugger, `UnhandledError` on standard
   error and exit code 1; break on the `throw` to see where it is made.
 - After `std::inline` a name bound to an inlined call is not shown under its name (see section 4).
-- Not verified: Windows (the adapter's process handling is ported but untested), macOS, and the
-  behaviour of the VS Code user interface itself.
+- Verified: Windows Release and Linux Debug protocol tests, plus the Windows VS Code UI.
+  macOS remains unverified. Windows Debug currently exceeds the PE DLL export limit, a build
+  limitation rather than an enabled allocation-breakpoint capability.

@@ -27,6 +27,7 @@
 
 #include "../ops/registry.h"
 
+#include "camel/core/operator_semantics.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
 
@@ -170,20 +171,67 @@ void fuse(GraphDraft &draft, const Match &m) {
     draft.eraseNode(m.matmul);
 }
 
+/// The permissions a library GEMM needs: its own order and grouping of the accumulation
+/// (reassociate), and products that may be rounded separately or a different accumulation
+/// precision (change_precision). Design principles 2.13.
+constexpr uint8_t kLibraryGemmPermissions =
+    camel::core::sem::kReassociate | camel::core::sem::kChangePrecision;
+
+/// Replaces every tensor:matmul node granted kLibraryGemmPermissions by tensor:matmul_blas
+/// (same operands, control inputs and permissions). Returns the number replaced.
+size_t useLibraryGemm(GraphDraft &draft) {
+    const PatternOperators &ops = patternOperators();
+    const auto *def             = ops::OpRegistry::instance().find("tensor:matmul_blas");
+    size_t count                = 0;
+    const gc_node_ref_t slots   = draft.nodeSlotCount();
+    for (gc_node_ref_t id = 0; id < slots; ++id) {
+        if (operOf(draft, id) != ops.matmul ||
+            (draft.nodePermissions(id) & kLibraryGemmPermissions) != kLibraryGemmPermissions) {
+            continue;
+        }
+        const auto inputs = draft.normInputsOf(id);
+        const auto ctrl   = draft.ctrlInputsOf(id);
+        const std::vector<gc_node_ref_t> in(inputs.begin(), inputs.end());
+        const std::vector<gc_node_ref_t> ctl(ctrl.begin(), ctrl.end());
+        const gc_node_ref_t blas =
+            draft.addOperNode(draft.header(id)->dataType, def->kernel, "tensor:matmul_blas");
+        draft.setNormInputs(blas, in);
+        draft.setCtrlInputs(blas, ctl);
+        draft.setNodePermissions(blas, draft.nodePermissions(id));
+        draft.replaceAllValueUses(id, blas);
+        draft.replaceAllCtrlUses(id, blas);
+        draft.retargetBranchArmAnchors(id, blas, blas);
+        if (draft.outputNode() == id) {
+            draft.setOutputNode(blas);
+        }
+        if (draft.returnNode() == id) {
+            draft.setReturnNode(blas, draft.returnKind());
+        }
+        draft.eraseNode(id);
+        ++count;
+    }
+    return count;
+}
+
 } // namespace
 
 GCGraph *TensorFusePass::apply(GCGraph *graph, std::ostream &) {
     RuntimeGraphDraftSession session(context_, graph);
-    size_t fusedCount = 0;
+    size_t fusedCount = 0, libraryCount = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
         GraphDraft &draft = session.edit(g);
         while (const auto m = findMatch(draft)) {
             fuse(draft, *m);
             ++fusedCount;
         }
+        libraryCount += useLibraryGemm(draft);
     }
-    CAMEL_LOG_INFO_S("tensor::fuse", "fused {} matmul+add pattern(s)", fusedCount);
-    if (fusedCount == 0) {
+    CAMEL_LOG_INFO_S(
+        "tensor::fuse",
+        "fused {} matmul+add pattern(s), {} matmul(s) by the library GEMM",
+        fusedCount,
+        libraryCount);
+    if (fusedCount == 0 && libraryCount == 0) {
         return graph;
     }
     session.commit();
