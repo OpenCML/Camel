@@ -1,0 +1,29 @@
+/**
+ * tensor::fuse lets a matmul use the library GEMM (tensor:matmul_blas, a system BLAS when the
+ * build has one) only when its node may be reassociated and computed at another precision; any
+ * other matmul keeps the canonical fused multiply-add chain (design principles 2.13).
+ */
+module library_gemm
+
+import { Tensor, reshape, sum } from tensor
+
+func plain(x: Tensor, w: Tensor): Tensor {
+    return x @ w
+}
+
+@numeric(reassociate)
+func reordered(x: Tensor, w: Tensor): Tensor {
+    return x @ w
+}
+
+@numeric(reassociate, change_precision)
+func relaxed(x: Tensor, w: Tensor): Tensor {
+    return x @ w
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5], [2, 3])
+    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25], [3, 2])
+    'gemm plain={} reordered={} relaxed={}'->format<sum(plain(x, w)), sum(reordered(x, w)), sum(relaxed(x, w))>->println
+    return 0
+}

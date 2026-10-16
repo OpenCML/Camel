@@ -39,6 +39,14 @@ slot_t matmulKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
+/// tensor:matmul_blas: matmul by the library GEMM (kernels::sgemmLibrary). Only tensor::fuse
+/// creates it, for a matmul whose node may be reassociated and computed at another precision.
+slot_t matmulBlasKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("matmul", [&] {
+        return wrap(k::matmul(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator(), true));
+    });
+}
+
 int64_t agree(int64_t a, int64_t b, const char *what) {
     if (a == kUnknownDim) {
         return b;
@@ -209,7 +217,19 @@ std::vector<OpDef> linalgOps() {
         .infer     = matmulAddInfer,
         .kernel    = &matmulAddKernel<true>,
         .traits    = {}});
+    // matmul by a system BLAS (CAMEL_TENSOR_BLAS), whose order of accumulation is its own: no
+    // source-level name; tensor::fuse substitutes it for a matmul granted reassociate and
+    // change_precision (design principles 2.13). Without a BLAS it is the canonical matmul.
+    defs.push_back(OpDef{
+        .name      = "matmul_blas",
+        .exports   = {},
+        .params    = {{"lhs", ParamKind::Tensor}, {"rhs", ParamKind::Tensor}},
+        .resultDoc = "Tensor",
+        .infer     = matmulInfer,
+        .kernel    = &matmulBlasKernel,
+        .traits    = {}});
     setVjp(defs, "matmul", &matmulVjp);
+    setVjp(defs, "matmul_blas", &matmulVjp);
     setVjp(defs, "linear", &linearVjp);
     setVjp(defs, "matmul_add", &matmulAddVjp<false>);
     setVjp(defs, "matmul_add_relu", &matmulAddVjp<true>);

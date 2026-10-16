@@ -24,14 +24,18 @@
  * matrices, where op(X) is X or X^T. Each element of op(A) * op(B) is matmul's
  * canonical algorithm (design principles 2.13): a chain of fused multiply-adds
  * in ascending k from +0; alpha and beta are applied after the chain
- * (gemm_blocked.inl). It has two backends selected at build time:
- *   - builtin: cache-blocked, packed, register-tiled, parallel over tiles; the
- *     same bits on every processor.
- *   - cblas:   forwards to cblas_sgemm (CMake option CAMEL_TENSOR_BLAS, off by
- *     default). A BLAS library chooses its own order of accumulation, so this
- *     backend does not follow the canonical algorithm: results may differ from
- *     the builtin backend and between machines.
- * `gemmBackendName()` reports which one is active.
+ * (gemm_blocked.inl). It is the builtin backend: cache-blocked, packed,
+ * register-tiled, parallel over tiles; the same bits on every processor.
+ * `gemmBackendName()` reports which ISA unit runs it.
+ *
+ * `sgemmLibrary` forwards to cblas_sgemm when the build has a CBLAS (CMake
+ * option CAMEL_TENSOR_BLAS, off by default), and is `sgemm` otherwise. A BLAS
+ * library chooses its own order and grouping of the accumulation (and may not
+ * fuse the multiply-adds), so it does not follow the canonical algorithm: it
+ * is used only by tensor:matmul_blas, which tensor::fuse puts in place of a
+ * tensor:matmul whose node was granted both `reassociate` and
+ * `change_precision`. Without those permissions every matmul is canonical.
+ * `libraryGemmName()` reports what sgemmLibrary calls.
  *
  * `matmul` follows NumPy semantics: rank-1 operands are promoted to a row or
  * column vector and the promoted dimension is removed from the result; leading
@@ -51,12 +55,20 @@ void sgemm(
     bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
     int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc);
 
+void sgemmLibrary(
+    bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
+    int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc);
+
 std::string_view gemmBackendName();
+std::string_view libraryGemmName();
 
 /// Result shape of matmul(lhs, rhs). Throws std::invalid_argument when inner extents differ.
 Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs);
 
-TensorObject *matmul(const TensorObject *lhs, const TensorObject *rhs, mm::IAllocator &allocator);
+/// lhs @ rhs; f32 products by sgemm (canonical), or by sgemmLibrary when `library` is set.
+TensorObject *matmul(
+    const TensorObject *lhs, const TensorObject *rhs, mm::IAllocator &allocator,
+    bool library = false);
 
 /// y = x @ weight (+ bias). `weight` is [in, out]; `bias` is [out] or null.
 TensorObject *linear(

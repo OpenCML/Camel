@@ -23,8 +23,11 @@
  * The builtin backend is compiled from gemm_blocked.inl once per ISA: a
  * portable unit, an AVX2+FMA unit, and an AVX-512F unit (x86-64 builds). The
  * widest unit the CPU and OS support is selected at first use, so default
- * builds stay portable while still using wide vectors where available. With
- * CAMEL_TENSOR_USE_CBLAS the call is forwarded to cblas_sgemm instead.
+ * builds stay portable while still using wide vectors where available. Every
+ * operator uses it (matmul's canonical algorithm, design principles 2.13). With
+ * CAMEL_TENSOR_USE_CBLAS, sgemmLibrary forwards to cblas_sgemm; only the
+ * tensor:matmul_blas operator calls it, which tensor::fuse substitutes for a
+ * matmul whose node was granted the permissions a library order needs.
  */
 
 #include "gemm.h"
@@ -159,6 +162,12 @@ int64_t batchOffset(const Shape &batchShape, const Shape &extents, int64_t b) {
 void sgemm(
     bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
     int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc) {
+    builtinBackend().fn(transA, transB, M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
+}
+
+void sgemmLibrary(
+    bool transA, bool transB, int64_t M, int64_t N, int64_t K, float alpha, const float *A,
+    int64_t lda, const float *B, int64_t ldb, float beta, float *C, int64_t ldc) {
 #if defined(CAMEL_TENSOR_USE_CBLAS)
     cblas_sgemm(
         CblasRowMajor,
@@ -180,7 +189,9 @@ void sgemm(
 #endif
 }
 
-std::string_view gemmBackendName() {
+std::string_view gemmBackendName() { return builtinBackend().name; }
+
+std::string_view libraryGemmName() {
 #if defined(CAMEL_TENSOR_USE_CBLAS)
     return "cblas";
 #else
@@ -192,7 +203,9 @@ Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs) {
     return planMatmul(lhs, rhs).outShape;
 }
 
-TensorObject *matmul(const TensorObject *lhs, const TensorObject *rhs, mm::IAllocator &allocator) {
+TensorObject *matmul(
+    const TensorObject *lhs, const TensorObject *rhs, mm::IAllocator &allocator, bool library) {
+    const auto gemm = library ? &sgemmLibrary : &sgemm;
     const MatmulPlan plan  = planMatmul(lhs->shapeSpan(), rhs->shapeSpan());
     const TypeCode outType = promoteTensorTypes(lhs->dtype(), rhs->dtype());
     const TypeCode compute = outType == TypeCode::Bool ? TypeCode::Int64 : outType;
@@ -208,7 +221,7 @@ TensorObject *matmul(const TensorObject *lhs, const TensorObject *rhs, mm::IAllo
             const int64_t aOff = batchOffset(plan.batchShape, plan.lhsBatch, batch) * aSize;
             const int64_t bOff = batchOffset(plan.batchShape, plan.rhsBatch, batch) * bSize;
             if (compute == TypeCode::Float32) {
-                sgemm(
+                gemm(
                     false,
                     false,
                     plan.M,

@@ -132,3 +132,29 @@ case = "../../../cases/compile/numeric/invalid.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["'fast' is not a permission", "invalid.cml:11:1", "The annotation '@kernelish' is not accepted", "invalid.cml:14:1", "it names no permission", "invalid.cml:17:1", "The annotation '@twice' is not accepted: a decorator applies to a function", "invalid.cml:21:5"]
+
+[[tests]]
+name = "library_gemm"
+desc = "The optional CBLAS backend (CAMEL_TENSOR_BLAS) does not follow matmul's canonical FMA chain, so it is never the default: tensor::fuse replaces a matmul by tensor:matmul_blas (the library GEMM when the build has one, the canonical kernel otherwise) only when its node was granted both reassociate and change_precision; a plain matmul and one granted reassociate alone stay tensor:matmul. Without a BLAS in the build the three results are the canonical ones."
+kind = "behavior"
+case = "../../../cases/compile/numeric/library_gemm.cml"
+args = ["${case}", "tensor::fuse", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const opers = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
+const blas = opers.filter((l) => l.includes('label="tensor:matmul_blas"'))
+const canonical = opers.filter((l) => l.includes('label="tensor:matmul"'))
+assert(blas.length === 1 && blas[0].includes('numeric="reassociate, change_precision"'), `one library matmul expected: ${blas}`)
+assert(canonical.length === 2 && canonical.some((l) => !l.includes('numeric=')) && canonical.some((l) => l.includes('numeric="reassociate"')), `two canonical matmuls expected: ${canonical}`)
+}
+"""
+
+[[tests]]
+name = "library_gemm.results"
+desc = "The same program run after tensor::fuse prints the canonical results in a build without a BLAS (the default)."
+kind = "behavior"
+case = "../../../cases/compile/numeric/library_gemm.cml"
+args = ["${case}", "tensor::fuse"]
+expect_exit = 0
+expect_stdout_exact = "gemm plain=-12.625 reordered=-12.625 relaxed=-12.625\n"
