@@ -190,6 +190,18 @@ std::string inspectRegions(const rt::GCGraph &graph, rt::fact::FactStore &facts)
         ids(out, region.inputs);
         out << ",\"outputs\":";
         ids(out, region.outputs);
+        auto extracted = extractRegion(graph, region);
+        out << ",\"parameters\":";
+        ids(out, extracted.parameters);
+        out << ",\"result_arity\":" << region.outputs.size();
+        out << ",\"extracted_nodes\":" << extracted.graph->nodeCount();
+        for (auto id : region.members) {
+            const auto *copy = extracted.graph->header(extracted.sourceToNode[id]);
+            if (copy->origin != graph.nodeOrigin(id) ||
+                copy->permissions != graph.nodePermissions(id) ||
+                copy->dataType != graph.node(id)->dataType())
+                throw std::runtime_error("region extraction lost source metadata");
+        }
         out << '}';
     }
     out << "],\"excluded\":[";

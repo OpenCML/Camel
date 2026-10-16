@@ -10,7 +10,9 @@
 
 // Dependency-convex region partitioning; eligibility comes from the semantic planner.
 #pragma once
+#include "camel/runtime/draft.h"
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 namespace camel::runtime {
@@ -35,7 +37,16 @@ struct Region {
 // all observable roots (including effect/control roots) and all dependency edge kinds.
 // The result contains node IDs only: no GC pointers or references to the source graph.
 std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes);
+struct RegionDraft {
+    std::unique_ptr<runtime::GraphDraft> graph;
+    std::vector<size_t> parameters; // Source IDs; constant boundary values are embedded.
+    std::vector<runtime::gc_node_ref_t> sourceToNode;
+};
+// Source and static values must remain rooted; use under NoCollectionScope until
+// encoding/attaching the graph. The returned draft is not a GC root by itself.
+RegionDraft extractRegion(const runtime::GCGraph &source, const Region &region);
+
 // Inspect one function graph without executing it or initializing CUDA. This is
-// candidate analysis, not a claim that graph extraction/execution is implemented.
+// candidate analysis with extracted drafts, not automatic graph execution.
 std::string inspectRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
 } // namespace camel::tiles

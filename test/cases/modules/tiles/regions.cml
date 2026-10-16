@@ -1,5 +1,5 @@
 module tiles_regions
-import { Tensor } from tensor
+import { Tensor, sum } from tensor
 import { regions } from tiles
 func chain(x: Tensor<f32, const [2, 3]>): Tensor<f32, const [2,3]> {
     let y = x + x
@@ -15,10 +15,20 @@ func ordered(x: Tensor<f32, const [2,3]>): Tensor<f32, const [2,3]> sync {
     let y = wait (x + x)
     return y + y
 }
+@numeric(contract)
+func shared_values(x: Tensor<f32, const [2,3]>): (Tensor<f32, const [2,3]>, Tensor<f32, const [2,3]>) {
+    let y = x + x
+    return (y, y * y)
+}
+func constant_axis(x: Tensor<f32, const [2,3]>): Tensor<f32, const [2,1]> {
+    return sum(x, 1, true)
+}
 func main(): int sync {
     println(regions<chain>())
     println(regions<dynamic>())
     println(regions<detour>())
     println(regions<ordered>())
+    println(regions<shared_values>())
+    println(regions<constant_axis>())
     return 0
 }

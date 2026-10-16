@@ -409,6 +409,12 @@ f32 pointwise operations, rank-2 matrix multiplication and supported reductions;
 dynamic shapes, scalar arithmetic, layouts and other node kinds remain boundaries.
 This is analysis for the graph pass, not automatic GPU execution.
 
+Each candidate is also extracted into a function draft. Runtime boundary values
+become distinct parameters; constant boundary values (including reduction axes)
+stay constants. Multiple exits are packed into a tuple. Operator types, source
+origins and numerical permissions are preserved. Inspection reports `parameters`,
+`result_arity` and `extracted_nodes`; it does not install or execute these drafts.
+
 Regions are connected and dependency-convex: replacing each region by one call
 must leave the complete CPU/GPU dependency graph acyclic. In particular, a direct
 GPU edge cannot justify fusion across a CPU detour. Shared values used outside a
