@@ -314,7 +314,15 @@ gradient matrix primitives use that same protocol. Tensor's private index
 callbacks are not invoked directly, so a replaced core declaration supplies both
 the selected maps and the laws against which they are validated. Static slots
 are borrowed only inside extraction's no-collection scope and never retained in
-the owned execution plan. Graph-fact caching of these queries is subsequent work.
+the owned execution plan. Extraction uses the execution context's FactStore to
+obtain `core.instance` when graph operand types match the concrete call and every
+instance parameter is known. Each read checks the graph revision and declaration
+epoch through the core store. Unknown graph facts remain unknown: call-specific
+instantiation stays in the owned plan and is never published into the shared
+function graph. `inspect` reports `graph_fact_instances` and
+`specialized_instances` as extraction query-result counts, not kernel counts or
+source-cache hit counts. Synthetic gradient primitives still instantiate directly
+because they have no originating graph node.
 
 Matrix multiplication, elementwise/layout fusion, canonical serial reductions
 and parallel maximum lower to a typed physical statement tree before CUDA
