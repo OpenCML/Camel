@@ -1,0 +1,111 @@
+[INFO] camel executable: /home/zjwei/camel-eval/tiles-75776da8/out/latest/bin/camel
+[INFO] discovered plans: 5
+
+[PLAN] feat.modules.tiles: modules.tiles
+[PASS] slice_bounds_rejected_before_cuda                     10.22 ms
+[PASS] plan                                                  10.77 ms
+[PASS] plan_validation                                       37.67 ms
+[PASS] source                                                 9.94 ms
+[PASS] reject_effect                                         13.00 ms
+[PASS] selected_branch_effect                                13.77 ms
+[PASS] empty_mean                                            12.58 ms
+[PASS] loop_structure_nvm                                    17.30 ms
+[PASS] loop_structure_fvm                                    12.87 ms
+[PASS] loop_structure_jit                                    13.54 ms
+[PASS] loop_structure_prl                                    15.01 ms
+[PASS] loop_structure_closure_nvm                             7.91 ms
+[PASS] loop_structure_closure_fvm                             6.97 ms
+[PASS] loop_structure_closure_prl                            13.56 ms
+
+[PLAN] feat.modules.graph_facts: Graph facts (camel/runtime/facts.h, docs/design/op-semantics section 10, docs/technical/40_graph_facts.md): the registry of kinds and its rules, the store and its stamps checked on every read, the core's kinds as `camel inspect --facts` prints them, how rewrites make facts stale and nothing stale is reused, and the persistence hooks.
+[PASS] registry_and_store                                     6.24 ms
+[PASS] test_passes_need_the_environment                       6.57 ms
+[PASS] inspect_facts                                          6.61 ms
+[PASS] rewrite_inline                                        14.01 ms
+[PASS] rewrite_opt                                           18.65 ms
+[PASS] rewrite_macro_simplify                                15.02 ms
+[PASS] persistence_round_trip                                12.00 ms
+
+[PLAN] gpu.tiles: gpu.tiles
+[PASS] runtime_scalars                                         1.85 s
+[PASS] ordered_reduction_fusion                                2.08 s
+[PASS] matmul_rounding.nvm                                  481.73 ms
+[PASS] matmul_rounding.fvm                                  471.49 ms
+[PASS] matmul_rounding.jit                                  481.75 ms
+[PASS] max_special_values                                      1.88 s
+[PASS] max_grid_stride                                      667.50 ms
+[PASS] benchmark_protocol                                      1.03 s
+[PASS] fusion.nvm                                           509.25 ms
+[PASS] fusion.fvm                                           499.10 ms
+[PASS] fusion.jit                                           487.52 ms
+[PASS] boundaries.nvm                                       534.47 ms
+[PASS] boundaries.fvm                                       535.60 ms
+[PASS] boundaries.jit                                       557.03 ms
+[PASS] vector_add                                           427.15 ms
+[PASS] softmax                                              501.69 ms
+[PASS] matmul                                               420.34 ms
+[PASS] consistency.nvm                                      631.74 ms
+[PASS] consistency.fvm                                      605.94 ms
+[PASS] consistency.jit                                      605.69 ms
+[PASS] index_maps.nvm                                       524.57 ms
+[PASS] index_maps.fvm                                       507.93 ms
+[PASS] index_maps.jit                                       529.71 ms
+[PASS] mapped_fusion.nvm                                    515.55 ms
+[PASS] mapped_fusion.fvm                                    524.53 ms
+[PASS] mapped_fusion.jit                                    530.03 ms
+[PASS] aggregate_outputs.nvm                                565.51 ms
+[PASS] aggregate_outputs.fvm                                578.15 ms
+[PASS] aggregate_outputs.jit                                561.05 ms
+[PASS] gradients.nvm                                        639.76 ms
+[PASS] gradients.fvm                                        630.55 ms
+[PASS] gradients.jit                                        643.73 ms
+[PASS] specialized_branches.nvm                             532.67 ms
+[PASS] specialized_branches.fvm                             684.63 ms
+[PASS] specialized_branches.jit                             535.96 ms
+[PASS] value_gradient.nvm                                   637.99 ms
+[PASS] value_gradient.fvm                                   617.89 ms
+[PASS] value_gradient.jit                                   615.66 ms
+[PASS] resident_transfers.nvm                               476.29 ms
+[PASS] resident_transfers.fvm                               477.31 ms
+[PASS] resident_transfers.jit                               532.44 ms
+[PASS] resident_compute.nvm                                 535.22 ms
+[PASS] resident_compute.fvm                                 545.09 ms
+[PASS] resident_compute.jit                                 518.04 ms
+[PASS] resident_outputs.nvm                                 588.86 ms
+[PASS] resident_outputs.fvm                                 601.15 ms
+[PASS] resident_outputs.jit                                 602.17 ms
+[PASS] resident_scalars.nvm                                 566.80 ms
+[PASS] resident_scalars.fvm                                 560.69 ms
+[PASS] resident_scalars.jit                                 545.73 ms
+[PASS] scalar_arithmetic.nvm                                590.77 ms
+[PASS] scalar_zero.nvm                                      423.21 ms
+[PASS] scalar_arithmetic.fvm                                595.37 ms
+[PASS] scalar_zero.fvm                                      429.57 ms
+[PASS] scalar_arithmetic.jit                                604.10 ms
+[PASS] scalar_zero.jit                                      435.64 ms
+[PASS] scalar_zero_positive                                 434.96 ms
+[PASS] scalar_zero_control.nvm                              441.82 ms
+[PASS] scalar_zero_control.fvm                              447.85 ms
+[PASS] scalar_zero_control.jit                              430.41 ms
+[PASS] module_lease                                            1.84 s
+[PASS] extrema_canonical_bits                                  8.89 s
+[PASS] numeric_permission_boundaries                           2.61 s
+[PASS] numeric_permissions_moving_gc                           2.59 s
+[PASS] matmul_edges.nvm                                     634.31 ms
+[PASS] matmul_edges.fvm                                     610.56 ms
+[PASS] matmul_edges.jit                                     626.31 ms
+[PASS] scalar_predicates.nvm                                441.81 ms
+[PASS] scalar_predicates.fvm                                423.59 ms
+[PASS] scalar_predicates.jit                                536.27 ms
+[PASS] graph_facts.nvm                                      532.08 ms
+[PASS] graph_facts.fvm                                      578.91 ms
+[PASS] graph_facts.jit                                      562.25 ms
+
+[PLAN] gpu.tiles_transfer: gpu.tiles_transfer
+[PASS] large_upload_completion                                 1.10 s
+
+[PLAN] gpu.tiles_rows: gpu.tiles_rows
+[PASS] shared_row_regions                                   940.92 ms
+[PASS] strict_sum_bits                                         5.85 s
+
+[SUMMARY] total: 97, pass: 97, fail: 0
