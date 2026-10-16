@@ -1,6 +1,7 @@
 # Native operators calling Camel subgraphs
 
-Status: implementation proposal. No new language syntax or numerical permissions.
+Status: invocation service and NodeVM integration implemented; other backend and macro
+bindings remain pending. No new language syntax or numerical permissions.
 This is a prerequisite for the portable execution boundary in
 [the approved Tiles route](../tiles-route/README.cn.md), section 3.3.
 

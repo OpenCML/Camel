@@ -11,7 +11,9 @@
 // Test region rewriting through ordinary CPU calls and explicit GPU execution.
 #include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/execute/function_call.h"
 #include "camel/execute/pass/opt.h"
 #include "camel/runtime/draft_session.h"
 #include "tiles/internal/graph_values.h"
@@ -24,6 +26,24 @@
 #include <vector>
 namespace camel::tiles {
 namespace {
+// Invoke twice and re-read the operator views after the first nested call. Regions
+// are pure, so the discarded result is not an observable extra effect.
+slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &context) {
+    auto invoke = [&]() {
+        auto *function = with.get<::Function *>(0);
+        std::vector<slot_t> args;
+        if (function->graph()->normPorts().size() == 1) {
+            args.push_back(norm.slot(0));
+        } else {
+            auto *tuple = norm.get<::Tuple *>(0);
+            for (size_t i = 0; i < function->graph()->normPorts().size(); ++i)
+                args.push_back(tuple->get<slot_t>(i));
+        }
+        return execute::invokeFunction(context, function, {}, args);
+    };
+    (void)invoke();
+    return invoke();
+}
 class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
     operator_t run_;
 
@@ -59,8 +79,11 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                 if (run_) {
                     const auto packed =
                         args.size() == 1 ? args.front() : packGraphTuple(draft, args);
-                    call =
-                        draft.addOperNode(type, run_, "tiles:run", draft.allocateRuntimeSlot(type));
+                    call = draft.addOperNode(
+                        type,
+                        run_,
+                        run_ == &testNativeCall ? "tiles:test_call" : "tiles:run",
+                        draft.allocateRuntimeSlot(type));
                     draft.setNormInputs(call, std::span(&packed, 1));
                 } else {
                     call = draft.addCallNode(type, {}, draft.allocateRuntimeSlot(type));
@@ -104,6 +127,14 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
 } // namespace
 void registerRegionTestPasses(operator_t run) {
     if (std::getenv("CAMEL_ENABLE_TEST_PASSES")) {
+        core::OperatorTable::instance().set(
+            "tiles:test_call",
+            {.pure = false, .callsGraphs = true});
+        registerModulePass(
+            "tiles::test_outline_native",
+            [](const core::context::context_ptr_t &ctx) {
+                return std::make_unique<RegionOutlineTestPass>(ctx, &testNativeCall);
+            });
         registerModulePass("tiles::test_outline", [](const core::context::context_ptr_t &ctx) {
             return std::make_unique<RegionOutlineTestPass>(ctx);
         });
