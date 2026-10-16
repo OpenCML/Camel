@@ -96,6 +96,10 @@ for (const r of records) {
   assert(r.device && r.driver_version > 0 && r.nvrtc_version, 'missing hardware/compiler provenance')
   assert(JSON.stringify(r.compile_options) === JSON.stringify([r.target, '--std=c++14', '--fmad=false', '--prec-div=true', '--prec-sqrt=true', '--ftz=false']), 'unexpected numerical compiler policy')
   assert(r.correctness_before.mismatches === 0 && r.correctness_after.mismatches === 0, 'correctness gate failed')
+  for (const c of [r.correctness_before, r.correctness_after]) {
+    assert(c.bitwise_elements > 0 && c.relaxed_elements === 0, 'strict benchmark must compare output bits')
+    assert(c.reference === 'same-device unfused execution', 'benchmark reference must be explicit')
+  }
   for (const name of ['optimized', 'unfused']) {
     const v = r[name]
     assert(v.device_ms.length === 21 && v.upload_host_ms.length === 21, 'missing raw samples')
@@ -1085,3 +1089,23 @@ assert(plans[5].logical_bytes !== plans[6].logical_bytes, 'captured axis did not
 for (const line of lines.slice(7)) assert(Number(line) === 0, 'fact-backed execution differs')
 }
 """
+
+[[tests]]
+name = "benchmark_permission_gate"
+kind = "behavior"
+case = "../../cases/modules/tiles/numeric_benchmark.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const records = input.normalized.stdout.trim().split(String.fromCharCode(10)).map(JSON.parse)
+  assert(records.length === 2, 'expected strict and contracted records')
+  for (const field of ['correctness_before', 'correctness_after']) {
+    const strict = records[0][field], contracted = records[1][field]
+    assert(strict.bitwise_elements === 1048576 && strict.relaxed_elements === 0, 'missing strict bitwise gate')
+    assert(contracted.bitwise_elements === 0 && contracted.relaxed_elements === 1048576, 'contract permission not reflected')
+    assert(strict.mismatches === 0 && contracted.mismatches === 0, 'correctness failure')
+  }
+}
+"""
+timeout_ms = 60000

@@ -68,6 +68,19 @@ no ordinary inputs are currently rejected. This is separate from the planned
 The annotation also supports local functions with captured values. Use `gpu(lambda)`
 when constructing a GPU-dispatched function value directly.
 
+CPU fallback may change the last bits of transcendental results such as `exp`
+and `log`: each backend must satisfy the operator's declared ulp bound, rather
+than match the other backend bit for bit. Correctly rounded primitive operations
+and specified reduction algorithms retain their strict numerical contract.
+
+The benchmark correctness gate compares optimized and unfused execution on the
+same device. Without relevant explicit numeric permissions it compares the raw
+output bits, including signed zeros; a tolerance is used only for outputs that
+depend on operations granting `contract`, `reassociate`, `approx_math` or
+`change_precision`. Reports distinguish `bitwise_elements` and `relaxed_elements`.
+This is an optimization equivalence check, not a CPU reference or a proof that
+transcendental functions satisfy their declared ulp bounds.
+
 NVRTC always receives `--fmad=false`, `--prec-div=true`, `--prec-sqrt=true`
 and `--ftz=false`. The in-process module cache compares the source and all compiler
 options, including the target architecture; device/context and NVRTC library are

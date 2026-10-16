@@ -454,29 +454,62 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
         };
         const auto actual = decode(results[0]), expected = decode(results[1]);
         std::vector<bool> exact;
-        for (auto output : program.outputs)
-            exact.insert(
-                exact.end(),
-                elements(program.nodes[output].shape),
-                program.nodes[output].dtype == DType::F64);
+        std::vector<size_t> offsets, widths;
+        size_t offset          = 0;
+        constexpr auto relaxed = core::sem::kReassociate | core::sem::kContract |
+                                 core::sem::kApproxMath | core::sem::kChangePrecision;
+        for (auto output : program.outputs) {
+            // Permission is local to each operation. Only dependencies of this
+            // output can justify a relaxed optimized/unfused comparison.
+            std::vector<bool> visited(program.nodes.size());
+            std::vector<size_t> pending{output};
+            bool bitwise = true;
+            while (!pending.empty()) {
+                const auto id = pending.back();
+                pending.pop_back();
+                if (visited[id])
+                    continue;
+                visited[id]      = true;
+                const auto &node = program.nodes[id];
+                bitwise &= !(node.permissions & relaxed);
+                pending.insert(pending.end(), node.inputs.begin(), node.inputs.end());
+            }
+            const auto &node   = program.nodes[output];
+            const size_t width = node.dtype == DType::F64 ? sizeof(double) : sizeof(float);
+            for (size_t i = 0; i < elements(node.shape); ++i) {
+                exact.push_back(bitwise);
+                offsets.push_back(offset);
+                widths.push_back(width);
+                offset += width;
+            }
+        }
         double maxAbs = 0, maxRel = 0;
         size_t mismatches = 0;
         for (size_t i = 0; i < actual.size(); ++i) {
             double a = actual[i], r = expected[i];
+            const bool equalBits = std::memcmp(
+                                       results[0].data() + offsets[i],
+                                       results[1].data() + offsets[i],
+                                       widths[i]) == 0;
+            if (exact[i] && !equalBits)
+                ++mismatches;
             if (!std::isfinite(a) || !std::isfinite(r)) {
-                if (!(a == r || (std::isnan(a) && std::isnan(r))))
+                if (!exact[i] && !(a == r || (std::isnan(a) && std::isnan(r))))
                     ++mismatches;
                 continue;
             }
             double diff = std::abs(a - r);
             maxAbs      = std::max(maxAbs, diff);
             maxRel      = std::max(maxRel, diff / std::max(1e-30, std::abs(r)));
-            if (diff > (exact[i] ? 0.0 : 1e-6 + 1e-5 * std::abs(r)))
+            if (!exact[i] && diff > 1e-6 + 1e-5 * std::abs(r))
                 ++mismatches;
         }
         if (mismatches)
             throw std::runtime_error("benchmark correctness gate failed against unfused execution");
         return json{
+            {"bitwise_elements", std::count(exact.begin(), exact.end(), true)},
+            {"relaxed_elements", std::count(exact.begin(), exact.end(), false)},
+            {"reference", "same-device unfused execution"},
             {"max_abs_error", maxAbs},
             {"max_rel_error", maxRel},
             {"mismatches", mismatches}};
