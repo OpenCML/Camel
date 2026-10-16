@@ -1,7 +1,9 @@
 # Native operators calling Camel subgraphs
 
 Status: invocation service, NodeVM, both FastVM dispatch loops and JIT native
-operator paths are implemented. Parallel-scheduler and macro bindings remain pending. No new language syntax or numerical permissions.
+operator paths are implemented. Parallel-scheduler invocation is implemented and covered by concurrent callback
+and GC-stress tests; macro bindings and the broader fault/observer acceptance
+coverage remain pending. No new language syntax or numerical permissions.
 This is a prerequisite for the portable execution boundary in
 [the approved Tiles route](../tiles-route/README.cn.md), section 3.3.
 
@@ -83,6 +85,24 @@ continues to use `inspectsGraphs` and requires no invocation scope.
    or an explicit unsupported diagnostic. They must never inherit an unrelated
    runtime scope. Audit this path before publishing the interface.
 
+## Parallel-backend integration constraint
+
+Taskflow currently treats an unmarked native operator as leaf work, even when
+`callsGraphs` is declared. Both structured `runItems` and linear `runLinearBody`
+enter a GC region before executing that leaf. Installing a callback which creates
+another region would leave the outer region held across the entire callee; nested
+polls cannot collect while the thread's region depth is nonzero.
+
+The integration must give graph-calling native operators an execution boundary
+that can release the caller's region after arguments and captures have been bound
+into the callee frame. The callee then uses `callGraph`, including its normal
+bytecode handoff, worker recursion accounting and cooperative task execution.
+On return, re-enter the region and publish the result into the caller frame before
+leaving it. Cover both prepared-operator paths, the linear execution mode and the
+task-graph execution path; do not solve this by suppressing collection throughout
+the callback. The existing handoff classifier already excludes `callsGraphs`
+operators from serial bytecode regions and should retain that restriction.
+
 ## Tiles integration after the service exists
 
 `tiles:exec` keeps the extracted function as a graph-visible input. With a usable
@@ -92,7 +112,9 @@ runtime faults are not silently converted into CPU execution.
 
 This does not replace explicit boundary transfers, device-resident values,
 symbolic compilation or cache identities required by the route. Those remain
-part of the production pass. `run` and `@gpu` retain explicit GPU semantics.
+part of the production pass. `run` currently retains explicit GPU semantics. The user-directed multi-target
+redesign makes `@gpu` a GPU preference with capability-based CPU fallback; this
+policy is not implemented yet. See [the multi-target design](../tiles-targets/README.md).
 
 ## Acceptance tests
 
