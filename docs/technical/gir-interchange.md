@@ -28,7 +28,7 @@ Each graph contains:
 - `nodes`: real runtime nodes. Each has a document-unique `id`, `kind`, display-only `label`
   and `outputType` (a source-spelled type, or `null` when unavailable).
 - `edges`: `source` and `target` node IDs, `kind` (`normal`, `context`, `control`),
-  `sourceIndex` in the source's outgoing list of that kind and `targetIndex` in the target's
+  `sourceIndex` in the source's unique-consumer list of that kind and `targetIndex` in the target's
   incoming list. Parallel/repeated inputs are separate edges.
 - `normalPorts`, `contextPorts`, `capturePorts`: ordered input-node IDs.
 - `exit`: the real output-node ID. Visual ARGS/EXIT markers belong to the viewer and are not
@@ -54,3 +54,6 @@ not define a new language-level interface declaration syntax.
 JSON carries neither Vue Flow components nor coordinates. The editor validates its references,
 creates its own synthetic boundaries and uses generated DOT only to obtain Graphviz layout.
 Its text/copy/export view retains the original JSON, not the generated layout DOT.
+
+Repeated reads of one source by the same consumer retain separate input edges and target
+indices, sharing their source-side consumer index. They do not require duplicate use entries.
