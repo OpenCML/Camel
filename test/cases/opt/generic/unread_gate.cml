@@ -1,6 +1,7 @@
 /**
  * Unread return gates must transfer their ordering to control users, including
- * effects reached through the discarded value. A read return stays gated.
+ * effects reached through the discarded value. A read gate waiting only on
+ * its returned value is redundant too; the caller's return anchor remains.
  */
 module unread_gate
 

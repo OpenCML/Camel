@@ -31,6 +31,7 @@
  *   std::opt::algebra combines local scalar arithmetic, with optional safe_fp mode;
  *   std::opt::dce   removes pure operator (and value-only) nodes whose results
  *                   are unused, SYNC control joins, and GATEs used only for control;
+ *                   also bypasses non-anchor GATEs waiting only on their forwarded value;
  *                   their ordering is transferred to their control users.
  *   std::opt::ctrl  removes control edges already implied by mandatory data/control paths,
  *                   within a work budget and without changing branch boundaries or arm anchors.

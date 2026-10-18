@@ -1,0 +1,120 @@
+id = "opt.gate_value"
+order = 330
+tier = "feat"
+tags = ["feat", "opt", "control", "autodiff"]
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 10000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "ordering.reference"
+case = "../../../cases/opt/generic/gate_value_dependency.cml"
+args = ["${case}","std::macro","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="held\nmiddle\n1.510311065909078\n0.755155532954539",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "ordering.dce"
+case = "../../../cases/opt/generic/gate_value_dependency.cml"
+args = ["${case}","std::macro","std::opt::dce","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="held\nmiddle\n1.510311065909078\n0.755155532954539",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "ordering.inline_dce"
+case = "../../../cases/opt/generic/gate_value_dependency.cml"
+args = ["${case}","std::macro","std::inline","std::opt::dce","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="held\nmiddle\n1.510311065909078\n0.755155532954539",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "ordering.opt"
+case = "../../../cases/opt/generic/gate_value_dependency.cml"
+args = ["${case}","std::macro","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="held\nmiddle\n1.510311065909078\n0.755155532954539",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "ordering.safe"
+case = "../../../cases/opt/generic/gate_value_dependency.cml"
+args = ["${case}","std::macro","std::opt(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="held\nmiddle\n1.510311065909078\n0.755155532954539",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "ordering.twice"
+case = "../../../cases/opt/generic/gate_value_dependency.cml"
+args = ["${case}","std::macro","std::opt","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="held\nmiddle\n1.510311065909078\n0.755155532954539",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "covered_value.graph.false"
+case = "../../../cases/modules/autodiff/collapse_random.cml"
+args = ["${case}", "std::macro", "std::opt(safe_fp=false)", "std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ const gates=g.nodes.filter(n=>n.kind==='GATE');
+ assert(gates.length===1&&gates[0].id===g.exit,'data-covered GATE retained or return anchor erased');
+ const node=id=>g.nodes.find(n=>n.id===id);
+ const ctrl=g.edges.filter(e=>e.kind==='control');
+ assert(ctrl.length===2,'unexpected control dependencies');
+ assert(ctrl.some(e=>node(e.source).label==='rand:seed'&&node(e.target).label==='rand:rand'),'RNG ordering lost');
+ assert(ctrl.some(e=>node(e.source).label===':io/println'&&e.target===g.exit),'return completion lost');
+}
+'''
+
+[[tests]]
+name = "covered_value.graph.true"
+case = "../../../cases/modules/autodiff/collapse_random.cml"
+args = ["${case}", "std::macro", "std::opt(safe_fp=true)", "std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ const gates=g.nodes.filter(n=>n.kind==='GATE');
+ assert(gates.length===1&&gates[0].id===g.exit,'data-covered GATE retained or return anchor erased');
+ const node=id=>g.nodes.find(n=>n.id===id);
+ const ctrl=g.edges.filter(e=>e.kind==='control');
+ assert(ctrl.length===2,'unexpected control dependencies');
+ assert(ctrl.some(e=>node(e.source).label==='rand:seed'&&node(e.target).label==='rand:rand'),'RNG ordering lost');
+ assert(ctrl.some(e=>node(e.source).label===':io/println'&&e.target===g.exit),'return completion lost');
+}
+'''
+
+[[tests]]
+name = "other_wait.graph"
+case = "../../../cases/opt/generic/gate_value_dependency.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ const gates=g.nodes.filter(n=>n.kind==='GATE'&&n.outputType==='float');
+ assert(gates.length>0,'required waits erased');
+ for(const gate of gates){
+  const e=g.edges.filter(e=>e.target===gate.id),value=e.find(e=>e.kind==='normal');
+  assert(e.some(e=>e.kind==='control'&&e.source!==value.source),'redundant gate retained');
+ }
+}
+'''

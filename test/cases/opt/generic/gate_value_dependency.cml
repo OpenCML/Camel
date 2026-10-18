@@ -1,0 +1,23 @@
+/** A gate waiting only for the value it forwards adds no ordering. Other waits must remain. */
+module gate_value_dependency
+
+import { seed, rand } from random
+import { grad } from autodiff
+
+func square(x: float): float { return x * x }
+
+func hold(x: float): float sync {
+    println('held')
+    return x
+}
+
+func main(): int sync {
+    seed(42)
+    let x = rand()
+    let y = grad(square)(x)
+    let held = hold(x)
+    println('middle')
+    println(y)
+    println(held)
+    return 0
+}

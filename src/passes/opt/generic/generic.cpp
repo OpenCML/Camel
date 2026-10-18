@@ -896,6 +896,24 @@ size_t dceDraft(GraphDraft &draft) {
     for (bool changed = true; changed;) {
         changed = false;
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            // Waiting for the very value a GATE forwards adds no dependency. Remove the
+            // whole forwarding node, rather than leaving a GATE with no CTRL input. This
+            // direct-input proof is linear in the gate's own edges and crosses no branch.
+            // replaceNode also preserves completion for users that read only control.
+            if (const auto *gate = draft.header(id);
+                gate && gate->kind == GCNodeKind::Gate && isReplaceable(draft, id) &&
+                draft.normInputsOf(id).size() == 1 && draft.withInputsOf(id).empty()) {
+                const auto value = draft.normInputsOf(id).front();
+                if (!draft.ctrlInputsOf(id).empty() &&
+                    std::ranges::all_of(draft.ctrlInputsOf(id), [&](auto pred) {
+                        return pred == value;
+                    })) {
+                    replaceNode(draft, id, value);
+                    ++removed;
+                    changed = true;
+                    continue;
+                }
+            }
             // A SYNC only joins control; replaceNode hands its predecessors to its users, which
             // keeps every ordering it expressed.
             // A GATE only forwards its value once its control inputs ran. When no node reads the
