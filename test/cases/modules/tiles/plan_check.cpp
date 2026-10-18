@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,115 @@ template<class F> void rejects(const Program &original, F mutate, const char *re
 void checkKernelIR();
 void checkMatrixContracts();
 
+namespace {
+void checkLoopSourceCache() {
+    namespace sem = camel::core::sem;
+    auto &table = camel::core::OperatorTable::instance();
+    const std::string uri = "tilestest:loop_cache";
+    const auto id = table.intern(uri);
+    sem::OperatorSemantics declaration{.key = sem::OperatorKey::of(uri)};
+    table.declareSemantics(uri, declaration);
+    auto recurrence = std::make_shared<LoopRegion>();
+    recurrence->domain = {-2147483649LL, 9007199254740993LL};
+    recurrence->stateInputs = {0};
+    recurrence->captureInputs = {1, 2};
+    recurrence->nextStates = {6};
+    auto &body = recurrence->body;
+    body.contracts = {{.uri = uri, .key = declaration.key, .declaration = table.semantics(id)}};
+    body.nodes = {{.op = "input"}, {.op = "input"}, {.op = "input"},
+                  {.op = "input", .data = {-0.0f}},
+                  {.op = "add", .inputs = {0, 3}, .semantic = 0},
+                  {.op = "multiply", .inputs = {4, 1}},
+                  {.op = "subtract", .inputs = {5, 2}}};
+    sem::IndexedInstance index;
+    index.norm = {{.kind = sem::AccessKind::Affine}, {.kind = sem::AccessKind::Affine}};
+    body.nodes[4].indexing = index;
+    body.outputs = {6};
+    Program original;
+    original.nodes = {{.op = "input", .data = {1}}, {.op = "input", .data = {2}},
+                      {.op = "input", .data = {3}},
+                      {.op = "loop", .inputs = {0, 1, 2}, .loop = recurrence}};
+    original.outputs = {3};
+    generate(original);
+    auto rebound = original;
+    rebound.nodes[0].data = {4};
+    rebound.nodes[1].data = {5};
+    rebound.nodes[2].data = {6};
+    const auto beforeRebind = kernel::generationCacheStats();
+    generate(rebound);
+    if (kernel::generationCacheStats().hits != beforeRebind.hits + 1 || rebound.source != original.source)
+        throw std::runtime_error("loop runtime inputs changed source cache identity");
+    auto mutationRejected = [&](auto mutate, const char *reason) {
+        auto changed = original;
+        auto region = std::make_shared<LoopRegion>(*original.nodes.back().loop);
+        changed.nodes.back().loop = region;
+        // The self-cycle mutation must be released even when validation fails.
+        struct Cleanup {
+            LoopRegion &region;
+            ~Cleanup() { for (auto &value : region.body.nodes) value.loop.reset(); }
+        } cleanup{*region};
+        mutate(changed, *region);
+        try { validate(changed); }
+        catch (const std::runtime_error &error) {
+            if (std::string(error.what()).find(reason) != std::string::npos) return;
+            throw;
+        }
+        throw std::runtime_error("accepted malformed loop structure");
+    };
+    mutationRejected([](auto &, auto &region) { region.captureInputs[0] = region.stateInputs[0]; },
+                     "duplicate body input binding");
+    mutationRejected([](auto &, auto &region) { region.captureInputs[1] = region.captureInputs[0]; },
+                     "duplicate body input binding");
+    mutationRejected([](auto &changed, auto &region) { region.body.nodes[0].loop = changed.nodes.back().loop; },
+                     "nested device loops");
+    mutationRejected([](auto &changed, auto &) { changed.nodes[0].loop = changed.nodes.back().loop; },
+                     "nonloop node owns a recurrence");
+    auto longer = original;
+    auto longerRegion = std::make_shared<LoopRegion>(*original.nodes.back().loop);
+    longerRegion->domain.push_back(INT64_MIN);
+    longer.nodes.back().loop = longerRegion;
+    generate(longer);
+    const auto occurrences = [](const std::string &text, const std::string &needle) {
+        size_t count = 0, position = 0;
+        while ((position = text.find(needle, position)) != std::string::npos) {
+            ++count;
+            position += needle.size();
+        }
+        return count;
+    };
+    for (const auto *program : {&original, &longer})
+        if (occurrences(program->source, "for(unsigned long long k_iteration=") != 1 ||
+            occurrences(program->source, "__fadd_rn(") != 1)
+            throw std::runtime_error("loop source expanded its arithmetic by trip count");
+    if (original.source.find("k_iteration<2ULL") == std::string::npos ||
+        longer.source.find("k_iteration<3ULL") == std::string::npos)
+        throw std::runtime_error("loop source lost the exact device trip count");
+    auto mutationMisses = [&](auto mutate, bool changesSource) {
+        auto changed = original;
+        auto region = std::make_shared<LoopRegion>(*original.nodes.back().loop);
+        changed.nodes.back().loop = region;
+        mutate(*region);
+        const auto before = kernel::generationCacheStats();
+        generate(changed);
+        if (kernel::generationCacheStats().misses != before.misses + 1 ||
+            (changesSource && changed.source == original.source))
+            throw std::runtime_error("loop structure reused an incompatible source cache entry");
+    };
+    // Adjacent integers above 2^53 must differ even though float(k) rounds alike.
+    mutationMisses([](auto &region) { region.domain[1] = 9007199254740992LL; }, true);
+    mutationMisses([](auto &region) { region.body.nodes[3].data[0] = 0.0f; }, true);
+    mutationMisses([](auto &region) { region.body.nodes[4].op = "subtract"; }, true);
+    mutationMisses([](auto &region) { region.body.nodes[4].permissions = sem::kContract; }, false);
+    mutationMisses([](auto &region) { region.body.nodes[4].indexing->exprs.constant(17); }, false);
+    mutationMisses([](auto &region) { region.captureInputs = {2, 1}; }, true);
+    mutationMisses([](auto &region) { region.stateInputs = {1}; region.captureInputs = {0, 2}; }, true);
+    mutationMisses([](auto &region) { region.nextStates = {5}; region.body.outputs = {5}; }, true);
+    table.declareSemantics(uri, declaration);
+    mutationMisses([&](auto &region) { region.body.contracts[0].declaration = table.semantics(id); }, false);
+    std::cout << "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed\n";
+}
+} // namespace
+
 int main() {
     try {
         {
@@ -61,6 +170,7 @@ int main() {
         }
         checkKernelIR();
         checkMatrixContracts();
+        checkLoopSourceCache();
         using kernel::ScalarExpr;
         using kernel::ScalarValue;
         using kernel::ScalarOp;

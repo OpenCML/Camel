@@ -1,0 +1,19 @@
+module tiles_loop_benchmark
+import { benchmark } from tiles
+@numeric(contract)
+func relaxed(a: float): float {
+    return loop s = a for k in [1, 2] do s * a + a
+}
+func strict(a: float): float {
+    return loop s = a for k in [1, 2] do s * a + a
+}
+@numeric(contract)
+func empty(a: float): float {
+    let domain: int[] = []
+    return loop s = a for k in domain do s * a + a
+}
+func pair(a: float): (float, float, float) { return (strict(a), relaxed(a), empty(a)) }
+func main(): int sync {
+    println(benchmark<pair>(1.25))
+    return 0
+}

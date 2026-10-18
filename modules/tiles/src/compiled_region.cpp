@@ -22,7 +22,7 @@ namespace {
 // Graph lineage/revision and the declaration epoch are supplied by FactStore.
 // Changing the lowering policy must change this hash; device-specific machine
 // compilation remains in the backend's context-local source cache.
-constexpr uint64_t compiledRegionTarget = 0x74696c6573000001ULL;
+constexpr uint64_t compiledRegionTarget = 0x74696c6573000002ULL;
 rt::fact::KindId compiledRegionKind() {
     static const auto kind = rt::fact::registerKind<std::shared_ptr<const Program>>(
         {.key               = "tiles.compiled_region",

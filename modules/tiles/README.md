@@ -171,6 +171,10 @@ owners are excluded; graph literals, shapes, indexing, numeric permissions, oper
 declaration revisions and scheduling options are included. A hit restores the launch
 plan and source; storage planning and validation run on every call so host and
 resident inputs can share kernels without sharing allocation ownership.
+Loop keys additionally include the exact int64 domain, state/capture bindings,
+next-state outputs and the complete owned body, including its embedded constant
+bits, index instances, permissions and declaration revisions. Deferred body ports
+carry no invocation payload; changing an outer runtime input still reuses code.
 It retains at most 32 entries and 16 MiB of
 accounted entry payload (excluding allocator overhead), with synchronized access.
 This is not a persistent semantic fingerprint or a cache of graph compilation.
@@ -242,9 +246,37 @@ Boolean `if` conditions already known at specialization (for example, a captured
 configuration flag) select exactly one arm. Only that arm is translated; an
 unselected effect is neither executed nor rejected. A selected effect is rejected
 without execution. Aggregate branch results are supported. This is specialization,
-not device-side dynamic branching: GPU-dependent conditions, `match` and loops
+not device-side dynamic branching: GPU-dependent conditions and `match`
 still need additional lowering. Changing a captured flag specializes again; the
 generated-source cache cannot substitute the other arm's implementation.
+
+Pure single-state `loop ... for ... do ...` expressions support a static `int[]`
+domain and either an f64 scalar state or a statically shaped f32 tensor state.
+The compiler owns one body program and emits one device loop with lane-local
+state; the body is compiled once, independently of the trip count. Captured f64
+scalars and f32 tensors bind as body inputs. Tensor body values must be scalar
+or match the state shape, and their access maps must be canonical pointwise maps.
+Supported body operations are pointwise arithmetic, f64 scalar add/subtract/
+multiply/divide/negation and explicit scalar conversions. Empty domains return
+the initial state without executing the body.
+
+The static iteration table preserves every signed int64 value, including negative
+values, values above 2^53 and the int64 extrema. The element may enter floating
+arithmetic through explicit `float(k)`; CUDA uses `__ll2double_rn` directly from
+the integer value. No floating conversion precedes that operation. Loop-body
+numeric permissions and operator dependencies remain attached to the owned body
+and participate in validation and source-cache identity; they grant no additional
+reassociation or contraction.
+
+`while`, `for ... while`, dynamic domains, multiple states, nested loops, integer
+element arithmetic, shape-changing state, reductions and non-pointwise accesses
+inside the body remain unsupported. These are computation boundaries for `@gpu`
+fallback; explicit `run` and `source` report an unsupported computation. Scalar
+division faults during device execution are reported without CPU replay. Region
+analysis reads the body to establish the supported subset. A selected loop region
+owns that body, and `std::tiles` does not outline it independently. Unsupported
+loops remain CPU boundaries; the graph pass may still select eligible regions
+in their unclaimed body graphs, as it does in other reachable graphs.
 
 ## Execution and numerical behavior
 
@@ -404,8 +436,8 @@ the existing stages. This is a measured heuristic, not an autotuner. Row program
 are tested with signed zeros, subnormals, nonfinite values, cancellation and random
 finite bit patterns on NodeVM, FastVM and JIT (`gpu/tiles_rows.plan.toml`).
 
-First-class public index domains, masks, layouts, schedule/resource graphs, loop and
-branch lowering, general region fusion, asynchronous memory planning,
+First-class public index domains, masks, layouts, schedule/resource graphs, general
+loop and dynamic branch lowering, general region fusion, asynchronous memory planning,
 asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.
@@ -469,9 +501,14 @@ of the public tensor element types. Integer add/subtract/multiply wrap modulo
 and logical right shift operate on the bit representation; shift counts use
 their low five bits. Explicit equal-width 32-bit bitcasts preserve all payload
 bits, including floating NaNs and signed zero. Integer division and numeric
-float/integer conversions are currently rejected. These are internal physical
+float/integer conversions other than the explicit i64-to-f64 conversion below
+are currently rejected. These are internal physical
 instructions, not new Camel source-language integer semantics. The host oracle
 and CUDA emitter implement the same rules without signed C++ overflow.
+Physical i64 literals, symbols and immutable constant-table loads preserve exact
+signed payloads. Same-type i64 comparisons remain integer comparisons, including
+above 2^53. The explicit i64-to-f64 cast rounds to nearest-even; other i64
+arithmetic, mixed-type comparisons and i64 bitcasts are rejected.
 Serial reduction bodies explicitly retain their accumulator type, initial value,
 ordered loop, mean finalization and output rounding. Fused producer and epilogue
 nodes use lexical scalar bindings, with contraction permitted only by both
@@ -509,8 +546,9 @@ member node IDs in dependency order, distinct boundary inputs and outputs, and
 exclusion reasons. It inspects the function graph without calling it or loading
 CUDA. Candidate selection uses core declarations, type/instance facts and the
 same physical index-contract checks as lowering. The current coverage is static
-f32 pointwise operations, rank-2 matrix multiplication and supported reductions;
-dynamic shapes, scalar arithmetic, layouts and other node kinds remain boundaries.
+f32 pointwise operations, rank-2 matrix multiplication, supported reductions and
+the static loop subset described above. Dynamic shapes, standalone scalar
+arithmetic, layouts and other node kinds remain boundaries.
 This is analysis for the graph pass, not automatic GPU execution.
 
 Each candidate is also extracted into a function draft. Runtime boundary values
@@ -523,6 +561,8 @@ Regions are connected and dependency-convex: replacing each region by one call
 must leave the complete CPU/GPU dependency graph acyclic. In particular, a direct
 GPU edge cannot justify fusion across a CPU detour. Shared values used outside a
 region remain explicit outputs; unreachable nodes are omitted. Control-edge
-endpoints are excluded, and this analysis does not descend into calls, branch
-arms or LOOP bodies. The internal planner is deterministic and produces maximal
-legal contractions for its greedy order, not a globally optimal cost partition.
+endpoints are excluded. Partitioning is local to each graph; loop eligibility
+also checks its body, and the graph pass visits reachable graphs while skipping
+bodies already owned by selected loop regions. The internal planner is deterministic
+and produces maximal legal contractions for its greedy order, not a globally
+optimal cost partition.

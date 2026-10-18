@@ -14,6 +14,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/loop.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/graph_values.h"
@@ -24,6 +25,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -44,9 +46,24 @@ runtime::GCGraph *outlineRegions(
     std::lock_guard rewriteLock(rewriteMutex);
     core::mm::NoCollectionScope noCollection;
     rt::RuntimeGraphDraftSession session(context.shared_from_this(), root);
-    count = 0;
-    for (auto *graph : session.collectReachableRuntimeGraphs()) {
-        const auto analysis = analyzeRegions(*graph, context.facts());
+    count             = 0;
+    const auto graphs = session.collectReachableRuntimeGraphs();
+    std::unordered_map<rt::GCGraph *, RegionAnalysis> analyses;
+    std::unordered_set<rt::GCGraph *> claimedBodies;
+    for (auto *graph : graphs) {
+        auto analysis = analyzeRegions(*graph, context.facts());
+        for (const auto &region : analysis.regions)
+            for (auto id : region.members)
+                if (graph->node(id)->kind == rt::GCNodeKind::Loop)
+                    claimedBodies.insert(rt::LoopView(*graph, id).bodyGraph());
+        analyses.emplace(graph, std::move(analysis));
+    }
+    for (auto *graph : graphs) {
+        // The outer region owns this body's recurrence and compiles it once. Outlining
+        // it separately would replace body nodes with per-iteration GPU launches.
+        if (claimedBodies.contains(graph))
+            continue;
+        const auto &analysis = analyses.at(graph);
         if (analysis.regions.empty())
             continue;
         auto &draft = session.edit(graph);

@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,46 @@
 namespace camel::tiles {
 using namespace cuda_detail;
 namespace {
+// Loop divisions report through the outer program's fault slot and node identity.
+// Allocation and the host-only shortcut must inspect owned bodies as well.
+bool programMayFault(const Program &program) {
+    return std::any_of(program.nodes.begin(), program.nodes.end(), [](const Node &node) {
+        return node.op == "scalar_div" || (node.loop && programMayFault(node.loop->body));
+    });
+}
+
+bool outputHasRelaxedDependency(const Program &program, size_t output) {
+    constexpr auto relaxed = core::sem::kReassociate | core::sem::kContract |
+                             core::sem::kApproxMath | core::sem::kChangePrecision;
+    std::vector<bool> visited(program.nodes.size());
+    std::vector<size_t> pending{output};
+    while (!pending.empty()) {
+        const auto id = pending.back();
+        pending.pop_back();
+        if (visited[id])
+            continue;
+        visited[id]      = true;
+        const auto &node = program.nodes[id];
+        if (node.loop) {
+            // The recurrence is a container, not a grant to its arithmetic.
+            // Only executed next-state dependencies contribute body permissions.
+            if (node.loop->domain.empty()) {
+                pending.insert(
+                    pending.end(),
+                    node.inputs.begin(),
+                    node.inputs.begin() + node.loop->stateInputs.size());
+                continue;
+            }
+            for (auto next : node.loop->nextStates)
+                if (outputHasRelaxedDependency(node.loop->body, next))
+                    return true;
+        } else if (node.permissions & relaxed)
+            return true;
+        pending.insert(pending.end(), node.inputs.begin(), node.inputs.end());
+    }
+    return false;
+}
+
 struct OwnedAllocation final : DeviceStorage {
     std::shared_ptr<Backend> backend;
     CUdeviceptr pointer = 0;
@@ -96,9 +136,7 @@ class DeviceRun {
                 pointers[id] = allocation->pointer;
             } else if (p.storage.slots[id] != SIZE_MAX)
                 pointers[id] = allocations[p.storage.slots[id]];
-        if (std::any_of(p.nodes.begin(), p.nodes.end(), [](const auto &n) {
-                return n.op == "scalar_div";
-            })) {
+        if (programMayFault(p)) {
             fault                                = resources.allocate(sizeof(unsigned));
             clearFault                           = resources.allocateHost(sizeof(unsigned));
             *static_cast<unsigned *>(clearFault) = UINT_MAX;
@@ -307,11 +345,7 @@ std::vector<std::byte> execute(std::shared_ptr<const Program> snapshot) {
     Backend &b = backend();
     std::lock_guard lock(b.mutex);
     Current current(b.api, b.context);
-    if (std::none_of(
-            p.nodes.begin(),
-            p.nodes.end(),
-            [](const auto &n) { return n.op == "scalar_div"; }) &&
-        std::all_of(p.outputs.begin(), p.outputs.end(), [&](size_t id) {
+    if (!programMayFault(p) && std::all_of(p.outputs.begin(), p.outputs.end(), [&](size_t id) {
             return !elements(p.nodes[id].shape) ||
                    (p.nodes[id].op == "input" && !p.nodes[id].resident);
         })) {
@@ -455,25 +489,11 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
         const auto actual = decode(results[0]), expected = decode(results[1]);
         std::vector<bool> exact;
         std::vector<size_t> offsets, widths;
-        size_t offset          = 0;
-        constexpr auto relaxed = core::sem::kReassociate | core::sem::kContract |
-                                 core::sem::kApproxMath | core::sem::kChangePrecision;
+        size_t offset = 0;
         for (auto output : program.outputs) {
             // Permission is local to each operation. Only dependencies of this
             // output can justify a relaxed optimized/unfused comparison.
-            std::vector<bool> visited(program.nodes.size());
-            std::vector<size_t> pending{output};
-            bool bitwise = true;
-            while (!pending.empty()) {
-                const auto id = pending.back();
-                pending.pop_back();
-                if (visited[id])
-                    continue;
-                visited[id]      = true;
-                const auto &node = program.nodes[id];
-                bitwise &= !(node.permissions & relaxed);
-                pending.insert(pending.end(), node.inputs.begin(), node.inputs.end());
-            }
+            const bool bitwise = !outputHasRelaxedDependency(program, output);
             const auto &node   = program.nodes[output];
             const size_t width = node.dtype == DType::F64 ? sizeof(double) : sizeof(float);
             for (size_t i = 0; i < elements(node.shape); ++i) {

@@ -66,6 +66,8 @@ struct RegionAnalysis {
     RegionTransfers transfers;
 };
 RegionAnalysis analyzeRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
+std::string loopEligibility(
+    const runtime::GCGraph &graph, runtime::gc_node_ref_t node, runtime::fact::FactStore &facts);
 struct RegionDeviceOps {
     operator_t upload, execute, download;
     std::string uploadUri = "tiles:upload", executeUri = "tiles:run_device",

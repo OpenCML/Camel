@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,67 @@
 using namespace camel::tiles;
 using namespace camel::tiles::kernel;
 using namespace camel::tiles::cuda_detail;
+
+namespace {
+void testScalarI64Device(const std::shared_ptr<Backend> &backend) {
+    const std::vector<int64_t> values = {
+        0, 1, -1, 2147483649LL, -2147483649LL,
+        9007199254740991LL, 9007199254740992LL, 9007199254740993LL,
+        9007199254740994LL, 9007199254740995LL, -9007199254740993LL,
+        -9007199254740995LL, INT64_MAX, INT64_MIN, INT64_MIN + 1,
+        INT64_MAX - 512, INT64_MAX - 511};
+    const auto a = ScalarExpr::symbol("a", ScalarType::I64);
+    const auto b = ScalarExpr::symbol("b", ScalarType::I64);
+    const auto converted = ScalarExpr::cast(ScalarType::F64, a);
+    const std::array<ScalarCompare, 4> comparisons = {
+        ScalarCompare::Equal, ScalarCompare::NotEqual, ScalarCompare::Less, ScalarCompare::LessEqual};
+    const size_t count = values.size() * values.size(), width = 8;
+    std::vector<uint64_t> input, output(count * width);
+    for (const auto value : values)
+        input.push_back(ScalarValue::i64(value).bits);
+    const auto n = std::to_string(values.size());
+    std::string source = scalarCudaPreamble() +
+        "\nextern \"C\" __global__ void scalar_i64_probe(const unsigned long long* x,unsigned long long* y){"
+        "unsigned i=threadIdx.x;long long a=tiles_i64(x[i/" + n + "]),b=tiles_i64(x[i%" + n + "]);\n"
+        "y[i*8]=(unsigned long long)a;y[i*8+1]=(unsigned long long)__double_as_longlong(" + converted.cuda() + ");\n";
+    for (size_t j = 0; j < comparisons.size(); ++j)
+        source += "y[i*8+" + std::to_string(j + 2) + "]=" + ScalarPredicate{comparisons[j], a, b}.cuda() + ";\n";
+    // Literal emission gets an independent device execution, including the
+    // INT64_MIN spelling which cannot use a positive signed decimal token.
+    for (size_t j = 0; j < values.size(); ++j) {
+        const auto literal = ScalarExpr::literal(ScalarValue::i64(values[j]));
+        source += "if(i/" + n + "==" + std::to_string(j) + "){y[i*8+6]=(unsigned long long)" + literal.cuda() +
+            ";y[i*8+7]=(unsigned long long)__double_as_longlong(" + ScalarExpr::cast(ScalarType::F64, literal).cuda() + ");}\n";
+    }
+    source += "}\n";
+    auto lease = backend->module(source);
+    Resources resources(backend);
+    auto &api = backend->api;
+    auto x = resources.allocate(input.size() * sizeof(uint64_t));
+    auto y = resources.allocate(output.size() * sizeof(uint64_t));
+    api.check(api.cuMemcpyHtoD(x, input.data(), input.size() * sizeof(uint64_t)), "upload i64 oracle inputs");
+    CUfunction kernel;
+    api.check(api.cuModuleGetFunction(&kernel, lease.compiled->module, "scalar_i64_probe"), "resolve i64 oracle");
+    void *args[] = {&x, &y};
+    api.check(api.cuLaunchKernel(kernel, 1, 1, 1, static_cast<unsigned>(count), 1, 1, 0,
+                                resources.stream, args, nullptr), "launch i64 oracle");
+    api.check(api.cuStreamSynchronize(resources.stream), "complete i64 oracle");
+    api.check(api.cuMemcpyDtoH(output.data(), y, output.size() * sizeof(uint64_t)), "read i64 oracle");
+    for (size_t i = 0; i < count; ++i) {
+        const auto av = ScalarValue::i64(values[i / values.size()]);
+        const auto bv = ScalarValue::i64(values[i % values.size()]);
+        const std::unordered_map<std::string, ScalarValue> bindings = {{"a", av}, {"b", bv}};
+        const auto castBits = converted.evaluate(bindings).bits;
+        if (output[i * width] != av.bits || output[i * width + 1] != castBits ||
+            output[i * width + 6] != av.bits || output[i * width + 7] != castBits)
+            throw std::runtime_error("scalar i64 device payload or cast mismatch at row " + std::to_string(i));
+        for (size_t j = 0; j < comparisons.size(); ++j)
+            if (output[i * width + j + 2] != ScalarPredicate{comparisons[j], a, b}.evaluate(bindings))
+                throw std::runtime_error("scalar i64 device comparison mismatch at row " + std::to_string(i));
+    }
+    std::cout << "tiles scalar i64 device: 2312 exact payload, cast and comparison results matched\n";
+}
+} // namespace
 
 void testScalarDevice() {
     auto backend = std::make_shared<Backend>();
@@ -97,4 +158,5 @@ void testScalarDevice() {
         }
     }
     std::cout << "tiles scalar device: 9728 typed host/CUDA results matched\n";
+    testScalarI64Device(backend);
 }

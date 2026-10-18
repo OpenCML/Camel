@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -151,6 +151,7 @@ void validate(const Program &p, InputBindings bindings) {
     }
     for (size_t id = 0; id < p.nodes.size(); ++id) {
         const auto &n = p.nodes[id];
+        require(n.op == "loop" || !n.loop, "nonloop node owns a recurrence");
         require(
             n.semantic == SIZE_MAX || n.semantic < p.contracts.size(),
             "missing operator contract");
@@ -187,6 +188,17 @@ void validate(const Program &p, InputBindings bindings) {
         }
         require(!n.resident, "computed value borrows input storage");
         require(n.data.empty() && !n.scalarBits, "computed value has host payload");
+        if (n.op == "loop") {
+            kernel::validateLoopRegion(p, n);
+            continue;
+        }
+        if (n.op == "loop_index_f64") {
+            require(
+                n.dtype == DType::F64 && n.shape.empty() && n.inputs.empty() &&
+                    n.attributes.empty(),
+                "loop element conversion type");
+            continue;
+        }
         if (n.op == "scalar_add" || n.op == "scalar_sub" || n.op == "scalar_mul" ||
             n.op == "scalar_div" || n.op == "scalar_neg") {
             require(

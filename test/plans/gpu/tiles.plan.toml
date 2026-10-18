@@ -918,7 +918,7 @@ tool = "python"
 case = "../../cases/modules/tiles/module_lease.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed", "tiles resources: cross-thread drain, release and context restoration passed", "tiles precision: subnormals, rounding and explicit FMA bits passed", "tiles scalar device: 9728 typed host/CUDA results matched"]
+expect_stdout_contains = ["tiles scalar i64 device: 2312 exact payload, cast and comparison results matched", "tiles module lease: eviction, launch and teardown passed", "tiles resources: cross-thread drain, release and context restoration passed", "tiles precision: subnormals, rounding and explicit FMA bits passed", "tiles scalar device: 9728 typed host/CUDA results matched"]
 timeout_ms = 60000
 
 [[tests]]
@@ -1129,3 +1129,23 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["Transcendental declared ULP bounds: four schedulers PASS"]
 timeout_ms = 60000
+
+[[tests]]
+name = "static_loop_device"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/loop_device.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: LOOP", "std::fvm: LOOP", "std::jit: LOOP", "std::prl: LOOP"]
+timeout_ms = 180000
+
+[[tests]]
+name = "loop_boundaries_faults_permissions"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/loop_checks.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: LOOP CPU boundaries", "std::fvm: LOOP CPU boundaries", "std::jit: LOOP CPU boundaries", "std::prl: LOOP CPU boundaries", "neighboring GPU regions preserved PASS"]
+timeout_ms = 180000

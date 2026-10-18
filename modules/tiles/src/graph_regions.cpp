@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,6 +69,11 @@ const std::unordered_map<core::OperId, std::string> &operations() {
 std::string
 eligibility(const rt::GCGraph &graph, rt::gc_node_ref_t id, rt::fact::FactStore &facts) {
     const auto *node = graph.node(id);
+    if (node->kind == rt::GCNodeKind::Loop) {
+        if (!graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty())
+            return "control_edge";
+        return loopEligibility(graph, id, facts);
+    }
     if (node->kind != rt::GCNodeKind::Oper)
         return "node_kind";
     if (!graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty())

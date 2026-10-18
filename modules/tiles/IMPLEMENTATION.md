@@ -22,6 +22,18 @@ follow [the design principles](../../docs/design-principles.cn.md).
   scalar, parallel maximum, matrix and row-region lowering emit this representation;
   CUDA printing is centralized. Statement validation checks bindings, types, memory
   permissions and barrier uniformity; it is not a general race or bounds proof.
+- `src/loop_kernel.cpp` lowers a pure static-array `For` recurrence to one device
+  loop with one f64 scalar or same-shape, lane-local f32 tensor state. The compiler
+  owns and lowers the body once, with explicit state and capture ports. The static
+  table retains exact int64 elements; `float(k)` uses an explicit nearest-even
+  i64-to-f64 instruction. Empty domains retain the initial state. Dynamic domains,
+  while conditions, multiple states, nested loops, integer element arithmetic and
+  non-pointwise or shape-changing bodies remain unsupported computations.
+- `src/codegen_cache.cpp` recursively keys recurrence domains, port maps, next
+  states, body constants, index instances, numeric grants and declaration revisions.
+  Embedded body constants retain their exact bits; outer invocation values and
+  their owners remain outside the source key. Validation rejects unsupported
+  nested loop bodies before recursively validating their dependencies.
 - `src/row_kernel.cpp` and `row_body.cpp` plan shared row intermediates. Maximum is
   order-independent under the canonical NaN/zero policy. Sum uses an exactness proof
   for a parallel f64 sum and falls back to the canonical ordered chain when needed.

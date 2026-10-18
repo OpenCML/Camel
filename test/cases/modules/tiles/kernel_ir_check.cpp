@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,7 +24,84 @@ void checkReductionContracts();
 void checkGeneralReductions();
 void checkRegions();
 
+namespace {
+void checkScalarI64() {
+    const auto literal = [](int64_t value) { return ScalarExpr::literal(ScalarValue::i64(value)); };
+    const auto element = ScalarExpr::symbol("element", ScalarType::I64);
+    const auto converted = ScalarExpr::cast(ScalarType::F64, element);
+    // Explicit IEEE encodings lock in nearest-even rounding independently of
+    // the host conversion used by the reference evaluator.
+    const std::vector<std::pair<int64_t, uint64_t>> cases = {
+        {0, 0}, {1, 0x3ff0000000000000ULL}, {-1, 0xbff0000000000000ULL},
+        {2147483649LL, 0x41e0000000200000ULL}, {-2147483649LL, 0xc1e0000000200000ULL},
+        {9007199254740991LL, 0x433fffffffffffffULL},
+        {9007199254740992LL, 0x4340000000000000ULL},
+        {9007199254740993LL, 0x4340000000000000ULL},
+        {9007199254740994LL, 0x4340000000000001ULL},
+        {9007199254740995LL, 0x4340000000000002ULL},
+        {-9007199254740993LL, 0xc340000000000000ULL},
+        {-9007199254740995LL, 0xc340000000000002ULL},
+        {INT64_MAX, 0x43e0000000000000ULL}, {INT64_MIN, 0xc3e0000000000000ULL},
+        {INT64_MIN + 1, 0xc3e0000000000000ULL},
+        {INT64_MAX - 512, 0x43dfffffffffffffULL},
+        {INT64_MAX - 511, 0x43e0000000000000ULL}};
+    for (const auto &[value, expected] : cases) {
+        const std::unordered_map<std::string, ScalarValue> bindings = {{"element", ScalarValue::i64(value)}};
+        if (literal(value).evaluate({}).asI64() != value ||
+            element.evaluate(bindings).asI64() != value ||
+            converted.evaluate(bindings).bits != expected ||
+            ScalarExpr::cast(ScalarType::F64, literal(value)).evaluate({}).bits != expected ||
+            element.substitute("element", literal(value)).evaluate({}).asI64() != value ||
+            ScalarExpr::cast(ScalarType::I64, literal(value)).evaluate({}).asI64() != value)
+            throw std::runtime_error("physical i64 payload or nearest-even cast mismatch");
+        for (const auto &[other, ignored] : cases) {
+            for (const auto compare : {ScalarCompare::Equal, ScalarCompare::NotEqual,
+                                       ScalarCompare::Less, ScalarCompare::LessEqual}) {
+                const bool expectedComparison = compare == ScalarCompare::Equal ? value == other
+                    : compare == ScalarCompare::NotEqual ? value != other
+                    : compare == ScalarCompare::Less ? value < other : value <= other;
+                if (ScalarPredicate{compare, element, literal(other)}.evaluate(bindings) != expectedComparison)
+                    throw std::runtime_error("physical i64 comparison lost integer precision");
+            }
+        }
+    }
+    if (converted.cuda() != "__ll2double_rn(element)" ||
+        literal(INT64_MIN).cuda() != "tiles_i64(9223372036854775808ULL)" ||
+        literal(INT64_MAX).cuda() != "tiles_i64(9223372036854775807ULL)" ||
+        element.symbols().at("element") != ScalarType::I64)
+        throw std::runtime_error("physical i64 CUDA type lost");
+    auto rejected = [](auto action) {
+        try { action(); } catch (const std::invalid_argument &) { return; }
+        throw std::runtime_error("accepted unsupported physical i64 operation");
+    };
+    const auto wide = literal(INT64_MAX), one = literal(1);
+    for (const auto op : {ScalarOp::Add, ScalarOp::Subtract, ScalarOp::Multiply,
+                          ScalarOp::Divide, ScalarOp::Minimum, ScalarOp::Maximum,
+                          ScalarOp::BitAnd, ScalarOp::BitOr, ScalarOp::BitXor,
+                          ScalarOp::LogicalShiftRight})
+        rejected([&] { ScalarExpr::apply(op, {wide, one}); });
+    for (const auto op : {ScalarOp::Neg, ScalarOp::Abs, ScalarOp::Exp, ScalarOp::Log, ScalarOp::Sqrt})
+        rejected([&] { ScalarExpr::apply(op, {wide}); });
+    rejected([&] { ScalarExpr::apply(ScalarOp::Fma, {wide, wide, one}); });
+    for (const auto type : {ScalarType::F32, ScalarType::F64, ScalarType::I32, ScalarType::U32}) {
+        const auto other = ScalarExpr::symbol("other", type);
+        rejected([&] { ScalarExpr::apply(ScalarOp::Add, {wide, other}); });
+        rejected([&] { ScalarExpr::cast(ScalarType::I64, other); });
+        if (type != ScalarType::F64)
+            rejected([&] { ScalarExpr::cast(type, wide); });
+        rejected([&] { ScalarExpr::bitcast(type, wide); });
+        rejected([&] { ScalarExpr::bitcast(ScalarType::I64, other); });
+        rejected([&] { ScalarPredicate{ScalarCompare::Equal, wide, other}.evaluate({}); });
+        rejected([&] { ScalarPredicate{ScalarCompare::Less, wide, other}.cuda(); });
+    }
+    rejected([&] { ScalarValue::f64(1).asI64(); });
+    rejected([&] { element.substitute("element", ScalarExpr::literal(ScalarValue::f64(0))); });
+    std::cout << "tiles scalar i64: exact payloads, comparisons and nearest-even f64 casts passed\n";
+}
+} // namespace
+
 void checkKernelIR() {
+    checkScalarI64();
     checkPointwiseContracts();
     checkReductionContracts();
     checkGeneralReductions();

@@ -20,6 +20,7 @@
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/loop.h"
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/ops/support.h"
 #include "modules/tensor/tensor.h"
@@ -27,6 +28,7 @@
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/compiled_region.h"
+#include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <bit>
@@ -54,6 +56,7 @@ struct Value {
     std::vector<Value> fields;
     // Borrowed function graph and captured values, used only while reading the graph.
     rt::GCGraph *function = nullptr;
+    bool loopElement = false; // Exact i64 body port, materialized only by an explicit conversion.
 };
 struct Frame {
     rt::GCGraph *graph;
@@ -231,6 +234,108 @@ class Compiler {
         return value;
     }
 
+    Value placeholder(ty::Type *type) {
+        Node node{.op = "input"};
+        if (type->code() == ty::TypeCode::Float64)
+            node.dtype = DType::F64;
+        else {
+            const auto *t = tensor::asTensorType(type);
+            if (!t || t->dtype() != ty::TypeCode::Float32 || !t->isStaticShape())
+                throw UnsupportedComputation(
+                    "loop values require f64 scalars or static f32 tensors");
+            node.shape = *t->shape();
+        }
+        return {.type = type, .tensor = append(std::move(node))};
+    }
+    size_t materialize(const Value &value) {
+        if (value.tensor != SIZE_MAX)
+            return value.tensor;
+        if (value.constant && std::holds_alternative<double>(*value.constant))
+            return append(
+                Node{
+                    .op         = "constant64",
+                    .attributes = {std::bit_cast<int64_t>(std::get<double>(*value.constant))},
+                    .dtype      = DType::F64});
+        throw UnsupportedComputation("loop state/capture must be a tensor or f64 value");
+    }
+    Value loop(Frame &frame, rt::gc_node_ref_t id) {
+        const rt::LoopView view(*frame.graph, id);
+        if (view.kind() != core::LoopKind::For || view.stateCount() != 1 ||
+            !view.bodyEffects().pure())
+            throw UnsupportedComputation("tiles requires a pure single-state static For loop");
+        auto *body = view.bodyGraph();
+        const rt::fact::Anchor anchors[]{{frame.graph, id}, {body, *view.bodyElementParam()}};
+        const auto domain =
+            facts.obtain<rt::fact::LoopDomain>(rt::fact::coreKinds().loopDomain, anchors);
+        if (!domain || !domain->extent || *domain->extent < 0 ||
+            body->node(*view.bodyElementParam())->dataType()->code() != ty::TypeCode::Int64)
+            throw UnsupportedComputation("tiles loop requires a static int[] domain");
+        const auto iterable = eval(frame, *view.iterable());
+        if (!iterable.constant || !std::holds_alternative<std::vector<int64_t>>(*iterable.constant))
+            throw UnsupportedComputation("tiles loop requires exact static int[] values");
+        auto region    = std::make_shared<LoopRegion>();
+        region->domain = std::get<std::vector<int64_t>>(*iterable.constant);
+        if (region->domain.size() != static_cast<size_t>(*domain->extent))
+            throw std::runtime_error("core loop domain disagrees with static array");
+        Compiler nested(facts);
+        nested.active    = active;
+        auto initial     = eval(frame, view.initialState(0));
+        const auto state = nested.placeholder(initial.type);
+        region->stateInputs.push_back(state.tensor);
+        std::vector<Value> captures;
+        std::vector<size_t> inputs{materialize(initial)};
+        for (auto ref : view.captures()) {
+            const auto outer = eval(frame, ref);
+            inputs.push_back(materialize(outer));
+            auto inner = nested.placeholder(outer.type);
+            region->captureInputs.push_back(inner.tensor);
+            captures.push_back(std::move(inner));
+        }
+        // One activation is lowered once. The device loop carries the recurrence;
+        // Compiler::call is never repeated according to the domain's trip count.
+        Frame activation{.graph = body};
+        activation.values.emplace(
+            *view.bodyElementParam(),
+            Value{.type = body->node(*view.bodyElementParam())->dataType(), .loopElement = true});
+        activation.values.emplace(view.bodyStateParam(0), state);
+        for (size_t c = 0; c < captures.size(); ++c)
+            activation.values.emplace(view.bodyCapturePort(c), captures[c]);
+        nested.active.insert(body);
+        if (body->exitNodeRef() != rt::kInvalidNodeRef)
+            nested.eval(activation, body->exitNodeRef());
+        auto result = nested.eval(activation, view.nextState());
+        region->nextStates.push_back(nested.materialize(result));
+        region->body         = std::move(nested.program);
+        region->body.outputs = region->nextStates;
+        const auto &source   = program.nodes[inputs.front()];
+        Node node{
+            .op     = "loop",
+            .shape  = source.shape,
+            .inputs = std::move(inputs),
+            .dtype  = source.dtype};
+        node.loop = std::move(region);
+        // A legal graph outside the initial lane-local subset remains a CPU region.
+        // Structural/contract validation below still reports actual malformed IR.
+        for (const auto &value : node.loop->body.nodes) {
+            const auto &op       = value.op;
+            const bool supported = op == "input" || op == "constant64" || op == "loop_index_f64" ||
+                                   op == "cast_f32" || op == "scalar_add" || op == "scalar_sub" ||
+                                   op == "scalar_mul" || op == "scalar_div" || op == "scalar_neg" ||
+                                   elementwise(op);
+            if (!supported || value.loop || (!value.shape.empty() && value.shape != node.shape) ||
+                (elementwise(op) && !kernel::canonicalPointwise(node.loop->body, value)) ||
+                (op == "input" && !value.data.empty() && !value.shape.empty()))
+                throw UnsupportedComputation(
+                    "tiles loop body is not a supported lane-local recurrence");
+            // Scalar expressions still execute when a tensor has no elements. Without a
+            // lane to report their fault, keep this recurrence on the CPU instead.
+            if (op == "scalar_div" && !node.loop->domain.empty() && elements(node.shape) == 0)
+                throw UnsupportedComputation("tiles loop needs a lane to preserve scalar faults");
+        }
+        kernel::validateLoopRegion(program, node);
+        return {.type = initial.type, .tensor = append(std::move(node))};
+    }
+
     Value eval(Frame &f, rt::gc_node_ref_t id) {
         if (auto it = f.values.find(id); it != f.values.end())
             return it->second;
@@ -244,6 +349,9 @@ class Compiler {
             Value out;
             const auto ins = g->normInputsOf(id);
             switch (node->kind) {
+            case rt::GCNodeKind::Loop:
+                out = loop(f, id);
+                break;
             case rt::GCNodeKind::Data:
                 if (node->dataIndex >= 0)
                     throw std::runtime_error("nonconstant DATA node");
@@ -461,6 +569,22 @@ class Compiler {
     Value operation(
         core::OperId id, const std::vector<Value> &args,
         const std::optional<core::sem::IndexedInstance> &indexed) {
+        static const auto intToFloat = core::OperatorTable::instance().intern(":op/ltod");
+        if (id == intToFloat && args.size() == 1) {
+            if (args[0].loopElement)
+                return {
+                    .type   = ty::Type::Float64(),
+                    .tensor = append(Node{.op = "loop_index_f64", .dtype = DType::F64})};
+            if (args[0].constant && std::holds_alternative<int64_t>(*args[0].constant))
+                return {
+                    .type   = ty::Type::Float64(),
+                    .tensor = append(
+                        Node{
+                            .op         = "constant64",
+                            .attributes = {std::bit_cast<int64_t>(
+                                static_cast<double>(std::get<int64_t>(*args[0].constant)))},
+                            .dtype      = DType::F64})};
+        }
         static const auto scalarOps = [] {
             auto &table = core::OperatorTable::instance();
             return std::unordered_map<core::OperId, std::string>{
@@ -666,6 +790,27 @@ class Compiler {
     }
 };
 } // namespace
+
+// Read-only capability probing uses the very same recurrence compiler with deferred
+// boundary inputs. It creates no graph, function, CUDA context, or retained GC reference.
+std::string
+loopEligibility(const rt::GCGraph &graph, rt::gc_node_ref_t id, rt::fact::FactStore &facts) {
+    try {
+        Compiler compiler(facts);
+        Frame frame{.graph = const_cast<rt::GCGraph *>(&graph)};
+        const rt::LoopView view(graph, id);
+        if (view.kind() != core::LoopKind::For || view.stateCount() != 1)
+            return "unsupported_loop_form";
+        for (auto ref : {view.initialState(0)})
+            frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
+        for (auto ref : view.captures())
+            frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
+        (void)compiler.loop(frame, id);
+        return {};
+    } catch (const UnsupportedComputation &) {
+        return "unsupported_loop_body_or_domain";
+    }
+}
 
 static Program compileInputs(
     Function *function, const std::vector<Argument> &arguments, rt::fact::FactStore &facts,

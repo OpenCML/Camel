@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,6 +38,8 @@ void kernel::emitCUDA(Program &p) {
             if (!region)
                 throw std::runtime_error("invalid row region");
             code << emitBody(rowBody(p, *region, launch));
+        } else if (n.op == "loop") {
+            code << emitBody(loopBody(p, launch));
         } else if (n.op.starts_with("scalar_")) {
             code << emitBody(scalarBody(p, launch));
         } else if (launch.implementation == "parallel_max") {
