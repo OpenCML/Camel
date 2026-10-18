@@ -4,6 +4,15 @@ tier = "gpu"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]
+name = "device_parameter_tree_training"
+kind = "behavior"
+case = "../../cases/modules/tiles/device_tree.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "0.0\n0.0\n0.0\n0.0\n0.0\n0.0\n"
+timeout_ms = 60000
+
+[[tests]]
 name = "large_upload_completion"
 kind = "behavior"
 case = "../../cases/modules/tiles/upload_large.cml"

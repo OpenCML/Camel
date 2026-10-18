@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -97,12 +97,14 @@ class OtherType : public Type {
         return params_ ? std::span<Type *const>(params_, paramCount_) : std::span<Type *const>();
     }
 
-    virtual OtherType *cloneWithParams(std::span<Type *const> params) const = 0;
+    // A module type constructor may normalize to an ordinary structural type.
+    // Device<{a: A}> is {a: Device<A>}, rather than an opaque wrapper.
+    virtual Type *cloneWithParams(std::span<Type *const> params) const = 0;
     /// The type `Name<args...>` denotes, arguments in source order. A type that gives its
     /// constant arguments a meaning overrides this; the default accepts type arguments only
     /// (and hands them to cloneWithParams). Returns nullptr with `error` set when the arguments
     /// are not ones the type accepts; the compiler reports that at the type expression.
-    virtual OtherType *
+    virtual Type *
     cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const;
 
     /// Whether the arguments of this type are plain types and nothing else (`Map<K, V>`), as

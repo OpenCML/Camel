@@ -32,6 +32,7 @@
 #include "tiles/internal/dispatch.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
+#include "tiles/internal/tree_transfer.h"
 #include "tiles/program.h"
 #include <cstdlib>
 #include <cstring>
@@ -228,43 +229,10 @@ slot_t runCompiledDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return runResidentPrepared(with, std::move(program));
 }
 slot_t uploadKernel(ArgsView &, ArgsView &norm, Context &) {
-    return checked([&] {
-        if (norm.type(0)->code() == TypeCode::Float64) {
-            double value = norm.get<double>(0);
-            return wrapDevice(uploadValue({}, DType::F64, std::as_bytes(std::span(&value, 1))));
-        }
-        Shape shape;
-        std::vector<float> data;
-        {
-            core::mm::NoCollectionScope noCollection;
-            auto *tensor = norm.get<tensor::TensorObject *>(0);
-            if (tensor->dtype() != TypeCode::Float32)
-                throw std::runtime_error("upload currently requires f32 tensors");
-            shape              = tensor->shapeVector();
-            const size_t count = elements(shape);
-            if (count)
-                data.assign(tensor->dataAs<float>(), tensor->dataAs<float>() + count);
-        }
-        auto resident = uploadValue(shape, DType::F32, std::as_bytes(std::span(data)));
-        return wrapDevice(std::move(resident));
-    });
+    return checked([&] { return transferTree(norm, true); });
 }
 slot_t downloadKernel(ArgsView &, ArgsView &norm, Context &) {
-    return checked([&] {
-        auto *wrapper = norm.get<td::ForeignResourceObject *>(0);
-        auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
-        auto data     = downloadValue(*resident);
-        if (resident->dtype == DType::F64) {
-            double value;
-            std::memcpy(&value, data.data(), sizeof(value));
-            return td::toSlot(value);
-        }
-        auto *out =
-            tensor::TensorObject::create(TypeCode::Float32, resident->shape, core::mm::autoSpace());
-        if (!data.empty())
-            std::memcpy(out->rawData(), data.data(), data.size());
-        return td::toSlot(out);
-    });
+    return checked([&] { return transferTree(norm, false); });
 }
 // Called only while collection is inhibited; aggregates are rebuilt with exact types.
 slot_t hostResidentValue(Type *hostType, slot_t value, bool retain) {
@@ -564,7 +532,7 @@ class TilesModule final : public BuiltinModule {
                     {{"tiles:" + name,
                       DynamicFuncTypeResolver::create(
                           {{0, {}}, {1, {false}}},
-                          name == "upload" ? "(T: Tensor or float) => Device<T>"
+                          name == "upload" ? "(T: Tensor, float, struct or tuple) => Device<T>"
                                            : "(Device<T>) => T",
                           [upload = name == "upload"](
                               const type_vec_t &with,
@@ -572,18 +540,8 @@ class TilesModule final : public BuiltinModule {
                               const ModifierSet &) -> std::optional<Type *> {
                               if (!with.empty() || norm.size() != 1)
                                   return std::nullopt;
-                              if (upload) {
-                                  if (norm[0]->code() == TypeCode::Float64)
-                                      return DeviceType::get(norm[0]);
-                                  const auto *tensor = tensor::asTensorType(norm[0]);
-                                  if (!tensor ||
-                                      (tensor->dtype() && *tensor->dtype() != TypeCode::Float32))
-                                      return std::nullopt;
-                                  return DeviceType::get(norm[0]);
-                              }
-                              const auto *device = asDeviceType(norm[0]);
-                              return device ? std::optional<Type *>(device->hostType())
-                                            : std::nullopt;
+                              auto *result = transferTreeType(norm[0], upload);
+                              return result ? std::optional<Type *>(result) : std::nullopt;
                           })}}));
         }
         std::vector<std::string>
