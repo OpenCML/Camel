@@ -21,7 +21,7 @@
         },
         {
             "name": "CAMEL_TENSOR_BLAS",
-            "description": "Use a system CBLAS (find_package(BLAS)) for tensor GEMM instead of the builtin kernels",
+            "description": "Link a system CBLAS (find_package(BLAS)) for a matmul granted reassociate and change_precision (tensor:matmul_blas); every other GEMM stays on the canonical builtin kernels",
             "default": "OFF",
             "type": "bool"
         }

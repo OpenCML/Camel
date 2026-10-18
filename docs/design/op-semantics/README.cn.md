@@ -1106,7 +1106,7 @@ if (const sem::OperatorSemantics *s = table.semantics(operId)) {   // 无锁；n
     s->numeric.cls;                  // Exact / CorrectlyRounded / Bounded / Opaque
     s->numeric.compute;              // 舍入所在的类型（Float32、Float64）
     s->numeric.ulpBound;             // Bounded 才有：exp、log 为 2
-    s->numeric.specials;             // 与 IEEE 不同之处：exp 把次正规数结果冲为 0（subnormals = false）
+    s->numeric.specials;             // 与 IEEE 不同之处；张量算子目前都没有（exp 的次正规数结果 2026-10-16 起不再冲为 0）
     s->numeric.sensitiveTo;          // 哪些许可会改变它的结果；不在其中的许可对它无作用
     s->faults;                       // nullopt = 未声明（看 mayFault 位）；标量除法有 {DivisionByZero, 1}
 }
@@ -1114,7 +1114,7 @@ table.bind(sem::OperatorKey::parse("tensor:matmul@1.0").value());  // 读缓存�
 table.declarationEpoch();            // 声明有增改时加一
 ```
 
-已声明的：内建 `:op/` 标量的加减乘除、取模、取负、比较（i32/int/f32/float）；张量的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`、`neg`、`abs`、`relu`、`sqrt`、`rsqrt`、`exp`、`log`、`sum`、`sum_axis`、`mean`、`mean_axis`、`max_axis`、`min_axis`、`sum_to`、`matmul`、`reshape`、`flatten`、`unsqueeze`、`transpose`、`permute`、`slice`、`broadcast_like`、`expand_axis`。`softmax`、`matmul_grad_*`、`cast_like` 等未声明（Opaque）。张量算子的声明描述 f32 的情形；整数与布尔元素一律精确。`camel inspect --ops <程序>` 在每个已声明的算子上打印 `"semantics": {...}`，可以直接核对。下标映射与归约律是第二阶段：Tiles 在此之前仍按今天的方式（`reindex`、名字）取得映射与累加类型。
+已声明的：内建 `:op/` 标量的加减乘除、取模、取负、比较（i32/int/f32/float）；张量的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`、`neg`、`abs`、`relu`、`sqrt`、`rsqrt`、`exp`、`log`、`sum`、`sum_axis`、`mean`、`mean_axis`、`max_axis`、`min_axis`、`argmax_axis`、`argmin_axis`、`sum_to`、`matmul`、`reshape`、`flatten`、`unsqueeze`、`transpose`、`permute`、`slice`、`broadcast_like`、`expand_axis`。`softmax`、`matmul_grad_*`、`cast_like` 等未声明（Opaque）。张量算子的声明描述 f32 的情形；整数与布尔元素一律精确（int64 与布尔的 `sum`、`mean` 在 int64 里精确累加并回绕，设计原则 2.14；归约律 `sum_i64` 等的累加类型是 int64）。`camel inspect --ops <程序>` 在每个已声明的算子上打印 `"semantics": {...}`，可以直接核对。下标映射与归约律是第二阶段：Tiles 在此之前仍按今天的方式（`reindex`、名字）取得映射与累加类型。
 
 **查询一个节点被授予的许可：**
 
@@ -1135,7 +1135,7 @@ bool any        = graph->hasNodePermissions();
 
 **CPU 的结果、图的转储、程序的输出都没有变**；只增加了声明与查询。已声明下标语义的张量算子的键升为 `@1.1`（次版本：只多了事实，4.1）；内建 `:op/` 仍是 `@1.0`；新声明的 `nn:max_pool2d`、`nn:avg_pool2d`、`:mark/unordered_reduce_arr` 是 `@1.0`。
 
-**已声明的实例**（`camel inspect --ops` 里 `"indexing": true` 的算子）：逐元素的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`（广播，数作为 0 维操作数）、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`；`transpose`、`permute`、`slice`（正步长；负的起止点从末尾数，之后仍在 [0, n] 之外是故障 `SliceOutOfRange`、没有实例，与数组的 `slice` 一致，设计原则 2.10；起点在终点之后是空的范围，2.11）、`reshape`、`flatten`、`unsqueeze`、`broadcast_like`、`expand_axis`；`sum`、`mean`（全量）、`sum_axis`、`mean_axis`、`max_axis`、`min_axis`、`sum_to`；`matmul`（NumPy 的一维与批维广播规则，k 是归约维）；`nn:max_pool2d`、`nn:avg_pool2d`（第 5.2 节例 4 的窗口：越界的元素 `max` 排除、`avg` 读 +0）；`:mark/unordered_reduce_arr`。每个实例由声明求值器（`tensor::test_index_eval`）在 2520 个随机调用上与 CPU 内核逐位比较过（第 12 节）。
+**已声明的实例**（`camel inspect --ops` 里 `"indexing": true` 的算子）：逐元素的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`（广播，数作为 0 维操作数）、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`；`transpose`、`permute`、`slice`（正步长；负的起止点从末尾数，之后仍在 [0, n] 之外是故障 `SliceOutOfRange`、没有实例，与数组的 `slice` 一致，设计原则 2.10；起点在终点之后是空的范围，2.11）、`reshape`、`flatten`、`unsqueeze`、`broadcast_like`、`expand_axis`；`sum`、`mean`（全量）、`sum_axis`、`mean_axis`、`max_axis`、`min_axis`、`argmax_axis`、`argmin_axis`（律 `ArgMax`/`ArgMin`：按 IEEE `maximum`/`minimum` 的第一个最值的位置，有 NaN 时第一个 NaN，+0 大于 -0，设计原则 2.14）、`sum_to`；`matmul`（NumPy 的一维与批维广播规则，k 是归约维）；`nn:max_pool2d`、`nn:avg_pool2d`（第 5.2 节例 4 的窗口：越界的元素 `max` 排除、`avg` 读 +0）；`:mark/unordered_reduce_arr`。每个实例由声明求值器（`tensor::test_index_eval`）在 2780 个随机调用上与 CPU 内核逐位比较过（第 12 节）。
 
 **取得一个实例：**
 
@@ -1195,7 +1195,7 @@ std::optional<sem::StridedView> v = sem::rowMajorView(inst, inst.norm[0], shape)
 
 例：`transpose` 读 `(d1, d0)`，`shape = [3, 5]` 得 `offset 0, strides (1, 5)`；`slice(x, 1, 1, ., 2)` 读 `(d0, 1 + 2*d1)` 得 `offset 1, strides (5, 2)`；广播的轴读常数 0，步长为 0（Tiles 现在的 `broadcastIndex`）；`reshape` 跨轴时坐标里有 `floordiv`/`mod`，`rowMajorView` 返回 `nullopt`：它不是步长视图，按 Tiles 现在的做法是"线性下标不变"（行主序存储下逻辑映射与存储映射恰好抵消，5.2 例 3）。融合时把生产者的访问代入消费者的坐标（`ExprPool` 的表达式可以按维代入，`sem::splitDims` 是一个现成的例子）。分块：`sem::splitDims(inst, {{dim, 16}, ...})` 把维 `d` 换成 `16*d_o + d_i`，原来的界成为 `guard`：写在尾部不发生，归约在尾部排除（不是补 0），即 Tiles 现在的 `if (base + t < k)`。
 
-**还不在第二阶段里的**：事实库（3b）、`LOOP`（3a）、资源与定义图（4）；`gather`/`scatter` 的 `Indirect` 访问形式已在数据结构里，算子的声明在第四阶段；`conv2d` 的实例（im2col 之后的 FMA 链加偏置）没有声明；`softmax`、`argmax` 等仍是不透明的。
+**还不在第二阶段里的**：事实库（3b）、`LOOP`（3a）、资源与定义图（4）；`gather`/`scatter` 的 `Indirect` 访问形式已在数据结构里，算子的声明在第四阶段；`conv2d` 的实例（im2col 之后的 FMA 链加偏置）没有声明；`softmax` 等仍是不透明的（`argmax`、`argmin` 2026-10-16 起有声明）。
 
 ### 14.3 事实库给 Tiles 的（`lane/facts`）
 
@@ -1297,7 +1297,7 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 
 **待问（给负责人）**：
 1. 随机数生成器的效应：按 8.1 的注释算外部效应，于是它与打印、文件之间也保持先后；若定为"程序内部的状态"，调度器就可以让抽样与输出交换次序（它们彼此仍保持先后，因为都读改写 `rand:generator`）。
-2. `mean` 对空张量：内核的故障是"mean of an empty tensor"，定义是标量除以零（`DivisionByZero`）；都是故障，诊断不同。是否要求故障的种类也一致？
+2. ~~`mean` 对空张量：内核与定义的故障种类不同~~ 已按 2.13（"故障也包括在内"）改：内核也报 `DivisionByZero`，与定义的除法相同的诊断（`definitions` 计划的 `mean_empty_fault*` 对照两边的故障种类与消息）。
 3. 定义库在第一次被问到时编译，而不是模块装载时（第 9 节开头的理由）；若要"装载时建出"，每个导入 `tensor` 的程序都要多编一个库。
 
 ---
