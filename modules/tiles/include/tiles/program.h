@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -95,6 +95,9 @@ struct Program {
     std::vector<Launch> launches;
     StoragePlan storage;
     size_t graphFactInstances = 0, specializedInstances = 0;
+    // Type-only templates bind exactly these nodes, in function parameter order.
+    // Embedded constants and captures are never invocation bindings.
+    std::vector<size_t> parameterInputs;
 };
 
 size_t elements(const Shape &shape);

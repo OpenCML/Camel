@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,6 +81,7 @@ runtime::GCGraph *outlineRegions(
 void registerRegionTestPasses(
     operator_t run, RegionDeviceOps device, RegionDeviceOps host, RegionDeviceOps preferred);
 slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &context);
+slot_t testCompiledCall(ArgsView &with, ArgsView &norm, core::context::Context &context);
 
 // Inspect one function graph without executing it or initializing CUDA. This is
 // candidate analysis with extracted drafts, not automatic graph execution.

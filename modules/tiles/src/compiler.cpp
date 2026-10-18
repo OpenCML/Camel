@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,6 +26,7 @@
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
+#include "tiles/internal/compiled_region.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <bit>
@@ -42,6 +43,7 @@ namespace td = core::rtdata;
 using tensor::ops::ConstArg;
 
 namespace {
+thread_local size_t extractions = 0;
 struct Value {
     ty::Type *type = nullptr;
     std::optional<ConstArg> constant;
@@ -670,6 +672,7 @@ static Program compileInputs(
     bool fromTypes) {
     if (!function || !function->graph())
         throw std::runtime_error("expected a function graph");
+    ++extractions;
     Compiler c(facts);
     std::vector<Value> with, norm;
     if (auto *closure = function->tuple()) {
@@ -696,11 +699,17 @@ static Program compileInputs(
                         "type-only compilation requires static f32 tensor shapes");
                 input.shape = *tensor->shape();
             }
-            norm.push_back(Value{.type = type, .tensor = c.append(std::move(input))});
+            const auto node = c.append(std::move(input));
+            c.program.parameterInputs.push_back(node);
+            norm.push_back(Value{.type = type, .tensor = node});
         }
     } else {
-        for (const auto &a : arguments)
-            norm.push_back(c.host(a.value, a.type, true));
+        for (const auto &a : arguments) {
+            auto input = c.host(a.value, a.type, true);
+            if (input.tensor != SIZE_MAX)
+                c.program.parameterInputs.push_back(input.tensor);
+            norm.push_back(std::move(input));
+        }
     }
     auto out = c.call(function->graph(), {}, norm, with);
     c.program.outputs.clear();
@@ -734,7 +743,32 @@ Program
 compile(Function *function, const std::vector<Argument> &arguments, rt::fact::FactStore &facts) {
     return compileInputs(function, arguments, facts, false);
 }
-Program compileTypes(Function *function, rt::fact::FactStore &facts) {
+size_t compilationExtractions() { return extractions; }
+Program compileRegionTemplate(Function *function, rt::fact::FactStore &facts) {
     return compileInputs(function, {}, facts, true);
+}
+void bindRegionArguments(
+    Program &program, const std::vector<Argument> &arguments, rt::fact::FactStore &facts) {
+    if (arguments.size() != program.parameterInputs.size())
+        throw std::runtime_error("compiled region argument count changed");
+    // Reuse the ordinary input snapshot implementation; no graph node, operator
+    // instantiation, inference, scheduling or source generation is visited here.
+    Compiler bindings(facts);
+    for (size_t i = 0; i < arguments.size(); ++i) {
+        const auto &argument = arguments[i];
+        const auto value     = bindings.host(argument.value, argument.type, true);
+        if (value.tensor == SIZE_MAX)
+            throw std::runtime_error("compiled region requires tensor or f64 input");
+        auto input   = std::move(bindings.program.nodes.at(value.tensor));
+        auto &target = program.nodes.at(program.parameterInputs[i]);
+        if (input.shape != target.shape || input.dtype != target.dtype)
+            throw std::runtime_error("compiled region input shape or dtype changed");
+        target.data       = std::move(input.data);
+        target.scalarBits = input.scalarBits;
+        target.resident   = std::move(input.resident);
+    }
+    // Allocation needs depend on host versus resident ownership. The compiled
+    // launches and arithmetic are immutable; only this invocation owns inputs.
+    planStorage(program);
 }
 } // namespace camel::tiles

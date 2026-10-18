@@ -4,6 +4,17 @@ tier = "gpu"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]
+name = "compiled_region_fresh_inputs_and_captures"
+kind = "behavior"
+case = "../../cases/modules/tiles/compiled_region.cml"
+args = ["${case}", "std::tiles", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "tensor([      4.,      16.,      36.], dtype=float32)\ntensor([      2.,       4.,       6.], dtype=float32)\ntensor([      8.,      10.,      12.], dtype=float32)\ntensor([     64.,     100.,     144.], dtype=float32)\ntensor([      4.,      16.,      36.], dtype=float32)\n"
+timeout_ms = 60000
+
+[[tests]]
 name = "resident_cpu_gpu_chain"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_fallback.cml"

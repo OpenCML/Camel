@@ -64,9 +64,32 @@ stay on CPU while supported regions prefer GPU; captures and CPU effects are
 preserved. Partitioning happens once when the decorated function value is built.
 Static regions now generate their launch plans and CUDA source from parameter types
 when outlined, without allocating placeholder input tensors or initializing CUDA.
-The process-local plan/source cache retains this work. NVRTC compilation still happens
-at execution time, as do graph extraction and binding validation; cached artifacts are
-not yet attached directly to graph calls. Symbolic and unknown shapes do not use this regional path.
+The core context's process-local `tiles.compiled_region` target fact associates the
+owned template with the extracted callee graph. Re-encoding an unchanged callee
+preserves its lineage and revision, so the actual runtime call reads the same fact.
+Each call copies the template and binds fresh inputs through an explicit parameter
+map; it does not extract the graph, infer shapes, instantiate operators or plan
+fusion again. Constants are retained separately from invocation bindings. Input
+snapshots and resident allocation owners exist only in that call's copy. Binding
+still checks shapes/dtypes and replans storage for host versus resident inputs;
+owned-plan validation still runs. NVRTC compilation remains lazy.
+
+Graph revision (including lexical numerical permissions), declaration epoch and
+the CUDA lowering-policy target hash govern validity. A stale fact is dropped;
+later compilation rebuilds it rather than executing an old declaration. Native
+declaration revision tokens are process-local and never serialized. Facts contain
+no Camel GC pointers. General call-site specialization with captures keeps its
+existing fresh-extraction path; captured region boundaries are fresh parameters.
+Symbolic and unknown shapes do not use this regional path.
+The outlined execution entry explicitly requests a static template, so a cache
+clear or another fact reader dropping a stale entry cannot permanently disable
+reuse. General `run` specialization does not infer eligibility from a cache miss.
+
+Templates live until replacement, explicit fact invalidation/clear, or destruction
+of their execution context. Replacing a revision reuses its lineage's fact entry.
+The source LRU remains bounded separately; the graph-fact store has no LRU, so
+repeated construction of distinct decorated graphs in one long-lived context can
+retain additional templates until that context or its facts are released.
 When no static region can be extracted, the existing whole-function, call-site
 specialization remains: an unavailable backend or unsupported computation runs
 the original function on the current CPU execution backend. Regional execution
@@ -293,6 +316,13 @@ broadcasting, fresh values with cached code, reshape, captures, direct calls,
 negative-axis reduction, and empty dimensions across NodeVM, FastVM, and JIT.
 The host plan also runs native mutation tests built by the standard build. Its
 test executable stays in the build tree and is not a distributed runtime tool.
+The test-only `tiles::test_outline_compiled` pass verifies actual callee-fact
+reuse with per-thread extraction counts before comparing fresh input snapshots
+against an independent extraction. It covers changing inputs/captures, tuple
+exits, embedded axes and concurrent GC-stressed calls. Its pre-execution fixture
+also checks f64 bit patterns, embedded literals, resident owner release, explicit
+invalidation and stale facts consumed by another reader after declaration or
+numerical-permission changes. Test diagnostics produce no ordinary runtime output.
 
 ## Remaining architecture
 

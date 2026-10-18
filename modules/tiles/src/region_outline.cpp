@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -74,9 +74,9 @@ runtime::GCGraph *outlineRegions(
                 callee,
                 core::type::TupleType::create(std::vector<core::type::Type *>{}),
                 core::mm::autoSpace());
-            if (device) {
-                // Populate the shared plan/source cache from types, before any device
-                // selection or input upload. Unsupported lowerings retain CPU fallback.
+            if (run) {
+                // Publish the owned compiled template as a graph fact. Draft commit
+                // preserves this unedited callee's lineage/revision, including copies.
                 try {
                     (void)compileTypes(fn, context.facts());
                 } catch (const UnsupportedComputation &) {
