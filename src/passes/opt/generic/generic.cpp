@@ -187,28 +187,56 @@ class StaticArgsView final : public ArgsView {
     std::vector<type::Type *> types_;
 };
 
-/// Static value of a DATA node with a static slot, also seen through GATEs forwarding one (an
-/// inlined call gates its arguments; the value it forwards is the same). A constant that is
-/// written in place has no static value.
+/// Static DATA, seen through GATEs or a JOIN whose arms all forward the same scalar bits.
+/// This proves a value, not permission to discard its producer: replaceNode retains ordering.
+/// A shared budget bounds gate walks; nested JOINs are not recursively expanded.
 std::optional<std::pair<slot_t, type::Type *>>
 staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
-    for (size_t hops = 0; hops < draft.nodeSlotCount(); ++hops) {
-        const auto *gate = draft.header(id);
-        if (!gate || gate->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
-            break;
+    size_t budget     = 128;
+    const auto ungate = [&](gc_node_ref_t node) {
+        while (budget) {
+            --budget;
+            const auto *h = draft.header(node);
+            if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(node).size() != 1 ||
+                isWrittenInPlace(draft, node)) {
+                return node;
+            }
+            node = draft.normInputsOf(node).front();
         }
-        id = draft.normInputsOf(id).back();
-    }
+        return kInvalidNodeRef;
+    };
+    const auto dataValue =
+        [&](gc_node_ref_t node) -> std::optional<std::pair<slot_t, type::Type *>> {
+        const auto *h = draft.header(node);
+        if (!h || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
+            return std::nullopt;
+        }
+        const auto index = static_cast<size_t>(-h->dataIndex);
+        if (index >= draft.staticSlots().size() || isWrittenInPlace(draft, node)) {
+            return std::nullopt;
+        }
+        type::Type *ty = draft.staticSlotTypes()[index];
+        return std::pair{draft.staticSlots()[index], ty ? ty : h->dataType};
+    };
+    id            = ungate(id);
     const auto *h = draft.header(id);
-    if (!h || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
+    if (!h || h->kind != GCNodeKind::Join) {
+        return dataValue(id);
+    }
+    if (!h->dataType || !type::isPrimitive(h->dataType->code()) ||
+        type::isGCTraced(h->dataType->code()) || isWrittenInPlace(draft, id)) {
         return std::nullopt;
     }
-    const auto index = static_cast<size_t>(-h->dataIndex);
-    if (index >= draft.staticSlots().size() || isWrittenInPlace(draft, id)) {
-        return std::nullopt;
+    std::optional<std::pair<slot_t, type::Type *>> common;
+    for (auto arm : draft.withInputsOf(id)) {
+        const auto value = dataValue(ungate(arm));
+        // Slot equality preserves signed zero and NaN payloads; floating-point == would not.
+        if (!value || value->second != h->dataType || (common && *common != *value)) {
+            return std::nullopt;
+        }
+        common = value;
     }
-    type::Type *ty = draft.staticSlotTypes()[index];
-    return std::pair{draft.staticSlots()[index], ty ? ty : h->dataType};
+    return common;
 }
 
 /// True when `id` can be replaced by another node holding its value: it does not anchor the
@@ -777,6 +805,11 @@ size_t cseDraft(GraphDraft &draft) {
     // constants that are written in place.
     std::map<std::tuple<type::Type *, slot_t, std::vector<uint64_t>>, gc_node_ref_t> constants;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        // A known JOIN value does not make the JOIN replaceable: it still closes its BRCH
+        // and carries the condition and selected arm's effects. Consumers may fold instead.
+        if (const auto *h = draft.header(id); h && h->kind == GCNodeKind::Join) {
+            continue;
+        }
         const auto value = staticValueOf(draft, id);
         if (!value || !value->second || type::isGCTraced(value->second->code())) {
             continue;
