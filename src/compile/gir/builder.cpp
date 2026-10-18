@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -5653,6 +5653,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             auto ops = std::get<oper_group_ptr_t>(drefTarget);
+            if (auto expanded = expandTreeCall(ops, withInputs, normInputs, gct)) {
+                LEAVE("LINK");
+                return expanded;
+            }
             settleGenericOperatorArguments(
                 ops,
                 withInputs,
@@ -6197,6 +6201,11 @@ std::string Builder::bindTemporary(node_handle_t node) {
     std::string name = "$tagged" + std::to_string(tagTemporaries_++);
     insertNode(name, node);
     return name;
+}
+
+void Builder::registerTreeOrigin(
+    node_handle_t node, const GCT::node_ptr_t &origin, const char *kind) {
+    registerNodeOrigin(context_, node, origin, kind);
 }
 
 node_handle_t

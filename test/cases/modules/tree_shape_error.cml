@@ -1,0 +1,6 @@
+module tree_shape_error
+import { tree_map } from tree
+func main(): int sync {
+    println(tree_map<(a: int, b: int): int => a + b>({ block: (1, 2) }, { block: 3 }))
+    return 0
+}

@@ -1,0 +1,34 @@
+module tree_training
+import { Tensor, reshape, zeros, sum, abs } from tensor
+import { value_and_grad } from autodiff
+import { tree_map, tree_reduce, tree_unzip } from tree
+import { Device, upload, download, run_device } from tiles
+type Model = { weight: Tensor<f32>, nested: (Tensor<f32>, Tensor<f32>) }
+func initialize(): Model {
+    return { weight: reshape([1.0, 2.0], [2]), nested: (reshape([3.0], [1]), zeros([0, 2])) }
+}
+func loss(p: Model): float {
+    let squared = tree_map<(x: Tensor<f32>): float => sum(x * x)>(p)
+    return tree_reduce<(a: float, b: float): float => a + b>(squared, 0.0)
+}
+func update_model(p: Model, g: Model): (Model, Model) { return update(p, g) }
+func update(p: typeas P, g: P): (P, P) {
+    let r = tree_map<(a: Tensor<f32>, b: Tensor<f32>) => (a - b * 0.01, b * 0.1)>(p, g)
+    return tree_unzip(r, p)
+}
+func main(): int sync {
+    let p = initialize()
+    let vg = value_and_grad(loss)
+    let cpu = vg(p)
+    println(cpu.0 - 14.0)
+    println(sum(abs(cpu.1.weight - p.weight * 2.0)))
+    let dp: Device<Model> = upload(p)
+    let measured = run_device<vg>(dp)
+    let changed: Device<(Model, Model)> = run_device<update_model>((dp, measured.1))
+    let actual = download(changed)
+    let expected = update(p, cpu.1)
+    println(download(measured.0) - cpu.0)
+    println(sum(abs(actual.0.weight - expected.0.weight)))
+    println(sum(abs(actual.1.nested.0 - expected.1.nested.0)))
+    return 0
+}
