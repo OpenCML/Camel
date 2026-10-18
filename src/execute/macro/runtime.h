@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,10 +69,9 @@ class MacroEvaluator {
 
     std::optional<MacroEvalResult> tryEvaluate(const MacroCandidate &candidate, std::ostream &os);
 
-    /// Failures are collected per round of the pass: a call that fails in one round may
-    /// evaluate in a later one (another expansion made it evaluable), so only the failures of
-    /// the last round, in which nothing changed any more, are final.
-    void beginRound() { failures_.clear(); }
+    /// An evaluator belongs to one rewrite round. Only failures from the final round,
+    /// in which nothing changes any more, are reported: another expansion can make a
+    /// previously unsuccessful call evaluable.
     /// Reports the failures of the current round as RuntimeDiag::MacroEvaluationFailed errors
     /// at the call, with the reason, in the runtime diagnostics: a failed evaluation rejects
     /// the program (design principles 2.7 and 3). An argument that is not a

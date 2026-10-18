@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 25, 2025
- * Updated: May. 04, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,48 +34,53 @@ camel::runtime::GCGraph *MacroRewritePass::apply(camel::runtime::GCGraph *graph,
     }
 
     camel::runtime::RuntimeGraphDraftSession runtimeSession(context_, graph);
-    camel::execute::macro_runtime::MacroEvaluator evaluator(context_);
 
     while (true) {
-        bool roundChanged     = false;
-        evaluator.beginRound();
-        auto runtimeGraphs    = runtimeSession.collectReachableRuntimeGraphs();
-        const auto candidates = camel::execute::macro_runtime::collectMacroCandidates(
-            std::span<camel::runtime::GCGraph *const>(runtimeGraphs.data(), runtimeGraphs.size()));
+        bool roundChanged = false;
+        {
+            // Results belong to this rewrite transaction. Commit clones the static Function
+            // values and retires the old graph carriers; retaining an evaluator's old results
+            // into the next round would trace Functions that still name those retired graphs.
+            camel::execute::macro_runtime::MacroEvaluator evaluator(context_);
+            auto runtimeGraphs    = runtimeSession.collectReachableRuntimeGraphs();
+            const auto candidates = camel::execute::macro_runtime::collectMacroCandidates(
+                std::span<camel::runtime::GCGraph *const>(
+                    runtimeGraphs.data(),
+                    runtimeGraphs.size()));
 
-        // Evaluate first, rewrite afterwards. Evaluation reaches safepoints, where the
-        // collector may move the values of this round. The evaluator keeps each of them in a
-        // root that is updated in place and that a MacroEvalResult reads through; a draft, on
-        // the other hand, holds plain copies of slots (the static slots of the graph it was
-        // decoded from, and every value materialized into it) that no root covers. So no
-        // draft may exist while a candidate is still being evaluated: all rewrites are applied
-        // after the last evaluation, and nothing between them and the commit reaches a
-        // safepoint. Candidates are calls of the installed graphs, which the rewrites of the
-        // same round do not change, so the order does not affect what is evaluated.
-        std::vector<
-            std::pair<
+            // Evaluate first, rewrite afterwards. Evaluation reaches safepoints, where the
+            // collector may move the values of this round. The evaluator keeps each of them in a
+            // root that is updated in place and that a MacroEvalResult reads through; a draft, on
+            // the other hand, holds plain copies of slots (the static slots of the graph it was
+            // decoded from, and every value materialized into it) that no root covers. So no
+            // draft may exist while a candidate is still being evaluated: all rewrites are applied
+            // after the last evaluation, and nothing between them and the commit reaches a
+            // safepoint. Candidates are calls of the installed graphs, which the rewrites of the
+            // same round do not change, so the order does not affect what is evaluated.
+            std::vector<std::pair<
                 const camel::execute::macro_runtime::MacroCandidate *,
                 camel::execute::macro_runtime::MacroEvalResult>>
-            evaluated;
-        for (const auto &candidate : candidates) {
-            auto result = evaluator.tryEvaluate(candidate, os);
-            if (result.has_value()) {
-                evaluated.emplace_back(&candidate, *result);
+                evaluated;
+            for (const auto &candidate : candidates) {
+                auto result = evaluator.tryEvaluate(candidate, os);
+                if (result.has_value()) {
+                    evaluated.emplace_back(&candidate, *result);
+                }
             }
-        }
-        for (const auto &[candidate, result] : evaluated) {
-            roundChanged |= camel::execute::macro_runtime::applyMacroRewrite(
-                runtimeSession,
-                *candidate,
-                result,
-                os);
-        }
+            for (const auto &[candidate, result] : evaluated) {
+                roundChanged |= camel::execute::macro_runtime::applyMacroRewrite(
+                    runtimeSession,
+                    *candidate,
+                    result,
+                    os);
+            }
 
-        if (!roundChanged) {
-            // Nothing evaluates any more: the calls that failed in this round are final
-            // failures, and each is an error.
-            evaluator.reportFailures();
-            break;
+            if (!roundChanged) {
+                // Nothing evaluates any more: the calls that failed in this round are final
+                // failures, and each is an error.
+                evaluator.reportFailures();
+                break;
+            }
         }
         graph = runtimeSession.commit();
         if (!graph) {
