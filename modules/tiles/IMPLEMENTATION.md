@@ -17,17 +17,25 @@ follow [the design principles](../../docs/design-principles.cn.md).
 - `src/schedule.cpp` forms launch groups and assigns storage by lifetime. Execution
   validates topology, shapes, declaration dependencies, launch legality and storage
   non-overlap. A changed declaration or incompatible core map invalidates reuse.
+- `src/graph_values.cpp` shares resident leaf types across dispatch and region
+  rewriting. `region_outline.cpp` preserves tuple/struct structure with explicit
+  leaf transfers. Pure fixed tuple projections of an eligible producer remain in
+  its dependency-convex region; selected results avoid sibling downloads.
 - `src/scalar_expr.cpp`, `index_expr.cpp` and `kernel_ir.cpp` represent typed scalar
   expressions, checked index expressions and structured kernel statements. Serial,
   scalar, parallel maximum, matrix and row-region lowering emit this representation;
   CUDA printing is centralized. Statement validation checks bindings, types, memory
   permissions and barrier uniformity; it is not a general race or bounds proof.
 - `src/loop_kernel.cpp` lowers a pure static-array `For` recurrence to one device
-  loop with one f64 scalar or same-shape, lane-local f32 tensor state. The compiler
+  loop with f64 scalar states or same-shape, lane-local f32 tensor states. The compiler
   owns and lowers the body once, with explicit state and capture ports. The static
   table retains exact int64 elements; `float(k)` uses an explicit nearest-even
-  i64-to-f64 instruction. Empty domains retain the initial state. Dynamic domains,
-  while conditions, multiple states, nested loops, integer element arithmetic and
+  i64-to-f64 instruction. Empty domains retain every initial state. A producer owns
+  ordered result descriptors and no value allocation; generic result projections
+  hold the individual values. One launch writes all projections, whose lifetimes
+  start at that producer launch. All next-state expressions are bound before any
+  state assignment. Dynamic domains, while conditions, mixed recurrent lane
+  domains or dtypes, nested loops, integer element arithmetic and
   non-pointwise or shape-changing bodies remain unsupported computations.
 - `src/codegen_cache.cpp` recursively keys recurrence domains, port maps, next
   states, body constants, index instances, numeric grants and declaration revisions.
@@ -64,8 +72,12 @@ Do not run builds and tests concurrently against the same output directory.
 ## Remaining work
 
 The existing kernel families use structured physical statements and consume core
-index contracts. This is not yet automatic graph-region GPU compilation. Remaining
-work includes region extraction and graph rewriting, symbolic shape code generation,
-expert block kernels, general masked/indirect accesses, asynchronous device plans,
-and broader optimized implementations and tuning. See the design route for the
-full intended scope; passing the current test suite is not completion of that scope.
+index contracts. `std::tiles` and `@gpu` extract supported regions, compile static
+shapes and rewrite their boundaries with resident leaf transfers. Static-array
+lane-local For loops support multiple compatible states in one device recurrence.
+Remaining work includes symbolic shape code generation, dynamic domains and
+conditions, mixed recurrent lane domains, nested loops and non-pointwise loop
+bodies, expert block kernels, general masked/indirect accesses, asynchronous
+device plans, and broader optimized implementations and tuning. See the design
+route for the full intended scope; passing the current test suite does not
+complete that scope.

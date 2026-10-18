@@ -250,15 +250,24 @@ not device-side dynamic branching: GPU-dependent conditions and `match`
 still need additional lowering. Changing a captured flag specializes again; the
 generated-source cache cannot substitute the other arm's implementation.
 
-Pure single-state `loop ... for ... do ...` expressions support a static `int[]`
-domain and either an f64 scalar state or a statically shaped f32 tensor state.
+Pure `loop ... for ... do ...` expressions with one or more states support a static `int[]`
+domain and either f64 scalar states or statically shaped f32 tensor states with
+identical shapes and dtypes. Mixed scalar/tensor recurrent states remain a CPU
+boundary; read-only scalar captures are supported.
 The compiler owns one body program and emits one device loop with lane-local
 state; the body is compiled once, independently of the trip count. Captured f64
 scalars and f32 tensors bind as body inputs. Tensor body values must be scalar
 or match the state shape, and their access maps must be canonical pointwise maps.
 Supported body operations are pointwise arithmetic, f64 scalar add/subtract/
 multiply/divide/negation and explicit scalar conversions. Empty domains return
-the initial state without executing the body.
+every initial state without executing the body. All next-state expressions are
+computed before any state assignment, so swaps and coupled recurrences preserve
+simultaneous updates. One operation owns the body and exposes ordered typed
+result projections; it produces all states in one launch even when the caller
+uses only one result. Tuple destructuring does not duplicate the recurrence. Fixed tuple
+projections stay in the same selected region as their eligible producer, so a
+selected result downloads only its own visible leaf. Whole tuple results retain
+their structure while transferring each tensor/scalar leaf explicitly.
 
 The static iteration table preserves every signed int64 value, including negative
 values, values above 2^53 and the int64 extrema. The element may enter floating
@@ -268,7 +277,7 @@ numeric permissions and operator dependencies remain attached to the owned body
 and participate in validation and source-cache identity; they grant no additional
 reassociation or contraction.
 
-`while`, `for ... while`, dynamic domains, multiple states, nested loops, integer
+`while`, `for ... while`, dynamic domains, mixed recurrent lane domains, nested loops, integer
 element arithmetic, shape-changing state, reductions and non-pointwise accesses
 inside the body remain unsupported. These are computation boundaries for `@gpu`
 fallback; explicit `run` and `source` report an unsupported computation. Scalar

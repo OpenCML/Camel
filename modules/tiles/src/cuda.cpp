@@ -43,11 +43,78 @@ bool programMayFault(const Program &program) {
     });
 }
 
-bool outputHasRelaxedDependency(const Program &program, size_t output) {
+struct ValueDependencies {
+    std::vector<size_t> inputs;
+    bool relaxed = false;
+};
+ValueDependencies valueDependencies(const Program &program, size_t output);
+
+ValueDependencies loopDependencies(const Node &producer, size_t ordinal) {
+    const auto &region        = *producer.loop;
+    const size_t states       = region.stateInputs.size();
+    std::vector<size_t> ports = region.stateInputs;
+    ports.insert(ports.end(), region.captureInputs.begin(), region.captureInputs.end());
+    struct Transition {
+        std::vector<bool> inputs;
+        bool relaxed = false;
+    };
+    std::vector<Transition> transitions;
+    for (auto next : region.nextStates) {
+        const auto dependencies = valueDependencies(region.body, next);
+        Transition transition{std::vector<bool>(ports.size()), dependencies.relaxed};
+        for (auto input : dependencies.inputs) {
+            const auto port = std::find(ports.begin(), ports.end(), input);
+            // Embedded constants have no corresponding invocation dependency.
+            if (port != ports.end())
+                transition.inputs[port - ports.begin()] = true;
+        }
+        transitions.push_back(std::move(transition));
+    }
+    // Compose exact simultaneous transitions. Captures and arithmetic permissions
+    // are absorbing dependencies; states advance by exactly the selected trip count.
+    // Repeated squaring avoids walking a potentially very large static domain.
+    const auto advance = [&](const Transition &from) {
+        Transition result{std::vector<bool>(ports.size()), from.relaxed};
+        for (size_t input = 0; input < ports.size(); ++input) {
+            if (!from.inputs[input])
+                continue;
+            if (input >= states) {
+                result.inputs[input] = true;
+                continue;
+            }
+            const auto &step = transitions[input];
+            result.relaxed   = result.relaxed || step.relaxed;
+            for (size_t port = 0; port < ports.size(); ++port)
+                result.inputs[port] = result.inputs[port] || step.inputs[port];
+        }
+        return result;
+    };
+    Transition selected{std::vector<bool>(ports.size())};
+    selected.inputs[ordinal] = true;
+    for (size_t remaining = region.domain.size(); remaining;) {
+        if (remaining & 1)
+            selected = advance(selected);
+        remaining >>= 1;
+        if (remaining) {
+            std::vector<Transition> squared;
+            for (const auto &transition : transitions)
+                squared.push_back(advance(transition));
+            transitions = std::move(squared);
+        }
+    }
+    ValueDependencies result{.relaxed = selected.relaxed};
+    for (size_t port = 0; port < ports.size(); ++port)
+        if (selected.inputs[port])
+            result.inputs.push_back(producer.inputs[port]);
+    return result;
+}
+
+ValueDependencies valueDependencies(const Program &program, size_t output) {
     constexpr auto relaxed = core::sem::kReassociate | core::sem::kContract |
                              core::sem::kApproxMath | core::sem::kChangePrecision;
     std::vector<bool> visited(program.nodes.size());
     std::vector<size_t> pending{output};
+    ValueDependencies result;
     while (!pending.empty()) {
         const auto id = pending.back();
         pending.pop_back();
@@ -55,24 +122,26 @@ bool outputHasRelaxedDependency(const Program &program, size_t output) {
             continue;
         visited[id]      = true;
         const auto &node = program.nodes[id];
-        if (node.loop) {
-            // The recurrence is a container, not a grant to its arithmetic.
-            // Only executed next-state dependencies contribute body permissions.
-            if (node.loop->domain.empty()) {
-                pending.insert(
-                    pending.end(),
-                    node.inputs.begin(),
-                    node.inputs.begin() + node.loop->stateInputs.size());
-                continue;
-            }
-            for (auto next : node.loop->nextStates)
-                if (outputHasRelaxedDependency(node.loop->body, next))
-                    return true;
-        } else if (node.permissions & relaxed)
-            return true;
+        if (node.op == "result") {
+            // A projection selects one state, not every sibling result of its
+            // producer. The recurrence container grants no numeric permission.
+            const auto dependencies = loopDependencies(
+                program.nodes[node.inputs[0]],
+                static_cast<size_t>(node.attributes[0]));
+            result.relaxed = result.relaxed || dependencies.relaxed;
+            pending.insert(pending.end(), dependencies.inputs.begin(), dependencies.inputs.end());
+            continue;
+        }
+        result.relaxed = result.relaxed || bool(node.permissions & relaxed);
+        if (node.op == "input")
+            result.inputs.push_back(id);
         pending.insert(pending.end(), node.inputs.begin(), node.inputs.end());
     }
-    return false;
+    return result;
+}
+
+bool outputHasRelaxedDependency(const Program &program, size_t output) {
+    return valueDependencies(program, output).relaxed;
 }
 
 struct OwnedAllocation final : DeviceStorage {

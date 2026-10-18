@@ -10,6 +10,7 @@
 
 // Classify static core-indexed operations, then partition the complete dependency DAG.
 #include "camel/core/operator_table.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "modules/tensor/type.h"
@@ -184,6 +185,33 @@ RegionAnalysis analyzeRegions(const rt::GCGraph &graph, rt::fact::FactStore &fac
             nodes[id].inputs.insert(nodes[id].inputs.end(), edges.begin(), edges.end());
         nodes[id].output = id == graph.outputNodeRef() || id == graph.exitNodeRef();
     }
+    // Fixed tuple projections are structural edges of an eligible aggregate
+    // producer, not host computation boundaries. Never admit dynamic indexing.
+    bool changed;
+    do {
+        changed = false;
+        for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
+            if (nodes[id].eligible || graph.node(id)->kind != rt::GCNodeKind::Accs ||
+                !graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty() ||
+                !graph.withInputsOf(id).empty())
+                continue;
+            const auto inputs = graph.normInputsOf(id);
+            if (inputs.size() != 1 || !nodes[inputs[0]].eligible)
+                continue;
+            auto *sourceType   = graph.node(inputs[0])->dataType();
+            const auto *access = graph.nodeBodyAs<rt::GCAccsBody>(id);
+            if (sourceType->code() != ty::TypeCode::Tuple ||
+                access->accsKind != rt::GCAccsKind::TupleIndex)
+                continue;
+            auto *tuple = static_cast<ty::TupleType *>(sourceType);
+            if (access->value >= tuple->size() ||
+                tuple->typeAt(access->value) != graph.node(id)->dataType())
+                continue;
+            nodes[id].eligible = true;
+            reasons[id].clear();
+            changed = true;
+        }
+    } while (changed);
     auto regions   = partitionRegions(nodes);
     auto transfers = planRegionTransfers(nodes, regions);
     return {std::move(regions), std::move(reasons), std::move(transfers)};

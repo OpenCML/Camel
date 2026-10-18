@@ -30,6 +30,7 @@
 #include "tiles/internal/capability.h"
 #include "tiles/internal/compiled_region.h"
 #include "tiles/internal/dispatch.h"
+#include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
 #include "tiles/program.h"
 #include <cstdlib>
@@ -184,43 +185,6 @@ slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     descriptor.deleter = [](void *p) { delete static_cast<std::shared_ptr<DeviceValue> *>(p); };
     return td::toSlot(
         td::ForeignResourceObject::create(core::mm::autoSpace(), std::move(descriptor), owner));
-}
-Type *buildResidentType(Type *type) {
-    if (tensor::asTensorType(type) || type->code() == TypeCode::Float64)
-        return DeviceType::get(type);
-    if (type->code() == TypeCode::Tuple) {
-        auto *tuple = static_cast<TupleType *>(type);
-        type_vec_t fields;
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            auto *field = buildResidentType(tuple->typeAt(i));
-            if (!field)
-                return nullptr;
-            fields.push_back(field);
-        }
-        return TupleType::create(fields);
-    }
-    if (type->code() == TypeCode::Struct) {
-        auto *object = static_cast<StructType *>(type);
-        StructTypeFactory fields;
-        for (size_t i = 0; i < object->size(); ++i) {
-            auto *field = buildResidentType(object->typeAt(i));
-            if (!field)
-                return nullptr;
-            fields.add(std::string(object->fieldName(i)), field);
-        }
-        return fields.build();
-    }
-    return nullptr;
-}
-Type *residentType(Type *type) {
-    static std::mutex mutex;
-    static std::unordered_map<Type *, Type *> types;
-    std::lock_guard lock(mutex);
-    if (auto it = types.find(type); it != types.end())
-        return it->second;
-    auto *result = buildResidentType(type);
-    types.emplace(type, result);
-    return result;
 }
 slot_t runResidentPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
     return checked([&] {

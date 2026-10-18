@@ -40,6 +40,12 @@ struct Argument {
     core::type::Type *type;
 };
 
+// A producer has ordered typed results; result nodes project them into value edges.
+struct ResultType {
+    Shape shape;
+    DType dtype = DType::F32;
+};
+
 struct Node {
     std::string op;
     Shape shape;
@@ -63,6 +69,7 @@ struct Node {
     std::shared_ptr<const DeviceValue>
         resident;                           // Borrowed immutable input, retained through execution.
     std::shared_ptr<const LoopRegion> loop; // Owned recurrence; its body is compiled once.
+    std::vector<ResultType> results;        // Nonempty only on multi-result operation producers.
 };
 
 struct Launch {
@@ -73,6 +80,7 @@ struct Launch {
     std::string implementation;
     unsigned blockX = 256, blockY = 1;
     unsigned gridX = 1, gridY = 1;
+    std::vector<size_t> outputs; // All materialized values written by this one launch.
 };
 struct ScheduleOptions {
     bool fuseElementwise = true;
@@ -106,7 +114,7 @@ struct Program {
 
 // A recurrence owns its subprogram and exact iteration values. Body inputs correspond to
 // outer Node.inputs (state first, captures afterwards); each lane retains its own state.
-// Vectors preserve simultaneous next-state semantics when multiple states are supported.
+// All next-state values are computed before any current state is updated.
 struct LoopRegion {
     Program body;
     std::vector<int64_t> domain;

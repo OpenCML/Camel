@@ -79,7 +79,7 @@ tool = "python"
 case = "../../../cases/modules/tiles/plan_check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles scalar i64: exact payloads, comparisons and nearest-even f64 casts passed", "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed", "tiles regions: convexity, boundaries, liveness and dependency order passed", "tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected"]
+expect_stdout_contains = ["tiles scalar i64: exact payloads, comparisons and nearest-even f64 casts passed", "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed", "tiles multi-result storage: one producer, distinct writes and inclusive read lifetimes passed", "tiles regions: convexity, boundaries, liveness and dependency order passed", "tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected"]
 timeout_ms = 10000
 
 [[tests]]
@@ -142,7 +142,7 @@ case = "../../../cases/modules/tiles/loop_source.cml"
 args = ["${case}", "std::nvm"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_2[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
+expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
 
 [[tests]]
@@ -152,7 +152,7 @@ case = "../../../cases/modules/tiles/loop_source.cml"
 args = ["${case}", "std::fvm"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_2[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
+expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
 
 [[tests]]
@@ -162,7 +162,7 @@ case = "../../../cases/modules/tiles/loop_source.cml"
 args = ["${case}", "std::jit"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_2[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
+expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
 
 [[tests]]
@@ -172,7 +172,7 @@ case = "../../../cases/modules/tiles/loop_source.cml"
 args = ["${case}", "std::prl"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 0
-expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_2[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
+expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
 
 [[tests]]
@@ -182,7 +182,7 @@ case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
 args = ["${case}", "std::nvm"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
-expect_output_contains = ["node 3: tiles requires a pure single-state static For loop"]
+expect_output_contains = ["node 3: tiles requires a pure static For loop"]
 timeout_ms = 10000
 
 [[tests]]
@@ -192,7 +192,7 @@ case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
 args = ["${case}", "std::fvm"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
-expect_output_contains = ["node 3: tiles requires a pure single-state static For loop"]
+expect_output_contains = ["node 3: tiles requires a pure static For loop"]
 timeout_ms = 10000
 
 [[tests]]
@@ -202,7 +202,7 @@ case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
 args = ["${case}", "std::prl"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
-expect_output_contains = ["node 3: tiles requires a pure single-state static For loop"]
+expect_output_contains = ["node 3: tiles requires a pure static For loop"]
 timeout_ms = 10000
 
 [[tests]]

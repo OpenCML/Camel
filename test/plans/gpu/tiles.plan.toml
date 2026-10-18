@@ -1149,3 +1149,25 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: LOOP CPU boundaries", "std::fvm: LOOP CPU boundaries", "std::jit: LOOP CPU boundaries", "std::prl: LOOP CPU boundaries", "neighboring GPU regions preserved PASS"]
 timeout_ms = 180000
+
+[[tests]]
+name = "multi_state_loop_device"
+kind = "behavior"
+
+tool = "python"
+case = "../../cases/modules/tiles/loop_multi_device.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: multi-state LOOP", "std::fvm: multi-state LOOP", "std::jit: multi-state LOOP", "std::prl: multi-state LOOP"]
+timeout_ms = 180000
+
+[[tests]]
+name = "multi_state_loop_boundaries"
+kind = "behavior"
+
+tool = "python"
+case = "../../cases/modules/tiles/loop_multi_boundaries.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: multi-state LOOP", "std::fvm: multi-state LOOP", "std::jit: multi-state LOOP", "std::prl: multi-state LOOP", "Multi-state LOOP graph: one region, selected downloads and CPU neighbor regions PASS"]
+timeout_ms = 180000

@@ -41,6 +41,42 @@ void checkKernelIR();
 void checkMatrixContracts();
 
 namespace {
+void checkMultiResultStorage() {
+    auto region = std::make_shared<LoopRegion>();
+    region->domain = {1, 2, 3};
+    region->stateInputs = {0, 1};
+    region->nextStates = {1, 0};
+    region->body.nodes = {{.op = "input", .shape = {2}}, {.op = "input", .shape = {2}}};
+    region->body.outputs = {1, 0};
+    Program p;
+    p.nodes = {{.op = "input", .shape = {2}, .data = {1, 2}},
+               {.op = "input", .shape = {2}, .data = {3, 4}},
+               {.op = "loop", .shape = {2}, .inputs = {0, 1}, .loop = region,
+                .results = {{{2}, DType::F32}, {{2}, DType::F32}}},
+               {.op = "result", .shape = {2}, .inputs = {2}, .attributes = {0}},
+               {.op = "result", .shape = {2}, .inputs = {2}, .attributes = {1}},
+               {.op = "add", .shape = {2}, .inputs = {3, 4}}};
+    p.outputs = {4, 5};
+    generate(p);
+    if (p.launches.size() != 2 || p.launches[0].outputs != std::vector<size_t>{3, 4} ||
+        p.storage.slots[2] != SIZE_MAX || p.storage.slots[3] == SIZE_MAX ||
+        p.storage.slots[4] == SIZE_MAX)
+        throw std::runtime_error("multi-result producer did not own one stage with separate values");
+    rejects(p, [](auto &x) { x.storage.slots[4] = x.storage.slots[3]; }, "overlapping buffer lifetimes");
+    rejects(p, [](auto &x) { x.storage.slots[3] = x.storage.slots[0]; }, "overlapping buffer lifetimes");
+    rejects(p, [](auto &x) { x.storage.slots[2] = x.storage.slots[3]; }, "register-only value has allocation");
+    rejects(p, [](auto &x) { x.launches[0].outputs = {4, 3}; }, "stage result projection mismatch");
+    rejects(p, [](auto &x) { x.launches[0].outputs.pop_back(); }, "multi-result stage arity");
+    rejects(p, [](auto &x) { x.nodes[4].attributes[0] = 2; }, "result projection index");
+    rejects(p, [](auto &x) { x.nodes[4].attributes[0] = 0; }, "stage result projection mismatch");
+    auto one = p;
+    one.outputs = {3}; // The unreturned recurrent state still has a writable launch result.
+    generate(one);
+    if (one.launches[0].outputs != std::vector<size_t>{3, 4} || one.storage.slots[4] == SIZE_MAX)
+        throw std::runtime_error("partial result use discarded a recurrent state");
+    std::cout << "tiles multi-result storage: one producer, distinct writes and inclusive read lifetimes passed\n";
+}
+
 void checkLoopSourceCache() {
     namespace sem = camel::core::sem;
     auto &table = camel::core::OperatorTable::instance();
@@ -67,8 +103,9 @@ void checkLoopSourceCache() {
     Program original;
     original.nodes = {{.op = "input", .data = {1}}, {.op = "input", .data = {2}},
                       {.op = "input", .data = {3}},
-                      {.op = "loop", .inputs = {0, 1, 2}, .loop = recurrence}};
-    original.outputs = {3};
+                      {.op = "loop", .inputs = {0, 1, 2}, .loop = recurrence, .results = {{{}, DType::F32}}},
+                      {.op = "result", .inputs = {3}, .attributes = {0}}};
+    original.outputs = {4};
     generate(original);
     auto rebound = original;
     rebound.nodes[0].data = {4};
@@ -80,8 +117,8 @@ void checkLoopSourceCache() {
         throw std::runtime_error("loop runtime inputs changed source cache identity");
     auto mutationRejected = [&](auto mutate, const char *reason) {
         auto changed = original;
-        auto region = std::make_shared<LoopRegion>(*original.nodes.back().loop);
-        changed.nodes.back().loop = region;
+        auto region = std::make_shared<LoopRegion>(*original.nodes[3].loop);
+        changed.nodes[3].loop = region;
         // The self-cycle mutation must be released even when validation fails.
         struct Cleanup {
             LoopRegion &region;
@@ -99,14 +136,14 @@ void checkLoopSourceCache() {
                      "duplicate body input binding");
     mutationRejected([](auto &, auto &region) { region.captureInputs[1] = region.captureInputs[0]; },
                      "duplicate body input binding");
-    mutationRejected([](auto &changed, auto &region) { region.body.nodes[0].loop = changed.nodes.back().loop; },
+    mutationRejected([](auto &changed, auto &region) { region.body.nodes[0].loop = changed.nodes[3].loop; },
                      "nested device loops");
-    mutationRejected([](auto &changed, auto &) { changed.nodes[0].loop = changed.nodes.back().loop; },
+    mutationRejected([](auto &changed, auto &) { changed.nodes[0].loop = changed.nodes[3].loop; },
                      "nonloop node owns a recurrence");
     auto longer = original;
-    auto longerRegion = std::make_shared<LoopRegion>(*original.nodes.back().loop);
+    auto longerRegion = std::make_shared<LoopRegion>(*original.nodes[3].loop);
     longerRegion->domain.push_back(INT64_MIN);
-    longer.nodes.back().loop = longerRegion;
+    longer.nodes[3].loop = longerRegion;
     generate(longer);
     const auto occurrences = [](const std::string &text, const std::string &needle) {
         size_t count = 0, position = 0;
@@ -125,8 +162,8 @@ void checkLoopSourceCache() {
         throw std::runtime_error("loop source lost the exact device trip count");
     auto mutationMisses = [&](auto mutate, bool changesSource) {
         auto changed = original;
-        auto region = std::make_shared<LoopRegion>(*original.nodes.back().loop);
-        changed.nodes.back().loop = region;
+        auto region = std::make_shared<LoopRegion>(*original.nodes[3].loop);
+        changed.nodes[3].loop = region;
         mutate(*region);
         const auto before = kernel::generationCacheStats();
         generate(changed);
@@ -171,6 +208,7 @@ int main() {
         checkKernelIR();
         checkMatrixContracts();
         checkLoopSourceCache();
+        checkMultiResultStorage();
         using kernel::ScalarExpr;
         using kernel::ScalarValue;
         using kernel::ScalarOp;

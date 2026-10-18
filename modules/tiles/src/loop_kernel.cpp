@@ -44,9 +44,12 @@ void validateLoopRegion(const Program &outer, const Node &node) {
     require(node.op == "loop" && node.loop, "missing owned recurrence");
     const auto &region = *node.loop;
     require(
-        region.stateInputs.size() == 1 && region.nextStates.size() == 1,
-        "only one recurrent state is supported");
-    require(node.inputs.size() == 1 + region.captureInputs.size(), "capture/input arity");
+        !region.stateInputs.empty() && region.nextStates.size() == region.stateInputs.size() &&
+            node.results.size() == region.stateInputs.size(),
+        "state/result arity mismatch");
+    require(
+        node.inputs.size() == region.stateInputs.size() + region.captureInputs.size(),
+        "capture/input arity");
     const auto &body = region.body;
     for (const auto &value : body.nodes)
         require(!value.loop, "nested device loops are not supported");
@@ -74,8 +77,18 @@ void validateLoopRegion(const Program &outer, const Node &node) {
     }
     const auto &state = body.nodes[region.stateInputs[0]];
     require(node.shape == state.shape && node.dtype == state.dtype, "state result type");
-    const auto &next = body.nodes.at(region.nextStates[0]);
-    require(next.shape == state.shape && next.dtype == state.dtype, "next-state type changed");
+    for (size_t i = 0; i < region.stateInputs.size(); ++i) {
+        const auto &input = body.nodes[region.stateInputs[i]];
+        require(
+            input.shape == state.shape && input.dtype == state.dtype,
+            "states have incompatible lane domains or dtypes");
+        require(region.nextStates[i] < body.nodes.size(), "invalid next-state binding");
+        const auto &next = body.nodes[region.nextStates[i]];
+        require(next.shape == input.shape && next.dtype == input.dtype, "next-state type changed");
+        require(
+            node.results[i].shape == input.shape && node.results[i].dtype == input.dtype,
+            "result descriptor type mismatch");
+    }
     for (size_t id = 0; id < body.nodes.size(); ++id) {
         const auto &value = body.nodes[id];
         require(!value.loop, "nested device loops are not supported");
@@ -106,7 +119,7 @@ KernelBody loopBody(const Program &p, Launch &launch) {
              p.nodes[i].dtype,
              i,
              elements(p.nodes[i].shape),
-             i == launch.node});
+             std::find(launch.outputs.begin(), launch.outputs.end(), i) != launch.outputs.end()});
     kernel.faultSlot = p.nodes.size();
     const auto table = kernel.buffers.size();
     if (!region.domain.empty()) {
@@ -160,11 +173,7 @@ KernelBody loopBody(const Program &p, Launch &launch) {
                                 ScalarCompare::Equal,
                                 b,
                                 ScalarExpr::literal(ScalarValue::f64(0))},
-                            {ReportFault{static_cast<uint32_t>(launch.node)},
-                             Store{
-                                 {launch.node, lane, Predicate(true)},
-                                 ScalarExpr::literal(ScalarValue{root.dtype, 0})},
-                             Return{}}});
+                            {ReportFault{static_cast<uint32_t>(launch.node)}, Return{}}});
                 expr = expr.substitute("b", b);
             }
         }
@@ -191,10 +200,12 @@ KernelBody loopBody(const Program &p, Launch &launch) {
                 IndexExpr(region.domain.size()),
                 1,
                 std::move(iteration)});
-    laneBody.push_back(
-        Store{
-            {launch.node, lane, Predicate(true)},
-            ScalarExpr::symbol("k_loop_input0", root.dtype)});
+    require(launch.outputs.size() == region.stateInputs.size(), "launch result arity");
+    for (size_t i = 0; i < launch.outputs.size(); ++i)
+        laneBody.push_back(
+            Store{
+                {launch.outputs[i], lane, Predicate(true)},
+                ScalarExpr::symbol("k_loop_input" + std::to_string(i), root.results[i].dtype)});
     launch.blockX = root.dtype == DType::F64 ? 1 : 256;
     launch.gridX  = static_cast<unsigned>(
         std::clamp<size_t>((elements(root.shape) + launch.blockX - 1) / launch.blockX, 1, 65535));

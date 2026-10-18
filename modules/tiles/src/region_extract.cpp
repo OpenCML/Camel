@@ -78,7 +78,8 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Region &region) {
         const auto ref   = static_cast<rt::gc_node_ref_t>(id);
         const auto *node = source.node(ref);
         require(
-            node->kind == rt::GCNodeKind::Oper || node->kind == rt::GCNodeKind::Loop,
+            node->kind == rt::GCNodeKind::Oper || node->kind == rt::GCNodeKind::Loop ||
+                node->kind == rt::GCNodeKind::Accs,
             "unsupported region member");
         require(
             source.ctrlInputsOf(ref).empty() && source.ctrlOutputsOf(ref).empty(),

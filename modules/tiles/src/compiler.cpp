@@ -260,9 +260,9 @@ class Compiler {
     }
     Value loop(Frame &frame, rt::gc_node_ref_t id) {
         const rt::LoopView view(*frame.graph, id);
-        if (view.kind() != core::LoopKind::For || view.stateCount() != 1 ||
+        if (view.kind() != core::LoopKind::For || view.stateCount() == 0 ||
             !view.bodyEffects().pure())
-            throw UnsupportedComputation("tiles requires a pure single-state static For loop");
+            throw UnsupportedComputation("tiles requires a pure static For loop");
         auto *body = view.bodyGraph();
         const rt::fact::Anchor anchors[]{{frame.graph, id}, {body, *view.bodyElementParam()}};
         const auto domain =
@@ -278,12 +278,17 @@ class Compiler {
         if (region->domain.size() != static_cast<size_t>(*domain->extent))
             throw std::runtime_error("core loop domain disagrees with static array");
         Compiler nested(facts);
-        nested.active    = active;
-        auto initial     = eval(frame, view.initialState(0));
-        const auto state = nested.placeholder(initial.type);
-        region->stateInputs.push_back(state.tensor);
-        std::vector<Value> captures;
-        std::vector<size_t> inputs{materialize(initial)};
+        nested.active = active;
+        std::vector<Value> initials, states, captures;
+        std::vector<size_t> inputs;
+        for (size_t i = 0; i < view.stateCount(); ++i) {
+            auto initial = eval(frame, view.initialState(i));
+            inputs.push_back(materialize(initial));
+            auto state = nested.placeholder(initial.type);
+            region->stateInputs.push_back(state.tensor);
+            initials.push_back(std::move(initial));
+            states.push_back(std::move(state));
+        }
         for (auto ref : view.captures()) {
             const auto outer = eval(frame, ref);
             inputs.push_back(materialize(outer));
@@ -297,14 +302,22 @@ class Compiler {
         activation.values.emplace(
             *view.bodyElementParam(),
             Value{.type = body->node(*view.bodyElementParam())->dataType(), .loopElement = true});
-        activation.values.emplace(view.bodyStateParam(0), state);
+        for (size_t i = 0; i < states.size(); ++i)
+            activation.values.emplace(view.bodyStateParam(i), states[i]);
         for (size_t c = 0; c < captures.size(); ++c)
             activation.values.emplace(view.bodyCapturePort(c), captures[c]);
         nested.active.insert(body);
         if (body->exitNodeRef() != rt::kInvalidNodeRef)
             nested.eval(activation, body->exitNodeRef());
         auto result = nested.eval(activation, view.nextState());
-        region->nextStates.push_back(nested.materialize(result));
+        if (states.size() == 1)
+            region->nextStates.push_back(nested.materialize(result));
+        else {
+            if (result.fields.size() != states.size())
+                throw std::runtime_error("loop next-state tuple arity mismatch");
+            for (const auto &field : result.fields)
+                region->nextStates.push_back(nested.materialize(field));
+        }
         region->body         = std::move(nested.program);
         region->body.outputs = region->nextStates;
         const auto &source   = program.nodes[inputs.front()];
@@ -313,6 +326,15 @@ class Compiler {
             .shape  = source.shape,
             .inputs = std::move(inputs),
             .dtype  = source.dtype};
+        for (auto input : node.inputs) {
+            if (node.results.size() == states.size())
+                break;
+            const auto &value = program.nodes[input];
+            if (value.shape != node.shape || value.dtype != node.dtype)
+                throw UnsupportedComputation(
+                    "tiles loop states require identical lane domains and dtypes");
+            node.results.push_back({value.shape, value.dtype});
+        }
         node.loop = std::move(region);
         // A legal graph outside the initial lane-local subset remains a CPU region.
         // Structural/contract validation below still reports actual malformed IR.
@@ -333,7 +355,24 @@ class Compiler {
                 throw UnsupportedComputation("tiles loop needs a lane to preserve scalar faults");
         }
         kernel::validateLoopRegion(program, node);
-        return {.type = initial.type, .tensor = append(std::move(node))};
+        const auto producer = append(std::move(node));
+        Value output{.type = view.valueType()};
+        for (size_t i = 0; i < states.size(); ++i) {
+            const auto &type = program.nodes[producer].results[i];
+            auto result      = Value{
+                .type   = initials[i].type,
+                .tensor = append(
+                    Node{
+                        .op         = "result",
+                        .shape      = type.shape,
+                        .inputs     = {producer},
+                        .attributes = {static_cast<int64_t>(i)},
+                        .dtype      = type.dtype})};
+            if (states.size() == 1)
+                return result;
+            output.fields.push_back(std::move(result));
+        }
+        return output;
     }
 
     Value eval(Frame &f, rt::gc_node_ref_t id) {
@@ -799,10 +838,12 @@ loopEligibility(const rt::GCGraph &graph, rt::gc_node_ref_t id, rt::fact::FactSt
         Compiler compiler(facts);
         Frame frame{.graph = const_cast<rt::GCGraph *>(&graph)};
         const rt::LoopView view(graph, id);
-        if (view.kind() != core::LoopKind::For || view.stateCount() != 1)
+        if (view.kind() != core::LoopKind::For || view.stateCount() == 0)
             return "unsupported_loop_form";
-        for (auto ref : {view.initialState(0)})
+        for (size_t i = 0; i < view.stateCount(); ++i) {
+            const auto ref = view.initialState(i);
             frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
+        }
         for (auto ref : view.captures())
             frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
         (void)compiler.loop(frame, id);

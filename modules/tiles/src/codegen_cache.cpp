@@ -124,6 +124,11 @@ class Key {
             numbers(n.shape);
             numbers(n.inputs);
             numbers(n.attributes); // Includes graph constant64 literal bits.
+            number(n.results.size());
+            for (const auto &result : n.results) {
+                numbers(result.shape);
+                number(static_cast<uint64_t>(result.dtype));
+            }
             number(n.offset);
             numbers(n.strides);
             number(n.indexing.has_value());
@@ -160,7 +165,7 @@ class Key {
 };
 std::string planKey(const Program &p, ScheduleOptions options) {
     Key key;
-    key.number(6); // Process-local key schema; not a persistent semantic fingerprint.
+    key.number(7); // Process-local key schema; not a persistent semantic fingerprint.
     key.number(options.fuseElementwise);
     key.number(options.parallelMax);
     key.program(p);
@@ -174,7 +179,7 @@ struct Entry {
                        launches.capacity() * sizeof(Launch);
         for (const auto &s : launches)
             total += s.name.capacity() + s.implementation.capacity() +
-                     s.members.capacity() * sizeof(size_t);
+                     (s.members.capacity() + s.outputs.capacity()) * sizeof(size_t);
         return total;
     }
 };
