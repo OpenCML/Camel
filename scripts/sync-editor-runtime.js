@@ -10,6 +10,17 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const required = ['bin/camel.exe', 'bin/camel-db.exe', 'bin/camel-ls.exe', 'libs/libcamel.dll']
 const inside = (parent, child) => { const relative = path.relative(parent, child); return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative)) }
 
+function report(target, message, level = 'log') {
+    const line = `[runtime-sync] ${message}`
+    console[level](line)
+    try {
+        const logFile = path.join(path.dirname(path.resolve(target)), 'runtime-sync.log')
+        fs.appendFileSync(logFile, `${new Date().toISOString()} ${line}\n`, 'utf8')
+    } catch (error) {
+        console.warn(`[runtime-sync] Could not write the local sync log: ${error.message}`)
+    }
+}
+
 function manifest(root) {
     const result = new Map()
     const visit = relative => {
@@ -31,10 +42,11 @@ function stopRuntime(target) {
         "$active=@(Get-Process -Name 'camel*' -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($root+'\\',[StringComparison]::OrdinalIgnoreCase) }); " +
         "foreach ($item in $active) { $item.Kill(); $item.WaitForExit() }; Write-Output $active.Count"],
         { encoding: 'utf8', windowsHide: true, env: { ...process.env, CAMEL_EDITOR_RUNTIME_TARGET: target } }).trim()
-    if (Number(raw) > 0) console.log(`[runtime-sync] Stopped ${Number(raw)} Camel process(es) using the fixed runtime`)
+    if (Number(raw) > 0) report(target, `Stopped ${Number(raw)} Camel process(es) using the fixed runtime`)
 }
 
 export function syncRuntime(source, target) {
+    const startedAt = Date.now()
     if (!path.isAbsolute(target)) throw new Error('The runtime destination must be absolute')
     source = fs.realpathSync(source)
     if (fs.lstatSync(target).isSymbolicLink()) throw new Error('The fixed runtime must be an independent directory')
@@ -67,7 +79,8 @@ export function syncRuntime(source, target) {
         try { fs.renameSync(staged, target) }
         catch (error) { fs.renameSync(backup, target); throw error } // rollback, not a second sync attempt
         try { remove(backup) }
-        catch (error) { console.warn(`[runtime-sync] New runtime installed; old copy remains at ${backup}: ${error.message}. No retry.`) }
+        catch (error) { report(target, `New runtime installed; old copy remains at ${backup}: ${error.message}. No retry.`, 'warn') }
+        report(target, `Synchronized ${expected.size} files in ${Date.now() - startedAt} ms to ${target}`)
         return expected.size
     } finally {
         if (fs.existsSync(staged)) remove(staged)
@@ -78,10 +91,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     try {
         const target = execFileSync('git', ['config', '--local', '--get', 'camel.runtimeSyncTarget'],
             { cwd: repoRoot, encoding: 'utf8', windowsHide: true }).trim()
-        if (target) console.log(`[runtime-sync] Synchronized ${syncRuntime(path.join(repoRoot, 'out/latest'), target)} files to ${target}`)
+        if (target) syncRuntime(path.join(repoRoot, 'out/latest'), target)
     } catch (error) {
         // An unset opt-in is normal. Every other failure is visible but does not affect the commit.
         if (!(error.status === 1 && error.stdout?.toString().trim() === ''))
-            console.warn(`[runtime-sync] Not synchronized: ${error.message}. No retry.`)
+            report(target || path.join(repoRoot, 'out/latest'), `Not synchronized: ${error.message}. No retry.`, 'warn')
     }
 }

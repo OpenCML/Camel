@@ -19,7 +19,8 @@ try {
     assert.equal(syncRuntime(source, target), 4)
     assert.equal(fs.readFileSync(path.join(target, binaries[0]), 'utf8'), 'new')
     assert.equal(fs.existsSync(path.join(target, 'obsolete.txt')), false)
-    assert.deepEqual(fs.readdirSync(root).sort(), ['runtime', 'source'])
+    assert.deepEqual(fs.readdirSync(root).sort(), ['runtime', 'runtime-sync.log', 'source'])
+    assert.match(fs.readFileSync(path.join(root, 'runtime-sync.log'), 'utf8'), /Synchronized 4 files/)
     // Use isolated ping executables as long-running Camel-named processes. The hook
     // must stop only the one inside the destination, never a different checkout.
     const ping = path.join(process.env.SystemRoot, 'System32/ping.exe')

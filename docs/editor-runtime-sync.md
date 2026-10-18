@@ -19,6 +19,8 @@ The hook checks required binaries, rejects links, copies into a temporary siblin
 and verifies file hashes and that the source build did not change during copying. It replaces
 the fixed directory only after verification; if installation fails it restores the old directory.
 Temporary siblings are removed after success; a failed cleanup is reported without retry.
+Each attempt also appends its result, time and errors to `runtime-sync.log` beside the fixed
+runtime directory (for example, `D:/Projects/OpenCML-Ext/.local/camel/runtime-sync.log`).
 If the language server does not restart automatically, run **Camel: Restart Language Server**
 (**Camel: 重启语言服务器**) from the VS Code command palette.
 
