@@ -1,0 +1,66 @@
+// Views read only the core's maps; custom VJPs exercise legal noncanonical dy reshapes.
+module tiles_core_views
+import { Tensor, load_npy, save_npy, reshape, permute, slice, sum, zeros } from tensor
+import { grad, vjp } from autodiff
+import { run, source, inspect } from tiles
+import { get_env } from sys
+let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0], [2, 3])
+func chained(x: Tensor<f32>): Tensor<f32> { return slice(permute(x, [2, 0, 1]), 0, 1, 4, 2) }
+func fixed(x: Tensor<f32, const [2, 3, 4]>): Tensor<f32> { return permute(x, [2, 0, 1]) }
+with <axes: int[]>
+func configured(x: Tensor<f32, const [2, 3, 4]>): Tensor<f32> { return permute(x, axes) }
+func rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3, 2]) }
+@vjp<rule>
+func mark(x: Tensor<f32>): Tensor<f32> { return x }
+func loss(x: Tensor<f32>): float {
+    return sum(mark(sum(x, 1)) * weights)
+}
+func negative_loss(x: Tensor<f32>): float {
+    return sum(mark(sum(x, -2)) * weights)
+}
+func keep_loss(x: Tensor<f32>): float { return sum(sum(x, -2, true)) }
+func empty_rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3, 0]) }
+@vjp<empty_rule>
+func empty_mark(x: Tensor<f32>): Tensor<f32> { return x }
+func empty_loss(x: Tensor<f32>): float { return sum(empty_mark(sum(x, 1))) }
+func wide_rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [4, 5, 2]) }
+@vjp<wide_rule>
+func wide_mark(x: Tensor<f32>): Tensor<f32> { return x }
+func wide_loss(x: Tensor<f32>): float { return sum(wide_mark(sum(x, 1))) }
+func main(): int sync {
+    let folder = get_env('TILES_TEST_OUT')
+    let x = load_npy(folder + '/x.npy') as Tensor<f32, const [2, 3, 4]>
+    save_npy(chained(x), folder + '/chain_cpu.npy')
+    save_npy(run<chained>(x), folder + '/chain_gpu.npy')
+    save_npy(fixed(x), folder + '/fixed_cpu.npy')
+    save_npy(run<fixed>(x), folder + '/fixed_gpu.npy')
+    save_npy(configured<[2, 0, 1]>(x), folder + '/config_cpu0.npy')
+    save_npy(configured<[1, 2, 0]>(x), folder + '/config_cpu1.npy')
+    save_npy(run<configured<[2, 0, 1]>>(x), folder + '/config_gpu0.npy')
+    save_npy(run<configured<[1, 2, 0]>>(x), folder + '/config_gpu1.npy')
+    save_npy(run<configured<[2, 0, 1]>>(x), folder + '/config_gpu2.npy')
+    let a = zeros([2, 4, 3])
+    let df = grad(loss)
+    let dn = grad(negative_loss)
+    let dk = grad(keep_loss)
+    save_npy(df(a), folder + '/expand_cpu.npy')
+    save_npy(run<df>(a), folder + '/expand_gpu.npy')
+    save_npy(dn(a), folder + '/negative_cpu.npy')
+    save_npy(run<dn>(a), folder + '/negative_gpu.npy')
+    save_npy(dk(a), folder + '/keep_cpu.npy')
+    save_npy(run<dk>(a), folder + '/keep_gpu.npy')
+    let e = zeros([0, 4, 2])
+    let de = grad(empty_loss)
+    save_npy(de(e), folder + '/empty_cpu.npy')
+    save_npy(run<de>(e), folder + '/empty_gpu.npy')
+    let w = zeros([2, 3, 4, 5])
+    let dw = grad(wide_loss)
+    save_npy(dw(w), folder + '/wide_cpu.npy')
+    save_npy(run<dw>(w), folder + '/wide_gpu.npy')
+    println('FIXED_INSPECT')
+    println(inspect<fixed>(x))
+    println('EXPAND_SOURCE')
+    println(source<df>(a))
+    println('VIEWS_COMPLETE')
+    return 0
+}

@@ -39,6 +39,7 @@ template<class F> void rejects(const Program &original, F mutate, const char *re
 
 void checkKernelIR();
 void checkMatrixContracts();
+void attachNativeReduction(Program &program, size_t node);
 
 namespace {
 void checkMultiResultStorage() {
@@ -302,12 +303,13 @@ int main() {
                          {.op="multiply", .shape={4,2}, .inputs={0,1}},
                          {.op="sum_axis", .shape={4}, .inputs={2}, .attributes={1}}};
         fusedReduction.outputs = {3};
+        attachNativeReduction(fusedReduction,3);
         schedule(fusedReduction);
         if (fusedReduction.launches.size() != 1 || fusedReduction.storage.slots[2] != SIZE_MAX ||
             fusedReduction.launches[0].implementation != "ordered_reduce")
             throw std::runtime_error("producer was not fused into ordered reduction");
         rejects(fusedReduction, [](auto &x) { x.launches[0].blockX = 256; }, "ordered reduction operation or block");
-        rejects(fusedReduction, [](auto &x) { x.nodes[3].op = "max_axis"; }, "ordered reduction operation or block");
+        rejects(fusedReduction, [](auto &x) { x.nodes[3].op = "max_axis"; }, "unsupported numerical law");
         auto epilogue = fusedReduction;
         epilogue.nodes.push_back(Node{.op="add", .shape={4}, .inputs={3,1}});
         epilogue.outputs = {4};
@@ -319,6 +321,7 @@ int main() {
         }, "ordered reduction epilogue domain");
         rejects(epilogue, [](auto &x) {
             x.nodes[4] = Node{.op="sum_axis", .shape={4}, .inputs={2}, .attributes={1}};
+            attachNativeReduction(x,4);
         }, "ordered reduction operation or block");
         fusedReduction.outputs = {2,3};
         schedule(fusedReduction);
@@ -386,7 +389,7 @@ int main() {
         generate(maximumPlan);
         if (maximumPlan.launches[0].implementation != "parallel_max")
             throw std::runtime_error("core maximum law did not authorize parallel reduction");
-        rejects(maximumPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "parallel maximum lacks");
+        rejects(maximumPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "missing index instance");
         rejects(maximumPlan, [](auto &x){ x.nodes[1].indexing->law=42; }, "invalid core index instance");
         auto rowPlan = maximumPlan;
         rowPlan.nodes[1].shape = {1,1};
@@ -400,7 +403,7 @@ int main() {
             throw std::runtime_error("shared row values must stay inside one block");
         rejects(rowPlan, [](auto &x){ x.launches[0].blockX=64; }, "invalid row region plan");
         rejects(rowPlan, [](auto &x){ x.launches[0].members.erase(x.launches[0].members.begin()); }, "invalid row region plan");
-        rejects(rowPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "invalid row region plan");
+        rejects(rowPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "missing index instance");
         auto mappedRow = rowPlan;
         mappedRow.nodes[1].indexing->norm[0].coords[1]=mappedRow.nodes[1].indexing->exprs.constant(0);
         rejects(mappedRow, [](auto &){}, "invalid row region plan");
@@ -410,9 +413,13 @@ int main() {
             throw std::runtime_error("noncanonical reduction incorrectly reused row-local loads");
         std::cout << "tiles row region: shared values and invalid launch mutations checked\n";
         maximumPlan.nodes[1].indexing.reset();
-        generate(maximumPlan);
-        if (maximumPlan.launches[0].implementation != "standard")
-            throw std::runtime_error("undeclared reduction reused parallel source");
+        bool missingReductionInstance = false;
+        try { generate(maximumPlan); }
+        catch (const std::runtime_error &error) {
+            missingReductionInstance = std::string(error.what()).find("missing index instance") != std::string::npos;
+        }
+        if (!missingReductionInstance)
+            throw std::runtime_error("undeclared reduction acquired private traversal semantics");
         std::cout << "tiles reduction laws: declared freedom required for parallel maximum\n";
         const std::string contractUri = "tilestest:versioned";
         const auto contractId = operators.intern(contractUri);
@@ -572,13 +579,14 @@ int main() {
                    {.op="sum_axis", .shape={}, .inputs={2}, .attributes={0}},
                    {.op="add", .shape={4}, .inputs={2,3}}};
         p.outputs = {4};
+        attachNativeReduction(p,3);
         schedule(p);
         validatePlan(p);
         if (p.launches.size() != 3 || p.storage.slots[1] != SIZE_MAX)
             throw std::runtime_error("expected chain fusion and shared-result boundary");
         rejects(p, [](auto &x) { x.nodes[1].inputs[0] = 4; }, "topologically earlier");
         rejects(p, [](auto &x) { x.nodes[1].shape = {5}; }, "binary result shape");
-        rejects(p, [](auto &x) { x.nodes[3].attributes = {2}; }, "reduction axis");
+        rejects(p, [](auto &x) { x.nodes[3].indexing->domain.dims[0].role = camel::core::sem::DimRole::Parallel; }, "missing from reduction projection");
         rejects(p, [](auto &x) { x.storage.slots[2] = x.storage.slots[0]; }, "overlapping buffer lifetimes");
         rejects(p, [](auto &x) { x.storage.bytes[x.storage.slots[0]] = 1; }, "undersized/missing allocation");
         rejects(p, [](auto &x) { x.launches[0].members.push_back(2); }, "duplicate/invalid scheduled value");
@@ -610,11 +618,13 @@ int main() {
             throw std::runtime_error("returned intermediates must remain live through download");
         auto reduced = indexed;
         reduced.nodes[1] = Node{.op="sum_to", .shape={1,3}, .inputs={0}};
+        attachNativeReduction(reduced,1);
         schedule(reduced);
         validatePlan(reduced);
-        rejects(reduced, [](auto &x) { x.nodes[1].shape = {1,2,3}; }, "sum_to broadcast domain");
+        rejects(reduced, [](auto &x) { x.nodes[1].shape = {1,2,3}; }, "unsupported output map");
         auto scalar = indexed;
         scalar.nodes[1] = Node{.op="sum_all", .shape={}, .inputs={0}, .dtype=DType::F64};
+        attachNativeReduction(scalar,1);
         schedule(scalar);
         validatePlan(scalar);
         rejects(scalar, [](auto &x) { x.storage.bytes[x.storage.slots[1]] = 4; }, "undersized/missing allocation");

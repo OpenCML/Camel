@@ -1171,3 +1171,14 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: multi-state LOOP", "std::fvm: multi-state LOOP", "std::jit: multi-state LOOP", "std::prl: multi-state LOOP", "Multi-state LOOP graph: one region, selected downloads and CPU neighbor regions PASS"]
 timeout_ms = 180000
+
+[[tests]]
+name = "core_view_maps"
+kind = "behavior"
+
+tool = "python"
+case = "../../cases/modules/tiles/core_views.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: core views exact bits", "std::fvm: core views exact bits", "std::jit: core views exact bits", "std::prl: core views exact bits"]
+timeout_ms = 180000

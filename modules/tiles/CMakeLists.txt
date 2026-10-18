@@ -7,7 +7,7 @@ add_camel_module(
 )
 
 # Native contract tests build with the standard build, without needing a CUDA device.
-add_executable(tiles-plan-check src/resident_storage.cpp ../../test/cases/modules/tiles/plan_check.cpp ../../test/cases/modules/tiles/kernel_ir_check.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)
+add_executable(tiles-plan-check src/resident_storage.cpp ../../test/cases/modules/tiles/plan_check.cpp ../../test/cases/modules/tiles/kernel_ir_check.cpp ../../test/cases/modules/tiles/reduction_domain_check.cpp ../../test/cases/modules/tiles/core_views_check.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)
 target_compile_features(tiles-plan-check PRIVATE cxx_std_23)
 target_include_directories(tiles-plan-check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/third_party)
 target_link_libraries(tiles-plan-check PRIVATE libcamel fmt::fmt)

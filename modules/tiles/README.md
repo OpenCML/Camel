@@ -154,12 +154,13 @@ result nodes in `indexed_nodes`. Instances are structurally validated against th
 captured declaration before scheduling. The parallel maximum implementation also
 requires a compatible f32 maximum law and the core's regroup, permute and block
 identity freedoms. Missing declarations choose the ordered implementation.
-Transpose, permutation and slice now derive their physical offset and strides
-from the core access map via `rowMajorView`; their duplicate index inference has
-been removed. The domain must write output coordinates directly and read an
-unconditional affine source. Empty domains retain zero physical strides without
-evaluating unused addresses. CUDA still prints these physical maps; other
-operators and graph facts have not yet migrated to generic domain-driven lowering.
+Transpose, permutation, slice, broadcast and axis expansion retain the core
+access map as their authority. The output domain writes coordinates directly;
+source coordinates may include the core's quotient/remainder reshape expressions.
+Physical address lowering checks nonnegative intermediate ranges and operand
+bounds. `rowMajorView` supplies compact strides when it proves an equivalent
+strided map. Empty domains evaluate no source address. Synthetic scalar fills
+and gradient matrix primitives still use their explicit physical layouts.
 
 FMA selection additionally requires the core declaration of correctly rounded
 f32 arithmetic sensitive to contraction; an opaque declaration grants no such
@@ -290,7 +291,8 @@ in their unclaimed body graphs, as it does in other reachable graphs.
 ## Execution and numerical behavior
 
 The compiler snapshots inputs into an owned IR, retaining no Camel GC pointers
-across CUDA work. Shape inference reuses the tensor operation registry.
+across CUDA work. Fully resolved static graph outputs use `core.shape`; unknown
+graph shapes specialize through the tensor operation registry for that call.
 Intermediates remain on the device. Single-use indexed scalar chains
 are fused into groups of at most 64 operations. Shared results retain materialization
 boundaries; axis sum/mean may absorb their single-use producers. Each fused node keeps an f32 rounding point;
@@ -382,8 +384,9 @@ at completion. Other scalar math functions, arbitrary pullback closures, control
 unsupported derivative operators still require further lowering work.
 
 Static `transpose`, `permute` (including negative axes) and positive-step `slice`
-lower to a checked index map: source address equals an element offset plus the
-dot product of output coordinates and element strides. Bounds are checked before
+lower to checked core index maps. Affine maps can simplify to an element offset
+plus a dot product with physical strides; reshape-based axis expansion can retain
+quotient/remainder expressions. Bounds are checked before
 CUDA execution, including arithmetic overflow. Empty domains do not dereference
 addresses. Transpose, permutation, slice and reshape can fuse with each other
 and with elementwise operations across different domains. Generated loads

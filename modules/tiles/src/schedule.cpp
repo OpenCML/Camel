@@ -69,7 +69,16 @@ bool scalar64(const std::string &op) {
 }
 bool orderedAxis(const std::string &op) { return op == "sum_axis" || op == "mean_axis"; }
 bool parallelMaximum(const Program &p, const Node &n) {
-    if (!n.indexing || n.semantic >= p.contracts.size())
+    if (!n.indexing || n.semantic >= p.contracts.size() || !elements(n.shape))
+        return false;
+    const auto &shape = p.nodes[n.inputs[0]].shape;
+    // The block kernel reads through reductionAccess(row, ordinal). Its only
+    // shape-derived traversal bound must equal the core contribution count;
+    // repeated or otherwise mapped contributions remain valid parallel inputs.
+    if (shape.empty() || n.attributes.size() != 1 || n.attributes[0] < 0 ||
+        size_t(n.attributes[0]) + 1 != shape.size() ||
+        kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0)).count !=
+            size_t(shape.back()))
         return false;
     const auto *declaration = p.contracts[n.semantic].declaration;
     if (!declaration || n.indexing->law >= declaration->laws.size())
@@ -237,9 +246,6 @@ void validate(const Program &p, InputBindings bindings) {
                 n.dtype == DType::F64 && n.shape.empty() && n.inputs.size() == 1 &&
                     p.nodes[n.inputs[0]].dtype == DType::F32,
                 "scalar reduction type");
-            require(
-                n.op != "mean_all" || elements(p.nodes[n.inputs[0]].shape),
-                "mean of empty tensor");
             (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
             continue;
         }
@@ -270,22 +276,22 @@ void validate(const Program &p, InputBindings bindings) {
             for (size_t input = 0; input < n.inputs.size(); ++input)
                 (void)kernel::pointwiseAddress(p, n, input, kernel::IndexExpr(0));
         const auto &a = p.nodes[n.inputs[0]].shape;
-        if (n.op == "sum_to")
-            require(
-                broadcast(n.shape, a) == a && n.shape.size() <= a.size(),
-                "sum_to broadcast domain");
         if (n.op == "reindex") {
-            require(n.strides.size() == n.shape.size(), "index map rank");
-            if (count) {
-                size_t last = n.offset;
-                for (size_t d = 0; d < n.shape.size(); ++d) {
-                    const size_t extent = size_t(n.shape[d] - 1);
-                    require(
-                        !extent || n.strides[d] <= (SIZE_MAX - last) / extent,
-                        "index map address overflow");
-                    last += extent * n.strides[d];
+            if (n.indexing)
+                (void)kernel::coreViewAddress(p, n, kernel::IndexExpr(0));
+            else {
+                require(n.strides.size() == n.shape.size(), "index map rank");
+                if (count) {
+                    size_t last = n.offset;
+                    for (size_t d = 0; d < n.shape.size(); ++d) {
+                        const size_t extent = size_t(n.shape[d] - 1);
+                        require(
+                            !extent || n.strides[d] <= (SIZE_MAX - last) / extent,
+                            "index map address overflow");
+                        last += extent * n.strides[d];
+                    }
+                    require(last < elements(a), "index map outside source domain");
                 }
-                require(last < elements(a), "index map outside source domain");
             }
         } else {
             require(n.offset == 0 && n.strides.empty(), "unexpected index map");
@@ -305,16 +311,6 @@ void validate(const Program &p, InputBindings bindings) {
         if (n.op == "sum_to")
             (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
         if (reduction) {
-            require(
-                n.attributes.size() == 1 && n.attributes[0] >= 0 &&
-                    size_t(n.attributes[0]) < a.size(),
-                "reduction axis");
-            size_t axis = n.attributes[0];
-            require(n.op != "max_axis" || a[axis] != 0, "empty maximum");
-            Shape kept = a, removed = a;
-            kept[axis] = 1;
-            removed.erase(removed.begin() + axis);
-            require(n.shape == kept || n.shape == removed, "reduction output shape");
             (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
         }
     }

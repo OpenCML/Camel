@@ -26,6 +26,7 @@
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
+#include "tiles/internal/access.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/compiled_region.h"
 #include "tiles/internal/kernel_ir.h"
@@ -530,10 +531,26 @@ class Compiler {
                         "operator context arguments are not supported yet");
                 for (auto in : ins)
                     args.push_back(eval(f, in));
-                const auto first    = program.nodes.size();
-                const auto semantic = contract(oper);
-                auto indexed        = graphInstance(*g, id, args);
-                out                 = operation(oper, args, indexed);
+                const auto first      = program.nodes.size();
+                const auto semantic   = contract(oper);
+                auto indexed          = graphInstance(*g, id, args);
+                ty::Type *knownResult = nullptr;
+                const auto inputRefs  = g->normInputsOf(id);
+                bool sameTypes        = inputRefs.size() == args.size();
+                for (size_t i = 0; sameTypes && i < args.size(); ++i)
+                    sameTypes = g->node(inputRefs[i])->dataType() == args[i].type;
+                if (sameTypes) {
+                    const rt::fact::Anchor anchor{g, id};
+                    const auto shape = facts.obtain<rt::fact::TensorShape>(
+                        rt::fact::coreKinds().shape,
+                        {&anchor, 1});
+                    if (shape && shape->dtype == ty::TypeCode::Float32 && shape->dims &&
+                        std::all_of(shape->dims->begin(), shape->dims->end(), [](auto extent) {
+                            return extent >= 0;
+                        }))
+                        knownResult = node->dataType();
+                }
+                out = operation(oper, args, indexed, knownResult);
                 // Only this operator's lowering inherits its lexical grant.
                 // Arguments and separately called functions have already been
                 // lowered with their own permissions and must remain unchanged.
@@ -607,7 +624,7 @@ class Compiler {
 
     Value operation(
         core::OperId id, const std::vector<Value> &args,
-        const std::optional<core::sem::IndexedInstance> &indexed) {
+        const std::optional<core::sem::IndexedInstance> &indexed, ty::Type *knownResult = nullptr) {
         static const auto intToFloat = core::OperatorTable::instance().intern(":op/ltod");
         if (id == intToFloat && args.size() == 1) {
             if (args[0].loopElement)
@@ -667,7 +684,10 @@ class Compiler {
             types.push_back(v.type);
             constants.push_back(v.constant);
         }
-        auto inferred = def->infer(tensor::ops::InferContext(types, constants));
+        // Static graph types have already run the module's resolver. Read their
+        // core shape fact; only invocation specialization needs to infer again.
+        auto inferred = knownResult ? std::optional<ty::Type *>(knownResult)
+                                    : def->infer(tensor::ops::InferContext(types, constants));
         if (inferred && (*inferred)->code() == ty::TypeCode::Float64 &&
             (def->name == "sum" || def->name == "mean")) {
             size_t input = tensorValue(args.at(0));
@@ -693,42 +713,23 @@ class Compiler {
                 throw std::runtime_error("cast_like shape mismatch");
             return {.type = *inferred, .tensor = append(std::move(n))};
         }
-        if (n.op == "broadcast_like" || n.op == "expand_axis" || n.op == "ones_like" ||
-            n.op == "zeros_like") {
-            size_t input;
-            if (n.op == "ones_like" || n.op == "zeros_like")
-                input = append(
-                    Node{.op = "input", .shape = {}, .data = {n.op == "ones_like" ? 1.0f : 0.0f}});
-            else
-                input = tensorValue(args.at(0));
-            Shape shape = program.nodes[input].shape;
-            if (n.op == "expand_axis") {
-                int64_t axis = integer(args.at(2));
-                if (axis < 0)
-                    axis += static_cast<int64_t>(n.shape.size());
-                if (axis < 0 || size_t(axis) >= n.shape.size())
-                    throw std::runtime_error("gradient axis out of bounds");
-                Shape kept = n.shape;
-                kept[axis] = 1;
-                if (elements(kept) != elements(shape))
-                    throw std::runtime_error("gradient reshape count mismatch");
-                if (kept != shape)
-                    input = append(Node{.op = "reshape", .shape = kept, .inputs = {input}});
-                shape = std::move(kept);
-            }
-            if (shape.size() > n.shape.size())
-                throw std::runtime_error("gradient broadcast rank");
-            n.strides.assign(n.shape.size(), 0);
-            size_t stride      = 1;
-            const size_t shift = n.shape.size() - shape.size();
-            for (size_t d = shape.size(); d-- > 0;) {
-                if (shape[d] != 1 && shape[d] != n.shape[d + shift])
-                    throw std::runtime_error("gradient broadcast extent");
-                n.strides[d + shift] = shape[d] == 1 ? 0 : stride;
-                stride *= size_t(shape[d]);
-            }
+        if (n.op == "broadcast_like" || n.op == "expand_axis") {
+            n.inputs   = {tensorValue(args.at(0))};
+            n.op       = "reindex";
+            n.indexing = indexed;
+            if (!n.indexing)
+                throw UnsupportedComputation("view operator lacks a concrete core index instance");
+            (void)kernel::coreViewAddress(program, n, kernel::IndexExpr(0));
+            return {.type = *inferred, .tensor = append(std::move(n))};
+        }
+        if (n.op == "ones_like" || n.op == "zeros_like") {
+            // These source operators do not yet declare index instances. Their
+            // scalar-fill physical primitive reads the one embedded constant.
+            const auto input =
+                append(Node{.op = "input", .data = {n.op == "ones_like" ? 1.0f : 0.0f}});
             n.op     = "reindex";
             n.inputs = {input};
+            n.strides.assign(n.shape.size(), 0);
             return {.type = *inferred, .tensor = append(std::move(n))};
         }
         if (n.op == "matmul_grad_lhs" || n.op == "matmul_grad_rhs") {
@@ -781,43 +782,13 @@ class Compiler {
                 throw std::runtime_error("max over an empty axis");
             n.attributes = {axis};
         } else if (n.op == "transpose" || n.op == "permute" || n.op == "slice") {
-            n.inputs          = {tensorValue(args.at(0))};
-            const auto &shape = program.nodes[n.inputs[0]].shape;
-            auto instance     = indexed;
-            if (!instance || instance->norm.empty() ||
-                instance->output.mode != core::sem::WriteMode::Unique ||
-                instance->output.indirect || !instance->output.valid.empty() ||
-                !instance->domain.guard.empty() ||
-                instance->extents() != std::optional<Shape>(n.shape) ||
-                instance->output.coords.size() != n.shape.size())
-                throw std::runtime_error("layout operator lacks a direct core index domain");
-            for (size_t d = 0; d < n.shape.size(); ++d) {
-                const auto &coordinate = instance->exprs[instance->output.coords[d]];
-                if (instance->domain.dims[d].role != core::sem::DimRole::Parallel ||
-                    coordinate.op != core::sem::ExprOp::Dim ||
-                    coordinate.value != static_cast<int64_t>(d))
-                    throw std::runtime_error("layout output is not an identity iteration map");
-            }
-            const auto &access = instance->norm[0];
-            if (access.kind != core::sem::AccessKind::Affine || !access.valid.empty())
-                throw std::runtime_error("layout input is not an unconditional affine access");
-            if (elements(n.shape) == 0) {
-                // Empty views never evaluate an address, including overflowing unused strides.
-                n.strides.assign(n.shape.size(), 0);
-            } else {
-                const auto view = core::sem::rowMajorView(*instance, access, shape);
-                if (!view || view->offset < 0)
-                    throw std::runtime_error(
-                        "core layout map cannot be represented by physical strides");
-                n.offset = static_cast<size_t>(view->offset);
-                for (auto stride : view->strides) {
-                    if (stride < 0)
-                        throw UnsupportedComputation("negative physical strides are not supported");
-                    n.strides.push_back(static_cast<size_t>(stride));
-                }
-            }
-            n.indexing = std::move(instance);
+            n.inputs   = {tensorValue(args.at(0))};
+            n.indexing = indexed;
             n.op       = "reindex";
+            if (!n.indexing)
+                throw UnsupportedComputation(
+                    "layout operator lacks a concrete core index instance");
+            (void)kernel::coreViewAddress(program, n, kernel::IndexExpr(0));
         } else if (n.op == "reshape") {
             n.inputs = {tensorValue(args.at(0))};
             if (elements(program.nodes[n.inputs[0]].shape) != elements(n.shape))

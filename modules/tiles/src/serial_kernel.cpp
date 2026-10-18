@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,6 +82,8 @@ class Lowerer {
     IndexExpr operand(const Node &n, size_t side, const IndexExpr &at) {
         if (elementwise(n.op) && n.indexing)
             return pointwiseAddress(p, n, side, at);
+        if (n.op == "reindex" && n.indexing)
+            return coreViewAddress(p, n, at);
         return n.op == "reindex"   ? mapped(n, at)
                : n.op == "reshape" ? at
                                    : broadcast(p.nodes[n.inputs.at(side)].shape, n.shape, at);

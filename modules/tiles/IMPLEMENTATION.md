@@ -8,12 +8,18 @@ follow [the design principles](../../docs/design-principles.cn.md).
 ## Compilation and execution
 
 - `src/compiler.cpp` reads Camel function graphs and lexical permissions. It uses
-  core operator declarations and validated `core.instance` facts, with isolated
-  call specialization when concrete input shapes are required. Compiled programs
+  core operator declarations and validated `core.shape`/`core.instance` facts.
+  Fully resolved graph shapes reuse their existing type result; only invocation
+  specialization reruns the module type resolver. Compiled programs
   own their data and retain no GC graph or value pointers.
 - `src/access.cpp`, `pointwise_kernel.cpp` and `reduction_kernel.cpp` compose
   core index maps with physical addresses and check supported domains and bounds.
-  `matmul_kernel.cpp` additionally checks the ascending f32 FMA-chain contract.
+  Transpose, permutation, slice, broadcast and axis-expansion views retain their
+  authoritative core map. Quasi-affine quotient/remainder expressions lower into
+  the existing physical index tree after range/bounds checks; `rowMajorView` is
+  a strided simplification, not another semantic definition. Empty domains form
+  no source address. `matmul_kernel.cpp` additionally checks the ascending f32
+  FMA-chain contract.
 - `src/schedule.cpp` forms launch groups and assigns storage by lifetime. Execution
   validates topology, shapes, declaration dependencies, launch legality and storage
   non-overlap. A changed declaration or incompatible core map invalidates reuse.
@@ -81,3 +87,10 @@ bodies, expert block kernels, general masked/indirect accesses, asynchronous
 device plans, and broader optimized implementations and tuning. See the design
 route for the full intended scope; passing the current test suite does not
 complete that scope.
+
+Known core defect: design principles 2.14 require an empty reduction domain to
+fault, including when the result is empty. Some existing tensor declarations
+(`sum`, `sum_axis`, `mean_axis`) still declare `LawEmpty::Initial`, and their CPU
+kernels retain that older behavior. Reconcile the declarations, CPU kernels,
+definition graphs and tests in a separate change; the current domain migration
+does not reinterpret `Initial` as conforming to the language specification.

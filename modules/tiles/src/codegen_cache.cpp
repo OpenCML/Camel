@@ -165,7 +165,7 @@ class Key {
 };
 std::string planKey(const Program &p, ScheduleOptions options) {
     Key key;
-    key.number(7); // Process-local key schema; not a persistent semantic fingerprint.
+    key.number(8); // Process-local key schema; not a persistent semantic fingerprint.
     key.number(options.fuseElementwise);
     key.number(options.parallelMax);
     key.program(p);

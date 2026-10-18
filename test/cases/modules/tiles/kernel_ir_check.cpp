@@ -23,6 +23,9 @@ void checkPointwiseContracts();
 void checkReductionContracts();
 void checkGeneralReductions();
 void checkRegions();
+void checkReductionDomains();
+void checkCoreViews();
+void attachNativeReduction(Program &program, size_t node);
 
 namespace {
 void checkScalarI64() {
@@ -105,6 +108,8 @@ void checkKernelIR() {
     checkPointwiseContracts();
     checkReductionContracts();
     checkGeneralReductions();
+    checkReductionDomains();
+    checkCoreViews();
     checkRegions();
     const auto integer = [](uint32_t value) { return ScalarExpr::literal(ScalarValue::u32(value)); };
     const auto signedInteger = [](int32_t value) { return ScalarExpr::literal(ScalarValue::i32(value)); };
@@ -314,6 +319,7 @@ void checkPointwiseContracts() {
     reduction.nodes[1]=Node{.op="sum_axis",.shape={2,2},.inputs={0},.attributes={2}};
     auto epilogue=p.nodes[1];epilogue.op="neg";epilogue.inputs={1};epilogue.indexing->norm.resize(1);
     reduction.nodes.push_back(epilogue);reduction.outputs={2};
+    attachNativeReduction(reduction,1);
     generate(reduction);
     if(reduction.launches.size()!=1 || reduction.launches[0].implementation!="ordered_reduce")
         throw std::runtime_error("canonical reduction epilogue did not fuse");
@@ -365,7 +371,7 @@ void checkReductionContracts() {
     };
     auto bad=p;bad.nodes[1].indexing->norm[0].coords[0]=bad.nodes[1].indexing->exprs.add(row,two);
     rejected(bad,"outside operand domain");
-    bad=p;bad.nodes[1].indexing->output.coords={zero,row};rejected(bad,"reduction projection");
+    bad=p;bad.nodes[1].indexing->output.coords={zero,row};rejected(bad,"constant output coordinate has nonunit extent");
     bad=p;bad.nodes[1].indexing->norm[0].valid.push_back({row,sem::Constraint::Rel::Lt,two});
     rejected(bad,"unconditional affine");
     auto otherLaw=declaration;otherLaw.laws[0].accumulator=f32;
