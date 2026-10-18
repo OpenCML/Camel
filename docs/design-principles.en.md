@@ -484,6 +484,14 @@ At present all complicated type computation is implemented directly by operators
 - **Algebra optimization defaults to a relaxed local policy to enable more optimization.** The standalone `std::opt::algebra` is included in `std::opt`. Both default to `safe_fp=false`: local reassociation and coefficient combination are allowed without `@numeric(reassociate)`, so results need not be bit-identical to the unoptimized program. This does not grant precision changes, approximate math, FMA, or assumptions about NaNs, infinities, signed zeros or subnormals. Rules must preserve exceptional-value behaviour or check the corresponding explicit permissions. This is an exception to the explicit-grant requirement of §2.13 for local algebra only.
 - **Safe floating-point mode is a pass parameter.** `std::opt::algebra(safe_fp=true)` and `std::opt(safe_fp=true)` restrict the algebra stage to strictly equivalent float rewrites, including provably exact coefficient doubling; that stage does not use wider node permissions to change rounding. Constant folding still uses canonical algorithms and integers still wrap at their declared width. This policy does not change runtime operators, govern the whole pipeline, or undo rewrites performed by an earlier pass.
 
+### 2.16 Direction of the training infrastructure (2026-10-18)
+
+See [the training infrastructure design](design/training/README.cn.md).
+
+- **Parameter trees**: the standard library provides `tree_map`, `tree_zip`, `tree_unzip`, `tree_reduce` and related operations over values nested from structs and tuples, leaves in depth-first order by field declaration; the shape of a tree comes from its type and the operations expand at compile time into ordinary per-leaf nodes. `Device<T>` distributes over structs and tuples field by field: `Device<{ a: A }>` and `{ a: Device<A> }` are the same type.
+- **Stateless random numbers**: besides the existing random numbers with global state, random numbers determined by a key (`key`, `fold`, `split`, `normal`, `uniform`, `randint`). They are pure functions, not external effects; the canonical algorithm is Philox4x32-10; integer and uniform results are bit-identical across devices, normal ones within the ulp bound of transcendental functions.
+- **A byte type**: `Bytes` is added and `string` means text only; file interfaces come in a text and a binary set.
+
 ## 3. `macro`
 
 - `macro` is a native marker provided by the language core to help with dynamic graph rewriting: a function marked `macro` can be evaluated early by the `std::macro` pass, which computes the static values and forms a new static graph.
