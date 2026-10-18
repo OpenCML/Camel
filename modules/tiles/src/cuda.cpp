@@ -11,6 +11,7 @@
 // Scoped execution, resident allocation ownership and GPU benchmark measurements.
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
+#include "tiles/internal/mixed_gemm.h"
 #include "tiles/internal/submission.h"
 #include "tiles/program.h"
 #include <algorithm>
@@ -180,6 +181,9 @@ class DeviceRun {
     const Program &program;
     Api &api;
     std::shared_ptr<Submission> submission;
+    // Before Resources in member order: benchmark storage drains before handle
+    // destruction. Native submissions additionally retain it through completion.
+    std::shared_ptr<MixedGemm> mixedGemm;
     std::unique_ptr<Resources> ownedResources;
     Resources &resources;
     std::vector<CUdeviceptr> pointers;
@@ -243,6 +247,15 @@ class DeviceRun {
             std::memcpy(hostInputs[id], data, bytes(node));
         }
         for (const auto &launch : p.launches) {
+            if (launch.implementation == "cublas_bf16") {
+                if (!mixedGemm) {
+                    mixedGemm = std::make_shared<MixedGemm>(moduleLease.backend, resources.stream);
+                    if (submission)
+                        submission->keepAlive(mixedGemm);
+                }
+                kernels.push_back(nullptr);
+                continue;
+            }
             CUfunction kernel;
             api.check(
                 api.cuModuleGetFunction(&kernel, moduleLease.compiled->module, launch.name.c_str()),
@@ -275,6 +288,10 @@ class DeviceRun {
             const auto &s = program.launches[i];
             if (!s.elements)
                 continue;
+            if (s.implementation == "cublas_bf16") {
+                mixedGemm->run(program, program.nodes[s.node], pointers);
+                continue;
+            }
             api.check(
                 api.cuLaunchKernel(
                     kernels[i],

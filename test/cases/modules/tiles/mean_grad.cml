@@ -1,0 +1,21 @@
+// Mean's pullback queries numel; specialize that query from the invocation shape.
+module tiles_mean_grad
+import { Tensor, reshape, mean, abs, sum } from tensor
+import { grad } from autodiff
+import { run, source } from tiles
+func mse(x: Tensor<f32>): float { return mean(x * x) }
+func main(run_gpu: bool): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let derivative = grad(mse)
+    let y = reshape([1.0, 2.0], [1, 2])
+    let first = source<derivative>(x)
+    let second = source<derivative>(y)
+    if len(first) == 0 || len(second) == 0 || first == second then sync { exit(1) }
+    println('mean_grad shape specialization PASS')
+    if run_gpu then sync {
+        let gpu = run<derivative>(x)
+        println('mean_grad error={}'->format<sum(abs(gpu - derivative(x)))>)
+        println('mean_grad changed_shape={}'->format<sum(abs(run<derivative>(y) - derivative(y)))>)
+    }
+    return 0
+}

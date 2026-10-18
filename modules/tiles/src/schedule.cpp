@@ -304,8 +304,11 @@ void validate(const Program &p, InputBindings bindings) {
             require(elements(a) == count, "reshape element count");
         if (n.op == "matmul") {
             const auto &b = p.nodes[n.inputs[1]].shape;
-            require(a.size() == 2 && b.size() == 2, "matmul rank");
-            require(a[1] == b[0] && n.shape == Shape{a[0], b[1]}, "matmul dimensions");
+            require(a.size() >= 2 && b.size() >= 2, "matmul rank");
+            auto output = broadcast(Shape(a.begin(), a.end() - 2), Shape(b.begin(), b.end() - 2));
+            output.push_back(a[a.size() - 2]);
+            output.push_back(b.back());
+            require(a.back() == b[b.size() - 2] && n.shape == output, "matmul dimensions");
             kernel::validateMatmulContract(p, n);
         }
         if (n.op == "sum_to")
@@ -405,6 +408,11 @@ void schedule(Program &p, ScheduleOptions options, InputBindings bindings) {
         }
         launch.implementation = "standard";
         const auto &n         = p.nodes[id];
+        constexpr auto mixed =
+            core::sem::kReassociate | core::sem::kChangePrecision | core::sem::kFiniteMath;
+        if (n.op == "matmul" && (n.permissions & mixed) == mixed && launch.elements &&
+            p.nodes[n.inputs[0]].shape.back() > 0)
+            launch.implementation = "cublas_bf16";
         if (launch.members.size() > 1 &&
             std::any_of(launch.members.begin(), launch.members.end(), [&](size_t member) {
                 return orderedAxis(p.nodes[member].op);
@@ -508,8 +516,17 @@ void validatePlan(const Program &p, InputBindings bindings) {
         }
         require(
             launch.implementation == "standard" || launch.implementation == "parallel_max" ||
-                launch.implementation == "ordered_reduce" || launch.implementation == "row_region",
+                launch.implementation == "ordered_reduce" ||
+                launch.implementation == "row_region" || launch.implementation == "cublas_bf16",
             "unknown implementation");
+        if (launch.implementation == "cublas_bf16") {
+            constexpr auto mixed =
+                core::sem::kReassociate | core::sem::kChangePrecision | core::sem::kFiniteMath;
+            require(
+                p.nodes[launch.node].op == "matmul" &&
+                    (p.nodes[launch.node].permissions & mixed) == mixed,
+                "mixed GEMM permissions");
+        }
         if (launch.implementation == "row_region") {
             const auto region = kernel::rowKernel(p);
             require(

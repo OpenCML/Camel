@@ -1,0 +1,57 @@
+module batch_matmul_checks
+import { Tensor, randn, seed, sum, mean, abs, reshape, shape, set_num_threads } from tensor
+import { value_and_grad } from autodiff
+import { run, source } from tiles
+
+type Pair = { a: Tensor<f32>, b: Tensor<f32> }
+func pair(a: Tensor<f32>, b: Tensor<f32>): Pair { return { a: a, b: b } }
+func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+with <w: Pair>
+func loss(target: Tensor<f32>): float {
+    let e = w.a @ w.b - target
+    return mean(e * e)
+}
+func derivative(w: Pair, target: Tensor<f32>): (float, Pair) {
+    return value_and_grad(loss)<w>(target)
+}
+func check(name: string, a: Tensor<f32>, b: Tensor<f32>, target: Tensor<f32>, run_gpu: bool): int sync {
+    let w = pair(a, b)
+    let code = source<derivative>((w, target))
+    if len(code) == 0 then sync { exit(1) }
+    if run_gpu then sync {
+        let forward_error = sum(abs(run<product>((a, b)) - a @ b))
+        let cpu = derivative(w, target)
+        let gpu = run<derivative>((w, target))
+        let gradient_error = sum(abs(cpu.1.a - gpu.1.a)) + sum(abs(cpu.1.b - gpu.1.b))
+        let plus = pair(a + 0.001, b - 0.001)
+        let minus = pair(a - 0.001, b + 0.001)
+        let fd = (loss<plus>(target) - loss<minus>(target)) / 0.002
+        let fd_error = sum(abs(reshape([fd - sum(gpu.1.a) + sum(gpu.1.b)], [1])))
+        println('BATCH {} forward_l1={} gradient_l1={} directional_error={}'->format<name, forward_error, gradient_error, fd_error>)
+        if forward_error > 0.0001 || gradient_error > 0.0001 || fd_error > 0.002 then sync { exit(1) }
+    }
+    return 0
+}
+func main(run_gpu: bool): int sync {
+    set_num_threads(1)
+    seed(173)
+    check('equal3', randn([2, 3, 4]), randn([2, 4, 5]), randn([2, 3, 5]), run_gpu)
+    check('changed_batch', randn([3, 3, 4]), randn([3, 4, 5]), randn([3, 3, 5]), run_gpu)
+    check('equal4', randn([2, 3, 4, 5]), randn([2, 3, 5, 6]), randn([2, 3, 4, 6]), run_gpu)
+    check('rhs_matrix', randn([2, 3, 4]), randn([4, 5]), randn([2, 3, 5]), run_gpu)
+    check('lhs_matrix', randn([3, 4]), randn([2, 4, 5]), randn([2, 3, 5]), run_gpu)
+    check('broadcast4', randn([2, 1, 3, 4]), randn([1, 3, 4, 5]), randn([2, 3, 3, 5]), run_gpu)
+    check('tail_tiles', randn([2, 17, 19]), randn([2, 19, 18]), randn([2, 17, 18]), run_gpu)
+    if run_gpu then sync {
+        let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0], [2, 2, 3])
+        let expected = reshape([22.0, 28.0, 49.0, 64.0, 220.0, 244.0, 301.0, 334.0], [2, 2, 2])
+        let known_error = sum(abs(run<product>((a, reshape(a, [2, 3, 2]))) - expected))
+        if known_error != 0.0 then sync { exit(1) }
+        let empty_k = run<product>((randn([2, 3, 0]), randn([2, 0, 4])))
+        if sum(abs(empty_k)) != 0.0 then sync { exit(1) }
+        let empty_batch = run<product>((randn([0, 3, 4]), randn([1, 4, 5])))
+        if shape(empty_batch)[0] != 0 then sync { exit(1) }
+    }
+    println('BATCH MATMUL CHECKS PASS')
+    return 0
+}

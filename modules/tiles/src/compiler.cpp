@@ -185,6 +185,16 @@ class Compiler {
                 "an integer attribute must be known when specializing the graph");
         return std::get<int64_t>(*v.constant);
     }
+
+    // A synthesized shape/permutation is a host-only specialization attribute.
+    // The core instantiator reads its temporary slot under extraction's no-GC scope;
+    // neither the slot nor the array escapes into the owned Program.
+    Value integerArray(const std::vector<int64_t> &values) {
+        auto *array = ::Array::create(tensor::ops::resultAllocator(), values.size());
+        for (size_t i = 0; i < values.size(); ++i)
+            array->set<td::Int64>(i, values[i]);
+        return host(td::toSlot<::Array *>(array), ty::ArrayType::create(ty::Type::Int64()));
+    }
     size_t tensorValue(const Value &v) {
         if (v.tensor != SIZE_MAX) {
             if (program.nodes[v.tensor].dtype == DType::F64)
@@ -625,6 +635,20 @@ class Compiler {
     Value operation(
         core::OperId id, const std::vector<Value> &args,
         const std::optional<core::sem::IndexedInstance> &indexed, ty::Type *knownResult = nullptr) {
+        static const auto shapeQuery = core::OperatorTable::instance().intern("tensor:shape");
+        if (id == shapeQuery && args.size() == 1) {
+            const auto input = tensorValue(args[0]);
+            return integerArray(program.nodes[input].shape);
+        }
+        static const auto numel = core::OperatorTable::instance().intern("tensor:numel");
+        if (id == numel && args.size() == 1) {
+            // Invocation specialization already knows the concrete tensor domain.
+            // Keep shape queries as integer attributes, not device tensor results.
+            const auto input = tensorValue(args[0]);
+            return {
+                .type     = ty::Type::Int64(),
+                .constant = static_cast<int64_t>(elements(program.nodes[input].shape))};
+        }
         static const auto intToFloat = core::OperatorTable::instance().intern(":op/ltod");
         if (id == intToFloat && args.size() == 1) {
             if (args[0].loopElement)
@@ -678,6 +702,30 @@ class Compiler {
         const auto *def = tensor::ops::OpRegistry::instance().find(id);
         if (!def || !def->traits.pure)
             throw UnsupportedComputation("unsupported or effectful operator '" + uri() + "'");
+        if (def->name == "permute_inverse" && args.size() == 2) {
+            const auto input = tensorValue(args[0]);
+            const auto rank  = program.nodes[input].shape.size();
+            if (!args[1].constant ||
+                !std::holds_alternative<std::vector<int64_t>>(*args[1].constant))
+                throw UnsupportedComputation("permute_inverse requires a static permutation");
+            const auto &permutation = std::get<std::vector<int64_t>>(*args[1].constant);
+            if (permutation.size() != rank)
+                throw std::runtime_error("permute_inverse: permutation rank mismatch");
+            std::vector<int64_t> inverse(rank, -1);
+            for (size_t i = 0; i < rank; ++i) {
+                const auto axis = permutation[i] < 0 ? permutation[i] + static_cast<int64_t>(rank)
+                                                     : permutation[i];
+                if (axis < 0 || static_cast<size_t>(axis) >= rank || inverse[axis] != -1)
+                    throw std::runtime_error("permute_inverse: invalid permutation");
+                inverse[axis] = static_cast<int64_t>(i);
+            }
+            static const auto permute = core::OperatorTable::instance().intern("tensor:permute");
+            std::vector<Value> normalized{args[0], integerArray(inverse)};
+            auto result = operation(permute, normalized, instance(permute, normalized));
+            // Keep the original derivative contract and the physical view's contract.
+            program.nodes[result.tensor].semantic = contract(permute);
+            return result;
+        }
         std::vector<ty::Type *> types;
         std::vector<std::optional<ConstArg>> constants;
         for (const auto &v : args) {
@@ -733,33 +781,41 @@ class Compiler {
             return {.type = *inferred, .tensor = append(std::move(n))};
         }
         if (n.op == "matmul_grad_lhs" || n.op == "matmul_grad_rhs") {
-            size_t dy  = tensorValue(args.at(0));
-            size_t lhs = tensorValue(args.at(1)), rhs = tensorValue(args.at(2));
-            const auto a = program.nodes[lhs].shape, b = program.nodes[rhs].shape;
-            if (a.size() != 2 || b.size() != 2)
-                throw UnsupportedComputation("tiles matmul gradient requires rank 2");
-            const bool left   = n.op == "matmul_grad_lhs";
-            const auto &shape = left ? b : a;
-            size_t transposed = append(
-                Node{
-                    .op      = "reindex",
-                    .shape   = {shape[1], shape[0]},
-                    .inputs  = {left ? rhs : lhs},
-                    .strides = {1, size_t(shape[1])}});
-            n.op = "matmul";
-            n.inputs =
-                left ? std::vector<size_t>{dy, transposed} : std::vector<size_t>{transposed, dy};
-            // The physical primitive has its own indexing/law, not the three-operand
-            // gradient operator's instance. Keep both contracts in the dependency set.
-            static const auto matmulId = core::OperatorTable::instance().intern("tensor:matmul");
-            std::vector<Value> matrixArgs;
-            for (auto in : n.inputs)
-                matrixArgs.push_back(
-                    {.type =
-                         tensor::TensorType::get(ty::TypeCode::Float32, program.nodes[in].shape)});
-            n.indexing = instance(matmulId, matrixArgs);
-            n.semantic = contract(matmulId);
-            return {.type = *inferred, .tensor = append(std::move(n))};
+            const auto a = program.nodes[tensorValue(args.at(1))].shape;
+            const auto b = program.nodes[tensorValue(args.at(2))].shape;
+            if (a.size() < 2 || b.size() < 2)
+                throw UnsupportedComputation("tiles matmul gradient requires rank >= 2");
+            // Compose existing tensor primitives, retaining their core instances
+            // and contracts rather than inventing a separate batched index law.
+            auto apply = [&](const char *uri, std::vector<Value> values) {
+                const auto op       = core::OperatorTable::instance().intern(uri);
+                const auto first    = program.nodes.size();
+                const auto indexed  = instance(op, values);
+                auto value          = operation(op, values, indexed);
+                const auto semantic = contract(op);
+                for (size_t i = first; i < program.nodes.size(); ++i)
+                    if (program.nodes[i].semantic == SIZE_MAX)
+                        program.nodes[i].semantic = semantic;
+                if (value.tensor >= first && !program.nodes[value.tensor].indexing)
+                    program.nodes[value.tensor].indexing = indexed;
+                return value;
+            };
+            const bool left = n.op == "matmul_grad_lhs";
+            Value lhs = args[1], rhs = args[2], dy = args[0];
+            if (!left && b.size() == 2) {
+                // Match the Tensor CPU gradient's canonical GEMM: a shared RHS
+                // accumulates over batch and row in one ascending FMA chain.
+                // Per-batch GEMMs followed by sum_to would round differently.
+                const auto rows =
+                    static_cast<int64_t>(elements(a) / std::max<int64_t>(a.back(), 1));
+                lhs = apply("tensor:reshape", {lhs, integerArray({rows, a.back()})});
+                dy  = apply("tensor:reshape", {dy, integerArray({rows, b.back()})});
+            }
+            auto transposed = apply("tensor:transpose", {left ? rhs : lhs});
+            auto product    = apply(
+                "tensor:matmul",
+                left ? std::vector<Value>{dy, transposed} : std::vector<Value>{transposed, dy});
+            return apply("tensor:sum_to", {product, args[left ? 1 : 2]});
         }
         const std::string unary  = "|neg|abs|exp|log|sqrt|rsqrt|relu|";
         const std::string binary = "|add|subtract|multiply|divide|maximum|minimum|";
@@ -767,9 +823,9 @@ class Compiler {
             n.inputs = {tensorValue(args.at(0))};
         } else if (binary.find("|" + n.op + "|") != std::string::npos || n.op == "matmul") {
             n.inputs = {tensorValue(args.at(0)), tensorValue(args.at(1))};
-            if (n.op == "matmul" && (program.nodes[n.inputs[0]].shape.size() != 2 ||
-                                     program.nodes[n.inputs[1]].shape.size() != 2))
-                throw UnsupportedComputation("tiles matmul currently requires two rank-2 tensors");
+            if (n.op == "matmul" && (program.nodes[n.inputs[0]].shape.size() < 2 ||
+                                     program.nodes[n.inputs[1]].shape.size() < 2))
+                throw UnsupportedComputation("tiles matmul requires tensors with rank >= 2");
         } else if (n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis") {
             n.inputs          = {tensorValue(args.at(0))};
             int64_t axis      = integer(args.at(1));

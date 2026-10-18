@@ -31,6 +31,14 @@ void kernel::emitCUDA(Program &p) {
         const Node &n = p.nodes[id];
         if (n.op == "input")
             continue;
+        if (launch.implementation == "cublas_bf16") {
+            validateMatmulContract(p, n);
+            code << "// cuBLAS BF16 compute, FP32 boundary: " << launch.name << " shape";
+            for (auto extent : n.shape)
+                code << ' ' << extent;
+            code << '\n';
+            continue;
+        }
         code << "// " << n.op << "\nextern \"C\" __global__ void " << launch.name
              << "(float** v) {\n";
         if (launch.implementation == "row_region") {

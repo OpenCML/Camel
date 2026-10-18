@@ -1,0 +1,56 @@
+id = "modules.ddpm_primitives"
+order = 375
+tier = "feat"
+tags = ["feat", "modules", "autodiff", "math", "fs", "tiles"]
+
+[defaults]
+kind = "behavior"
+backends = ["nvm", "fvm", "jit"]
+expect_exit = 0
+timeout_ms = 15000
+
+[[tests]]
+name = "math.sqrt.runtime"
+case = "../../../cases/modules/autodiff/math_sqrt.cml"
+args = ["${case}", "${backend}"]
+expect_stdout_contains = ["sqrt64=(2.0, 0.25)", "sqrt32=(2.0, 0.25)", "repeated=1.0", "integer=2.0", "weighted=(22.0, tensor([      6.,       8.], dtype=float32))"]
+
+[[tests]]
+name = "math.sqrt.macro"
+case = "../../../cases/modules/autodiff/math_sqrt.cml"
+args = ["${case}", "std::macro", "${backend}"]
+expect_stdout_contains = ["sqrt64=(2.0, 0.25)", "sqrt32=(2.0, 0.25)", "repeated=1.0", "integer=2.0", "weighted=(22.0, tensor([      6.,       8.], dtype=float32))"]
+
+[[tests]]
+name = "fs.binary_roundtrip"
+case = "../../../cases/modules/fs_binary_roundtrip.cml"
+args = ["${case}", "${backend}"]
+expect_stdout_contains = ["binary size=8 whole=[0, 65, 0, 255, 13, 10, 128, 0] middle=[65, 0, 255, 13, 10, 128]"]
+
+[[tests]]
+name = "tiles.mean_grad.source"
+case = "../../../cases/modules/tiles/mean_grad.cml"
+args = ["--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_stdout_contains = ["mean_grad shape specialization PASS"]
+
+[[tests]]
+name = "tiles.layout_grad.source"
+case = "../../../cases/modules/tiles/layout_grad.cml"
+args = ["--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_stdout_contains = ["layout_grad shape specialization PASS"]
+
+[[tests]]
+name = "tiles.batch_matmul.source"
+case = "../../../cases/modules/tiles/batch_matmul.cml"
+args = ["--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_stdout_contains = ["BATCH MATMUL CHECKS PASS"]
+
+[[tests]]
+name = "tiles.mixed_matmul.source"
+case = "../../../cases/modules/tiles/mixed_matmul.cml"
+args = ["--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_stdout_contains = ["cublas_bf16", "MIXED CHECKS PASS"]
