@@ -93,14 +93,20 @@ let next = run_device<update>((m, vg.1, mu, nu, ...))                    // 第�
 
 | 操作 | 含义 | 类型规则 |
 |---|---|---|
-| `tree_map<f>(t)` | 对每个叶子应用 `f` | 结果的结构同 `t`，叶子类型 `L` 换成 `f` 对 `L` 的返回类型 |
-| `tree_zip(t1, …, tn)` | 多棵同构树对位组合成"叶子为元组"的树 | 各树结构必须相同，否则编译错误并指出第一个不同的路径 |
-| `tree_unzip(t)` | 叶子为 n 元组的树拆成 n 棵树 | `tree_zip` 的逆 |
+| `tree_map<f>(t1, …, tn)` | 对位取 n 棵树的叶子，作为 n 个实参调用 `f` | 叶子边界由 `t1` 的类型决定；`t2…tn` 的结构必须与 `t1` 相同，否则编译错误并指出第一个不同的路径。结果的结构同 `t1`，每个叶子换成 `f` 的返回值 |
+| `tree_unzip(r, like)` | `r` 由 `tree_map` 得到、每个叶子位置是 k 元组时，拆成 k 棵树 | 叶子边界由 `like` 的类型决定；`r` 在 `like` 的每个叶子位置必须是同一元数 k 的元组。结果是 k 棵与 `like` 同构的树组成的元组 |
 | `tree_reduce<op>(t, init)` | 按叶子的规范顺序（3.3）从左到右折叠 | `op: (A, L) => A` |
 | `tree_leaves(t)` | 叶子按规范顺序组成的元组 | |
 | `tree_paths(t)` | 每个叶子的路径字符串（`ff.up`、`blocks.0.att.q`），结构同 `t` | 用于序列化与诊断 |
 
-`f` 必须能作用于每一种叶子类型；不能时报编译错误，列出第一个不适用的叶子的路径与类型。`f` 可以是重载集合或泛型函数，按每个叶子的类型分别选择。这些操作的类型由核心计算，与现有内建算子的类型由实参算出的方式相同，不需要新语法。
+**叶子边界永远由树实参的类型决定，从不由回调决定**（2026-10-18 补充）：
+
+- `tree_map` 以第一棵树为准，在它的叶子处停止展开，其余树在同一位置的值整体作为实参，即使那里是元组或结构体。因此不存在"元组叶子"与普通元组相混的问题：多棵树的叶子不先组合成元组，而是直接作为多个实参传给 `f`。
+- `tree_map` 的回调返回元组时，结果在类型上就是"含元组的树"，叶子边界已经丢失；`tree_unzip` 因此必须给出参照树 `like`，按它的叶子边界拆开。
+- 不采用"按回调的形参类型决定停在哪一层"：`f` 是重载集合或泛型函数时，停止的层次会随重载选择改变，含义不稳定，错误也难以定位。
+- 不采用显式包装（如 `Leaf<T>`）：第一阶段没有必须把结构体当作叶子的场景；以后若出现（例如把配置结构整体当作一个叶子），再单独设计。
+
+`f` 必须能作用于每一组叶子类型；不能时报编译错误，列出第一个不适用的叶子的路径与类型。`f` 可以是重载集合或泛型函数，按每个叶子的类型分别选择。这些操作的类型由核心计算，与现有内建算子的类型由实参算出的方式相同，不需要新语法。
 
 ### 3.3 规范顺序
 
@@ -123,26 +129,32 @@ Device<{ a: A, b: (B, C) }>  ≡  { a: Device<A>, b: (Device<B>, Device<C>) }
 `params_ff.cml` 里的 12 个函数与镜像类型全部不再需要。优化器与 EMA 对所有结构通用：
 
 ```cml
-import { tree_map, tree_zip, tree_unzip, tree_reduce } from tree
+import { tree_map, tree_unzip, tree_reduce } from tree
 import { Tensor, sum, sqrt } from tensor
 
-func adam_leaf(s: (Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>), h: Hyper): (Tensor<f32>, Tensor<f32>, Tensor<f32>) {
-    let (p, g, m, v) = s
+func adam_leaf(p: Tensor<f32>, g: Tensor<f32>, m: Tensor<f32>, v: Tensor<f32>, h: Hyper): (Tensor<f32>, Tensor<f32>, Tensor<f32>) {
     let nm = m * 0.9 + g * 0.1
     let nv = v * 0.999 + g * g * 0.001
     return (p - h.rate * (nm / h.bc1) / (sqrt(nv / h.bc2) + 0.00000001), nm, nv)
 }
 
 export func adam(p: typeas P, g: P, m: P, v: P, h: Hyper): (P, P, P) {
-    return tree_zip(p, g, m, v)->tree_map<(s: (Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>)) => adam_leaf(s, h)>->tree_unzip
+    let r = tree_map<(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>, d: Tensor<f32>) => adam_leaf(a, b, c, d, h)>(p, g, m, v)
+    return tree_unzip(r, p)       // 按 p 的叶子边界拆成 (新参数, 新 m, 新 v)
 }
 export func ema(avg: typeas P, p: P): P {
-    return tree_zip(avg, p)->tree_map<(s: (Tensor<f32>, Tensor<f32>)): Tensor<f32> => s.0 * 0.999 + s.1 * 0.001>
+    return tree_map<(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> => a * 0.999 + b * 0.001>(avg, p)
+}
+export func sq_distance(p: typeas P, q: P): float {
+    return tree_map<(a: Tensor<f32>, b: Tensor<f32>): float => sum((a - b) * (a - b))>(p, q)
+        ->tree_reduce<(acc: float, x: float): float => acc + x>(0.0)
 }
 export func sq_norm(p: typeas P): float {
     return p->tree_reduce<(acc: float, x: Tensor<f32>): float => acc + sum(x * x)>(0.0)
 }
 ```
+
+`tree_unzip` 只是方便：上面的 Adam 也可以写成三次 `tree_map`（先算新的 m、v，再用它们算新参数），展开后的图相同。
 
 参数的初始化仍逐层写（不同层的形状与初始化方式本来就不同），但只写一次值，不再写类型的镜像。
 
@@ -288,7 +300,7 @@ let half = s.params->tree_map<(x: Tensor<f32>): Tensor<bf16> => x as Tensor<bf16
 
 - **分析**：`camel inspect --memory`（技术选择）对给定入口与形状报告训练图的峰值活跃字节数、各阶段占用，以及前向为反向保存的张量。Tiles 报告设备上的实际峰值。用实测决定模型规模。
 - **重计算**：标注 `@recompute` 写在函数或块上。自动微分对该区域只保存输入，反向时重新计算前向。由于区域是纯计算，重算结果与保存的结果逐位相同，语义不变。区域内用带状态的 `randn` 会改变结果，因此拒绝并提示改用第 4.1 节的键式随机数。标注由 autodiff 模块导出，不是语言关键字（与 `@numeric` 的处理一致，名称待定 T3）。
-- **梯度累积**：库函数，对若干微批量依次求梯度并用 `tree_zip`+`tree_map` 相加，顺序固定，结果确定。它与单个大批量在浮点上不逐位相同（求和顺序不同），文档写明。
+- **梯度累积**：库函数，对若干微批量依次求梯度并用 `tree_map` 对位相加，顺序固定，结果确定。它与单个大批量在浮点上不逐位相同（求和顺序不同），文档写明。
 
 ---
 
