@@ -13,12 +13,13 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /* Draft-only topology tests: no synthetic operator payload is executed or encoded. */
 #include "camel/passes/test/control.h"
+#include "../opt/generic/rewrite.h"
 #include "camel/runtime/control.h"
 
 #include <cstring>
@@ -57,12 +58,73 @@ void chainAndBudget() {
     check(!appendControlDependency(draft, a, d), "rewrite reinserted an implied edge");
     check(reduceControlDependencies(draft) == 0, "small graph reduction is not idempotent");
 }
-void dataIsNotAControlProof() {
+void mandatoryDataPaths() {
     GraphDraft draft;
     const auto a = node(draft), b = node(draft);
     draft.setNormInputs(b, std::span<const gc_node_ref_t>(&a, 1));
-    node(draft, {a, b});
-    check(reduceControlDependencies(draft) == 0, "a data path was used as a CTRL-only proof");
+    const auto c = node(draft, {a, b});
+    check(reduceControlDependencies(draft) == 1, "mandatory data path was not used as proof");
+    check(
+        draft.ctrlInputsOf(c).size() == 1 && draft.ctrlInputsOf(c).front() == b,
+        "data/control path lost its required predecessor");
+    const auto d = node(draft, {a});
+    draft.setWithInputs(d, std::span<const gc_node_ref_t>(&b, 1));
+    check(
+        reduceControlDependencies(draft) == 1 && draft.ctrlInputsOf(d).empty(),
+        "context data path did not cover a single control");
+    const auto e = node(draft);
+    draft.setNormInputs(e, std::span<const gc_node_ref_t>(&a, 1));
+    check(!appendControlDependency(draft, a, e), "rewrite added a direct data-covered control");
+    const auto call = draft.addNode(
+        DraftNodeInit{
+            .kind       = GCNodeKind::Func,
+            .normInputs = std::span<const gc_node_ref_t>(&a, 1),
+        });
+    check(
+        appendControlDependency(draft, a, call),
+        "argument ordering needed by an imminent inline was skipped");
+    // The explicit edge can be reduced on a stable graph, but not skipped before splicing.
+    draft.setCtrlInputs(call, {});
+    const auto gate = draft.addNode(
+        DraftNodeInit{
+            .kind       = GCNodeKind::Gate,
+            .normInputs = std::span<const gc_node_ref_t>(&a, 1),
+        });
+    check(appendControlDependency(draft, a, gate), "GATE lost its required first control");
+    check(
+        reduceControlDependencies(draft) == 0 && draft.ctrlInputsOf(gate).size() == 1,
+        "GATE lost its last control");
+}
+void conditionalDataIsNotMandatory() {
+    GraphDraft draft;
+    const auto a = node(draft), b = node(draft);
+    const gc_node_ref_t alternatives[] = {a, b};
+    const auto join                    = draft.addNode(
+        DraftNodeInit{
+            .kind       = GCNodeKind::Join,
+            .withInputs = alternatives,
+        });
+    const auto user = node(draft, {a, join});
+    draft.setNormInputs(user, std::span<const gc_node_ref_t>(&join, 1));
+    check(reduceControlDependencies(draft) == 1, "completed JOIN was not an endpoint proof");
+    check(
+        draft.ctrlInputsOf(user).size() == 1 && draft.ctrlInputsOf(user).front() == a,
+        "an unselected JOIN arm was treated as mandatory");
+}
+void dataBudget() {
+    GraphDraft draft;
+    const auto first = node(draft);
+    auto previous    = first;
+    for (size_t i = 0; i < 300; ++i) {
+        const auto current = node(draft);
+        draft.setNormInputs(current, std::span<const gc_node_ref_t>(&previous, 1));
+        previous = current;
+    }
+    const auto last = node(draft, {first});
+    draft.setNormInputs(last, std::span<const gc_node_ref_t>(&previous, 1));
+    check(
+        reduceControlDependencies(draft) == 0 && draft.ctrlInputsOf(last).size() == 1,
+        "data search exceeded its per-target budget");
 }
 void branchBoundaries() {
     GraphDraft draft;
@@ -78,9 +140,11 @@ void branchBoundaries() {
         });
     const auto other = node(draft, {a});
     const auto head  = node(draft, {branch, a, other});
+    draft.setNormInputs(head, std::span<const gc_node_ref_t>(&other, 1));
     GCBranchArm arm{.head = head, .tail = head};
     std::memcpy(draft.mutablePayloadOf(branch).data() + sizeof(body), &arm, sizeof(arm));
     const auto tail = node(draft, {a, head});
+    draft.setNormInputs(tail, std::span<const gc_node_ref_t>(&head, 1));
     check(reduceControlDependencies(draft) == 0, "branch anchor or boundary was reduced");
     check(
         draft.ctrlInputsOf(head).size() == 3 && draft.ctrlInputsOf(tail).size() == 2,
@@ -106,13 +170,80 @@ void denseChain() {
             "dense chain lost its immediate predecessor");
     }
 }
+void denseDataChain() {
+    GraphDraft draft;
+    std::vector<gc_node_ref_t> predecessors;
+    for (size_t i = 0; i < 128; ++i) {
+        const auto current = node(draft);
+        draft.setCtrlInputs(current, predecessors);
+        if (!predecessors.empty()) {
+            draft.setNormInputs(current, std::span<const gc_node_ref_t>(&predecessors.back(), 1));
+        }
+        predecessors.push_back(current);
+    }
+    check(reduceControlDependencies(draft) == 8128, "dense data chain retained covered controls");
+}
+void forwardingGateConsumers() {
+    using camel::passes::generic::bypassValueGate;
+    GraphDraft draft;
+    const auto value = node(draft), wait = node(draft);
+    const auto gate = draft.addGateNode(nullptr);
+    draft.setNormInputs(gate, std::span(&value, 1));
+    draft.setCtrlInputs(gate, std::span(&wait, 1));
+    const auto reader = node(draft), control = node(draft, {gate});
+    draft.setNormInputs(reader, std::span(&gate, 1));
+    size_t budget = 0;
+    check(!bypassValueGate(draft, gate, budget), "zero budget bypassed a gate");
+    budget = 64;
+    check(bypassValueGate(draft, gate, budget), "ordinary forwarding gate survived");
+    check(
+        !draft.header(gate) && draft.normInputsOf(reader).front() == value,
+        "reader did not receive the original value");
+    check(hasControlDependency(draft, wait, reader), "reader lost its wait");
+    check(
+        hasControlDependency(draft, wait, control) && hasControlDependency(draft, value, control),
+        "control-only consumer lost value completion or explicit wait");
+    check(draft.ctrlInputsOf(value).empty(), "wait moved onto the value producer");
+
+    const auto conditional = draft.addGateNode(nullptr);
+    draft.setNormInputs(conditional, std::span(&value, 1));
+    draft.setCtrlInputs(conditional, std::span(&wait, 1));
+    const auto join = draft.addNode(DraftNodeInit{.kind = GCNodeKind::Join});
+    draft.setWithInputs(join, std::span(&conditional, 1));
+    check(!bypassValueGate(draft, conditional, budget), "arm-local wait moved to JOIN");
+    check(draft.ctrlInputsOf(join).empty(), "JOIN acquired an unconditional arm dependency");
+
+    const auto barrier = draft.addGateNode(nullptr);
+    draft.setNormInputs(barrier, std::span(&value, 1));
+    std::vector<gc_node_ref_t> waits;
+    for (size_t i = 0; i < 4; ++i)
+        waits.push_back(node(draft));
+    draft.setCtrlInputs(barrier, waits);
+    for (size_t i = 0; i < 4; ++i) {
+        const auto user = node(draft);
+        draft.setNormInputs(user, std::span(&barrier, 1));
+    }
+    check(!bypassValueGate(draft, barrier, budget), "shared barrier caused excess edge growth");
+
+    const auto output = draft.addGateNode(nullptr);
+    draft.setNormInputs(output, std::span(&value, 1));
+    draft.setCtrlInputs(output, std::span(&wait, 1));
+    const auto outputReader = node(draft);
+    draft.setNormInputs(outputReader, std::span(&output, 1));
+    draft.setOutputNode(output);
+    check(!bypassValueGate(draft, output, budget), "output anchor lost its identity");
+}
 } // namespace
 
 camel::runtime::GCGraph *ControlTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     chainAndBudget();
-    dataIsNotAControlProof();
+    mandatoryDataPaths();
+    conditionalDataIsNotMandatory();
+    dataBudget();
     branchBoundaries();
     denseChain();
+    denseDataChain();
+    forwardingGateConsumers();
     os << "CONTROL topology, budgets, branches, dense chain: PASS\n";
     return graph;
 }

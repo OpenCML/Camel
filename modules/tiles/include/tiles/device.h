@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,11 +23,20 @@ struct DeviceStorage {
     virtual ~DeviceStorage()                                                  = default;
     virtual std::vector<std::byte> read(uint64_t address, size_t bytes) const = 0;
 };
+// Native submissions may expose pending leaves only inside the backend. Camel
+// operators must wait before publishing a Device value. Completion is separate
+// from allocation ownership, including for aliases and zero-byte results.
+struct DeviceCompletion {
+    virtual ~DeviceCompletion() = default;
+    virtual void wait() const   = 0;
+    virtual bool ready() const  = 0;
+};
 struct DeviceValue {
     Shape shape;
     DType dtype      = DType::F32;
     uint64_t address = 0;
     std::shared_ptr<DeviceStorage> owner;
+    std::shared_ptr<DeviceCompletion> completion;
 };
 std::shared_ptr<DeviceValue>
 uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data);

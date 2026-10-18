@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,9 @@
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
+#include "tiles/internal/compiled_region.h"
 #include "tiles/internal/dispatch.h"
+#include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
 #include "tiles/program.h"
 #include <cstdlib>
@@ -53,7 +55,7 @@ template <class F> slot_t checked(F &&body) {
     }
 }
 
-Program prepare(ArgsView &with, ArgsView &norm, Context &ctx) {
+Program prepare(ArgsView &with, ArgsView &norm, Context &ctx, bool staticRegion = false) {
     // Only extraction holds GC pointers. CUDA work uses owned host snapshots and releases
     // them after execution; the cache never retains Camel objects or shape-only identities.
     core::mm::NoCollectionScope noCollection;
@@ -67,7 +69,7 @@ Program prepare(ArgsView &with, ArgsView &norm, Context &ctx) {
         for (size_t i = 0; i < type->size(); ++i)
             args.push_back({tuple->get<slot_t>(i), type->typeAt(i)});
     }
-    return compile(fn, args, ctx.facts());
+    return prepareProgram(fn, args, ctx.facts(), staticRegion);
 }
 
 slot_t regionsKernel(ArgsView &with, ArgsView &, Context &ctx) {
@@ -140,6 +142,11 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         return runPrepared(with, std::make_shared<const Program>(prepare(with, norm, ctx)));
     });
 }
+slot_t runCompiledKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return checked([&] {
+        return runPrepared(with, std::make_shared<const Program>(prepare(with, norm, ctx, true)));
+    });
+}
 slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<const Program> program;
     const bool supported = checked([&] {
@@ -179,43 +186,6 @@ slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     return td::toSlot(
         td::ForeignResourceObject::create(core::mm::autoSpace(), std::move(descriptor), owner));
 }
-Type *buildResidentType(Type *type) {
-    if (tensor::asTensorType(type) || type->code() == TypeCode::Float64)
-        return DeviceType::get(type);
-    if (type->code() == TypeCode::Tuple) {
-        auto *tuple = static_cast<TupleType *>(type);
-        type_vec_t fields;
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            auto *field = buildResidentType(tuple->typeAt(i));
-            if (!field)
-                return nullptr;
-            fields.push_back(field);
-        }
-        return TupleType::create(fields);
-    }
-    if (type->code() == TypeCode::Struct) {
-        auto *object = static_cast<StructType *>(type);
-        StructTypeFactory fields;
-        for (size_t i = 0; i < object->size(); ++i) {
-            auto *field = buildResidentType(object->typeAt(i));
-            if (!field)
-                return nullptr;
-            fields.add(std::string(object->fieldName(i)), field);
-        }
-        return fields.build();
-    }
-    return nullptr;
-}
-Type *residentType(Type *type) {
-    static std::mutex mutex;
-    static std::unordered_map<Type *, Type *> types;
-    std::lock_guard lock(mutex);
-    if (auto it = types.find(type); it != types.end())
-        return it->second;
-    auto *result = buildResidentType(type);
-    types.emplace(type, result);
-    return result;
-}
 slot_t runResidentPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
     return checked([&] {
         auto values = executeResident(std::move(program));
@@ -245,6 +215,14 @@ slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<const Program> program;
     checked([&] {
         program = std::make_shared<const Program>(prepare(with, norm, ctx));
+        return slot_t{};
+    });
+    return runResidentPrepared(with, std::move(program));
+}
+slot_t runCompiledDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    std::shared_ptr<const Program> program;
+    checked([&] {
+        program = std::make_shared<const Program>(prepare(with, norm, ctx, true));
         return slot_t{};
     });
     return runResidentPrepared(with, std::move(program));
@@ -406,7 +384,7 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
         (void)configuredCudaOrdinal();
         try {
             (void)deviceInfo();
-            program = std::make_shared<Program>(prepare(with, norm, ctx));
+            program = std::make_shared<Program>(prepare(with, norm, ctx, true));
             return true;
         } catch (const BackendUnavailable &) {
             return false;
@@ -536,8 +514,13 @@ class TilesModule final : public BuiltinModule {
              "tiles:run_preferred_resident",
              "tiles:download"});
         registerRegionTestPasses(
-            &runKernel,
-            {&uploadKernel, &runDeviceKernel, &downloadKernel},
+            &runCompiledKernel,
+            {&uploadKernel,
+             &runCompiledDeviceKernel,
+             &downloadKernel,
+             "tiles:upload",
+             "tiles:run_compiled_device",
+             "tiles:download"},
             {&retainHostKernel,
              &runHostResidentKernel,
              &downloadKernel,
@@ -667,8 +650,11 @@ class TilesModule final : public BuiltinModule {
                 ctx,
                 std::unordered_map<std::string, operator_t>{
                     {"run", &runKernel},
+                    {"run_compiled", &runCompiledKernel},
+                    {"run_compiled_device", &runCompiledDeviceKernel},
                     {"prefer_gpu", &preferGpuKernel},
                     {"test_call", &testNativeCall},
+                    {"test_compiled_call", &testCompiledCall},
                     {"gpu", &gpuKernel},
                     {"run_device", &runDeviceKernel},
                     {"retain_host", &retainHostKernel},
@@ -710,7 +696,15 @@ class TilesModule final : public BuiltinModule {
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
         for (const char *name :
-             {"run", "run_device", "source", "inspect", "benchmark", "regions", "gpu"}) {
+             {"run",
+              "run_device",
+              "run_compiled",
+              "run_compiled_device",
+              "source",
+              "inspect",
+              "benchmark",
+              "regions",
+              "gpu"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
                 {.pure = false, .inspectsGraphs = true});
@@ -718,6 +712,10 @@ class TilesModule final : public BuiltinModule {
         core::OperatorTable::instance().set(
             "tiles:prefer_gpu",
             {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+        for (const char *name : {"tiles:run_compiled", "tiles:run_compiled_device"})
+            core::OperatorTable::instance().set(
+                name,
+                {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
         // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
         // resource `tiles:device` (upload makes one; run and run_device read the device values
         // among their inputs, run_device returns new ones that may be inputs again); the driver
@@ -746,7 +744,17 @@ class TilesModule final : public BuiltinModule {
                      ResourceSpec{
                          .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .externalEffect = true}},
+                    {"run_compiled",
+                     ResourceSpec{
+                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .externalEffect = true}},
                     {"run_device",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .result   = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},
+                         .allocates      = device,
+                         .externalEffect = true}},
+                    {"run_compiled_device",
                      ResourceSpec{
                          .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .result   = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},

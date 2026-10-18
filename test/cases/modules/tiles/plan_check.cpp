@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,6 +39,153 @@ template<class F> void rejects(const Program &original, F mutate, const char *re
 
 void checkKernelIR();
 void checkMatrixContracts();
+void attachNativeReduction(Program &program, size_t node);
+
+namespace {
+void checkMultiResultStorage() {
+    auto region = std::make_shared<LoopRegion>();
+    region->domain = {1, 2, 3};
+    region->stateInputs = {0, 1};
+    region->nextStates = {1, 0};
+    region->body.nodes = {{.op = "input", .shape = {2}}, {.op = "input", .shape = {2}}};
+    region->body.outputs = {1, 0};
+    Program p;
+    p.nodes = {{.op = "input", .shape = {2}, .data = {1, 2}},
+               {.op = "input", .shape = {2}, .data = {3, 4}},
+               {.op = "loop", .shape = {2}, .inputs = {0, 1}, .loop = region,
+                .results = {{{2}, DType::F32}, {{2}, DType::F32}}},
+               {.op = "result", .shape = {2}, .inputs = {2}, .attributes = {0}},
+               {.op = "result", .shape = {2}, .inputs = {2}, .attributes = {1}},
+               {.op = "add", .shape = {2}, .inputs = {3, 4}}};
+    p.outputs = {4, 5};
+    generate(p);
+    if (p.launches.size() != 2 || p.launches[0].outputs != std::vector<size_t>{3, 4} ||
+        p.storage.slots[2] != SIZE_MAX || p.storage.slots[3] == SIZE_MAX ||
+        p.storage.slots[4] == SIZE_MAX)
+        throw std::runtime_error("multi-result producer did not own one stage with separate values");
+    rejects(p, [](auto &x) { x.storage.slots[4] = x.storage.slots[3]; }, "overlapping buffer lifetimes");
+    rejects(p, [](auto &x) { x.storage.slots[3] = x.storage.slots[0]; }, "overlapping buffer lifetimes");
+    rejects(p, [](auto &x) { x.storage.slots[2] = x.storage.slots[3]; }, "register-only value has allocation");
+    rejects(p, [](auto &x) { x.launches[0].outputs = {4, 3}; }, "stage result projection mismatch");
+    rejects(p, [](auto &x) { x.launches[0].outputs.pop_back(); }, "multi-result stage arity");
+    rejects(p, [](auto &x) { x.nodes[4].attributes[0] = 2; }, "result projection index");
+    rejects(p, [](auto &x) { x.nodes[4].attributes[0] = 0; }, "stage result projection mismatch");
+    auto one = p;
+    one.outputs = {3}; // The unreturned recurrent state still has a writable launch result.
+    generate(one);
+    if (one.launches[0].outputs != std::vector<size_t>{3, 4} || one.storage.slots[4] == SIZE_MAX)
+        throw std::runtime_error("partial result use discarded a recurrent state");
+    std::cout << "tiles multi-result storage: one producer, distinct writes and inclusive read lifetimes passed\n";
+}
+
+void checkLoopSourceCache() {
+    namespace sem = camel::core::sem;
+    auto &table = camel::core::OperatorTable::instance();
+    const std::string uri = "tilestest:loop_cache";
+    const auto id = table.intern(uri);
+    sem::OperatorSemantics declaration{.key = sem::OperatorKey::of(uri)};
+    table.declareSemantics(uri, declaration);
+    auto recurrence = std::make_shared<LoopRegion>();
+    recurrence->domain = {-2147483649LL, 9007199254740993LL};
+    recurrence->stateInputs = {0};
+    recurrence->captureInputs = {1, 2};
+    recurrence->nextStates = {6};
+    auto &body = recurrence->body;
+    body.contracts = {{.uri = uri, .key = declaration.key, .declaration = table.semantics(id)}};
+    body.nodes = {{.op = "input"}, {.op = "input"}, {.op = "input"},
+                  {.op = "input", .data = {-0.0f}},
+                  {.op = "add", .inputs = {0, 3}, .semantic = 0},
+                  {.op = "multiply", .inputs = {4, 1}},
+                  {.op = "subtract", .inputs = {5, 2}}};
+    sem::IndexedInstance index;
+    index.norm = {{.kind = sem::AccessKind::Affine}, {.kind = sem::AccessKind::Affine}};
+    body.nodes[4].indexing = index;
+    body.outputs = {6};
+    Program original;
+    original.nodes = {{.op = "input", .data = {1}}, {.op = "input", .data = {2}},
+                      {.op = "input", .data = {3}},
+                      {.op = "loop", .inputs = {0, 1, 2}, .loop = recurrence, .results = {{{}, DType::F32}}},
+                      {.op = "result", .inputs = {3}, .attributes = {0}}};
+    original.outputs = {4};
+    generate(original);
+    auto rebound = original;
+    rebound.nodes[0].data = {4};
+    rebound.nodes[1].data = {5};
+    rebound.nodes[2].data = {6};
+    const auto beforeRebind = kernel::generationCacheStats();
+    generate(rebound);
+    if (kernel::generationCacheStats().hits != beforeRebind.hits + 1 || rebound.source != original.source)
+        throw std::runtime_error("loop runtime inputs changed source cache identity");
+    auto mutationRejected = [&](auto mutate, const char *reason) {
+        auto changed = original;
+        auto region = std::make_shared<LoopRegion>(*original.nodes[3].loop);
+        changed.nodes[3].loop = region;
+        // The self-cycle mutation must be released even when validation fails.
+        struct Cleanup {
+            LoopRegion &region;
+            ~Cleanup() { for (auto &value : region.body.nodes) value.loop.reset(); }
+        } cleanup{*region};
+        mutate(changed, *region);
+        try { validate(changed); }
+        catch (const std::runtime_error &error) {
+            if (std::string(error.what()).find(reason) != std::string::npos) return;
+            throw;
+        }
+        throw std::runtime_error("accepted malformed loop structure");
+    };
+    mutationRejected([](auto &, auto &region) { region.captureInputs[0] = region.stateInputs[0]; },
+                     "duplicate body input binding");
+    mutationRejected([](auto &, auto &region) { region.captureInputs[1] = region.captureInputs[0]; },
+                     "duplicate body input binding");
+    mutationRejected([](auto &changed, auto &region) { region.body.nodes[0].loop = changed.nodes[3].loop; },
+                     "nested device loops");
+    mutationRejected([](auto &changed, auto &) { changed.nodes[0].loop = changed.nodes[3].loop; },
+                     "nonloop node owns a recurrence");
+    auto longer = original;
+    auto longerRegion = std::make_shared<LoopRegion>(*original.nodes[3].loop);
+    longerRegion->domain.push_back(INT64_MIN);
+    longer.nodes[3].loop = longerRegion;
+    generate(longer);
+    const auto occurrences = [](const std::string &text, const std::string &needle) {
+        size_t count = 0, position = 0;
+        while ((position = text.find(needle, position)) != std::string::npos) {
+            ++count;
+            position += needle.size();
+        }
+        return count;
+    };
+    for (const auto *program : {&original, &longer})
+        if (occurrences(program->source, "for(unsigned long long k_iteration=") != 1 ||
+            occurrences(program->source, "__fadd_rn(") != 1)
+            throw std::runtime_error("loop source expanded its arithmetic by trip count");
+    if (original.source.find("k_iteration<2ULL") == std::string::npos ||
+        longer.source.find("k_iteration<3ULL") == std::string::npos)
+        throw std::runtime_error("loop source lost the exact device trip count");
+    auto mutationMisses = [&](auto mutate, bool changesSource) {
+        auto changed = original;
+        auto region = std::make_shared<LoopRegion>(*original.nodes[3].loop);
+        changed.nodes[3].loop = region;
+        mutate(*region);
+        const auto before = kernel::generationCacheStats();
+        generate(changed);
+        if (kernel::generationCacheStats().misses != before.misses + 1 ||
+            (changesSource && changed.source == original.source))
+            throw std::runtime_error("loop structure reused an incompatible source cache entry");
+    };
+    // Adjacent integers above 2^53 must differ even though float(k) rounds alike.
+    mutationMisses([](auto &region) { region.domain[1] = 9007199254740992LL; }, true);
+    mutationMisses([](auto &region) { region.body.nodes[3].data[0] = 0.0f; }, true);
+    mutationMisses([](auto &region) { region.body.nodes[4].op = "subtract"; }, true);
+    mutationMisses([](auto &region) { region.body.nodes[4].permissions = sem::kContract; }, false);
+    mutationMisses([](auto &region) { region.body.nodes[4].indexing->exprs.constant(17); }, false);
+    mutationMisses([](auto &region) { region.captureInputs = {2, 1}; }, true);
+    mutationMisses([](auto &region) { region.stateInputs = {1}; region.captureInputs = {0, 2}; }, true);
+    mutationMisses([](auto &region) { region.nextStates = {5}; region.body.outputs = {5}; }, true);
+    table.declareSemantics(uri, declaration);
+    mutationMisses([&](auto &region) { region.body.contracts[0].declaration = table.semantics(id); }, false);
+    std::cout << "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed\n";
+}
+} // namespace
 
 int main() {
     try {
@@ -61,6 +208,8 @@ int main() {
         }
         checkKernelIR();
         checkMatrixContracts();
+        checkLoopSourceCache();
+        checkMultiResultStorage();
         using kernel::ScalarExpr;
         using kernel::ScalarValue;
         using kernel::ScalarOp;
@@ -154,12 +303,13 @@ int main() {
                          {.op="multiply", .shape={4,2}, .inputs={0,1}},
                          {.op="sum_axis", .shape={4}, .inputs={2}, .attributes={1}}};
         fusedReduction.outputs = {3};
+        attachNativeReduction(fusedReduction,3);
         schedule(fusedReduction);
         if (fusedReduction.launches.size() != 1 || fusedReduction.storage.slots[2] != SIZE_MAX ||
             fusedReduction.launches[0].implementation != "ordered_reduce")
             throw std::runtime_error("producer was not fused into ordered reduction");
         rejects(fusedReduction, [](auto &x) { x.launches[0].blockX = 256; }, "ordered reduction operation or block");
-        rejects(fusedReduction, [](auto &x) { x.nodes[3].op = "max_axis"; }, "ordered reduction operation or block");
+        rejects(fusedReduction, [](auto &x) { x.nodes[3].op = "max_axis"; }, "unsupported numerical law");
         auto epilogue = fusedReduction;
         epilogue.nodes.push_back(Node{.op="add", .shape={4}, .inputs={3,1}});
         epilogue.outputs = {4};
@@ -171,6 +321,7 @@ int main() {
         }, "ordered reduction epilogue domain");
         rejects(epilogue, [](auto &x) {
             x.nodes[4] = Node{.op="sum_axis", .shape={4}, .inputs={2}, .attributes={1}};
+            attachNativeReduction(x,4);
         }, "ordered reduction operation or block");
         fusedReduction.outputs = {2,3};
         schedule(fusedReduction);
@@ -238,7 +389,7 @@ int main() {
         generate(maximumPlan);
         if (maximumPlan.launches[0].implementation != "parallel_max")
             throw std::runtime_error("core maximum law did not authorize parallel reduction");
-        rejects(maximumPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "parallel maximum lacks");
+        rejects(maximumPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "missing index instance");
         rejects(maximumPlan, [](auto &x){ x.nodes[1].indexing->law=42; }, "invalid core index instance");
         auto rowPlan = maximumPlan;
         rowPlan.nodes[1].shape = {1,1};
@@ -252,7 +403,7 @@ int main() {
             throw std::runtime_error("shared row values must stay inside one block");
         rejects(rowPlan, [](auto &x){ x.launches[0].blockX=64; }, "invalid row region plan");
         rejects(rowPlan, [](auto &x){ x.launches[0].members.erase(x.launches[0].members.begin()); }, "invalid row region plan");
-        rejects(rowPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "invalid row region plan");
+        rejects(rowPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "missing index instance");
         auto mappedRow = rowPlan;
         mappedRow.nodes[1].indexing->norm[0].coords[1]=mappedRow.nodes[1].indexing->exprs.constant(0);
         rejects(mappedRow, [](auto &){}, "invalid row region plan");
@@ -262,9 +413,13 @@ int main() {
             throw std::runtime_error("noncanonical reduction incorrectly reused row-local loads");
         std::cout << "tiles row region: shared values and invalid launch mutations checked\n";
         maximumPlan.nodes[1].indexing.reset();
-        generate(maximumPlan);
-        if (maximumPlan.launches[0].implementation != "standard")
-            throw std::runtime_error("undeclared reduction reused parallel source");
+        bool missingReductionInstance = false;
+        try { generate(maximumPlan); }
+        catch (const std::runtime_error &error) {
+            missingReductionInstance = std::string(error.what()).find("missing index instance") != std::string::npos;
+        }
+        if (!missingReductionInstance)
+            throw std::runtime_error("undeclared reduction acquired private traversal semantics");
         std::cout << "tiles reduction laws: declared freedom required for parallel maximum\n";
         const std::string contractUri = "tilestest:versioned";
         const auto contractId = operators.intern(contractUri);
@@ -424,13 +579,14 @@ int main() {
                    {.op="sum_axis", .shape={}, .inputs={2}, .attributes={0}},
                    {.op="add", .shape={4}, .inputs={2,3}}};
         p.outputs = {4};
+        attachNativeReduction(p,3);
         schedule(p);
         validatePlan(p);
         if (p.launches.size() != 3 || p.storage.slots[1] != SIZE_MAX)
             throw std::runtime_error("expected chain fusion and shared-result boundary");
         rejects(p, [](auto &x) { x.nodes[1].inputs[0] = 4; }, "topologically earlier");
         rejects(p, [](auto &x) { x.nodes[1].shape = {5}; }, "binary result shape");
-        rejects(p, [](auto &x) { x.nodes[3].attributes = {2}; }, "reduction axis");
+        rejects(p, [](auto &x) { x.nodes[3].indexing->domain.dims[0].role = camel::core::sem::DimRole::Parallel; }, "missing from reduction projection");
         rejects(p, [](auto &x) { x.storage.slots[2] = x.storage.slots[0]; }, "overlapping buffer lifetimes");
         rejects(p, [](auto &x) { x.storage.bytes[x.storage.slots[0]] = 1; }, "undersized/missing allocation");
         rejects(p, [](auto &x) { x.launches[0].members.push_back(2); }, "duplicate/invalid scheduled value");
@@ -462,11 +618,13 @@ int main() {
             throw std::runtime_error("returned intermediates must remain live through download");
         auto reduced = indexed;
         reduced.nodes[1] = Node{.op="sum_to", .shape={1,3}, .inputs={0}};
+        attachNativeReduction(reduced,1);
         schedule(reduced);
         validatePlan(reduced);
-        rejects(reduced, [](auto &x) { x.nodes[1].shape = {1,2,3}; }, "sum_to broadcast domain");
+        rejects(reduced, [](auto &x) { x.nodes[1].shape = {1,2,3}; }, "unsupported output map");
         auto scalar = indexed;
         scalar.nodes[1] = Node{.op="sum_all", .shape={}, .inputs={0}, .dtype=DType::F64};
+        attachNativeReduction(scalar,1);
         schedule(scalar);
         validatePlan(scalar);
         rejects(scalar, [](auto &x) { x.storage.bytes[x.storage.slots[1]] = 4; }, "undersized/missing allocation");

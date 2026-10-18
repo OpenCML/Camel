@@ -1,0 +1,187 @@
+id = "opt.control_data"
+order = 328
+tier = "feat"
+tags = ["feat", "opt", "control", "branch"]
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 8000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+
+[[tests]]
+name = "control_data.unused_argument.reference"
+case = "../../../cases/opt/generic/control_unused_argument.cml"
+args = ["${case}","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'before\nafter', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.unused_argument.inline"
+case = "../../../cases/opt/generic/control_unused_argument.cml"
+args = ["${case}","std::inline","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'before\nafter', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.unused_argument.inline_fold"
+case = "../../../cases/opt/generic/control_unused_argument.cml"
+args = ["${case}","std::inline","std::opt::fold","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'before\nafter', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.unused_argument.ctrl_inline"
+case = "../../../cases/opt/generic/control_unused_argument.cml"
+args = ["${case}","std::opt::ctrl","std::inline","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'before\nafter', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.unused_argument.opt"
+case = "../../../cases/opt/generic/control_unused_argument.cml"
+args = ["${case}","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'before\nafter', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.unused_argument.opt_twice"
+case = "../../../cases/opt/generic/control_unused_argument.cml"
+args = ["${case}","std::opt","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'before\nafter', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.graph"
+case = "../../../cases/opt/generic/control_data_paths.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jgir"]
+verify_script = '''
+({ input, assert }) => {
+ const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
+ const nodes = new Map(g.nodes.map(n => [n.id, n]))
+ const controls = g.edges.filter(e => e.kind === 'control')
+ assert(g.normalPorts.length === 2, 'runtime inputs were specialized away')
+ assert(g.nodes.some(n => n.label === ':op/mul_d'), 'gradient folded away')
+ assert(controls.length <= 10, 'data-covered controls survived')
+ const joins = new Set(g.nodes.filter(n => n.kind === 'JOIN').map(n => n.id))
+ assert(joins.size === 1, 'branch completion was lost')
+ for (const e of controls) {
+   if (joins.has(e.source)) assert(nodes.get(e.target).kind === 'GATE', 'JOIN control duplicates data ordering')
+ }
+ // No alternate path may use the candidate edge itself or a conditional arm.
+ for (const edge of controls) {
+   if (nodes.get(edge.target).kind !== 'OPER' || nodes.get(edge.source).kind === 'BRCH') continue
+   const seen = new Set(), work = g.edges.filter(e => e.target === edge.target && e !== edge).map(e => e.source)
+   while (work.length) {
+     const n = work.pop()
+     assert(n !== edge.source, 'ordinary operator retained a proven data-covered control')
+     if (seen.has(n) || ['BRCH', 'JOIN', 'LOOP'].includes(nodes.get(n).kind)) continue
+     seen.add(n)
+     work.push(...g.edges.filter(e => e.target === n).map(e => e.source))
+   }
+ }
+}
+'''
+
+[[tests]]
+name = "control_data.macro.left"
+case = "../../../cases/opt/generic/control_data_paths.cml"
+args = ["${case}","--arg","x=2","--arg","flag=true","std::macro","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "left\ndata dh=22.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.macro.right"
+case = "../../../cases/opt/generic/control_data_paths.cml"
+args = ["${case}","--arg","x=2","--arg","flag=false","std::macro","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "right\ndata dh=30.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.ctrl.left"
+case = "../../../cases/opt/generic/control_data_paths.cml"
+args = ["${case}","--arg","x=2","--arg","flag=true","std::macro","std::opt::devirtualize","std::inline","std::opt::ctrl","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "left\ndata dh=22.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.ctrl.right"
+case = "../../../cases/opt/generic/control_data_paths.cml"
+args = ["${case}","--arg","x=2","--arg","flag=false","std::macro","std::opt::devirtualize","std::inline","std::opt::ctrl","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "right\ndata dh=30.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.opt.left"
+case = "../../../cases/opt/generic/control_data_paths.cml"
+args = ["${case}","--arg","x=2","--arg","flag=true","std::macro","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "left\ndata dh=22.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "control_data.opt.right"
+case = "../../../cases/opt/generic/control_data_paths.cml"
+args = ["${case}","--arg","x=2","--arg","flag=false","std::macro","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "right\ndata dh=30.0", input.normalized.stdout)
+}
+'''

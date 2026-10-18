@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,9 +34,16 @@ namespace camel::tiles {
 
 using Shape = std::vector<int64_t>;
 struct DeviceValue;
+struct LoopRegion;
 struct Argument {
     slot_t value;
     core::type::Type *type;
+};
+
+// A producer has ordered typed results; result nodes project them into value edges.
+struct ResultType {
+    Shape shape;
+    DType dtype = DType::F32;
 };
 
 struct Node {
@@ -44,7 +51,9 @@ struct Node {
     Shape shape;
     std::vector<size_t> inputs;
     std::vector<int64_t> attributes;
-    std::vector<float> data; // Owned host input or scalar constant; never part of a code-cache key.
+    // Owned host input or scalar constant. Outer runtime values are excluded from source
+    // cache keys; embedded loop-body constants contribute their exact bits.
+    std::vector<float> data;
     std::optional<uint64_t>
         scalarBits; // Owned runtime f64 input, including exact special-value bits.
     // reindex: source linear address = offset + sum(output_coordinate[d] * strides[d]).
@@ -58,7 +67,9 @@ struct Node {
     // Owned core declaration instance, specialized to this call; no graph or GC pointers.
     std::optional<core::sem::IndexedInstance> indexing;
     std::shared_ptr<const DeviceValue>
-        resident; // Borrowed immutable input, retained through execution.
+        resident;                           // Borrowed immutable input, retained through execution.
+    std::shared_ptr<const LoopRegion> loop; // Owned recurrence; its body is compiled once.
+    std::vector<ResultType> results;        // Nonempty only on multi-result operation producers.
 };
 
 struct Launch {
@@ -69,6 +80,7 @@ struct Launch {
     std::string implementation;
     unsigned blockX = 256, blockY = 1;
     unsigned gridX = 1, gridY = 1;
+    std::vector<size_t> outputs; // All materialized values written by this one launch.
 };
 struct ScheduleOptions {
     bool fuseElementwise = true;
@@ -95,6 +107,20 @@ struct Program {
     std::vector<Launch> launches;
     StoragePlan storage;
     size_t graphFactInstances = 0, specializedInstances = 0;
+    // Type-only templates bind exactly these nodes, in function parameter order.
+    // Embedded constants and captures are never invocation bindings.
+    std::vector<size_t> parameterInputs;
+};
+
+// A recurrence owns its subprogram and exact iteration values. Body inputs correspond to
+// outer Node.inputs (state first, captures afterwards); each lane retains its own state.
+// All next-state values are computed before any current state is updated.
+struct LoopRegion {
+    Program body;
+    std::vector<int64_t> domain;
+    std::vector<size_t> stateInputs;
+    std::vector<size_t> captureInputs;
+    std::vector<size_t> nextStates;
 };
 
 size_t elements(const Shape &shape);

@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -15,6 +15,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
+#include <optional>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -76,14 +77,33 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Region &region) {
     for (auto id : region.members) {
         const auto ref   = static_cast<rt::gc_node_ref_t>(id);
         const auto *node = source.node(ref);
-        require(node->kind == rt::GCNodeKind::Oper, "unsupported region member");
+        require(
+            node->kind == rt::GCNodeKind::Oper || node->kind == rt::GCNodeKind::Loop ||
+                node->kind == rt::GCNodeKind::Accs,
+            "unsupported region member");
         require(
             source.ctrlInputsOf(ref).empty() && source.ctrlOutputsOf(ref).empty(),
             "control endpoint in region");
-        require(source.withInputsOf(ref).empty(), "context arguments in region");
+        require(
+            node->kind == rt::GCNodeKind::Loop || source.withInputsOf(ref).empty(),
+            "context arguments in region");
         std::vector<rt::gc_node_ref_t> inputs;
         for (auto input : source.normInputsOf(ref))
             inputs.push_back(mapped(input));
+        std::vector<rt::gc_node_ref_t> captures;
+        for (auto input : source.withInputsOf(ref))
+            captures.push_back(mapped(input));
+        // Frozen LOOP references are graph-table indices; a draft owns graph pointers.
+        // Copying the frozen payload bytes would silently bind unrelated graph entries.
+        std::optional<rt::GCLoopBody> loop;
+        auto payload = source.nodePayloadBytes(ref);
+        if (node->kind == rt::GCNodeKind::Loop) {
+            loop = rt::loopBodyOf(source, ref);
+            if (loop->condGraph)
+                draft.addDependency(loop->condGraph);
+            draft.addDependency(loop->bodyGraph);
+            payload = std::as_bytes(std::span(&*loop, 1));
+        }
         auto *type              = typeOf(source, id);
         result.sourceToNode[id] = draft.addNode(
             {.dataIndex    = draft.allocateRuntimeSlot(type),
@@ -92,8 +112,9 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Region &region) {
              .runtimeFlags = node->flags,
              .origin       = source.nodeOrigin(ref),
              .permissions  = source.nodePermissions(ref),
-             .payload      = source.nodePayloadBytes(ref),
-             .normInputs   = inputs});
+             .payload      = payload,
+             .normInputs   = inputs,
+             .withInputs   = captures});
     }
     std::vector<rt::gc_node_ref_t> outputs;
     std::vector<ty::Type *> types;

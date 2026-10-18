@@ -14,12 +14,12 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * The generic optimization passes std::opt::{fold, cse, dce, ctrl} (see generic.h).
+ * Generic optimization passes and the integrated pipeline (algebra lives in algebra.cpp).
  */
 
 #include "generic.h"
@@ -187,28 +187,56 @@ class StaticArgsView final : public ArgsView {
     std::vector<type::Type *> types_;
 };
 
-/// Static value of a DATA node with a static slot, also seen through GATEs forwarding one (an
-/// inlined call gates its arguments; the value it forwards is the same). A constant that is
-/// written in place has no static value.
+/// Static DATA, seen through GATEs or a JOIN whose arms all forward the same scalar bits.
+/// This proves a value, not permission to discard its producer: replaceNode retains ordering.
+/// A shared budget bounds gate walks; nested JOINs are not recursively expanded.
 std::optional<std::pair<slot_t, type::Type *>>
 staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
-    for (size_t hops = 0; hops < draft.nodeSlotCount(); ++hops) {
-        const auto *gate = draft.header(id);
-        if (!gate || gate->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
-            break;
+    size_t budget     = 128;
+    const auto ungate = [&](gc_node_ref_t node) {
+        while (budget) {
+            --budget;
+            const auto *h = draft.header(node);
+            if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(node).size() != 1 ||
+                isWrittenInPlace(draft, node)) {
+                return node;
+            }
+            node = draft.normInputsOf(node).front();
         }
-        id = draft.normInputsOf(id).back();
-    }
+        return kInvalidNodeRef;
+    };
+    const auto dataValue =
+        [&](gc_node_ref_t node) -> std::optional<std::pair<slot_t, type::Type *>> {
+        const auto *h = draft.header(node);
+        if (!h || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
+            return std::nullopt;
+        }
+        const auto index = static_cast<size_t>(-h->dataIndex);
+        if (index >= draft.staticSlots().size() || isWrittenInPlace(draft, node)) {
+            return std::nullopt;
+        }
+        type::Type *ty = draft.staticSlotTypes()[index];
+        return std::pair{draft.staticSlots()[index], ty ? ty : h->dataType};
+    };
+    id            = ungate(id);
     const auto *h = draft.header(id);
-    if (!h || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
+    if (!h || h->kind != GCNodeKind::Join) {
+        return dataValue(id);
+    }
+    if (!h->dataType || !type::isPrimitive(h->dataType->code()) ||
+        type::isGCTraced(h->dataType->code()) || isWrittenInPlace(draft, id)) {
         return std::nullopt;
     }
-    const auto index = static_cast<size_t>(-h->dataIndex);
-    if (index >= draft.staticSlots().size() || isWrittenInPlace(draft, id)) {
-        return std::nullopt;
+    std::optional<std::pair<slot_t, type::Type *>> common;
+    for (auto arm : draft.withInputsOf(id)) {
+        const auto value = dataValue(ungate(arm));
+        // Slot equality preserves signed zero and NaN payloads; floating-point == would not.
+        if (!value || value->second != h->dataType || (common && *common != *value)) {
+            return std::nullopt;
+        }
+        common = value;
     }
-    type::Type *ty = draft.staticSlotTypes()[index];
-    return std::pair{draft.staticSlots()[index], ty ? ty : h->dataType};
+    return common;
 }
 
 /// True when `id` can be replaced by another node holding its value: it does not anchor the
@@ -777,6 +805,11 @@ size_t cseDraft(GraphDraft &draft) {
     // constants that are written in place.
     std::map<std::tuple<type::Type *, slot_t, std::vector<uint64_t>>, gc_node_ref_t> constants;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        // A known JOIN value does not make the JOIN replaceable: it still closes its BRCH
+        // and carries the condition and selected arm's effects. Consumers may fold instead.
+        if (const auto *h = draft.header(id); h && h->kind == GCNodeKind::Join) {
+            continue;
+        }
         const auto value = staticValueOf(draft, id);
         if (!value || !value->second || type::isGCTraced(value->second->code())) {
             continue;
@@ -831,10 +864,10 @@ size_t cseDraft(GraphDraft &draft) {
 // ---------------------------------------------------------------- dce
 
 /**
- * True when erasing the unread GATE `gate` loses no ordering: every node it waits on is a pure
- * value, or has another user through which it still reaches the exit. An effect whose only
- * successor is the gate (a println before a folded call) would otherwise be cut off and never
- * run.
+ * For a GATE with no users at all, check that erasing it loses no ordering: every node it
+ * waits on is a pure value, or has another user through which it still reaches the exit.
+ * Gates with control users do not need this check: replaceNode transfers their dependencies
+ * to those users, including an effect whose only current successor is the gate.
  */
 bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
     for (auto inputs :
@@ -859,10 +892,16 @@ bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
 }
 
 size_t dceDraft(GraphDraft &draft) {
-    size_t removed = 0;
+    size_t removed        = 0;
+    size_t gateEdgeBudget = std::min<size_t>(8192, draft.nodeSlotCount() * 8);
     for (bool changed = true; changed;) {
         changed = false;
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            if (bypassValueGate(draft, id, gateEdgeBudget)) {
+                ++removed;
+                changed = true;
+                continue;
+            }
             // A SYNC only joins control; replaceNode hands its predecessors to its users, which
             // keeps every ordering it expressed.
             // A GATE only forwards its value once its control inputs ran. When no node reads the
@@ -876,7 +915,8 @@ size_t dceDraft(GraphDraft &draft) {
             const auto *h     = draft.header(id);
             const bool isJoin = h && h->kind == GCNodeKind::Sync;
             const bool isDeadGate =
-                h && h->kind == GCNodeKind::Gate && gateInputsSurvive(draft, id);
+                h && h->kind == GCNodeKind::Gate &&
+                (!draft.ctrlUsersOf(id).empty() || gateInputsSurvive(draft, id));
             if ((isValueOnly(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
@@ -930,7 +970,7 @@ GCGraph *simplifyGraph(
         bool optChanged = false;
         graph           = applyOptimizeRewritePass(context, graph, os, config, &optChanged);
         std::deque<camel::core::mm::RootHandle> roots;
-        size_t folded = 0, merged = 0, removed = 0;
+        size_t folded = 0, merged = 0, simplified = 0, removed = 0;
         graph = rewriteReachableGraphs(
             context,
             graph,
@@ -938,8 +978,14 @@ GCGraph *simplifyGraph(
             [&](GraphDraft &draft) { return foldDraft(draft, *context, roots); },
             &folded);
         graph = rewriteReachableGraphs(context, graph, "std::opt::cse", cseDraft, &merged);
+        graph = rewriteReachableGraphs(
+            context,
+            graph,
+            "std::opt::algebra",
+            [&](GraphDraft &draft) { return algebraDraft(draft, config.safeFloatingPoint); },
+            &simplified);
         graph = rewriteReachableGraphs(context, graph, "std::opt::dce", dceDraft, &removed);
-        if (!optChanged && folded == 0 && merged == 0 && removed == 0) {
+        if (!optChanged && folded == 0 && merged == 0 && simplified == 0 && removed == 0) {
             CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
             return finish(graph);
         }

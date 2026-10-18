@@ -140,9 +140,10 @@
 - `std::opt::inline::small` / `std::opt::inline::arm` / `std::opt::inline::hybrid`：显式的内联目标策略
 - `std::opt::devirtualize`：运行时原生的去虚化遍
 - `std::opt::specialize`：运行时原生的特化遍
-- `std::opt`：集成优化总入口；循环执行去虚化、特化、内联、fold、cse 和 dce，直到稳定或达到共享的增长及轮数预算
+- `std::opt`：集成优化总入口；循环执行去虚化、特化、内联、fold、cse、algebra 和 dce，直到稳定或达到共享的增长及轮数预算
+- `std::opt::algebra`：在预算内做局部标量算式化简，包括系数合并。默认放宽局部重结合；`'std::opt::algebra(safe_fp=true)'` 或 `'std::opt(safe_fp=true)'` 将算式阶段限制为严格等价的浮点改写。默认值为 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。PowerShell 中带参数的遍须加引号；所有参数在运行第一个遍之前校验。
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`：分别运行常量折叠、公共子表达式消除、死代码消除
-- `std::opt::ctrl`：在预算内消除传递冗余的 CTRL 边；`std::opt` 的其他阶段结束后默认执行一次。只沿 CTRL 路径证明冗余，保留分支边界和臂锚点
+- `std::opt::ctrl`：在预算内消除被必需的数据/控制路径覆盖的 CTRL 边；`std::opt` 的其他阶段结束后默认执行一次。保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖
 - `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 的别名
 
 - `std::fvm`：高性能字节码虚拟机调度器

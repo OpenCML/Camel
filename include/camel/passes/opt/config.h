@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -129,4 +129,7 @@ struct OptimizeRewriteConfig {
     /// only valid for consumers that never build an execution topo — the ONNX exporter.
     bool enableBranchedCallSplit = false;
     InlineRewriteConfig inlineConfig{};
+    /// Restrict algebra to strictly equivalent floating-point rewrites. By default local
+    /// reassociation is allowed; precision changes and approximate functions are not implied.
+    bool safeFloatingPoint = false;
 };

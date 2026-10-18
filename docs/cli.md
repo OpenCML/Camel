@@ -139,9 +139,10 @@ The passes given on the command line run in the order written. Each pass transfo
 - `std::opt::inline::small` / `std::opt::inline::arm` / `std::opt::inline::hybrid`: explicit inline target strategies
 - `std::opt::devirtualize`: runtime-native devirtualization pass
 - `std::opt::specialize`: runtime-native specialization pass
-- `std::opt`: integrated optimization entry point; repeats call rewriting (`devirtualize`, `specialize`, `inline`), `fold`, `cse`, and `dce` until stable, within shared growth and round limits
+- `std::opt`: integrated optimization entry point; repeats call rewriting (`devirtualize`, `specialize`, `inline`), `fold`, `cse`, `algebra`, and `dce` until stable, within shared growth and round limits
+- `std::opt::algebra`: bounded local scalar arithmetic simplification, including coefficient combination. Defaults to relaxed local reassociation; use `'std::opt::algebra(safe_fp=true)'` or `'std::opt(safe_fp=true)'` for strictly equivalent float algebra. `safe_fp=false` is the default, not permission for lower precision, approximate functions or arbitrary special-value assumptions. Quote parameterized passes in PowerShell; options are validated before any pass runs.
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`: standalone constant folding, common-subexpression elimination, and dead-code elimination
-- `std::opt::ctrl`: bounded removal of transitive CTRL edges; `std::opt` runs it once after its other stages finish. Only CTRL paths prove redundancy; branch boundaries and arm anchors are retained
+- `std::opt::ctrl`: bounded removal of CTRL edges covered by mandatory data/control paths; `std::opt` runs it once after its other stages finish. Branch/loop boundaries and arm anchors are retained; unselected arms are never treated as mandatory dependencies
 - `std::inline` (including `small` / `arm` / `hybrid`): alias of `std::opt::inline`
 
 - `std::fvm`: high-performance bytecode VM scheduler

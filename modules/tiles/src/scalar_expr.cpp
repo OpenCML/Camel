@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@
 namespace camel::tiles::kernel {
 namespace {
 void checkType(ScalarType type) {
-    if (type.kind < ScalarType::F32 || type.kind > ScalarType::U32)
+    if (type.kind < ScalarType::F32 || type.kind > ScalarType::I64)
         throw std::invalid_argument("invalid scalar type");
 }
 size_t arity(ScalarOp op) {
@@ -108,6 +108,14 @@ ScalarValue ScalarValue::i32(int32_t value) {
     return {ScalarType::I32, std::bit_cast<uint32_t>(value)};
 }
 ScalarValue ScalarValue::u32(uint32_t value) { return {ScalarType::U32, value}; }
+ScalarValue ScalarValue::i64(int64_t value) {
+    return {ScalarType::I64, std::bit_cast<uint64_t>(value)};
+}
+int64_t ScalarValue::asI64() const {
+    if (type != ScalarType::I64)
+        throw std::invalid_argument("expected scalar i64 bits");
+    return std::bit_cast<int64_t>(bits);
+}
 int32_t ScalarValue::asI32() const {
     if (type != ScalarType::I32 || bits > UINT32_MAX)
         throw std::invalid_argument("expected scalar i32 bits");
@@ -141,7 +149,7 @@ struct ScalarExpr::Node {
 ScalarExpr::ScalarExpr(std::shared_ptr<const Node> n) : node(std::move(n)) {}
 ScalarExpr ScalarExpr::literal(ScalarValue value) {
     checkType(value.type);
-    if (value.type != DType::F64 && value.bits > UINT32_MAX)
+    if (value.type != ScalarType::F64 && value.type != ScalarType::I64 && value.bits > UINT32_MAX)
         throw std::invalid_argument("invalid 32-bit scalar payload");
     return ScalarExpr(
         std::make_shared<Node>(
@@ -168,6 +176,10 @@ ScalarExpr ScalarExpr::apply(ScalarOp op, std::vector<ScalarExpr> inputs) {
     for (const auto &input : inputs)
         if (input.type() != type)
             throw std::invalid_argument("mixed scalar types require explicit casts");
+    // I64 currently carries static loop-domain elements only. Extending the
+    // existing wrapping 32-bit arithmetic is a separate lowering contract.
+    if (type == ScalarType::I64)
+        throw std::invalid_argument("unsupported i64 scalar operation");
     const bool integer = type == ScalarType::I32 || type == ScalarType::U32;
     const bool bitwise = op == ScalarOp::BitAnd || op == ScalarOp::BitOr ||
                          op == ScalarOp::BitXor || op == ScalarOp::LogicalShiftRight;
@@ -187,8 +199,9 @@ ScalarExpr ScalarExpr::cast(ScalarType type, ScalarExpr input) {
     checkType(type);
     if (input.type() == type)
         return input;
-    if ((type != ScalarType::F32 && type != ScalarType::F64) ||
-        (input.type() != ScalarType::F32 && input.type() != ScalarType::F64))
+    const bool i64ToF64 = type == ScalarType::F64 && input.type() == ScalarType::I64;
+    if (!i64ToF64 && ((type != ScalarType::F32 && type != ScalarType::F64) ||
+                      (input.type() != ScalarType::F32 && input.type() != ScalarType::F64)))
         throw std::invalid_argument("numeric conversion involving integers is not supported");
     return ScalarExpr(
         std::make_shared<Node>(Node{
@@ -199,7 +212,8 @@ ScalarExpr ScalarExpr::cast(ScalarType type, ScalarExpr input) {
 }
 ScalarExpr ScalarExpr::bitcast(ScalarType type, ScalarExpr input) {
     checkType(type);
-    if (type == ScalarType::F64 || input.type() == ScalarType::F64)
+    if (type == ScalarType::F64 || input.type() == ScalarType::F64 || type == ScalarType::I64 ||
+        input.type() == ScalarType::I64)
         throw std::invalid_argument("bitcast requires equal 32-bit widths");
     if (type == input.type())
         return input;
@@ -223,7 +237,8 @@ ScalarExpr::evaluate(const std::unordered_map<std::string, ScalarValue> &binding
             throw std::runtime_error("unbound scalar symbol " + node->name);
         if (found->second.type != type())
             throw std::runtime_error("scalar binding type mismatch");
-        if (type() != DType::F64 && found->second.bits > UINT32_MAX)
+        if (type() != ScalarType::F64 && type() != ScalarType::I64 &&
+            found->second.bits > UINT32_MAX)
             throw std::invalid_argument("invalid 32-bit scalar binding");
         return found->second;
     }
@@ -269,6 +284,8 @@ ScalarExpr::evaluate(const std::unordered_map<std::string, ScalarValue> &binding
     }
     if (node->op == ScalarOp::Cast) {
         const auto value = node->inputs[0].evaluate(bindings);
+        if (value.type == ScalarType::I64)
+            return ScalarValue::f64(static_cast<double>(value.asI64()));
         return type() == DType::F32 ? ScalarValue::f32(static_cast<float>(value.asF64()))
                                     : ScalarValue::f64(static_cast<double>(value.asF32()));
     }
@@ -312,6 +329,8 @@ std::unordered_map<std::string, ScalarType> ScalarExpr::symbols() const {
 }
 std::string ScalarExpr::cuda() const {
     const bool f32 = type() == DType::F32;
+    if (node->kind == Node::Kind::Literal && type() == ScalarType::I64)
+        return "tiles_i64(" + std::to_string(node->value.bits) + "ULL)";
     if (node->kind == Node::Kind::Literal && type() == ScalarType::I32)
         return "tiles_i32(" + std::to_string(node->value.bits) + "U)";
     if (node->kind == Node::Kind::Literal && type() == ScalarType::U32)
@@ -404,6 +423,8 @@ std::string ScalarExpr::cuda() const {
     case ScalarOp::Minimum:
         return call(f32 ? "tiles_minimum" : "tiles_minimum64");
     case ScalarOp::Cast:
+        if (node->inputs[0].type() == ScalarType::I64)
+            return call("__ll2double_rn");
         return f32 ? call("__double2float_rn") : "((double)(" + x[0] + "))";
     default:
         break; // Integer and bitcast operations were handled above.
@@ -424,19 +445,7 @@ const char *comparison(ScalarCompare op) {
     }
     throw std::invalid_argument("invalid scalar comparison");
 }
-} // namespace
-bool ScalarPredicate::evaluate(const std::unordered_map<std::string, ScalarValue> &bindings) const {
-    if (lhs.type() != rhs.type())
-        throw std::invalid_argument("scalar comparison type mismatch");
-    const auto a = lhs.evaluate(bindings), b = rhs.evaluate(bindings);
-    auto number = [](ScalarValue value) -> double {
-        if (value.type == ScalarType::I32)
-            return value.asI32();
-        if (value.type == ScalarType::U32)
-            return value.asU32();
-        return value.type == ScalarType::F32 ? value.asF32() : value.asF64();
-    };
-    const double x = number(a), y = number(b);
+template <class T> bool compareValues(ScalarCompare compare, T x, T y) {
     switch (compare) {
     case ScalarCompare::Equal:
         return x == y;
@@ -448,6 +457,24 @@ bool ScalarPredicate::evaluate(const std::unordered_map<std::string, ScalarValue
         return x <= y;
     }
     throw std::invalid_argument("invalid scalar comparison");
+}
+} // namespace
+bool ScalarPredicate::evaluate(const std::unordered_map<std::string, ScalarValue> &bindings) const {
+    if (lhs.type() != rhs.type())
+        throw std::invalid_argument("scalar comparison type mismatch");
+    const auto a = lhs.evaluate(bindings), b = rhs.evaluate(bindings);
+    // An intermediate double would collapse distinct integers above 2^53.
+    if (a.type == ScalarType::I64)
+        return compareValues(compare, a.asI64(), b.asI64());
+    auto number = [](ScalarValue value) -> double {
+        if (value.type == ScalarType::I32)
+            return value.asI32();
+        if (value.type == ScalarType::U32)
+            return value.asU32();
+        return value.type == ScalarType::F32 ? value.asF32() : value.asF64();
+    };
+    const double x = number(a), y = number(b);
+    return compareValues(compare, x, y);
 }
 std::string ScalarPredicate::cuda() const {
     if (lhs.type() != rhs.type())
@@ -493,6 +520,10 @@ std::string scalarCudaPreamble() {
     return R"CUDA(
 __device__ __forceinline__ int tiles_i32(unsigned x) {
     return x <= 0x7fffffffU ? (int)x : -1 - (int)(~x);
+}
+__device__ __forceinline__ long long tiles_i64(unsigned long long x) {
+    // Both casts are in range, including the two's-complement INT64_MIN payload.
+    return x <= 0x7fffffffffffffffULL ? (long long)x : -1LL - (long long)(~x);
 }
 __device__ __forceinline__ float tiles_maximum(float a, float b) {
     if (a != a || b != b) return __uint_as_float(0x7fc00000U);

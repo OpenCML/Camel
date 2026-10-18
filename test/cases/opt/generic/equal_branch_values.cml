@@ -1,0 +1,28 @@
+/**
+ * Equal scalar branch results can feed constant folding without dropping the
+ * condition or taken arm's effects. Different values and signed zeros stay distinct.
+ */
+module equal_branch_values
+
+import { get_env } from sys
+
+func left(): float sync {
+    println('left')
+    return 2.0
+}
+
+func right(): float sync {
+    println('right')
+    return 2.0
+}
+
+func main(): int sync {
+    let flag = get_env('CAMEL_EQUAL_BRANCH') == ''
+    let x = if flag then left() else right()
+    println(x * x)
+    let different = if flag then 2.0 else 3.0
+    println(different * different)
+    let zero = if flag then 0.0 else -0.0
+    println(zero * 1.0)
+    return 0
+}

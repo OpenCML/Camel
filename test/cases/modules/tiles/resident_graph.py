@@ -22,9 +22,9 @@ def incoming(graph, node, kind="normal"):
     return [e["source"] for e in graph["edges"] if e["target"] == node and e["kind"] == kind]
 
 g = graphs["detour"]
-assert len(ops(g, "upload")) == len(ops(g, "download")) == len(ops(g, "run_device")) == 2
+assert len(ops(g, "upload")) == len(ops(g, "download")) == len(ops(g, "run_compiled_device")) == 2
 nodes = {n["id"]: n for n in g["nodes"]}
-calls = ops(g, "run_device")
+calls = ops(g, "run_compiled_device")
 consumer = next(n for n in calls if nodes[incoming(g, n["id"])[0]]["kind"] == "FILL")
 producer = next(n for n in calls if n != consumer)
 packed = incoming(g, consumer["id"])[0]
@@ -39,5 +39,5 @@ for name, uploads, downloads in [("chain", 1, 1), ("shared_values", 1, 2), ("con
     graph = graphs[name]
     assert len(ops(graph, "upload")) == uploads, name
     assert len(ops(graph, "download")) == downloads, name
-    assert len(ops(graph, "run_device")) == 1, name
+    assert len(ops(graph, "run_compiled_device")) == 1, name
 print("Resident graph transfers: PASS")

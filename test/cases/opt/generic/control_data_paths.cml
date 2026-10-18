@@ -1,0 +1,26 @@
+/**
+ * A runtime branch feeds a gradient. Data dependencies already carry most of
+ * the post-JOIN ordering, but the selected arm's effects must still run.
+ */
+module control_data_paths
+
+import { grad } from autodiff
+
+func sq(x: float): float { return x * x }
+func h(x: float): float { return sq(x) + 3.0 * sq(x + 1.0) }
+
+func left(x: float): float sync {
+    println('left')
+    return x
+}
+
+func right(x: float): float sync {
+    println('right')
+    return x + 1.0
+}
+
+func main(x: float, flag: bool): int sync {
+    let value = if flag then left(x) else right(x)
+    'data dh={}'->format<grad(h)(value)>->println
+    return 0
+}

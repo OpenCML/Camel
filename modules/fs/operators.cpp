@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,8 +34,8 @@ using namespace camel::core::rtdata;
 #include <cerrno>
 #include <format>
 #include <fstream>
-#include <system_error>
 #include <sstream>
+#include <system_error>
 
 namespace fs_impl = std::filesystem;
 
@@ -140,7 +140,16 @@ slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
             std::string(path->c_str()),
             openFailureReason(errno));
     }
-    f << content->c_str();
+    // Camel strings carry a byte length and may contain NUL (for example PGM pixels).
+    f.write(content->c_str(), static_cast<std::streamsize>(content->size()));
+    f.close();
+    if (!f) {
+        throwRuntimeFault(
+            RuntimeDiag::FileSystemError,
+            "fs.write_text",
+            std::string(path->c_str()),
+            "cannot write the complete file");
+    }
     return NullSlot;
 }
 

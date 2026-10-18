@@ -1,7 +1,7 @@
 // Tiles reads the graph of the function it is given as the program wrote it: a `loop` in it is
 // the LOOP node on every back end, also where the back end runs a private copy of the program
 // with its loops lowered to tail recursion (std::fvm, std::jit, std::prl; op-semantics 11.4).
-// Tiles does not compile LOOP yet, so the observable is its refusal naming the node kind (15).
+// Source emission retains one device recurrence instead of unrolling its body on the host.
 module tiles_loop_source
 import { Tensor, reshape } from tensor
 import { source } from tiles

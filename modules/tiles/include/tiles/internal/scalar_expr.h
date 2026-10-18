@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 namespace camel::tiles::kernel {
 // Physical register/shared-memory types; tensor plans retain their own DType.
 struct ScalarType {
-    enum Kind { F32, F64, I32, U32 } kind;
+    enum Kind { F32, F64, I32, U32, I64 } kind;
     ScalarType(Kind kind);
     ScalarType(DType type);
     bool operator==(const ScalarType &) const = default;
@@ -53,8 +53,10 @@ struct ScalarValue {
     static ScalarValue f64(double value);
     static ScalarValue i32(int32_t value);
     static ScalarValue u32(uint32_t value);
+    static ScalarValue i64(int64_t value);
     int32_t asI32() const;
     uint32_t asU32() const;
+    int64_t asI64() const;
     float asF32() const;
     double asF64() const;
 };
@@ -76,7 +78,8 @@ class ScalarExpr {
     std::string cuda() const;
 };
 enum class ScalarCompare { Equal, NotEqual, Less, LessEqual };
-// IEEE ordered comparisons: NaNs compare unequal, either signed zero equals zero.
+// Same-type comparisons: integers remain exact; IEEE NaNs compare unequal and
+// either floating signed zero equals zero. Mixed types require an explicit cast.
 struct ScalarPredicate {
     ScalarCompare compare;
     ScalarExpr lhs, rhs;
