@@ -37,7 +37,7 @@
 
 - `std::opt::inline*` 只负责 **inline target selection + inline rewrite**；
 - 若需要运行聚合优化流水线（如 **specialization / devirtualization / inlining**），
-  入口使用 `std::opt`：循环执行去虚化、特化、内联、常量折叠、公共子表达式消除与死代码消除，直到稳定或达到预算。
+  入口使用 `std::opt`：循环执行去虚化、特化、内联、常量折叠、公共子表达式消除、局部算式化简与死代码消除，直到稳定或达到预算。
   `std::inline`（含 `small` / `arm` / `hybrid`）保留为 `std::opt::inline` 的别名。
 
 控制依赖采用源头规避与末尾清理结合的方式。编译器加同步边时，最多检查 64 条 CTRL 边；

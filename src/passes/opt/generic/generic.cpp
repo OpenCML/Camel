@@ -19,7 +19,7 @@
  */
 
 /*
- * The generic optimization passes std::opt::{fold, cse, dce, ctrl} (see generic.h).
+ * Generic optimization passes and the integrated pipeline (algebra lives in algebra.cpp).
  */
 
 #include "generic.h"
@@ -964,7 +964,7 @@ GCGraph *simplifyGraph(
         bool optChanged = false;
         graph           = applyOptimizeRewritePass(context, graph, os, config, &optChanged);
         std::deque<camel::core::mm::RootHandle> roots;
-        size_t folded = 0, merged = 0, removed = 0;
+        size_t folded = 0, merged = 0, simplified = 0, removed = 0;
         graph = rewriteReachableGraphs(
             context,
             graph,
@@ -972,8 +972,14 @@ GCGraph *simplifyGraph(
             [&](GraphDraft &draft) { return foldDraft(draft, *context, roots); },
             &folded);
         graph = rewriteReachableGraphs(context, graph, "std::opt::cse", cseDraft, &merged);
+        graph = rewriteReachableGraphs(
+            context,
+            graph,
+            "std::opt::algebra",
+            [&](GraphDraft &draft) { return algebraDraft(draft, config.safeFloatingPoint); },
+            &simplified);
         graph = rewriteReachableGraphs(context, graph, "std::opt::dce", dceDraft, &removed);
-        if (!optChanged && folded == 0 && merged == 0 && removed == 0) {
+        if (!optChanged && folded == 0 && merged == 0 && simplified == 0 && removed == 0) {
             CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
             return finish(graph);
         }

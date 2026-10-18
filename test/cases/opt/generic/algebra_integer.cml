@@ -1,0 +1,13 @@
+/** Coefficient arithmetic wraps at the operand width, including compile-time combination. */
+module algebra_integer
+
+func coefficients(n: int): int { return n * 3 + n * 5 }
+func chain(n: int): int { return (n * 3) * 2 }
+func coefficients32(n: i32): i32 { return n * i32(3) + n * i32(5) }
+
+func main(n: int): int sync {
+    println(coefficients(n))
+    println(chain(n))
+    println(coefficients32(i32(2147483647)))
+    return 0
+}

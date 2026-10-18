@@ -93,6 +93,25 @@ macro evaluation and optimization. The fixed runtime seed makes backend results
 repeatable; it does not make random draws compile-time constants. This example
 keeps the derivative arithmetic visible even when all entry arguments are bound.
 
+`std::opt::algebra` is a general scalar arithmetic pass, included after CSE in each
+`std::opt` round; it has no knowledge of autodiff. In `collapse_random.cml` it turns
+the shared `t = (x + 1) * 3; t + t` into `(x + 1) * 6` and the analogous unit-seed
+path into `x * 2`, reducing main's derivative arithmetic from six nodes to four.
+Default algebra permits local reassociation, so bitwise equality with the original
+program is not promised. Use `'std::opt(safe_fp=true)'` or the standalone
+`'std::opt::algebra(safe_fp=true)'` to restrict this stage to exact float rewrites;
+the coefficient doubling above is exact and remains enabled in safe mode.
+
+Matching inspects only adjacent scalar add/multiply nodes and direct constants;
+it neither expands shared expression trees nor crosses GATEs. A product with
+other consumers is retained. A deduplicated work queue has at most four times
+the original node count in visits. Eliminated products transfer their immediate
+CTRL predecessors, while consumer identities, origins and numeric permissions
+remain intact, including branch-arm/output anchors. Integer coefficients use
+unsigned arithmetic at their declared width to preserve wrapping.
+Written slots are classified once through GATE alias groups, rather than walking
+the same shared value paths separately for every arithmetic pattern.
+
 ### Pass order: `std::macro` and the inlining passes
 
 `grad(f)` transforms f's graph **as compiled**: the pullback builder takes one

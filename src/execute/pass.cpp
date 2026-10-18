@@ -403,6 +403,7 @@ PassScopePtr initPassScope() {
                              {"devirtualize", def(PASS(DevirtualizeRewritePass))},
                              {"specialize", def(PASS(SpecializeRewritePass))},
                              {"fold", def(PASS(ConstantFoldPass))},
+                             {"algebra", def(PASS(AlgebraPass))},
                              {"cse", def(PASS(CommonSubexpressionPass))},
                              {"dce", def(PASS(DeadCodePass))},
                              {"ctrl", def(PASS(ControlReductionPass))},
@@ -626,6 +627,47 @@ namespace {
 
 /// The factory of a pass name, or null. Prints nothing.
 PassFactory lookupPassFactory(const std::string &name) {
+    // Parameterized optimization entries share the same policy. Parse and validate before
+    // returning a factory, so a malformed option after a consuming pass still fails preflight.
+    if (const auto open = name.find('('); open != std::string::npos) {
+        if (name.back() != ')') {
+            return nullptr;
+        }
+        const auto trim = [](std::string_view value) {
+            const auto first = value.find_first_not_of(" \t\r\n");
+            if (first == std::string_view::npos)
+                return std::string_view{};
+            const auto last = value.find_last_not_of(" \t\r\n");
+            return value.substr(first, last - first + 1);
+        };
+        const auto path = trim(std::string_view(name).substr(0, open));
+        if (path != "std::opt" && path != "std::opt::algebra") {
+            return nullptr;
+        }
+        auto args   = trim(std::string_view(name).substr(open + 1, name.size() - open - 2));
+        bool safeFp = false;
+        if (!args.empty()) {
+            const auto equal = args.find('=');
+            if (equal == std::string_view::npos || trim(args.substr(0, equal)) != "safe_fp") {
+                return nullptr;
+            }
+            const auto value = trim(args.substr(equal + 1));
+            if (value != "true" && value != "false") {
+                return nullptr;
+            }
+            safeFp = value == "true";
+        }
+        if (path == "std::opt::algebra") {
+            return [safeFp](const context_ptr_t &ctx) {
+                return std::make_unique<AlgebraPass>(ctx, safeFp);
+            };
+        }
+        return [safeFp](const context_ptr_t &ctx) {
+            OptimizeRewriteConfig config;
+            config.safeFloatingPoint = safeFp;
+            return std::make_unique<OptimizeRewritePass>(ctx, config);
+        };
+    }
     // 1. Resolve aliases
     std::string resolved = name;
     auto aliasIt         = passAliases.find(name);
@@ -762,6 +804,8 @@ void listAvailablePasses(const std::string &name) {
         help << std::format("  {} -> {}\n", alias, target);
     }
     help << std::endl;
+    help << "Optimization options: std::opt(safe_fp=true|false), "
+            "std::opt::algebra(safe_fp=true|false); default: false.\n";
 }
 
 } // namespace

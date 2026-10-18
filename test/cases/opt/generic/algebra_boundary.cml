@@ -1,0 +1,13 @@
+/** Keep inputs unbound for graph inspection; bind --arg x=... for strict IEEE boundary tests. */
+module algebra_boundary
+
+func positive(x: float): float { let t = x * 3.0; return t + t }
+func negative(x: float): float { let t = x * -3.0; return t + t }
+func fractional(x: float): float { let t = x * 0.1; return t + t }
+
+func main(x: float): int sync {
+    println(positive(x))
+    println(negative(x))
+    println(fractional(x))
+    return 0
+}
