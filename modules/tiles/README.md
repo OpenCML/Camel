@@ -218,9 +218,11 @@ This is not a persistent semantic fingerprint or a cache of graph compilation.
   returns a host tensor. Both transfers complete before returning; repeated
   downloads preserve the device value. Empty tensors are supported.
   `upload(float)` and `download(Device<float>)` preserve all f64 bits.
-  Device storage is owned through Camel's foreign-resource control blocks and
-  released by finalization or end-of-run cleanup. The native allocation retains
-  its CUDA context and driver lifetime, and contains no moving-heap pointers.
+  Device storage is owned through Camel's foreign-resource control blocks; that
+  ownership ends with finalization or end-of-run cleanup, while the physical
+  native block may remain cached in its backend's pool until a trim or the
+  backend's destruction. The native allocation retains its CUDA context and
+  driver lifetime, and contains no moving-heap pointers.
   Graph APIs accept these values as inputs, including mixed host/device tensor
   leaves in tuples and structs. The function keeps its ordinary tensor signature:
   `run<square>(upload(x))` borrows the existing device allocation without copying
@@ -324,6 +326,26 @@ not introduce a pending Camel value or change source-level `sync`/`wait`.
 Compilation-cache access uses a short mutex rather than serializing device
 execution. This release does not claim competitive performance with Triton.
 
+Native device and pinned-host blocks are served by two backend-private idle
+pools. Caching is ready-only and bounded: 64 MiB / 32 entries for device memory
+and 16 MiB / 32 entries for pinned host memory, allocated in 256-byte size
+classes. Checkout takes the smallest cached block that is large enough, so a
+small request prefers a small cached block but consumes a larger one whenever no
+smaller block is available. A block returns to its pool only when its last shared
+lease drops, and every live lease keeps its backend alive; an idle slot holds a
+raw handle only, so a pool can never extend its backend's lifetime. A released
+block that exceeds the idle byte budget or slot count is freed immediately; all
+other idle memory is freed only by an explicit trim, by the same-kind trim that an
+out-of-memory retry performs, or when the owning backend is destroyed.
+`inspect`'s `allocated_bytes` remains a planning metric for device storage; it
+does not describe cached or otherwise idle native memory. If draining a stream or
+activating the owning context fails during cleanup, both pools permanently
+disable reuse before any lease share is dropped: a block that may still be the
+target of pending work is abandoned rather than cached or freed, and further
+checkouts on that backend are rejected. That failure path does not retry or
+recover the memory, so a backend that reports a failed cleanup should be
+replaced rather than reused.
+
 ## Build and runtime
 
 Run `npm run build`. CMake discovers CUDA Toolkit headers if installed. Without
@@ -365,6 +387,11 @@ broadcasting, fresh values with cached code, reshape, captures, direct calls,
 negative-axis reduction, and empty dimensions across NodeVM, FastVM, and JIT.
 The host plan also runs native mutation tests built by the standard build. Its
 test executable stays in the build tree and is not a distributed runtime tool.
+When the CUDA Toolkit is present the same build also produces native CUDA contract
+executables; `tiles-async-check` covers the memory-pool contract described above
+(reuse and size classes, idle budgets, injected allocation failure, disabled reuse
+after a failed cleanup, lease lifetime and shared-backend reuse) and needs a GPU
+to run.
 The test-only `tiles::test_outline_compiled` pass verifies actual callee-fact
 reuse with per-thread extraction counts before comparing fresh input snapshots
 against an independent extraction. It covers changing inputs/captures, tuple

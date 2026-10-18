@@ -40,14 +40,20 @@ class Resources {
   public:
     Api &api;
     CUstream stream = nullptr;
-    std::vector<CUdeviceptr> buffers;
-    std::vector<void *> hostBuffers;
+    // Scratch, table, fault and staging leases. An exported output shares the
+    // same lease instead of moving it, so a block returns to its pool only after
+    // this owner has drained and every exported share has been dropped.
+    std::vector<std::shared_ptr<AllocationLease>> leases;
     explicit Resources(std::shared_ptr<Backend> backend);
-    ~Resources();
+    ~Resources() noexcept;
     Resources(const Resources &)            = delete;
     Resources &operator=(const Resources &) = delete;
     CUdeviceptr allocate(size_t size);
     void *allocateHost(size_t size);
+    // Share (never move) the device lease for `handle`, so this owner and the
+    // caller both keep the block alive. Returns null when this owner holds no
+    // such lease, so a caller can never take ownership twice.
+    std::shared_ptr<AllocationLease> shareDevice(CUdeviceptr handle);
 };
 } // namespace camel::tiles::cuda_detail
 #endif

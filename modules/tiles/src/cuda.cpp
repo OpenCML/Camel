@@ -146,30 +146,29 @@ bool outputHasRelaxedDependency(const Program &program, size_t output) {
     return valueDependencies(program, output).relaxed;
 }
 
+// Exported resident storage: a share of one pooled device lease plus the logical
+// byte limit recorded when the value was published. The rounded pool capacity is
+// an implementation detail and must never widen what metadata may read.
 struct OwnedAllocation final : DeviceStorage {
-    std::shared_ptr<Backend> backend;
-    CUdeviceptr pointer = 0;
-    size_t capacity     = 0;
+    std::shared_ptr<AllocationLease> lease;
+    size_t logicalBytes = 0;
+    CUdeviceptr pointer() const { return lease ? lease->devicePointer() : 0; }
     std::vector<std::byte> read(uint64_t address, size_t bytes) const override {
-        if (!backend || pointer != address || bytes > capacity)
+        if (!lease || !lease->valid() || pointer() != address || bytes > logicalBytes)
             throw std::runtime_error("resident CUDA storage metadata mismatch");
-        Current current(backend->api, backend->context);
+        const auto &owner = lease->backend();
+        Current current(owner->api, owner->context);
         std::vector<std::byte> result(bytes);
         if (!result.empty())
-            backend->api.check(
-                backend->api.cuMemcpyDtoH(result.data(), pointer, result.size()),
+            owner->api.check(
+                owner->api.cuMemcpyDtoH(result.data(), pointer(), result.size()),
                 "download resident tensor");
         return result;
     }
-    ~OwnedAllocation() override {
-        // Pending submissions retain allocations independently of their result
-        // leaves. No Camel references or allocator locks participate in cleanup.
-        if (pointer && backend->api.cuCtxPushCurrent(backend->context) == CUDA_SUCCESS) {
-            backend->api.cuMemFree(pointer);
-            CUcontext popped;
-            backend->api.cuCtxPopCurrent(&popped);
-        }
-    }
+    // Ownership is shared: the lease returns its block exactly when the last
+    // share drops, which covers this storage and the Resources that drained the
+    // pending stream. No Camel references or allocator locks participate.
+    ~OwnedAllocation() override = default;
 };
 
 // Production submissions and benchmarks share allocation, uploads and launches.
@@ -207,9 +206,10 @@ class DeviceRun {
             if (p.nodes[id].resident) {
                 auto allocation =
                     std::dynamic_pointer_cast<OwnedAllocation>(p.nodes[id].resident->owner);
-                if (!allocation || !allocation->backend || &allocation->backend->api != &a ||
-                    allocation->pointer != p.nodes[id].resident->address ||
-                    bytes(p.nodes[id]) > allocation->capacity)
+                if (!allocation || !allocation->lease || !allocation->lease->valid() ||
+                    &allocation->lease->backend()->api != &a ||
+                    allocation->pointer() != p.nodes[id].resident->address ||
+                    bytes(p.nodes[id]) > allocation->logicalBytes)
                     throw std::runtime_error("resident input belongs to another CUDA backend");
                 if (p.nodes[id].resident->completion) {
                     if (submission)
@@ -217,7 +217,7 @@ class DeviceRun {
                     else
                         p.nodes[id].resident->completion->wait();
                 }
-                pointers[id] = allocation->pointer;
+                pointers[id] = allocation->pointer();
             } else if (p.storage.slots[id] != SIZE_MAX)
                 pointers[id] = allocations[p.storage.slots[id]];
         if (programMayFault(p)) {
@@ -317,8 +317,7 @@ class DeviceRun {
         }
         return result;
     }
-    std::vector<std::shared_ptr<DeviceValue>>
-    retainOutputs(std::shared_ptr<Backend> backend, bool complete = true) {
+    std::vector<std::shared_ptr<DeviceValue>> retainOutputs(bool complete = true) {
         if (complete)
             synchronize();
         std::vector<std::shared_ptr<DeviceValue>> result;
@@ -329,31 +328,34 @@ class DeviceRun {
                 continue;
             }
             const auto &node = program.nodes[id];
-            auto value       = node.resident ? std::make_shared<DeviceValue>(*node.resident)
-                                             : std::make_shared<DeviceValue>();
-            if (!node.resident) {
-                auto owner     = std::make_shared<OwnedAllocation>();
-                owner->backend = backend;
-                auto allocation =
-                    std::find(resources.buffers.begin(), resources.buffers.end(), pointers[id]);
-                if (allocation == resources.buffers.end())
-                    throw std::runtime_error("resident output allocation is not owned");
-                value->shape   = node.shape;
-                value->dtype   = node.dtype;
-                value->address = pointers[id];
-                value->owner   = owner;
-                // The submission must own this allocation before the resources
-                // relinquish it. A throwing keepAlive leaves the buffer owned by
-                // Resources and the new owner still has a null device pointer.
+            if (node.resident) {
+                // A returned resident input keeps its own lease and owner.
+                auto value = std::make_shared<DeviceValue>(*node.resident);
                 if (submission)
-                    submission->keepAlive(owner);
-                // Transfer only after every potentially throwing field assignment.
-                owner->capacity = bytes(node);
-                owner->pointer  = *allocation;
-                *allocation     = 0;
-            } else if (submission) {
-                submission->keepAlive(value->owner);
+                    submission->keepAlive(value->owner);
+                retained.emplace(id, value);
+                result.push_back(std::move(value));
+                continue;
             }
+            // Distinct output nodes can resolve to the same allocation. Each
+            // keeps its own shape, dtype and logical byte bound and shares only
+            // the underlying lease, so one node's metadata can never widen
+            // another node's read. Only an identical node reuses its whole value.
+            auto owner     = std::make_shared<OwnedAllocation>();
+            auto value     = std::make_shared<DeviceValue>();
+            value->shape   = node.shape;
+            value->dtype   = node.dtype;
+            value->address = pointers[id];
+            value->owner   = owner;
+            // The submission must retain the exported owner before anything can
+            // throw; Resources keeps its own share for the whole drain, so a
+            // pending DMA can never see this block reused underneath it.
+            if (submission)
+                submission->keepAlive(owner);
+            owner->lease = resources.shareDevice(pointers[id]);
+            if (!owner->lease)
+                throw std::runtime_error("resident output allocation is not owned");
+            owner->logicalBytes = bytes(node);
             retained.emplace(id, value);
             result.push_back(std::move(value));
         }
@@ -383,9 +385,9 @@ std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceVal
         throw std::invalid_argument("missing resident value");
     const auto allocation = std::dynamic_pointer_cast<OwnedAllocation>(value->owner);
     const auto target     = sharedBackend();
-    if (allocation && allocation->backend == target) {
-        if (allocation->pointer != value->address ||
-            bytes(Node{.shape = value->shape, .dtype = value->dtype}) > allocation->capacity)
+    if (allocation && allocation->lease && allocation->lease->backend() == target) {
+        if (allocation->pointer() != value->address ||
+            bytes(Node{.shape = value->shape, .dtype = value->dtype}) > allocation->logicalBytes)
             throw std::runtime_error("resident CUDA storage metadata mismatch");
         if (value->completion)
             value->completion->wait();
@@ -400,26 +402,31 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
         throw std::runtime_error("device upload shape mismatch");
     auto b = sharedBackend();
     Current current(b->api, b->context);
-    auto allocation      = std::make_shared<OwnedAllocation>();
-    allocation->backend  = b;
-    allocation->capacity = data.size();
-    b->api.check(
-        b->api.cuMemAlloc(&allocation->pointer, std::max(size_t(1), data.size())),
-        "allocate resident tensor");
+    // Staging owns the destination block as well as the pinned source, so an
+    // exception anywhere below drains the async copy before the block can return
+    // to the pool. The lease is shared, not moved, so the returned value keeps it
+    // alive after this scope ends. Only the physical capacity is rounded; the
+    // logical payload stays exactly the uploaded size.
     Resources staging(b);
+    const CUdeviceptr pointer = staging.allocate(data.size());
+    auto allocation           = std::make_shared<OwnedAllocation>();
+    allocation->lease         = staging.shareDevice(pointer);
+    if (!allocation->lease)
+        throw std::runtime_error("upload destination allocation is not owned");
+    allocation->logicalBytes = data.size();
     if (!data.empty()) {
         const size_t size = data.size();
         void *pinned      = staging.allocateHost(size);
         std::memcpy(pinned, data.data(), size);
         b->api.check(
-            b->api.cuMemcpyHtoDAsync(allocation->pointer, pinned, size, staging.stream),
+            b->api.cuMemcpyHtoDAsync(pointer, pinned, size, staging.stream),
             "upload resident tensor");
         b->api.check(b->api.cuStreamSynchronize(staging.stream), "complete resident upload");
     }
     auto result     = std::make_shared<DeviceValue>();
     result->shape   = shape;
     result->dtype   = dtype;
-    result->address = allocation->pointer;
+    result->address = pointer;
     result->owner   = std::move(allocation);
     return result;
 }
@@ -480,7 +487,7 @@ SubmittedProgram submitProgram(std::shared_ptr<const Program> snapshot) {
     DeviceRun run(std::move(snapshot), b->api, std::move(module), completion);
     run.upload(false);
     run.launch();
-    SubmittedProgram submitted{run.retainOutputs(b, false), completion};
+    SubmittedProgram submitted{run.retainOutputs(false), completion};
     for (const auto &output : submitted.outputs)
         output->completion = completion;
     completion->finish(run.faultSlot());

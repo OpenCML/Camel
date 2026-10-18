@@ -25,6 +25,7 @@
 using namespace camel::tiles;
 using namespace camel::tiles::cuda_detail;
 void testAsyncFailuresAndConcurrency();
+void runMemoryPoolChecks();
 
 namespace {
 void require(bool condition, const char *message) {
@@ -224,7 +225,10 @@ struct CleanupProbe {
 };
 
 void testOwnershipAndFaultWithoutOutputs() {
-    auto backend = std::make_shared<Backend>();
+    // Caching is disabled for this private backend so the exact native cleanup
+    // counts below do not depend on pool budgets or trim timing. Pooled reuse is
+    // covered separately by memory_pool_check.cpp.
+    auto backend = std::make_shared<Backend>(MemoryPolicy::uncached());
     auto &api    = backend->api;
     CleanupProbe cleanup(api);
     ModuleLease module = [&] {
@@ -316,6 +320,7 @@ void testOwnershipAndFaultWithoutOutputs() {
 
 int main() {
     try {
+        runMemoryPoolChecks();
         testNativeChain();
         testFaultChain();
         testOwnershipAndFaultWithoutOutputs();

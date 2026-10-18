@@ -51,9 +51,19 @@ follow [the design principles](../../docs/design-principles.cn.md).
 - `src/row_kernel.cpp` and `row_body.cpp` plan shared row intermediates. Maximum is
   order-independent under the canonical NaN/zero policy. Sum uses an exactness proof
   for a parallel f64 sum and falls back to the canonical ordered chain when needed.
-- `src/cuda_backend.cpp`, `cuda_resources.cpp`, `cuda_submission.cpp` and `device.cpp` manage driver/NVRTC
+- `src/cuda_backend.cpp`, `cuda_pool.cpp`, `cuda_resources.cpp`,
+  `cuda_submission.cpp` and `device.cpp` manage driver/NVRTC
   ownership, compiled-module leases and device resources. Resident inputs may be
   borrowed; resources retain their context/module ownership until completion.
+  `cuda_pool.cpp` keeps a bounded, backend-private free list of raw device and
+  pinned blocks. `Resources` and an exported value share one lease per block, so
+  a block returns to its pool only after the stream has drained and the last
+  share drops. A failed drain or context activation disables reuse for both pools
+  before any share is dropped, so a block that may still be the target of pending
+  work is abandoned instead of being cached or freed. Idle blocks are freed while
+  the backend still owns its primary context. The lease factory allocates the
+  lease object before acquiring shared ownership, so a failing host allocation
+  returns the checked-out block exactly once.
   Native submissions retain snapshots, modules, allocations and pinned staging
   until completion; cross-stream event ordering and ancestor fault observation
   are separate obligations. Completed submissions release temporary owners and
@@ -71,7 +81,16 @@ The native plan checker exercises malformed plans, index-map mutations, numerica
 contracts, cache invalidation and structured-kernel validation. GPU plans exercise
 actual registered operators across execution engines, strict reduction bits,
 gradients, resident values and transfer lifetimes. Synthetic map tests alone do
-not prove arbitrary custom operators execute correctly on GPU.
+not prove arbitrary custom operators execute correctly on GPU. The native
+`tiles-async-check` executable additionally covers the pool contract
+(`test/cases/modules/tiles/memory_pool_check.cpp`): reuse counters and exact
+cached addresses, size classes and best fit, idle byte/entry budgets, the
+uncached policy, device/pinned round-trips with verified payload bits, shared
+alias retention, cross-thread context restoration, concurrent non-sharing of
+active blocks, backend/pool isolation, lease lifetime, injected OOM
+trim-and-retry versus non-OOM rejection, disabled reuse after a failed drain or
+context activation, and shared-backend reuse with duplicate aliases and forged
+logical-bound rejection.
 
 Keep ordinary test logs in local `tmp/` or CI artifacts. Include relevant commands,
 results and limitations in feature commit descriptions. Durable performance evidence

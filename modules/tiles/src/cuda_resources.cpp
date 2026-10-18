@@ -13,7 +13,6 @@
 
 #include <memory>
 #ifdef CAMEL_TILES_CUDA
-#include <algorithm>
 #include <utility>
 
 namespace camel::tiles::cuda_detail {
@@ -58,48 +57,47 @@ Resources::Resources(std::shared_ptr<Backend> owner)
     Current current(api, backend->context);
     api.check(api.cuStreamCreate(&stream, CU_STREAM_NON_BLOCKING), "create stream");
 }
-Resources::~Resources() {
+Resources::~Resources() noexcept {
     // Destruction may run on a different thread with no current context. Never
-    // throw from cleanup or try to release handles in an unrelated context.
-    if (api.cuCtxPushCurrent(backend->context) != CUDA_SUCCESS)
-        return;
-    if (stream)
-        api.cuStreamSynchronize(stream);
-    for (auto ptr : buffers)
-        if (ptr)
-            api.cuMemFree(ptr);
-    for (auto ptr : hostBuffers)
-        api.cuMemFreeHost(ptr);
-    if (stream)
+    // throw from cleanup or release handles in an unrelated context.
+    const bool active = api.cuCtxPushCurrent(backend->context) == CUDA_SUCCESS;
+    bool drained      = !stream;
+    if (active && stream) {
+        drained = api.cuStreamSynchronize(stream) == CUDA_SUCCESS;
         api.cuStreamDestroy(stream);
-    CUcontext popped;
-    api.cuCtxPopCurrent(&popped);
+    }
+    // A failed context activation or drain means kernel or DMA work may still be
+    // pending. Reuse must stop for the whole backend before any owner drops a
+    // share, so every outstanding block is abandoned by its pool rather than
+    // cached or freed underneath the driver. The leases themselves are shared,
+    // so exported values and borrowed inputs are covered by the same decision.
+    if (!active || !drained)
+        backend->disableReuse();
+    leases.clear();
+    if (active) {
+        CUcontext popped = nullptr;
+        api.cuCtxPopCurrent(&popped);
+    }
 }
 CUdeviceptr Resources::allocate(size_t size) {
-    Current current(api, backend->context);
-    CUdeviceptr ptr = 0;
-    api.check(api.cuMemAlloc(&ptr, std::max(size, size_t(1))), "allocate device memory");
-    try {
-        buffers.push_back(ptr);
-    } catch (...) {
-        api.cuMemFree(ptr);
-        throw;
-    }
-    return ptr;
+    auto lease                = AllocationLease::device(backend, size);
+    const CUdeviceptr pointer = lease->devicePointer();
+    // A throwing push_back destroys the shared lease, which returns the block,
+    // so a failed owner-vector growth cannot leak it.
+    leases.push_back(std::move(lease));
+    return pointer;
 }
 void *Resources::allocateHost(size_t size) {
-    Current current(api, backend->context);
-    void *ptr = nullptr;
-    api.check(
-        api.cuMemHostAlloc(&ptr, std::max(size, size_t(1)), 0),
-        "allocate pinned host memory");
-    try {
-        hostBuffers.push_back(ptr);
-    } catch (...) {
-        api.cuMemFreeHost(ptr);
-        throw;
-    }
-    return ptr;
+    auto lease    = AllocationLease::host(backend, size);
+    void *pointer = lease->hostPointer();
+    leases.push_back(std::move(lease));
+    return pointer;
+}
+std::shared_ptr<AllocationLease> Resources::shareDevice(CUdeviceptr handle) {
+    for (auto &lease : leases)
+        if (lease && lease->kind() == PoolKind::Device && lease->devicePointer() == handle)
+            return lease;
+    return {};
 }
 } // namespace camel::tiles::cuda_detail
 #endif

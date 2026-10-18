@@ -191,7 +191,9 @@ Current::~Current() {
     CUcontext popped;
     api.cuCtxPopCurrent(&popped);
 }
-Backend::Backend() {
+Backend::Backend(MemoryPolicy policy)
+    : devicePool_(api, PoolKind::Device, policy.device),
+      hostPool_(api, PoolKind::Host, policy.host) {
     const auto initialized = api.cuInit(0);
     if (initialized == CUDA_ERROR_NO_DEVICE)
         throw BackendUnavailable("no CUDA device is available");
@@ -220,6 +222,8 @@ Backend::Backend() {
         throw std::runtime_error("NVRTC does not support this GPU architecture");
     architecture = "--gpu-architecture=compute_" + std::to_string(target);
     api.check(api.cuDevicePrimaryCtxRetain(&context, device), "retain CUDA context");
+    devicePool_.bindContext(context);
+    hostPool_.bindContext(context);
 }
 Compiled::Compiled(
     Api &api, CUcontext context, const std::string &source, const std::vector<std::string> &options)
@@ -234,10 +238,25 @@ Compiled::~Compiled() {
 ModuleLease::ModuleLease(std::shared_ptr<Backend> backend, std::shared_ptr<Compiled> compiled)
     : backend(std::move(backend)), compiled(std::move(compiled)) {}
 Backend::~Backend() {
+    // Free pooled idle blocks while the primary context is still valid. Pool
+    // slots hold no Backend reference, so nothing here can extend this object's
+    // lifetime; active leases have already dropped their references.
+    devicePool_.trim();
+    hostPool_.trim();
     if (context) {
         cache.clear();
         api.cuDevicePrimaryCtxRelease(device);
     }
+}
+MemoryPool &Backend::pool(PoolKind kind) noexcept {
+    return kind == PoolKind::Device ? devicePool_ : hostPool_;
+}
+void Backend::disableReuse() noexcept {
+    // Stop reuse on both pools before any owner drops a lease share, so a block
+    // that may still be the target of pending work is abandoned rather than
+    // cached or freed.
+    devicePool_.disableReuse();
+    hostPool_.disableReuse();
 }
 std::vector<std::string> Backend::compileOptions() const {
     // These are language defaults, not permissions to relax numerical semantics.
