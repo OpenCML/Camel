@@ -88,8 +88,9 @@ export function syncRuntime(source, target) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    let target = ''
     try {
-        const target = execFileSync('git', ['config', '--local', '--get', 'camel.runtimeSyncTarget'],
+        target = execFileSync('git', ['config', '--local', '--get', 'camel.runtimeSyncTarget'],
             { cwd: repoRoot, encoding: 'utf8', windowsHide: true }).trim()
         if (target) syncRuntime(path.join(repoRoot, 'out/latest'), target)
     } catch (error) {

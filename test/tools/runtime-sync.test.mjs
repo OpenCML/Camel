@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { syncRuntime } from '../../scripts/sync-editor-runtime.js'
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-runtime-sync-test-'))
@@ -41,6 +41,18 @@ try {
     assert.equal(fs.readFileSync(path.join(target, binaries[0]), 'utf8'), 'new', 'incomplete source must leave destination intact')
     assert.throws(() => syncRuntime(target, target), /Unsafe/)
     assert.throws(() => syncRuntime(target, 'relative-runtime'), /absolute/)
+    // Exercise the CLI catch path without touching the real editor runtime.
+    const fixtureGit = path.join(root, 'git-fixture')
+    assert.equal(spawnSync('git', ['init', '--quiet', fixtureGit]).status, 0)
+    assert.equal(spawnSync('git', ['-C', fixtureGit, 'config', 'camel.runtimeSyncTarget', 'relative-runtime']).status, 0)
+    const failedSync = spawnSync(process.execPath, [path.resolve('scripts/sync-editor-runtime.js')], {
+        cwd: root,
+        env: { ...process.env, GIT_DIR: path.join(fixtureGit, '.git') },
+        encoding: 'utf8',
+    })
+    assert.equal(failedSync.status, 0, failedSync.stderr)
+    assert.match(failedSync.stderr, /Not synchronized: The runtime destination must be absolute/)
+    assert.doesNotMatch(failedSync.stderr, /ReferenceError/)
     console.log('RUNTIME_SYNC_OK: replacement, process-path isolation, failure leaves runtime intact, unsafe paths rejected')
 } finally {
     for (const child of [managed, unrelated]) if (child && child.exitCode === null) {
