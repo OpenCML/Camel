@@ -51,10 +51,13 @@ follow [the design principles](../../docs/design-principles.cn.md).
 - `src/row_kernel.cpp` and `row_body.cpp` plan shared row intermediates. Maximum is
   order-independent under the canonical NaN/zero policy. Sum uses an exactness proof
   for a parallel f64 sum and falls back to the canonical ordered chain when needed.
-- `src/cuda_backend.cpp`, `cuda_resources.cpp` and `device.cpp` manage driver/NVRTC
+- `src/cuda_backend.cpp`, `cuda_resources.cpp`, `cuda_submission.cpp` and `device.cpp` manage driver/NVRTC
   ownership, compiled-module leases and device resources. Resident inputs may be
   borrowed; resources retain their context/module ownership until completion.
-  Current public execution waits for completion before CPU use.
+  Native submissions retain snapshots, modules, allocations and pinned staging
+  until completion; cross-stream event ordering and ancestor fault observation
+  are separate obligations. Completed submissions release temporary owners and
+  dependencies. Public execution waits before publishing any Camel result.
 
 ## Validation
 

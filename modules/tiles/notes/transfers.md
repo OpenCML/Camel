@@ -28,24 +28,31 @@ after stream draining and resource cleanup. The module boundary moves the compil
 program into that snapshot; it does not copy its input tensor payloads to establish
 ownership. Host result reconstruction shares the same snapshot, and benchmarking
 retains separate optimized/reference snapshots. This establishes program lifetime
-independence from the caller's stack; execution is still synchronous. Completion
+independence from the caller's stack; public execution is still synchronous. Completion
 events, cross-stream dependencies, deferred fault propagation and context-safe
-cleanup remain prerequisites for asynchronous submission.
+cleanup belong to the native submission layer described below. Public operators
+still wait before publishing their results.
 
 ## Pending-submission ownership constraints
 
-The next execution layer must own a completion event together with its program,
+The native `Submission` owns a completion event together with its program,
 module lease, argument table, fault word, stream and pinned staging allocations.
 An event alone does not retain any of those objects. Every exit path after the
 first enqueue, including construction failure, must drain or transfer ownership
-of the submitted work before releasing its resources.
+of the submitted work before releasing its resources. `submitProgram` is an
+internal interface: `run`, `run_device`, and resident downloads observe its
+completion before returning to Camel. Completion events use their retained
+backend context for recording, querying, waiting and destruction.
 
 Device output allocations and submission state must have separate ownership:
 output values may retain their producer submission, but the submission must not
 retain those output values in turn. Dependency edges retain producer submissions
 until their input reads complete. Cleanup should release completed dependencies
 and staging rather than retaining an entire training history through the final
-device value.
+device value. The current completion implementation releases its program,
+temporary resources, retained allocation owners and dependency references after
+observing completion and caching success or failure. Its event and backend remain
+available for a later consumer to establish stream ordering.
 
 Ordering and fault observation are separate responsibilities. A consumer stream
 can wait on a producer event without blocking the host. That event establishes

@@ -11,6 +11,7 @@
 // Scoped execution, resident allocation ownership and GPU benchmark measurements.
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
+#include "tiles/internal/submission.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <chrono>
@@ -31,6 +32,7 @@
 #ifdef CAMEL_TILES_CUDA
 #include "tiles/internal/cuda_backend.h"
 #include "tiles/internal/cuda_resources.h"
+#include "tiles/internal/cuda_submission.h"
 
 namespace camel::tiles {
 using namespace cuda_detail;
@@ -151,7 +153,6 @@ struct OwnedAllocation final : DeviceStorage {
     std::vector<std::byte> read(uint64_t address, size_t bytes) const override {
         if (!backend || pointer != address || bytes > capacity)
             throw std::runtime_error("resident CUDA storage metadata mismatch");
-        std::lock_guard lock(backend->mutex);
         Current current(backend->api, backend->context);
         std::vector<std::byte> result(bytes);
         if (!result.empty())
@@ -161,8 +162,8 @@ struct OwnedAllocation final : DeviceStorage {
         return result;
     }
     ~OwnedAllocation() override {
-        // No Camel references or allocator locks. The owner outlives every use;
-        // transfers are synchronous before publishing the value.
+        // Pending submissions retain allocations independently of their result
+        // leaves. No Camel references or allocator locks participate in cleanup.
         if (pointer && backend->api.cuCtxPushCurrent(backend->context) == CUDA_SUCCESS) {
             backend->api.cuMemFree(pointer);
             CUcontext popped;
@@ -171,14 +172,17 @@ struct OwnedAllocation final : DeviceStorage {
     }
 };
 
-// Both normal execution and benchmarking use this exact upload/launch/download path.
-// Allocation reuse can overwrite inputs, so every repetition must restore them.
+// Production submissions and benchmarks share allocation, uploads and launches.
+// Benchmarks explicitly complete upload before timing; production records one
+// completion after all work. Allocation reuse requires restoring every input.
 class DeviceRun {
     ModuleLease moduleLease; // Outlives stream draining and all execution resources.
     std::shared_ptr<const Program> programOwner; // Includes borrowed device input owners.
     const Program &program;
     Api &api;
-    Resources resources;
+    std::shared_ptr<Submission> submission;
+    std::unique_ptr<Resources> ownedResources;
+    Resources &resources;
     std::vector<CUdeviceptr> pointers;
     std::vector<CUfunction> kernels;
     std::vector<void *> hostInputs;
@@ -187,9 +191,13 @@ class DeviceRun {
     void *clearFault  = nullptr;
 
   public:
-    DeviceRun(std::shared_ptr<const Program> snapshot, Api &a, ModuleLease module)
+    DeviceRun(
+        std::shared_ptr<const Program> snapshot, Api &a, ModuleLease module,
+        std::shared_ptr<Submission> pending = {})
         : moduleLease(std::move(module)), programOwner(std::move(snapshot)), program(*programOwner),
-          api(a), resources(moduleLease.backend) {
+          api(a), submission(std::move(pending)),
+          ownedResources(submission ? nullptr : std::make_unique<Resources>(moduleLease.backend)),
+          resources(submission ? submission->resources() : *ownedResources) {
         const auto &p = program;
         std::vector<CUdeviceptr> allocations;
         for (auto bytes : p.storage.bytes)
@@ -200,8 +208,15 @@ class DeviceRun {
                 auto allocation =
                     std::dynamic_pointer_cast<OwnedAllocation>(p.nodes[id].resident->owner);
                 if (!allocation || !allocation->backend || &allocation->backend->api != &a ||
-                    allocation->pointer != p.nodes[id].resident->address)
+                    allocation->pointer != p.nodes[id].resident->address ||
+                    bytes(p.nodes[id]) > allocation->capacity)
                     throw std::runtime_error("resident input belongs to another CUDA backend");
+                if (p.nodes[id].resident->completion) {
+                    if (submission)
+                        submission->depend(p.nodes[id].resident->completion);
+                    else
+                        p.nodes[id].resident->completion->wait();
+                }
                 pointers[id] = allocation->pointer;
             } else if (p.storage.slots[id] != SIZE_MAX)
                 pointers[id] = allocations[p.storage.slots[id]];
@@ -236,7 +251,8 @@ class DeviceRun {
         }
     }
     CUstream stream() const { return resources.stream; }
-    void upload() {
+    CUdeviceptr faultSlot() const { return fault; }
+    void upload(bool complete = true) {
         if (fault)
             api.check(
                 api.cuMemcpyHtoDAsync(fault, clearFault, sizeof(unsigned), resources.stream),
@@ -248,10 +264,10 @@ class DeviceRun {
                     api.cuMemcpyHtoDAsync(pointers[id], hostInputs[id], bytes(n), resources.stream),
                     "upload input");
         }
-        // Pageable synchronous copies can return after staging, before DMA completes.
-        // All transfers use our stream and stable pinned buffers; completion here makes
-        // the public synchronous upload contract and benchmark phase timing explicit.
-        synchronize();
+        // Benchmark upload timing includes DMA completion. Native submissions keep
+        // the same pinned staging alive and record completion after their kernels.
+        if (complete)
+            synchronize();
     }
     void launch() {
         void *args[] = {&table};
@@ -301,8 +317,10 @@ class DeviceRun {
         }
         return result;
     }
-    std::vector<std::shared_ptr<DeviceValue>> retainOutputs(std::shared_ptr<Backend> backend) {
-        synchronize();
+    std::vector<std::shared_ptr<DeviceValue>>
+    retainOutputs(std::shared_ptr<Backend> backend, bool complete = true) {
+        if (complete)
+            synchronize();
         std::vector<std::shared_ptr<DeviceValue>> result;
         std::unordered_map<size_t, std::shared_ptr<DeviceValue>> retained;
         for (auto id : program.outputs) {
@@ -324,10 +342,17 @@ class DeviceRun {
                 value->dtype   = node.dtype;
                 value->address = pointers[id];
                 value->owner   = owner;
+                // The submission must own this allocation before the resources
+                // relinquish it. A throwing keepAlive leaves the buffer owned by
+                // Resources and the new owner still has a null device pointer.
+                if (submission)
+                    submission->keepAlive(owner);
                 // Transfer only after every potentially throwing field assignment.
                 owner->capacity = bytes(node);
                 owner->pointer  = *allocation;
                 *allocation     = 0;
+            } else if (submission) {
+                submission->keepAlive(value->owner);
             }
             retained.emplace(id, value);
             result.push_back(std::move(value));
@@ -362,6 +387,8 @@ std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceVal
         if (allocation->pointer != value->address ||
             bytes(Node{.shape = value->shape, .dtype = value->dtype}) > allocation->capacity)
             throw std::runtime_error("resident CUDA storage metadata mismatch");
+        if (value->completion)
+            value->completion->wait();
         return value;
     }
     return uploadValue(value->shape, value->dtype, downloadValue(*value));
@@ -372,7 +399,6 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
         (dtype == DType::F64 && !shape.empty()))
         throw std::runtime_error("device upload shape mismatch");
     auto b = sharedBackend();
-    std::lock_guard lock(b->mutex);
     Current current(b->api, b->context);
     auto allocation      = std::make_shared<OwnedAllocation>();
     allocation->backend  = b;
@@ -411,10 +437,13 @@ std::vector<std::byte> execute(std::shared_ptr<const Program> snapshot) {
         throw std::invalid_argument("missing Tiles program snapshot");
     const auto &p = *snapshot;
     validatePlan(p);
-    Backend &b = backend();
-    std::lock_guard lock(b.mutex);
-    Current current(b.api, b.context);
-    if (!programMayFault(p) && std::all_of(p.outputs.begin(), p.outputs.end(), [&](size_t id) {
+    (void)backend();
+    if (!programMayFault(p) &&
+        std::none_of(
+            p.nodes.begin(),
+            p.nodes.end(),
+            [](const Node &n) { return bool(n.resident); }) &&
+        std::all_of(p.outputs.begin(), p.outputs.end(), [&](size_t id) {
             return !elements(p.nodes[id].shape) ||
                    (p.nodes[id].op == "input" && !p.nodes[id].resident);
         })) {
@@ -428,26 +457,40 @@ std::vector<std::byte> execute(std::shared_ptr<const Program> snapshot) {
         }
         return result;
     }
-    auto module = b.module(p.source);
-    DeviceRun run(std::move(snapshot), b.api, module);
-    run.upload();
-    run.launch();
-    return run.download();
+    auto submitted = submitProgram(std::move(snapshot));
+    submitted.completion->wait();
+    std::vector<std::byte> result;
+    for (const auto &output : submitted.outputs) {
+        auto data = downloadValue(*output);
+        result.insert(result.end(), data.begin(), data.end());
+    }
+    return result;
 }
 
-std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program> snapshot) {
+SubmittedProgram submitProgram(std::shared_ptr<const Program> snapshot) {
     if (!snapshot)
         throw std::invalid_argument("missing Tiles program snapshot");
     const auto &p = *snapshot;
     validatePlan(p);
     auto b = sharedBackend();
-    std::lock_guard lock(b->mutex);
     Current current(b->api, b->context);
     auto module = b->module(p.source);
-    DeviceRun run(std::move(snapshot), b->api, std::move(module));
-    run.upload();
+    auto completion =
+        std::make_shared<Submission>(b, std::make_unique<Resources>(b), snapshot, module);
+    DeviceRun run(std::move(snapshot), b->api, std::move(module), completion);
+    run.upload(false);
     run.launch();
-    return run.retainOutputs(b);
+    SubmittedProgram submitted{run.retainOutputs(b, false), completion};
+    for (const auto &output : submitted.outputs)
+        output->completion = completion;
+    completion->finish(run.faultSlot());
+    return submitted;
+}
+
+std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program> snapshot) {
+    auto submitted = submitProgram(std::move(snapshot));
+    submitted.completion->wait();
+    return std::move(submitted.outputs);
 }
 
 std::string benchmark(std::shared_ptr<const Program> snapshot) {
@@ -465,7 +508,6 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
     auto start              = Clock::now();
     Backend &b              = backend();
     double initializationMs = elapsed(start);
-    std::lock_guard lock(b.mutex);
     Current current(b.api, b.context);
     int driver = 0, major = 0, minor = 0;
     b.api.check(b.api.cuDriverGetVersion(&driver), "query driver version");
@@ -509,17 +551,15 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
     const char *names[] = {"optimized", "unfused"};
     std::unique_ptr<DeviceRun> runs[2];
     for (size_t i = 0; i < 2; ++i) {
-        const auto &p             = *plans[i];
-        auto &r                   = report[names[i]];
-        r["plan"]                 = json::parse(inspect(p));
-        r["compile_cache_hit"]    = std::any_of(b.cache.begin(), b.cache.end(), [&](const auto &c) {
-            return c->source == p.source && c->options == b.compileOptions();
-        });
-        start                     = Clock::now();
-        auto module               = b.module(p.source);
-        r["compile_load_host_ms"] = elapsed(start);
-        start                     = Clock::now();
-        runs[i]                   = std::make_unique<DeviceRun>(plans[i], b.api, module);
+        const auto &p                 = *plans[i];
+        auto &r                       = report[names[i]];
+        r["plan"]                     = json::parse(inspect(p));
+        r["compile_cache_hit"]        = b.cached(p.source);
+        start                         = Clock::now();
+        auto module                   = b.module(p.source);
+        r["compile_load_host_ms"]     = elapsed(start);
+        start                         = Clock::now();
+        runs[i]                       = std::make_unique<DeviceRun>(plans[i], b.api, module);
         r["allocation_setup_host_ms"] = elapsed(start);
         r["device_ms"]                = json::array();
         r["upload_host_ms"]           = json::array();
@@ -659,6 +699,10 @@ std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceVal
     return {};
 }
 std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program>) {
+    (void)deviceInfo();
+    return {};
+}
+SubmittedProgram submitProgram(std::shared_ptr<const Program>) {
     (void)deviceInfo();
     return {};
 }

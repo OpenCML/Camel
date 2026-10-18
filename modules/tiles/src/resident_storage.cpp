@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,6 +46,8 @@ retainHostValue(const Shape &shape, DType dtype, std::span<const std::byte> data
     return value;
 }
 std::vector<std::byte> downloadValue(const DeviceValue &value) {
+    if (value.completion)
+        value.completion->wait();
     if (!value.owner || !value.address)
         throw std::runtime_error("invalid resident tensor");
     return value.owner->read(

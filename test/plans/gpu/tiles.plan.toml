@@ -1182,3 +1182,23 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: core views exact bits", "std::fvm: core views exact bits", "std::jit: core views exact bits", "std::prl: core views exact bits"]
 timeout_ms = 180000
+
+[[tests]]
+name = "async_native_submissions"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/async_submission.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["tiles async chain: distinct streams, exact bits, identities and empty outputs passed", "tiles async faults: two identity consumers preserve ancestor failures passed", "tiles async ownership: empty consumers, eviction, early drop and cross-thread cleanup passed", "tiles async failures: event creation and record errors drain before releasing owners passed", "tiles async observers: concurrent ready and wait preserve results and faults passed", "tiles async staging: over 32 MiB distinct-stream transfer matches every output bit passed", "tiles async submit: concurrent same-source inputs and cache publication passed"]
+timeout_ms = 120000
+
+[[tests]]
+name = "async_public_completion"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/async_execution.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: async public exact bits, completed results and eager faults PASS", "std::fvm: async public exact bits, completed results and eager faults PASS", "std::jit: async public exact bits, completed results and eager faults PASS", "std::prl: async public exact bits, completed results and eager faults PASS"]
+timeout_ms = 180000

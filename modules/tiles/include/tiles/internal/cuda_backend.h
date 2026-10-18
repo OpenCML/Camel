@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -55,14 +55,17 @@ struct Api {
     decltype(&::cuMemcpyHtoD) cuMemcpyHtoD;
     decltype(&::cuMemcpyHtoDAsync) cuMemcpyHtoDAsync;
     decltype(&::cuMemcpyDtoH) cuMemcpyDtoH;
+    decltype(&::cuMemcpyDtoHAsync) cuMemcpyDtoHAsync;
     decltype(&::cuStreamCreate) cuStreamCreate;
     decltype(&::cuStreamSynchronize) cuStreamSynchronize;
     decltype(&::cuStreamDestroy) cuStreamDestroy;
+    decltype(&::cuStreamWaitEvent) cuStreamWaitEvent;
     decltype(&::cuLaunchKernel) cuLaunchKernel;
     decltype(&::cuEventCreate) cuEventCreate;
     decltype(&::cuEventDestroy) cuEventDestroy;
     decltype(&::cuEventRecord) cuEventRecord;
     decltype(&::cuEventSynchronize) cuEventSynchronize;
+    decltype(&::cuEventQuery) cuEventQuery;
     decltype(&::cuEventElapsedTime) cuEventElapsedTime;
     decltype(&::nvrtcCreateProgram) nvrtcCreateProgram;
     decltype(&::nvrtcVersion) nvrtcVersion;
@@ -118,6 +121,7 @@ class Backend : public std::enable_shared_from_this<Backend> {
     Backend();
     ~Backend();
     std::vector<std::string> compileOptions() const;
+    bool cached(const std::string &source);
     ModuleLease module(const std::string &source);
 };
 std::shared_ptr<Backend> sharedBackend();

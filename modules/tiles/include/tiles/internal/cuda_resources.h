@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -17,6 +17,23 @@
 #include "tiles/internal/cuda_backend.h"
 
 namespace camel::tiles::cuda_detail {
+// Completion events retain their context independently of submitted resources.
+// The owner records exactly once, then keeps the event alive for every consumer.
+class CompletionEvent {
+    std::shared_ptr<Backend> backend;
+    CUevent event = nullptr;
+
+  public:
+    explicit CompletionEvent(std::shared_ptr<Backend> backend);
+    ~CompletionEvent();
+    CompletionEvent(const CompletionEvent &)            = delete;
+    CompletionEvent &operator=(const CompletionEvent &) = delete;
+    void record(CUstream stream);
+    void waitOn(CUstream stream) const;
+    void wait() const;
+    bool ready() const;
+};
+
 class Resources {
     std::shared_ptr<Backend> backend;
 

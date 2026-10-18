@@ -310,13 +310,19 @@ least 128. Extrema propagate any NaN to canonical f32 `0x7fc00000` and order
 negative zero below positive zero, matching the CPU numeric contract. Other axis
 reductions are serial per output, with f64 accumulation for sum/mean.
 There is no fast-math mode; GPU transcendental results need not be bitwise equal
-to CPU results. Floating-point agreement is tested with tolerances.
+to CPU results. Strict arithmetic is checked bitwise; transcendental operations
+use their declared ulp bounds. Relaxed comparison applies only to algorithms
+with the required numeric permissions.
 
 Driver contexts, streams, buffers, and modules have scoped ownership. A bounded
 32-entry cache stores compiled modules by generated source within the selected
 device context; it does not cache tensor values. Each invocation uploads fresh
-inputs. Calls are synchronous and serialized through the backend. This release
-does not claim competitive performance with Triton.
+host inputs, while resident inputs reuse their native allocations. Public calls
+wait for completion before returning Camel values. The internal native submission
+interface can chain work on distinct streams through completion events; it does
+not introduce a pending Camel value or change source-level `sync`/`wait`.
+Compilation-cache access uses a short mutex rather than serializing device
+execution. This release does not claim competitive performance with Triton.
 
 ## Build and runtime
 
@@ -450,7 +456,7 @@ finite bit patterns on NodeVM, FastVM and JIT (`gpu/tiles_rows.plan.toml`).
 
 First-class public index domains, masks, layouts, schedule/resource graphs, general
 loop and dynamic branch lowering, general region fusion, asynchronous memory planning,
-asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
+public asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.
 
