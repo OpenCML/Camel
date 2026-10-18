@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,7 +29,8 @@
  *   std::opt::cse   merges pure operator nodes with identical operator and
  *                   inputs;
  *   std::opt::dce   removes pure operator (and value-only) nodes whose results
- *                   are unused, and SYNC control joins.
+ *                   are unused, SYNC control joins, and GATEs used only for control;
+ *                   their ordering is transferred to their control users.
  *   std::opt::ctrl  removes control edges already implied by other CTRL paths, within a work
  *                   budget and without changing branch boundaries or arm anchors.
  *

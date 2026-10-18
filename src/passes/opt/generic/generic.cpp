@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -831,10 +831,10 @@ size_t cseDraft(GraphDraft &draft) {
 // ---------------------------------------------------------------- dce
 
 /**
- * True when erasing the unread GATE `gate` loses no ordering: every node it waits on is a pure
- * value, or has another user through which it still reaches the exit. An effect whose only
- * successor is the gate (a println before a folded call) would otherwise be cut off and never
- * run.
+ * For a GATE with no users at all, check that erasing it loses no ordering: every node it
+ * waits on is a pure value, or has another user through which it still reaches the exit.
+ * Gates with control users do not need this check: replaceNode transfers their dependencies
+ * to those users, including an effect whose only current successor is the gate.
  */
 bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
     for (auto inputs :
@@ -876,7 +876,8 @@ size_t dceDraft(GraphDraft &draft) {
             const auto *h     = draft.header(id);
             const bool isJoin = h && h->kind == GCNodeKind::Sync;
             const bool isDeadGate =
-                h && h->kind == GCNodeKind::Gate && gateInputsSurvive(draft, id);
+                h && h->kind == GCNodeKind::Gate &&
+                (!draft.ctrlUsersOf(id).empty() || gateInputsSurvive(draft, id));
             if ((isValueOnly(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);

@@ -1,0 +1,15 @@
+id = "opt.unread_gate"
+order = 325
+tier = "feat"
+tags = ["feat", "opt", "control", "dce"]
+
+[[tests]]
+name = "unread_gate.control_users"
+desc = "DCE bypasses unread gates even when they are the only user of an effect, preserves effects in their values, and retains read and return gates on five backends."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/opt/unread_gate_contract.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["Unread gates removed; effects, read values and return gates preserved: PASS"]
+timeout_ms = 30000
