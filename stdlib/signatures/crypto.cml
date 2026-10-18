@@ -12,6 +12,9 @@
 inner func sha256(s: string): string {
     return 'crypto:sha256'
 }
+inner func sha256(s: Bytes): string {
+    return 'crypto:sha256'
+}
 
 /// SHA-256 applied rounds times, each round to the hexadecimal text of the one before;
 /// 0 rounds gives s itself.

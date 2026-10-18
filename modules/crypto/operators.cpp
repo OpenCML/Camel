@@ -12,11 +12,13 @@
  * See the the MIT license for more details.
  */
 
-#include <format>
 #include "operators.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/type/bytes.h"
+#include <format>
 
 #include <array>
 #include <cstdint>
@@ -126,8 +128,10 @@ std::unordered_map<std::string, operator_t> getCryptoOpsMap() {
 }
 
 slot_t __crypto_sha256__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    String *input = norm.get<String *>(0);
-    return toSlot(String::from(sha256Hex(input->view()), mm::autoSpace()));
+    const auto input = camel::core::type::isBytesType(norm.type(0))
+                           ? norm.get<BytesObject *>(0)->view()
+                           : norm.get<String *>(0)->view();
+    return toSlot(String::from(sha256Hex(input), mm::autoSpace()));
 }
 
 slot_t __crypto_sha256_rounds__(ArgsView &with, ArgsView &norm, Context &ctx) {

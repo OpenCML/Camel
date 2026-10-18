@@ -50,6 +50,7 @@ const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'regist
 const MODULES = [
     { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp' },
     { name: 'str', title: '`str`: strings', kind: 'cpp' },
+    { name: 'bytes', title: '`bytes`: immutable binary values and UTF-8 conversion', kind: 'cpp' },
     { name: 'array', title: '`array`: arrays and higher-order functions', kind: 'camel' },
     { name: 'math', title: '`math`: numbers and bits', kind: 'cpp' },
     { name: 'statistics', title: '`statistics`', kind: 'cpp' },

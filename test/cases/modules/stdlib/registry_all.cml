@@ -5,6 +5,7 @@
 module registry_all
 
 import algo
+import bytes
 import crypto
 import fs
 import io
