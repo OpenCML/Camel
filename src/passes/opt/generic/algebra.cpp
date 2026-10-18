@@ -185,9 +185,6 @@ void multiply(
     GraphDraft &draft, gc_node_ref_t node, const Arithmetic &ops, type::Type *ty,
     gc_node_ref_t base, T c, std::array<gc_node_ref_t, 2> products) {
     const auto value = draft.materializeStaticValue(toSlot<T>(c), ty);
-    if (draft.nodeOrigin(value) == 0)
-        draft.setNodeOrigin(value, draft.nodeOrigin(node));
-    draft.setNodePermissions(value, draft.nodePermissions(node));
     const std::array inputs{base, value};
     draft.setNormInputs(node, inputs);
     auto *body = reinterpret_cast<GCOperBody *>(draft.mutablePayloadOf(node).data());
@@ -252,12 +249,6 @@ bool simplify(
             (left.product == kInvalidNodeRef && right.product == kInvalidNodeRef && a != b)) {
             return false;
         }
-        if constexpr (std::is_floating_point_v<T>) {
-            // With no removable product, x+x -> x*2 only exchanges one instruction for
-            // another. Keep a shared product and its add instead of manufacturing work.
-            if (left.product == kInvalidNodeRef && right.product == kInvalidNodeRef)
-                return false;
-        }
         const bool exact =
             a == b && left.product != kInvalidNodeRef && exactDoubling(left.coefficient);
         const T c = left.coefficient + right.coefficient;
@@ -312,23 +303,13 @@ size_t algebraDraft(GraphDraft &draft, bool safeFp) {
     // Fixed-depth matching, and at most four times the original node count in visits. The queue
     // revisits affected users without repeatedly scanning the graph or expanding shared DAGs.
     const size_t slots = draft.nodeSlotCount();
-    std::deque<gc_node_ref_t> work;
-    std::vector<bool> queued(slots, false);
-    for (gc_node_ref_t id = 0; id < slots; ++id) {
-        const auto op = operIdOf(draft, id);
-        if (std::ranges::any_of(arithmetic(), [&](const auto &ops) {
-                return op == ops.add || op == ops.sub || op == ops.mul;
-            })) {
-            work.push_back(id);
-            queued[id] = true;
-        }
-    }
-    // Most tensor-only or call-only graphs have no scalar arithmetic. Avoid alias/signature
-    // analysis and its scratch storage entirely when there is nothing this pass can rewrite.
-    if (work.empty())
-        return 0;
     const WrittenSlots written(draft);
     size_t budget = slots * 4, changed = 0;
+    std::deque<gc_node_ref_t> work;
+    std::vector<bool> queued(slots, true);
+    for (gc_node_ref_t id = 0; id < slots; ++id) {
+        work.push_back(id);
+    }
     while (!work.empty() && budget--) {
         const auto id = work.front();
         work.pop_front();
