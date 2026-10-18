@@ -19,6 +19,7 @@
 
 /* Draft-only topology tests: no synthetic operator payload is executed or encoded. */
 #include "camel/passes/test/control.h"
+#include "../opt/generic/rewrite.h"
 #include "camel/runtime/control.h"
 
 #include <cstring>
@@ -182,6 +183,56 @@ void denseDataChain() {
     }
     check(reduceControlDependencies(draft) == 8128, "dense data chain retained covered controls");
 }
+void forwardingGateConsumers() {
+    using camel::passes::generic::bypassValueGate;
+    GraphDraft draft;
+    const auto value = node(draft), wait = node(draft);
+    const auto gate = draft.addGateNode(nullptr);
+    draft.setNormInputs(gate, std::span(&value, 1));
+    draft.setCtrlInputs(gate, std::span(&wait, 1));
+    const auto reader = node(draft), control = node(draft, {gate});
+    draft.setNormInputs(reader, std::span(&gate, 1));
+    size_t budget = 0;
+    check(!bypassValueGate(draft, gate, budget), "zero budget bypassed a gate");
+    budget = 64;
+    check(bypassValueGate(draft, gate, budget), "ordinary forwarding gate survived");
+    check(
+        !draft.header(gate) && draft.normInputsOf(reader).front() == value,
+        "reader did not receive the original value");
+    check(hasControlDependency(draft, wait, reader), "reader lost its wait");
+    check(
+        hasControlDependency(draft, wait, control) && hasControlDependency(draft, value, control),
+        "control-only consumer lost value completion or explicit wait");
+    check(draft.ctrlInputsOf(value).empty(), "wait moved onto the value producer");
+
+    const auto conditional = draft.addGateNode(nullptr);
+    draft.setNormInputs(conditional, std::span(&value, 1));
+    draft.setCtrlInputs(conditional, std::span(&wait, 1));
+    const auto join = draft.addNode(DraftNodeInit{.kind = GCNodeKind::Join});
+    draft.setWithInputs(join, std::span(&conditional, 1));
+    check(!bypassValueGate(draft, conditional, budget), "arm-local wait moved to JOIN");
+    check(draft.ctrlInputsOf(join).empty(), "JOIN acquired an unconditional arm dependency");
+
+    const auto barrier = draft.addGateNode(nullptr);
+    draft.setNormInputs(barrier, std::span(&value, 1));
+    std::vector<gc_node_ref_t> waits;
+    for (size_t i = 0; i < 4; ++i)
+        waits.push_back(node(draft));
+    draft.setCtrlInputs(barrier, waits);
+    for (size_t i = 0; i < 4; ++i) {
+        const auto user = node(draft);
+        draft.setNormInputs(user, std::span(&barrier, 1));
+    }
+    check(!bypassValueGate(draft, barrier, budget), "shared barrier caused excess edge growth");
+
+    const auto output = draft.addGateNode(nullptr);
+    draft.setNormInputs(output, std::span(&value, 1));
+    draft.setCtrlInputs(output, std::span(&wait, 1));
+    const auto outputReader = node(draft);
+    draft.setNormInputs(outputReader, std::span(&output, 1));
+    draft.setOutputNode(output);
+    check(!bypassValueGate(draft, output, budget), "output anchor lost its identity");
+}
 } // namespace
 
 camel::runtime::GCGraph *ControlTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
@@ -192,6 +243,7 @@ camel::runtime::GCGraph *ControlTestPass::apply(camel::runtime::GCGraph *graph, 
     branchBoundaries();
     denseChain();
     denseDataChain();
+    forwardingGateConsumers();
     os << "CONTROL topology, budgets, branches, dense chain: PASS\n";
     return graph;
 }

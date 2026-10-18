@@ -110,11 +110,110 @@ args = ["${case}", "std::macro", "std::opt", "std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
- const gates=g.nodes.filter(n=>n.kind==='GATE'&&n.outputType==='float');
- assert(gates.length>0,'required waits erased');
- for(const gate of gates){
-  const e=g.edges.filter(e=>e.target===gate.id),value=e.find(e=>e.kind==='normal');
-  assert(e.some(e=>e.kind==='control'&&e.source!==value.source),'redundant gate retained');
- }
+ const gates=g.nodes.filter(n=>n.kind==='GATE');
+ assert(gates.length===1&&gates[0].id===g.exit,'ordinary consumer gates remained');
+ const prints=g.nodes.filter(n=>n.label===':io/println');
+ const node=id=>g.nodes.find(n=>n.id===id);
+ const printOf=label=>prints.find(n=>g.edges.some(e=>e.target===n.id&&e.kind==='normal'&&node(e.source).label===label));
+ const held=printOf('held'),middle=printOf('middle'),last=printOf('rand:rand');
+ const result=prints.find(n=>![held,middle,last].includes(n));
+ assert(prints.length===4&&held&&middle&&last&&result,'effect/value lost');
+ const ordered=(a,b)=>g.edges.some(e=>e.kind==='control'&&e.source===a.id&&e.target===b.id);
+ assert(ordered(held,middle)&&ordered(middle,result)&&ordered(result,last)&&ordered(last,gates[0]),'consumer waiting order lost');
+}
+'''
+
+[[tests]]
+name = "branch.42.reference"
+case = "../../../cases/opt/generic/gate_branch_wait.cml"
+args = ["${case}","--arg","k=42","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="left\n0.755155532954539",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "branch.42.opt"
+case = "../../../cases/opt/generic/gate_branch_wait.cml"
+args = ["${case}","--arg","k=42","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="left\n0.755155532954539",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "branch.42.inline_dce"
+case = "../../../cases/opt/generic/gate_branch_wait.cml"
+args = ["${case}","--arg","k=42","std::inline","std::opt::dce","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="left\n0.755155532954539",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "branch.42.opt_dce"
+case = "../../../cases/opt/generic/gate_branch_wait.cml"
+args = ["${case}","--arg","k=42","std::opt","std::opt::dce","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="left\n0.755155532954539",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "branch.1.reference"
+case = "../../../cases/opt/generic/gate_branch_wait.cml"
+args = ["${case}","--arg","k=1","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="right\n0.13387664401253274",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "branch.1.opt"
+case = "../../../cases/opt/generic/gate_branch_wait.cml"
+args = ["${case}","--arg","k=1","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="right\n0.13387664401253274",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "branch.1.inline_dce"
+case = "../../../cases/opt/generic/gate_branch_wait.cml"
+args = ["${case}","--arg","k=1","std::inline","std::opt::dce","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="right\n0.13387664401253274",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "branch.1.opt_dce"
+case = "../../../cases/opt/generic/gate_branch_wait.cml"
+args = ["${case}","--arg","k=1","std::opt","std::opt::dce","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="right\n0.13387664401253274",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "branch.graph"
+case = "../../../cases/opt/generic/gate_branch_wait.cml"
+args = ["${case}", "std::opt", "std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ const join=g.nodes.find(n=>n.kind==='JOIN');
+ assert(join&&g.nodes.some(n=>n.kind==='BRCH'),'runtime branch disappeared');
+ const arms=g.edges.filter(e=>e.target===join.id&&e.kind==='context');
+ assert(arms.length===2&&arms.every(e=>g.nodes.find(n=>n.id===e.source).kind==='GATE'),'branch exit gates lost');
+ assert(!g.edges.some(e=>e.target===join.id&&e.kind==='control'),'conditional wait made unconditional');
 }
 '''

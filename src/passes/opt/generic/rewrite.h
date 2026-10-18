@@ -39,6 +39,10 @@ using camel::runtime::GraphDraft;
 /// Bounded local scalar arithmetic. safeFp restricts float rules to strict equivalence.
 size_t algebraDraft(GraphDraft &draft, bool safeFp = false);
 
+/// Bypass a non-anchor forwarding gate by putting its waits on mandatory consumers.
+/// Conditional value consumers and costly shared barriers stay gates; edgeBudget bounds growth.
+bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget);
+
 /// URI of an OPER node, or an empty view for other nodes. For messages: passes recognise an
 /// operator by operIdOf.
 std::string_view operUriOf(const GraphDraft &draft, gc_node_ref_t id);

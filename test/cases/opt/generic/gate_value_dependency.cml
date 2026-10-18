@@ -1,4 +1,4 @@
-/** A gate waiting only for the value it forwards adds no ordering. Other waits must remain. */
+/** Forward values directly; transfer other waits to consumers and preserve effect order. */
 module gate_value_dependency
 
 import { seed, rand } from random
