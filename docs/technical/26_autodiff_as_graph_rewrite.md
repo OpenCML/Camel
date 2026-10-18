@@ -77,6 +77,22 @@ result (a new function value) is materialized as static data by `std::macro`.
 The synthesized graph joins the reachable graph closure at commit time, so every
 later pass sees it like user code.
 
+To inspect the generated gradient before and after optimization, use
+`test/cases/modules/autodiff/collapse_runtime.cml`, whose `main(x: float)` leaves
+the evaluation point open. Dump with `std::macro std::gir`, then with
+`std::macro std::opt std::gir`, **without `--arg`**: the former exposes `grad(h)`
+and the pullback subgraphs, while the latter retains runtime arithmetic over the
+input port. Bind `--arg x=2` when executing (the derivative is 22), or `x=3` (30).
+Binding an argument before optimization may specialize and fold the entry graph.
+The older `collapse.cml` has equal constant branch values and can legitimately
+fold its caller's derivative calculation; it is not an open-input inspection case.
+
+For interactive execution without argument binding, use `collapse_random.cml`.
+Its `rand:rand` input is effectful and remains a runtime operator through both
+macro evaluation and optimization. The fixed runtime seed makes backend results
+repeatable; it does not make random draws compile-time constants. This example
+keeps the derivative arithmetic visible even when all entry arguments are bound.
+
 ### Pass order: `std::macro` and the inlining passes
 
 `grad(f)` transforms f's graph **as compiled**: the pullback builder takes one

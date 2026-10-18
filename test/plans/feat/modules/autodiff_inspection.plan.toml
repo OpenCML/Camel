@@ -1,0 +1,172 @@
+id = "modules.autodiff_inspection"
+order = 327
+tier = "feat"
+tags = ["feat","modules","autodiff","opt","entry_args"]
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 8000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "autodiff.open_input.macro"
+case = "../../../cases/modules/autodiff/collapse_runtime.cml"
+args = ["${case}","std::macro","std::jgir"]
+verify_script = '''
+({ input, assert }) => {
+ const doc = JSON.parse(input.normalized.stdout)
+ const main = doc.graphs.find(g => g.name === 'main')
+ for (const name of ['main', '__root__']) assert(doc.graphs.find(g => g.name === name).normalPorts.length === 1, 'open input lost')
+ assert(doc.graphs.some(g => g.name === 'grad(h)') && doc.graphs.some(g => g.name === 'sq.pb'), 'gradient graph missing')
+ assert(main.nodes.some(n => n.kind === 'CALL'), 'macro invocation missing')
+}
+'''
+
+[[tests]]
+name = "autodiff.open_input.opt"
+case = "../../../cases/modules/autodiff/collapse_runtime.cml"
+args = ["${case}","std::macro","std::opt","std::jgir"]
+verify_script = '''
+({ input, assert }) => {
+ const doc = JSON.parse(input.normalized.stdout)
+ const main = doc.graphs.find(g => g.name === 'main')
+ for (const name of ['main', '__root__']) assert(doc.graphs.find(g => g.name === name).normalPorts.length === 1, 'open input lost')
+ assert(main.nodes.some(n => n.label === ':op/mul_d') && main.nodes.some(n => n.label === ':op/add_d'), 'runtime gradient folded')
+ assert(!main.nodes.some(n => ['CALL', 'FUNC', 'FILL', 'ACCS'].includes(n.kind)), 'abstraction remained')
+ const ctrl = main.edges.filter(e => e.kind === 'control')
+ assert(ctrl.length === 1 && ctrl[0].target === main.exit, 'unnecessary controls')
+ assert(main.nodes.find(n => n.id === ctrl[0].source).label === ':io/println', 'print ordering lost')
+}
+'''
+
+[[tests]]
+name = "autodiff.open_input.macro.x2"
+case = "../../../cases/modules/autodiff/collapse_runtime.cml"
+args = ["${case}","--arg","x=2","std::macro","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'collapse_runtime dh=22.0', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "autodiff.open_input.macro.x3"
+case = "../../../cases/modules/autodiff/collapse_runtime.cml"
+args = ["${case}","--arg","x=3","std::macro","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'collapse_runtime dh=30.0', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "autodiff.open_input.macro.x-1"
+case = "../../../cases/modules/autodiff/collapse_runtime.cml"
+args = ["${case}","--arg","x=-1","std::macro","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'collapse_runtime dh=-2.0', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "autodiff.open_input.opt.x2"
+case = "../../../cases/modules/autodiff/collapse_runtime.cml"
+args = ["${case}","--arg","x=2","std::macro","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'collapse_runtime dh=22.0', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "autodiff.open_input.opt.x3"
+case = "../../../cases/modules/autodiff/collapse_runtime.cml"
+args = ["${case}","--arg","x=3","std::macro","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'collapse_runtime dh=30.0', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "autodiff.open_input.opt.x-1"
+case = "../../../cases/modules/autodiff/collapse_runtime.cml"
+args = ["${case}","--arg","x=-1","std::macro","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === 'collapse_runtime dh=-2.0', input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "autodiff.random_input.macro.graph"
+case = "../../../cases/modules/autodiff/collapse_random.cml"
+args = ["${case}","std::macro","std::jgir"]
+verify_script = '''
+({ input, assert }) => {
+ const doc = JSON.parse(input.normalized.stdout)
+ const g = doc.graphs.find(g => g.name === 'main')
+ for(const label of ['rand:rand', 'rand:seed']) assert(g.nodes.filter(n => n.label === label).length === 1, label + ' executed early or duplicated')
+ assert(doc.graphs.some(g => g.name === 'grad(h)'), 'gradient graph missing')
+}
+'''
+
+[[tests]]
+name = "autodiff.random_input.macro.results"
+case = "../../../cases/modules/autodiff/collapse_random.cml"
+args = ["${case}","std::macro","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert, match, approx }) => {
+ const m = match(/^collapse_random x=(\S+) dh=(\S+)$/, input.normalized.stdout.trim())
+ const x = Number(m[1]), dy = Number(m[2])
+ assert(x >= 0 && x < 1, 'random input outside range')
+ assert(approx(dy, (x + x) + (3 * (x + 1) + 3 * (x + 1)), 1e-13), 'wrong derivative')
+ assert(x === 0.755155532954539, 'seed/draw order changed')
+}
+'''
+
+[[tests]]
+name = "autodiff.random_input.opt.graph"
+case = "../../../cases/modules/autodiff/collapse_random.cml"
+args = ["${case}","std::macro","std::opt","std::jgir"]
+verify_script = '''
+({ input, assert }) => {
+ const doc = JSON.parse(input.normalized.stdout)
+ const g = doc.graphs.find(g => g.name === 'main')
+ for(const label of ['rand:rand', 'rand:seed']) assert(g.nodes.filter(n => n.label === label).length === 1, label + ' executed early or duplicated')
+ assert(g.nodes.some(n => n.label === ':op/mul_d') && g.nodes.some(n => n.label === ':str/format'), 'random gradient folded')
+ assert(!g.nodes.some(n => ['CALL', 'FUNC', 'FILL', 'ACCS'].includes(n.kind)), 'calls remained')
+}
+'''
+
+[[tests]]
+name = "autodiff.random_input.opt.results"
+case = "../../../cases/modules/autodiff/collapse_random.cml"
+args = ["${case}","std::macro","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert, match, approx }) => {
+ const m = match(/^collapse_random x=(\S+) dh=(\S+)$/, input.normalized.stdout.trim())
+ const x = Number(m[1]), dy = Number(m[2])
+ assert(x >= 0 && x < 1, 'random input outside range')
+ assert(approx(dy, (x + x) + (3 * (x + 1) + 3 * (x + 1)), 1e-13), 'wrong derivative')
+ assert(x === 0.755155532954539, 'seed/draw order changed')
+}
+'''
