@@ -41,7 +41,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 PIPELINES = {
     'plain': [],
-    'inline': ['std::inline'],
+    'inline': ['std::opt::inline'],
     'opt': ['std::opt'],
 }
 DEFAULT_CORPORA = [

@@ -7,7 +7,7 @@ desc = "The core standard library (str, math, statistics, array): values on the 
 # Every case prints what the library functions return, including the boundaries (empty string
 # or array, non-ASCII text, invalid UTF-8, NaN, the largest and smallest integers). Each runs
 # on std::nvm, std::fvm, std::jit and std::prl; the four agree and the output is the golden
-# file's. The same golden file is then required of std::inline std::opt and std::macro
+# file's. The same golden file is then required of std::opt::inline std::opt and std::macro
 # std::opt: every operator used here is declared pure, so these pipelines fold, merge and
 # drop calls.
 
@@ -31,11 +31,11 @@ golden = "golden/stdlib/str_bytes.txt"
 
 [[tests]]
 name = "stdlib.str_bytes.inline_opt"
-desc = "The same through std::inline std::opt."
+desc = "The same through std::opt::inline std::opt."
 case = "../../../cases/modules/stdlib/str_bytes.cml"
 golden = "golden/stdlib/str_bytes.txt"
 backends = false
-args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 
 [[tests]]
 name = "stdlib.str_bytes.macro_opt"
@@ -53,11 +53,11 @@ golden = "golden/stdlib/str_chars.txt"
 
 [[tests]]
 name = "stdlib.str_chars.inline_opt"
-desc = "The same through std::inline std::opt."
+desc = "The same through std::opt::inline std::opt."
 case = "../../../cases/modules/stdlib/str_chars.cml"
 golden = "golden/stdlib/str_chars.txt"
 backends = false
-args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 
 [[tests]]
 name = "stdlib.str_chars.macro_opt"
@@ -75,11 +75,11 @@ golden = "golden/stdlib/math_functions.txt"
 
 [[tests]]
 name = "stdlib.math_functions.inline_opt"
-desc = "The same through std::inline std::opt."
+desc = "The same through std::opt::inline std::opt."
 case = "../../../cases/modules/stdlib/math_functions.cml"
 golden = "golden/stdlib/math_functions.txt"
 backends = false
-args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 
 [[tests]]
 name = "stdlib.math_functions.macro_opt"
@@ -97,11 +97,11 @@ golden = "golden/stdlib/math_numbers.txt"
 
 [[tests]]
 name = "stdlib.math_numbers.inline_opt"
-desc = "The same through std::inline std::opt."
+desc = "The same through std::opt::inline std::opt."
 case = "../../../cases/modules/stdlib/math_numbers.cml"
 golden = "golden/stdlib/math_numbers.txt"
 backends = false
-args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 
 [[tests]]
 name = "stdlib.math_numbers.macro_opt"
@@ -119,11 +119,11 @@ golden = "golden/stdlib/math_bits.txt"
 
 [[tests]]
 name = "stdlib.math_bits.inline_opt"
-desc = "The same through std::inline std::opt."
+desc = "The same through std::opt::inline std::opt."
 case = "../../../cases/modules/stdlib/math_bits.cml"
 golden = "golden/stdlib/math_bits.txt"
 backends = false
-args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 
 [[tests]]
 name = "stdlib.math_bits.macro_opt"
@@ -141,11 +141,11 @@ golden = "golden/stdlib/stats_quantiles.txt"
 
 [[tests]]
 name = "stdlib.stats_quantiles.inline_opt"
-desc = "The same through std::inline std::opt."
+desc = "The same through std::opt::inline std::opt."
 case = "../../../cases/modules/stdlib/stats_quantiles.cml"
 golden = "golden/stdlib/stats_quantiles.txt"
 backends = false
-args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 
 [[tests]]
 name = "stdlib.stats_quantiles.macro_opt"
@@ -163,11 +163,11 @@ golden = "golden/stdlib/array_basic.txt"
 
 [[tests]]
 name = "stdlib.array_basic.inline_opt"
-desc = "The same through std::inline std::opt."
+desc = "The same through std::opt::inline std::opt."
 case = "../../../cases/modules/stdlib/array_basic.cml"
 golden = "golden/stdlib/array_basic.txt"
 backends = false
-args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 
 [[tests]]
 name = "stdlib.array_basic.macro_opt"
@@ -185,11 +185,11 @@ golden = "golden/stdlib/array_hof.txt"
 
 [[tests]]
 name = "stdlib.array_hof.inline_opt"
-desc = "The same through std::inline std::opt."
+desc = "The same through std::opt::inline std::opt."
 case = "../../../cases/modules/stdlib/array_hof.cml"
 golden = "golden/stdlib/array_hof.txt"
 backends = false
-args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 
 [[tests]]
 name = "stdlib.array_hof.macro_opt"
@@ -207,11 +207,11 @@ golden = "golden/stdlib/array_large.txt"
 
 [[tests]]
 name = "stdlib.array_large.inline_opt"
-desc = "The same through std::inline std::opt."
+desc = "The same through std::opt::inline std::opt."
 case = "../../../cases/modules/stdlib/array_large.cml"
 golden = "golden/stdlib/array_large.txt"
 backends = false
-args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 
 [[tests]]
 name = "stdlib.array_large.macro_opt"

@@ -36,28 +36,28 @@ expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n
 
 [[tests]]
 name = "if_without_else.statement.inline"
-desc = "The same program through std::inline, std::fvm."
+desc = "The same program through std::opt::inline, std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/if_without_else/statement.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n"
 
 [[tests]]
 name = "if_without_else.statement.simplify"
-desc = "The same program through std::opt::simplify, std::nvm."
+desc = "The same program through std::opt, std::nvm."
 kind = "behavior"
 case = "../../../cases/consistency/if_without_else/statement.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n"
 
 [[tests]]
 name = "if_without_else.statement.inline_opt"
-desc = "The same program through std::inline, std::opt, std::jit."
+desc = "The same program through std::opt::inline, std::opt, std::jit."
 kind = "behavior"
 case = "../../../cases/consistency/if_without_else/statement.cml"
-args = ["${case}", "std::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n"
 
@@ -66,7 +66,7 @@ name = "if_without_else.graph"
 desc = "On the graph it is a branch with two arms and a join of type void: nothing else is added."
 kind = "snapshot"
 case = "../../../cases/consistency/if_without_else/as_statement_graph.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"

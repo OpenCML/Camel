@@ -69,7 +69,7 @@ camel prog.cml std::jit                 # 带即时编译运行
 camel prog.cml std::prl                 # 并行调度
 camel prog.cml std::opt std::fvm        # 先优化，再运行
 camel prog.cml std::rgir                # 不运行，打印图（Graphviz DOT）
-camel prog.cml std::macro std::opt::simplify onnx::export    # 把 main 转译为 ONNX 模型
+camel prog.cml std::macro std::opt onnx::export    # 把 main 转译为 ONNX 模型
 ```
 
 自动微分（`autodiff` 模块的 `grad`）与 ONNX 导出是建立在同一套遍机制之上的库。[入门教程](tutorial/tutorial.cn.md)会带你看图、换流水线、导出一个小模型、求一次梯度。
@@ -89,6 +89,10 @@ npm run build        # 可执行文件在 out/latest/bin/camel
 ```
 
 把 `out/latest/bin` 加入 `PATH`（并把 `CAMEL_HOME` 设为 `out/latest`）。同一棵源码树还可以打出名为 `camel-lang` 的 Python wheel，见 [pypi-packaging.md](pypi-packaging.md)。
+
+### VS Code
+
+推荐安装 [OpenCML-Ext 插件](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension)，在 VS Code 中使用语法高亮、语言服务、交互式 GIR 浏览和调试。将 `opencmlLanguageServer.camelPath` 设为构建得到的 `camel` 可执行文件路径，插件会在同一目录查找 `camel-ls` 和 `camel-db`。较新的运行时还支持逐遍调试、查看暂停时的 GIR 和内存。配置方法见[插件 README](https://github.com/OpenCML/OpenCML-Ext#readme)，运行时能力见[调试指南](debugging.cn.md)。
 
 ### Hello, Camel
 

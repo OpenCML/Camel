@@ -1,0 +1,23 @@
+// Scalar sqrt pullbacks, including a non-trainable integer input and a tensor coefficient.
+module math_sqrt
+import { sqrt } from math
+import { grad, value_and_grad } from autodiff
+import { Tensor, reshape, sum } from tensor
+
+func root(x: float): float { return sqrt(x) }
+func root32(x: f32): f32 { return sqrt(x) }
+func repeated(x: float): float { return sqrt(x) * sqrt(x) }
+func integer_root(n: int, x: float): float { return sqrt(n) * x }
+with <w: Tensor>
+func weighted(x: Tensor, variance: float): float { return sum(w * x * sqrt(variance)) }
+
+func main(): int sync {
+    println('sqrt64={}'->format<value_and_grad(root)(4.0)>)
+    println('sqrt32={}'->format<value_and_grad(root32)(f32(4.0))>)
+    println('repeated={}'->format<grad(repeated)(9.0)>)
+    println('integer={}'->format<grad(integer_root)(4, 3.0)>)
+    let w = reshape([1.0, 2.0], [2])
+    let x = reshape([3.0, 4.0], [2])
+    println('weighted={}'->format<value_and_grad(weighted)<w>(x, 4.0)>)
+    return 0
+}

@@ -39,11 +39,11 @@ check() { # stack_kib limit n case pipeline...
 for stack in default 8192 1024 256; do
     for limit in 100000 1000000; do
         for n in 50000 900000; do
-            for pipeline in "std::nvm" "std::fvm" "std::jit" "std::prl" "std::inline std::jit" "std::opt std::jit" "std::inline std::prl"; do
+            for pipeline in "std::nvm" "std::fvm" "std::jit" "std::prl" "std::opt::inline std::jit" "std::opt std::jit" "std::opt::inline std::prl"; do
                 # shellcheck disable=SC2086
                 check "$stack" "$limit" "$n" depth_direct.cml $pipeline
             done
-            for pipeline in "std::jit" "std::inline std::jit" "std::prl"; do
+            for pipeline in "std::jit" "std::opt::inline std::jit" "std::prl"; do
                 # shellcheck disable=SC2086
                 check "$stack" "$limit" "$n" depth_isolated.cml $pipeline
                 # shellcheck disable=SC2086

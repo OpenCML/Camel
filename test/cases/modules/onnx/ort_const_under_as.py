@@ -5,7 +5,7 @@ ort_const_under_as.cml exports three models from an example that is a tensor of 
 converted with `as`: `affine` (weights converted to shaped types are constants of the model),
 `checked` (conversions of computed values that the example's shape proves) and `step`
 (value_and_grad through conversions). The program is run twice, by the operator (default run) and
-by the pass (std::macro std::opt::simplify onnx::export); every model must pass onnx.checker's
+by the pass (std::macro std::opt onnx::export); every model must pass onnx.checker's
 full check, hold no Cast node (a conversion of a tensor to a tensor type is not an ONNX Cast)
 and match NumPy on ONNX Runtime for several inputs within 1e-6 relative to the largest element.
 
@@ -81,7 +81,7 @@ def check(path: Path, model: str, label: str) -> bool:
 
 def main() -> int:
     ok = True
-    for label, passes in [("operator", []), ("pass", ["std::macro", "std::opt::simplify", "onnx::export"])]:
+    for label, passes in [("operator", []), ("pass", ["std::macro", "std::opt", "onnx::export"])]:
         with tempfile.TemporaryDirectory() as tmp:
             env = dict(os.environ, CAMEL_HOME=str(HOME))
             env.pop("CAMEL_ONNX_OUT", None)

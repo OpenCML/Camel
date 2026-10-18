@@ -1,7 +1,7 @@
 /**
- * progen finding F04 (effect order lost). `std::inline` drops a `println` statement of `main`'s
+ * progen finding F04 (effect order lost). `std::opt::inline` drops a `println` statement of `main`'s
  *   sync body that is followed by a branch whose test calls a function.
- * Pipeline: std::inline std::nvm
+ * Pipeline: std::opt::inline std::nvm
  * Expected output: pq
  * Actual: (nothing)
  * Reduced by test/tools/progen from seed 85 (generator version 1, all features).

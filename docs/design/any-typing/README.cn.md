@@ -34,7 +34,7 @@
 - **默认回收器、不加任何开关就能崩溃**：`examples/t20_default_collector.cml`（22 行，不用 `json`）在 `n=1500000` 时三次运行三次段错误，把 `any` 换成 `string` 的对照程序三次都对。【实测，2.9】
 - `--gc generational` 下 5 个把引用放在 `any` 里的程序（帧槽、数组元素、元组/结构体字段、经过用户函数、`std::macro` 算出的常量）在测过的后端上（`nvm`、`fvm`，其中三个加测 `jit`、`prl`）或崩溃、或**打印错值而退出码为 0**（`200000 157292`、`300 item-299 item-299 item-299`）。【实测，2.9】
 - `docs/technical/36_gc_handle_rules.md` 第 9 节说"立刻转换（`decode(s) as T`）在 `std::nvm`、`std::fvm` 上安全"。**这不成立**：`CAST` 是纯节点，没有控制边，后端把它排在用它的地方而不是 `decode` 之后。`examples/t21_cast_at_once.cml` 在四个后端上都出错。【实测，2.9；附录 B 的 D4】
-- `any` 的静态性质会被遍抹掉：同一个程序不加遍打印 `<any>`，加 `std::inline` 打印 `42`。【实测 `examples/t18_inline_changes_print.cml`】这正说明它"只是一种写法"：值本来就有类型，是签名把它遮住了。
+- `any` 的静态性质会被遍抹掉：同一个程序不加遍打印 `<any>`，加 `std::opt::inline` 打印 `42`。【实测 `examples/t18_inline_changes_print.cml`】这正说明它"只是一种写法"：值本来就有类型，是签名把它遮住了。
 - `std::cpp` 直接拒绝任何带 `any` 的图。【实测，2.8】
 
 **方案的要点。**
@@ -247,14 +247,14 @@ let ys = decode('[[1], [2]]') as int[]     // 元素是两个数组的地址
   func wrap(x: int): any { return x }
   func main(): int sync {
       let n = 40 + 2
-      println(wrap(n))     // 不加遍：<any>     std::inline 之后：42
+      println(wrap(n))     // 不加遍：<any>     std::opt::inline 之后：42
       println(n as any)    // 两种情况都是 <any>（这里有一个 CAST 节点）
       return 0
   }
   ```
 
-  【实测 `camel …/t18_inline_changes_print.cml` 与 `camel …/t18_inline_changes_print.cml std::inline std::fvm`】内联之后 `println` 的实参节点是 `n` 本身，类型是 `int`。`benchmarks/pipeline/exclusions.json` 为此排除了两个程序。按设计原则 2.10，遍前后行为不同不算缺陷；但它直接说明 `any` 遮住的类型编译器本来就知道。
-- **内联也改变 GC 问题是否暴露。** `examples/t11_gc_user_func.cml` 加 `std::inline` 后（`std::fvm`）前四种设置都对（`any` 形参没了），只剩毒化模式报出；`examples/t07_gc_frame.cml` 加 `std::inline` 后五种设置全对。【实测，附录 A 的矩阵命令加 `PASSES=std::inline`】这不是修复，是时序变了。
+  【实测 `camel …/t18_inline_changes_print.cml` 与 `camel …/t18_inline_changes_print.cml std::opt::inline std::fvm`】内联之后 `println` 的实参节点是 `n` 本身，类型是 `int`。`benchmarks/pipeline/exclusions.json` 为此排除了两个程序。按设计原则 2.10，遍前后行为不同不算缺陷；但它直接说明 `any` 遮住的类型编译器本来就知道。
+- **内联也改变 GC 问题是否暴露。** `examples/t11_gc_user_func.cml` 加 `std::opt::inline` 后（`std::fvm`）前四种设置都对（`any` 形参没了），只剩毒化模式报出；`examples/t07_gc_frame.cml` 加 `std::opt::inline` 后五种设置全对。【实测，附录 A 的矩阵命令加 `PASSES=std::opt::inline`】这不是修复，是时序变了。
 - **`std::macro` 把 `any` 值变成常量。** `macro func table(): any { return decode('[…]') }` 经 `std::macro` 求值后，结果成为 `main` 静态区里一个类型为 `any` 的常量；静态区的追踪同样跳过它（2.5）。`examples/t16_macro_const.cml` 加 `std::macro` 后在强制回收下打印 `300 299`、`300 0`（退出码 0）或崩溃。【实测】
 
 ### 2.8 `std::cpp`
@@ -657,7 +657,7 @@ camel inspect --gir docs/design/any-typing/examples/t01_declare.cml
 
 # 2.7：内联前后
 camel docs/design/any-typing/examples/t18_inline_changes_print.cml
-camel docs/design/any-typing/examples/t18_inline_changes_print.cml std::inline std::fvm
+camel docs/design/any-typing/examples/t18_inline_changes_print.cml std::opt::inline std::fvm
 
 # 2.8：std::cpp
 camel docs/design/any-typing/examples/t01_declare.cml std::cpp
@@ -671,7 +671,7 @@ bash docs/design/any-typing/tools/gc_matrix.sh $E/t07_gc_frame.cml $E/t09_gc_arr
 BACKENDS="std::jit std::prl" bash docs/design/any-typing/tools/gc_matrix.sh \
      $E/t07_gc_frame.cml $E/t09_gc_array_elem.cml $E/t11_gc_user_func.cml $E/t21_cast_at_once.cml
 PASSES=std::macro bash docs/design/any-typing/tools/gc_matrix.sh $E/t16_macro_const.cml
-PASSES=std::inline BACKENDS=std::fvm bash docs/design/any-typing/tools/gc_matrix.sh \
+PASSES=std::opt::inline BACKENDS=std::fvm bash docs/design/any-typing/tools/gc_matrix.sh \
      $E/t11_gc_user_func.cml $E/t07_gc_frame.cml
 
 # 2.9：默认回收器、不加开关

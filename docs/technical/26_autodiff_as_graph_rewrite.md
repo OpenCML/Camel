@@ -4,7 +4,7 @@
 >
 > In its terms (section 4): automatic differentiation is a **library built on the pass mechanism, not part of the language core**. Its precondition is that `std::macro` runs before `grad` / `value_and_grad` / `vjp` are used: a graph on which macros have not been executed lacks the information differentiation needs. When the precondition is not met the library must give a clear diagnostic. Pass order is otherwise unrestricted by the language and may change results.
 >
-> **Implementation status**: an unmet precondition can still surface as a run-time error instead of a clear located diagnostic (e.g. "branch arms must be subgraph calls" after `std::opt::simplify` on the GRU benchmark; tracking item N3 / D21).
+> **Implementation status**: an unmet precondition can still surface as a run-time error instead of a clear located diagnostic (e.g. "branch arms must be subgraph calls" after `std::opt` on the GRU benchmark; tracking item N3 / D21).
 
 Status: implemented through phase 5 and phase 7 (§8); phase 6 (thin ONNX) is
 partly done: `onnx::export` exists as a module-contributed translation pass,
@@ -34,7 +34,7 @@ Deviations from the proposal below:
   (shape arithmetic, integer comparisons) need no rule.
 - `grad` is not restricted by the core; rules and engines are package
   contributions, and `@vjp` is a decorator evaluated by `std::macro`.
-- Generic simplification (`std::opt::simplify`) collapses pullback closures
+- Generic simplification (`std::opt`) collapses pullback closures
   into straight-line code, and FastVM/JIT compile graphs created at run time
   (a gradient built while the program runs) on first call, so training steps
   run under every execution pass.
@@ -66,7 +66,7 @@ Deviations from the proposal below:
 ```text
 source ── compile ──> GIR
   ── std::macro ──────────── grad(f) runs here: f's graph -> derivative graph
-  ── std::devirtualize / std::specialize / std::inline
+  ── std::opt::devirtualize / std::opt::specialize / std::opt::inline
   ── std::opt::fold / cse / dce, tensor::fuse, ...
   ── execution pass (std::nvm, std::fvm)      -> runs the program
      or translation pass (onnx::export, ...)   -> emits a format
@@ -76,6 +76,41 @@ source ── compile ──> GIR
 result (a new function value) is materialized as static data by `std::macro`.
 The synthesized graph joins the reachable graph closure at commit time, so every
 later pass sees it like user code.
+
+To inspect the generated gradient before and after optimization, use
+`test/cases/modules/autodiff/collapse_runtime.cml`, whose `main(x: float)` leaves
+the evaluation point open. Dump with `std::macro std::gir`, then with
+`std::macro std::opt std::gir`, **without `--arg`**: the former exposes `grad(h)`
+and the pullback subgraphs, while the latter retains runtime arithmetic over the
+input port. Bind `--arg x=2` when executing (the derivative is 22), or `x=3` (30).
+Binding an argument before optimization may specialize and fold the entry graph.
+The older `collapse.cml` has equal constant branch values and can legitimately
+fold its caller's derivative calculation; it is not an open-input inspection case.
+
+For interactive execution without argument binding, use `collapse_random.cml`.
+Its `rand:rand` input is effectful and remains a runtime operator through both
+macro evaluation and optimization. The fixed runtime seed makes backend results
+repeatable; it does not make random draws compile-time constants. This example
+keeps the derivative arithmetic visible even when all entry arguments are bound.
+
+`std::opt::algebra` is a general scalar arithmetic pass, included after CSE in each
+`std::opt` round; it has no knowledge of autodiff. In `collapse_random.cml` it turns
+the shared `t = (x + 1) * 3; t + t` into `(x + 1) * 6` and the analogous unit-seed
+path into `x * 2`, reducing main's derivative arithmetic from six nodes to four.
+Default algebra permits local reassociation, so bitwise equality with the original
+program is not promised. Use `'std::opt(safe_fp=true)'` or the standalone
+`'std::opt::algebra(safe_fp=true)'` to restrict this stage to exact float rewrites;
+the coefficient doubling above is exact and remains enabled in safe mode.
+
+Matching inspects only adjacent scalar add/multiply nodes and direct constants;
+it neither expands shared expression trees nor crosses GATEs. A product with
+other consumers is retained. A deduplicated work queue has at most four times
+the original node count in visits. Eliminated products transfer their immediate
+CTRL predecessors, while consumer identities, origins and numeric permissions
+remain intact, including branch-arm/output anchors. Integer coefficients use
+unsigned arithmetic at their declared width to preserve wrapping.
+Written slots are classified once through GATE alias groups, rather than walking
+the same shared value paths separately for every arithmetic pattern.
 
 ### Pass order: `std::macro` and the inlining passes
 
@@ -89,7 +124,7 @@ into its own arm.
   derivative like user code.
 - **Without `std::macro`, or with it after an inlining pass**, `grad` runs with
   the program on the graphs the passes left. The inlining engine
-  (`std::inline`, `std::opt`, `std::opt::simplify`; `MacroOperandGraphs` in
+  (`std::opt::inline`, `std::opt`, `std::opt`; `MacroOperandGraphs` in
   `src/passes/opt/inline/engine.cpp`) therefore inlines nothing into the
   graphs an unexpanded macro operator can still reach: its function operand
   and what that calls or holds as a function constant. Calls of those
@@ -218,7 +253,7 @@ How (`modules/autodiff/pullback.cpp`):
   captured value) and a call that returns one. "Evident" means that the graph
   itself says which function the value is: a constant function, or a
   `FILL FunctionClosure` over one. Afterwards the call of the value is a call
-  of a closure built in the graph. Inlining is `std::inline`'s own
+  of a closure built in the graph. Inlining is `std::opt::inline`'s own
   (`camel::passes::opt::inlineCallInOrder`), so the order and the effects of the
   inlined code are kept by the same code as in the pass; a callee value behind
   the gates an inlined call puts on its arguments is seen through.
@@ -350,8 +385,8 @@ unrolling, branch selection, shape facts). These move to general passes:
 - **Shape specialization:** bind the example input types (`Tensor<float32,
   [64, 784]>`, or with a dynamic batch dimension) to the function's ports and
   re-run operator inference, so shapes live in node types.
-- **Static simplification:** `std::devirtualize` / `std::specialize` /
-  `std::inline` / `std::opt::fold` / branch pruning / `dce` until a fixpoint.
+- **Static simplification:** `std::opt::devirtualize` / `std::opt::specialize` /
+  `std::opt::inline` / `std::opt::fold` / branch pruning / `dce` until a fixpoint.
 - **`onnx::export` (a module-contributed translation pass):** lowers the
   resulting graph node by node, `BRCH`/`JOIN` to `If`, reading shapes and
   dtypes from node types. It reports anything left over (calls, unsupported
@@ -364,7 +399,7 @@ on `fn`.
 
 What exists (`modules/onnx/passes/export.cpp`, `docs/cli.md`):
 
-    CAMEL_ONNX_OUT=model.onnx camel m.cml std::macro std::opt::simplify onnx::export
+    CAMEL_ONNX_OUT=model.onnx camel m.cml std::macro std::opt onnx::export
 
 - `onnx::export` is registered by the `onnx` module and is the last pass of the
   pipeline; it consumes the graph, so the program does not run. The export
@@ -394,7 +429,7 @@ What differs from the design above:
   a constant condition, where folding left them (inside branch arms).
 - **Both export entries run the same export simplification** on the bound
   function (`exportRewriteConfig`, `modules/onnx/exporter.cpp`), with settings
-  `std::opt::simplify` does not have: inlining regardless of size, up to 4096
+  `std::opt` does not have: inlining regardless of size, up to 4096
   rounds (deeper static recursion), and the branched-call split that turns the
   pullback of a data-dependent branch into per-arm calls
   (`enableBranchedCallSplit`, valid only for a consumer that builds no

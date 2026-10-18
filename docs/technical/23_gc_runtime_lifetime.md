@@ -68,7 +68,7 @@ The permanent space never releases, so **a question must not allocate in it**. R
 operator overload builds a new function type every time; the rewrites ask "is this argument
 passed to a var parameter" for every user of every value and again after every inlined call,
 and re-infer the result type of every operator node at every commit. One program of 120 lines
-left 1.4 million function types (more than 256 MB) behind under `std::specialize std::opt`.
+left 1.4 million function types (more than 256 MB) behind under `std::opt::specialize std::opt`.
 Two rules follow, and code on a query or probe path has to keep them:
 
 - Overload questions that do not depend on constant argument values go through

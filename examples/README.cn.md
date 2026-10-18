@@ -80,7 +80,7 @@ camel examples/text/word_frequency.cml
 | 文件 | 展示的内容 | 运行命令 |
 |------|------|------|
 | [`train_linear.cml`](ml/train_linear.cml) | 最小的训练循环：`autodiff.grad` 求梯度，`nn.sgd` 更新参数 | `camel examples/ml/train_linear.cml` |
-| [`export_onnx.cml`](ml/export_onnx.cml) | 用 `onnx.export_model` 把一个两层小模型导出为 ONNX 文件 | `camel examples/ml/export_onnx.cml`<br>`camel examples/ml/export_onnx.cml std::macro std::opt::simplify onnx::export` |
+| [`export_onnx.cml`](ml/export_onnx.cml) | 用 `onnx.export_model` 把一个两层小模型导出为 ONNX 文件 | `camel examples/ml/export_onnx.cml`<br>`camel examples/ml/export_onnx.cml std::macro std::opt onnx::export` |
 
 `files/` 和 `ml/` 下的程序以及 `text/log_filter.cml` 把文件写到 `tmp/examples/`（相对于执行命令时所在的目录）；目录由程序自己创建，不受 git 跟踪。
 

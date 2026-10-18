@@ -378,7 +378,7 @@ class Adapter {
             }
             if (e.contains("allocation"))
                 body["description"] =
-                    "Before allocation in " + e["allocation"].value("space", std::string());
+                    "After allocation in " + e["allocation"].value("space", std::string());
             // The graph-node view of the stop, for clients that know Camel.
             json camel{{"reason", reason}, {"threadId", kThreadId}};
             if (e.contains("allocation"))

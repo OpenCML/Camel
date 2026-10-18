@@ -1,0 +1,113 @@
+id = "opt.unread_gate"
+order = 325
+tier = "feat"
+tags = ["feat", "opt", "control", "dce"]
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 10000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "unread_gate.before"
+case = "../../../cases/opt/generic/unread_gate.cml"
+args = ["${case}","std::inline","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ assert(g.nodes.filter(n=>n.kind==='GATE').length===4,'regression setup changed');
+}
+'''
+
+[[tests]]
+name = "unread_gate.graph.inline_dce"
+case = "../../../cases/opt/generic/unread_gate.cml"
+args = ["${case}","std::inline","std::opt::dce","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ const gates=g.nodes.filter(n=>n.kind==='GATE');
+ assert(gates.length===1&&gates[0].id===g.exit,'unread/data-covered gates survived or return anchor removed');
+ assert(g.nodes.filter(n=>n.label===':io/println').length===8,'effect lost');
+}
+'''
+
+[[tests]]
+name = "unread_gate.graph.inline_dce_twice"
+case = "../../../cases/opt/generic/unread_gate.cml"
+args = ["${case}","std::inline","std::opt::dce","std::opt::dce","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ const gates=g.nodes.filter(n=>n.kind==='GATE');
+ assert(gates.length===1&&gates[0].id===g.exit,'unread/data-covered gates survived or return anchor removed');
+ assert(g.nodes.filter(n=>n.label===':io/println').length===8,'effect lost');
+}
+'''
+
+[[tests]]
+name = "unread_gate.graph.opt"
+case = "../../../cases/opt/generic/unread_gate.cml"
+args = ["${case}","std::opt","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ const gates=g.nodes.filter(n=>n.kind==='GATE');
+ assert(gates.length===1&&gates[0].id===g.exit,'unread/data-covered gates survived or return anchor removed');
+ assert(g.nodes.filter(n=>n.label===':io/println').length===8,'effect lost');
+}
+'''
+
+[[tests]]
+name = "unread_gate.graph.opt_dce"
+case = "../../../cases/opt/generic/unread_gate.cml"
+args = ["${case}","std::opt","std::opt::dce","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ const gates=g.nodes.filter(n=>n.kind==='GATE');
+ assert(gates.length===1&&gates[0].id===g.exit,'unread/data-covered gates survived or return anchor removed');
+ assert(g.nodes.filter(n=>n.label===':io/println').length===8,'effect lost');
+}
+'''
+
+[[tests]]
+name = "unread_gate.results.reference"
+case = "../../../cases/opt/generic/unread_gate.cml"
+args = ["${case}","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="1\n2\n3\n4\n5\n3\n4\n4",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "unread_gate.results.inline"
+case = "../../../cases/opt/generic/unread_gate.cml"
+args = ["${case}","std::inline","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="1\n2\n3\n4\n5\n3\n4\n4",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "unread_gate.results.inline_dce"
+case = "../../../cases/opt/generic/unread_gate.cml"
+args = ["${case}","std::inline","std::opt::dce","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="1\n2\n3\n4\n5\n3\n4\n4",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "unread_gate.results.opt"
+case = "../../../cases/opt/generic/unread_gate.cml"
+args = ["${case}","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="1\n2\n3\n4\n5\n3\n4\n4",input.normalized.stdout)
+'''

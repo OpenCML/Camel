@@ -1,5 +1,5 @@
 /**
- * One program for the optimisation pipelines (std::inline, std::opt, std::opt::simplify, ...):
+ * One program for the optimisation pipelines (std::opt::inline, std::opt, std::opt, ...):
  * small functions that an inliner would copy into their callers, constant arguments a
  * specialiser would propagate, a constant division by zero inside the callee, two identical
  * `attempt` calls, and one whose result is not used. The boundary must stay where it is: the

@@ -66,9 +66,9 @@ json DebugCore::memoryCommand(const std::string &name, const json &args) {
                 allocationSpaces_  = std::move(spaces);
             }
             if (args["enabled"].get<bool>())
-                camel::DebugBreakpoint::EnableType("alloc_before");
+                camel::DebugBreakpoint::EnableType("alloc_boundary");
             else
-                camel::DebugBreakpoint::DisableType("alloc_before");
+                camel::DebugBreakpoint::DisableType("alloc_boundary");
         }
         std::lock_guard<std::mutex> lock(mutex_);
         return {
@@ -127,14 +127,13 @@ bool DebugCore::allocationEvent(size_t size, const char *space, const void *ptr)
         std::lock_guard<std::mutex> lock(mutex_);
         if (!allocationEnabled_)
             return false; // legacy REPL type hook still owns its events
-        if (ptr || state_ != State::Running || std::this_thread::get_id() != programThread_ ||
+        if (!ptr || state_ != State::Running || std::this_thread::get_id() != programThread_ ||
             (!allocationSpaces_.empty() && !allocationSpaces_.contains(space ? space : "")))
             return true;
     }
     // An allocation inside index maintenance must not stop while the index lock is held.
-    if (!indexMutex_.try_lock())
+    if (indexMutex_.busy())
         return true;
-    indexMutex_.unlock();
     static thread_local bool inside = false;
     if (inside)
         return true;
@@ -145,7 +144,7 @@ bool DebugCore::allocationEvent(size_t size, const char *space, const void *ptr)
     } clear{inside};
     stop(
         "pause",
-        {{"allocation", {{"phase", "before"}, {"space", space ? space : ""}, {"size", size}}}});
+        {{"allocation", {{"phase", "after"}, {"space", space ? space : ""}, {"size", size}}}});
     return true;
 }
 } // namespace debugger::core

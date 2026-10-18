@@ -57,7 +57,7 @@ for g in json.loads(duplicate.stdout)["graphs"]:
             inputs = [e for e in g["edges"] if e["target"] == n["id"] and e["kind"] == "normal"]
             assert len(inputs) == 2 and inputs[0]["source"] == inputs[1]["source"]
             assert {e["targetIndex"] for e in inputs} == {0, 1}
-            assert {e["sourceIndex"] for e in inputs} == {0, 1}
+            assert {e["sourceIndex"] for e in inputs} == {0}
             found_duplicate = True
 assert found_duplicate
 for retired in ("dot", "rdot", "graphviz", "readable_graphviz", "annotated_graphviz", "readable_annotated_graphviz"):

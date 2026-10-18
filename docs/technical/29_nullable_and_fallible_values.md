@@ -279,8 +279,8 @@ Nothing in a pass, a backend or an exporter mentions the two forms. What they me
 
 Verified (`test/plans/feat/compile/tagged.plan.toml`): one program over both forms gives the
 same output on `std::nvm`, `std::fvm`, `std::jit`, `std::prl` and through `std::opt`,
-`std::inline`, `std::opt::simplify`, `std::opt::fold`, `std::opt::cse std::opt::dce`,
-`std::macro std::opt` and `std::inline std::opt`. No pass, backend or exporter was changed.
+`std::opt::inline`, `std::opt`, `std::opt::fold`, `std::opt::cse std::opt::dce`,
+`std::macro std::opt` and `std::opt::inline std::opt`. No pass, backend or exporter was changed.
 
 Not verified: `std::cpp`, `onnx::export` and autodiff over a graph that holds these nodes
 (they are expected to refuse it the way they refuse tuples and unknown operators), and a
@@ -313,7 +313,7 @@ affected, with or without the tagged forms:
 func f(x: float): float { return x + 0.5 }
 func main(): int sync {
     let i = 7
-    println(f(i as float))     // 7.5; under std::opt::simplify or std::opt: 0.5
+    println(f(i as float))     // 7.5; under std::opt or std::opt: 0.5
     return 0
 }
 ```
@@ -323,13 +323,13 @@ With a tagged form the unconverted constant is then read as a box, and the progr
 ```camel
 func main(): int sync {
     let c: int? = 7
-    println(c ?? 1)            // 7; under std::opt::simplify or std::opt: segmentation fault
+    println(c ?? 1)            // 7; under std::opt or std::opt: segmentation fault
     return 0
 }
 ```
 
 `nullable.cml` of the test plan contains this shape, so it is run on the four backends and
-through `std::inline`, not through `std::opt`.
+through `std::opt::inline`, not through `std::opt`.
 
 ## 10. Questions for the language author
 

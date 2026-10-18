@@ -17,7 +17,7 @@
 - 它也不是新的 pass 分类
 - 它是一个 **基于运行时执行语义的图重写遍**
 
-换句话说，`std::macro` 与 `std::inline` 一样属于 rewrite pass；与 `NodeVM` 的关系则是：
+换句话说，`std::macro` 与 `std::opt::inline` 一样属于 rewrite pass；与 `NodeVM` 的关系则是：
 
 - `NodeVM` 消费图并产生运行结果
 - `std::macro` 借用相同的图执行语义，对满足条件的子图做求值，然后把结果重新物化回 GIR
@@ -238,7 +238,7 @@ CAST / COPY / FILL / ACCS / BRCH / JOIN / CALL / FUNC / OPER 这些节点的解�
 
 这意味着：
 
-- `std::macro` 不能直接照搬 `std::inline` 的“先切换到 draft graph，再在 draft graph 上执行”的模式
+- `std::macro` 不能直接照搬 `std::opt::inline` 的“先切换到 draft graph，再在 draft graph 上执行”的模式
 - 在共享执行内核或 source/draft node correspondence 补齐之前，`macro` 仍然只能基于 finalized graph 求值
 
 因此后续迁移时必须显式区分：
@@ -257,7 +257,7 @@ CAST / COPY / FILL / ACCS / BRCH / JOIN / CALL / FUNC / OPER 这些节点的解�
 目标：
 
 - 把 `inline` 当前私有的 graph materialization 机制沉到公共层
-- 让 `std::macro` 与 `std::inline` 使用同一套 editable graph tree API
+- 让 `std::macro` 与 `std::opt::inline` 使用同一套 editable graph tree API
 
 验收标准：
 

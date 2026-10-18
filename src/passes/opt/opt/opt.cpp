@@ -13,15 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "opt.h"
 
-#include "../inline/engine.h"
+#include "camel/passes/opt/generic.h"
 
 camel::runtime::GCGraph *
 OptimizeRewritePass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
-    return applyOptimizeRewritePass(context_, graph, os, config_);
+    return simplifyGraph(context_, graph, config_, os);
 }

@@ -2,7 +2,7 @@ id = "tools.debugger"
 order = 910
 tier = "feat"
 tags = ["feat", "tools", "debugger"]
-desc = "camel-db, the debugger. Each test is a script that starts camel-db and talks to it by protocol (test/tools/debugger/client.mjs): the HTTP API of the Web UI, or the Debug Adapter Protocol over stdio."
+desc = "camel-db, the debugger. Each test is a script that starts camel-db and talks to it by protocol (test/tools/debugger/client.mjs): the retained HTTP gateway API, or the Debug Adapter Protocol over stdio."
 
 [defaults]
 kind = "behavior"
@@ -28,6 +28,12 @@ timeout_ms = 300000
 name = "debugger.dap_stepping"
 desc = "Steps over DAP on both back ends: next, stepIn, stepOut by source line in execution order (a line that is never executed is not a stop, and the console says why), the same by graph node (granularity instruction), recursion as one frame per call with the arms folded into the frames of their function or, switched by camel/setFrames or launched with frames subgraphs, as the subgraphs they are, a tail recursion as the one frame it is, and a branch whose untaken arm never stops."
 case = "../../../cases/tools/debugger/dap_stepping.test.mjs"
+timeout_ms = 300000
+
+[[tests]]
+name = "debugger.dap_tail_steps"
+desc = "Tail-recursive F10 skips replacement activations, F11 enters with new parameter snapshots, and breakpoints still interrupt step-over on NVM and FVM."
+case = "../../../cases/tools/debugger/dap_tail_steps.test.mjs"
 timeout_ms = 300000
 
 [[tests]]
@@ -69,3 +75,8 @@ case = "../../../cases/tools/debugger/dap_pipeline.test.mjs"
 name = "debugger.dap_memory"
 desc = "Paused memory overview, bounded byte/object paging, lossless addresses, invalid requests, Release capability and session end."
 case = "../../../cases/tools/debugger/dap_memory.test.mjs"
+
+[[tests]]
+name = "debugger.dap_node_breakpoints"
+desc = "GIR origins set at compiler entry hit the transformed runtime node on NodeVM/FastVM; paused origin/source, actual GIR, clear and resume."
+case = "../../../cases/tools/debugger/dap_node_breakpoints.test.mjs"

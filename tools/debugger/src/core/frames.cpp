@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -95,7 +95,7 @@ void DebugCore::placeCallee(ShadowFrame &f, const ShadowFrame *caller) {
     f.activation     = nextActivation_++;
     f.presentedDepth = (caller != nullptr ? caller->presentedDepth : 0) + 1;
     f.awaitingEntry  = true;
-    std::lock_guard<std::mutex> lock(indexMutex_);
+    std::lock_guard lock(indexMutex_);
     f.function = functionOf(*f.info, [this](GCGraph *g) -> GraphInfo & { return index_.graph(g); });
 }
 
@@ -113,7 +113,7 @@ void DebugCore::placeReplacement(ShadowFrame &f, const ShadowFrame &old, const S
     f.activation    = nextActivation_++;
     f.awaitingEntry = true;
     {
-        std::lock_guard<std::mutex> lock(indexMutex_);
+        std::lock_guard lock(indexMutex_);
         f.function =
             functionOf(*f.info, [this](GCGraph *g) -> GraphInfo & { return index_.graph(g); });
     }
@@ -200,7 +200,7 @@ json DebugCore::frameJson(const Chain &chain, bool top) {
         int function;
         std::string path;
         {
-            std::lock_guard<std::mutex> lock(indexMutex_);
+            std::lock_guard lock(indexMutex_);
             function = index_.functionOf(f.loc);
             path     = index_.filePath(f.loc.file);
             if (function != f.info->function && function >= 0) {
@@ -217,6 +217,38 @@ json DebugCore::frameJson(const Chain &chain, bool top) {
     }
     j["name"] = name;
     j["top"]  = top;
+    if (top) {
+        // A bounded, immutable snapshot for graph clients. Use declared parameter ports,
+        // not every local of an arm; no variable handles survive a resume.
+        j["activation"]           = f.activation;
+        j["entry"]                = f.atEntry;
+        const GraphInfo *function = f.function != nullptr ? f.function : f.info;
+        j["functionId"]           = function->stableId;
+        std::unordered_set<std::string> parameters;
+        const auto addParameter = [&](gc_node_ref_t ref) {
+            if (function->capturePorts.count(ref) == 0) {
+                if (const NodeInfo *node = function->node(ref))
+                    parameters.insert(node->label);
+            }
+        };
+        for (auto ref : function->graph->withPorts())
+            addParameter(ref);
+        for (auto ref : function->graph->normPorts())
+            addParameter(ref);
+        json arguments = json::array();
+        for (const Variable &v : localsOf(chain)) {
+            if (parameters.erase(v.name) == 0)
+                continue;
+            const Rendered value = v.evaluated ? render(v.view, 120) : Rendered{};
+            arguments.push_back(
+                json{
+                    {"name", v.name},
+                    {"value", v.evaluated ? value.value : v.note},
+                    {"type", v.evaluated ? value.type : typeText(v.view.type)},
+                    {"evaluated", v.evaluated}});
+        }
+        j["arguments"] = std::move(arguments);
+    }
     if (f.node != nullptr) {
         j["node"] = json{
             {"ref", f.node->ref},
@@ -249,7 +281,7 @@ json DebugCore::skippedLines(const ShadowFrame &f, const Arrival &a) {
         return key(s) == step_.frame;
     });
 
-    std::lock_guard<std::mutex> lock(indexMutex_);
+    std::lock_guard lock(indexMutex_);
     const auto add = [&](uint64_t activation, int function, int from, int to) {
         for (DroppedLine &line : index_.droppedLines(function, from, to)) {
             if (!explainedLines_[activation].insert({line.file, line.line}).second) {

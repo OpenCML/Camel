@@ -524,14 +524,14 @@ Alternatives, for the author:
   such run relocated 864 map tables, 344 set tables and 1608 strings (`CAMEL_GC_LOG_MOVES=1`).
 - **Passes.** The operators are pure operators without a registered folder, and a `CAST` to
   a module type is not folded, so `std::opt::fold` leaves them and CSE/DCE treat them like
-  any pure operator. The test programs print the same through `std::opt`, `std::inline`,
-  `std::macro std::opt`, `std::inline std::opt`, `std::opt::fold std::opt::cse std::opt::dce`
-  and `std::opt::simplify`.
+  any pure operator. The test programs print the same through `std::opt`, `std::opt::inline`,
+  `std::macro std::opt`, `std::opt::inline std::opt`, `std::opt::fold std::opt::cse std::opt::dce`
+  and `std::opt`.
 - **Constants.** `std::macro` evaluates a macro function ahead of time and stores its result
   in the static area of the calling graph; a `Map` or `Set` result is then a `DATA` node.
   Its keys and values (strings, arrays, other maps, function values) are carried over with
   it (section 2). Verified with and without `std::macro`, through `std::opt` and
-  `std::inline`, on the four backends, and under heap verification with a collection at
+  `std::opt::inline`, on the four backends, and under heap verification with a collection at
   every allocation.
 - **`std::cpp`, `onnx::export`.** Each refuses the graph with `TranslationRefused` and a
   position (at the array the collection is built from, which they do not translate either).

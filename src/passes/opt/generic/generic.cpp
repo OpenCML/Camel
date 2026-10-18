@@ -14,12 +14,12 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * The generic optimization passes std::opt::{fold, cse, dce} (see generic.h).
+ * Generic optimization passes and the integrated pipeline (algebra lives in algebra.cpp).
  */
 
 #include "generic.h"
@@ -31,11 +31,12 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tuple.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/pass/warnings.h"
-#include "camel/core/rtdata/tuple.h"
-#include "camel/core/rtdata/struct.h"
+#include "camel/runtime/control.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
@@ -186,28 +187,56 @@ class StaticArgsView final : public ArgsView {
     std::vector<type::Type *> types_;
 };
 
-/// Static value of a DATA node with a static slot, also seen through GATEs forwarding one (an
-/// inlined call gates its arguments; the value it forwards is the same). A constant that is
-/// written in place has no static value.
+/// Static DATA, seen through GATEs or a JOIN whose arms all forward the same scalar bits.
+/// This proves a value, not permission to discard its producer: replaceNode retains ordering.
+/// A shared budget bounds gate walks; nested JOINs are not recursively expanded.
 std::optional<std::pair<slot_t, type::Type *>>
 staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
-    for (size_t hops = 0; hops < draft.nodeSlotCount(); ++hops) {
-        const auto *gate = draft.header(id);
-        if (!gate || gate->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
-            break;
+    size_t budget     = 128;
+    const auto ungate = [&](gc_node_ref_t node) {
+        while (budget) {
+            --budget;
+            const auto *h = draft.header(node);
+            if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(node).size() != 1 ||
+                isWrittenInPlace(draft, node)) {
+                return node;
+            }
+            node = draft.normInputsOf(node).front();
         }
-        id = draft.normInputsOf(id).back();
-    }
+        return kInvalidNodeRef;
+    };
+    const auto dataValue =
+        [&](gc_node_ref_t node) -> std::optional<std::pair<slot_t, type::Type *>> {
+        const auto *h = draft.header(node);
+        if (!h || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
+            return std::nullopt;
+        }
+        const auto index = static_cast<size_t>(-h->dataIndex);
+        if (index >= draft.staticSlots().size() || isWrittenInPlace(draft, node)) {
+            return std::nullopt;
+        }
+        type::Type *ty = draft.staticSlotTypes()[index];
+        return std::pair{draft.staticSlots()[index], ty ? ty : h->dataType};
+    };
+    id            = ungate(id);
     const auto *h = draft.header(id);
-    if (!h || h->kind != GCNodeKind::Data || h->dataIndex >= 0) {
+    if (!h || h->kind != GCNodeKind::Join) {
+        return dataValue(id);
+    }
+    if (!h->dataType || !type::isPrimitive(h->dataType->code()) ||
+        type::isGCTraced(h->dataType->code()) || isWrittenInPlace(draft, id)) {
         return std::nullopt;
     }
-    const auto index = static_cast<size_t>(-h->dataIndex);
-    if (index >= draft.staticSlots().size() || isWrittenInPlace(draft, id)) {
-        return std::nullopt;
+    std::optional<std::pair<slot_t, type::Type *>> common;
+    for (auto arm : draft.withInputsOf(id)) {
+        const auto value = dataValue(ungate(arm));
+        // Slot equality preserves signed zero and NaN payloads; floating-point == would not.
+        if (!value || value->second != h->dataType || (common && *common != *value)) {
+            return std::nullopt;
+        }
+        common = value;
     }
-    type::Type *ty = draft.staticSlotTypes()[index];
-    return std::pair{draft.staticSlots()[index], ty ? ty : h->dataType};
+    return common;
 }
 
 /// True when `id` can be replaced by another node holding its value: it does not anchor the
@@ -306,7 +335,8 @@ std::optional<std::vector<std::vector<gc_node_ref_t>>> branchArmNodes(
             }
             owner[n] = static_cast<int>(arm);
             regions[arm].push_back(n);
-            for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
+            for (auto inputs :
+                 {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
                 for (gc_node_ref_t in : inputs) {
                     if (in < inBranch.size() && inBranch[in]) {
                         stack.push_back(in);
@@ -346,7 +376,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     const gc_node_ref_t result = draft.withInputsOf(join)[*arm];
 
     const auto tails = draft.withInputsOf(join);
-    auto found = branchArmNodes(draft, brch, join, tails);
+    auto found       = branchArmNodes(draft, brch, join, tails);
     if (!found) {
         return false;
     }
@@ -410,10 +440,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         }
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, brch);
         for (gc_node_ref_t pred : preds) {
-            const auto existing = draft.ctrlInputsOf(user);
-            if (pred != user && std::ranges::find(existing, pred) == existing.end()) {
-                draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
-            }
+            camel::runtime::appendControlDependency(draft, pred, user);
         }
     }
 
@@ -445,10 +472,8 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     if (!resultInArm) {
         for (gc_node_ref_t user : joinValueUsers) {
             for (gc_node_ref_t pred : after) {
-                const auto existing = draft.ctrlInputsOf(user);
-                if (pred != user && pred != result && !dropped[pred] &&
-                    std::ranges::find(existing, pred) == existing.end()) {
-                    draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
+                if (pred != result && !dropped[pred]) {
+                    camel::runtime::appendControlDependency(draft, pred, user);
                 }
             }
         }
@@ -456,9 +481,8 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     for (gc_node_ref_t user : joinCtrlUsers) {
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, join);
         for (gc_node_ref_t pred : after) {
-            const auto existing = draft.ctrlInputsOf(user);
-            if (pred != user && !dropped[pred] && std::ranges::find(existing, pred) == existing.end()) {
-                draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
+            if (!dropped[pred]) {
+                camel::runtime::appendControlDependency(draft, pred, user);
             }
         }
     }
@@ -477,7 +501,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     const gc_node_ref_t takenHead = arms[*arm].head;
     const gc_node_ref_t newHead =
         takenHead != kInvalidNodeRef && draft.header(takenHead) && !dropped[takenHead] ? takenHead
-                                                                                          : result;
+                                                                                       : result;
     draft.retargetBranchArmAnchors(join, result, result);
     draft.retargetBranchArmAnchors(brch, newHead, result);
     draft.eraseNode(join);
@@ -497,12 +521,13 @@ bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
     if (sources.size() != 1) {
         return false;
     }
-    const auto source = staticValueOf(draft, sources[0]);
+    const auto source  = staticValueOf(draft, sources[0]);
     type::Type *result = draft.header(id)->dataType;
     if (!source || !source->second || !result || source->first == NullSlot) {
         return false;
     }
-    const auto *body = reinterpret_cast<const camel::runtime::GCAccsBody *>(draft.payloadOf(id).data());
+    const auto *body =
+        reinterpret_cast<const camel::runtime::GCAccsBody *>(draft.payloadOf(id).data());
     slot_t value = NullSlot;
     if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex &&
         source->second->code() == type::TypeCode::Tuple) {
@@ -532,7 +557,8 @@ bool foldStaticFill(
     if (sources.size() != 1 || !result || !type::isGCTraced(result->code())) {
         return false;
     }
-    const auto *body = reinterpret_cast<const camel::runtime::GCFillBody *>(draft.payloadOf(id).data());
+    const auto *body =
+        reinterpret_cast<const camel::runtime::GCFillBody *>(draft.payloadOf(id).data());
     if (body->fillKind == camel::runtime::GCFillKind::FunctionClosure) {
         return false; // closures stay calls std::opt can devirtualize
     }
@@ -553,7 +579,10 @@ bool foldStaticFill(
     // Keep the object alive until commit moves it into the graph's static area.
     roots.emplace_back(camel::core::mm::autoSpace(), object, result, "std::opt::fold");
     camel::execute::writeRuntimeFillSlots(object, result, body, slots);
-    replaceNode(draft, id, draft.materializeStaticValue(camel::core::rtdata::toSlot(object), result));
+    replaceNode(
+        draft,
+        id,
+        draft.materializeStaticValue(camel::core::rtdata::toSlot(object), result));
     return true;
 }
 
@@ -578,12 +607,12 @@ bool foldStaticCast(
     }
     const type::CastSafety safety = target->castSafetyFrom(source->second);
     // A module type checks a value of its own kind (the constant's type says it is one).
-    const bool checkedByTarget    = target->isOtherType() && safety != type::CastSafety::Forbidden &&
-                                    source->second->code() == target->code() &&
-                                    source->first != NullSlot;
-    const bool safePrimitive      = safety == type::CastSafety::Safe &&
-                                    type::isPrimitive(target->code()) &&
-                                    type::isPrimitive(source->second->code());
+    const bool checkedByTarget = target->isOtherType() && safety != type::CastSafety::Forbidden &&
+                                 source->second->code() == target->code() &&
+                                 source->first != NullSlot;
+    const bool safePrimitive   = safety == type::CastSafety::Safe &&
+                                 type::isPrimitive(target->code()) &&
+                                 type::isPrimitive(source->second->code());
     if (!checkedByTarget && !safePrimitive) {
         return false;
     }
@@ -760,13 +789,13 @@ size_t cseDraft(GraphDraft &draft) {
     // different permissions (design principles 2.13) may compute different bits, and merging
     // them would give one of them permissions it was not granted, or take some away. They are
     // not merged (docs/design/op-semantics 6.4).
-    using Key          = std::tuple<
-                 std::string,
-                 type::Type *,
-                 std::vector<gc_node_ref_t>,
-                 std::vector<gc_node_ref_t>,
-                 std::vector<uint64_t>,
-                 uint8_t>;
+    using Key = std::tuple<
+        std::string,
+        type::Type *,
+        std::vector<gc_node_ref_t>,
+        std::vector<gc_node_ref_t>,
+        std::vector<uint64_t>,
+        uint8_t>;
     std::map<Key, gc_node_ref_t> seen;
     size_t merged = 0;
 
@@ -776,6 +805,11 @@ size_t cseDraft(GraphDraft &draft) {
     // constants that are written in place.
     std::map<std::tuple<type::Type *, slot_t, std::vector<uint64_t>>, gc_node_ref_t> constants;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        // A known JOIN value does not make the JOIN replaceable: it still closes its BRCH
+        // and carries the condition and selected arm's effects. Consumers may fold instead.
+        if (const auto *h = draft.header(id); h && h->kind == GCNodeKind::Join) {
+            continue;
+        }
         const auto value = staticValueOf(draft, id);
         if (!value || !value->second || type::isGCTraced(value->second->code())) {
             continue;
@@ -830,19 +864,21 @@ size_t cseDraft(GraphDraft &draft) {
 // ---------------------------------------------------------------- dce
 
 /**
- * True when erasing the unread GATE `gate` loses no ordering: every node it waits on is a pure
- * value, or has another user through which it still reaches the exit. An effect whose only
- * successor is the gate (a println before a folded call) would otherwise be cut off and never
- * run.
+ * For a GATE with no users at all, check that erasing it loses no ordering: every node it
+ * waits on is a pure value, or has another user through which it still reaches the exit.
+ * Gates with control users do not need this check: replaceNode transfers their dependencies
+ * to those users, including an effect whose only current successor is the gate.
  */
 bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
-    for (auto inputs : {draft.normInputsOf(gate), draft.withInputsOf(gate), draft.ctrlInputsOf(gate)}) {
+    for (auto inputs :
+         {draft.normInputsOf(gate), draft.withInputsOf(gate), draft.ctrlInputsOf(gate)}) {
         for (gc_node_ref_t in : inputs) {
             if (isValueOnly(draft, in)) {
                 continue;
             }
             size_t users = 0;
-            for (auto group : {draft.normUsersOf(in), draft.withUsersOf(in), draft.ctrlUsersOf(in)}) {
+            for (auto group :
+                 {draft.normUsersOf(in), draft.withUsersOf(in), draft.ctrlUsersOf(in)}) {
                 for (gc_node_ref_t user : group) {
                     users += user != gate ? 1 : 0;
                 }
@@ -856,10 +892,16 @@ bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
 }
 
 size_t dceDraft(GraphDraft &draft) {
-    size_t removed = 0;
+    size_t removed        = 0;
+    size_t gateEdgeBudget = std::min<size_t>(8192, draft.nodeSlotCount() * 8);
     for (bool changed = true; changed;) {
         changed = false;
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            if (bypassValueGate(draft, id, gateEdgeBudget)) {
+                ++removed;
+                changed = true;
+                continue;
+            }
             // A SYNC only joins control; replaceNode hands its predecessors to its users, which
             // keeps every ordering it expressed.
             // A GATE only forwards its value once its control inputs ran. When no node reads the
@@ -873,7 +915,8 @@ size_t dceDraft(GraphDraft &draft) {
             const auto *h     = draft.header(id);
             const bool isJoin = h && h->kind == GCNodeKind::Sync;
             const bool isDeadGate =
-                h && h->kind == GCNodeKind::Gate && gateInputsSurvive(draft, id);
+                h && h->kind == GCNodeKind::Gate &&
+                (!draft.ctrlUsersOf(id).empty() || gateInputsSurvive(draft, id));
             if ((isValueOnly(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
@@ -902,6 +945,12 @@ GCGraph *DeadCodePass::apply(GCGraph *graph, std::ostream &) {
     return rewriteReachableGraphs(context_, graph, "std::opt::dce", dceDraft);
 }
 
+GCGraph *ControlReductionPass::apply(GCGraph *graph, std::ostream &) {
+    return rewriteReachableGraphs(context_, graph, "std::opt::ctrl", [](GraphDraft &draft) {
+        return camel::runtime::reduceControlDependencies(draft);
+    });
+}
+
 GCGraph *simplifyGraph(
     const camel::core::context::context_ptr_t &context, GCGraph *graph,
     const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds) {
@@ -912,30 +961,38 @@ GCGraph *simplifyGraph(
     if (!config.growthSpentNodes) {
         config.growthSpentNodes = &growthSpent;
     }
+    const auto finish = [&](GCGraph *result) {
+        return rewriteReachableGraphs(context, result, "std::opt::ctrl", [](GraphDraft &draft) {
+            return camel::runtime::reduceControlDependencies(draft);
+        });
+    };
     for (size_t round = 0; round < maxRounds; ++round) {
         bool optChanged = false;
-        graph = applyOptimizeRewritePass(context, graph, os, config, &optChanged);
+        graph           = applyOptimizeRewritePass(context, graph, os, config, &optChanged);
         std::deque<camel::core::mm::RootHandle> roots;
-        size_t folded = 0, removed = 0;
+        size_t folded = 0, merged = 0, simplified = 0, removed = 0;
         graph = rewriteReachableGraphs(
             context,
             graph,
             "std::opt::fold",
             [&](GraphDraft &draft) { return foldDraft(draft, *context, roots); },
             &folded);
+        graph = rewriteReachableGraphs(context, graph, "std::opt::cse", cseDraft, &merged);
+        graph = rewriteReachableGraphs(
+            context,
+            graph,
+            "std::opt::algebra",
+            [&](GraphDraft &draft) { return algebraDraft(draft, config.safeFloatingPoint); },
+            &simplified);
         graph = rewriteReachableGraphs(context, graph, "std::opt::dce", dceDraft, &removed);
-        if (!optChanged && folded == 0 && removed == 0) {
-            CAMEL_LOG_INFO_S("Opt", "std::opt::simplify: fixpoint after {} round(s)", round + 1);
-            return graph;
+        if (!optChanged && folded == 0 && merged == 0 && simplified == 0 && removed == 0) {
+            CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
+            return finish(graph);
         }
     }
     CAMEL_LOG_WARN_S(
         "Opt",
-        "std::opt::simplify: still changing after {} rounds (a recursion of non-static depth?)",
+        "std::opt: still changing after {} rounds (a recursion of non-static depth?)",
         maxRounds);
-    return graph;
-}
-
-GCGraph *SimplifyPass::apply(GCGraph *graph, std::ostream &os) {
-    return simplifyGraph(context_, graph, OptimizeRewriteConfig{}, os);
+    return finish(graph);
 }

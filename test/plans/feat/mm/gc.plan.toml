@@ -371,7 +371,7 @@ skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "When objects move, std::jit still compiles a graph with an object constant: the code reads the constant from the static area, which the collector updates, instead of baking its address in."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_jit_constants.cml"
-args = ["-vv", "${case}", "std::inline", "std::jit"]
+args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
 envs = ["CAMEL_GC_POISON=1"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'count' as frameless code", "compiled & cached graph 'tag' as frameless code"]
@@ -385,7 +385,7 @@ skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "Without the moving collector std::jit compiles both graphs."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_jit_constants.cml"
-args = ["-vv", "${case}", "std::inline", "std::jit"]
+args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
 envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'count'", "compiled & cached graph 'tag'"]
@@ -452,3 +452,51 @@ expect_exit = 0
 expect_stdout_contains = ["gc_live_table total=11231"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+[[tests]]
+name = "gc.macro_round_lifetime.moving_stress.nvm"
+desc = "Function-valued custom VJP results from a completed macro round must not trace retired graph carriers."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/macro_round_lifetime_gc.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_contains = ["-12.0 -12.0 24.0", "[2, 3, 2] 12.0 120.0", "\n-12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gc.macro_round_lifetime.moving_stress.fvm"
+desc = "Function-valued custom VJP results from a completed macro round must not trace retired graph carriers."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/macro_round_lifetime_gc.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_contains = ["-12.0 -12.0 24.0", "[2, 3, 2] 12.0 120.0", "\n-12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gc.macro_round_lifetime.moving_stress.jit"
+desc = "Function-valued custom VJP results from a completed macro round must not trace retired graph carriers."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/macro_round_lifetime_gc.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_contains = ["-12.0 -12.0 24.0", "[2, 3, 2] 12.0 120.0", "\n-12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gc.macro_round_lifetime.moving_stress.prl"
+desc = "Function-valued custom VJP results from a completed macro round must not trace retired graph carriers."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/macro_round_lifetime_gc.cml"
+args = ["${case}", "std::macro", "${run_prl}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_contains = ["-12.0 -12.0 24.0", "[2, 3, 2] 12.0 120.0", "\n-12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

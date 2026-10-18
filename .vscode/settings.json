@@ -12,6 +12,9 @@
         "CAMEL_HOME": "${workspaceFolder}/out/latest"
     },
     "cSpell.words": [
-        "Topo"
+        "Topo",
+        "opencml",
+        "opencmlrc",
+        "typeas"
     ]
 }

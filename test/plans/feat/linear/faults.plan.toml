@@ -5,7 +5,7 @@ tags = ["feat", "linear", "runtime", "negative"]
 
 [[tests]]
 name = "divide_by_zero_hot.nvm"
-desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (nvm)."
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::opt::inline): the located DivisionByZero of the interpreters, not SIGFPE (nvm)."
 kind = "negative"
 case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
 args = ["${case}", "${run_nvm}"]
@@ -85,7 +85,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "divide_by_zero_hot.fvm"
-desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (fvm)."
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::opt::inline): the located DivisionByZero of the interpreters, not SIGFPE (fvm)."
 kind = "negative"
 case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
 args = ["${case}", "${run_fvm}"]
@@ -165,7 +165,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "divide_by_zero_hot.jit"
-desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (jit)."
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::opt::inline): the located DivisionByZero of the interpreters, not SIGFPE (jit)."
 kind = "negative"
 case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
 args = ["${case}", "${run_jit}"]
@@ -245,7 +245,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "divide_by_zero_hot.inline_jit"
-desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (inline_jit)."
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::opt::inline): the located DivisionByZero of the interpreters, not SIGFPE (inline_jit)."
 kind = "negative"
 case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
 args = ["${case}", "${run_inline_jit}"]
@@ -325,7 +325,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "divide_by_zero_hot.prl"
-desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (prl)."
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::opt::inline): the located DivisionByZero of the interpreters, not SIGFPE (prl)."
 kind = "negative"
 case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
 args = ["${case}", "${run_prl}"]
@@ -405,7 +405,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "divide_by_zero_hot.tf"
-desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (tf)."
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::opt::inline): the located DivisionByZero of the interpreters, not SIGFPE (tf)."
 kind = "negative"
 case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
 args = ["${case}", "std::tf"]
@@ -469,7 +469,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "float_divide_by_zero_hot.nvm"
-desc = "Float division by zero in a function the JIT compiles after std::inline, already run once: the located DivisionByZero at the division on every back end, not inf (nvm)."
+desc = "Float division by zero in a function the JIT compiles after std::opt::inline, already run once: the located DivisionByZero at the division on every back end, not inf (nvm)."
 kind = "negative"
 case = "../../../cases/linear/faults/float_divide_by_zero_hot.cml"
 args = ["${case}", "${run_nvm}"]
@@ -485,7 +485,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "float_divide_by_zero_hot.fvm"
-desc = "Float division by zero in a function the JIT compiles after std::inline, already run once: the located DivisionByZero at the division on every back end, not inf (fvm)."
+desc = "Float division by zero in a function the JIT compiles after std::opt::inline, already run once: the located DivisionByZero at the division on every back end, not inf (fvm)."
 kind = "negative"
 case = "../../../cases/linear/faults/float_divide_by_zero_hot.cml"
 args = ["${case}", "${run_fvm}"]
@@ -501,7 +501,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "float_divide_by_zero_hot.prl"
-desc = "Float division by zero in a function the JIT compiles after std::inline, already run once: the located DivisionByZero at the division on every back end, not inf (prl)."
+desc = "Float division by zero in a function the JIT compiles after std::opt::inline, already run once: the located DivisionByZero at the division on every back end, not inf (prl)."
 kind = "negative"
 case = "../../../cases/linear/faults/float_divide_by_zero_hot.cml"
 args = ["${case}", "${run_prl}"]
@@ -517,7 +517,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "float_divide_by_zero_hot.inline_fvm"
-desc = "Float division by zero in a function the JIT compiles after std::inline, already run once: the located DivisionByZero at the division on every back end, not inf (inline_fvm)."
+desc = "Float division by zero in a function the JIT compiles after std::opt::inline, already run once: the located DivisionByZero at the division on every back end, not inf (inline_fvm)."
 kind = "negative"
 case = "../../../cases/linear/faults/float_divide_by_zero_hot.cml"
 args = ["${case}", "${run_inline_fvm}"]
@@ -533,7 +533,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "float_divide_by_zero_hot.inline_jit"
-desc = "Float division by zero in a function the JIT compiles after std::inline, already run once: the located DivisionByZero at the division on every back end, not inf (inline_jit)."
+desc = "Float division by zero in a function the JIT compiles after std::opt::inline, already run once: the located DivisionByZero at the division on every back end, not inf (inline_jit)."
 kind = "negative"
 case = "../../../cases/linear/faults/float_divide_by_zero_hot.cml"
 args = ["${case}", "${run_inline_jit}"]
@@ -609,7 +609,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "recursion_depth_hot.fvm"
-desc = "A recursion one call deeper than the default limit of 1000, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (fvm)."
+desc = "A recursion one call deeper than the default limit of 1000, in a function the JIT compiles after std::opt::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (fvm)."
 kind = "negative"
 case = "../../../cases/linear/faults/recursion_depth_hot.cml"
 args = ["${case}", "${run_fvm}"]
@@ -625,7 +625,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "recursion_depth_hot.inline_fvm"
-desc = "A recursion one call deeper than the default limit of 1000, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (inline_fvm)."
+desc = "A recursion one call deeper than the default limit of 1000, in a function the JIT compiles after std::opt::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (inline_fvm)."
 kind = "negative"
 case = "../../../cases/linear/faults/recursion_depth_hot.cml"
 args = ["${case}", "${run_inline_fvm}"]
@@ -641,7 +641,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "recursion_depth_hot.inline_jit"
-desc = "A recursion one call deeper than the default limit of 1000, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (inline_jit)."
+desc = "A recursion one call deeper than the default limit of 1000, in a function the JIT compiles after std::opt::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (inline_jit)."
 kind = "negative"
 case = "../../../cases/linear/faults/recursion_depth_hot.cml"
 args = ["${case}", "${run_inline_jit}"]
@@ -660,7 +660,7 @@ timeout_ms = 8000
 [[tests]]
 name = "divide_by_zero_hot.inline_jit.compiled"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-desc = "The function with the variable divisor is compiled by the JIT after std::inline (the -vv log names it) for its run with a nonzero divisor."
+desc = "The function with the variable divisor is compiled by the JIT after std::opt::inline (the -vv log names it) for its run with a nonzero divisor."
 kind = "behavior"
 case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
 args = ["-vv", "${case}", "${run_inline_jit}"]
@@ -674,7 +674,7 @@ timeout_ms = 8000
 [[tests]]
 name = "recursion_depth_hot.inline_jit.compiled"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-desc = "The three recursive functions are compiled by the JIT after std::inline (the -vv log names them)."
+desc = "The three recursive functions are compiled by the JIT after std::opt::inline (the -vv log names them)."
 kind = "behavior"
 case = "../../../cases/linear/faults/recursion_depth_hot.cml"
 args = ["-vv", "${case}", "${run_inline_jit}"]

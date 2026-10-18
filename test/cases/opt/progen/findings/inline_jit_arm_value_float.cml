@@ -1,9 +1,9 @@
 /**
- * progen finding F37 ((other) wrong value after inlining). After `std::inline`, the JIT returns
+ * progen finding F37 ((other) wrong value after inlining). After `std::opt::inline`, the JIT returns
  *   the unwritten slot of the other arm for `if (0 <= 0) then 1.0 + 1.0 else r6(...)`: a
  *   comparison fused with its branch, whose first arm has code of its own (same cause as F17).
  *   The node VM, the bytecode VM and the parallel scheduler print 3.5.
- * Pipeline: std::inline std::jit
+ * Pipeline: std::opt::inline std::jit
  * Expected output: L8 3.5
  * Actual: L8 1.5 (the unreduced program printed `L8 -nan` where `L8 -2` is expected)
  * Reduced by test/tools/progen from seed 944 (generator version 1, all features).

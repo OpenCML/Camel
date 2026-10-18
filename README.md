@@ -69,7 +69,7 @@ camel prog.cml std::jit                 # run with JIT compilation
 camel prog.cml std::prl                 # run with parallel scheduling
 camel prog.cml std::opt std::fvm        # optimize, then run
 camel prog.cml std::gir                # print the graph (Graphviz DOT) instead of running
-camel prog.cml std::macro std::opt::simplify onnx::export    # translate `main` to an ONNX model
+camel prog.cml std::macro std::opt onnx::export    # translate `main` to an ONNX model
 ```
 
 Automatic differentiation (`grad` from the `autodiff` module) and ONNX export are libraries built on the same pass mechanism. The [tutorial](docs/tutorial/tutorial.en.md) walks through looking at the graph, changing the pipeline, exporting a small model and taking a gradient.
@@ -89,6 +89,10 @@ npm run build        # the executable is out/latest/bin/camel
 ```
 
 Put `out/latest/bin` on your `PATH` (and set `CAMEL_HOME` to `out/latest`). A Python wheel named `camel-lang` can be built from the same tree; see [docs/pypi-packaging.md](docs/pypi-packaging.md).
+
+### VS Code
+
+Install [OpenCML-Ext from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension) for syntax highlighting, language services, interactive GIR browsing, and debugging. Configure `opencmlLanguageServer.camelPath` to point to your built `camel` executable; the extension discovers `camel-ls` and `camel-db` alongside it. Recent runtime builds also support stepping through compiler passes, inspecting the paused GIR, and viewing memory. See the [extension README](https://github.com/OpenCML/OpenCML-Ext#readme) for setup and the [debugging guide](docs/debugging.en.md) for runtime capabilities.
 
 ### Hello, Camel
 

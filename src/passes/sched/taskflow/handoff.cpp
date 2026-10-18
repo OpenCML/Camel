@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -215,7 +215,18 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
     std::vector<size_t> spoiled; // not serial, callers not yet told
     for (size_t i = 0; i < graphs.size(); ++i) {
         GCGraph *graph = graphs[i];
-        obstacle[i]    = serialObstacle(*planFor(graph));
+        // Original graphs retained by a private copy are reachable too. A runtime
+        // callback may hand one back, but its LOOP must first get a private execution
+        // graph; do not attach bytecode for the source to that execution graph's plan.
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if ((*it)->kind == GCNodeKind::Loop) {
+                obstacle[i] = "a source loop requires private lowering when called";
+                break;
+            }
+        }
+        if (obstacle[i].empty()) {
+            obstacle[i] = serialObstacle(*planFor(graph));
+        }
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const auto *node = *it;
             if (node == nullptr || node->kind != GCNodeKind::Func) {

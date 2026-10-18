@@ -11,7 +11,7 @@
 ```bash
 camel-cpp test/cases/linear/nvm/fib.cml            # 写出 fib.cpp，编出 fib（Windows 上 fib.exe）
 camel-cpp prog.cml -o build/prog                   # 指定可执行文件
-camel-cpp prog.cml -o prog std::inline             # std::cpp 之前先跑别的遍
+camel-cpp prog.cml -o prog std::opt::inline             # std::cpp 之前先跑别的遍
 ```
 
 `camel-cpp` 调用同目录下的 `camel <文件> [遍…] std::cpp` 得到 C++，写到可执行文件旁边的 `<名字>.cpp`，再用 `$CXX`（没有时用 `c++`，Windows 上用 `clang++`）编译。头文件取自安装目录（`$CAMEL_HOME`，没有设时取 `camel-cpp` 所在的安装）。需要运行时的程序会自动加上链接参数。

@@ -661,10 +661,10 @@ timeout_ms = 120000
 
 [[tests]]
 name = "pass_export_fold"
-desc = "onnx::export as the last pass: `std::macro std::opt::simplify onnx::export` writes the same model shape as export_model for the forward export (weights as named initializers, three unrolled steps, shape arithmetic folded) without executing the program."
+desc = "onnx::export as the last pass: `std::macro std::opt onnx::export` writes the same model shape as export_model for the forward export (weights as named initializers, three unrolled steps, shape arithmetic folded) without executing the program."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_fold.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_fold.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_fold.onnx"]
@@ -688,7 +688,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "pass_export_refuses_without_simplify"
-desc = "onnx::export only translates: with no preceding pass the entry graph still calls main, and the pass refuses with TranslationRefused at main, naming std::opt::simplify, and writes no file."
+desc = "onnx::export only translates: with no preceding pass the entry graph still calls main, and the pass refuses with TranslationRefused at main, naming std::opt, and writes no file."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_train_step.cml"
 args = ["${case}", "onnx::export"]
@@ -698,7 +698,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 29
 expect_diagnostic_column = 1
-expect_output_contains = ["run std::opt::simplify before onnx::export"]
+expect_output_contains = ["run std::opt before onnx::export"]
 expect_output_not_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
@@ -715,7 +715,7 @@ name = "pass_export_refuses_without_macro"
 desc = "Without std::macro the training step still contains value_and_grad: onnx::export refuses with TranslationRefused at the macro call, naming std::macro, and writes no file."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_train_step.cml"
-args = ["${case}", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_refused_b.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -749,7 +749,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "pass_export_equals_export_model"
-desc = "For twenty-six programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes and the branched-call split: the four branched training steps, the gated GRU forward and its training step, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt::simplify onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
+desc = "For twenty-six programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes and the branched-call split: the four branched training steps, the gated GRU forward and its training step, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/pass_export.py"
@@ -789,7 +789,7 @@ name = "pass_export_ctrl_effect_json"
 desc = "onnx::export refuses the same control-path effect: TranslationRefused, stage pass:onnx::export, the range of the println, no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_ctrl_effect.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["--output-format", "json", "${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_ctrl_effect.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -835,7 +835,7 @@ name = "pass_export_ctrl_effect_in_callee_json"
 desc = "onnx::export finds the effect inside a function the exported one calls and reports the println there (the pass inlines the callee, as export_model does, so the position is the same on both entries); no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_ctrl_effect_callee.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["--output-format", "json", "${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_ctrl_effect_callee.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -884,10 +884,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_train_step.fuse_simplify"
-desc = "The training step of export_train_step exports the same model after tensor::fuse then std::opt::simplify before the run-time export."
+desc = "The training step of export_train_step exports the same model after tensor::fuse then std::opt before the run-time export."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step.cml"
-args = ["${case}", "tensor::fuse", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "tensor::fuse", "std::opt", "std::nvm"]
 envs = ["ONNX_OUT=tmp/test/onnx/export_train_step.fuse_simplify.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
@@ -943,7 +943,7 @@ name = "pass_export_refusal_located.two_calls"
 desc = "CAMEL_ONNX_OUT with two export_model calls: the refusal is located at the second call (it had no source position)."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/two_calls.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/refusal_one.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -960,7 +960,7 @@ name = "pass_export_refusal_located.no_request"
 desc = "A program without an export_model call and without CAMEL_ONNX_OUT: the pass would translate `main` itself and has no file to write; the refusal is located at the entry function `main`, also after main has been inlined into the entry graph. (Until `main` itself became exportable the message was 'the entry graph contains no onnx.export_model call'; a program without a request is no longer refused for that.)"
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/no_request.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -973,10 +973,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.main_not_inlined"
-desc = "After std::devirtualize the call of main is a direct call without a source position of its own: the refusal is located at the definition of main (it had an all-zero range)."
+desc = "After std::opt::devirtualize the call of main is a direct call without a source position of its own: the refusal is located at the definition of main (it had an all-zero range)."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_fold.cml"
-args = ["${case}", "std::devirtualize", "onnx::export"]
+args = ["${case}", "std::opt::devirtualize", "onnx::export"]
 envs = ["ONNX_OUT=tmp/test/onnx/refusal_unused.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -993,7 +993,7 @@ name = "pass_export_refusal_located.dynamic_axis"
 desc = "An error about the request, not about a node of the exported function (a dynamic axis out of range), is located at the export_model call."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/bad_axis.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -1009,7 +1009,7 @@ name = "pass_export_refusal_located.target"
 desc = "An unknown export target is located at the export_model call."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/bad_target.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -1025,7 +1025,7 @@ name = "pass_export_refusal_located.arity"
 desc = "A function with two parameters and one example is located at the export_model call."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/bad_arity.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -1041,7 +1041,7 @@ name = "pass_export_refusal_located.output"
 desc = "A result that is not a tensor or a number is located at the export_model call."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/bad_output.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -1057,7 +1057,7 @@ name = "pass_export_refusal_located.write"
 desc = "A model file that cannot be written (a path component is a file) is located at the export_model call."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/bad_path.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -1094,10 +1094,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_var_local"
-desc = "The same function through `std::macro std::opt::simplify onnx::export`."
+desc = "The same function through `std::macro std::opt onnx::export`."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_var_local.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_var_local.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_var_local.onnx"]
@@ -1121,7 +1121,7 @@ name = "pass_export_refusal_var_arm"
 desc = "onnx::export refuses, with a located diagnostic that states why, a variable assigned in the arms of a branch: its content would be state outside the model."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/var_arm.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_refusal_var_arm.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -1134,7 +1134,7 @@ name = "pass_export_refusal_var_param"
 desc = "onnx::export refuses, with a located diagnostic that states why, a variable passed to a call that assigns it: its content would be state outside the model."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/var_param.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_refusal_var_param.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -1147,7 +1147,7 @@ name = "pass_export_refusal_var_outer"
 desc = "onnx::export refuses, with a located diagnostic that states why, a variable declared in the enclosing function and read by the exported lambda: its content would be state outside the model."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/var_outer.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_refusal_var_outer.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -1183,7 +1183,7 @@ name = "pass_export_float_array"
 desc = "A float array literal whose elements depend on the model input (`reshape([sum(x * 2.0), 1.5, sum(x)], [3])`) is exported as the 1-D tensor it stands for: three Unsqueeze, one Concat, then the Reshape."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_float_array.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_float_array.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_float_array.onnx"]
@@ -1206,7 +1206,7 @@ name = "export_train_step_branch_tensor.macro_simplify"
 desc = "The branched training step with tensor arms also exports after the optimisation passes have run: the gradient of `mean` asks for `tensor:numel` of a value that depends on the model input, which had no ONNX lowering (run-time error of export_model under every pipeline with std::macro and an optimisation pass)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
 envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_tensor.macro_simplify.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
@@ -1287,7 +1287,7 @@ name = "pass_export_grad_mean"
 desc = "A value and gradient through `mean` over an axis and over all elements export: the gradient rules ask for `tensor:dim` and `tensor:numel` of values that depend on the model input; with static shapes both are constants of the model (no Shape, Gather or Size node)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_grad_mean.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_grad_mean.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_grad_mean.onnx"]
@@ -1337,7 +1337,7 @@ name = "pass_export_grad_matmul_vector"
 desc = "The gradient of matmul exports when an operand is a vector (matrix @ vector, vector @ matrix, vector @ vector): the operand and the incoming gradient get the axis matmul adds for a vector, and the gradient of a vector operand loses it again. Checked by hand against NumPy and on ONNX Runtime."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_grad_matmul_vector.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_grad_matmul_vector.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_grad_matmul_vector.onnx"]
@@ -1392,7 +1392,7 @@ name = "pass_export_loop"
 desc = "Two tail recursions whose depth depends on the model input (one bounded by the data alone, one a counter against a data-dependent bound with an argument that never changes) export as two ONNX Loops; the unchanged argument is not a carried value."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_loop.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_loop.onnx"]
@@ -1484,7 +1484,7 @@ name = "pass_export_slice_loop"
 desc = "A recursion over the time axis that stops early on the data exports: the slice of step t takes a start and an end that depend on the model input (inputs of the ONNX Slice; they had to be export-time constants)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_slice_loop.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_slice_loop.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_slice_loop.onnx"]
@@ -1519,7 +1519,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "ort_time_axis"
-desc = "A tail recursion and a linear recursion over the time axis whose step slices the data at the counter are exported for sequence lengths 1 to 7, by the default run and after std::inline; every model runs on ONNX Runtime on five random inputs and matches NumPy. The loops used to evaluate one step past the end of the data (both sides of the loop decision were computed and selected), so models failed at run time for some lengths and inputs: found by X1a cycle 6."
+desc = "A tail recursion and a linear recursion over the time axis whose step slices the data at the counter are exported for sequence lengths 1 to 7, by the default run and after std::opt::inline; every model runs on ONNX Runtime on five random inputs and matches NumPy. The loops used to evaluate one step past the end of the data (both sides of the loop decision were computed and selected), so models failed at run time for some lengths and inputs: found by X1a cycle 6."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/ort_time_axis.py"
@@ -1689,7 +1689,7 @@ name = "pass_export_train_step_vjp"
 desc = "A training step (value_and_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_vjp.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_train_step_vjp.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_train_step_vjp.onnx"]
@@ -1735,7 +1735,7 @@ name = "pass_export_var_compound"
 desc = "Local scalar variables with typed and compound assignments (`k += 2`, `s += sum(x)`, `s *= 2.0`, `s -= 1.0`) export: a compound assignment writes the content it finds combined with its operand; the integer variable folds to a constant."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_var_compound.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/pass_export_var_compound.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_var_compound.onnx"]
@@ -1758,7 +1758,7 @@ name = "pass_export_refusal_located.no_request_effect"
 desc = "The same program with CAMEL_ONNX_OUT set: `main` prints, so it is not a computation the pass can translate as a whole; the refusal is at the println (line 10) and says that a program doing more than computing exports a function with onnx.export_model. No file is written."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/no_request.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/no_request_effect.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -1781,7 +1781,7 @@ name = "pass_export_entry.forward"
 desc = "A pure program (no export_model request, no `import onnx`) exported by pass composition: the model is the computation of `main`. One input per parameter, named like it and shaped by its declared type (the negative extent of x is a dynamic axis), one output, no initializers. Naming onnx::export on the command line loads the onnx module."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/forward.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_forward.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_forward.onnx"]
@@ -1828,7 +1828,7 @@ name = "pass_export_entry.bound_argument_is_initializer"
 desc = "A parameter given a value at export (--arg w=<file>) is a constant of the graph: it becomes the initializer `w`, and only x is left as a model input."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/forward.cml"
-args = ["${case}", "--arg", "w=test/cases/compile/entry_args/w.npy", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "--arg", "w=test/cases/compile/entry_args/w.npy", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_forward_bound.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_forward_bound.onnx"]
@@ -1850,7 +1850,7 @@ name = "pass_export_entry.tuple"
 desc = "A tuple result is expanded: one output per element (output_0, output_1)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/tuple.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_tuple.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_tuple.onnx"]
@@ -1872,7 +1872,7 @@ name = "pass_export_entry.constant"
 desc = "A `main` without parameters gives a model without inputs: its value is a constant."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/constant.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_constant.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_constant.onnx"]
@@ -1895,7 +1895,7 @@ name = "pass_export_entry.weights_as_inputs"
 desc = "`with` parameters are the weights: exported without values, each leaf of the struct is a model input named by its path (p_fc_w, p_fc_b), before the data input."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/weights.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_weights.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_weights.onnx"]
@@ -1917,7 +1917,7 @@ name = "pass_export_entry.weights_as_initializers"
 desc = "The same program exported with `--arg p=<directory>`: the weights are known, so they are the initializers w and b (named by field) and x is the only input."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/weights.cml"
-args = ["${case}", "--arg", "p=test/cases/compile/entry_args/model", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "--arg", "p=test/cases/compile/entry_args/model", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_weights_init.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_weights_init.onnx"]
@@ -1939,7 +1939,7 @@ name = "pass_export_entry.train_step"
 desc = "A training step as `main` (weights as `with` parameters, value_and_grad, sgd): the weights are inputs (p_w, p_b) and, updated, outputs (output_1_w, output_1_b) next to the loss (output_0)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/train_step.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_train_step.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_train_step.onnx"]
@@ -1961,7 +1961,7 @@ name = "pass_export_entry.train_step_without_macro"
 desc = "Without std::macro the training step still contains value_and_grad: refused at the macro call, naming std::macro, as for an export_model request."
 kind = "negative"
 case = "../../../cases/modules/onnx/entry/train_step.cml"
-args = ["${case}", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_train_step_refused.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -1976,7 +1976,7 @@ name = "pass_export_entry.unknown_shape"
 desc = "A parameter declared `Tensor` (no element type, no shape) cannot be a model input: the refusal is located at main and names the parameter. No file is written."
 kind = "negative"
 case = "../../../cases/modules/onnx/entry/unknown_shape.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_unknown_shape.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -2000,7 +2000,7 @@ name = "pass_export_entry.unknown_shape_given"
 desc = "The same program with the value of x given at export: its shape is known from the file, x is a constant of the model and the export succeeds."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/unknown_shape.cml"
-args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_unknown_shape_given.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_unknown_shape_given.onnx"]
@@ -2012,7 +2012,7 @@ name = "pass_export_entry.effect"
 desc = "A `main` with an effect the model cannot express (println) is refused at the effect (line 10); the message says what the pass translates. No file is written."
 kind = "negative"
 case = "../../../cases/modules/onnx/entry/effect.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_ONNX_OUT=tmp/test/onnx/entry_effect.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -2033,7 +2033,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "ort_entry_export"
-desc = "Pure programs exported by `std::macro std::opt::simplify onnx::export` and the same programs run natively with --arg / -o under the default pipeline, std::fvm, std::jit and std::tf agree on ONNX Runtime within 1e-5: declared shapes with a dynamic axis at two batch sizes, a tuple result, a parameterless main, weights as `with` parameters exported as inputs and (given at export) as initializers, and a training step returning the loss and the updated weights."
+desc = "Pure programs exported by `std::macro std::opt onnx::export` and the same programs run natively with --arg / -o under the default pipeline, std::fvm, std::jit and std::tf agree on ONNX Runtime within 1e-5: declared shapes with a dynamic axis at two batch sizes, a tuple result, a parameterless main, weights as `with` parameters exported as inputs and (given at export) as initializers, and a training step returning the loss and the updated weights."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/entry/ort_entry_export.py"
@@ -2061,10 +2061,10 @@ timeout_ms = 120000
 
 [[tests]]
 name = "pass_export_refusal_located.growth_budget"
-desc = "The request is in `main`, and the growth budget of the inliner (here CAMEL_OPT_GROWTH_BUDGET=0) leaves the call of `main` in the entry graph: the refusal, at `main`, says that the budget was exhausted, names the budget with its value and where the value comes from, and names the variable that raises it. It used to say 'run std::opt::simplify before onnx::export', although the pass had run."
+desc = "The request is in `main`, and the growth budget of the inliner (here CAMEL_OPT_GROWTH_BUDGET=0) leaves the call of `main` in the entry graph: the refusal, at `main`, says that the budget was exhausted, names the budget with its value and where the value comes from, and names the variable that raises it. It used to say 'run std::opt before onnx::export', although the pass had run."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/growth_budget.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_OPT_GROWTH_BUDGET=0"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -2072,7 +2072,7 @@ expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 16
 expect_diagnostic_column = 1
 expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined", "the inliner ran before onnx::export and left this call because its growth budget was exhausted: the budget is 0 nodes (set by CAMEL_OPT_GROWTH_BUDGET), 0 were spent, and inlining 'main' copies 2 more", "raise the budget by setting the environment variable CAMEL_OPT_GROWTH_BUDGET to a larger number of nodes"]
-expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "run std::opt::simplify before onnx::export"]
+expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "run std::opt before onnx::export"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -2081,7 +2081,7 @@ name = "pass_export_refusal_located.growth_budget_json"
 desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:onnx::export, the range of `main`, the budget and the variable in the message, no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/growth_budget.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["--output-format", "json", "${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_OPT_GROWTH_BUDGET=0"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -2106,7 +2106,7 @@ name = "pass_export_refusal_located.growth_budget_default_exports"
 desc = "The same program under the default budget: `main` is inlined, the request is visible and the model is written (the refusal above is about the budget, not about the program)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/growth_budget.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 0
 expect_output_contains = ["onnx::export: wrote tmp/test/onnx/refusal_growth_budget.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -2114,33 +2114,33 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.main_reaches_loop"
-desc = "The request is in a `main` that also runs a loop of run-time depth and is not small: the inliner leaves the call of `main` for that reason, not for the budget. The refusal, at `main`, says so (the function reaches a recursion and is inlined only while small, with both sizes) and what to change; it does not ask for std::opt::simplify, which ran, and does not mention the budget, which was not exhausted."
+desc = "The request is in a `main` that also runs a loop of run-time depth and is not small: the inliner leaves the call of `main` for that reason, not for the budget. The refusal, at `main`, says so (the function reaches a recursion and is inlined only while small, with both sizes) and what to change; it does not ask for std::opt, which ran, and does not mention the budget, which was not exhausted."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/main_reaches_loop.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 23
 expect_diagnostic_column = 1
 expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined", "the inliner ran before onnx::export and left this call because 'main' calls, directly or through other functions, a recursive function (a loop), and such a function is inlined only while it is small (at most 8 nodes besides constants and parameters; this one has 17)", "keep the function that makes the export_model call small by moving the rest of its work into a function it calls"]
-expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "run std::opt::simplify before onnx::export", "growth budget"]
+expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "run std::opt before onnx::export", "growth budget"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.request_in_arm"
-desc = "An export_model call in an arm of a branch on an environment value: the refusal points at the branch (the `if`, line 19 column 12), says where the call is and that the condition of the branch is not known at compile time. It used to point at the definition of the example and say 'the example argument of onnx.export_model is a value computed at run time ... run std::opt::simplify before it so that it folds'."
+desc = "An export_model call in an arm of a branch on an environment value: the refusal points at the branch (the `if`, line 19 column 12), says where the call is and that the condition of the branch is not known at compile time. It used to point at the definition of the example and say 'the example argument of onnx.export_model is a value computed at run time ... run std::opt before it so that it folds'."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/request_in_arm.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 19
 expect_diagnostic_column = 12
 expect_output_contains = ["request_in_arm.cml:20:9 is made in an arm of this branch, and the condition of the branch (a value computed by ':op/eq_s') is not known at compile time", "onnx::export does not run the program, so it cannot tell whether the request is made", "write the export_model call outside the branch, or make the condition a constant"]
-expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "the example argument of onnx.export_model", "run std::opt::simplify before it so that it folds"]
+expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "the example argument of onnx.export_model", "run std::opt before it so that it folds"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -2149,7 +2149,7 @@ name = "pass_export_refusal_located.request_in_arm_json"
 desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:onnx::export, the range of the branch (it starts at the `if` on line 19 and ends with the else arm on line 23), no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/request_in_arm.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["--output-format", "json", "${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2172,7 +2172,7 @@ name = "pass_export_refusal_located.graph_too_large"
 desc = "A function that does not fit one runtime graph once the export has inlined every call in it (f13 calls f12 twice, and so on down to f0): the refusal is at the export_model call and names the graph, the quantity, the size it needs and the limit of 65535. It used to be the unlocated PassInternalError '... exceeds the target integral width'."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/graph_too_large.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -2188,7 +2188,7 @@ name = "pass_export_refusal_located.graph_too_large_json"
 desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:onnx::export, the range of the export_model call, a size above the limit in the message, no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/graph_too_large.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["--output-format", "json", "${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2237,10 +2237,10 @@ timeout_ms = 240000
 
 [[tests]]
 name = "as_refusal.unproven.pass"
-desc = "A conversion of a model-dependent tensor that asserts an extent the exported inputs leave open (axis 0 is dynamic, the conversion says 2) cannot be checked at export, and an ONNX model checks nothing when it runs: refused at the conversion, naming it. The exporter used to drop the conversion silently. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused at the construct."
+desc = "A conversion of a model-dependent tensor that asserts an extent the exported inputs leave open (axis 0 is dynamic, the conversion says 2) cannot be checked at export, and an ONNX model checks nothing when it runs: refused at the conversion, naming it. The exporter used to drop the conversion silently. By the pass (std::macro std::opt onnx::export): TranslationRefused at the construct."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/as_unproven.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -2265,10 +2265,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "as_refusal.always_fails.pass"
-desc = "A conversion of a model-dependent tensor to a shape the exported inputs contradict ([2, 3] converted to [3, 2]) always fails: refused at the conversion with both types. The exporter used to drop the conversion silently and write a model. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused at the construct."
+desc = "A conversion of a model-dependent tensor to a shape the exported inputs contradict ([2, 3] converted to [3, 2]) always fails: refused at the conversion with both types. The exporter used to drop the conversion silently and write a model. By the pass (std::macro std::opt onnx::export): TranslationRefused at the construct."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/as_always_fails.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -2293,10 +2293,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "as_refusal.constant_fails.pass"
-desc = "A conversion of a constant that fails inside the exported function (a [2, 3] tensor from a function declared to return Tensor, converted to [3, 2]): constant folding leaves it, and the export refuses at the conversion with the conversion's own message. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused at the construct."
+desc = "A conversion of a constant that fails inside the exported function (a [2, 3] tensor from a function declared to return Tensor, converted to [3, 2]): constant folding leaves it, and the export refuses at the conversion with the conversion's own message. By the pass (std::macro std::opt onnx::export): TranslationRefused at the construct."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/as_constant_fails.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -2321,10 +2321,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "example_refusal.tuple.pass"
-desc = "The example of a one-parameter function is its argument itself; a tuple that holds the tensor is an argument of tuple type that the parameter (declared a tensor) cannot take: refused at the export_model call with the parameter, both types and what to write. It used to bind the tuple to the parameter and fail at the first operator using it, with a message about a tuple that depends on the model input being used where a tensor is expected. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused at the construct."
+desc = "The example of a one-parameter function is its argument itself; a tuple that holds the tensor is an argument of tuple type that the parameter (declared a tensor) cannot take: refused at the export_model call with the parameter, both types and what to write. It used to bind the tuple to the parameter and fail at the first operator using it, with a message about a tuple that depends on the model input being used where a tensor is expected. By the pass (std::macro std::opt onnx::export): TranslationRefused at the construct."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/tuple_example.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -2350,10 +2350,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "example_refusal.shape.pass"
-desc = "An example whose shape contradicts the declared type of the parameter it is given for ([2, 3] for a parameter declared [4, 3]) is refused at the export_model call. The function is specialized for the example's type whatever the parameter declares, so the model used to be written for [2, 3] without a word. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused at the construct."
+desc = "An example whose shape contradicts the declared type of the parameter it is given for ([2, 3] for a parameter declared [4, 3]) is refused at the export_model call. The function is specialized for the example's type whatever the parameter declares, so the model used to be written for [2, 3] without a word. By the pass (std::macro std::opt onnx::export): TranslationRefused at the construct."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/example_mismatch.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -2392,10 +2392,10 @@ timeout_ms = 240000
 
 [[tests]]
 name = "unended_unrolling.pass"
-desc = "An export whose simplification does not end (a constant typed by a declared return type that says neither element type nor shape, used inside a recursion: every unrolled level is more precisely typed than the loop) is refused, naming the recursive call, saying that the unrolling did not end and what to do. It used to be the unlocated 'Runtime draft encoding failed to allocate ... bytes'. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused. The unrolling stops at whichever limit it meets first: the space all graphs live in (refused at the recursive call) or the size of one graph (refused at the export_model call, with the recursive call in the text); which one depends on how compact the unrolled levels are, so the test holds for both. The graph space is limited to 64 MB (its size when it could not grow) so that the unrolling reaches a limit in a few seconds."
+desc = "An export whose simplification does not end (a constant typed by a declared return type that says neither element type nor shape, used inside a recursion: every unrolled level is more precisely typed than the loop) is refused, naming the recursive call, saying that the unrolling did not end and what to do. It used to be the unlocated 'Runtime draft encoding failed to allocate ... bytes'. By the pass (std::macro std::opt onnx::export): TranslationRefused. The unrolling stops at whichever limit it meets first: the space all graphs live in (refused at the recursive call) or the size of one graph (refused at the export_model call, with the recursive call in the text); which one depends on how compact the unrolled levels are, so the test holds for both. The graph space is limited to 64 MB (its size when it could not grow) so that the unrolling reaches a limit in a few seconds."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/unended_unrolling.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 envs = ["CAMEL_GRAPH_SPACE_LIMIT_MB=64"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
@@ -2421,10 +2421,10 @@ timeout_ms = 60000
 
 [[tests]]
 name = "function_branch.pass"
-desc = "A branch on a condition that depends on the model input whose arms yield functions, outside the recursion with one recursive call that is exported as loops (the returned function calls the next one twice), is refused at the branch, saying that a function value would be chosen when the model runs. It used to stop with 'the dtype of 'arm_out' is not known statically'. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused at the construct."
+desc = "A branch on a condition that depends on the model input whose arms yield functions, outside the recursion with one recursive call that is exported as loops (the returned function calls the next one twice), is refused at the branch, saying that a function value would be chosen when the model runs. It used to stop with 'the dtype of 'arm_out' is not known statically'. By the pass (std::macro std::opt onnx::export): TranslationRefused at the construct."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/function_branch.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"

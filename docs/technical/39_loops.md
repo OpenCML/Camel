@@ -94,7 +94,7 @@ analysis look into its two graphs, and nothing lowers it in the shared program.
 | `std::nvm` | natively (`NodeVMSchedPass::evalLoop`): one call of the condition graph and one of the body graph per round, the state in the node's slot |
 | `std::fvm`, `std::jit` | the private lowering at its entry, by default (faster today, section 5). Natively under a debugger and with `CAMEL_FVM_NATIVE_LOOP=1`: one `SCHD` instruction (marks `LoopWhile`, `LoopFor`, `LoopForWhile`, the two graphs in extra words), run by `FastVMSchedPass::evalLoop` through the call path of the higher-order operators (a compiled body runs compiled), so that a debugger shows the loop's own graphs |
 | `std::macro` evaluator | natively, round by round, at most 1,000,000 rounds |
-| `std::prl` | the private lowering at its entry |
+| `std::prl` | the private lowering at its entry and when a runtime callback supplies an original graph containing a loop |
 | `std::cpp` | the private lowering at its entry; the generated tail calls are loops |
 | ONNX export | refused where the loop is written (the LOOP to ONNX Loop translation is the next step) |
 | autodiff | refused where the loop is written (forward and backward loops are a later step) |
@@ -107,6 +107,16 @@ first). The arms are graphs under a BRCH, as the front end builds an `if`, so th
 is in tail position on every back end, and the lowered loop is not counted against the recursion
 limit. The program is committed **detached** (`RuntimeGraphDraftSession::commit(true)`): the
 context's program keeps its LOOP nodes.
+
+The parallel scheduler also accepts function graphs obtained during execution, for example
+the CPU fallback of a native operator that reads a function's original graph. Its per-run
+execution-graph cache lowers such a graph once, under a mutex, before allocating the callee
+frame. Arguments and captures are bound through the resulting frame's own ports. Detached
+copies and their original graphs remain rooted by the context's graph manager; the cache
+holds no function values or invocation data. Concurrent publication of those graph roots is
+serialized, with collections inhibited only while publishing or rewriting, never while
+running the callee. The bytecode hand-off excludes original LOOP graphs, so bytecode compiled
+for a source graph cannot be paired with a lowered graph's frame layout.
 
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
 function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,

@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.2.13"
+#define VERSION "0.2.14"
 
 #include <string>
 #include <vector>

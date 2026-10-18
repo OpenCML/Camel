@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,12 +29,25 @@ struct PreAllocEvent {
     const char *space; // Space name.
 };
 
-/// Post-allocation event information for Web UI display.
+/// Post-allocation event information for debugger clients.
 struct AllocEvent {
     void *ptr;
     size_t size;       // Total size including header.
     const char *space; // Space name: auto.birth, auto.haven, auto.elder, auto.large, meta, perm
 };
+
+#ifndef NDEBUG
+/// A debugger inspection boundary outside the outer allocator's locks. Declare before
+/// lock/operation guards. Nested allocators contribute their completed allocation event;
+/// only the outer scope notifies, after every nested allocator has released its guards.
+class AllocationDebugScope {
+  public:
+    AllocationDebugScope();
+    ~AllocationDebugScope() noexcept(false);
+    AllocationDebugScope(const AllocationDebugScope &)            = delete;
+    AllocationDebugScope &operator=(const AllocationDebugScope &) = delete;
+};
+#endif
 
 /// Invoke breakpoint before allocation (Debug build only); may block until continue.
 void invokePreAllocHook(const PreAllocEvent &evt);

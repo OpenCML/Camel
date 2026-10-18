@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,53 +25,21 @@ void require(bool ok, const char *message) {
         throw std::runtime_error(std::string("reduction core contract: ") + message);
 }
 struct Domain {
+    Shape extents;
     std::vector<bool> reduced;
-    std::vector<int64_t> outputDims; // -1 denotes a kept reduction coordinate (zero).
+    std::vector<size_t> outputAxes; // Domain dim -> output axis; SIZE_MAX means fixed zero.
     size_t count = 1;
 };
 Domain domain(const Program &p, const Node &n) {
-    const auto &shape = p.nodes.at(n.inputs.at(0)).shape;
-    Domain result{std::vector<bool>(shape.size(), true)};
-    if (n.op.ends_with("_axis")) {
-        const size_t axis = n.attributes.at(0);
-        require(axis < shape.size(), "invalid axis");
-        const bool keep = n.shape.size() == shape.size();
-        require(keep || n.shape.size() + 1 == shape.size(), "unsupported output rank");
-        for (size_t d = 0; d < shape.size(); ++d) {
-            result.reduced[d] = d == axis;
-            if (d != axis || keep)
-                result.outputDims.push_back(d == axis ? -1 : static_cast<int64_t>(d));
-        }
-    } else if (n.op == "sum_to") {
-        require(n.shape.size() <= shape.size(), "invalid target rank");
-        const auto shift = shape.size() - n.shape.size();
-        for (size_t d = shift; d < shape.size(); ++d) {
-            const auto extent = n.shape[d - shift];
-            require(extent == shape[d] || extent == 1, "invalid target extent");
-            result.reduced[d] = extent != shape[d];
-            result.outputDims.push_back(result.reduced[d] ? -1 : static_cast<int64_t>(d));
-        }
-    } else
-        require(
-            (n.op == "sum_all" || n.op == "mean_all") && n.shape.empty(),
-            "unsupported reduction");
-    Shape reductions;
-    for (size_t d = 0; d < shape.size(); ++d)
-        if (result.reduced[d])
-            reductions.push_back(shape[d]);
-    result.count = elements(reductions);
-    return result;
-}
-void contract(const Program &p, const Node &n, const Domain &domain) {
     require(n.indexing && n.semantic < p.contracts.size(), "missing index instance");
     const auto &inst = *n.indexing;
     const auto *decl = p.contracts[n.semantic].declaration;
     require(decl && !sem::validate(inst, decl), "invalid index instance");
-    const auto &shape = p.nodes.at(n.inputs.at(0)).shape;
+    const auto extents = inst.extents();
     require(
-        inst.extents() == std::optional<Shape>(shape) && inst.with.empty() && !inst.norm.empty() &&
-            inst.domain.guard.empty(),
+        extents && inst.with.empty() && !inst.norm.empty() && inst.domain.guard.empty(),
         "unsupported iteration domain");
+    elements(*extents); // Checks the complete rectangular domain, independently of storage.
     for (size_t i = 1; i < inst.norm.size(); ++i)
         require(inst.norm[i].kind == sem::AccessKind::None, "unexpected data operand");
     for (const auto &c : inst.domain.constraints)
@@ -79,25 +47,52 @@ void contract(const Program &p, const Node &n, const Domain &domain) {
             !inst.exprs.mentionsDim(c.lhs) && !inst.exprs.mentionsDim(c.rhs),
             "dimension-dependent constraint");
     require(
-        sem::holds(inst, inst.domain.constraints, std::vector<int64_t>(shape.size())),
+        sem::holds(inst, inst.domain.constraints, std::vector<int64_t>(extents->size())),
         "unsatisfied domain constraints");
     require(
         inst.output.mode == sem::WriteMode::Combine && !inst.output.indirect &&
             inst.output.valid.empty() && inst.output.coords.size() == n.shape.size(),
         "unsupported output map");
-    for (size_t d = 0; d < shape.size(); ++d)
+    Domain result{
+        *extents,
+        std::vector<bool>(extents->size()),
+        std::vector<size_t>(extents->size(), SIZE_MAX)};
+    Shape reductions;
+    for (size_t d = 0; d < extents->size(); ++d) {
+        const auto role = inst.domain.dims[d].role;
         require(
-            inst.domain.dims[d].role ==
-                (domain.reduced[d] ? sem::DimRole::Reduction : sem::DimRole::Parallel),
+            role == sem::DimRole::Parallel || role == sem::DimRole::Reduction,
             "unsupported dimension roles");
-    for (size_t out = 0; out < domain.outputDims.size(); ++out) {
-        const auto d      = domain.outputDims[out];
-        const auto &coord = inst.exprs[inst.output.coords[out]];
-        require(
-            d < 0 ? coord.op == sem::ExprOp::Const && coord.value == 0
-                  : coord.op == sem::ExprOp::Dim && coord.value == d,
-            "output is not the reduction projection");
+        result.reduced[d] = role == sem::DimRole::Reduction;
+        if (result.reduced[d])
+            reductions.push_back((*extents)[d]);
     }
+    result.count = elements(reductions);
+    for (size_t out = 0; out < inst.output.coords.size(); ++out) {
+        const auto coord =
+            inst.exprs.affine(inst.output.coords[out], extents->size(), inst.paramValues());
+        require(coord && coord->constant == 0, "output is not the reduction projection");
+        size_t dimension = SIZE_MAX;
+        for (size_t d = 0; d < extents->size(); ++d)
+            if (coord->coeffs[d]) {
+                require(
+                    coord->coeffs[d] == 1 && dimension == SIZE_MAX && !result.reduced[d],
+                    "output is not the reduction projection");
+                dimension = d;
+            }
+        if (dimension == SIZE_MAX) {
+            require(n.shape[out] == 1, "constant output coordinate has nonunit extent");
+            continue;
+        }
+        require(
+            result.outputAxes[dimension] == SIZE_MAX && n.shape[out] == (*extents)[dimension],
+            "duplicate or incompatible reduction projection");
+        result.outputAxes[dimension] = out;
+    }
+    for (size_t d = 0; d < extents->size(); ++d)
+        require(
+            result.reduced[d] || result.outputAxes[d] != SIZE_MAX || (*extents)[d] == 1,
+            "parallel dimension is missing from reduction projection");
     require(inst.law < decl->laws.size(), "missing reduction law");
     const auto &law = decl->laws[inst.law];
     const auto f32 = core::type::TypeCode::Float32, f64 = core::type::TypeCode::Float64;
@@ -109,60 +104,68 @@ void contract(const Program &p, const Node &n, const Domain &domain) {
             law.kind == (maximum ? sem::LawKind::Max : sem::LawKind::Add) &&
             law.accumulator == (maximum || n.op == "sum_to" ? f32 : f64) &&
             law.initBits == (maximum ? 0xff800000ULL : 0) &&
-            law.empty ==
-                (maximum || n.op == "mean_all" ? sem::LawEmpty::Fault : sem::LawEmpty::Initial) &&
             law.finalize == (mean ? sem::LawFinalize::DivideByCount : sem::LawFinalize::None),
         "unsupported numerical law");
+    require(result.count || law.empty != sem::LawEmpty::Fault, "empty reduction domain");
+    return result;
 }
 } // namespace
 ReductionAccess
 reductionAccess(const Program &p, const Node &n, const IndexExpr &row, const IndexExpr &r) {
     const auto &shape   = p.nodes.at(n.inputs.at(0)).shape;
     const auto geometry = domain(p, n);
-    if (n.indexing)
-        contract(p, n, geometry);
-    std::vector<IndexExpr> point(shape.size(), IndexExpr(0));
-    size_t redStride = 1, outStride = 1, inStride = 1;
-    IndexExpr direct(0);
-    for (size_t d = shape.size(); d-- > 0;) {
-        auto &stride       = geometry.reduced[d] ? redStride : outStride;
-        const auto &linear = geometry.reduced[d] ? r : row;
-        point[d] = (linear / IndexExpr(stride)) % IndexExpr(std::max<int64_t>(shape[d], 1));
-        stride *= std::max<int64_t>(shape[d], 1);
-        direct = direct + point[d] * IndexExpr(inStride);
-        inStride *= std::max<int64_t>(shape[d], 1);
+    if (!geometry.count || !elements(n.shape)) {
+        const std::vector<IndexExpr> point(geometry.extents.size(), IndexExpr(0));
+        // Validate the access form without building unreachable linear coordinates.
+        return {geometry.count, affineAddress(*n.indexing, n.indexing->norm[0], shape, point)};
     }
-    // Preserve compact formulas for the common full and single-axis domains.
-    if (n.op == "sum_all" || n.op == "mean_all")
-        direct = r;
-    else if (n.op.ends_with("_axis")) {
-        const auto axis = static_cast<size_t>(n.attributes.at(0));
-        size_t inner    = 1;
-        for (size_t d = axis + 1; d < shape.size(); ++d)
-            inner *= shape[d];
-        const auto safeInner = IndexExpr(std::max(inner, size_t(1)));
-        direct = (row / safeInner) * IndexExpr(shape[axis] * inner) + row % safeInner +
-                 r * IndexExpr(inner);
+    std::vector<size_t> outputStrides(n.shape.size());
+    size_t stride = 1;
+    for (size_t out = n.shape.size(); out-- > 0;) {
+        outputStrides[out] = stride;
+        stride *= std::max<int64_t>(n.shape[out], 1);
     }
-    if (!n.indexing)
-        return {geometry.count, direct}; // Explicit physical primitives.
-    const auto mapped = affineAddress(*n.indexing, n.indexing->norm[0], shape, point);
-    const auto view   = sem::rowMajorView(*n.indexing, n.indexing->norm[0], shape);
-    bool identity     = view && view->offset == 0;
-    size_t stride     = 1;
-    for (size_t d = shape.size(); identity && d-- > 0;) {
-        identity = shape[d] <= 1 || view->strides[d] == static_cast<int64_t>(stride);
-        stride *= std::max<int64_t>(shape[d], 1);
+    std::vector<IndexExpr> point(geometry.extents.size(), IndexExpr(0));
+    size_t reductionStride = 1;
+    for (size_t d = geometry.extents.size(); d-- > 0;) {
+        const auto extent = IndexExpr(std::max<int64_t>(geometry.extents[d], 1));
+        if (geometry.reduced[d]) {
+            point[d] = (r / IndexExpr(reductionStride)) % extent;
+            reductionStride *= std::max<int64_t>(geometry.extents[d], 1);
+        } else if (geometry.outputAxes[d] != SIZE_MAX)
+            point[d] = (row / IndexExpr(outputStrides[geometry.outputAxes[d]])) % extent;
     }
-    return {geometry.count, identity ? direct : mapped};
+    return {geometry.count, affineAddress(*n.indexing, n.indexing->norm[0], shape, point)};
 }
 bool canonicalAxisReduction(const Program &p, const Node &n) {
-    if (!n.indexing)
-        return true;
     try {
-        (void)reductionAccess(p, n, IndexExpr(0), IndexExpr(0));
+        const auto geometry = domain(p, n);
+        // Empty outputs need no specialized launch. Avoid multiplying artificial
+        // unit extents through zero axes: their physical strides may be enormous.
+        if (!elements(n.shape))
+            return false;
         const auto &shape = p.nodes.at(n.inputs.at(0)).shape;
-        const auto view   = sem::rowMajorView(*n.indexing, n.indexing->norm[0], shape);
+        // Existing row/axis kernels use the operand's physical row-major axes.
+        // This eligibility proof never supplies the generic reduction's semantics.
+        if (geometry.extents != shape || n.attributes.size() != 1 || n.attributes[0] < 0 ||
+            size_t(n.attributes[0]) >= shape.size())
+            return false;
+        const auto axis = size_t(n.attributes[0]);
+        size_t output   = 0;
+        const bool keep = n.shape.size() == shape.size();
+        if (!keep && n.shape.size() + 1 != shape.size())
+            return false;
+        for (size_t d = 0; d < shape.size(); ++d) {
+            if (geometry.reduced[d] != (d == axis))
+                return false;
+            if (d != axis) {
+                if (geometry.outputAxes[d] != output++)
+                    return false;
+            } else if (keep && n.shape[output++] != 1)
+                return false;
+        }
+        (void)reductionAccess(p, n, IndexExpr(0), IndexExpr(0));
+        const auto view = sem::rowMajorView(*n.indexing, n.indexing->norm[0], shape);
         if (!view || view->offset != 0)
             return false;
         int64_t stride = 1;

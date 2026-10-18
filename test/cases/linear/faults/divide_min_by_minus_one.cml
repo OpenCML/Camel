@@ -1,7 +1,7 @@
 /**
  * The smallest integer divided by -1: the quotient does not fit, and the machine's division
  * traps on it. Every back end gives the negation with wraparound (the smallest integer again)
- * and 0 for the remainder, not SIGFPE; `f` is what the JIT compiles after std::inline.
+ * and 0 for the remainder, not SIGFPE; `f` is what the JIT compiles after std::opt::inline.
  */
 module divide_min_by_minus_one
 

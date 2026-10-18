@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,19 +35,20 @@ void matrixContract(const Program &p, const Node &n, const Shape &domain) {
         inst.extents() == std::optional<Shape>(domain) && inst.norm.size() == 2 &&
             inst.with.empty() && inst.domain.guard.empty(),
         "unsupported iteration domain");
+    require(domain.size() >= 3, "matrix domain rank");
+    for (size_t d = 0; d < domain.size(); ++d)
+        require(
+            inst.domain.dims[d].role ==
+                (d + 1 == domain.size() ? sem::DimRole::Reduction : sem::DimRole::Parallel),
+            "unsupported dimension roles");
     require(
-        inst.domain.dims[0].role == sem::DimRole::Parallel &&
-            inst.domain.dims[1].role == sem::DimRole::Parallel &&
-            inst.domain.dims[2].role == sem::DimRole::Reduction,
-        "unsupported dimension roles");
-    require(
-        sem::holds(inst, inst.domain.constraints, std::vector<int64_t>(3)),
+        sem::holds(inst, inst.domain.constraints, std::vector<int64_t>(domain.size())),
         "unsatisfied domain constraints");
     require(
         inst.output.mode == sem::WriteMode::Combine && !inst.output.indirect &&
-            inst.output.valid.empty() && inst.output.coords.size() == 2,
+            inst.output.valid.empty() && inst.output.coords.size() + 1 == domain.size(),
         "unsupported output map");
-    for (size_t d = 0; d < 2; ++d) {
+    for (size_t d = 0; d < inst.output.coords.size(); ++d) {
         const auto &e = inst.exprs[inst.output.coords[d]];
         require(
             e.op == sem::ExprOp::Dim && e.value == static_cast<int64_t>(d),
@@ -65,15 +66,18 @@ void matrixContract(const Program &p, const Node &n, const Shape &domain) {
     const auto lhs = sem::rowMajorView(inst, inst.norm[0], p.nodes[n.inputs[0]].shape);
     const auto rhs = sem::rowMajorView(inst, inst.norm[1], p.nodes[n.inputs[1]].shape);
     require(
-        lhs && rhs && lhs->strides[1] == 0 && rhs->strides[0] == 0,
+        lhs && rhs && lhs->strides[domain.size() - 2] == 0 && rhs->strides[domain.size() - 3] == 0,
         "cross-output dependence prevents tiled sharing");
 }
 } // namespace
 void validateMatmulContract(const Program &p, const Node &n) {
     const auto &a = p.nodes.at(n.inputs.at(0)).shape;
     const auto &b = p.nodes.at(n.inputs.at(1)).shape;
-    matrixContract(p, n, {a.at(0), b.at(1), a.at(1)});
-    const std::vector<IndexExpr> point(3, IndexExpr(0));
+    require(a.size() >= 2 && b.size() >= 2 && n.shape.size() >= 2, "operand rank");
+    auto domain = n.shape;
+    domain.push_back(a.back());
+    matrixContract(p, n, domain);
+    const std::vector<IndexExpr> point(domain.size(), IndexExpr(0));
     (void)affineAddress(*n.indexing, n.indexing->norm[0], a, point);
     (void)affineAddress(*n.indexing, n.indexing->norm[1], b, point);
 }
@@ -82,14 +86,15 @@ KernelBody matmulBody(const Program &p, Launch &launch) {
     const auto &n  = p.nodes.at(id);
     const auto &a  = p.nodes.at(n.inputs.at(0)).shape;
     const auto &b  = p.nodes.at(n.inputs.at(1)).shape;
-    const size_t m = a.at(0), k = a.at(1), cols = b.at(1);
+    const size_t m = a.at(a.size() - 2), k = a.back(), cols = b.back();
     validateMatmulContract(p, n);
     const size_t gx = (cols + 15) / 16, gy = (m + 15) / 16;
-    if (gx > 2147483647 || gy > 65535)
+    const auto batches = elements(Shape(n.shape.begin(), n.shape.end() - 2));
+    if (gx > 2147483647 || gy > 65535 || (gy && batches > 65535 / gy))
         throw std::runtime_error("matrix launch exceeds CUDA grid limits");
     launch.blockX = launch.blockY = 16;
     launch.gridX                  = static_cast<unsigned>(std::max(gx, size_t(1)));
-    launch.gridY                  = static_cast<unsigned>(std::max(gy, size_t(1)));
+    launch.gridY                  = static_cast<unsigned>(std::max(gy * batches, size_t(1)));
     KernelBody result;
     result.buffers = {
         {MemorySpace::Global, DType::F32, n.inputs[0], elements(a), false},
@@ -97,10 +102,28 @@ KernelBody matmulBody(const Program &p, Launch &launch) {
         {MemorySpace::Global, DType::F32, id, elements(n.shape), true},
         {MemorySpace::Shared, DType::F32, 0, 256, true},
         {MemorySpace::Shared, DType::F32, 1, 256, true}};
+    // No operand access is valid for an empty output batch. Emit a no-op body.
+    if (!elements(n.shape)) {
+        validateBody(result);
+        return result;
+    }
     const auto tx = IndexExpr::variable("thread_x"), ty = IndexExpr::variable("thread_y");
     const auto row = IndexExpr::variable("k_row"), col = IndexExpr::variable("k_col");
     const auto base = IndexExpr::variable("k_base"), t = IndexExpr::variable("k_t");
     const auto ak = base + tx, bk = base + ty;
+    // Flatten batch and row tiles into grid Y. Logical batch coordinates feed
+    // the existing core maps, including singleton and unequal-rank broadcasts.
+    std::vector<IndexExpr> point;
+    auto batch = IndexExpr::variable("block_y") / IndexExpr(gy);
+    for (size_t d = 0; d + 2 < n.shape.size(); ++d) {
+        const auto stride = elements(Shape(n.shape.begin() + d + 1, n.shape.end() - 2));
+        point.push_back((batch / IndexExpr(stride)) % IndexExpr(n.shape[d]));
+    }
+    const auto matrixPoint = [&](IndexExpr r, IndexExpr c, IndexExpr reduction) {
+        auto coordinates = point;
+        coordinates.insert(coordinates.end(), {r, c, reduction});
+        return coordinates;
+    };
     const auto zero = ScalarValue::f32(0);
     auto symbol     = [](const char *name) { return ScalarExpr::symbol(name, DType::F32); };
     // The canonical FMA chain keeps one accumulator across tiles. Padding is
@@ -117,13 +140,13 @@ KernelBody matmulBody(const Program &p, Launch &launch) {
         Load{
             "k_a",
             {0,
-             affineAddress(*n.indexing, n.indexing->norm[0], a, {row, IndexExpr(0), ak}),
+             affineAddress(*n.indexing, n.indexing->norm[0], a, matrixPoint(row, IndexExpr(0), ak)),
              Predicate::less(row, IndexExpr(m)) && Predicate::less(ak, IndexExpr(k))},
             zero},
         Load{
             "k_b",
             {1,
-             affineAddress(*n.indexing, n.indexing->norm[1], b, {IndexExpr(0), col, bk}),
+             affineAddress(*n.indexing, n.indexing->norm[1], b, matrixPoint(IndexExpr(0), col, bk)),
              Predicate::less(bk, IndexExpr(k)) && Predicate::less(col, IndexExpr(cols))},
             zero},
         Store{{3, ty * IndexExpr(16) + tx, Predicate(true)}, symbol("k_a")},
@@ -138,7 +161,9 @@ KernelBody matmulBody(const Program &p, Launch &launch) {
             true},
         Barrier{}};
     result.statements = {
-        IndexBinding{"k_row", IndexExpr::variable("block_y") * IndexExpr(16) + ty},
+        IndexBinding{
+            "k_row",
+            (IndexExpr::variable("block_y") % IndexExpr(gy)) * IndexExpr(16) + ty},
         IndexBinding{"k_col", IndexExpr::variable("block_x") * IndexExpr(16) + tx},
         ScalarBinding{"k_acc", ScalarExpr::literal(zero)},
         Loop{"k_base", IndexExpr(0), IndexExpr(k), 16, std::move(tile)},
@@ -148,7 +173,7 @@ KernelBody matmulBody(const Program &p, Launch &launch) {
                  *n.indexing,
                  sem::Access{.kind = sem::AccessKind::Affine, .coords = n.indexing->output.coords},
                  n.shape,
-                 {row, col, IndexExpr(0)}),
+                 matrixPoint(row, col, IndexExpr(0))),
              Predicate::less(row, IndexExpr(m)) && Predicate::less(col, IndexExpr(cols))},
             symbol("k_acc")}};
     validateBody(result);

@@ -56,7 +56,7 @@ The relation between lines and nodes is many to many, and the debugger never hid
 |------|--------------|
 | One line, several nodes (`println(f(x) + g(x))`) | The line is entered once (2.1); node steps walk the nodes |
 | One line, nodes in several graphs (a generic function's instances; a function inlined at several places) | A line breakpoint binds to all of them |
-| A node whose source is in another function (after `std::inline`) | The frame is the graph that runs; the location is the source it came from, and the frame says "inlined" (5.3) |
+| A node whose source is in another function (after `std::opt::inline`) | The frame is the graph that runs; the location is the source it came from, and the frame says "inlined" (5.3) |
 | A line with code but no node | The code is not executed: nothing depends on it, or a pass removed it. A breakpoint there is unverified and says which (3.2) |
 | A node without a line | Reached by node steps only |
 
@@ -197,10 +197,15 @@ with F not S or line(N) not L. It enters a callee when the next node is a call.
 ### 4.1 Tail calls
 
 A tail call replaces the frame (section 5.2): the callee takes the place of S at the same
-depth. For stepping, the replacement is a new frame at depth `d`, so a line step at
-`return loop(n - 1, acc)` stops at the first line of `loop`, and step out runs until the whole
-chain of tail calls has returned to the real caller. A recursion written as tail calls is thus
-stepped like the loop it is. `DESIGN-QUESTION(step-over-tail-call)`.
+depth. Step in (F11) stops at its first executable source location with the new arguments.
+Step over (F10) and step out run until the chain returns to the real caller; a breakpoint,
+fault or explicit pause can still interrupt them. This also applies to node-granularity
+step over. The source author's ruling on 2026-10-16 resolves `step-over-tail-call` this way.
+
+The top frame in `camel/stopped` includes its `activation`, `functionId`, `entry` flag and
+bounded `arguments` snapshots (name, type, value, evaluated). These are immutable display
+values, not heap handles. Graph clients can show changed arguments between activations of
+the same function without inventing a stack frame or requesting values after resume.
 
 ### 4.2 Lines that did not execute
 
@@ -233,7 +238,7 @@ REPL prints them under the stop. A variable whose node is not in the graph says 
 
 ### 4.3 Inlined calls
 
-After `std::inline` the callee's nodes are in the caller's graph and there is no frame. Nodes
+After `std::opt::inline` the callee's nodes are in the caller's graph and there is no frame. Nodes
 keep their origins, so the debugger knows which *function of the source* a node was written in
 (the innermost function whose span contains the node's span), though not at which call it was
 inlined (10: there is no "inlined at" chain). Stepping uses the source function as a frame
@@ -429,7 +434,7 @@ Two exception filters:
   breakpoints, the stack, stepping, stops, variables, events. It knows neither HTTP nor DAP.
   It is the `ExecutionObserver` of the scheduler in the worker.
 - **The HTTP API** of the worker exposes the core as `/api/debug/<command>` (JSON in, JSON out)
-  and `/api/debug/events` (long poll). The existing endpoints the Vue front end uses
+  and `/api/debug/events` (long poll). The retained HTTP endpoints for REPL and automation
   (`gir-breakpoints`, `step`, `continue`, `step-paused`) are now implemented by the core.
 - **The DAP adapter** (`camel-db --dap`) speaks DAP on stdin/stdout, spawns one worker, forwards
   the worker's standard output and error as `output` events, and translates requests to
@@ -494,7 +499,7 @@ are not stops.
   the program is the same program; what cannot be observed this way is a defect that depends
   on the interleaving. A stop-the-world mode showing the node of each worker is possible
   later; it needs hooks in the task bodies. `DESIGN-QUESTION(parallel-debugging)`.
-- **Passes that rewrite the graph** (`std::inline`, `std::opt`, `std::macro`, ...) run as asked.
+- **Passes that rewrite the graph** (`std::opt::inline`, `std::opt`, `std::macro`, ...) run as asked.
   Positions survive because nodes keep their origins through rewrites (10); breakpoints are
   answered again against the graph the scheduler is given (3.1). What is lost: the name of a
   `let` bound to a call that was inlined or a value that was folded (its node is gone: the
@@ -603,12 +608,12 @@ has ruled since, which say so.
    node of the line.
 2. `line-step-order`: the next line in execution order, or in the text. **Ruled** (design
    principles 2.11): in execution order.
-3. `step-over-tail-call`: a line step over a tail call stops in the callee (recommended), or
-   runs until the chain returns to the caller.
+3. `step-over-tail-call`: **Ruled 2026-10-16**: F10 runs until the chain returns to the
+   caller; F11 enters the callee at its first executable location. Breakpoints still apply.
 4. `tail-call-stack`: show the stack as it is, marking replaced frames (recommended), or keep
    a shadow record of replaced callers for display.
 5. `inlined-frames`: one frame marked as inlined code, stepping by source function
-   (recommended), or have `std::inline` record call sites so that virtual frames can be shown.
+   (recommended), or have `std::opt::inline` record call sites so that virtual frames can be shown.
    (Ruling 2.11 folds arms into the frame of their function; whether a function inlined into
    another should then be shown as a frame of its own has not been ruled.)
 6. `parallel-debugging`: run on the sequential `std::fvm` with a notice (implemented), refuse
@@ -641,15 +646,15 @@ been run since), macOS, and the VS Code user interface (the tests speak DAP to t
 | Faults: stop with the diagnostic, isolated faults by filter | implemented, tested on both back ends |
 | DAP adapter (7.3) | implemented, tested |
 | `std::jit`, `std::prl` | run as `std::fvm` with a notice; tested |
-| After `std::inline` / `std::opt` | positions kept, breakpoints re-answered, inlined code labelled; tested for no crash and for the surviving positions |
-| Graph view over DAP (`camel/graph`) | implemented, one check; no editor front end uses it yet |
-| Web UI: line breakpoints, source view, a call stack | not done: the Vue front end still offers node breakpoints and node steps only, so it has no frames to fold (the HTTP API takes `configure {frames}` like the other clients) |
+| After `std::opt::inline` / `std::opt` | positions kept, breakpoints re-answered, inlined code labelled; tested for no crash and for the surviving positions |
+| Graph view over DAP | OpenCML-Ext uses `camel/structuredGraph` and immutable pass snapshots; source/type and hierarchy UI tested |
+| Graphical debugger | OpenCML-Ext + native VS Code debugging; standalone Web frontend retired after migration acceptance |
 | Conditional breakpoints, hit counts, logpoints, set value, restart, attach | not done |
 | Stop at an error value that reaches the exit of `main` unhandled | not done: reported as without a debugger (stderr, exit code 1) |
 | A frame per inlined call (4.3), the names of `let`s bound to inlined calls | not done: needs the inliner to record call sites |
 
 **Tests** (`test/plans/feat/tools/debugger.plan.toml`, in the default set): `http_gateway` (the
-Web UI's API), `dap_session`, `dap_stepping`, `dap_frames` (folded arms, the switch, lines that
+retained HTTP API), `dap_session`, `dap_stepping`, `dap_frames` (folded arms, the switch, lines that
 did not execute, full names, function breakpoints), `dap_faults`, `dap_protocol`, and
 `cli_session` (the REPL, through its standard input). The DAP tests start
 `camel-db --dap` and speak the protocol on its pipes (`test/tools/debugger/client.mjs`); every
@@ -732,6 +737,11 @@ byte/object paging currently uses the profiler's contiguous bump-region API. Inv
 requests while running and requests after termination fail explicitly.
 
 Allocation stops require a build without NDEBUG. Release reports `supported:false` and refuses
-enabling them. The native hook stops before allocation on the program thread, filters named
-spaces and skips index maintenance/reentrant hooks. `camel/stopped.allocation` identifies the
-space, requested size and `phase:"before"`; inspection uses that same stopped worker.
+enabling them. The native hook stops after the outermost allocator has released its locks on the program
+thread, filters named spaces and skips index maintenance/reentrant hooks. Nested allocators
+report one completed allocation at that boundary, so heap inspection cannot wait on a lock
+held by its own paused allocation. `camel/stopped.allocation` identifies the
+space, requested size and `phase:"after"`; inspection uses that same stopped worker.
+
+The standalone debugger frontend and Python static proxy/embed scripts have been retired.
+OpenCML-Ext owns graph and memory UX; backend HTTP and REPL remain supported and tested.

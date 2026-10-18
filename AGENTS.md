@@ -88,7 +88,7 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 | `std::nvm` | Scheduling pass: executes on the node VM linearly, then returns an empty graph |
 | `std::fvm` | Scheduling pass: high-performance bytecode VM, returns an empty graph |
 | `std::jit` | Scheduling pass: JIT-enabled bytecode VM, returns an empty graph |
-| `std::inline` | Optimization pass: inlines small functions into larger graphs to reduce call overhead; returns an optimized graph |
+| `std::opt::inline` | Optimization pass: inlines small functions into larger graphs to reduce call overhead; returns an optimized graph |
 
 ### Graph Inspection Preference
 - Prefer `std::gir` when inspecting graphs in terminal output, snapshots intended for AI review, or structural debugging where visual styling is noise.
@@ -98,7 +98,7 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 ```powershell
 camel fib.cml std::rgir
 camel fib.cml std::gir
-camel fib.cml std::inline std::fvm
+camel fib.cml std::opt::inline std::fvm
 ```
 
 ## Priority

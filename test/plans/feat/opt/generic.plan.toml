@@ -4,6 +4,38 @@ tier = "feat"
 tags = ["feat", "opt", "generic"]
 
 [[tests]]
+name = "optimization_namespace"
+desc = "Standalone stages live under std::opt; std::inline and its strategies are exact aliases."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/opt/pass_surface.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["Optimization namespace and inline aliases: PASS"]
+timeout_ms = 20000
+
+[[tests]]
+name = "integrated_rewrites"
+desc = "The std::opt entry folds constants, merges duplicate expressions and removes unused products while retaining effects."
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "std::opt", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+    const graph = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === '__root__')
+    assert(graph, 'root graph missing')
+    const count = uri => graph.nodes.filter(n => n.label === uri).length
+    assert(count(':op/mul_l') === 3, `expected 3 multiplications, got ${count(':op/mul_l')}`)
+    assert(count(':op/add_l') === 2, `expected 2 additions, got ${count(':op/add_l')}`)
+    assert(count(':io/println') === 3, 'effects must be kept')
+    assert(graph.nodes.some(n => n.kind === 'DATA' && n.label === '23'), 'constant expression was not folded')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
 name = "results_reference"
 desc = "Results and print order of the generic-pass inputs are unchanged by: no pass."
 kind = "behavior"
@@ -120,10 +152,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "static_branches.simplify"
-desc = "std::opt::simplify prunes the static branch (only the taken arm's effect runs), keeps every effect in order (including before a devirtualized call), and does not change results."
+desc = "std::opt prunes the static branch (only the taken arm's effect runs), keeps every effect in order (including before a devirtualized call), and does not change results."
 kind = "behavior"
 case = "../../../cases/opt/generic/static_branches.cml"
-args = ["${case}", "std::opt::simplify"]
+args = ["${case}", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -136,10 +168,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "static_branches.simplify.rgir"
-desc = "After std::opt::simplify, main has no branch left."
+desc = "After std::opt, main has no branch left."
 kind = "behavior"
 case = "../../../cases/opt/generic/static_branches.cml"
-args = ["${case}", "std::opt::simplify", "${run_rgir}"]
+args = ["${case}", "std::opt", "${run_rgir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -166,10 +198,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "recursion_unroll.simplify"
-desc = "A recursion of constant depth computes the same value after std::opt::simplify."
+desc = "A recursion of constant depth computes the same value after std::opt."
 kind = "behavior"
 case = "../../../cases/opt/generic/recursion_unroll.cml"
-args = ["${case}", "std::opt::simplify"]
+args = ["${case}", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -182,10 +214,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "recursion_unroll.simplify.rgir"
-desc = "std::opt::simplify unrolls a recursion of constant depth: forward becomes straight-line code with no call or branch."
+desc = "std::opt unrolls a recursion of constant depth: forward becomes straight-line code with no call or branch."
 kind = "behavior"
 case = "../../../cases/opt/generic/recursion_unroll.cml"
-args = ["${case}", "std::opt::simplify", "${run_rgir}"]
+args = ["${case}", "std::opt", "${run_rgir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -214,10 +246,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "shape_unroll.simplify"
-desc = "Shape specialization: the value of a recursion over shape(x)[1] is unchanged by std::opt::simplify."
+desc = "Shape specialization: the value of a recursion over shape(x)[1] is unchanged by std::opt."
 kind = "behavior"
 case = "../../../cases/opt/generic/shape_unroll.cml"
-args = ["${case}", "std::opt::simplify"]
+args = ["${case}", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -230,10 +262,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "shape_unroll.simplify.rgir"
-desc = "std::opt::simplify specializes forward to its argument's static shape, folds shape(x) and unrolls the recursion: the specialized forward and everything it calls are branch-free."
+desc = "std::opt specializes forward to its argument's static shape, folds shape(x) and unrolls the recursion: the specialized forward and everything it calls are branch-free."
 kind = "behavior"
 case = "../../../cases/opt/generic/shape_unroll.cml"
-args = ["${case}", "std::opt::simplify", "${run_rgir}"]
+args = ["${case}", "std::opt", "${run_rgir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -283,10 +315,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "effect_order_folded.simplify.nvm"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::simplify, NodeVM)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt, NodeVM)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_nvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -301,10 +333,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "effect_order_folded.simplify.fvm"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::simplify, FastVM)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt, FastVM)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -319,10 +351,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "effect_order_folded.simplify.jit"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::simplify, JIT)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt, JIT)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -337,10 +369,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "effect_order_folded.inline.fvm"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::inline, FastVM)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::inline, FastVM)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
-args = ["${case}", "std::macro", "std::inline", "${run_fvm}"]
+args = ["${case}", "std::macro", "std::opt::inline", "${run_fvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -355,10 +387,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "effect_order_folded.inline.jit"
-desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::inline, JIT)."
+desc = "An effect before code simplify folds away still runs first, an arm reading a value computed before its branch is entered after the branch, and tail calls through nested branches keep the stack flat (std::opt::inline, JIT)."
 kind = "behavior"
 case = "../../../cases/opt/generic/effect_order_folded.cml"
-args = ["${case}", "std::macro", "std::inline", "${run_jit}"]
+args = ["${case}", "std::macro", "std::opt::inline", "${run_jit}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -421,10 +453,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "written_variable.simplify.nvm"
-desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::simplify (folded the first tuple into a constant the assignment then wrote)."
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt (folded the first tuple into a constant the assignment then wrote)."
 kind = "behavior"
 case = "../../../cases/opt/generic/written_variable.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -437,10 +469,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "written_variable.simplify.fvm"
-desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::simplify on FastVM."
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt on FastVM."
 kind = "behavior"
 case = "../../../cases/opt/generic/written_variable.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -485,10 +517,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "written_variable.inline_fold_cse.nvm"
-desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::inline, std::opt::fold, std::opt::cse."
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::inline, std::opt::fold, std::opt::cse."
 kind = "behavior"
 case = "../../../cases/opt/generic/written_variable.cml"
-args = ["${case}", "std::inline", "std::opt::fold", "std::opt::cse", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::opt::fold", "std::opt::cse", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -501,10 +533,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "written_variable.inline_fold_cse.jit"
-desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::inline, std::opt::fold, std::opt::cse on the JIT."
+desc = "A reassigned var tuple, a var tuple built from an argument bound to a constant, and an expression reread after a write keep the zero-pass output under: std::opt::inline, std::opt::fold, std::opt::cse on the JIT."
 kind = "behavior"
 case = "../../../cases/opt/generic/written_variable.cml"
-args = ["${case}", "std::inline", "std::opt::fold", "std::opt::cse", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt::fold", "std::opt::cse", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -533,10 +565,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "cse_arm_constants.inline_cse.nvm"
-desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline std::opt::cse."
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::opt::inline std::opt::cse."
 kind = "behavior"
 case = "../../../cases/opt/generic/cse_arm_constants.cml"
-args = ["${case}", "std::inline", "std::opt::cse", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::opt::cse", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -549,10 +581,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "cse_arm_constants.inline_cse.fvm"
-desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline std::opt::cse on FastVM."
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::opt::inline std::opt::cse on FastVM."
 kind = "behavior"
 case = "../../../cases/opt/generic/cse_arm_constants.cml"
-args = ["${case}", "std::inline", "std::opt::cse", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt::cse", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -565,10 +597,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "cse_arm_constants.inline_cse.jit"
-desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline std::opt::cse on the JIT."
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::opt::inline std::opt::cse on the JIT."
 kind = "behavior"
 case = "../../../cases/opt/generic/cse_arm_constants.cml"
-args = ["${case}", "std::inline", "std::opt::cse", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt::cse", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -581,10 +613,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "cse_arm_constants.inline_arm_cse.nvm"
-desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::inline::arm std::opt::cse."
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::opt::inline::arm std::opt::cse."
 kind = "behavior"
 case = "../../../cases/opt/generic/cse_arm_constants.cml"
-args = ["${case}", "std::inline::arm", "std::opt::cse", "std::nvm"]
+args = ["${case}", "std::opt::inline::arm", "std::opt::cse", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -597,10 +629,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "cse_arm_constants.simplify_cse.nvm"
-desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::opt::simplify std::opt::cse (a condition simplify cannot fold)."
+desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: std::opt std::opt::cse (a condition simplify cannot fold)."
 kind = "behavior"
 case = "../../../cases/opt/generic/cse_arm_constants.cml"
-args = ["${case}", "std::opt::simplify", "std::opt::cse", "std::nvm"]
+args = ["${case}", "std::opt", "std::opt::cse", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -616,7 +648,7 @@ name = "cse_arm_constants.inline_specialize_cse_devirtualize.nvm"
 desc = "Equal literals in arms of different branches stay separate nodes for std::opt::cse after the arms are inlined (merging them made a node of one branch wait on the other BRCH: 'Cycle detected while building runtime execution topo'). Under: the experiment pipeline R06."
 kind = "behavior"
 case = "../../../cases/opt/generic/cse_arm_constants.cml"
-args = ["${case}", "std::inline", "std::specialize", "std::opt::cse", "std::devirtualize", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::cse", "std::opt::devirtualize", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -645,10 +677,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arm_tail_gate.simplify.nvm"
-desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt::simplify."
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -661,10 +693,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arm_tail_gate.simplify.fvm"
-desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt::simplify on FastVM."
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt on FastVM."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -677,10 +709,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arm_tail_gate.simplify.jit"
-desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt::simplify on the JIT."
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: std::opt on the JIT."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::simplify", "std::jit"]
+args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -693,10 +725,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arm_tail_gate.unfolded_inline_small.nvm"
-desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: two simplify rounds by hand, then std::inline::small (the step that built the gate)."
+desc = "A specialized recursion step inlined as the tail of a branch arm keeps a control input on its exit GATE (the rewrite committed 'GATE node ... without control input'). Under: two simplify rounds by hand, then std::opt::inline::small (the step that built the gate)."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt", "std::opt::fold", "std::opt::dce", "std::opt", "std::opt::fold", "std::opt::dce", "std::inline::small", "std::nvm"]
+args = ["${case}", "std::opt", "std::opt::fold", "std::opt::dce", "std::opt", "std::opt::fold", "std::opt::dce", "std::opt::inline::small", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -709,10 +741,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "shape_unroll.cse_simplify.nvm"
-desc = "shape_unroll with its three shape(x) calls merged by cse before simplify (the corpus route to the same GATE defect). Under: std::opt::cse std::opt::simplify."
+desc = "shape_unroll with its three shape(x) calls merged by cse before simplify (the corpus route to the same GATE defect). Under: std::opt::cse std::opt."
 kind = "behavior"
 case = "../../../cases/opt/generic/shape_unroll.cml"
-args = ["${case}", "std::opt::cse", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt::cse", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -728,7 +760,7 @@ name = "shape_unroll.fold_fuse_cse_simplify_specialize.nvm"
 desc = "shape_unroll with its three shape(x) calls merged by cse before simplify (the corpus route to the same GATE defect). Under: the shortest experiment pipeline."
 kind = "behavior"
 case = "../../../cases/opt/generic/shape_unroll.cml"
-args = ["${case}", "std::opt::fold", "tensor::fuse", "std::opt::cse", "std::opt::simplify", "std::specialize", "std::nvm"]
+args = ["${case}", "std::opt::fold", "tensor::fuse", "std::opt::cse", "std::opt", "std::opt::specialize", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -741,10 +773,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_growing_shape.fold_specialize.nvm"
-desc = "A recursion whose tensor argument grows one row per level has a different argument type at every level; type-only specialization of the recursive function is bounded (8 copies), after which the call keeps its callee. The pass used not to terminate. Under: std::opt::fold std::specialize."
+desc = "A recursion whose tensor argument grows one row per level has a different argument type at every level; type-only specialization of the recursive function is bounded (8 copies), after which the call keeps its callee. The pass used not to terminate. Under: std::opt::fold std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
-args = ["${case}", "std::opt::fold", "std::specialize", "std::nvm"]
+args = ["${case}", "std::opt::fold", "std::opt::specialize", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -757,10 +789,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_growing_shape.fold_specialize.bounded"
-desc = "The program after std::opt::fold std::specialize holds a bounded number of graphs (the 8 type specializations of the recursion's branch arm and what they call), and still prints the zero-pass output."
+desc = "The program after std::opt::fold std::opt::specialize holds a bounded number of graphs (the 8 type specializations of the recursion's branch arm and what they call), and still prints the zero-pass output."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
-args = ["${case}", "std::opt::fold", "std::specialize", "std::stats", "std::fvm"]
+args = ["${case}", "std::opt::fold", "std::opt::specialize", "std::stats", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -775,10 +807,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "reshape_view_gc.fold_specialize.nvm"
-desc = "The corpus program of the same defect (a recursion that concatenates onto its tensor argument): std::opt::fold std::specialize terminates and reproduces the zero-pass output."
+desc = "The corpus program of the same defect (a recursion that concatenates onto its tensor argument): std::opt::fold std::opt::specialize terminates and reproduces the zero-pass output."
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
-args = ["${case}", "std::opt::fold", "std::specialize", "std::nvm"]
+args = ["${case}", "std::opt::fold", "std::opt::specialize", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -786,10 +818,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "simplify_growth_budget.simplify.nvm"
-desc = "std::opt::simplify unrolls a recursion with constant arguments one level per round; the growth budget (4096 copied nodes) stops it and leaves the remaining calls as calls. fib(10) and fib(18) keep their values. Before the budget the pass ran for tens of seconds and then failed on the 16-bit edge arena."
+desc = "std::opt unrolls a recursion with constant arguments one level per round; the growth budget (4096 copied nodes) stops it and leaves the remaining calls as calls. fib(10) and fib(18) keep their values. Before the budget the pass ran for tens of seconds and then failed on the 16-bit edge arena."
 kind = "behavior"
 case = "../../../cases/opt/generic/simplify_growth_budget.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -802,10 +834,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "simplify_growth_budget.inline_simplify.fvm"
-desc = "The same program with std::inline before std::opt::simplify (the order that reached the arena error first, and a segfault with two calls). Under: std::inline std::opt::simplify std::fvm."
+desc = "The same program with std::opt::inline before std::opt (the order that reached the arena error first, and a segfault with two calls). Under: std::opt::inline std::opt std::fvm."
 kind = "behavior"
 case = "../../../cases/opt/generic/simplify_growth_budget.cml"
-args = ["${case}", "std::inline", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -821,7 +853,7 @@ name = "simplify_growth_budget.calls_remain"
 desc = "After the budget is spent the program still holds direct calls of fib (it is not the whole call tree) and stays small: std::stats reports fewer than 4000 nodes and more than 100 direct calls."
 kind = "behavior"
 case = "../../../cases/opt/generic/simplify_growth_budget.cml"
-args = ["${case}", "std::opt::simplify", "std::stats", "std::nvm"]
+args = ["${case}", "std::opt", "std::stats", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -840,7 +872,7 @@ name = "simplify_growth_budget.env_override"
 desc = "CAMEL_OPT_GROWTH_BUDGET overrides the budget: with 0 nothing is specialized or inlined and the program keeps its size (fewer than 60 nodes) and its output."
 kind = "behavior"
 case = "../../../cases/opt/generic/simplify_growth_budget.cml"
-args = ["${case}", "std::opt::simplify", "std::stats", "std::nvm"]
+args = ["${case}", "std::opt", "std::stats", "std::nvm"]
 envs = ["CAMEL_OPT_GROWTH_BUDGET=0"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -856,10 +888,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fib_recursive.simplify.nvm"
-desc = "The corpus program of the same defect: test/cases/linear/jit/fib_recursive.cml under std::opt::simplify finishes within the budget and prints the zero-pass output."
+desc = "The corpus program of the same defect: test/cases/linear/jit/fib_recursive.cml under std::opt finishes within the budget and prints the zero-pass output."
 kind = "behavior"
 case = "../../../cases/linear/jit/fib_recursive.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["fib_recursive f0=0 f1=1 f10=55 f15=610"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -867,10 +899,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_growing_shape.simplify.nvm"
-desc = "The growing-shape recursion under std::opt::simplify: with type specialization bounded, the inliner kept unrolling it until the permanent space was exhausted (a segfault); the growth budget stops it. Output equals the zero-pass output."
+desc = "The growing-shape recursion under std::opt: with type specialization bounded, the inliner kept unrolling it until the permanent space was exhausted (a segfault); the growth budget stops it. Output equals the zero-pass output."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -886,14 +918,14 @@ name = "perm_space_exhausted.diagnostic"
 desc = "Exhausting the permanent space inside a pass is RuntimeDiag::MemoryExhausted with the stage of the pass, raised before anything executes, naming the space, the limit and the variable that raises it (it used to be a write through null: the guard was an ASSERT, compiled out in release builds; then a PassInternalError). The budget is lifted by CAMEL_OPT_GROWTH_BUDGET to reach the limit, and the space is limited to 2 MB so that the limit is reached in a few seconds (it was 32 MB, the size of the space when it could not grow, until frame layouts were interned, then 16 MB until they moved into the graphs' own blocks: the same run now ends by itself with 2.9 MB in use)."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
-args = ["--output-format", "json", "${case}", "std::opt::simplify", "std::nvm"]
+args = ["--output-format", "json", "${case}", "std::opt", "std::nvm"]
 envs = ["CAMEL_OPT_GROWTH_BUDGET=100000000", "CAMEL_PERM_SPACE_LIMIT_MB=2"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout + input.normalized.stderr
-assert(out.includes('"stage":"pass:std::opt::simplify"'), `stage missing: ${out}`)
+assert(out.includes('"stage":"pass:std::opt"'), `stage missing: ${out}`)
 assert(out.includes('"name":"RuntimeDiag::MemoryExhausted"'), `name missing: ${out}`)
 assert(out.includes('The permanent space (types and layouts) is exhausted'), `reason missing: ${out}`)
 assert(out.includes('of the limit of 2.0 MB are in use'), `limit missing: ${out}`)
@@ -982,10 +1014,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "broken_branch.intact"
-desc = "The program of the two tests above without a fault-injection pass: it runs, and the branch-arm check accepts the graphs the front end builds and the ones std::opt::simplify commits."
+desc = "The program of the two tests above without a fault-injection pass: it runs, and the branch-arm check accepts the graphs the front end builds and the ones std::opt commits."
 kind = "behavior"
 case = "../../../cases/opt/generic/broken_branch.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 expect_stdout_contains = ["main start", "-1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -993,7 +1025,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pruned_branch_keeps_condition_effect.default"
-desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt: the two printed lines of the calls were missing."
 kind = "behavior"
 case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
 args = ["${case}"]
@@ -1009,7 +1041,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pruned_branch_keeps_condition_effect.opt_fold"
-desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt: the two printed lines of the calls were missing."
 kind = "behavior"
 case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
 args = ["${case}", "std::opt", "std::opt::fold"]
@@ -1025,10 +1057,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pruned_branch_keeps_condition_effect.simplify"
-desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt: the two printed lines of the calls were missing."
 kind = "behavior"
 case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
-args = ["${case}", "std::opt::simplify"]
+args = ["${case}", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1041,10 +1073,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pruned_branch_keeps_condition_effect.macro_simplify_fvm"
-desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt: the two printed lines of the calls were missing."
 kind = "behavior"
 case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::macro", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1057,10 +1089,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pruned_branch_keeps_condition_effect.simplify_jit"
-desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt: the two printed lines of the calls were missing."
 kind = "behavior"
 case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
-args = ["${case}", "std::opt::simplify", "std::jit"]
+args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1073,10 +1105,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pruned_branch_keeps_condition_effect.simplify_tf"
-desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt: the two printed lines of the calls were missing."
 kind = "behavior"
 case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
-args = ["${case}", "std::opt::simplify", "std::tf"]
+args = ["${case}", "std::opt", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1089,7 +1121,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole.default"
-desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
 args = ["${case}"]
@@ -1105,10 +1137,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole.simplify"
-desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
-args = ["${case}", "std::opt::simplify"]
+args = ["${case}", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1121,10 +1153,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole.simplify_nvm"
-desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1137,10 +1169,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole.simplify_fvm"
-desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1153,10 +1185,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole.simplify_jit"
-desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
-args = ["${case}", "std::opt::simplify", "std::jit"]
+args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1169,10 +1201,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole.simplify_tf"
-desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
-args = ["${case}", "std::opt::simplify", "std::tf"]
+args = ["${case}", "std::opt", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1185,10 +1217,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole.macro_simplify_fvm"
-desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::macro", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1201,7 +1233,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole_tensor.default"
-desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+desc = "The tensor program on which the arm layout defect was found: under std::opt FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
 args = ["${case}"]
@@ -1217,10 +1249,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole_tensor.simplify_nvm"
-desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+desc = "The tensor program on which the arm layout defect was found: under std::opt FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1233,10 +1265,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole_tensor.simplify_fvm"
-desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+desc = "The tensor program on which the arm layout defect was found: under std::opt FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1249,10 +1281,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole_tensor.simplify_jit"
-desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+desc = "The tensor program on which the arm layout defect was found: under std::opt FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
-args = ["${case}", "std::opt::simplify", "std::jit"]
+args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1265,10 +1297,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "arms_laid_out_whole_tensor.simplify_tf"
-desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+desc = "The tensor program on which the arm layout defect was found: under std::opt FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
 kind = "behavior"
 case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
-args = ["${case}", "std::opt::simplify", "std::tf"]
+args = ["${case}", "std::opt", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1321,10 +1353,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fold_cast.rewrites"
-desc = "A conversion (`e as T`, a CAST node) of a constant is a constant: after std::opt::simplify no CAST is left, for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor) and for a number converted to another primitive type. Folding used to leave every CAST, so nothing under `as` was a constant."
+desc = "A conversion (`e as T`, a CAST node) of a constant is a constant: after std::opt no CAST is left, for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor) and for a number converted to another primitive type. Folding used to leave every CAST, so nothing under `as` was a constant."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_cast.cml"
-args = ["${case}", "std::opt::simplify", "std::gir"]
+args = ["${case}", "std::opt", "std::gir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1340,10 +1372,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fold_cast.results"
-desc = "The folded conversions leave the result unchanged: with and without std::opt::simplify the program prints the same number."
+desc = "The folded conversions leave the result unchanged: with and without std::opt the program prints the same number."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_cast.cml"
-args = ["${case}", "std::opt::simplify", "${run_nvm}"]
+args = ["${case}", "std::opt", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["31.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1354,7 +1386,7 @@ name = "fold_cast.failing_is_kept"
 desc = "A conversion of a constant that fails is not folded: the CAST stays in the simplified graph, and compiling is not an error."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_cast_fails.cml"
-args = ["${case}", "std::opt::simplify", "std::gir"]
+args = ["${case}", "std::opt", "std::gir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1371,7 +1403,7 @@ name = "fold_cast.failing_fails_at_run_time"
 desc = "The failing conversion left by folding fails when the simplified program runs, after what ran before it, with the conversion's own error at the conversion."
 kind = "negative"
 case = "../../../cases/opt/generic/fold_cast_fails.cml"
-args = ["${case}", "std::opt::simplify", "${run_nvm}"]
+args = ["${case}", "std::opt", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_diagnostic_line = 14

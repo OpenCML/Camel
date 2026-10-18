@@ -1,6 +1,6 @@
 """Checks `camel --dump-after-each-pass <dir>` and tools/graph-diff on a macro program.
 
-Runs `basic.cml` (a macro call `add_one(41)`) through `std::macro std::inline std::nvm` and
+Runs `basic.cml` (a macro call `add_one(41)`) through `std::macro std::opt::inline std::nvm` and
 checks that:
   - snapshot 00 is the input graph and one snapshot follows per pass that returned a graph
     (the scheduling pass consumes the graph and leaves none);
@@ -48,20 +48,20 @@ def main() -> int:
         out = Path(t) / "snapshots"
         proc = subprocess.run(
             [camel_exe(), "--dump-after-each-pass", str(out), str(PROGRAM),
-             "std::macro", "std::inline", "std::nvm"],
+             "std::macro", "std::opt::inline", "std::nvm"],
             env=env, capture_output=True, text=True, cwd=REPO_ROOT)
         check(proc.returncode == 0, f"camel exit code 0 (got {proc.returncode})")
         check(proc.stdout.strip() == "42", "program output unchanged (42)")
 
         names = sorted(p.name for p in out.iterdir()) if out.is_dir() else []
         expected = [f"{stem}.{ext}"
-                    for stem in ("00_input", "01_std.macro", "02_std.inline")
+                    for stem in ("00_input", "01_std.macro", "02_std.opt.inline")
                     for ext in ("gir.dot", "stats.json")]
         check(names == sorted(expected), f"snapshot files {sorted(expected)} (got {names})")
         if failures:
             return 1
 
-        for stem in ("00_input", "01_std.macro", "02_std.inline"):
+        for stem in ("00_input", "01_std.macro", "02_std.opt.inline"):
             stats = json.loads((out / f"{stem}.stats.json").read_text())
             check(stats.get("nodes", 0) > 0, f"{stem}: stats JSON has a node count")
 

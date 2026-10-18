@@ -1,8 +1,8 @@
 /**
- * progen finding F16 ((other) wrong value after inlining). After `std::opt::fold std::inline` a
+ * progen finding F16 ((other) wrong value after inlining). After `std::opt::fold std::opt::inline` a
  *   value read from the environment prints as 0 instead of 4; the value is also named in an arm
  *   that is never taken.
- * Pipeline: std::opt::fold std::inline std::nvm
+ * Pipeline: std::opt::fold std::opt::inline std::nvm
  * Environment: PROGEN_I0=4
  * Expected output: L11 false 4
  * Actual: L11 false 0

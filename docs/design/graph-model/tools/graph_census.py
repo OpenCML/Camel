@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Census of the graphs the compiler builds for the programs under the given directories.
 
-    python3 docs/design/graph-model/tools/graph_census.py [--passes "std::inline"] [--json out.json] DIR...
+    python3 docs/design/graph-model/tools/graph_census.py [--passes "std::opt::inline"] [--json out.json] DIR...
 
 For every .cml file that declares `main`, runs `camel <file> [passes] std::rgir` with
 CAMEL_GC_STATS=1 and reads

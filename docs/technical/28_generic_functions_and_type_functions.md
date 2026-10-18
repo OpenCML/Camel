@@ -239,7 +239,7 @@ program called `map` or `filter` does not change what a comprehension means.
 ## 8. Tests
 
 `test/plans/feat/compile/generics.plan.toml` (cases under `test/cases/compile/generics/`):
-behaviour, the four backends and the `std::opt` / `std::inline` / `std::macro` pipelines, the
+behaviour, the four backends and the `std::opt` / `std::opt::inline` / `std::macro` pipelines, the
 shape of the graph, and each diagnostic with its position. Generic functions as values:
 `test/plans/feat/consistency/generic_values.plan.toml`; list comprehensions:
 `test/plans/feat/consistency/comprehension.plan.toml`.

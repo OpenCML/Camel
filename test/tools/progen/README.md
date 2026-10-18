@@ -187,8 +187,8 @@ seed back; when the generator changes the programs of existing seeds, raise
 present.
 
 The same plan runs `progen.py fixed`: every finding with a `fixed` key in `findings.json`, under
-the rewrite sequence it was found with and under `std::inline`, `std::opt`,
-`std::inline std::opt::dce`, `std::opt::simplify` and `std::specialize`, on the four schedulers. When a finding is fixed, give it that key.
+the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
+`std::opt::inline std::opt::dce`, `std::opt` and `std::opt::specialize`, on the four schedulers. When a finding is fixed, give it that key.
 
 ## What is not covered
 

@@ -3,7 +3,7 @@
  * state is the whole model: each step computes the gradient with
  * value_and_grad (a graph transformation, not a tape) and passes the
  * SGD-updated parameter struct to the next step. The loss falls step by step,
- * and the same program runs unchanged after std::opt::simplify.
+ * and the same program runs unchanged after std::opt.
  */
 module loop_carried_state
 

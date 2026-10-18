@@ -1,7 +1,7 @@
 /**
  * Staticness. `run` recurses over the time axis of its input; its depth is
  * `shape(x)[1]`, which shape specialization turns into a constant, so
- * std::opt::simplify unrolls the recursion into straight-line code
+ * std::opt unrolls the recursion into straight-line code
  * (std::stats: no calls left) and the model exports. `shrink` recurses until
  * a value computed from the input is small: its depth is not static, so it
  * cannot unroll; because the recursive call is the last thing it does, it is a

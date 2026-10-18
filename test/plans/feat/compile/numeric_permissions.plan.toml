@@ -49,10 +49,10 @@ all(29, '')                          // blocky outside its block
 
 [[tests]]
 name = "graph.inline"
-desc = "std::inline keeps each node's own permissions: the inlined body of plain has none in its annotated caller, the inlined lambda keeps reassociate."
+desc = "std::opt::inline keeps each node's own permissions: the inlined body of plain has none in its annotated caller, the inlined lambda keeps reassociate."
 kind = "behavior"
 case = "../../../cases/compile/numeric/permissions.cml"
-args = ["${case}", "std::inline", "std::gir"]
+args = ["${case}", "std::opt::inline", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -94,7 +94,7 @@ name = "fuse"
 desc = "tensor::fuse fuses `x @ w + b` when both nodes have the same permissions (the fused node keeps them) and not when they differ (a product inlined from an annotated function, an add without)."
 kind = "behavior"
 case = "../../../cases/compile/numeric/fuse.cml"
-args = ["${case}", "std::inline", "tensor::fuse", "std::gir"]
+args = ["${case}", "std::opt::inline", "tensor::fuse", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -111,7 +111,7 @@ name = "fuse.result"
 desc = "Fused or not, the results are the canonical ones."
 kind = "behavior"
 case = "../../../cases/compile/numeric/fuse.cml"
-args = ["${case}", "std::inline", "tensor::fuse"]
+args = ["${case}", "std::opt::inline", "tensor::fuse"]
 expect_exit = 0
 expect_stdout_exact = "fuse split=-12.825000286102295 whole=-12.825000286102295\n"
 

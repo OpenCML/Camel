@@ -2,7 +2,7 @@
 
 Each program of this folder is a pure `main` (no export request, no `import onnx`). It is
 
-  - exported by `camel p.cml std::macro std::opt::simplify onnx::export` (CAMEL_ONNX_OUT),
+  - exported by `camel p.cml std::macro std::opt onnx::export` (CAMEL_ONNX_OUT),
     the model checked by onnx.checker(full_check) when the onnx package is present and its
     inputs, initializers and outputs compared with what the declared types say;
   - run natively with the same values (`--arg name=file`, `-o dir`) under the default
@@ -32,7 +32,7 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[4]
 TOL = 1e-5
 SCHEDULERS = [None, "std::fvm", "std::jit", "std::tf"]
-EXPORT = ["std::macro", "std::opt::simplify", "onnx::export"]
+EXPORT = ["std::macro", "std::opt", "onnx::export"]
 
 
 def camel(program: str, *args: str, env: dict | None = None) -> str:

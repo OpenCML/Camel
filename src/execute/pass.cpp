@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 #include "camel/core/process_exit.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "camel/passes/test/control.h"
 #include "camel/passes/trans/json/gir.h"
 #include "camel/runtime/capacity.h"
 #include "macro/macro.h"
@@ -46,6 +47,7 @@
 #include "passes/test/facts.h"
 #include "passes/test/fault.h"
 #include "passes/test/index_semantics.h"
+#include "passes/test/native_call.h"
 #include "passes/test/resources.h"
 #include "passes/test/semantics.h"
 #include "passes/trans/cpp/cpp_export.h"
@@ -370,40 +372,41 @@ PassScopePtr initPassScope() {
                                        })},
                                   })},
                          })},
-                    {"inline",
-                     def(PASS1(InlineRewritePass, InlineRewriteConfig{}),
-                         {
-                             {"small", def([](const context_ptr_t &ctx) {
-                                  return std::make_unique<InlineRewritePass>(
-                                      ctx,
-                                      InlineRewriteConfig{
-                                          .inlineStrategy = InlineTargetStrategy::Small,
-                                      });
-                              })},
-                             {"arm", def([](const context_ptr_t &ctx) {
-                                  return std::make_unique<InlineRewritePass>(
-                                      ctx,
-                                      InlineRewriteConfig{
-                                          .inlineStrategy = InlineTargetStrategy::Arm,
-                                      });
-                              })},
-                             {"hybrid", def([](const context_ptr_t &ctx) {
-                                  return std::make_unique<InlineRewritePass>(
-                                      ctx,
-                                      InlineRewriteConfig{
-                                          .inlineStrategy = InlineTargetStrategy::Hybrid,
-                                      });
-                              })},
-                         })},
-                    {"devirtualize", def(PASS(DevirtualizeRewritePass))},
-                    {"specialize", def(PASS(SpecializeRewritePass))},
                     {"opt",
                      def(PASS(OptimizeRewritePass),
                          {
+                             {"inline",
+                              def(PASS1(InlineRewritePass, InlineRewriteConfig{}),
+                                  {
+                                      {"small", def([](const context_ptr_t &ctx) {
+                                           return std::make_unique<InlineRewritePass>(
+                                               ctx,
+                                               InlineRewriteConfig{
+                                                   .inlineStrategy = InlineTargetStrategy::Small,
+                                               });
+                                       })},
+                                      {"arm", def([](const context_ptr_t &ctx) {
+                                           return std::make_unique<InlineRewritePass>(
+                                               ctx,
+                                               InlineRewriteConfig{
+                                                   .inlineStrategy = InlineTargetStrategy::Arm,
+                                               });
+                                       })},
+                                      {"hybrid", def([](const context_ptr_t &ctx) {
+                                           return std::make_unique<InlineRewritePass>(
+                                               ctx,
+                                               InlineRewriteConfig{
+                                                   .inlineStrategy = InlineTargetStrategy::Hybrid,
+                                               });
+                                       })},
+                                  })},
+                             {"devirtualize", def(PASS(DevirtualizeRewritePass))},
+                             {"specialize", def(PASS(SpecializeRewritePass))},
                              {"fold", def(PASS(ConstantFoldPass))},
+                             {"algebra", def(PASS(AlgebraPass))},
                              {"cse", def(PASS(CommonSubexpressionPass))},
                              {"dce", def(PASS(DeadCodePass))},
-                             {"simplify", def(PASS(SimplifyPass))},
+                             {"ctrl", def(PASS(ControlReductionPass))},
                          })},
                     {"taskflow", def(PASS(TaskflowExecSchedPass))},
                     {"tfdump", def(PASS(TfDumpPass))},
@@ -419,6 +422,13 @@ PassScopePtr initPassScope() {
 const PassScopePtr passScope = initPassScope();
 
 std::unordered_map<std::string, std::string> passAliases = {
+    // Frequently used spelling of the standalone inline stage and its strategies.
+    {"std::inline", "std::opt::inline"},
+    {"std::inline::small", "std::opt::inline::small"},
+    {"std::inline::arm", "std::opt::inline::arm"},
+    {"std::inline::hybrid", "std::opt::inline::hybrid"},
+    // The implementation and executor remain in the bundled Tiles module.
+    {"std::tiles", "tiles::compile"},
     // Standard scheduler aliases
     {"std::default", "std::nodevm"},
     {"std::linear", "std::nodevm"},
@@ -617,6 +627,47 @@ namespace {
 
 /// The factory of a pass name, or null. Prints nothing.
 PassFactory lookupPassFactory(const std::string &name) {
+    // Parameterized optimization entries share the same policy. Parse and validate before
+    // returning a factory, so a malformed option after a consuming pass still fails preflight.
+    if (const auto open = name.find('('); open != std::string::npos) {
+        if (name.back() != ')') {
+            return nullptr;
+        }
+        const auto trim = [](std::string_view value) {
+            const auto first = value.find_first_not_of(" \t\r\n");
+            if (first == std::string_view::npos)
+                return std::string_view{};
+            const auto last = value.find_last_not_of(" \t\r\n");
+            return value.substr(first, last - first + 1);
+        };
+        const auto path = trim(std::string_view(name).substr(0, open));
+        if (path != "std::opt" && path != "std::opt::algebra") {
+            return nullptr;
+        }
+        auto args   = trim(std::string_view(name).substr(open + 1, name.size() - open - 2));
+        bool safeFp = false;
+        if (!args.empty()) {
+            const auto equal = args.find('=');
+            if (equal == std::string_view::npos || trim(args.substr(0, equal)) != "safe_fp") {
+                return nullptr;
+            }
+            const auto value = trim(args.substr(equal + 1));
+            if (value != "true" && value != "false") {
+                return nullptr;
+            }
+            safeFp = value == "true";
+        }
+        if (path == "std::opt::algebra") {
+            return [safeFp](const context_ptr_t &ctx) {
+                return std::make_unique<AlgebraPass>(ctx, safeFp);
+            };
+        }
+        return [safeFp](const context_ptr_t &ctx) {
+            OptimizeRewriteConfig config;
+            config.safeFloatingPoint = safeFp;
+            return std::make_unique<OptimizeRewritePass>(ctx, config);
+        };
+    }
     // 1. Resolve aliases
     std::string resolved = name;
     auto aliasIt         = passAliases.find(name);
@@ -649,7 +700,12 @@ PassFactory lookupPassFactory(const std::string &name) {
         return factory;
     }
 
-    // 5. Test-only fault-injection passes, off unless the environment enables them.
+    // 5. Test-only passes, off unless the environment enables them.
+    if (resolved == kNativeCallbackTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<NativeCallbackTestPass>(ctx);
+        };
+    }
     if (resolved == kDropCallArgumentPass && std::getenv(kTestPassesEnvVar) != nullptr) {
         return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
             return std::make_unique<DropCallArgumentTestPass>(ctx);
@@ -693,6 +749,11 @@ PassFactory lookupPassFactory(const std::string &name) {
     if (resolved == kResourcesTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
         return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
             return std::make_unique<ResourcesTestPass>(ctx);
+        };
+    }
+    if (resolved == kControlTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<ControlTestPass>(ctx);
         };
     }
     if (resolved == kFactStoreTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
@@ -743,6 +804,8 @@ void listAvailablePasses(const std::string &name) {
         help << std::format("  {} -> {}\n", alias, target);
     }
     help << std::endl;
+    help << "Optimization options: std::opt(safe_fp=true|false), "
+            "std::opt::algebra(safe_fp=true|false); default: false.\n";
 }
 
 } // namespace

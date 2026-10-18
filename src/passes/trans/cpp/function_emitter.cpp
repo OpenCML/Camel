@@ -13,19 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "function_emitter.h"
 
-#include "camel/core/symbol.h"
-#include "camel/core/type/composite/func.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/symbol.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
@@ -100,8 +100,9 @@ std::string movedOnce(const std::string &text, const std::string &name) {
     auto isIdent = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
     size_t found = std::string::npos, count = 0;
     for (size_t at = text.find(name); at != std::string::npos; at = text.find(name, at + 1)) {
-        const bool before = at > 0 && (isIdent(text[at - 1]) || text[at - 1] == ':' || text[at - 1] == '.');
-        const bool after  = at + name.size() < text.size() && isIdent(text[at + name.size()]);
+        const bool before =
+            at > 0 && (isIdent(text[at - 1]) || text[at - 1] == ':' || text[at - 1] == '.');
+        const bool after = at + name.size() < text.size() && isIdent(text[at + name.size()]);
         if (!before && !after) {
             found = at;
             ++count;
@@ -128,7 +129,8 @@ gc_node_ref_t resultThrough(const GCGraph *graph, gc_node_ref_t ref) {
 /// The last part of a URI as a name hint: ":op/sub_l" gives "sub".
 std::string operatorHint(std::string_view uri) {
     std::string_view tail = uri.substr(uri.find_last_of(":/") + 1);
-    if (const size_t cut = tail.rfind('_'); cut != std::string_view::npos && cut + 2 >= tail.size()) {
+    if (const size_t cut = tail.rfind('_');
+        cut != std::string_view::npos && cut + 2 >= tail.size()) {
         tail = tail.substr(0, cut); // add_l -> add
     }
     return std::string(tail);
@@ -225,11 +227,12 @@ void FunctionEmitter::collectParameters(Member &member) {
         // In a group the parameters of every member are locals of one function: each is
         // named after its function.
         const std::string base = parameterName(graph, port);
-        member.params.push_back(Parameter{
-            port,
-            *program_.values.type(type),
-            base,
-            group_.empty() ? locals_.unique(base) : locals_.unique(member.name + "_" + base)});
+        member.params.push_back(
+            Parameter{
+                port,
+                *program_.values.type(type),
+                base,
+                group_.empty() ? locals_.unique(base) : locals_.unique(member.name + "_" + base)});
     };
     // The order of the arguments of a direct call: the normal ones, then the `with` ones
     // (declared, then captures), as a FUNC node lists its inputs.
@@ -409,7 +412,8 @@ size_t FunctionEmitter::liveUses(const GCGraph *graph, gc_node_ref_t ref) {
     if (table.empty()) {
         auto &order = orders_[graph];
         if (order.empty()) {
-            order = camel::execute::buildReachableExecutionTopoIndices(const_cast<GCGraph *>(graph));
+            order =
+                camel::execute::buildReachableExecutionTopoIndices(const_cast<GCGraph *>(graph));
         }
         std::unordered_set<gc_node_ref_t> live(order.begin(), order.end());
         for (gc_node_ref_t n : order) {
@@ -469,11 +473,12 @@ Block FunctionEmitter::lowerSequenceBody(
             // write nothing can follow (nothingAfter). They still give values: an arm laid out
             // after another one reads the gates the order put at the end of the other. A gate
             // of the value that ended the sequence (a tail call has none) gives nothing.
-            const bool forwards = node->kind == GCNodeKind::Gate || node->kind == GCNodeKind::Copy;
+            const bool forwards  = node->kind == GCNodeKind::Gate || node->kind == GCNodeKind::Copy;
             const bool valueOnly = forwards || node->kind == GCNodeKind::Data ||
                                    node->kind == GCNodeKind::Port || node->kind == GCNodeKind::Sync;
-            const auto inputs = frame.graph->normInputsOf(ref);
-            if (valueOnly && (!forwards || (!inputs.empty() && frame.values.contains(inputs.front())))) {
+            const auto inputs    = frame.graph->normInputsOf(ref);
+            if (valueOnly &&
+                (!forwards || (!inputs.empty() && frame.values.contains(inputs.front())))) {
                 lowerNode(frame, ref, out, false, Tail{});
             }
             continue;
@@ -483,9 +488,9 @@ Block FunctionEmitter::lowerSequenceBody(
             // order follows it: its arms then end with what the sequence would end with.
             const gc_node_ref_t join = frame.graph->nodeBodyAs<GCBrchBody>(ref)->join;
             const auto at            = std::find(order.begin(), order.end(), join);
-            const bool joinIsTail    = join == result && tail.kind != Tail::Kind::Discard &&
-                                    at != order.end() &&
-                                    nothingAfter(frame, order, static_cast<size_t>(at - order.begin()));
+            const bool joinIsTail =
+                join == result && tail.kind != Tail::Kind::Discard && at != order.end() &&
+                nothingAfter(frame, order, static_cast<size_t>(at - order.begin()));
             done = lowerBranch(frame, ref, order, out, joinIsTail, tail);
             continue;
         }
@@ -507,16 +512,20 @@ Block FunctionEmitter::lowerSequenceBody(
             out.push_back(Stmt::line("return;"));
             break;
         }
-        out.push_back(Stmt::line(
-            hasValue ? std::format("return {};", withoutParentheses(valueOf(frame, result).text))
-                     : std::string("return;")));
+        out.push_back(
+            Stmt::line(
+                hasValue
+                    ? std::format("return {};", withoutParentheses(valueOf(frame, result).text))
+                    : std::string("return;")));
         break;
     case Tail::Kind::Assign:
         if (hasValue) {
-            out.push_back(Stmt::line(std::format(
-                "{} = {};",
-                tail.variable,
-                withoutParentheses(valueOf(frame, result).text))));
+            out.push_back(
+                Stmt::line(
+                    std::format(
+                        "{} = {};",
+                        tail.variable,
+                        withoutParentheses(valueOf(frame, result).text))));
         }
         break;
     case Tail::Kind::Discard:
@@ -559,12 +568,15 @@ void FunctionEmitter::bind(
         frame.values[ref] = CppValue{std::move(expr), false};
         return;
     }
-    const std::string name = locals_.unique(std::format("v{}_{}", nextValue_++, cppIdentifier(hint)));
-    out.push_back(Stmt::line(std::format(
-        "const {} {} = {};",
-        cppType(frame.graph, ref, type),
-        name,
-        withoutParentheses(expr))));
+    const std::string name =
+        locals_.unique(std::format("v{}_{}", nextValue_++, cppIdentifier(hint)));
+    out.push_back(
+        Stmt::line(
+            std::format(
+                "const {} {} = {};",
+                cppType(frame.graph, ref, type),
+                name,
+                withoutParentheses(expr))));
     frame.values[ref] = CppValue{name, false};
 }
 
@@ -609,8 +621,8 @@ bool FunctionEmitter::lowerNode(
         }
         const bool numeric = type->code() == camel::core::type::TypeCode::Int64 ||
                              type->code() == camel::core::type::TypeCode::Int32;
-        frame.values[ref] = CppValue{*text, numeric && text->find_first_not_of("-0123456789") ==
-                                                           std::string::npos};
+        frame.values[ref] =
+            CppValue{*text, numeric && text->find_first_not_of("-0123456789") == std::string::npos};
         return false;
     }
     case GCNodeKind::Port:
@@ -658,7 +670,10 @@ bool FunctionEmitter::lowerNode(
     case GCNodeKind::Brch:
         return lowerBranch(frame, ref, {}, out, false, tail);
     case GCNodeKind::Join:
-        refuse(g, ref, std::format("a JOIN of {} is not reached from its BRCH", describeFunction(g)));
+        refuse(
+            g,
+            ref,
+            std::format("a JOIN of {} is not reached from its BRCH", describeFunction(g)));
     default: {
         const char *construct = node->kind == GCNodeKind::Bind
                                     ? "a function bound to its 'with' arguments"
@@ -738,8 +753,13 @@ void FunctionEmitter::lowerCall(
         } else if (!changes.empty()) {
             Block assign;
             for (size_t i = 0; i < changes.size(); ++i) {
-                assign.push_back(Stmt::line(std::format(
-                    "{} next_{} = {};", types[i], changes[i].first, changes[i].second)));
+                assign.push_back(
+                    Stmt::line(
+                        std::format(
+                            "{} next_{} = {};",
+                            types[i],
+                            changes[i].first,
+                            changes[i].second)));
             }
             for (const auto &[param, value] : changes) {
                 assign.push_back(Stmt::line(std::format("{} = std::move(next_{});", param, param)));
@@ -763,7 +783,13 @@ void FunctionEmitter::lowerCall(
         expr += ", " + a;
     }
     expr += ")";
-    bind(frame, ref, std::move(expr), false, out, callee->name().substr(0, callee->name().find('$')));
+    bind(
+        frame,
+        ref,
+        std::move(expr),
+        false,
+        out,
+        callee->name().substr(0, callee->name().find('$')));
 }
 
 namespace {
@@ -822,7 +848,8 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     }
     std::vector<CppValue> norm, with;
     std::vector<const Type *> normTypes, withTypes;
-    auto collect = [&](std::span<const gc_node_ref_t> inputs, std::vector<CppValue> &values,
+    auto collect = [&](std::span<const gc_node_ref_t> inputs,
+                       std::vector<CppValue> &values,
                        std::vector<const Type *> &types) {
         for (gc_node_ref_t input : inputs) {
             const Type *type = g->node(input)->dataType();
@@ -885,10 +912,12 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
             program_.firstBridgedGraph = g;
             program_.firstBridgedNode  = ref;
         }
-        auto values = [&](const std::vector<CppValue> &args, const std::vector<const Type *> &types) {
+        auto values = [&](const std::vector<CppValue> &args,
+                          const std::vector<const Type *> &types) {
             std::string out;
             for (size_t i = 0; i < args.size(); ++i) {
-                const bool wide = args[i].literal && types[i]->code() == camel::core::type::TypeCode::Int64;
+                const bool wide =
+                    args[i].literal && types[i]->code() == camel::core::type::TypeCode::Int64;
                 out += std::format(
                     "{}rt::bridge::arg({})",
                     i ? ", " : "",
@@ -933,12 +962,12 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
 bool FunctionEmitter::lowerBranch(
     Frame &frame, gc_node_ref_t brch, const std::vector<gc_node_ref_t> &order, Block &out,
     bool joinIsTail, const Tail &tail) {
-    GCGraph *g                 = frame.graph;
-    const gc_node_ref_t join   = g->nodeBodyAs<GCBrchBody>(brch)->join;
-    const auto *joinNode       = join != kInvalidNodeRef ? g->node(join) : nullptr;
-    const auto arms            = g->branchArmsOf(brch);
-    const auto cases           = g->withInputsOf(brch);
-    const auto selectorInputs  = g->normInputsOf(brch);
+    GCGraph *g                = frame.graph;
+    const gc_node_ref_t join  = g->nodeBodyAs<GCBrchBody>(brch)->join;
+    const auto *joinNode      = join != kInvalidNodeRef ? g->node(join) : nullptr;
+    const auto arms           = g->branchArmsOf(brch);
+    const auto cases          = g->withInputsOf(brch);
+    const auto selectorInputs = g->normInputsOf(brch);
     if (joinNode == nullptr || joinNode->kind != GCNodeKind::Join || selectorInputs.empty() ||
         arms.size() < 2) {
         refuse(g, brch, std::format("a branch of {} is malformed", describeFunction(g)));
@@ -954,13 +983,13 @@ bool FunctionEmitter::lowerBranch(
         const std::string type = cppType(g, join, joinNode->dataType());
         const std::string name = locals_.unique(std::format("v{}_branch", nextValue_++));
         out.push_back(Stmt::line(std::format("{} {};", type, name)));
-        armTail           = Tail{Tail::Kind::Assign, name};
+        armTail            = Tail{Tail::Kind::Assign, name};
         frame.values[join] = CppValue{name, false};
     } else {
         frame.values[join] = CppValue{"", false};
     }
 
-    // The form std::inline leaves: an arm's nodes lie between the BRCH and the JOIN in the
+    // The form std::opt::inline leaves: an arm's nodes lie between the BRCH and the JOIN in the
     // execution order, each arm as one piece starting at its entry (the node std::fvm jumps
     // to, resolveRuntimeBranchArmEntry) and running to the next arm's entry or the JOIN.
     const auto brchAt = std::find(order.begin(), order.end(), brch);
@@ -1039,30 +1068,36 @@ Block FunctionEmitter::lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail
     const GCGraph *g = frame.graph;
     GCGraph *arm     = g->directCalleeGraphOf(call);
     if (!arm->closureNodes().empty()) {
-        refuse(g, call, std::format("an arm of a branch in {} captures a closure", describeFunction(g)));
+        refuse(
+            g,
+            call,
+            std::format("an arm of a branch in {} captures a closure", describeFunction(g)));
     }
     Frame inner{arm, {}, {}};
     Block prefix;
     // The ports take the values the call passes. A value written as an expression that the
     // arm uses more than once is computed once, at the start of the arm.
-    auto bindPorts = [&](std::span<const gc_node_ref_t> ports, std::span<const gc_node_ref_t> args) {
-        for (size_t i = 0; i < ports.size() && i < args.size(); ++i) {
-            CppValue value = valueOf(frame, args[i]);
-            const bool simple =
-                value.literal || value.text.find_first_of("()+-*/<>=!&|~ ,") == std::string::npos;
-            if (!simple && liveUses(arm, ports[i]) > 1) {
-                const std::string name =
-                    locals_.unique(std::format("v{}_{}", nextValue_++, parameterName(arm, ports[i])));
-                prefix.push_back(Stmt::line(std::format(
-                    "const {} {} = {};",
-                    cppType(arm, ports[i], arm->node(ports[i])->dataType()),
-                    name,
-                    value.text)));
-                value = CppValue{name, false};
+    auto bindPorts =
+        [&](std::span<const gc_node_ref_t> ports, std::span<const gc_node_ref_t> args) {
+            for (size_t i = 0; i < ports.size() && i < args.size(); ++i) {
+                CppValue value    = valueOf(frame, args[i]);
+                const bool simple = value.literal || value.text.find_first_of("()+-*/<>=!&|~ ,") ==
+                                                         std::string::npos;
+                if (!simple && liveUses(arm, ports[i]) > 1) {
+                    const std::string name = locals_.unique(
+                        std::format("v{}_{}", nextValue_++, parameterName(arm, ports[i])));
+                    prefix.push_back(
+                        Stmt::line(
+                            std::format(
+                                "const {} {} = {};",
+                                cppType(arm, ports[i], arm->node(ports[i])->dataType()),
+                                name,
+                                value.text)));
+                    value = CppValue{name, false};
+                }
+                inner.values[ports[i]] = value;
             }
-            inner.values[ports[i]] = value;
-        }
-    };
+        };
     bindPorts(arm->normPorts(), g->normInputsOf(call));
     bindPorts(arm->withPorts(), g->withInputsOf(call));
 
@@ -1073,7 +1108,10 @@ Block FunctionEmitter::lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail
         resultOf(arm),
         tail);
     inlining_.erase(arm);
-    prefix.insert(prefix.end(), std::make_move_iterator(body.begin()), std::make_move_iterator(body.end()));
+    prefix.insert(
+        prefix.end(),
+        std::make_move_iterator(body.begin()),
+        std::make_move_iterator(body.end()));
     return prefix;
 }
 
@@ -1180,7 +1218,8 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
         // A closure: the function constant and the values it captures, slot i of the closure
         // being the i-th captured port of the function's graph.
         GCGraph *function = functionConstantOf(g, templ);
-        std::vector<std::string> captures(function != nullptr ? function->closureNodes().size() : 0);
+        std::vector<std::string> captures(
+            function != nullptr ? function->closureNodes().size() : 0);
         for (size_t i = 0; i < with.size() && i < slots.size(); ++i) {
             const auto at = static_cast<size_t>(slots[i]);
             if (at < captures.size()) {
@@ -1300,8 +1339,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
         // The root's call of `main`: a direct call, with the values main captures from the
         // top level (the closure the root builds of them, a FILL).
         const gc_node_ref_t closure = with.front();
-        std::string expr =
-            std::format("{}(depth", program_.functionNames.at(program_.entryMain));
+        std::string expr = std::format("{}(depth", program_.functionNames.at(program_.entryMain));
         for (gc_node_ref_t arg : g->normInputsOf(ref)) {
             expr += ", " + valueOf(frame, arg).text;
         }
@@ -1314,8 +1352,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
         return;
     }
     cppType(g, with.front(), g->node(with.front())->dataType());
-    std::string expr =
-        std::format("{}({}", valueOf(frame, with.front()).text, callDepth(g, ref));
+    std::string expr = std::format("{}({}", valueOf(frame, with.front()).text, callDepth(g, ref));
     for (gc_node_ref_t arg : g->normInputsOf(ref)) {
         expr += ", " + valueOf(frame, arg).text;
     }
@@ -1337,8 +1374,8 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
     const std::string from    = isVoid(fromType) ? "void" : cppType(g, input, fromType);
     using camel::core::type::TupleType;
     using camel::core::type::TypeCode;
-    const auto *target = toType->code() == TypeCode::Tuple ? static_cast<const TupleType *>(toType)
-                                                           : nullptr;
+    const auto *target =
+        toType->code() == TypeCode::Tuple ? static_cast<const TupleType *>(toType) : nullptr;
     const auto *source = fromType != nullptr && fromType->code() == TypeCode::Tuple
                              ? static_cast<const TupleType *>(fromType)
                              : nullptr;
@@ -1346,15 +1383,18 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
     if (to == from) {
         frame.values[ref] = value;
         return;
-    } else if (target != nullptr && target->isNullable() && (isVoid(fromType) || value.text == "rt::Unit{}")) {
+    } else if (
+        target != nullptr && target->isNullable() &&
+        (isVoid(fromType) || value.text == "rt::Unit{}")) {
         text = std::format("{}{{}}", to); // null
-    } else if (target != nullptr && target->isFallible() && source != nullptr &&
-               source->isFallible()) {
+    } else if (
+        target != nullptr && target->isFallible() && source != nullptr && source->isFallible()) {
         text = std::format("rt::retag<{}>({})", to, value.text);
     } else if (target != nullptr && (target->isNullable() || target->isFallible())) {
         text = std::format("{}({})", to, value.text);
-    } else if (fromType != nullptr && fromType->code() <= TypeCode::Bool &&
-               toType->code() <= TypeCode::Bool) {
+    } else if (
+        fromType != nullptr && fromType->code() <= TypeCode::Bool &&
+        toType->code() <= TypeCode::Bool) {
         text = std::format("static_cast<{}>({})", to, value.text);
     } else {
         refuse(
@@ -1436,8 +1476,8 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
                     const GCGraph *arm;
                     ~Leave() { walk.erase(arm); }
                 } leave{escapeWalk_, arm};
-                const auto args    = graph->withInputsOf(user);
-                const auto ports   = arm->withPorts();
+                const auto args  = graph->withInputsOf(user);
+                const auto ports = arm->withPorts();
                 for (size_t i = 0; i < args.size() && i < ports.size(); ++i) {
                     if (args[i] == cell && cellEscapes(arm, ports[i])) {
                         return true;
@@ -1460,7 +1500,7 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
 
 bool FunctionEmitter::lowerVariable(
     Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out) {
-    const GCGraph *g              = frame.graph;
+    const GCGraph *g             = frame.graph;
     const camel::core::OperId id = operatorId(g, ref);
     if (id == camel::core::oper::VarNew) {
         const gc_node_ref_t init = g->normInputsOf(ref).front();
@@ -1468,15 +1508,22 @@ bool FunctionEmitter::lowerVariable(
         const std::string type   = cppType(g, init, valueType);
         const std::string name   = locals_.unique(std::format("var{}", nextValue_++));
         if (cellEscapes(g, ref)) {
-            out.push_back(Stmt::line(std::format(
-                "const rt::Cell<{}> {}{{{}}};",
-                type,
-                name,
-                withoutParentheses(valueOf(frame, init).text))));
+            out.push_back(
+                Stmt::line(
+                    std::format(
+                        "const rt::Cell<{}> {}{{{}}};",
+                        type,
+                        name,
+                        withoutParentheses(valueOf(frame, init).text))));
             frame.values[ref] = CppValue{name, false, CppValue::Cell::Shared};
         } else {
-            out.push_back(Stmt::line(
-                std::format("{} {} = {};", type, name, withoutParentheses(valueOf(frame, init).text))));
+            out.push_back(
+                Stmt::line(
+                    std::format(
+                        "{} {} = {};",
+                        type,
+                        name,
+                        withoutParentheses(valueOf(frame, init).text))));
             frame.values[ref] = CppValue{name, false, CppValue::Cell::Local};
         }
         return true;
@@ -1505,16 +1552,19 @@ bool FunctionEmitter::lowerVariable(
         std::string item = valueOf(frame, norm[1]).text;
         if (!isIdentifier(item)) {
             const std::string name = locals_.unique(std::format("item{}", nextValue_++));
-            out.push_back(Stmt::line(std::format(
-                "const {} {} = {};",
-                cppType(g, norm[1], g->node(norm[1])->dataType()),
-                name,
-                withoutParentheses(item))));
+            out.push_back(
+                Stmt::line(
+                    std::format(
+                        "const {} {} = {};",
+                        cppType(g, norm[1], g->node(norm[1])->dataType()),
+                        name,
+                        withoutParentheses(item))));
             item = name;
         }
-        out.push_back(Stmt::line(
-            local ? std::format("{0} = rt::append(std::move({0}), {1});", cell.text, item)
-                  : std::format("{0}.set(rt::append({0}.take(), {1}));", cell.text, item)));
+        out.push_back(
+            Stmt::line(
+                local ? std::format("{0} = rt::append(std::move({0}), {1});", cell.text, item)
+                      : std::format("{0}.set(rt::append({0}.take(), {1}));", cell.text, item)));
         bind(frame, ref, read, false, out, "assigned");
         return true;
     }
@@ -1586,10 +1636,10 @@ bool FunctionEmitter::lowerHigherOrder(
     if (it->second == "attempt") {
         // attempt(f, args...): the result's payload type is the C++ type of the `T!`'s T.
         const Type *result            = g->node(ref)->dataType();
-        const auto *tagged = static_cast<const camel::core::type::TupleType *>(result);
-        const Type *payload = tagged->payloadType();
+        const auto *tagged            = static_cast<const camel::core::type::TupleType *>(result);
+        const Type *payload           = tagged->payloadType();
         const std::string payloadType = isVoid(payload) ? "rt::Unit" : cppType(g, ref, payload);
-        expr = std::format("rt::attempt<{}>(depth, {}", payloadType, site);
+        expr                          = std::format("rt::attempt<{}>(depth, {}", payloadType, site);
         for (gc_node_ref_t input : norm) {
             expr += ", " + valueOf(frame, input).text;
         }

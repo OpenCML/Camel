@@ -3,7 +3,7 @@
  * that ordered the call after the read is an argument the callee does not use.
  * `snapshot` is read after the first write; `ignores` takes a value computed from the
  * snapshot, ignores it, and writes the variable. After inlining, the write inside `ignores`
- * used to be free to run before the read (std::opt::simplify: the snapshot came out as the
+ * used to be free to run before the read (std::opt: the snapshot came out as the
  * final value of the variable).
  */
 module var_read_before_callee_write

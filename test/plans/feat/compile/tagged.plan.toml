@@ -233,10 +233,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "combined.inline_nvm"
-desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`: through `std::inline std::nvm`."
+desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`: through `std::opt::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/combined.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -709,10 +709,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_nvm"
-desc = "The program over both tagged forms gives the same result through `std::inline std::nvm`."
+desc = "The program over both tagged forms gives the same result through `std::opt::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -736,10 +736,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.fallible.inline_nvm"
-desc = "The `T!` program gives the same result through `std::inline std::nvm`."
+desc = "The `T!` program gives the same result through `std::opt::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/fallible.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -766,10 +766,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.nullable.inline_nvm"
-desc = "The `T?` program gives the same result through `std::inline std::nvm`."
+desc = "The `T?` program gives the same result through `std::opt::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/nullable.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -800,10 +800,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_fvm"
-desc = "The program over both tagged forms gives the same result through `std::inline std::fvm`."
+desc = "The program over both tagged forms gives the same result through `std::opt::inline std::fvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -827,10 +827,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.simplify_nvm"
-desc = "The program over both tagged forms gives the same result through `std::opt::simplify std::nvm`."
+desc = "The program over both tagged forms gives the same result through `std::opt std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -935,10 +935,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_opt_jit"
-desc = "The program over both tagged forms gives the same result through `std::inline std::opt std::jit`."
+desc = "The program over both tagged forms gives the same result through `std::opt::inline std::opt std::jit`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -965,7 +965,7 @@ name = "graph.null_then"
 desc = "`a ?? b` on the graph: one OPER reading the tag, one BRCH/JOIN pair with two arms (FUNC subgraphs), and the OPER that takes the value out inside an arm. No node kind of its own."
 kind = "behavior"
 case = "../../../cases/compile/tagged/graph_null_then.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1003,7 +1003,7 @@ name = "graph.null_then_snapshot"
 desc = "Snapshot of the graph of `a ?? b`."
 kind = "snapshot"
 case = "../../../cases/compile/tagged/graph_null_then.cml"
-args = ["${case}", "${run_gir}"]
+args = ["${case}", "${run_rgir}"]
 expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"
@@ -1016,7 +1016,7 @@ name = "graph.throw_and_pass"
 desc = "`throw e` is the exit of its graph (OPER, CAST, EXIT, no branch); `x ?-> f` is one BRCH/JOIN."
 kind = "behavior"
 case = "../../../cases/compile/tagged/graph_throw_pass.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

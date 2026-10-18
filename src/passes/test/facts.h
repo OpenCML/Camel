@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,9 +33,9 @@
  * It returns the committed program.
  *
  * `test::facts_seed` and `test::facts_check` bracket other passes (rewrites interact with facts,
- * design 10.5): `camel p.cml test::facts_seed std::inline test::facts_check`. The first computes
- * every core fact of the program and prints how many of each kind (`FACTS seeded <kind> <n>`).
- * The second reads every stored fact against the program as it is now and prints, per graph,
+ * design 10.5): `camel p.cml test::facts_seed std::opt::inline test::facts_check`. The first
+ * computes every core fact of the program and prints how many of each kind (`FACTS seeded <kind>
+ * <n>`). The second reads every stored fact against the program as it is now and prints, per graph,
  * how many are valid, revalidated (Cone) and stale, and how many are about graphs the program
  * no longer has (`FACTS graph <name> valid=.. revalidated=.. stale=..`, `FACTS gone <n>`); then
  * it computes again what was stale and verifies every stored fact against a fresh computation

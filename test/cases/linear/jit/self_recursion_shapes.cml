@@ -1,6 +1,6 @@
 /**
  * Self-recursive functions of several shapes (one, two and three arguments, a float argument and result) whose
- * recursive calls are not tail calls. After std::inline each is a single graph that calls only itself, which is
+ * recursive calls are not tail calls. After std::opt::inline each is a single graph that calls only itself, which is
  * what the JIT compiles: the recursive call is then machine code calling machine code. The recursive arm reads
  * parameters the other arm has read first, and passes them on in another order.
  */

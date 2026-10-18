@@ -62,10 +62,10 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_map_simplify_nvm"
-desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::opt::simplify std::nvm."
+desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::opt std::nvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
-args = ["${case}", "--arg", "reps=200", "std::opt::simplify", "${run_nvm}"]
+args = ["${case}", "--arg", "reps=200", "std::opt", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_map total=17472000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -106,10 +106,10 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_filter_simplify_nvm"
-desc = "filter nested with map both ways, the element functions building rows, 100 times over, across several elder-space collections. Pipeline: std::opt::simplify std::nvm."
+desc = "filter nested with map both ways, the element functions building rows, 100 times over, across several elder-space collections. Pipeline: std::opt std::nvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_filter.cml"
-args = ["${case}", "--arg", "reps=100", "std::opt::simplify", "${run_nvm}"]
+args = ["${case}", "--arg", "reps=100", "std::opt", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_filter total=5638400"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

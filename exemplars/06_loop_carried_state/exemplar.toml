@@ -9,6 +9,6 @@ stdout = "expected/output.txt"
 
 [[runs]]
 name = "simplified"
-args = ["std::macro", "std::opt::simplify", "std::nvm"]
+args = ["std::macro", "std::opt", "std::nvm"]
 exit = 0
 stdout = "expected/output.txt"

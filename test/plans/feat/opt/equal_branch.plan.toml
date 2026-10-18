@@ -1,0 +1,168 @@
+id = "opt.equal_branch"
+order = 326
+tier = "feat"
+tags = ["feat","opt","fold","branch"]
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 8000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "equal_branch.graph.inline"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","std::inline","std::jgir"]
+verify_script = '''
+({ input, assert }) => {
+ const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
+ const count = label => g.nodes.filter(n => n.label === label).length
+ assert(count(':op/mul_d') === 3, 'wrong remaining scalar arithmetic')
+ assert(count('JOIN') === 3 && count('BRCH') === 3, 'branch structure lost')
+ assert(count('sys:get_env') === 1, 'runtime condition lost')
+}
+'''
+
+[[tests]]
+name = "equal_branch.graph.fold"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","std::opt","std::jgir"]
+verify_script = '''
+({ input, assert }) => {
+ const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
+ const count = label => g.nodes.filter(n => n.label === label).length
+ assert(count(':op/mul_d') === 2, 'wrong remaining scalar arithmetic')
+ assert(count('JOIN') === 3 && count('BRCH') === 3, 'branch structure lost')
+ assert(count('sys:get_env') === 1, 'runtime condition lost')
+}
+'''
+
+[[tests]]
+name = "equal_branch.graph.cse"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","std::inline","std::opt::cse","std::jgir"]
+verify_script = '''
+({ input, assert }) => {
+ const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
+ const count = label => g.nodes.filter(n => n.label === label).length
+ assert(count(':op/mul_d') === 3, 'wrong remaining scalar arithmetic')
+ assert(count('JOIN') === 3 && count('BRCH') === 3, 'branch structure lost')
+ assert(count('sys:get_env') === 1, 'runtime condition lost')
+}
+'''
+
+[[tests]]
+name = "equal_branch.known_gradient"
+case = "../../../cases/modules/autodiff/collapse.cml"
+args = ["${case}","std::macro","std::opt","std::jgir"]
+verify_script = '''
+({ input, assert }) => {
+ const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
+ assert(!g.nodes.some(n => [':op/mul_d', ':op/add_d', ':str/format'].includes(n.label)), 'known gradient did not fold')
+ assert(g.nodes.some(n => n.label === 'sys:get_env') && g.nodes.some(n => n.kind === 'JOIN'), 'condition lost')
+}
+'''
+
+[[tests]]
+name = "equal_branch.reference.left"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","${backend}"]
+envs = ["CAMEL_EQUAL_BRANCH="]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "left\n4.0\n4.0\n0.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "equal_branch.reference.right"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","${backend}"]
+envs = ["CAMEL_EQUAL_BRANCH=right"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "right\n4.0\n9.0\n-0.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "equal_branch.fold.left"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","std::inline","std::opt::fold","${backend}"]
+envs = ["CAMEL_EQUAL_BRANCH="]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "left\n4.0\n4.0\n0.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "equal_branch.fold.right"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","std::inline","std::opt::fold","${backend}"]
+envs = ["CAMEL_EQUAL_BRANCH=right"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "right\n4.0\n9.0\n-0.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "equal_branch.cse.left"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","std::inline","std::opt::cse","${backend}"]
+envs = ["CAMEL_EQUAL_BRANCH="]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "left\n4.0\n4.0\n0.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "equal_branch.cse.right"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","std::inline","std::opt::cse","${backend}"]
+envs = ["CAMEL_EQUAL_BRANCH=right"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "right\n4.0\n9.0\n-0.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "equal_branch.opt.left"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","std::opt","${backend}"]
+envs = ["CAMEL_EQUAL_BRANCH="]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "left\n4.0\n4.0\n0.0", input.normalized.stdout)
+}
+'''
+
+[[tests]]
+name = "equal_branch.opt.right"
+case = "../../../cases/opt/generic/equal_branch_values.cml"
+args = ["${case}","std::opt","${backend}"]
+envs = ["CAMEL_EQUAL_BRANCH=right"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({ input, assert }) => {
+ assert(input.normalized.stdout.trim() === "right\n4.0\n9.0\n-0.0", input.normalized.stdout)
+}
+'''

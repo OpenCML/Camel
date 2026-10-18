@@ -4,6 +4,16 @@ tier = "gpu"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]
+name = "static_regions"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/gpu_regions.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["GPU decorator regions: mixed execution, captures, macro and CPU fallback PASS"]
+timeout_ms = 60000
+
+[[tests]]
 name = "direct_and_nested"
 kind = "behavior"
 case = "../../cases/modules/tiles/gpu_decorator.cml"

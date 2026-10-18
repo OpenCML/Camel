@@ -1,6 +1,6 @@
 /**
  * The tensor program on which the defect of arms_laid_out_whole.cml was found: `loop(0, 2, x)`
- * unrolled inside the arm of a run-time `if`. Under std::opt::simplify FastVM and the JIT left
+ * unrolled inside the arm of a run-time `if`. Under std::opt FastVM and the JIT left
  * the unrolled arm after its first multiplication and the JOIN read a slot never written
  * ("reduce: RuntimeError" at the `sum`). The first arm is empty here, so NodeVM and Taskflow
  * were right by accident.

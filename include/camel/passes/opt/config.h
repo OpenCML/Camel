@@ -13,16 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
  * Runtime rewrite pass configuration.
  *
- * `std::inline` is intentionally an inline-only surface. `std::opt` is the
- * aggregate rewrite pipeline that may also enable devirtualization and
- * specialization before inlining. Keeping the two configuration types distinct
+ * `std::opt::inline` is intentionally an inline-only surface. `std::opt` is the
+ * integrated optimization driver, which combines call rewriting with folding, CSE
+ * and DCE. This configuration selects the call-rewrite stages and their budgets.
+ * Keeping the two configuration types distinct
  * prevents pass registration from accidentally collapsing back into the old
  * "inline means all optimizations" behavior.
  */
@@ -119,7 +120,7 @@ struct OptimizeRewriteConfig {
     /// still count, so the bound is also a bound on the work of the pass.
     size_t growthBudgetNodes = kDefaultGrowthBudgetNodes;
     /// The nodes already copied, for a driver that runs the engine several times against one
-    /// budget (std::opt::simplify). Null: each run of the engine has the whole budget.
+    /// budget (std::opt). Null: each run of the engine has the whole budget.
     size_t *growthSpentNodes = nullptr;
     /// Splits an indirect call whose callee is projected out of a branch JOIN into one call
     /// per arm plus one JOIN per projected value. The result deliberately violates the
@@ -128,4 +129,7 @@ struct OptimizeRewriteConfig {
     /// only valid for consumers that never build an execution topo — the ONNX exporter.
     bool enableBranchedCallSplit = false;
     InlineRewriteConfig inlineConfig{};
+    /// Restrict algebra to strictly equivalent floating-point rewrites. By default local
+    /// reassociation is allowed; precision changes and approximate functions are not implied.
+    bool safeFloatingPoint = false;
 };

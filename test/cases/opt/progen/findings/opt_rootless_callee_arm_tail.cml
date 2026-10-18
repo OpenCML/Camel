@@ -3,7 +3,7 @@
  *   its call was the tail of a branch arm, its result waited on nothing: the tail became a
  *   value outside the branch, and the code computing the arguments (here the inner call of
  *   `r18`, a branch of its own) was left between the BRCH and the JOIN in no arm.
- * Pipeline: std::opt std::nvm (also std::opt::simplify)
+ * Pipeline: std::opt std::nvm (also std::opt)
  * Expected output: (nothing)
  * Actual: PassInternalError of the branch-arm check ("GATE ... belongs to no arm") since that
  *   check exists. Before it this reduced program happened to run; the unreduced one (seed 108

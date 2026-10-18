@@ -27,19 +27,19 @@ assert(input.stderr === '', 'no diagnostic: ' + input.stderr)
 
 [[tests]]
 name = "logical_branch.short_circuit.passes"
-desc = "The same program through std::inline, std::opt, std::jit: the passes keep the right side an arm."
+desc = "The same program through std::opt::inline, std::opt, std::jit: the passes keep the right side an arm."
 kind = "behavior"
 case = "../../../cases/consistency/logical/short_circuit.cml"
-args = ["${case}", "std::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout_starts_with = "a1\nfalse\nb1\nb2\nfalse\nc1\ntrue\nd1\nd2\ntrue\ne1\ne2\nfalse\n"
 
 [[tests]]
 name = "logical_branch.short_circuit.simplify"
-desc = "The same program through std::opt::simplify, std::fvm."
+desc = "The same program through std::opt, std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/logical/short_circuit.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 expect_stdout_starts_with = "a1\nfalse\nb1\nb2\nfalse\nc1\ntrue\nd1\nd2\ntrue\ne1\ne2\nfalse\n"
 
@@ -56,10 +56,10 @@ expect_stdout_contains = ["[even digit, odd digit or far, other, odd digit or fa
 
 [[tests]]
 name = "logical_branch.values.inline"
-desc = "The same program through std::inline, std::fvm."
+desc = "The same program through std::opt::inline, std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/logical/pure.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 expect_stdout_contains = ["[even digit, odd digit or far, other, odd digit or far, other]", "true false false true\ntrue false false false\ntrue true true false\ntrue false false false\ntrue true true false\ntrue"]
 
@@ -68,7 +68,7 @@ name = "logical_branch.graph"
 desc = "`a && b > 1` on the graph: a branch on `a` whose arm 0 is the right side and whose arm 1 is `false`."
 kind = "snapshot"
 case = "../../../cases/consistency/logical/graph.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"
@@ -79,7 +79,7 @@ name = "logical_branch.graph_is_if"
 desc = "`if a then b > 1 else false` gives the same graph as `a && b > 1` (the same golden)."
 kind = "snapshot"
 case = "../../../cases/consistency/logical/graph_if.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"

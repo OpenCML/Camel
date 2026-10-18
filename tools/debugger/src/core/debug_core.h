@@ -162,6 +162,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         LinePosition activationLine;
         /// The activation has not run a located node yet (function breakpoints, 3.3).
         bool awaitingEntry = false;
+        bool atEntry = false; // the current instruction is the first located one of this activation
     };
 
     struct Step {
@@ -322,7 +323,18 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     std::atomic<int> abort_{0}; // 0 none, 1 terminate, 2 restart
 
     // ---- the index; guarded by indexMutex_ (never held while waiting) ----
-    std::mutex indexMutex_;
+    // Allocation callbacks can run inside an index update. Track occupancy instead
+    // of try_lock on a mutex the same thread may already own (undefined behavior).
+    class IndexMutex {
+      public:
+        void lock();
+        void unlock();
+        bool busy() const;
+
+      private:
+        std::mutex mutex_;
+        std::atomic<bool> held_{false};
+    } indexMutex_;
     ProgramIndex index_;
 
     // ---- owned by the program's thread ----

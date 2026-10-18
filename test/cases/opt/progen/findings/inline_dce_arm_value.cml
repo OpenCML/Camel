@@ -1,5 +1,5 @@
 /**
- * progen finding F13 (branch arm). `std::inline std::opt::dce` changes the value of a branch whose
+ * progen finding F13 (branch arm). `std::opt::inline std::opt::dce` changes the value of a branch whose
  * taken arm is a sync block that declares a variable it does not use: the program prints 0 instead
  * of 1 (exit 0, no diagnostic). Without passes, and with either pass alone, it prints 1.
  * Expected output: 1

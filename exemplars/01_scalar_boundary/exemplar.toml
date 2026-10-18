@@ -9,7 +9,7 @@ stdout = "expected/run.txt"
 
 [[runs]]
 name = "dump"
-args = ["std::argir"]
+args = ["std::agir"]
 exit = 0
-stdout = "expected/dump.argir.dot"
+stdout = "expected/dump.agir.dot"
 output_contains = ["role=\"scalar-boundary\"", "role=\"branch-contract\"", "role=\"effect\""]

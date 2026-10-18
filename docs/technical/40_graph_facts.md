@@ -77,7 +77,7 @@ the interface does not change.
 
 ## 4. Rewrites
 
-Every rewrite of the program goes through a `RuntimeGraphDraftSession` commit (`std::inline`,
+Every rewrite of the program goes through a `RuntimeGraphDraftSession` commit (`std::opt::inline`,
 `std::opt` and its parts, `std::macro`, specialization, entry arguments, `tensor::fuse`, the ONNX
 export's session, the loop lowering), so the serials are maintained in one place. A fact computed
 before a pass reads as stale afterwards when the pass changed what it read, and is computed again
@@ -123,7 +123,7 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
 
   (`test/cases/facts/tensors_and_loops.cml`.)
 - `test/plans/feat/modules/graph_facts.plan.toml`: the registry and store rules
-  (`test::facts`), facts across `std::inline` and `std::opt` and a private loop lowering
+  (`test::facts`), facts across `std::opt::inline` and `std::opt` and a private loop lowering
   (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
   and `inspect --facts`. The test passes need `CAMEL_ENABLE_TEST_PASSES`.
 

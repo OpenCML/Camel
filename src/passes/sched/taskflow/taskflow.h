@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -438,6 +438,12 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // per-thread plan caches of planFor; never 0.
     uint64_t planEpoch_ = nextPlanEpoch();
     static uint64_t nextPlanEpoch();
+    // Graphs obtained during execution (notably graph-reading native operators' CPU
+    // callbacks) can still contain LOOP. The context owns and traces the detached
+    // lowered copies; this run only remembers their immutable graph identities.
+    std::mutex loweringMutex_;
+    std::unordered_map<camel::runtime::GCGraph *, camel::runtime::GCGraph *> executionGraphs_;
+    camel::runtime::GCGraph *executionGraph(camel::runtime::GCGraph *graph);
     // The fault domain of everything outside a fault-isolation boundary. A failure in it ends
     // the run.
     TaskflowFaultDomain rootDomain_;

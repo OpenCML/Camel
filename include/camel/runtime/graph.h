@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,6 +59,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 #include <span>
 #include <string_view>
 #include <type_traits>
@@ -84,7 +85,6 @@ using gc_cnt_t      = uint16_t;
 
 constexpr gc_node_ref_t kInvalidNodeRef = static_cast<gc_node_ref_t>(-1);
 constexpr gc_off_t kInvalidOffset       = static_cast<gc_off_t>(-1);
-
 
 // The kinds of node. The numeric values are part of the graph model (docs/design/graph-model,
 // section 3.5) and must not be renumbered.
@@ -327,7 +327,7 @@ static_assert(std::is_trivially_copyable_v<GCJoinBody>);
 struct GCOperBody {
     // The implementation, when a scheduler has resolved it; nullptr until then. A cache of what
     // the executor manager answers for `oper`, not part of the node's identity.
-    operator_t op = nullptr;
+    operator_t op            = nullptr;
     camel::core::OperId oper = camel::core::kNoOper;
     uint32_t reserved        = 0;
 
@@ -635,7 +635,9 @@ class GCGraphManager {
 
     void adoptRoot(GCGraph *rootGraph);
     void replaceRoot(GCGraph *rootGraph);
-    GCGraph *root() const { return root_; }
+    GCGraph *root() const;
+    // The collector reads this stable vector only when collections are allowed.
+    // Runtime publishers hold NoCollectionScope while changing it.
     std::vector<camel::core::rtdata::Object *> &gcRoots() { return gcRoots_; }
     const std::vector<camel::core::rtdata::Object *> &gcRoots() const { return gcRoots_; }
 
@@ -656,6 +658,10 @@ class GCGraphManager {
   private:
     void rebuildGcRoots();
 
+    // Publishing a detached graph can happen on different execution workers.
+    // Recursive because the lifecycle operations below compose (adopt/replace,
+    // destruction/release/clear); the lock is never held through graph execution.
+    mutable std::recursive_mutex mutex_;
     std::vector<GCGraph *> graphs_;
     std::vector<GCGraph *> detached_;
     std::vector<GCGraph *> pinned_;

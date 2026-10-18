@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -76,7 +76,7 @@ struct Refusal {
 struct Request {
     uint64_t origin = camel::source::kInvalidOriginId; // the call, for refusals about it
     ::Function *fn  = nullptr; // constant function value (the closure template when built by FILL)
-    GCGraph *graph = nullptr;
+    GCGraph *graph  = nullptr;
     std::vector<Example> captures;
     std::vector<Example> examples;
     std::string path;
@@ -106,8 +106,8 @@ std::optional<Example> constantOf(const GCGraph *g, gc_node_ref_t ref) {
     if (n->kind != GCNodeKind::Data || n->dataIndex >= 0) {
         return std::nullopt;
     }
-    const auto index      = static_cast<size_t>(-n->dataIndex);
-    core::type::Type *ty  = g->staticDataType()->typeAt(index);
+    const auto index     = static_cast<size_t>(-n->dataIndex);
+    core::type::Type *ty = g->staticDataType()->typeAt(index);
     return Example{g->staticArea()->get<slot_t>(index), ty ? ty : n->dataType()};
 }
 
@@ -133,8 +133,7 @@ uint64_t argOrigin(const GCGraph *g, gc_node_ref_t node, gc_node_ref_t arg) {
 
 /// Reads argument `index` of the request `node` as a constant; refuses when the preceding
 /// passes did not reduce it to one. The pass does not execute the program to obtain it.
-Example
-constantArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::string_view what) {
+Example constantArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::string_view what) {
     const gc_node_ref_t arg = g->normInputsOf(node)[index];
     if (auto value = constantOf(g, arg)) {
         return *value;
@@ -143,7 +142,7 @@ constantArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::string_view
         argOrigin(g, node, arg),
         std::format(
             "the {} of onnx.export_model is {}, not a constant of the graph; onnx::export "
-            "does not run the program: run std::opt::simplify before it so that it folds, or "
+            "does not run the program: run std::opt before it so that it folds, or "
             "build it from constants only",
             what,
             describeNode(g, arg))};
@@ -161,7 +160,7 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
             throw Refusal{
                 argOrigin(g, node, arg),
                 "the function argument of onnx.export_model is not a constant of the graph; "
-                "run std::opt::simplify before onnx::export"};
+                "run std::opt before onnx::export"};
         }
         auto *fn         = rtdata::fromSlot<::Function *>(templ->value);
         request.fn       = fn;
@@ -180,7 +179,7 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
                     std::format(
                         "the function passed to onnx.export_model captures {}, not a constant "
                         "of the graph; onnx::export does not run the "
-                        "program: run std::opt::simplify before it so that it folds, or pass "
+                        "program: run std::opt before it so that it folds, or pass "
                         "the value as a function argument",
                         describeNode(g, refs[k]))};
             }
@@ -460,7 +459,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
     const auto report =
         std::static_pointer_cast<const InlineReport>(ctx.passFact(kInlineReportFactKey));
     if (!report) {
-        return "run std::opt::simplify before onnx::export (after std::macro when the program "
+        return "run std::opt before onnx::export (after std::macro when the program "
                "uses macros such as grad)";
     }
     const GCGraph *callee    = calleeGraphOf(root, call);
@@ -594,7 +593,7 @@ void refuseUnexpandedMacros(const GCGraph *g) {
                 originNear(g, it.ref()),
                 std::format(
                     "macro operator '{}' is not expanded; run std::macro (then "
-                    "std::opt::simplify) before onnx::export",
+                    "std::opt) before onnx::export",
                     g->nodeBodyAs<camel::runtime::GCOperBody>(it.ref())->uri())};
         }
     }
@@ -612,7 +611,7 @@ Model translate(core::context::Context &ctx, const Request &request) {
     } catch (const ExportError &e) {
         std::string message = e.what();
         if (e.kind() == ExportError::Kind::CallRemains) {
-            message += "; onnx::export inlines what std::opt::simplify left once the shapes "
+            message += "; onnx::export inlines what std::opt left once the shapes "
                        "of the examples are known, so this call is one no simplification "
                        "removes (run std::macro before the pass when the program uses macros "
                        "such as grad)";
@@ -648,7 +647,7 @@ void exportEntry(core::context::Context &ctx, GCGraph *root, std::ostream &os) {
     } catch (const ExportError &e) {
         std::string message = e.what();
         if (e.kind() == ExportError::Kind::CallRemains) {
-            message += "; onnx::export inlines what std::opt::simplify left, so this call is "
+            message += "; onnx::export inlines what std::opt left, so this call is "
                        "one no simplification removes (run std::macro before the pass when "
                        "the program uses macros such as grad)";
         }

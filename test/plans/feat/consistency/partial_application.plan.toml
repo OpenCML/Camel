@@ -36,27 +36,27 @@ golden = "golden/partial_application_values.txt"
 
 [[tests]]
 name = "partial_application.values.inline"
-desc = "The same program through std::inline, std::fvm."
+desc = "The same program through std::opt::inline, std::fvm."
 case = "../../../cases/consistency/partial_application/values.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/partial_application_values.txt"
 
 [[tests]]
 name = "partial_application.values.simplify"
-desc = "The same program through std::opt::simplify, std::nvm."
+desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/partial_application/values.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/partial_application_values.txt"
 
 [[tests]]
 name = "partial_application.values.inline_opt"
-desc = "The same program through std::inline, std::opt, std::jit."
+desc = "The same program through std::opt::inline, std::opt, std::jit."
 case = "../../../cases/consistency/partial_application/values.cml"
-args = ["${case}", "std::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/partial_application_values.txt"
@@ -74,7 +74,7 @@ golden = "golden/partial_application_values.txt"
 name = "partial_application.graph"
 desc = "The graph of `let g = inc<1>`: a subgraph of its own that calls inc, with the bound argument entering through a closure port, held by a function value with one captured slot. No node of another graph is referred to."
 case = "../../../cases/consistency/partial_application/graph.cml"
-args = ["${case}", "std::rgir"]
+args = ["${case}", "std::gir"]
 backends = ["nvm"]
 backends_agree = []
 snapshot_compare = "gir_dot_isomorphic"

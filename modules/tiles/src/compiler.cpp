@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -20,12 +20,16 @@
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/loop.h"
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/ops/support.h"
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
+#include "tiles/internal/access.h"
 #include "tiles/internal/capability.h"
+#include "tiles/internal/compiled_region.h"
+#include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <bit>
@@ -42,6 +46,7 @@ namespace td = core::rtdata;
 using tensor::ops::ConstArg;
 
 namespace {
+thread_local size_t extractions = 0;
 struct Value {
     ty::Type *type = nullptr;
     std::optional<ConstArg> constant;
@@ -52,6 +57,7 @@ struct Value {
     std::vector<Value> fields;
     // Borrowed function graph and captured values, used only while reading the graph.
     rt::GCGraph *function = nullptr;
+    bool loopElement = false; // Exact i64 body port, materialized only by an explicit conversion.
 };
 struct Frame {
     rt::GCGraph *graph;
@@ -179,6 +185,16 @@ class Compiler {
                 "an integer attribute must be known when specializing the graph");
         return std::get<int64_t>(*v.constant);
     }
+
+    // A synthesized shape/permutation is a host-only specialization attribute.
+    // The core instantiator reads its temporary slot under extraction's no-GC scope;
+    // neither the slot nor the array escapes into the owned Program.
+    Value integerArray(const std::vector<int64_t> &values) {
+        auto *array = ::Array::create(tensor::ops::resultAllocator(), values.size());
+        for (size_t i = 0; i < values.size(); ++i)
+            array->set<td::Int64>(i, values[i]);
+        return host(td::toSlot<::Array *>(array), ty::ArrayType::create(ty::Type::Int64()));
+    }
     size_t tensorValue(const Value &v) {
         if (v.tensor != SIZE_MAX) {
             if (program.nodes[v.tensor].dtype == DType::F64)
@@ -229,6 +245,147 @@ class Compiler {
         return value;
     }
 
+    Value placeholder(ty::Type *type) {
+        Node node{.op = "input"};
+        if (type->code() == ty::TypeCode::Float64)
+            node.dtype = DType::F64;
+        else {
+            const auto *t = tensor::asTensorType(type);
+            if (!t || t->dtype() != ty::TypeCode::Float32 || !t->isStaticShape())
+                throw UnsupportedComputation(
+                    "loop values require f64 scalars or static f32 tensors");
+            node.shape = *t->shape();
+        }
+        return {.type = type, .tensor = append(std::move(node))};
+    }
+    size_t materialize(const Value &value) {
+        if (value.tensor != SIZE_MAX)
+            return value.tensor;
+        if (value.constant && std::holds_alternative<double>(*value.constant))
+            return append(
+                Node{
+                    .op         = "constant64",
+                    .attributes = {std::bit_cast<int64_t>(std::get<double>(*value.constant))},
+                    .dtype      = DType::F64});
+        throw UnsupportedComputation("loop state/capture must be a tensor or f64 value");
+    }
+    Value loop(Frame &frame, rt::gc_node_ref_t id) {
+        const rt::LoopView view(*frame.graph, id);
+        if (view.kind() != core::LoopKind::For || view.stateCount() == 0 ||
+            !view.bodyEffects().pure())
+            throw UnsupportedComputation("tiles requires a pure static For loop");
+        auto *body = view.bodyGraph();
+        const rt::fact::Anchor anchors[]{{frame.graph, id}, {body, *view.bodyElementParam()}};
+        const auto domain =
+            facts.obtain<rt::fact::LoopDomain>(rt::fact::coreKinds().loopDomain, anchors);
+        if (!domain || !domain->extent || *domain->extent < 0 ||
+            body->node(*view.bodyElementParam())->dataType()->code() != ty::TypeCode::Int64)
+            throw UnsupportedComputation("tiles loop requires a static int[] domain");
+        const auto iterable = eval(frame, *view.iterable());
+        if (!iterable.constant || !std::holds_alternative<std::vector<int64_t>>(*iterable.constant))
+            throw UnsupportedComputation("tiles loop requires exact static int[] values");
+        auto region    = std::make_shared<LoopRegion>();
+        region->domain = std::get<std::vector<int64_t>>(*iterable.constant);
+        if (region->domain.size() != static_cast<size_t>(*domain->extent))
+            throw std::runtime_error("core loop domain disagrees with static array");
+        Compiler nested(facts);
+        nested.active = active;
+        std::vector<Value> initials, states, captures;
+        std::vector<size_t> inputs;
+        for (size_t i = 0; i < view.stateCount(); ++i) {
+            auto initial = eval(frame, view.initialState(i));
+            inputs.push_back(materialize(initial));
+            auto state = nested.placeholder(initial.type);
+            region->stateInputs.push_back(state.tensor);
+            initials.push_back(std::move(initial));
+            states.push_back(std::move(state));
+        }
+        for (auto ref : view.captures()) {
+            const auto outer = eval(frame, ref);
+            inputs.push_back(materialize(outer));
+            auto inner = nested.placeholder(outer.type);
+            region->captureInputs.push_back(inner.tensor);
+            captures.push_back(std::move(inner));
+        }
+        // One activation is lowered once. The device loop carries the recurrence;
+        // Compiler::call is never repeated according to the domain's trip count.
+        Frame activation{.graph = body};
+        activation.values.emplace(
+            *view.bodyElementParam(),
+            Value{.type = body->node(*view.bodyElementParam())->dataType(), .loopElement = true});
+        for (size_t i = 0; i < states.size(); ++i)
+            activation.values.emplace(view.bodyStateParam(i), states[i]);
+        for (size_t c = 0; c < captures.size(); ++c)
+            activation.values.emplace(view.bodyCapturePort(c), captures[c]);
+        nested.active.insert(body);
+        if (body->exitNodeRef() != rt::kInvalidNodeRef)
+            nested.eval(activation, body->exitNodeRef());
+        auto result = nested.eval(activation, view.nextState());
+        if (states.size() == 1)
+            region->nextStates.push_back(nested.materialize(result));
+        else {
+            if (result.fields.size() != states.size())
+                throw std::runtime_error("loop next-state tuple arity mismatch");
+            for (const auto &field : result.fields)
+                region->nextStates.push_back(nested.materialize(field));
+        }
+        region->body         = std::move(nested.program);
+        region->body.outputs = region->nextStates;
+        const auto &source   = program.nodes[inputs.front()];
+        Node node{
+            .op     = "loop",
+            .shape  = source.shape,
+            .inputs = std::move(inputs),
+            .dtype  = source.dtype};
+        for (auto input : node.inputs) {
+            if (node.results.size() == states.size())
+                break;
+            const auto &value = program.nodes[input];
+            if (value.shape != node.shape || value.dtype != node.dtype)
+                throw UnsupportedComputation(
+                    "tiles loop states require identical lane domains and dtypes");
+            node.results.push_back({value.shape, value.dtype});
+        }
+        node.loop = std::move(region);
+        // A legal graph outside the initial lane-local subset remains a CPU region.
+        // Structural/contract validation below still reports actual malformed IR.
+        for (const auto &value : node.loop->body.nodes) {
+            const auto &op       = value.op;
+            const bool supported = op == "input" || op == "constant64" || op == "loop_index_f64" ||
+                                   op == "cast_f32" || op == "scalar_add" || op == "scalar_sub" ||
+                                   op == "scalar_mul" || op == "scalar_div" || op == "scalar_neg" ||
+                                   elementwise(op);
+            if (!supported || value.loop || (!value.shape.empty() && value.shape != node.shape) ||
+                (elementwise(op) && !kernel::canonicalPointwise(node.loop->body, value)) ||
+                (op == "input" && !value.data.empty() && !value.shape.empty()))
+                throw UnsupportedComputation(
+                    "tiles loop body is not a supported lane-local recurrence");
+            // Scalar expressions still execute when a tensor has no elements. Without a
+            // lane to report their fault, keep this recurrence on the CPU instead.
+            if (op == "scalar_div" && !node.loop->domain.empty() && elements(node.shape) == 0)
+                throw UnsupportedComputation("tiles loop needs a lane to preserve scalar faults");
+        }
+        kernel::validateLoopRegion(program, node);
+        const auto producer = append(std::move(node));
+        Value output{.type = view.valueType()};
+        for (size_t i = 0; i < states.size(); ++i) {
+            const auto &type = program.nodes[producer].results[i];
+            auto result      = Value{
+                .type   = initials[i].type,
+                .tensor = append(
+                    Node{
+                        .op         = "result",
+                        .shape      = type.shape,
+                        .inputs     = {producer},
+                        .attributes = {static_cast<int64_t>(i)},
+                        .dtype      = type.dtype})};
+            if (states.size() == 1)
+                return result;
+            output.fields.push_back(std::move(result));
+        }
+        return output;
+    }
+
     Value eval(Frame &f, rt::gc_node_ref_t id) {
         if (auto it = f.values.find(id); it != f.values.end())
             return it->second;
@@ -242,6 +399,9 @@ class Compiler {
             Value out;
             const auto ins = g->normInputsOf(id);
             switch (node->kind) {
+            case rt::GCNodeKind::Loop:
+                out = loop(f, id);
+                break;
             case rt::GCNodeKind::Data:
                 if (node->dataIndex >= 0)
                     throw std::runtime_error("nonconstant DATA node");
@@ -381,10 +541,26 @@ class Compiler {
                         "operator context arguments are not supported yet");
                 for (auto in : ins)
                     args.push_back(eval(f, in));
-                const auto first    = program.nodes.size();
-                const auto semantic = contract(oper);
-                auto indexed        = graphInstance(*g, id, args);
-                out                 = operation(oper, args, indexed);
+                const auto first      = program.nodes.size();
+                const auto semantic   = contract(oper);
+                auto indexed          = graphInstance(*g, id, args);
+                ty::Type *knownResult = nullptr;
+                const auto inputRefs  = g->normInputsOf(id);
+                bool sameTypes        = inputRefs.size() == args.size();
+                for (size_t i = 0; sameTypes && i < args.size(); ++i)
+                    sameTypes = g->node(inputRefs[i])->dataType() == args[i].type;
+                if (sameTypes) {
+                    const rt::fact::Anchor anchor{g, id};
+                    const auto shape = facts.obtain<rt::fact::TensorShape>(
+                        rt::fact::coreKinds().shape,
+                        {&anchor, 1});
+                    if (shape && shape->dtype == ty::TypeCode::Float32 && shape->dims &&
+                        std::all_of(shape->dims->begin(), shape->dims->end(), [](auto extent) {
+                            return extent >= 0;
+                        }))
+                        knownResult = node->dataType();
+                }
+                out = operation(oper, args, indexed, knownResult);
                 // Only this operator's lowering inherits its lexical grant.
                 // Arguments and separately called functions have already been
                 // lowered with their own permissions and must remain unchanged.
@@ -458,7 +634,37 @@ class Compiler {
 
     Value operation(
         core::OperId id, const std::vector<Value> &args,
-        const std::optional<core::sem::IndexedInstance> &indexed) {
+        const std::optional<core::sem::IndexedInstance> &indexed, ty::Type *knownResult = nullptr) {
+        static const auto shapeQuery = core::OperatorTable::instance().intern("tensor:shape");
+        if (id == shapeQuery && args.size() == 1) {
+            const auto input = tensorValue(args[0]);
+            return integerArray(program.nodes[input].shape);
+        }
+        static const auto numel = core::OperatorTable::instance().intern("tensor:numel");
+        if (id == numel && args.size() == 1) {
+            // Invocation specialization already knows the concrete tensor domain.
+            // Keep shape queries as integer attributes, not device tensor results.
+            const auto input = tensorValue(args[0]);
+            return {
+                .type     = ty::Type::Int64(),
+                .constant = static_cast<int64_t>(elements(program.nodes[input].shape))};
+        }
+        static const auto intToFloat = core::OperatorTable::instance().intern(":op/ltod");
+        if (id == intToFloat && args.size() == 1) {
+            if (args[0].loopElement)
+                return {
+                    .type   = ty::Type::Float64(),
+                    .tensor = append(Node{.op = "loop_index_f64", .dtype = DType::F64})};
+            if (args[0].constant && std::holds_alternative<int64_t>(*args[0].constant))
+                return {
+                    .type   = ty::Type::Float64(),
+                    .tensor = append(
+                        Node{
+                            .op         = "constant64",
+                            .attributes = {std::bit_cast<int64_t>(
+                                static_cast<double>(std::get<int64_t>(*args[0].constant)))},
+                            .dtype      = DType::F64})};
+        }
         static const auto scalarOps = [] {
             auto &table = core::OperatorTable::instance();
             return std::unordered_map<core::OperId, std::string>{
@@ -496,13 +702,40 @@ class Compiler {
         const auto *def = tensor::ops::OpRegistry::instance().find(id);
         if (!def || !def->traits.pure)
             throw UnsupportedComputation("unsupported or effectful operator '" + uri() + "'");
+        if (def->name == "permute_inverse" && args.size() == 2) {
+            const auto input = tensorValue(args[0]);
+            const auto rank  = program.nodes[input].shape.size();
+            if (!args[1].constant ||
+                !std::holds_alternative<std::vector<int64_t>>(*args[1].constant))
+                throw UnsupportedComputation("permute_inverse requires a static permutation");
+            const auto &permutation = std::get<std::vector<int64_t>>(*args[1].constant);
+            if (permutation.size() != rank)
+                throw std::runtime_error("permute_inverse: permutation rank mismatch");
+            std::vector<int64_t> inverse(rank, -1);
+            for (size_t i = 0; i < rank; ++i) {
+                const auto axis = permutation[i] < 0 ? permutation[i] + static_cast<int64_t>(rank)
+                                                     : permutation[i];
+                if (axis < 0 || static_cast<size_t>(axis) >= rank || inverse[axis] != -1)
+                    throw std::runtime_error("permute_inverse: invalid permutation");
+                inverse[axis] = static_cast<int64_t>(i);
+            }
+            static const auto permute = core::OperatorTable::instance().intern("tensor:permute");
+            std::vector<Value> normalized{args[0], integerArray(inverse)};
+            auto result = operation(permute, normalized, instance(permute, normalized));
+            // Keep the original derivative contract and the physical view's contract.
+            program.nodes[result.tensor].semantic = contract(permute);
+            return result;
+        }
         std::vector<ty::Type *> types;
         std::vector<std::optional<ConstArg>> constants;
         for (const auto &v : args) {
             types.push_back(v.type);
             constants.push_back(v.constant);
         }
-        auto inferred = def->infer(tensor::ops::InferContext(types, constants));
+        // Static graph types have already run the module's resolver. Read their
+        // core shape fact; only invocation specialization needs to infer again.
+        auto inferred = knownResult ? std::optional<ty::Type *>(knownResult)
+                                    : def->infer(tensor::ops::InferContext(types, constants));
         if (inferred && (*inferred)->code() == ty::TypeCode::Float64 &&
             (def->name == "sum" || def->name == "mean")) {
             size_t input = tensorValue(args.at(0));
@@ -528,72 +761,61 @@ class Compiler {
                 throw std::runtime_error("cast_like shape mismatch");
             return {.type = *inferred, .tensor = append(std::move(n))};
         }
-        if (n.op == "broadcast_like" || n.op == "expand_axis" || n.op == "ones_like" ||
-            n.op == "zeros_like") {
-            size_t input;
-            if (n.op == "ones_like" || n.op == "zeros_like")
-                input = append(
-                    Node{.op = "input", .shape = {}, .data = {n.op == "ones_like" ? 1.0f : 0.0f}});
-            else
-                input = tensorValue(args.at(0));
-            Shape shape = program.nodes[input].shape;
-            if (n.op == "expand_axis") {
-                int64_t axis = integer(args.at(2));
-                if (axis < 0)
-                    axis += static_cast<int64_t>(n.shape.size());
-                if (axis < 0 || size_t(axis) >= n.shape.size())
-                    throw std::runtime_error("gradient axis out of bounds");
-                Shape kept = n.shape;
-                kept[axis] = 1;
-                if (elements(kept) != elements(shape))
-                    throw std::runtime_error("gradient reshape count mismatch");
-                if (kept != shape)
-                    input = append(Node{.op = "reshape", .shape = kept, .inputs = {input}});
-                shape = std::move(kept);
-            }
-            if (shape.size() > n.shape.size())
-                throw std::runtime_error("gradient broadcast rank");
-            n.strides.assign(n.shape.size(), 0);
-            size_t stride      = 1;
-            const size_t shift = n.shape.size() - shape.size();
-            for (size_t d = shape.size(); d-- > 0;) {
-                if (shape[d] != 1 && shape[d] != n.shape[d + shift])
-                    throw std::runtime_error("gradient broadcast extent");
-                n.strides[d + shift] = shape[d] == 1 ? 0 : stride;
-                stride *= size_t(shape[d]);
-            }
+        if (n.op == "broadcast_like" || n.op == "expand_axis") {
+            n.inputs   = {tensorValue(args.at(0))};
+            n.op       = "reindex";
+            n.indexing = indexed;
+            if (!n.indexing)
+                throw UnsupportedComputation("view operator lacks a concrete core index instance");
+            (void)kernel::coreViewAddress(program, n, kernel::IndexExpr(0));
+            return {.type = *inferred, .tensor = append(std::move(n))};
+        }
+        if (n.op == "ones_like" || n.op == "zeros_like") {
+            // These source operators do not yet declare index instances. Their
+            // scalar-fill physical primitive reads the one embedded constant.
+            const auto input =
+                append(Node{.op = "input", .data = {n.op == "ones_like" ? 1.0f : 0.0f}});
             n.op     = "reindex";
             n.inputs = {input};
+            n.strides.assign(n.shape.size(), 0);
             return {.type = *inferred, .tensor = append(std::move(n))};
         }
         if (n.op == "matmul_grad_lhs" || n.op == "matmul_grad_rhs") {
-            size_t dy  = tensorValue(args.at(0));
-            size_t lhs = tensorValue(args.at(1)), rhs = tensorValue(args.at(2));
-            const auto a = program.nodes[lhs].shape, b = program.nodes[rhs].shape;
-            if (a.size() != 2 || b.size() != 2)
-                throw UnsupportedComputation("tiles matmul gradient requires rank 2");
-            const bool left   = n.op == "matmul_grad_lhs";
-            const auto &shape = left ? b : a;
-            size_t transposed = append(
-                Node{
-                    .op      = "reindex",
-                    .shape   = {shape[1], shape[0]},
-                    .inputs  = {left ? rhs : lhs},
-                    .strides = {1, size_t(shape[1])}});
-            n.op = "matmul";
-            n.inputs =
-                left ? std::vector<size_t>{dy, transposed} : std::vector<size_t>{transposed, dy};
-            // The physical primitive has its own indexing/law, not the three-operand
-            // gradient operator's instance. Keep both contracts in the dependency set.
-            static const auto matmulId = core::OperatorTable::instance().intern("tensor:matmul");
-            std::vector<Value> matrixArgs;
-            for (auto in : n.inputs)
-                matrixArgs.push_back(
-                    {.type =
-                         tensor::TensorType::get(ty::TypeCode::Float32, program.nodes[in].shape)});
-            n.indexing = instance(matmulId, matrixArgs);
-            n.semantic = contract(matmulId);
-            return {.type = *inferred, .tensor = append(std::move(n))};
+            const auto a = program.nodes[tensorValue(args.at(1))].shape;
+            const auto b = program.nodes[tensorValue(args.at(2))].shape;
+            if (a.size() < 2 || b.size() < 2)
+                throw UnsupportedComputation("tiles matmul gradient requires rank >= 2");
+            // Compose existing tensor primitives, retaining their core instances
+            // and contracts rather than inventing a separate batched index law.
+            auto apply = [&](const char *uri, std::vector<Value> values) {
+                const auto op       = core::OperatorTable::instance().intern(uri);
+                const auto first    = program.nodes.size();
+                const auto indexed  = instance(op, values);
+                auto value          = operation(op, values, indexed);
+                const auto semantic = contract(op);
+                for (size_t i = first; i < program.nodes.size(); ++i)
+                    if (program.nodes[i].semantic == SIZE_MAX)
+                        program.nodes[i].semantic = semantic;
+                if (value.tensor >= first && !program.nodes[value.tensor].indexing)
+                    program.nodes[value.tensor].indexing = indexed;
+                return value;
+            };
+            const bool left = n.op == "matmul_grad_lhs";
+            Value lhs = args[1], rhs = args[2], dy = args[0];
+            if (!left && b.size() == 2) {
+                // Match the Tensor CPU gradient's canonical GEMM: a shared RHS
+                // accumulates over batch and row in one ascending FMA chain.
+                // Per-batch GEMMs followed by sum_to would round differently.
+                const auto rows =
+                    static_cast<int64_t>(elements(a) / std::max<int64_t>(a.back(), 1));
+                lhs = apply("tensor:reshape", {lhs, integerArray({rows, a.back()})});
+                dy  = apply("tensor:reshape", {dy, integerArray({rows, b.back()})});
+            }
+            auto transposed = apply("tensor:transpose", {left ? rhs : lhs});
+            auto product    = apply(
+                "tensor:matmul",
+                left ? std::vector<Value>{dy, transposed} : std::vector<Value>{transposed, dy});
+            return apply("tensor:sum_to", {product, args[left ? 1 : 2]});
         }
         const std::string unary  = "|neg|abs|exp|log|sqrt|rsqrt|relu|";
         const std::string binary = "|add|subtract|multiply|divide|maximum|minimum|";
@@ -601,9 +823,9 @@ class Compiler {
             n.inputs = {tensorValue(args.at(0))};
         } else if (binary.find("|" + n.op + "|") != std::string::npos || n.op == "matmul") {
             n.inputs = {tensorValue(args.at(0)), tensorValue(args.at(1))};
-            if (n.op == "matmul" && (program.nodes[n.inputs[0]].shape.size() != 2 ||
-                                     program.nodes[n.inputs[1]].shape.size() != 2))
-                throw UnsupportedComputation("tiles matmul currently requires two rank-2 tensors");
+            if (n.op == "matmul" && (program.nodes[n.inputs[0]].shape.size() < 2 ||
+                                     program.nodes[n.inputs[1]].shape.size() < 2))
+                throw UnsupportedComputation("tiles matmul requires tensors with rank >= 2");
         } else if (n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis") {
             n.inputs          = {tensorValue(args.at(0))};
             int64_t axis      = integer(args.at(1));
@@ -616,43 +838,13 @@ class Compiler {
                 throw std::runtime_error("max over an empty axis");
             n.attributes = {axis};
         } else if (n.op == "transpose" || n.op == "permute" || n.op == "slice") {
-            n.inputs          = {tensorValue(args.at(0))};
-            const auto &shape = program.nodes[n.inputs[0]].shape;
-            auto instance     = indexed;
-            if (!instance || instance->norm.empty() ||
-                instance->output.mode != core::sem::WriteMode::Unique ||
-                instance->output.indirect || !instance->output.valid.empty() ||
-                !instance->domain.guard.empty() ||
-                instance->extents() != std::optional<Shape>(n.shape) ||
-                instance->output.coords.size() != n.shape.size())
-                throw std::runtime_error("layout operator lacks a direct core index domain");
-            for (size_t d = 0; d < n.shape.size(); ++d) {
-                const auto &coordinate = instance->exprs[instance->output.coords[d]];
-                if (instance->domain.dims[d].role != core::sem::DimRole::Parallel ||
-                    coordinate.op != core::sem::ExprOp::Dim ||
-                    coordinate.value != static_cast<int64_t>(d))
-                    throw std::runtime_error("layout output is not an identity iteration map");
-            }
-            const auto &access = instance->norm[0];
-            if (access.kind != core::sem::AccessKind::Affine || !access.valid.empty())
-                throw std::runtime_error("layout input is not an unconditional affine access");
-            if (elements(n.shape) == 0) {
-                // Empty views never evaluate an address, including overflowing unused strides.
-                n.strides.assign(n.shape.size(), 0);
-            } else {
-                const auto view = core::sem::rowMajorView(*instance, access, shape);
-                if (!view || view->offset < 0)
-                    throw std::runtime_error(
-                        "core layout map cannot be represented by physical strides");
-                n.offset = static_cast<size_t>(view->offset);
-                for (auto stride : view->strides) {
-                    if (stride < 0)
-                        throw UnsupportedComputation("negative physical strides are not supported");
-                    n.strides.push_back(static_cast<size_t>(stride));
-                }
-            }
-            n.indexing = std::move(instance);
+            n.inputs   = {tensorValue(args.at(0))};
+            n.indexing = indexed;
             n.op       = "reindex";
+            if (!n.indexing)
+                throw UnsupportedComputation(
+                    "layout operator lacks a concrete core index instance");
+            (void)kernel::coreViewAddress(program, n, kernel::IndexExpr(0));
         } else if (n.op == "reshape") {
             n.inputs = {tensorValue(args.at(0))};
             if (elements(program.nodes[n.inputs[0]].shape) != elements(n.shape))
@@ -665,10 +857,35 @@ class Compiler {
 };
 } // namespace
 
-Program
-compile(Function *function, const std::vector<Argument> &arguments, rt::fact::FactStore &facts) {
+// Read-only capability probing uses the very same recurrence compiler with deferred
+// boundary inputs. It creates no graph, function, CUDA context, or retained GC reference.
+std::string
+loopEligibility(const rt::GCGraph &graph, rt::gc_node_ref_t id, rt::fact::FactStore &facts) {
+    try {
+        Compiler compiler(facts);
+        Frame frame{.graph = const_cast<rt::GCGraph *>(&graph)};
+        const rt::LoopView view(graph, id);
+        if (view.kind() != core::LoopKind::For || view.stateCount() == 0)
+            return "unsupported_loop_form";
+        for (size_t i = 0; i < view.stateCount(); ++i) {
+            const auto ref = view.initialState(i);
+            frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
+        }
+        for (auto ref : view.captures())
+            frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
+        (void)compiler.loop(frame, id);
+        return {};
+    } catch (const UnsupportedComputation &) {
+        return "unsupported_loop_body_or_domain";
+    }
+}
+
+static Program compileInputs(
+    Function *function, const std::vector<Argument> &arguments, rt::fact::FactStore &facts,
+    bool fromTypes) {
     if (!function || !function->graph())
         throw std::runtime_error("expected a function graph");
+    ++extractions;
     Compiler c(facts);
     std::vector<Value> with, norm;
     if (auto *closure = function->tuple()) {
@@ -678,8 +895,35 @@ compile(Function *function, const std::vector<Argument> &arguments, rt::fact::Fa
         for (size_t i = 0; i < closure->size(); ++i)
             with.push_back(c.host(closure->get<slot_t>(i), types->typeAt(i), true));
     }
-    for (const auto &a : arguments)
-        norm.push_back(c.host(a.value, a.type, true));
+    if (fromTypes) {
+        if (!with.empty())
+            throw UnsupportedComputation(
+                "type-only compilation requires an extracted closure-free region");
+        auto *signature = function->graph()->funcType();
+        for (size_t i = 0; i < signature->normTypesCount(); ++i) {
+            auto *type = signature->normTypeAt(i);
+            Node input{.op = "input"};
+            if (type->code() == ty::TypeCode::Float64) {
+                input.dtype = DType::F64;
+            } else {
+                const auto *tensor = tensor::asTensorType(type);
+                if (!tensor || tensor->dtype() != ty::TypeCode::Float32 || !tensor->isStaticShape())
+                    throw UnsupportedComputation(
+                        "type-only compilation requires static f32 tensor shapes");
+                input.shape = *tensor->shape();
+            }
+            const auto node = c.append(std::move(input));
+            c.program.parameterInputs.push_back(node);
+            norm.push_back(Value{.type = type, .tensor = node});
+        }
+    } else {
+        for (const auto &a : arguments) {
+            auto input = c.host(a.value, a.type, true);
+            if (input.tensor != SIZE_MAX)
+                c.program.parameterInputs.push_back(input.tensor);
+            norm.push_back(std::move(input));
+        }
+    }
     auto out = c.call(function->graph(), {}, norm, with);
     c.program.outputs.clear();
     auto collect = [&](auto &&self, const Value &value) -> void {
@@ -705,7 +949,39 @@ compile(Function *function, const std::vector<Argument> &arguments, rt::fact::Fa
         }
     };
     collect(collect, out);
-    generate(c.program);
+    generate(c.program, {}, fromTypes ? InputBindings::Deferred : InputBindings::Required);
     return std::move(c.program);
+}
+Program
+compile(Function *function, const std::vector<Argument> &arguments, rt::fact::FactStore &facts) {
+    return compileInputs(function, arguments, facts, false);
+}
+size_t compilationExtractions() { return extractions; }
+Program compileRegionTemplate(Function *function, rt::fact::FactStore &facts) {
+    return compileInputs(function, {}, facts, true);
+}
+void bindRegionArguments(
+    Program &program, const std::vector<Argument> &arguments, rt::fact::FactStore &facts) {
+    if (arguments.size() != program.parameterInputs.size())
+        throw std::runtime_error("compiled region argument count changed");
+    // Reuse the ordinary input snapshot implementation; no graph node, operator
+    // instantiation, inference, scheduling or source generation is visited here.
+    Compiler bindings(facts);
+    for (size_t i = 0; i < arguments.size(); ++i) {
+        const auto &argument = arguments[i];
+        const auto value     = bindings.host(argument.value, argument.type, true);
+        if (value.tensor == SIZE_MAX)
+            throw std::runtime_error("compiled region requires tensor or f64 input");
+        auto input   = std::move(bindings.program.nodes.at(value.tensor));
+        auto &target = program.nodes.at(program.parameterInputs[i]);
+        if (input.shape != target.shape || input.dtype != target.dtype)
+            throw std::runtime_error("compiled region input shape or dtype changed");
+        target.data       = std::move(input.data);
+        target.scalarBits = input.scalarBits;
+        target.resident   = std::move(input.resident);
+    }
+    // Allocation needs depend on host versus resident ownership. The compiled
+    // launches and arithmetic are immutable; only this invocation owns inputs.
+    planStorage(program);
 }
 } // namespace camel::tiles

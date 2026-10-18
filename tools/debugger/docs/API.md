@@ -1,6 +1,6 @@
 # Camel Debugger HTTP API 规格
 
-本文档为 camel-db 的 HTTP API 契约，供 Web UI、CLI 与后续开发/Agent 一致遵守。完整请求/响应与 target 约定以此为准。
+本文档为 camel-db 的 HTTP API 契约，供 HTTP 自动化客户端、CLI 与后续开发/Agent 一致遵守；OpenCML-Ext 使用原生 DAP。完整请求/响应与 target 约定以此为准。
 
 ---
 
@@ -14,7 +14,7 @@
   - **单任务状态**：GET /api/task-state 必须带 `?target=<任务id>`，转发到该任务并返回其 state（与全局 state 结构不同，无 tasks 列表）。
   - **按任务 GET**：其余按任务接口查询参数 `?target=<任务id>` 可选。
   - **按任务 POST**：Body 中 `"target": "<任务id>"` 可选。
-  - **无 target 时**：后端支持**前台任务**；存在前台时由服务端解析为前台任务。多任务且无 target 且无前台时返回 400。**Web UI 调用按任务 API 时必须显式传 target**，不依赖前台机制。
+  - **无 target 时**：后端支持**前台任务**；存在前台时由服务端解析为前台任务。多任务且无 target 且无前台时返回 400。**HTTP 客户端 调用按任务 API 时必须显式传 target**，不依赖前台机制。
   - 任务是否暂停、last-alloc、assertionError 通过 GET /api/state 的 tasks[] 聚合字段获得，父进程不暴露 GET /api/step-paused、GET /api/last-alloc。
 - **打开文件即建任务**：POST /api/file 成功后父进程会 spawn 子进程并注册任务，任务状态为 `loaded`；同一文件可多次打开，每次新建 worker 与新任务。
 
@@ -66,7 +66,7 @@
 
 ### 3.4 GET /api/list-dir（仅父进程）
 
-- **用途**：供 Web UI 文件选择器浏览目录；仅父进程注册，子进程不提供。
+- **用途**：供 HTTP 客户端 文件浏览客户端浏览目录；仅父进程注册，子进程不提供。
 - **请求**：查询参数 `?dir=<路径>`，缺省为 `"."`（当前工作目录）。
 - **响应**：`{ "path": "<规范化的当前路径>", "dirs": [ { "name", "path" } ], "files": [ { "name", "path" } ] }`，`files` 仅包含 `.cml` 文件。若目录不存在或不可访问则返回 `{ "error": "<消息>" }`。
 - **错误**：无 HTTP 错误码；错误通过 body 中 `"error"` 字段返回。
@@ -84,8 +84,8 @@
 
 ### 3.6 POST /api/run
 
-- **target**：必选（Web UI 必须显式传）；CLI 可省略则解析为前台任务。Run 只需指明任务 id，path 为任务状态的一部分、不参与区分任务。
-- **请求**：`{ "target": "<任务id>" }`（target 可选，供 Web UI 指定任务）。run 不接收 memoryMonitor/allocStep；内存扫描与断点按统一断点模型处理，新 worker 或转发 run 后父进程会推送当前断点状态（breakpoint-spaces、gir-breakpoints 等）。
+- **target**：必选（HTTP 客户端 必须显式传）；CLI 可省略则解析为前台任务。Run 只需指明任务 id，path 为任务状态的一部分、不参与区分任务。
+- **请求**：`{ "target": "<任务id>" }`（target 可选，供 HTTP 客户端 指定任务）。run 不接收 memoryMonitor/allocStep；内存扫描与断点按统一断点模型处理，新 worker 或转发 run 后父进程会推送当前断点状态（breakpoint-spaces、gir-breakpoints 等）。
 - **响应**：由 launch 命令或 workerRunHandler 返回的 JSON。
 - **错误**：由命令或 handler 返回。若指定任务存在且为 `loaded`/`completed`/`terminated` 则转发 /api/run（worker 在脚本结束后继续服务，可直接复跑）；否则 fallback 或报错。
 
@@ -100,7 +100,7 @@
 
 ---
 
-（GET /api/step-paused、GET /api/last-alloc 仅子进程内部提供，父进程不注册；Web UI 通过 GET /api/state 的 tasks[].paused、pauseReason、lastAlloc 获取。）
+（GET /api/step-paused、GET /api/last-alloc 仅子进程内部提供，父进程不注册；HTTP 客户端 通过 GET /api/state 的 tasks[].paused、pauseReason、lastAlloc 获取。）
 
 ---
 
@@ -251,8 +251,8 @@
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：可选 `?target=`。无需其他参数。
-- **响应**：`{ "graphs": [ { "index": 0, "pass": null, "consumed": false }, { "index": 1, "pass": "std::inline", "consumed": false }, ... ] }`。
-  - `index` 为快照序号：`0` 是 pass 管线执行前的入口图（`pass` 为 `null`）；`index >= 1` 按执行顺序对应各 pass 的输出图（`pass` 为请求管线中的 pass 名，如 `"std::inline"`）。
+- **响应**：`{ "graphs": [ { "index": 0, "pass": null, "consumed": false }, { "index": 1, "pass": "std::opt::inline", "consumed": false }, ... ] }`。
+  - `index` 为快照序号：`0` 是 pass 管线执行前的入口图（`pass` 为 `null`）；`index >= 1` 按执行顺序对应各 pass 的输出图（`pass` 为请求管线中的 pass 名，如 `"std::opt::inline"`）。
   - `consumed` 为 `true` 表示该快照的图被下一个 pass 消费（即管线在该 pass 终止，其后无更多快照）。消费图的 pass 本身不再有快照条目。
   - 消费型 pass（如 `std::nodevm`/`std::default`）执行后不产生快照条目；`std::default` fallback 管线产生非空输出的 pass 也会按序编号（编号跨主/fallback 管线单调递增，不重置）。
   - 该任务尚未 run 过（或入口图无物化节点）时返回 `{ "graphs": [] }`。
@@ -264,7 +264,7 @@
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：必选 `?index=N`（与 3.24 的 `index` 对应）。
-- **响应**：`{ "index": N, "pass": "std::inline" | null, "consumed": false, "dot": "digraph GraphIR {...}" }`。`dot` 为 gir 风格精简 DOT（包含节点类型和输出类型等语义属性，节点行带 `origin=<id>`、`span="sl:sc-el:ec"`、`srcfile="..."`，同 `std::gir` 输出），供 Graphviz 渲染或与 gir-json 的 `originId` 对照。
+- **响应**：`{ "index": N, "pass": "std::opt::inline" | null, "consumed": false, "dot": "digraph GraphIR {...}" }`。`dot` 为 gir 风格精简 DOT（包含节点类型和输出类型等语义属性，节点行带 `origin=<id>`、`span="sl:sc-el:ec"`、`srcfile="..."`，同 `std::gir` 输出），供 Graphviz 渲染或与 gir-json 的 `originId` 对照。
 - **错误**：400（缺 `index` 或该序号无快照，body 含 `error`）。
 
 ---

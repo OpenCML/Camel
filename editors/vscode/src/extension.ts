@@ -357,7 +357,7 @@ async function runWithPasses(context: vscode.ExtensionContext): Promise<void> {
     const input = await vscode.window.showInputBox({
         title: 'Camel: Run Current File with Passes',
         prompt: 'Passes, applied in order and separated by spaces. Empty: the default (std::nvm).',
-        placeHolder: 'std::inline std::fvm',
+        placeHolder: 'std::opt::inline std::fvm',
         value: remembered !== undefined ? remembered : configured.join(' '),
     });
     if (input === undefined) {

@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
  */
 
 #include "rewrite.h"
+#include "camel/runtime/control.h"
 
 #include "camel/core/operator_traits.h"
 #include "camel/runtime/draft_session.h"
@@ -195,6 +196,7 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             preds.push_back(source);
         }
     }
+    preds = camel::runtime::controlFrontier(draft, preds);
     std::vector<gc_node_ref_t> users;
     for (auto group : {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id)}) {
         for (gc_node_ref_t u : group) {
@@ -218,10 +220,7 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     }
     for (gc_node_ref_t user : users) {
         for (gc_node_ref_t pred : preds) {
-            const auto existing = draft.ctrlInputsOf(user);
-            if (pred != user && std::ranges::find(existing, pred) == existing.end()) {
-                draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
-            }
+            camel::runtime::appendControlDependency(draft, pred, user);
         }
     }
     draft.eraseNode(id);

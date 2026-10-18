@@ -4,7 +4,7 @@
  *   live nodes of the arm it was in. The execution order visited what such dead users read and
  *   laid out a dead BRCH without its JOIN; every scheduler then lost its way at it. The graph
  *   is right (it satisfies the branch-arm invariant): the back ends misread it.
- * Pipeline: std::opt std::nvm (also std::inline)
+ * Pipeline: std::opt std::nvm (also std::opt::inline)
  * Expected output: an empty line
  * Actual: nothing (node VM, parallel scheduler); on the bytecode VM and the JIT the unreduced
  *   program printed its first lines over and over until the permanent space was exhausted.

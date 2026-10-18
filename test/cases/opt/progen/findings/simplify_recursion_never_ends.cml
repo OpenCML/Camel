@@ -1,7 +1,7 @@
 /**
- * progen finding F19 (unbounded growth). After `std::opt::simplify` a mutual recursion that is
+ * progen finding F19 (unbounded growth). After `std::opt` a mutual recursion that is
  *   three calls deep does not end: `RuntimeDiag::MaxRecursionDepthExceeded` in graph `__g_10__`.
- * Pipeline: std::opt::simplify std::nvm
+ * Pipeline: std::opt std::nvm
  * Environment: PROGEN_I0=2
  * Expected output: (nothing)
  * Actual: RUN_ERROR RuntimeDiag::MaxRecursionDepthExceeded: Maximum recursion depth (256) exceeded

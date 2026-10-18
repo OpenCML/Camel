@@ -4,13 +4,14 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Public module boundary: function graphs are inspected, never traced by executing the body.
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm/gen.h"
+#include "camel/core/mm/root_handle.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/func.h"
@@ -27,9 +28,12 @@
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
+#include "tiles/internal/compiled_region.h"
 #include "tiles/internal/dispatch.h"
+#include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
 #include "tiles/program.h"
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <unordered_map>
@@ -51,7 +55,7 @@ template <class F> slot_t checked(F &&body) {
     }
 }
 
-Program prepare(ArgsView &with, ArgsView &norm, Context &ctx) {
+Program prepare(ArgsView &with, ArgsView &norm, Context &ctx, bool staticRegion = false) {
     // Only extraction holds GC pointers. CUDA work uses owned host snapshots and releases
     // them after execution; the cache never retains Camel objects or shape-only identities.
     core::mm::NoCollectionScope noCollection;
@@ -65,7 +69,7 @@ Program prepare(ArgsView &with, ArgsView &norm, Context &ctx) {
         for (size_t i = 0; i < type->size(); ++i)
             args.push_back({tuple->get<slot_t>(i), type->typeAt(i)});
     }
-    return compile(fn, args, ctx.facts());
+    return prepareProgram(fn, args, ctx.facts(), staticRegion);
 }
 
 slot_t regionsKernel(ArgsView &with, ArgsView &, Context &ctx) {
@@ -138,6 +142,11 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         return runPrepared(with, std::make_shared<const Program>(prepare(with, norm, ctx)));
     });
 }
+slot_t runCompiledKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return checked([&] {
+        return runPrepared(with, std::make_shared<const Program>(prepare(with, norm, ctx, true)));
+    });
+}
 slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<const Program> program;
     const bool supported = checked([&] {
@@ -168,10 +177,7 @@ slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return execute::invokeFunction(ctx, function, {}, arguments);
 }
 slot_t availableKernel(ArgsView &, ArgsView &, Context &) { return td::toSlot(available()); }
-slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &) {
-    return checked(
-        [&] { return td::toSlot(gpuFunction(norm.get<::Function *>(0), &preferGpuKernel)); });
-}
+slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &ctx);
 slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     auto *owner = new std::shared_ptr<DeviceValue>(std::move(resident));
     td::ForeignResourceDescriptor descriptor;
@@ -180,46 +186,9 @@ slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     return td::toSlot(
         td::ForeignResourceObject::create(core::mm::autoSpace(), std::move(descriptor), owner));
 }
-Type *buildResidentType(Type *type) {
-    if (tensor::asTensorType(type) || type->code() == TypeCode::Float64)
-        return DeviceType::get(type);
-    if (type->code() == TypeCode::Tuple) {
-        auto *tuple = static_cast<TupleType *>(type);
-        type_vec_t fields;
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            auto *field = buildResidentType(tuple->typeAt(i));
-            if (!field)
-                return nullptr;
-            fields.push_back(field);
-        }
-        return TupleType::create(fields);
-    }
-    if (type->code() == TypeCode::Struct) {
-        auto *object = static_cast<StructType *>(type);
-        StructTypeFactory fields;
-        for (size_t i = 0; i < object->size(); ++i) {
-            auto *field = buildResidentType(object->typeAt(i));
-            if (!field)
-                return nullptr;
-            fields.add(std::string(object->fieldName(i)), field);
-        }
-        return fields.build();
-    }
-    return nullptr;
-}
-Type *residentType(Type *type) {
-    static std::mutex mutex;
-    static std::unordered_map<Type *, Type *> types;
-    std::lock_guard lock(mutex);
-    if (auto it = types.find(type); it != types.end())
-        return it->second;
-    auto *result = buildResidentType(type);
-    types.emplace(type, result);
-    return result;
-}
-slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t runResidentPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
     return checked([&] {
-        auto values = executeResident(std::make_shared<const Program>(prepare(with, norm, ctx)));
+        auto values = executeResident(std::move(program));
         core::mm::NoCollectionScope noCollection;
         auto *resultType = residentType(static_cast<FunctionType *>(with.type(0))->exitType());
         size_t leaf      = 0;
@@ -241,6 +210,22 @@ slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         };
         return rebuild(rebuild, resultType);
     });
+}
+slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    std::shared_ptr<const Program> program;
+    checked([&] {
+        program = std::make_shared<const Program>(prepare(with, norm, ctx));
+        return slot_t{};
+    });
+    return runResidentPrepared(with, std::move(program));
+}
+slot_t runCompiledDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    std::shared_ptr<const Program> program;
+    checked([&] {
+        program = std::make_shared<const Program>(prepare(with, norm, ctx, true));
+        return slot_t{};
+    });
+    return runResidentPrepared(with, std::move(program));
 }
 slot_t uploadKernel(ArgsView &, ArgsView &norm, Context &) {
     return checked([&] {
@@ -279,6 +264,164 @@ slot_t downloadKernel(ArgsView &, ArgsView &norm, Context &) {
         if (!data.empty())
             std::memcpy(out->rawData(), data.data(), data.size());
         return td::toSlot(out);
+    });
+}
+// Called only while collection is inhibited; aggregates are rebuilt with exact types.
+slot_t hostResidentValue(Type *hostType, slot_t value, bool retain) {
+    if (hostType->code() == TypeCode::Tuple || hostType->code() == TypeCode::Struct) {
+        const bool tuple   = hostType->code() == TypeCode::Tuple;
+        const size_t count = tuple ? static_cast<TupleType *>(hostType)->size()
+                                   : static_cast<StructType *>(hostType)->size();
+        auto *outType      = retain ? residentType(hostType) : hostType;
+        if (tuple) {
+            auto *input  = td::fromSlot<::Tuple *>(value);
+            auto *output = ::Tuple::create(count, core::mm::autoSpace());
+            for (size_t i = 0; i < count; ++i)
+                output->set(
+                    i,
+                    hostResidentValue(
+                        static_cast<TupleType *>(hostType)->typeAt(i),
+                        input->get<slot_t>(i),
+                        retain),
+                    static_cast<TupleType *>(outType));
+            return td::toSlot(output);
+        }
+        auto *input  = td::fromSlot<::Struct *>(value);
+        auto *output = ::Struct::create(count, core::mm::autoSpace());
+        for (size_t i = 0; i < count; ++i)
+            output->set(
+                i,
+                hostResidentValue(
+                    static_cast<StructType *>(hostType)->typeAt(i),
+                    input->get<slot_t>(i),
+                    retain),
+                static_cast<StructType *>(outType));
+        return td::toSlot(output);
+    }
+    if (retain) {
+        if (hostType->code() == TypeCode::Float64) {
+            const double scalar = td::fromSlot<double>(value);
+            return wrapDevice(
+                retainHostValue({}, DType::F64, std::as_bytes(std::span(&scalar, 1))));
+        }
+        auto *tensor = td::fromSlot<tensor::TensorObject *>(value);
+        if (tensor->dtype() != TypeCode::Float32)
+            throw std::runtime_error("host resident tensors require f32 elements");
+        const auto shape = tensor->shapeVector();
+        return wrapDevice(retainHostValue(
+            shape,
+            DType::F32,
+            std::as_bytes(std::span(tensor->dataAs<float>(), elements(shape)))));
+    }
+    auto *wrapper       = td::fromSlot<td::ForeignResourceObject *>(value);
+    const auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
+    const auto data     = downloadValue(*resident);
+    if (hostType->code() == TypeCode::Float64) {
+        if (resident->dtype != DType::F64 || data.size() != sizeof(double))
+            throw std::runtime_error("resident scalar type mismatch");
+        double scalar;
+        std::memcpy(&scalar, data.data(), sizeof(scalar));
+        return td::toSlot(scalar);
+    }
+    if (resident->dtype != DType::F32)
+        throw std::runtime_error("resident tensor type mismatch");
+    auto *tensor =
+        tensor::TensorObject::create(TypeCode::Float32, resident->shape, core::mm::autoSpace());
+    if (!data.empty())
+        std::memcpy(tensor->rawData(), data.data(), data.size());
+    return td::toSlot(tensor);
+}
+slot_t retainHostKernel(ArgsView &, ArgsView &norm, Context &) {
+    return checked([&] {
+        core::mm::NoCollectionScope noCollection;
+        return hostResidentValue(norm.type(0), norm.slot(0), true);
+    });
+}
+slot_t runHostResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    auto *type = static_cast<FunctionType *>(with.type(0));
+    core::mm::RootHandle root(core::mm::autoSpace(), "tiles.host.arguments");
+    std::vector<slot_t> arguments;
+    checked([&] {
+        core::mm::NoCollectionScope noCollection;
+        type_vec_t fields;
+        for (size_t i = 0; i < type->normTypesCount(); ++i)
+            fields.push_back(type->normTypeAt(i));
+        auto *tupleType = TupleType::create(fields);
+        auto *tuple     = ::Tuple::create(fields.size(), core::mm::autoSpace());
+        root.reset(tuple, tupleType);
+        for (size_t i = 0; i < fields.size(); ++i) {
+            const auto value =
+                fields.size() == 1 ? norm.slot(0) : norm.get<::Tuple *>(0)->get<slot_t>(i);
+            const auto host = hostResidentValue(fields[i], value, false);
+            tuple->set(i, host, tupleType);
+            arguments.push_back(host);
+        }
+        return slot_t{};
+    });
+    // Binding precedes the callee's first safepoint. Do not suppress GC through
+    // graph execution, and do not translate/replay faults from the original graph.
+    const auto result = execute::invokeFunction(ctx, with.get<::Function *>(0), {}, arguments);
+    return checked([&] {
+        core::mm::NoCollectionScope noCollection;
+        return hostResidentValue(type->exitType(), result, true);
+    });
+}
+slot_t retainPreferredKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const bool gpu = checked([&] {
+        (void)configuredCudaOrdinal();
+        try {
+            (void)deviceInfo();
+            return true;
+        } catch (const BackendUnavailable &) {
+            return false;
+        }
+    });
+    return gpu ? uploadKernel(with, norm, ctx) : retainHostKernel(with, norm, ctx);
+}
+slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    std::shared_ptr<Program> program;
+    const bool gpu = checked([&] {
+        (void)configuredCudaOrdinal();
+        try {
+            (void)deviceInfo();
+            program = std::make_shared<Program>(prepare(with, norm, ctx, true));
+            return true;
+        } catch (const BackendUnavailable &) {
+            return false;
+        } catch (const UnsupportedComputation &) {
+            return false;
+        }
+    });
+    if (!gpu)
+        return runHostResidentKernel(with, norm, ctx);
+    // Selection is complete before transfers. Transfer/compile/launch faults
+    // propagate; none trigger replay of the graph on another target.
+    checked([&] {
+        std::unordered_map<const DeviceValue *, std::shared_ptr<const DeviceValue>> placed;
+        for (auto &node : program->nodes)
+            if (node.resident) {
+                const auto *key = node.resident.get();
+                auto found      = placed.find(key);
+                if (found == placed.end())
+                    found = placed.emplace(key, placeOnDevice(node.resident)).first;
+                node.resident = found->second;
+            }
+        return slot_t{};
+    });
+    return runResidentPrepared(with, std::move(program));
+}
+slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    return checked([&] {
+        return td::toSlot(gpuFunction(
+            norm.get<::Function *>(0),
+            &preferGpuKernel,
+            ctx,
+            {&retainPreferredKernel,
+             &runPreferredResidentKernel,
+             &downloadKernel,
+             "tiles:retain_preferred",
+             "tiles:run_preferred_resident",
+             "tiles:download"}));
     });
 }
 slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
@@ -363,7 +506,33 @@ class TilesModule final : public BuiltinModule {
   public:
     explicit TilesModule(context_ptr_t ctx) : BuiltinModule("tiles", ctx) {
         tensor::ops::registerTensorOps();
-        registerRegionTestPasses(&runKernel);
+        registerRegionPass(
+            {&retainPreferredKernel,
+             &runPreferredResidentKernel,
+             &downloadKernel,
+             "tiles:retain_preferred",
+             "tiles:run_preferred_resident",
+             "tiles:download"});
+        registerRegionTestPasses(
+            &runCompiledKernel,
+            {&uploadKernel,
+             &runCompiledDeviceKernel,
+             &downloadKernel,
+             "tiles:upload",
+             "tiles:run_compiled_device",
+             "tiles:download"},
+            {&retainHostKernel,
+             &runHostResidentKernel,
+             &downloadKernel,
+             "tiles:retain_host",
+             "tiles:run_host_resident",
+             "tiles:download"},
+            {&retainPreferredKernel,
+             &runPreferredResidentKernel,
+             &downloadKernel,
+             "tiles:retain_preferred",
+             "tiles:run_preferred_resident",
+             "tiles:download"});
         exportType(Reference("Device"), DeviceType::get(tensor::TensorType::Default()));
         exportEntity(
             "gpu",
@@ -417,7 +586,13 @@ class TilesModule final : public BuiltinModule {
                                             : std::nullopt;
                           })}}));
         }
-        for (const std::string name : {"run", "run_device", "source", "inspect", "benchmark"}) {
+        std::vector<std::string>
+            executionNames{"run", "run_device", "source", "inspect", "benchmark"};
+        if (std::getenv("CAMEL_ENABLE_TEST_PASSES"))
+            executionNames.push_back("run_preferred_resident");
+        for (const std::string &name : executionNames) {
+            const bool residentResult = name == "run_device" || name == "run_preferred_resident";
+            const bool textResult     = name != "run" && !residentResult;
             exportEntity(
                 name,
                 OperatorGroup::create(
@@ -427,11 +602,10 @@ class TilesModule final : public BuiltinModule {
                           {{1, {false}}, {1, {false}}},
                           "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => " +
                               std::string(
-                                  name == "run_device" ? "DeviceAggregate"
-                                  : name != "run"      ? "string"
-                                                       : "NumericAggregate"),
-                          [source   = name != "run" && name != "run_device",
-                           resident = name == "run_device"](
+                                  residentResult ? "DeviceAggregate"
+                                  : textResult   ? "string"
+                                                 : "NumericAggregate"),
+                          [source = textResult, resident = residentResult](
                               const type_vec_t &with,
                               const type_vec_t &norm,
                               const ModifierSet &) -> std::optional<Type *> {
@@ -476,10 +650,17 @@ class TilesModule final : public BuiltinModule {
                 ctx,
                 std::unordered_map<std::string, operator_t>{
                     {"run", &runKernel},
+                    {"run_compiled", &runCompiledKernel},
+                    {"run_compiled_device", &runCompiledDeviceKernel},
                     {"prefer_gpu", &preferGpuKernel},
                     {"test_call", &testNativeCall},
+                    {"test_compiled_call", &testCompiledCall},
                     {"gpu", &gpuKernel},
                     {"run_device", &runDeviceKernel},
+                    {"retain_host", &retainHostKernel},
+                    {"retain_preferred", &retainPreferredKernel},
+                    {"run_preferred_resident", &runPreferredResidentKernel},
+                    {"run_host_resident", &runHostResidentKernel},
                     {"upload", &uploadKernel},
                     {"download", &downloadKernel},
                     {"source", &sourceKernel},
@@ -489,6 +670,14 @@ class TilesModule final : public BuiltinModule {
                     {"available", &availableKernel},
                     {"device", &deviceKernel}});
         });
+        core::OperatorTable::instance().set("tiles:retain_host", {.pure = false});
+        core::OperatorTable::instance().set(
+            "tiles:run_host_resident",
+            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+        core::OperatorTable::instance().set("tiles:retain_preferred", {.pure = false});
+        core::OperatorTable::instance().set(
+            "tiles:run_preferred_resident",
+            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
         // run may initialize a driver/compile code; never execute it in constant folding.
         core::OperatorTable::instance().declare(
             "tiles",
@@ -507,7 +696,15 @@ class TilesModule final : public BuiltinModule {
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
         for (const char *name :
-             {"run", "run_device", "source", "inspect", "benchmark", "regions", "gpu"}) {
+             {"run",
+              "run_device",
+              "run_compiled",
+              "run_compiled_device",
+              "source",
+              "inspect",
+              "benchmark",
+              "regions",
+              "gpu"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
                 {.pure = false, .inspectsGraphs = true});
@@ -515,6 +712,10 @@ class TilesModule final : public BuiltinModule {
         core::OperatorTable::instance().set(
             "tiles:prefer_gpu",
             {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+        for (const char *name : {"tiles:run_compiled", "tiles:run_compiled_device"})
+            core::OperatorTable::instance().set(
+                name,
+                {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
         // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
         // resource `tiles:device` (upload makes one; run and run_device read the device values
         // among their inputs, run_device returns new ones that may be inputs again); the driver
@@ -543,7 +744,17 @@ class TilesModule final : public BuiltinModule {
                      ResourceSpec{
                          .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .externalEffect = true}},
+                    {"run_compiled",
+                     ResourceSpec{
+                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .externalEffect = true}},
                     {"run_device",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .result   = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},
+                         .allocates      = device,
+                         .externalEffect = true}},
+                    {"run_compiled_device",
                      ResourceSpec{
                          .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .result   = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},

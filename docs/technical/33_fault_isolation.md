@@ -220,7 +220,7 @@ entry into compiled code.
 
 Verified with a callee that is compiled (`compiled.cml`): shape (a) with a division by zero
 in straight-line code under `std::jit`, and with a native self-recursion that exceeds the
-limit under `std::inline std::jit`; the compiled code runs again afterwards.
+limit under `std::opt::inline std::jit`; the compiled code runs again afterwards.
 
 The case "compiled `f` calls another graph through the interpreter" does not exist today: a
 graph that calls another graph is not compiled. If trampolines are added, `07` 16.5 applies
@@ -354,7 +354,7 @@ fault, would make an isolated fault cost a full collection).
   registry, as `map` is: what it does is what the function does, and its result depends on
   whether the call faults. It is never folded (2.9 on `1 / 0`: a pass must not decide a fault
   at compile time), never merged, and removed only where an effectful unused call already is.
-  `std::opt::simplify` specialises a callee on a constant argument and then warns
+  `std::opt` specialises a callee on a constant argument and then warns
   (`ConstantExpressionFaults`) that the division in the specialised copy always faults; it
   does not fold it, and the behaviour is unchanged.
 - **`std::macro`.** The macro evaluator runs none of the operators the schedulers run

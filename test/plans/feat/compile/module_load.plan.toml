@@ -130,7 +130,7 @@ name = "load.mutual_jit"
 desc = "The same with inlining and the JIT."
 kind = "behavior"
 case = "../../../cases/compile/module_load/mutual.cml"
-args = ["${case}", "std::inline", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::jit"]
 expect_exit = 0
 expect_stdout_exact = "true true\n22 11\n(10, 11)\n"
 

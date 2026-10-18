@@ -128,7 +128,15 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
 
 若要在 CI 中改为「按 sdks 多 wheel」，需在 job 中准备 `sdks/` 目录（下载 / 缓存 / 私有制品），并理解构建时间与磁盘成本会显著增加。
 
-发布侧可使用 **Trusted Publishing（OIDC）**；仓库内 workflow 注释中有环境与 PyPI 配置要点。
+推送 `v*` / `V*` 版本 tag 后，所有矩阵构建和 wheel 安装检查成功，工作流会自动发布到 **PyPI**。手动运行工作流时，`publish_to` 仍可选择 `none`（仅构建，默认）、`pypi` 或 `testpypi`；TestPyPI 只通过手动选择发布。
+
+发布使用 **Trusted Publishing（OIDC）**，无需在 GitHub 中保存长期 PyPI token。正式发布前需检查：
+
+- GitHub 仓库的 `pypi` environment 允许版本 tag 部署；若配置了 required reviewers，发布会等待人工审批。
+- PyPI 的 `camel-lang` 项目在 **Manage → Publishing** 中配置 GitHub Actions publisher：owner 为 `OpenCML`，repository 为 `Camel`，workflow filename 为 `build-pypi.yml`，environment 为 `pypi`。
+- 如需发布到 TestPyPI，在 TestPyPI 单独配置同样的 publisher，并将 environment 改为 `testpypi`；GitHub 中也使用对应 environment。
+
+workflow 的发布 job 已声明 `id-token: write`。Trusted Publisher 的配置必须与工作流身份匹配；只有成功执行 OIDC 上传，才能验证整条发布链路。
 
 ---
 

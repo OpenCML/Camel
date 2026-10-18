@@ -165,6 +165,6 @@ std::vector<MIR> buffer;
 - **MIR 层**：`jit/mir/` — `mir.h` / `mir.cpp`（MirOp 定义、`mirToString`/`mirPrint`、`mirSizeBytes`）、`mir_builder.h`（字节码→MIR）、`mir_optimize.h` / `mir_optimize.cpp`（Win64 冗余 mov 删除）、`mir_encode.h` / `mir_encode.cpp`（MIR→字节，依赖 x64 Encoder + VRegAllocation）。
 - **寄存器分配**：`jit/regalloc/` — `collectVRegDefUse`、`linearScanVReg`，对 MIR 中所有 V* 做 def/use 收集与线性扫描，得到 vreg→preg。
 - **x64 后端**：`jit/backend/x64/` — `x64_backend.cpp`（字节码→MIR→优化→pcToOffset→linearScanVReg→编码）、`x64_encoder.h`（机器码编码与 prologue/call 序列）。
-- **Debug 打印 MIR**：`camel … std::inline std::rmir` 输出带 pc/槽注释的 MIR；或在 `encodeMirBuffer` 前调用 `x64::mirPrint(mirBuf, std::cerr, &pcToOffset)`。
+- **Debug 打印 MIR**：`camel … std::opt::inline std::rmir` 输出带 pc/槽注释的 MIR；或在 `encodeMirBuffer` 前调用 `x64::mirPrint(mirBuf, std::cerr, &pcToOffset)`。
 - 架构总览：`docs/technical/07_jit_architecture.md`。
 - 字节码→汇编注解：`docs/jit/bytecode-to-asm.md`。
