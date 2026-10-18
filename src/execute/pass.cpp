@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,6 +47,7 @@
 #include "passes/test/facts.h"
 #include "passes/test/fault.h"
 #include "passes/test/index_semantics.h"
+#include "passes/test/native_call.h"
 #include "passes/test/resources.h"
 #include "passes/test/semantics.h"
 #include "passes/trans/cpp/cpp_export.h"
@@ -657,7 +658,12 @@ PassFactory lookupPassFactory(const std::string &name) {
         return factory;
     }
 
-    // 5. Test-only fault-injection passes, off unless the environment enables them.
+    // 5. Test-only passes, off unless the environment enables them.
+    if (resolved == kNativeCallbackTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<NativeCallbackTestPass>(ctx);
+        };
+    }
     if (resolved == kDropCallArgumentPass && std::getenv(kTestPassesEnvVar) != nullptr) {
         return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
             return std::make_unique<DropCallArgumentTestPass>(ctx);

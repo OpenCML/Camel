@@ -1,0 +1,10 @@
+func native_callback(f: (x: int) => int, x: int): int { return f(x) }
+func make(denominator: int): (x: int) => int {
+    return (x: int): int => loop s = x for k in [1, 2] do s / denominator
+}
+func main(): int sync {
+    println('native before fault once')
+    println(native_callback(make(0), 9))
+    println('native after fault')
+    return 0
+}

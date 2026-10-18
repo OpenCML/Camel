@@ -5,6 +5,51 @@ tags = ["feat", "linear", "loops"]
 desc = "The structured loop (design principles 2.10, 2.12, 2.13): the `do` form compiled to a LOOP node, run by every back end (nvm natively, fvm/jit/prl through the private lowering to tail recursion, fvm/jit natively under a debugger or with CAMEL_FVM_NATIVE_LOOP=1), its diagnostics, and the refusals of the consumers that do not handle it yet."
 
 [[tests]]
+name = "loops.native_callback"
+desc = "A native graph-reading callback invokes original For/While closures with fresh captures, including concurrent calls to the same graph under moving GC."
+kind = "behavior"
+case = "../../../cases/loops/native_callback.cml"
+args = ["${case}", "test::native_callback", "std::prl"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "30 42 30\n24\n3744\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.native_callback.scheduler"
+kind = "behavior"
+case = "../../../cases/loops/native_callback.cml"
+args = ["${case}", "test::native_callback", "std::prl"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_TF_BYTECODE=0", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "30 42 30\n24\n3744\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.native_callback.fault"
+kind = "negative"
+case = "../../../cases/loops/native_callback_fault.cml"
+args = ["${case}", "test::native_callback", "std::prl"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 1
+expect_diagnostic_line = 3
+expect_output_contains = ["native before fault once", "RuntimeDiag::DivisionByZero", "native_callback_fault.cml:3:61"]
+expect_output_not_contains = ["native after fault"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.native_callback.fault.scheduler"
+kind = "negative"
+case = "../../../cases/loops/native_callback_fault.cml"
+args = ["${case}", "test::native_callback", "std::prl"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_TF_BYTECODE=0", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 1
+expect_diagnostic_line = 3
+expect_output_contains = ["native before fault once", "RuntimeDiag::DivisionByZero", "native_callback_fault.cml:3:61"]
+expect_output_not_contains = ["native after fault"]
+timeout_ms = 20000
+
+[[tests]]
 name = "loops.shapes"
 desc = "The four shapes of 2.13 on the four back ends: one state over an array (14), two states under a condition whose value is their tuple (5 10), a struct as the state and as the body (11), `for ... while` with an `if` body that stops at the first element above 9 (12) or runs out of elements (-1)."
 kind = "behavior"

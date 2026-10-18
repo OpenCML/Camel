@@ -1,0 +1,15 @@
+// test::native_callback replaces this one explicit helper with a graph-reading native call.
+func native_callback(f: (x: int) => int, x: int): int { return f(x) }
+func make(bias: int): (x: int) => int {
+    return (x: int): int => loop s = x for k in [1, 2, 3] do s + bias + k
+}
+func main(): int sync {
+    let f = make(7)
+    let g = make(11)
+    println(native_callback(f, 3), native_callback(g, 3), native_callback(f, 3))
+    let w = (x: int): int => loop s = x while s < 20 do s + 7
+    println(native_callback(w, 3))
+    let results = range(0, 64)->map<(i: int): int => native_callback(f, i)>
+    println(results->reduce<(a: int, b: int): int => a + b, 0>)
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -509,6 +509,27 @@ uint64_t TaskflowExecSchedPass::nextPlanEpoch() {
     return next.fetch_add(1, std::memory_order_relaxed);
 }
 
+GCGraph *TaskflowExecSchedPass::executionGraph(GCGraph *graph) {
+    camel::core::mm::NoCollectionScope noCollection;
+    std::lock_guard lock(loweringMutex_);
+    if (const auto found = executionGraphs_.find(graph); found != executionGraphs_.end()) {
+        return found->second;
+    }
+    // Inspect this graph's executable nodes only: tracing originalGraph references
+    // would rediscover the source LOOP of an already lowered private copy.
+    bool hasLoop = false;
+    for (gc_node_ref_t ref = 0; !hasLoop && ref < graph->nodeCount(); ++ref) {
+        hasLoop = graph->node(ref)->kind == GCNodeKind::Loop;
+    }
+    GCGraph *target = graph;
+    if (hasLoop) {
+        target = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
+    }
+    executionGraphs_.emplace(graph, target);
+    executionGraphs_.emplace(target, target);
+    return target;
+}
+
 TaskflowExecSchedPass::GraphPlan *TaskflowExecSchedPass::planFor(GCGraph *graph) {
     ASSERT(graph != nullptr, "Taskflow plan lookup requires a runtime graph.");
     // Every call looks the plan of its callee up. The plans a thread used last are remembered
@@ -536,7 +557,7 @@ TaskflowExecSchedPass::GraphPlan *TaskflowExecSchedPass::planFor(GCGraph *graph)
         // Built outside the lock; two workers that meet a graph for the first time may both
         // build it, and the first to publish wins. A published plan is never changed or
         // removed while the run lasts.
-        auto built = buildGraphPlan(graph);
+        auto built = buildGraphPlan(executionGraph(graph));
         std::unique_lock lock(plansMutex_);
         auto [it, inserted] = plans_.try_emplace(graph, std::move(built));
         (void)inserted;
@@ -1072,6 +1093,10 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
         plans_.clear();
         planEpoch_ = nextPlanEpoch();
     }
+    {
+        std::lock_guard lock(loweringMutex_);
+        executionGraphs_.clear();
+    }
     linearArmEntryCache_.clear();
     const bool gcStats = envSwitch("CAMEL_TF_GC_STATS");
     TaskflowGcGate::instance().resetStats();
@@ -1193,7 +1218,9 @@ slot_t TaskflowExecSchedPass::evalGraph(
         GCGraph *callerGraph = plan->graph;
         GCGraph *target      = callerGraph->directCalleeGraphOf(tailRef);
         ASSERT(target != nullptr, "Taskflow tail FUNC target graph is null.");
-        Frame *lastFrame = currFrame;
+        GraphPlan *targetPlan = planFor(target);
+        target                = targetPlan->graph;
+        Frame *lastFrame      = currFrame;
         if (target == callerGraph) {
             camel::execute::fillFrameForDirectInvoke(lastFrame, currFrame, callerGraph, tailRef);
             continue;
@@ -1206,7 +1233,6 @@ slot_t TaskflowExecSchedPass::evalGraph(
             }
         }
         if (entry == nullptr) {
-            GraphPlan *targetPlan = planFor(target);
             if (targetPlan->bytecodeEntry != kNoBytecode) {
                 // A tail call of a serial graph: the rest of this activation is the callee, and
                 // the callee runs as bytecode. Its value is this activation's value. The call
@@ -1556,6 +1582,7 @@ slot_t TaskflowExecSchedPass::callGraph(
     if (plan == nullptr) {
         plan = planFor(target);
     }
+    target = plan->graph;
     // The arguments move into the callee frame, and the value comes back to the caller, each
     // inside the region.
     region.enter();
@@ -1617,6 +1644,7 @@ void TaskflowExecSchedPass::runOnExecutor(tf::Taskflow &flow) {
 }
 
 slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *graph, Frame *frame) {
+    graph = frame->runtimeGraph();
     ASSERT(graph != nullptr, "Taskflow subgraph execution requires a runtime graph.");
     (void)sf;
     try {
@@ -1824,6 +1852,7 @@ Frame *TaskflowExecSchedPass::acquirePreparedRuntimeCallFrame(
     ASSERT(sourceFrame != nullptr, "Taskflow runtime source frame is null.");
     ASSERT(sourceFrame->runtimeGraph() != nullptr, "Taskflow runtime source graph is null.");
 
+    targetGraph            = planFor(targetGraph)->graph;
     Frame *dest            = framePool_.acquire(targetGraph);
     const auto *callRecord = requireNode(sourceFrame->runtimeGraph(), callNodeRuntimeIndex);
     if (callRecord->kind == GCNodeKind::Call) {
@@ -1845,6 +1874,7 @@ Frame *TaskflowExecSchedPass::acquirePreparedRuntimeCallFrame(
 Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
     GCGraph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
     ASSERT(targetGraph != nullptr, "Taskflow closure call requires a runtime graph target.");
+    targetGraph = planFor(targetGraph)->graph;
     Frame *dest = framePool_.acquire(targetGraph);
     fillClosureCallFrame(dest, targetGraph, closure, args);
     return dest;
@@ -1852,6 +1882,9 @@ Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
 
 void TaskflowExecSchedPass::fillClosureCallFrame(
     Frame *dest, GCGraph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
+    // A dynamic source graph may have been privately lowered before allocating
+    // this frame. Bind through the actual destination graph, not its source IDs.
+    targetGraph          = dest->runtimeGraph();
     const auto normPorts = targetGraph->normPorts();
     ASSERT(args.size() == normPorts.size(), "Taskflow closure call norm-arg count mismatch.");
     for (size_t i = 0; i < args.size(); ++i) {
@@ -1888,9 +1921,10 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
                 try {
                     return callGraph(target, nullptr, region, [&](Frame *dest) {
                         fillClosureCallFrame(dest, target, function->tuple(), normal);
-                        const auto ports = target->withPorts();
+                        auto *executionTarget = dest->runtimeGraph();
+                        const auto ports      = executionTarget->withPorts();
                         for (size_t i = 0; i < ports.size(); ++i) {
-                            dest->set(dataIndexOf(target, ports[i]), with[i]);
+                            dest->set(dataIndexOf(executionTarget, ports[i]), with[i]);
                         }
                     });
                 } catch (...) {
