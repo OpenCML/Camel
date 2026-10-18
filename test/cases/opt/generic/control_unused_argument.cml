@@ -1,0 +1,16 @@
+/**
+ * Inlining an effectful callee that ignores an argument must transfer the
+ * argument's ordering to its body, even if data already orders the original call.
+ */
+module control_unused_argument
+
+func consume(ignored: bool): int sync {
+    println('after')
+    return 0
+}
+
+func main(): int sync {
+    println('before')
+    consume([1.0]->reduce<(a: bool, b: float): bool => false, true>)
+    return 0
+}

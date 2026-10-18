@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,12 +34,14 @@ bool hasControlDependency(
 std::vector<gc_node_ref_t> controlFrontier(
     const GraphDraft &draft, std::span<const gc_node_ref_t> inputs, size_t maxWork = 128);
 
-/// Adds an edge only when existing CTRL paths do not already prove it (bounded search).
+/// Avoids direct value-covered edges and edges already implied by CTRL paths (bounded search).
+/// Keeps explicit argument ordering on FUNC/CALL for later splicing, and a GATE's first CTRL.
 bool appendControlDependency(
     GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t maxWork = 32);
 
-/// Removes CTRL edges implied by other CTRL paths. Branch boundaries and arm anchors are
-/// retained. Work is limited per target, per graph size, and by maxWork; zero disables analysis.
+/// Removes CTRL edges implied by mandatory data/control paths. Branch boundaries and arm
+/// anchors are retained; JOIN/LOOP results may prove completion but their interiors are not
+/// traversed. Work is limited per target, per graph size, and by maxWork; zero disables analysis.
 size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork = 250000);
 
 } // namespace camel::runtime

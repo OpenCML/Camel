@@ -13,11 +13,11 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-/* CTRL-only transitive reduction with bounded work and preserved branch boundaries. */
+/* Bounded control reduction over mandatory data/control paths, preserving branch boundaries. */
 #include "camel/runtime/control.h"
 
 #include <algorithm>
@@ -100,8 +100,31 @@ controlFrontier(const GraphDraft &draft, std::span<const gc_node_ref_t> inputs, 
 bool appendControlDependency(
     GraphDraft &draft, gc_node_ref_t predecessor, gc_node_ref_t user, size_t maxWork) {
     const auto existing = draft.ctrlInputsOf(user);
-    if (predecessor == user || std::ranges::find(existing, predecessor) != existing.end() ||
-        hasControlDependency(draft, predecessor, user, maxWork)) {
+    if (predecessor == user || std::ranges::find(existing, predecessor) != existing.end()) {
+        return false;
+    }
+    const auto *h = draft.header(user);
+    // A direct value input already orders ordinary users after its producer. Calls are
+    // excluded: the inliner intentionally adds explicit argument ordering just before it
+    // removes the call and may discard an unused argument. That edge must reach the body.
+    // A GATE must still have at least one CTRL input; conditional boundaries stay separate.
+    const auto *source = draft.header(predecessor);
+    if (h && source && source->kind != GCNodeKind::Brch && h->kind != GCNodeKind::Loop &&
+        h->kind != GCNodeKind::Func && h->kind != GCNodeKind::Call && !isBoundary(draft, user) &&
+        (h->kind != GCNodeKind::Gate || !existing.empty())) {
+        for (auto inputs : {draft.normInputsOf(user), draft.withInputsOf(user)}) {
+            for (auto input : inputs) {
+                if (!maxWork) {
+                    break;
+                }
+                --maxWork;
+                if (input == predecessor) {
+                    return false;
+                }
+            }
+        }
+    }
+    if (hasControlDependency(draft, predecessor, user, maxWork)) {
         return false;
     }
     draft.appendInput(DraftEdgeKind::Ctrl, user, predecessor);
@@ -114,32 +137,44 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
     }
     const size_t slots = draft.nodeSlotCount();
     std::vector<bool> protectedNode(slots, false);
+    std::vector<bool> anchorNode(slots, false);
     size_t edges = 0;
     for (gc_node_ref_t id = 0; id < slots; ++id) {
         const auto *h = draft.header(id);
         if (!h) {
             continue;
         }
-        edges += draft.ctrlInputsOf(id).size();
-        protectedNode[id] = protectedNode[id] || isBoundary(draft, id);
+        edges += draft.ctrlInputsOf(id).size() + draft.normInputsOf(id).size() +
+                 draft.withInputsOf(id).size();
+        protectedNode[id] =
+            protectedNode[id] || isBoundary(draft, id) || h->kind == GCNodeKind::Loop;
         if (h->kind == GCNodeKind::Brch) {
             for (const auto &arm : draft.branchArmsOf(id)) {
                 if (arm.head < slots) {
                     protectedNode[arm.head] = true;
+                    anchorNode[arm.head]    = true;
                 }
                 if (arm.tail < slots) {
                     protectedNode[arm.tail] = true;
+                    anchorNode[arm.tail]    = true;
                 }
             }
         }
     }
     maxWork = std::min(maxWork, 8 * (slots + edges));
-    // Epochs avoid clearing graph-sized scratch arrays for every target. Each walk starts at
-    // the *parents* of its CTRL predecessors, so reaching a predecessor proves a distinct path.
+    // Epochs avoid clearing graph-sized scratch arrays for every target. Mandatory value
+    // inputs seed the walk directly; CTRL inputs seed only their parents, so a control edge
+    // cannot prove itself. JOIN arm values are alternatives, never mandatory predecessors:
+    // a walk may reach a completed JOIN/LOOP as its endpoint but cannot walk through it.
     std::vector<size_t> candidate(slots, 0), seen(slots, 0), redundant(slots, 0);
     size_t removed = 0;
     for (gc_node_ref_t target = 0; target < slots && maxWork; ++target) {
-        if (protectedNode[target] || draft.ctrlInputsOf(target).size() < 2) {
+        if (protectedNode[target] || draft.ctrlInputsOf(target).empty()) {
+            continue;
+        }
+        const bool hasValues =
+            !draft.normInputsOf(target).empty() || !draft.withInputsOf(target).empty();
+        if (!hasValues && draft.ctrlInputsOf(target).size() == 1) {
             continue;
         }
         const size_t epoch = static_cast<size_t>(target) + 1;
@@ -156,7 +191,20 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
             if (protectedNode[node]) {
                 return;
             }
-            for (auto pred : draft.ctrlInputsOf(node)) {
+            for (auto inputs :
+                 {draft.normInputsOf(node), draft.withInputsOf(node), draft.ctrlInputsOf(node)}) {
+                for (auto pred : inputs) {
+                    if (!localWork) {
+                        return;
+                    }
+                    --localWork;
+                    --maxWork;
+                    work.push_back(pred);
+                }
+            }
+        };
+        for (auto inputs : {draft.normInputsOf(target), draft.withInputsOf(target)}) {
+            for (auto pred : inputs) {
                 if (!localWork) {
                     break;
                 }
@@ -164,18 +212,22 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
                 --maxWork;
                 work.push_back(pred);
             }
-        };
+        }
         for (auto root : roots) {
             expand(root);
         }
         while (!work.empty()) {
             const auto node = work.back();
             work.pop_back();
-            if (seen[node] == epoch || protectedNode[node]) {
+            if (seen[node] == epoch) {
                 continue;
             }
-            seen[node] = epoch;
-            if (candidate[node] == epoch) {
+            seen[node]    = epoch;
+            const auto *h = draft.header(node);
+            const bool completedBoundary =
+                h && !anchorNode[node] &&
+                (h->kind == GCNodeKind::Join || h->kind == GCNodeKind::Loop);
+            if (candidate[node] == epoch && (!protectedNode[node] || completedBoundary)) {
                 redundant[node] = epoch;
             }
             expand(node);
@@ -186,9 +238,12 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
                 keep.push_back(root);
             }
         }
-        // A valid DAG always has a maximal predecessor. Retain malformed/cyclic input rather
-        // than producing a GATE with no control input; validation owns those diagnostics.
-        if (!keep.empty() && keep.size() < draft.ctrlInputsOf(target).size()) {
+        // GATEs require a CTRL input even if a value path already orders them. With no value
+        // seed, an empty frontier instead indicates a malformed cycle; preserve diagnostics.
+        if (keep.empty() && (draft.header(target)->kind == GCNodeKind::Gate || !hasValues)) {
+            keep.push_back(roots.back());
+        }
+        if (keep.size() < draft.ctrlInputsOf(target).size()) {
             removed += draft.ctrlInputsOf(target).size() - keep.size();
             draft.setCtrlInputs(target, keep);
         }
