@@ -293,7 +293,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 6. **设备故障读核心的 `FaultSpec` 与归约规律的空区间规则**，报告带故障种类与源码位置（第 9 条）。
 7. **BF16 cuBLAS 的批偏移用核心的访问映射**，与 `ddpm-primitives.md` 的描述一致（第 10 条）。
 8. **许可对应实现的规则读核心的统一判定**（2.16、2.17：库实现的 f32 矩阵乘默认可用、BF16 只需 `change_precision`、安全模式由遍参数给出），不在模块内各写一份（第 6 条）。遍参数的通用语法由核心提供（2.17），设备选择改用遍参数，不用环境变量。核心已提供：`registerModulePass(path, PassDescriptor)` 让模块遍声明参数（名字、类型、默认值、说明），`tiles::compile(device=1)` 即可写出；`CAMEL_TILES_DEVICE`（`capability.cpp` 的 `configuredCudaOrdinal`，后端初始化与测试都读它）和 `CAMEL_TILES_NVRTC`（进程环境，可保留）尚未迁移——设备序号要先从遍实例传到后端初始化，这属于模块内部的改动，由 Tiles 做；核心这一侧已不再读它。
-9. 遍名用 `tiles::` 前缀，别名由模块登记；核心别名表中的 `std::tiles` 由核心删去（第 11 条，2.17）。已删去（`registerPassAlias`、`registerDefaultPipelinePass` 已提供；核心的测试与文档改写为 `tiles::compile`）。Tiles 尚待做的两件事：用 `registerPassAlias` 登记它想要的短名；`@gpu` 改为编译期标注后用 `registerDefaultPipelinePass("tiles::compile")` 登记，使不写遍名时 `@gpu` 仍然生效（默认流水线的遍在第一个消耗图的遍之前运行，`--no-module-passes` 可关闭）。
+9. 遍名用 `tiles::` 前缀，别名由模块登记；核心别名表中的 `std::tiles` 由核心删去（第 11 条，2.17）。已删去（`registerPassAlias` 已提供；核心的测试与文档改写为 `tiles::compile`）。默认流水线登记已撤回（2.17 已改）：导入模块不再往流水线里加遍，`--no-module-passes` 也不再有。Tiles 尚待做的是用 `registerPassAlias` 登记它想要的短名；`@gpu` 改为标签 `#gpu`，由遍读取，不写遍名时 `tiles::compile` 不会自己运行——需要它的程序显式写出遍名，或者由库在缺少该遍时给出说明要加哪个遍的诊断。
 
 
 ### 11.1 参数树：核心已有唯一的树视图（2026-10-19，核心侧已做）
@@ -306,3 +306,9 @@ Tiles 里按类型工作的三处已机械地改用它，行为变化只有两�
 - `graph_values.cpp:31/42/69`、`compiler.cpp:139/475/495/941`、`region_outline.cpp:45`、`module.cpp` 的 `acceptsInput` 与 126/199/239/459 行（按节点或按类型对位）。
 
 这些应改为调用 `tree::isInternal`/`arity`/`childType`，不要再自己写 `code() == Tuple || Struct`。
+
+### 11.1 补充（2026-10-19，设计原则 2.21）
+
+调度（分块、布局、放置、内存策略）原则上由执行时注入：`tiles::compile` 的遍参数或调度文件，格式与粒度由 Tiles 设计，到函数为止（更细的由用户提成子函数），内联后用节点上的内联来源找回函数；自动调优按计算的结构身份记录结果。源码中的 `@gpu` 保留。
+
+块级内核的写法（第 6 节，`Tile<T,[形状]>` 与 `#kernel`）保持不变，作为专家路径与自动路径并存（设计原则 2.21）。数值许可的默认值改为 2.22：`reassociate`、`contract` 默认允许，`#strict` 与安全模式收紧；Tiles 的 FMA 收缩与并行归约据此默认启用。

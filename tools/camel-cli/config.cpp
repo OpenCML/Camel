@@ -307,11 +307,10 @@ bool timeitEnabled              = false;
 string dumpAfterEachPassDir     = "";
 vector<string> entryArgs        = {};
 
-bool profile        = false;
-bool noCache        = false;
-bool noModulePasses = false;
-bool semanticOnly   = false;
-int maxThreads      = -1; // -1 means use the maximum number of threads
+bool profile      = false;
+bool noCache      = false;
+bool semanticOnly = false;
+int maxThreads    = -1; // -1 means use the maximum number of threads
 
 string maxRecursionDepthOpt = ""; // raw --max-recursion-depth
 string maxMacroDepthOpt     = ""; // raw --max-macro-depth
@@ -618,9 +617,6 @@ bool parseArgs(int argc, char *argv[]) {
              "collector of run-time values: generational (default; young objects are copied) or "
              "mark-sweep (objects keep their address); also CAMEL_GC",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
-         option("--no-module-passes").set(noModulePasses) %
-             "do not add the passes that imported modules register to the pipeline (tiles::compile "
-             "for @gpu, for example)",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
          (option("-E", "--error-format", "--output-format") & value("error format", errorFormat)) %

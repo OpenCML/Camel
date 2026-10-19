@@ -858,7 +858,7 @@ any Formatter::visitCatchClause(cst::CatchClause context) {
 /*
 ctrlExpr
     : IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
-    | MATCH identRef '{' matchCase+ '}'
+    | MATCH logicalOrExpr '{' matchCase+ '}'
     | TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
     ;
 */
@@ -882,8 +882,8 @@ any Formatter::visitCtrlExpr(syn::Node context) {
         return result;
         break;
     }
-    case 2: // MATCH identRef '{' matchCase+ '}'
-        return "match " + any_cast<string>(visitIdentRef(context->get<cst::IdentRef>())) + " {" +
+    case 2: // MATCH logicalOrExpr '{' matchCase+ '}'
+        return "match " + any_cast<string>(visitExpr(context->expr())) + " {" +
                formatList(
                    vec(context->all<cst::MatchCase>()),
                    context,

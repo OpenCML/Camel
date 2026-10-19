@@ -40,7 +40,6 @@
 
 - `--input <file>`：输入文件路径（位置参数的替代写法；与 `--passes` 一起使用可避免歧义）  
 - `--passes <list>`：逗号分隔的遍列表（例如 `--passes std::gir,other`；遍的参数里的逗号不分隔）。省略时，第一个位置参数是文件，其余是遍。遍可以带参数：`std::opt(safe_fp=true)`（见“遍的参数”）  
-- `--no-module-passes`：不加入程序所导入的模块为默认流水线登记的遍（见“模块的遍与默认流水线”）  
 - `--timeit <pass>/<N>`：从全新的图出发把一个遍测量 `N` 次；文本模式打印各次样本和一张简表，`--output-format json` 则输出结构化的基准数据  
 - `--dump-after-each-pass <dir>`：把第一个遍之前的图（`00_input`）和每个返回图的遍之后的图（`NN_<pass>`，`::` 写作 `.`）写入 `<dir>`：一份可读的 DOT（`.rgir.dot`，即 `std::rgir` 格式，每个节点带 `origin`/`span`/`srcfile`）和 `std::stats` 的计数（`.stats.json`）。调度遍和翻译遍消耗图，不留下快照。比较两份快照用 `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
 - `--arg <name>=<value>`：`main` 的一个参数的值（可重复；见“`main` 带参数或有返回值的程序”）  
@@ -152,11 +151,11 @@
 
 仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，资源上限与回收器（`CAMEL_GC*`、`CAMEL_*_SPACE_*`、`CAMEL_MAX_RECURSION_DEPTH`），诊断用的追踪与统计（`CAMEL_EFFECT_TRACE`、`CAMEL_TYPE_STATS`、`CAMEL_STARTUP_PROFILE`），`CAMEL_ENABLE_TEST_PASSES`（决定测试遍是否存在，供测试用），以及 `CAMEL_OPT_GROWTH_BUDGET`（重写引擎的预算，ONNX 导出器内部也在用；以后改为 `std::opt` 的参数）。
 
-### 模块的遍与默认流水线
+### 模块的遍
 
 `std::` 前缀只给核心自带的遍。模块的遍用模块自己的名字：`tiles::compile`、`tensor::fuse`、`onnx::export`。模块可以为自己的遍登记别名（`registerPassAlias`），核心不认识任何模块的名字。
 
-模块还可以登记在程序导入该模块时加入流水线的遍（`registerDefaultPipelinePass`；Tiles 用它让 `@gpu` 不写遍名也生效）。它们在每条流水线中第一个消耗图的遍（调度遍或翻译遍）之前运行——流水线只写 `std::fvm` 时也一样——按显式的优先级、再按名字排序。用户自己写出的同一个遍只在写的位置运行，不会运行两次。`--no-module-passes` 把它们去掉。
+模块可以登记自己的遍（`registerModulePass`，短名用 `registerPassAlias`）。它们只在流水线写出它们的位置运行：流水线是显式组合的，导入模块不会加入任何遍。需要某个遍的库（如自动微分需要它之前的 `std::macro`）在前提不满足时给出诊断并说明要加哪个遍；标签没有读到它的遍时给出警告。
 
 ### 常用遍
 

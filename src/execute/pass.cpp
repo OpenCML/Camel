@@ -630,16 +630,6 @@ ModuleAliasRegistry &moduleAliases() {
     return registry;
 }
 
-struct DefaultPassRegistry {
-    std::mutex mutex;
-    std::set<std::pair<int, std::string>> entries; // (priority, spec): the run order
-};
-
-DefaultPassRegistry &defaultPasses() {
-    static DefaultPassRegistry registry;
-    return registry;
-}
-
 std::optional<PassDescriptor> findModulePass(const std::string &path) {
     auto &registry = modulePasses();
     std::lock_guard lock(registry.mutex);
@@ -811,12 +801,6 @@ void registerPassAlias(const std::string &alias, const std::string &target) {
     auto &registry = moduleAliases();
     std::lock_guard lock(registry.mutex);
     registry.aliases.insert_or_assign(alias, target);
-}
-
-void registerDefaultPipelinePass(const std::string &spec, int priority) {
-    auto &registry = defaultPasses();
-    std::lock_guard lock(registry.mutex);
-    registry.entries.insert({priority, spec});
 }
 
 namespace {
@@ -1002,35 +986,37 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     return resolved.factory;
 }
 
+/// Resolves `spec`, importing the module that contributes a `<module>::<pass>` name when the
+/// program has not imported it yet: a pass list may name a pass of a module the program does
+/// not import, and loading the module registers the pass. A name that stays unknown resolves
+/// to no factory, and a bad parameter list keeps its problem.
+ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t &ctx) {
+    ResolvedPass resolved = resolvePass(spec);
+    if (resolved.problem || resolved.factory || !ctx) {
+        return resolved;
+    }
+    const std::string name = resolveAlias(specName(spec));
+    const size_t sep       = name.find("::");
+    if (sep == std::string::npos || sep == 0 || name.substr(0, sep) == "std") {
+        return resolved;
+    }
+    try {
+        (void)ctx->importModule(name.substr(0, sep));
+    } catch (const Diagnostic &) {
+        // No such module: the name stays unknown and is reported by the caller.
+    } catch (const std::exception &) {
+    }
+    return resolvePass(spec);
+}
+
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {
-        auto resolved = resolvePass(name);
+        auto resolved = resolvePassWithModule(name, ctx);
         if (resolved.problem) {
             throw invalidParameterDiagnostic(name, *resolved.problem);
         }
         if (resolved.factory) {
             continue;
-        }
-        // `<module>::<pass>`: the pass is contributed by a module the program did not import.
-        // Loading the module registers it.
-        if (ctx) {
-            const std::string resolvedName = resolveAlias(specName(name));
-            const size_t sep               = resolvedName.find("::");
-            if (sep != std::string::npos && sep > 0 && resolvedName.substr(0, sep) != "std") {
-                try {
-                    (void)ctx->importModule(resolvedName.substr(0, sep));
-                } catch (const Diagnostic &) {
-                    // No such module: the name stays unknown and is reported below.
-                } catch (const std::exception &) {
-                }
-                resolved = resolvePass(name);
-                if (resolved.problem) {
-                    throw invalidParameterDiagnostic(name, *resolved.problem);
-                }
-                if (resolved.factory) {
-                    continue;
-                }
-            }
         }
         listAvailablePasses(name);
         setPipelineStage("pass:" + specName(name));
@@ -1044,7 +1030,7 @@ void requireKnownPasses(const std::vector<std::string> &passes, const context_pt
 std::optional<size_t>
 firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (size_t i = 0; i < passes.size(); ++i) {
-        auto factory = resolvePass(passes[i]).factory;
+        auto factory = resolvePassWithModule(passes[i], ctx).factory;
         if (!factory) {
             continue;
         }
@@ -1059,7 +1045,7 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
 
 bool passListTranslatesProgram(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {
-        auto factory = resolvePass(name).factory;
+        auto factory = resolvePassWithModule(name, ctx).factory;
         if (!factory) {
             continue;
         }
@@ -1074,48 +1060,6 @@ bool passListTranslatesProgram(const std::vector<std::string> &passes, const con
         }
     }
     return false;
-}
-
-std::vector<std::string> withDefaultPipelinePasses(
-    const std::vector<std::string> &pipeline, const context_ptr_t &ctx, bool enabled) {
-    std::set<std::pair<int, std::string>> entries;
-    {
-        auto &registry = defaultPasses();
-        std::lock_guard lock(registry.mutex);
-        entries = registry.entries;
-    }
-    if (!enabled || entries.empty()) {
-        return pipeline;
-    }
-    // The name a specification is known by, aliases resolved: `tiles` and `tiles::compile`
-    // are one pass.
-    const auto canonical = [](const std::string &spec) {
-        const std::string name = resolveAlias(specName(spec));
-        if (name.find("::") == std::string::npos &&
-            lookupInScope(passScope, splitPath("std::" + name))) {
-            return "std::" + name;
-        }
-        return name;
-    };
-    std::set<std::string> written;
-    for (const auto &spec : pipeline) {
-        written.insert(canonical(spec));
-    }
-    std::vector<std::string> inserted;
-    for (const auto &[priority, spec] : entries) {
-        (void)priority;
-        if (written.insert(canonical(spec)).second) {
-            inserted.push_back(spec);
-        }
-    }
-    if (inserted.empty()) {
-        return pipeline;
-    }
-    const size_t at = firstConsumingPass(pipeline, ctx).value_or(pipeline.size());
-    std::vector<std::string> result(pipeline.begin(), pipeline.begin() + at);
-    result.insert(result.end(), inserted.begin(), inserted.end());
-    result.insert(result.end(), pipeline.begin() + at, pipeline.end());
-    return result;
 }
 
 std::optional<Diagnostic>

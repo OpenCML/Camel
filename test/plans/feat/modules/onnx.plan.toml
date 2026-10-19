@@ -472,7 +472,7 @@ for (const op of ['Shape', 'Gather', 'Div', 'Expand']) {
 }
 const standard = new Set(['MatMul', 'Add', 'Relu', 'Mul', 'ReduceSum', 'Shape', 'Gather', 'Cast', 'Div', 'Expand', 'Transpose', 'Greater', 'Reshape', 'Sub', 'Identity'])
 assert(model.ops.every((o) => standard.has(o)), `non-standard op in ${model.ops}`)
-assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+assert(!model.initializers.some((n) => /^(w1|b1|w2|b2|input1)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
 }
 """
 timeout_ms = 6000

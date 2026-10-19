@@ -282,7 +282,7 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
     try {
         static const std::vector<std::string> defaultFallback{"std::default"};
         st.ctx->clearProcessExitCode();
-        passes = withDefaultPipelinePasses(passes, st.ctx);
+
         requireKnownPasses(passes, st.ctx);
         auto *graph = st.ctx->runtimeRootGraph();
         // The values given for the parameters of `main` become constants of the entry graph

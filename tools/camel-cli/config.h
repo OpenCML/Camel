@@ -84,7 +84,6 @@ extern std::vector<std::string> entryArgs;
 
 extern bool profile;
 extern bool noCache;
-extern bool noModulePasses;
 extern bool semanticOnly;
 extern int maxThreads;
 /// --max-recursion-depth / --max-macro-depth: the limits given on the command line, 0 when the
