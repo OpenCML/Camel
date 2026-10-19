@@ -1,8 +1,0 @@
-type Shape = enum { Circle(float), Empty }
-
-func main(): void sync {
-    let a = Shape::Circle(1.0)
-    let b = Shape::Empty
-    let m = [(a, 1), (b, 2)] as Map<Shape, int>
-    println(m[a] ?? 0)
-}

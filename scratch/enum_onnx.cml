@@ -1,3 +1,0 @@
-type Shape = enum { Circle(float), Empty }
-func area(s: Shape): float { return match s { case Shape::Circle(r) => r case Shape::Empty => 0.0 } }
-func main(s: Shape): float { return area(s) }

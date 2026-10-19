@@ -1,8 +1,0 @@
-type Shape = enum { Circle(float), Empty }
-func main(): void sync {
-    let s = Shape::Empty
-    println(match s {
-        case Shape::Empty => 1.0
-        case _ => 0.0
-    })
-}

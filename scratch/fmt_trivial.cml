@@ -1,3 +1,0 @@
-func main(): void sync {
-    println(1)
-}
