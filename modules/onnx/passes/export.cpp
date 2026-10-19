@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -296,31 +296,29 @@ std::string locationOf(const core::context::Context &ctx, uint64_t origin) {
 /// argument the reading stumbled on, is what the program has to change.
 Request readEntryRequest(
     const core::context::Context &ctx, GCGraph *g, gc_node_ref_t node, const std::string &out) {
-    try {
+    // Whether the arm runs is decided at run time: the pass cannot tell whether the request is
+    // made, whatever its arguments are. Refuse before reading the arguments, which may well be
+    // constants of the arm and would otherwise look like a request made unconditionally.
+    const auto brch = runtimeBranchOver(g, node);
+    if (!brch) {
         return readRequest(g, node, out);
-    } catch (const Refusal &) {
-        const auto brch = runtimeBranchOver(g, node);
-        if (!brch) {
-            throw;
-        }
-        const auto cond            = g->normInputsOf(*brch);
-        const std::string location = locationOf(ctx, originNear(g, node));
-        uint64_t origin            = originNear(g, *brch);
-        if (origin == camel::source::kInvalidOriginId) {
-            origin = originNear(g, node);
-        }
-        throw Refusal{
-            origin,
-            std::format(
-                "the onnx.export_model call{} is made in an arm of this branch, and the "
-                "condition of the branch{} is not known at compile time; onnx::export does not "
-                "run the program, so it cannot tell whether the request is made, and what the "
-                "arm computes is not a constant of the graph; write the export_model call "
-                "outside the branch, or make the condition a constant",
-                location.empty() ? std::string() : " at " + location,
-                cond.empty() ? std::string()
-                             : std::format(" ({})", describeNode(g, cond.front())))};
     }
+    const auto cond            = g->normInputsOf(*brch);
+    const std::string location = locationOf(ctx, originNear(g, node));
+    uint64_t origin            = originNear(g, *brch);
+    if (origin == camel::source::kInvalidOriginId) {
+        origin = originNear(g, node);
+    }
+    throw Refusal{
+        origin,
+        std::format(
+            "the onnx.export_model call{} is made in an arm of this branch, and the "
+            "condition of the branch{} is not known at compile time; onnx::export does not "
+            "run the program, so it cannot tell whether the request is made, and what the "
+            "arm computes is not a constant of the graph; write the export_model call "
+            "outside the branch, or make the condition a constant",
+            location.empty() ? std::string() : " at " + location,
+            cond.empty() ? std::string() : std::format(" ({})", describeNode(g, cond.front())))};
 }
 
 /// The function a call node of `g` calls, when it is statically known.
