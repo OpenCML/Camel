@@ -1,11 +1,12 @@
 # The Generational Collector as an Option: Report
 
 Run-time values can be reclaimed by one of two collectors, chosen per process: `mark-sweep`
-(the default, objects keep their address) and `generational` (`--gc generational` or
-`CAMEL_GC=generational`: young objects are copied). This note records what had to be fixed
+(objects keep their address; the default of releases up to v0.2.8) and `generational` (young
+objects are copied; the default since v0.2.9). This note records what had to be fixed
 before the generational collector could be offered, what was tested, what was measured against
-mark-sweep, what it costs, and what is known to be wrong. Its last section is for the language
-author: whether the generational collector should become the default is his decision.
+mark-sweep, what it costs, and what is known to be wrong. Section 7 records the question that
+was put to the language author at the time; it is superseded by the ruling of 2026-10-15 that
+made the generational collector the default.
 
 How to use the switch and its settings is in `docs/cli.md` ("The collector"); what C++ code
 must observe is in `36_gc_handle_rules.md`; the allocation domains are described in
@@ -452,6 +453,11 @@ a snapshot taken before the rebase. Its results were not used here.
 - A quiet machine. Every number above was taken at a load between 11 and 28 on 18 threads.
 
 ## 7. Should it be the default?
+
+**Superseded (2026-10-15).** The language author made the generational collector the default
+(`d270689c`, released in v0.2.9); `--gc mark-sweep` keeps the other one. The section below is
+the question as it was put at the time and the answer the measurements argued for, kept as the
+record of the comparison; it is not the current setting.
 
 The facts, from the sections above:
 

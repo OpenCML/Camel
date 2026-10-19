@@ -9,7 +9,7 @@ Camel's runtime values live in four allocator domains with different ownership r
 
 `GCGraph` is an `rtdata::Object` only so the GC can use its `updateRefs` hook to trace static data.
 The graph carrier itself is not an `autoSpace` object and is reclaimed by `GCGraphManager`, not by
-mark-sweep.
+the collector.
 
 ## Growable Program Spaces
 
