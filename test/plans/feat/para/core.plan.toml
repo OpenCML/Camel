@@ -337,11 +337,10 @@ timeout_ms = 60000
 
 [[tests]]
 name = "arm_reads_outer_value.opt_prl"
-desc = "A branch arm that reads values computed outside the branch (through GATE nodes that execute nothing, after std::opt inlined a loop round) waits for them under PRL. The program is scalar, so the granularity rule would run it inline: CAMEL_TF_FANOUT_ALL=1 makes every unordered scope a task graph, which is what this test is about."
+desc = "A branch arm that reads values computed outside the branch (through GATE nodes that execute nothing, after std::opt inlined a loop round) waits for them under PRL. The program is scalar, so the granularity rule would run it inline: std::prl(fanout_all=true) makes every unordered scope a task graph, which is what this test is about."
 kind = "behavior"
 case = "../../../cases/para/core/arm_reads_outer_value.cml"
-args = ["-t", "4", "${case}", "std::opt", "${run_prl}"]
-envs = ["CAMEL_TF_FANOUT_ALL=1"]
+args = ["-t", "4", "${case}", "std::opt", "${run_prl_fanout_all}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -357,8 +356,7 @@ name = "arm_reads_outer_value.opt_prl_t1"
 desc = "The same with one worker: the order of the tasks of a graph then differs from the linear order without any concurrency."
 kind = "behavior"
 case = "../../../cases/para/core/arm_reads_outer_value.cml"
-args = ["-t", "1", "${case}", "std::opt", "${run_prl}"]
-envs = ["CAMEL_TF_FANOUT_ALL=1"]
+args = ["-t", "1", "${case}", "std::opt", "${run_prl_fanout_all}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -411,11 +409,10 @@ timeout_ms = 30000
 
 [[tests]]
 name = "recursion_too_deep.prl_evaluator"
-desc = "The same program with the bytecode hand-off off (CAMEL_TF_BYTECODE=0), so that the scheduler's own evaluator runs the recursion and every call nests on the native stack: it stops with MaxRecursionDepthExceeded when the stack of the thread is nearly full (the shared guard reserves space for reporting and fault unwinding on each platform) instead of a segmentation fault; depth(2000) printed before it, nothing after."
+desc = "The same program with the bytecode hand-off off (std::prl(bytecode=false)), so that the scheduler's own evaluator runs the recursion and every call nests on the native stack: it stops with MaxRecursionDepthExceeded when the stack of the thread is nearly full (the shared guard reserves space for reporting and fault unwinding on each platform) instead of a segmentation fault; depth(2000) printed before it, nothing after."
 kind = "negative"
 case = "../../../cases/para/core/recursion_too_deep.cml"
-args = ["-t", "4", "--max-recursion-depth", "1000000", "${case}", "${run_prl}"]
-envs = ["CAMEL_TF_BYTECODE=0"]
+args = ["-t", "4", "--max-recursion-depth", "1000000", "${case}", "${run_prl_no_bytecode}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"
@@ -428,14 +425,13 @@ timeout_ms = 30000
 # Granularity: a scope runs as a task graph only when it has two unordered items that are each
 # a higher-order operator or a call of a heavy graph (one that reaches a higher-order operator,
 # a module operator or a call of a function value). Asserted through the scheduler's statistics
-# line (CAMEL_TF_GC_STATS: "[taskflow] run: task_graphs=N workers=W"), not through time.
+# line (std::prl(gc_stats=1): "[taskflow] run: task_graphs=N workers=W"), not through time.
 [[tests]]
 name = "scalar_recursion_inline.prl"
 desc = "Light side of the granularity rule: fib and a mutual recursion, bodies of built-in arithmetic only, make unordered recursive calls but run inline under PRL: 0 task graphs."
 kind = "behavior"
 case = "../../../cases/para/core/scalar_recursion_inline.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_TF_GC_STATS=1"]
+args = ["-t", "4", "${case}", "${run_prl_gc_stats1}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -451,11 +447,10 @@ timeout_ms = 30000
 
 [[tests]]
 name = "scalar_recursion_inline.prl_fanout_all"
-desc = "The same program with the rule switched off (CAMEL_TF_FANOUT_ALL=1) does run task graphs: the 0 above comes from the rule, not from the program."
+desc = "The same program with the rule switched off (std::prl(fanout_all=true)) does run task graphs: the 0 above comes from the rule, not from the program."
 kind = "behavior"
 case = "../../../cases/para/core/scalar_recursion_inline.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_TF_GC_STATS=1", "CAMEL_TF_FANOUT_ALL=1"]
+args = ["-t", "4", "${case}", "${run_prl_gc_stats1_fanout_all}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -473,8 +468,7 @@ name = "concurrent_alloc.prl_fans_out"
 desc = "Heavy side of the granularity rule: the two halves of a merge sort call module operators (algo), so each split runs as a task graph under PRL: at least 12 task graphs (the program sorts 13 arrays; measured 225)."
 kind = "behavior"
 case = "../../../cases/para/core/concurrent_alloc.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_TF_GC_STATS=1"]
+args = ["-t", "4", "${case}", "${run_prl_gc_stats1}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -497,8 +491,7 @@ name = "ordered_operators_inline.prl"
 desc = "reduce over 2000 elements and foreach over 5 start no task graph under PRL (0 in the scheduler's statistics) and give the result and the order of the linear back ends."
 kind = "behavior"
 case = "../../../cases/para/core/ordered_operators_inline.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_TF_GC_STATS=1"]
+args = ["-t", "4", "${case}", "${run_prl_gc_stats1}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -533,8 +526,7 @@ name = "map_chunks.prl"
 desc = "The same output under PRL with 4 workers, where the elements are handed out in chunks to several workers. The two maps whose element function recurses or calls a module operator get helpers from the start whatever the timing: at least 2 task graphs."
 kind = "behavior"
 case = "../../../cases/para/core/map_chunks.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_TF_GC_STATS=1"]
+args = ["-t", "4", "${case}", "${run_prl_gc_stats1}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -553,8 +545,7 @@ name = "map_chunks.prl_one_worker"
 desc = "The same output under PRL with one worker: every element runs on the calling thread and no task graph is started."
 kind = "behavior"
 case = "../../../cases/para/core/map_chunks.cml"
-args = ["-t", "1", "${case}", "${run_prl}"]
-envs = ["CAMEL_TF_GC_STATS=1"]
+args = ["-t", "1", "${case}", "${run_prl_gc_stats1}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

@@ -65,8 +65,8 @@ expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmea
 [[tests]]
 name = "framed.operators.moving"
 desc = "The same with the generational collector and safepoint poisoning: every safepoint moves every young object and poisons where it was, so a reference that compiled code kept in a register or baked into its code across a safepoint would fault."
-backends = ["fvm", "jit", "inline_jit"]
-envs = ["CAMEL_GC_POISON=1", "CAMEL_JIT_HOT_THRESHOLD=0"]
+backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
+envs = ["CAMEL_GC_POISON=1"]
 sweep = false
 timeout_ms = 240000
 expect_exit = 0
@@ -189,8 +189,8 @@ expect_output_contains = ["compiled & cached graph 'churn' as framed code", "com
 name = "framed.loops.moving"
 desc = "The loops with safepoint poisoning: the allocating loop and the loop that builds an array run across thousands of collections that move what they hold."
 case = "../../../cases/linear/jit/framed_loops.cml"
-backends = ["fvm", "jit", "inline_jit"]
-envs = ["N=20000", "CAMEL_GC_POISON=1", "CAMEL_JIT_HOT_THRESHOLD=0"]
+backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
+envs = ["N=20000", "CAMEL_GC_POISON=1"]
 sweep = false
 timeout_ms = 240000
 expect_exit = 0
@@ -200,8 +200,8 @@ expect_stdout_starts_with = "108894\n40001\n900\n88894\ndone\n"
 name = "framed.faults.moving"
 desc = "The isolated faults with safepoint poisoning."
 case = "../../../cases/linear/jit/framed_faults.cml"
-backends = ["fvm", "jit", "inline_jit"]
-envs = ["FAULT=none", "CAMEL_GC_POISON=1", "CAMEL_JIT_HOT_THRESHOLD=0"]
+backends = ["fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
+envs = ["FAULT=none", "CAMEL_GC_POISON=1"]
 sweep = false
 expect_exit = 0
 expect_stdout_starts_with = "62\n14\n14\n58\nIndexOutOfRange\nDivisionByZero\nDivisionByZero\nMaxRecursionDepthExceeded\n62\n58\nisolated\ndone\n"

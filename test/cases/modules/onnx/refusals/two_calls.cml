@@ -1,5 +1,5 @@
 /**
- * CAMEL_ONNX_OUT names one model file; a program with two export_model calls is refused by
+ * The parameter out of onnx::export names one model file; a program with two export_model calls is refused by
  * onnx::export, at the second call (line 14).
  */
 module two_calls

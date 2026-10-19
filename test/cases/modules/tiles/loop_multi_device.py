@@ -5,8 +5,8 @@ Manual verification after the standard build (PowerShell, repository root):
   $env:CAMEL_HOME = "$PWD/out/latest"
   $env:TILES_TEST_OUT = "$PWD/out/loop-multi-manual"
   out/latest/bin/camel.exe test/cases/modules/tiles/loop_multi_device.cml std::nvm
-  out/latest/bin/camel.exe test/cases/modules/tiles/loop_multi_boundaries.cml std::tiles std::nvm
-  out/latest/bin/camel.exe test/cases/modules/tiles/loop_multi_boundaries.cml std::tiles std::jgir
+  out/latest/bin/camel.exe test/cases/modules/tiles/loop_multi_boundaries.cml tiles::compile std::nvm
+  out/latest/bin/camel.exe test/cases/modules/tiles/loop_multi_boundaries.cml tiles::compile std::jgir
 """
 import argparse
 import ast
