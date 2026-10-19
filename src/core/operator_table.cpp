@@ -186,6 +186,20 @@ std::optional<std::string> OperatorTable::inPlaceForm(std::string_view uri) cons
     return std::string(symbolText(form));
 }
 
+void OperatorTable::declareCallSpec(std::string_view uri, CallSpec spec) {
+    std::unique_lock lock(mutex_);
+    entries_[internLocked(uri)].callSpec = std::make_unique<CallSpec>(std::move(spec));
+}
+
+const CallSpec *OperatorTable::callSpec(std::string_view uri) const {
+    const auto id = lookup(uri);
+    if (!id) {
+        return nullptr;
+    }
+    std::shared_lock lock(mutex_);
+    return entries_[*id].callSpec.get();
+}
+
 void OperatorTable::setTypeFolder(std::string_view uri, TypeFolder folder) {
     std::unique_lock lock(mutex_);
     entries_[internLocked(uri)].folder = std::make_unique<TypeFolder>(std::move(folder));

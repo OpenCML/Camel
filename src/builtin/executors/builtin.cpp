@@ -371,6 +371,14 @@ void registerBuiltinOperatorTraits() {
     registry.set(":var/get", {.stateOnly = true});
     registry.set(":var/peek", {.stateOnly = true});
     registry.set(":var/take", {.stateOnly = true});
+    // What the compiler does at a call because of the operator (design principles 2.17).
+    registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
+    registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});
+    registry.declareCallSpec(":mark/unordered_foreach_arr", {.discardsCallbackResult = true});
+    for (const char *uri : {":io/print", ":io/println"}) {
+        registry.declareCallSpec(uri, {.formatWithArg = 0, .checkFormat = checkFormatPattern});
+    }
+    registry.declareCallSpec(":str/format", {.formatNormArg = 0, .checkFormat = checkFormatPattern});
     declareBuiltinOperatorSemantics();
     std::vector<std::string_view> names;
     for (const auto &[name, op] : getOpsImplMap()) {

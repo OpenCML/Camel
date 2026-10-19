@@ -1579,36 +1579,6 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
-    case AST::BinaryDataOp::Assign: {
-        opNode = tree_->makeDRef("__assn__");
-    } break;
-    case AST::BinaryDataOp::AssignAdd: {
-        opNode = tree_->makeDRef("__assn_add__");
-    } break;
-    case AST::BinaryDataOp::AssignSub: {
-        opNode = tree_->makeDRef("__assn_sub__");
-    } break;
-    case AST::BinaryDataOp::AssignMul: {
-        opNode = tree_->makeDRef("__assn_mul__");
-    } break;
-    case AST::BinaryDataOp::AssignDiv: {
-        opNode = tree_->makeDRef("__assn_div__");
-    } break;
-    case AST::BinaryDataOp::AssignMod: {
-        opNode = tree_->makeDRef("__assn_mod__");
-    } break;
-    case AST::BinaryDataOp::AssignMat: {
-        opNode = tree_->makeDRef("__assn_mat__");
-    } break;
-    case AST::BinaryDataOp::AssignExp: {
-        opNode = tree_->makeDRef("__assn_pow__");
-    } break;
-    case AST::BinaryDataOp::AssignAnd: {
-        opNode = tree_->makeDRef("__assn_and__");
-    } break;
-    case AST::BinaryDataOp::AssignOr: {
-        opNode = tree_->makeDRef("__assn_or__");
-    } break;
     case AST::BinaryDataOp::LogicalOr:
     case AST::BinaryDataOp::LogicalAnd: {
         // `||` and `&&` are branches, not operators (design principles 2.11).
@@ -1616,18 +1586,6 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         LEAVE("BinaryExpr");
         return res;
     }
-    case AST::BinaryDataOp::Or: {
-        opNode = tree_->makeDRef("__or__");
-    } break;
-    case AST::BinaryDataOp::And: {
-        opNode = tree_->makeDRef("__and__");
-    } break;
-    case AST::BinaryDataOp::Eq: {
-        opNode = tree_->makeDRef("__eq__");
-    } break;
-    case AST::BinaryDataOp::Neq: {
-        opNode = tree_->makeDRef("__neq__");
-    } break;
     case AST::BinaryDataOp::StrictEq:
     case AST::BinaryDataOp::StrictNeq: {
         // Design principles 2.10: `===` is not supported for now (and `!==` with it). It
@@ -1643,46 +1601,15 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 "with '==' and '!='");
         throw BuildAbortException();
     }
-    case AST::BinaryDataOp::Less: {
-        opNode = tree_->makeDRef("__lt__");
+    default: {
+        // Every other operator is a call of the group the table of operator_names.cpp gives
+        // its symbol: plain, compound assignment and `=` alike.
+        const auto group = camel::core::binaryOperatorGroup(AST::to_string(binaryExpr->op()));
+        ASSERT(group.has_value(), "Unknown binary operation");
+        if (!group)
+            return nullptr;
+        opNode = tree_->makeDRef(std::string(*group));
     } break;
-    case AST::BinaryDataOp::LessEq: {
-        opNode = tree_->makeDRef("__le__");
-    } break;
-    case AST::BinaryDataOp::Greater: {
-        opNode = tree_->makeDRef("__gt__");
-    } break;
-    case AST::BinaryDataOp::GreaterEq: {
-        opNode = tree_->makeDRef("__ge__");
-    } break;
-    case AST::BinaryDataOp::Add: {
-        opNode = tree_->makeDRef("__add__");
-    } break;
-    case AST::BinaryDataOp::Sub: {
-        opNode = tree_->makeDRef("__sub__");
-    } break;
-    case AST::BinaryDataOp::Mul: {
-        opNode = tree_->makeDRef("__mul__");
-    } break;
-    case AST::BinaryDataOp::Div: {
-        opNode = tree_->makeDRef("__div__");
-    } break;
-    case AST::BinaryDataOp::Mod: {
-        opNode = tree_->makeDRef("__mod__");
-    } break;
-    case AST::BinaryDataOp::Mat: {
-        opNode = tree_->makeDRef("__mat__");
-    } break;
-    case AST::BinaryDataOp::Pow: {
-        opNode = tree_->makeDRef("__pow__");
-    } break;
-    case AST::BinaryDataOp::Index: {
-        opNode = tree_->makeDRef("__idx__");
-    } break;
-    default:
-        // If the operator is unknown, assert and return nullptr
-        ASSERT(false, "Unknown binary operation");
-        return nullptr;
     }
     auto binaryAstBundle = astSemantic(context_, ast);
     setOriginFromOrigin(

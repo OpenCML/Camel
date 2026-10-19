@@ -51,6 +51,16 @@ namespace camel::core {
 /// arityOf say why).
 std::optional<std::string_view> overloadableOperatorGroup(std::string_view symbol, size_t paramCount);
 
+/// The group a binary operator written `symbol` calls: `__add__` for `+`, `__assn_add__` for
+/// `+=`, `__assn__` for `=`, `__idx__` for `[]`. One table for the plain operators, the compound
+/// assignments and the groups the compiler looks them up by; nullopt for a symbol that is not
+/// a call of a function (`&&`, `||`, `===`, ...).
+std::optional<std::string_view> binaryOperatorGroup(std::string_view symbol);
+
+/// The plain operator a compound assignment follows: `__add__` for `__assn_add__`; nullopt
+/// for any other group.
+std::optional<std::string_view> plainGroupOfCompoundAssignment(std::string_view group);
+
 /// Why the operator `symbol` cannot be overloaded at all (for the diagnostic), or nullopt when
 /// it can be overloaded for some number of parameters.
 std::optional<std::string_view> whyNotOverloadable(std::string_view symbol);

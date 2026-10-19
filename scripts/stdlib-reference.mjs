@@ -51,6 +51,8 @@ const MODULES = [
     { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp' },
     { name: 'str', title: '`str`: strings', kind: 'cpp' },
     { name: 'bytes', title: '`bytes`: immutable binary values and UTF-8 conversion', kind: 'cpp' },
+    { name: 'tree', title: '`tree`: parameter trees and checkpoints', kind: 'cpp' },
+    { name: 'tensor', title: '`tensor`: binary conversion', kind: 'cpp', only: ['from_bytes', 'to_bytes'] },
     { name: 'array', title: '`array`: arrays and higher-order functions', kind: 'camel' },
     { name: 'math', title: '`math`: numbers and bits', kind: 'cpp' },
     { name: 'statistics', title: '`statistics`', kind: 'cpp' },
@@ -398,7 +400,9 @@ function verifyOps() {
         const registeredName = module.registered || module.name
         const file = `stdlib/signatures/${module.name}.cml`
         // The operators behind the language's own operators are registered under reserved names.
-        const ops = registered.filter((op) => op.module === registeredName && !op.name.startsWith('__'))
+        const ops = registered.filter(
+            (op) => op.module === registeredName && !op.name.startsWith('__') && (!module.only || module.only.includes(op.name)),
+        )
         if (ops.length === 0) {
             problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
             continue
