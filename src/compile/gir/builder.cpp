@@ -5744,7 +5744,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // static tensor shape conflict); report that instead of "no match".
                 std::vector<std::string> reasons;
                 for (const auto &[uri, resolver] : ops->resolvers()) {
-                    if (auto reason = resolver->explainRejection(
+                    if (auto reason = resolver->explainCallRejection(
+                            explicitTypes,
+                            expectedResult,
                             withInputTypes,
                             normInputTypes,
                             normStatics,

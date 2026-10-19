@@ -9,6 +9,7 @@
  */
 
 // Public module boundary: function graphs are inspected, never traced by executing the body.
+#include "camel/core/type/tree.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm/gen.h"
 #include "camel/core/mm/root_handle.h"
@@ -397,29 +398,9 @@ slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
 }
 
 bool supportedLeaves(Type *type) {
-    if (type->code() == TypeCode::Float64)
-        return true;
-    if (tensor::asTensorType(type))
-        return true;
-    if (type->code() == TypeCode::Tuple) {
-        auto *tuple = static_cast<TupleType *>(type);
-        if (!tuple->size())
-            return false;
-        for (size_t i = 0; i < tuple->size(); ++i)
-            if (!supportedLeaves(tuple->typeAt(i)))
-                return false;
-        return true;
-    }
-    if (type->code() == TypeCode::Struct) {
-        auto *object = static_cast<StructType *>(type);
-        if (!object->size())
-            return false;
-        for (size_t i = 0; i < object->size(); ++i)
-            if (!supportedLeaves(object->typeAt(i)))
-                return false;
-        return true;
-    }
-    return false;
+    return !core::type::tree::firstRejectedLeaf(type, [](Type *leaf) {
+        return leaf->code() == TypeCode::Float64 || tensor::asTensorType(leaf) != nullptr;
+    });
 }
 // Placement changes storage, not the computation function's tensor signature.
 bool acceptsInput(Type *expected, Type *actual) {

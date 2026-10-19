@@ -294,3 +294,14 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 8. **许可对应实现的规则读核心的统一判定**（2.16、2.17：库实现的 f32 矩阵乘默认可用、BF16 只需 `change_precision`、安全模式由遍参数给出），不在模块内各写一份（第 6 条）。遍参数的通用语法由核心提供（2.17），设备选择改用遍参数，不用环境变量。
 9. 遍名用 `tiles::` 前缀，别名由模块登记；核心别名表中的 `std::tiles` 由核心删去（第 11 条，2.17）。
 
+
+### 11.1 参数树：核心已有唯一的树视图（2026-10-19，核心侧已做）
+
+"什么是树、什么是叶子"与路径的写法现在只有一份：`include/camel/core/type/tree.h`（`core::type::tree`：`isInternal`、`arity`、`childType`、`childName`、`childPath`、`displayPath`、`forEachLeaf`、`firstRejectedLeaf`、`mapLeaves`）。规则按 2.16、2.17：结构体与普通元组是内部节点，`T?`/`T!`（带标记的元组）与可变格是叶子；空结构体、空元组在各处都是没有叶子的内部节点；路径是字段名（元组为下标）用点连接，`blocks.0.w`，根的路径为空。
+
+Tiles 里按类型工作的三处已机械地改用它，行为变化只有两点：`supportedLeaves` 不再拒绝空元组/空结构体（与 `tree_map` 一致），`Device<T>` 的诊断里路径不再带 `$.` 前缀（根写作 `<root>`）。其余各处是按值或按节点遍历的同类展开，不是机械替换，留给 Tiles：
+
+- `tree_transfer.cpp` 的 `walk` 与 `rebuild`（按值）；
+- `graph_values.cpp:31/42/69`、`compiler.cpp:139/475/495/941`、`region_outline.cpp:45`、`module.cpp` 的 `acceptsInput` 与 126/199/239/459 行（按节点或按类型对位）。
+
+这些应改为调用 `tree::isInternal`/`arity`/`childType`，不要再自己写 `code() == Tuple || Struct`。
