@@ -31,12 +31,8 @@ using namespace camel::core::rtdata;
 using namespace camel::core::error;
 namespace mm = camel::core::mm;
 slot_t encodeKernel(ArgsView &, ArgsView &norm, Context &) {
+    // A string is always valid UTF-8 (design principles 2.17), so encoding cannot fail.
     const std::string text(norm.get<::String *>(0)->view());
-    if (const auto bad = invalidUtf8Offset(text))
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "bytes.encode",
-            "invalid UTF-8 at byte " + std::to_string(*bad));
     return toSlot(BytesObject::from(text, mm::autoSpace()));
 }
 slot_t decodeKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -104,7 +100,6 @@ class BytesModule final : public BuiltinModule {
         auto *b = BytesType::get();
         auto *s = Type::String();
         auto *a = ArrayType::create(Type::Int64());
-        exportType(Reference("Bytes"), b);
         const auto add = [&](const std::string &name, const param_init_list_t &args, Type *result) {
             exportEntity(
                 name,

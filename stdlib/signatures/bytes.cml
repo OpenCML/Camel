@@ -2,7 +2,6 @@
 
 /// Encodes valid UTF-8 text as an immutable Bytes value.
 /// @pure
-/// @fails fault `InvalidArgument` when legacy string content is malformed UTF-8
 /// @example encode('hello')
 inner func encode(text: string): Bytes {
     return 'bytes:encode'

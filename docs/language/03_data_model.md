@@ -15,7 +15,8 @@
 | 整数 | `int`（即 `i64`）、`i32` | 64 位、32 位有符号 |
 | 浮点数 | `float`（即 `f64`）、`f32` | 双精度、单精度 |
 | 布尔 | `bool` | `true`、`false` |
-| 字符串 | `string` | 字节序列，不可变 |
+| 字符串 | `string` | 合法的 UTF-8 文本，不可变；长度与下标按码点 |
+| 字节串 | `Bytes` | 二进制数据，不可变；内建类型名，与 `string` 之间显式编码、解码 |
 | 数组 | `T[]` | 元素类型相同，长度在运行时确定 |
 | 元组 | `(T1, T2, ...)` | 按位置，用 `.0`、`.1` 访问 |
 | 结构体 | `{ x: T1, y: T2 }` | 按名字，用 `.x` 访问 |
@@ -151,37 +152,37 @@ println(p, q.x)
 
 ### 3.3.4 字符串
 
-字符串是不可变的字节序列，长度与下标都按字节。内建的操作：
+字符串是不可变的文本，**总是合法的 UTF-8**，长度与下标按码点计：`len('中文')` 是 2，`'中'[0]` 是 `'中'`。二进制数据用内建类型 `Bytes`（和 `string` 一样不必导入），两者之间显式转换：`bytes::encode`、`bytes::decode`（解码非法 UTF-8 得到错误值）；`str::from_bytes([255])` 这样用非法字节造字符串，在调用处就是故障。内建的操作：
 
 | 写法 | 结果 |
 |---|---|
-| `len(s)` | 字节数 |
-| `s->contains<sub>` | `sub` 是否出现在 `s` 里（按字节比较）；空串总是出现：`'hello'->contains<'ell'>` 是 `true`。写法与数组的 `contains` 相同 |
+| `len(s)` | 码点数 |
+| `s->contains<sub>` | `sub` 是否出现在 `s` 里（逐字节比较，结果与按码点相同）；空串总是出现：`'hello'->contains<'ell'>` 是 `true`。写法与数组的 `contains` 相同 |
 | `a + b` | 连接 |
-| `==`、`!=`、`<`、`>`、`<=`、`>=` | 按字节逐个比较，真前缀在前 |
+| `==`、`!=`、`<`、`>`、`<=`、`>=` | 按码点顺序比较（与 UTF-8 字节序相同），真前缀在前 |
 | `string(x)`、`int(s)`、`float(s)`、`parse_int(s)`、`parse_float(s)` | 转换，见 3.2 |
 | `fmt->format<a, b, ...>` | 格式化：`{}` 依次取实参，`{:.2f}`、`{:5d}`、`{:.17g}` 等指定格式；实参不够是故障 |
 | `strs->join<sep>` | 连接字符串数组 |
-| `s[i]` | 第 `i` 个字节，结果是只含这一个字节的字符串；越界是故障 |
+| `s[i]` | 第 `i` 个码点，结果是只含这一个字符的字符串；越界是故障 |
 
-其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：按字节的 `split`、`trim`、`to_upper`、`to_lower`、`replace`、`find`、`substr`、`starts_with`、`ends_with`、`repeat`、`bytes`；按码点的 `char_count`、`char_at`、`char_substr`、`codepoints`、`from_codepoints`。
+其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`find`、`substr`（下标与长度按码点）、`starts_with`、`ends_with`、`repeat`、`bytes`、`from_bytes`、`codepoints`、`from_codepoints`。
 
 ```cml
-import { split, trim, to_upper, char_count } from str
+import { split, trim, to_upper } from str
 
 func main(): int sync {
     println('a, b ,c'->split<','>->map<(w: string): string => trim(w)>)
-    println('héllo'->to_upper, len('héllo'), char_count('héllo'), 'hello'[1])
+    println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
     return 0
 }
 ```
 
 ```text
 [a, b, c]
-HéLLO 6 5 e
+HéLLO 5 é e
 ```
 
-`s[i]` 的结果是单字节字符串还是数值，是当前实现的行为，尚待确定。
+`s[i]` 的结果是单字符的字符串，不是数值；取码点的数值用 `str::codepoints`。字符串字面量里的转义 `\xHH` 只能拼出合法的 UTF-8（`'\xE4\xB8\xAD'` 是 `'中'`，单独的 `'\xE4'` 是编译错误）；`\u{4E2D}` 直接写码点。
 
 ### 3.3.5 不能比较的值
 

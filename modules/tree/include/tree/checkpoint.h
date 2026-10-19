@@ -17,13 +17,11 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-// Filesystem publication consumes only native-owned byte snapshots.
+// Atomic, typed snapshots of ordinary Camel training-state trees.
 #pragma once
-#include <filesystem>
-#include <string>
-#include <vector>
-namespace camel::nn {
-using CheckpointFiles = std::vector<std::pair<std::string, std::string>>;
-void publishCheckpoint(const std::filesystem::path &directory, const CheckpointFiles &files);
-std::string readCheckpointFile(const std::filesystem::path &directory, const std::string &name);
-} // namespace camel::nn
+#include "camel/core/operator.h"
+namespace camel::treelib {
+std::vector<oper_group_ptr_t> checkpointOperatorGroups();
+std::unordered_map<std::string, operator_t> checkpointKernels();
+void declareCheckpointResources();
+} // namespace camel::treelib

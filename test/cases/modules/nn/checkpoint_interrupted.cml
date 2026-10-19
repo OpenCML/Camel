@@ -1,7 +1,7 @@
 // Manual crash-publication probe: kill the process after its pending directory appears.
 module checkpoint_interrupted
 import { zeros, set_num_threads } from tensor
-import { save_tree } from nn
+import { save_tree } from tree
 func main(out: string): int sync {
     set_num_threads(1)
     save_tree(out, zeros([16777216]))

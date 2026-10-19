@@ -1,10 +1,8 @@
-module fault_char_at
-
-import { char_at } from str
+module fault_string_index
 
 func main(): int sync {
     println('before')
-    println('h€'->char_at<2>)
+    println('中文'[2])
     println('not reached')
     return 0
 }

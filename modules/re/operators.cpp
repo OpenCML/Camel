@@ -22,6 +22,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 
+#include "camel/utils/utf8.h"
 #include <regex>
 #include <string>
 
@@ -68,12 +69,36 @@ std::string regexErrorReason(const std::regex_error &e) {
     }
 }
 
+// Text with characters above ASCII is matched as wide characters, so that `.` and a class
+// stand for one code point and not for one byte (a string counts code points; design
+// principles 2.17). Where wchar_t is 16 bits (Windows) a code point above U+FFFF is two units.
+std::wstring widen(std::string_view text) {
+    std::wstring out;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        const uint32_t cp = camel::utf8::decodeOne(text, pos);
+        if constexpr (sizeof(wchar_t) == 2) {
+            if (cp > 0xFFFF) {
+                out.push_back(static_cast<wchar_t>(0xD800 + ((cp - 0x10000) >> 10)));
+                out.push_back(static_cast<wchar_t>(0xDC00 + ((cp - 0x10000) & 0x3FF)));
+                continue;
+            }
+        }
+        out.push_back(static_cast<wchar_t>(cp));
+    }
+    return out;
+}
+
 } // namespace
 
 slot_t __re_test__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *pattern = norm.get<String *>(0);
     String *text    = norm.get<String *>(1);
     try {
+        if (!camel::utf8::isAscii(pattern->view()) || !camel::utf8::isAscii(text->view())) {
+            std::wregex re(widen(pattern->view()));
+            return toSlot(std::regex_search(widen(text->view()), re));
+        }
         std::regex re(pattern->c_str());
         bool match = std::regex_search(text->c_str(), re);
         return toSlot(match);

@@ -23,6 +23,7 @@
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/rtdata/string.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
@@ -1643,8 +1644,8 @@ void Builder::settleGenericOperatorArguments(
                 }
             };
             for (const auto &[uri, resolver] : group->resolvers()) {
-                if (auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver)) {
-                    add(uri, fixed->funcType());
+                if (FunctionType *fixed = resolver->fixedSignature()) {
+                    add(uri, fixed);
                     continue;
                 }
                 // A signature computed from the argument types: asked for the candidate
@@ -3126,7 +3127,7 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
             }
         }
     }
-    set.ops = OperatorGroup::create(group, std::move(resolvers));
+    set.ops = OperatorGroup::merged(group, std::move(resolvers));
     return importedOperators_.emplace(key, std::move(set)).first->second;
 }
 
@@ -3246,9 +3247,9 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         return true;
     };
     const bool builtinExact = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
-        const auto *fixed = dynamic_cast<const StaticFuncTypeResolver *>(entry.second.get());
-        return fixed != nullptr && exactFor(fixed->funcType()) &&
-               fixed->resolve(withTypes, normTypes, Modifier::None).has_value();
+        FunctionType *fixed = entry.second->fixedSignature();
+        return fixed != nullptr && exactFor(fixed) &&
+               entry.second->resolve(withTypes, normTypes, Modifier::None).has_value();
     });
     const auto where        = [&](const void *overload) {
         const auto it = set.moduleOf.find(overload);
@@ -3381,13 +3382,13 @@ void Builder::rejectOperatorConflict(
     // family of types (by content, a type rule over several types) is less specific, and this
     // one is preferred where both apply (design principles 2.13; chooseOperatorOverload).
     const bool sameAsBuiltin = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
-        const auto *fixed = dynamic_cast<const StaticFuncTypeResolver *>(entry.second.get());
-        if (fixed == nullptr || fixed->funcType()->withTypesCount() != 0 ||
-            fixed->funcType()->normTypesCount() != params.size()) {
+        const FunctionType *fixed = entry.second->fixedSignature();
+        if (fixed == nullptr || fixed->withTypesCount() != 0 ||
+            fixed->normTypesCount() != params.size()) {
             return false;
         }
         for (size_t i = 0; i < params.size(); ++i) {
-            if (!fixed->funcType()->normTypeAt(i)->equals(params[i])) {
+            if (!fixed->normTypeAt(i)->equals(params[i])) {
                 return false;
             }
         }
@@ -3719,8 +3720,8 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
         const auto &ops = std::get<oper_group_ptr_t>(target);
         if (ops->resolvers().size() == 1) {
             const auto &[uri, resolver] = ops->resolvers().front();
-            if (auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver)) {
-                auto op = std::make_shared<OperatorIndex>(ops->name(), fixed->funcType(), uri);
+            if (FunctionType *fixed = resolver->fixedSignature()) {
+                auto op = std::make_shared<OperatorIndex>(ops->name(), fixed, uri);
                 if (compile_graph_ptr_t graph = operatorValueGraphOf(op, origin)) {
                     return createFuncDataNode(graph, true, false);
                 }
@@ -3908,8 +3909,7 @@ void Builder::rejectNameWithoutValue(
             "; ",
             [](const std::pair<std::string, resolver_ptr_t> &p) { return p.second->signature(); });
         if (ops->resolvers().size() == 1) {
-            const bool fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(
-                                   ops->resolvers().front().second) != nullptr;
+            const bool fixed = ops->resolvers().front().second->fixedSignature() != nullptr;
             what = fixed ? std::format("an operator that changes its argument in place [{}]", sigs)
                          : std::format(
                                "an operator whose signature depends on its arguments [{}]",
@@ -4208,9 +4208,9 @@ node_handle_t Builder::partialApplicationOf(
             // called, so its binding cannot stand alone.
             for (const auto &[uri, resolver] :
                  std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
-                auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver);
-                if (fixed && fits(fixed->funcType())) {
-                    calleeType = fixed->funcType();
+                FunctionType *fixed = resolver->fixedSignature();
+                if (fixed && fits(fixed)) {
+                    calleeType = fixed;
                     ++candidates;
                 }
             }
@@ -4335,28 +4335,19 @@ node_handle_t Builder::partialApplicationOf(
 
 node_handle_t Builder::compoundAssignmentByRebinding(
     const std::string &group, const GCT::node_ptr_t &gct, const std::vector<Argument> &operands) {
-    static const std::unordered_map<std::string, std::string> kPlainOperator = {
-        {"__assn_add__", "__add__"},
-        {"__assn_sub__", "__sub__"},
-        {"__assn_mul__", "__mul__"},
-        {"__assn_div__", "__div__"},
-        {"__assn_mod__", "__mod__"},
-        {"__assn_mat__", "__mat__"},
-        {"__assn_pow__", "__pow__"},
-        {"__assn_and__", "__and__"},
-        {"__assn_or__", "__or__"},
-    };
-    const auto plain = kPlainOperator.find(group);
-    if (plain == kPlainOperator.end() || operands.size() != 2) {
+    // The plain operator a compound assignment follows: the table of operator_names.cpp.
+    const auto plainGroup = camel::core::plainGroupOfCompoundAssignment(group);
+    if (!plainGroup || operands.size() != 2) {
         return nullptr;
     }
+    const std::string plainName(*plainGroup);
     // Only for a type a module defines. The built-in types have their own operators, and
     // where one is missing (`%=` on a float, `+=` on an array) that stays an error.
     // Or for any type when the program overloads the plain operator: `m &= n` on a type of
     // the program is `m = m & n` through its `operator &` (design principles 2.11, 2.12).
     Type *target = valueTypeOf(nodeTypeOf(operands[0].node));
     if (target == nullptr ||
-        (!target->isOtherType() && !hasProgramOperatorOverloads(plain->second))) {
+        (!target->isOtherType() && !hasProgramOperatorOverloads(plainName))) {
         return nullptr;
     }
     const auto make = [&](GCT::node_ptr_t node) {
@@ -4366,7 +4357,7 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // The right operand is evaluated once: it was built already, and is named here.
     const std::string right = bindTemporary(valueOf(operands[1].node));
     GCT::node_ptr_t value   = make(tree_->makeLink(2));
-    *value << make(tree_->makeDRef(plain->second)) << tree_->clone(operands[0].expr)
+    *value << make(tree_->makeDRef(plainName)) << tree_->clone(operands[0].expr)
            << make(tree_->makeDRef(right));
     GCT::node_ptr_t assign = make(tree_->makeLink(2));
     *assign << make(tree_->makeDRef("__assn__")) << tree_->clone(operands[0].expr) << value;
@@ -5511,12 +5502,25 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         normInputs.push_back({inputNode, gct->at(i)});
         normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
     }
-    if (gct->size() == 3 && nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
-        // `error(kind, message)`: an error value records where it was made (design
-        // principles 2.9), so the position of this call is its third, constant argument.
+    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+        // An operator that declares it takes the position of its call at this many arguments
+        // (CallSpec::callSiteAtArity; `error(kind, message)`: an error value records where it
+        // was made, design principles 2.9) gets that position as one more, constant argument.
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
-        if (std::holds_alternative<oper_group_ptr_t>(drefTarget) &&
-            std::get<oper_group_ptr_t>(drefTarget)->name() == "error") {
+        const auto takesCallSite = [&] {
+            if (!std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
+                return false;
+            }
+            for (const auto &[uri, resolver] : std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
+                const auto *spec = camel::core::OperatorTable::instance().callSpec(uri);
+                if (spec != nullptr && spec->callSiteAtArity >= 0 &&
+                    static_cast<size_t>(spec->callSiteAtArity) + 1 == gct->size()) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (takesCallSite()) {
             node_handle_t location = currGraph_->addStaticDataNode(
                 tt::as_shared<Data>(
                     std::make_shared<StringData>(sourceLocationOf(gct->at(0)->origin()))));
@@ -5940,7 +5944,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // static tensor shape conflict); report that instead of "no match".
                 std::vector<std::string> reasons;
                 for (const auto &[uri, resolver] : ops->resolvers()) {
-                    if (auto reason = resolver->explainRejection(
+                    if (auto reason = resolver->explainCallRejection(
+                            explicitTypes,
+                            expectedResult,
                             withInputTypes,
                             normInputTypes,
                             normStatics,
@@ -6025,10 +6031,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // `foreach` drops what its element function gives: the value of the body of a
             // function written in place here is a value nothing takes (design principles
             // 2.12). A function named here may be used elsewhere, where its value counts.
-            if (const auto operId = camel::core::OperatorTable::instance().lookup(targetOperator->uri());
-                operId && camel::core::OperatorTable::instance().elementCalls(*operId) != nullptr &&
-                camel::core::OperatorTable::instance().elementCalls(*operId)->shape ==
-                    camel::core::sem::ElementShape::Foreach) {
+            // The operator says so itself (CallSpec::discardsCallbackResult).
+            const auto *callSpec =
+                camel::core::OperatorTable::instance().callSpec(targetOperator->uri());
+            if (callSpec != nullptr && callSpec->discardsCallbackResult) {
                 for (const Argument &input : withInputs) {
                     if (input.expr == nullptr) {
                         continue;
@@ -6036,6 +6042,33 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     if (auto element = lambdaGraphs_.find(input.expr);
                         element != lambdaGraphs_.end()) {
                         rejectDiscardedValue(element->second);
+                    }
+                }
+            }
+            // A constant format string is checked against the arguments it formats now, not
+            // when the program runs (CallSpec::checkFormat; design principles 2.7).
+            if (callSpec != nullptr && callSpec->checkFormat) {
+                const bool patternInWith = callSpec->formatWithArg >= 0;
+                const auto &patterns     = patternInWith ? withInputs : normInputs;
+                const size_t at          = static_cast<size_t>(
+                    patternInWith ? callSpec->formatWithArg : callSpec->formatNormArg);
+                if (at < patterns.size()) {
+                    const StaticArg pattern = staticArgOf(patterns[at].node);
+                    if (pattern.value.has_value() && *pattern.value != NullSlot &&
+                        valueTypeOf(nodeTypeOf(patterns[at].node))->code() == TypeCode::String) {
+                        const std::string_view text =
+                            rtdata::fromSlot<const ::String *>(*pattern.value)->view();
+                        const type_vec_t &formatted =
+                            patternInWith ? normInputTypes : withInputTypes;
+                        if (const auto problem = callSpec->checkFormat(text, formatted)) {
+                            diags_->of(SemanticDiag::ArgumentsRejected)
+                                .atOrigin(patterns[at].expr->origin())
+                                .commit(
+                                    ops->name(),
+                                    "format string '" + std::string(text) + "'",
+                                    *problem);
+                            throw BuildAbortException();
+                        }
                     }
                 }
             }

@@ -2,7 +2,7 @@
 // Run: camel docs/tutorial/examples/12_stdlib.cml
 module stdlib_demo
 
-import { split, trim, to_upper, replace, find, char_count } from str
+import { split, trim, to_upper, replace, find } from str
 import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
 import { mean } from statistics
@@ -12,7 +12,7 @@ func main(): int sync {
     let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w: string): string => trim(w)>
     println(words)
     println(words->unique->sort_by<(w: string): int => len(w)>->take<2>)
-    println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'), char_count('héllo'))
+    println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
 
     // A result that may not exist is a T?.
     let at_l = 'hello'->find<'l'> ?? -1

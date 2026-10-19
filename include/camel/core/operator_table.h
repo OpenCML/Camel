@@ -191,6 +191,30 @@ struct AttrGrant {
     std::function<std::optional<attr::AttrValueId>(std::span<const data::data_ptr_t> with)> value;
 };
 
+/**
+ * What the compiler does at a call of the operator because of what the operator is (design
+ * principles 2.17): facts of the operator, declared with it, instead of names the compiler
+ * knows. Declared at module load time (OperatorTable::declareCallSpec).
+ */
+struct CallSpec {
+    /// When the call is written with exactly this many ordinary arguments (-1: never), the
+    /// compiler appends the position of the call as one more, constant string argument: like
+    /// Rust's `#[track_caller]`. `error(kind, message)` uses it.
+    int8_t callSiteAtArity = -1;
+    /// The operator calls its function arguments and drops what they return (`foreach`): a
+    /// function written in place there whose value is a value nothing takes is refused.
+    bool discardsCallbackResult = false;
+    /// The index of the with-argument, or of the ordinary argument, that is a format string
+    /// (-1: none): when it is a constant, the compiler checks it against the other arguments.
+    int8_t formatWithArg = -1;
+    int8_t formatNormArg = -1;
+    /// Checks a constant format string against the types of the arguments it formats; returns
+    /// what is wrong with it, nullopt when it is fine. Set together with the index above.
+    std::function<std::optional<std::string>(
+        std::string_view pattern, std::span<type::Type *const> argumentTypes)>
+        checkFormat;
+};
+
 class OperatorTable {
   public:
     static OperatorTable &instance();
@@ -291,6 +315,15 @@ class OperatorTable {
 
     /// What the operator `uri` grants, or nullptr when it is not declared to grant anything.
     std::shared_ptr<const AttrGrant> grantOf(std::string_view uri) const;
+
+    // ---- Call-site facts (CallSpec) --------------------------------------------------------
+
+    /// Declares the call-site facts of the operator `uri` (module load time).
+    void declareCallSpec(std::string_view uri, CallSpec spec);
+
+    /// The call-site facts of the operator, or nullptr when it declares none. The pointer stays
+    /// valid until the spec of the same operator is replaced (load time only).
+    const CallSpec *callSpec(std::string_view uri) const;
 
     // ---- Type rules -----------------------------------------------------------------------
 
@@ -438,6 +471,9 @@ class OperatorTable {
         SymId inPlace = kEmptySym;
         /// What it grants as a decorator (declareGrant), or nullptr.
         std::shared_ptr<const AttrGrant> grant;
+
+        /// The call-site facts (declareCallSpec), or null.
+        std::unique_ptr<CallSpec> callSpec;
         /// The published semantics record (owned by declarations_), or nullptr.
         std::atomic<const sem::OperatorSemantics *> semantics{nullptr};
     };

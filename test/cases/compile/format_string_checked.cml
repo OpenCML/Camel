@@ -1,0 +1,5 @@
+module format_string_checked
+func main(): int sync {
+    println<'{} and {}'>(1)
+    return 0
+}

@@ -102,7 +102,7 @@ stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
 moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
 moduleDecl         : 'module' identDef
-importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from' moduleName)
+importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from'
 bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
 importItem         : identDef ('as' identDef)?
 exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
@@ -155,8 +155,7 @@ linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
-annoExpr           : accessExpr (indices | parentArgues | angledValues | typeArguments | '!' | memberAccess)*
-memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
+annoExpr           : accessExpr (indices | parentArgues | angledValues | typeArguments | '!' |
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
 primaryData        : identRef | literal | arrayData | structData | tupleData | funcData
 literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
@@ -170,7 +169,8 @@ indexValues        : indexValue (',' indexValue)*
 indices            : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']'
 parentArgues       : '(' argumentList? ','? ')'
 angledValues       : '<' argumentList? ','? '>'
-typeArguments      : '::' '<' typeList ','? '>'
+typeArguments      : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
+namedTypeArgument  : IDENTIFIER '=' typeExpr
 arrayData          : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' dataExpr ('if' dataExpr)?)?
                      ']'
 structData         : '{' (pairedValues ','?)? '}'

@@ -33,6 +33,51 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
+name = "explicit_type_arguments_by_name"
+desc = "Explicit type arguments by position (order of first appearance in the signature) or by name `A = int`, in any order (design principles 2.17)."
+kind = "behavior"
+case = "../../../cases/compile/generic_explicit_named.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "(1, s)\n(1, s)\n(1, s)\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_argument_unknown_name"
+desc = "A named type argument that is not a type parameter of the function."
+kind = "negative"
+case = "../../../cases/compile/generic_explicit_named_unknown.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_output_contains = ["'U' is not a type parameter of second"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_argument_missing_name"
+desc = "Named type arguments must give every type parameter."
+kind = "negative"
+case = "../../../cases/compile/generic_explicit_named_missing.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_output_contains = ["type parameter 'B' is not given"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_arguments_not_mixed"
+desc = "Positional and named type arguments cannot be mixed: a syntax error."
+kind = "negative"
+case = "../../../cases/compile/generic_explicit_mixed.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
 name = "explicit_type_argument_arity"
 desc = "A type application reports an incorrect number of type arguments before runtime."
 kind = "negative"

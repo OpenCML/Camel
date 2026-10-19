@@ -18,7 +18,7 @@
  */
 
 // A checkpoint is immutable: flush a private sibling directory, then publish once.
-#include "include/nn/checkpoint_io.h"
+#include "include/tree/checkpoint_io.h"
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
@@ -36,7 +36,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #endif
-namespace camel::nn {
+namespace camel::treelib {
 namespace fs = std::filesystem;
 namespace {
 void nameCheck(const std::string &name) {
@@ -208,4 +208,4 @@ std::string readCheckpointFile(const fs::path &directory, const std::string &nam
         throw std::invalid_argument(name + ": checkpoint file changed or read failed");
     return bytes;
 }
-} // namespace camel::nn
+} // namespace camel::treelib

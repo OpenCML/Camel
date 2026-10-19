@@ -1,0 +1,10 @@
+module fault_from_bytes_utf8
+
+import { from_bytes } from str
+
+func main(): int sync {
+    println('before')
+    println(from_bytes([255]))
+    println('not reached')
+    return 0
+}

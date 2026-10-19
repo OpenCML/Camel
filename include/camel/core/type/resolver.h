@@ -79,6 +79,15 @@ class FuncTypeResolver {
     }
 
     /**
+     * The one signature this rule accepts, when it does not depend on the arguments: the
+     * rule is then exactly that function type. nullptr for a rule that accepts a family of
+     * types (its result is computed from the argument types). Whether an overload of the
+     * program is "more specific" than a rule of an operator is decided from this declaration
+     * and nothing else (design principles 2.13, 2.17).
+     */
+    virtual FunctionType *fixedSignature() const { return nullptr; }
+
+    /**
      * Resolution that may also use the values of constant arguments, for operators whose result
      * type depends on them (e.g. a tensor constructor whose shape is given by a shape literal).
      * The default ignores the values.
@@ -104,6 +113,13 @@ class FuncTypeResolver {
      * precise than "no match": for example, the argument kinds fit but statically known tensor
      * shapes conflict. Returns nullopt when the arguments simply do not fit this overload.
      */
+    virtual std::optional<std::string> explainCallRejection(
+        const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
+        const type_vec_t &norm, static_args_t normStatics, const ModifierSet &modifiers) const {
+        (void)expectedResult;
+        return types.empty() ? explainRejection(with, norm, normStatics, modifiers) : std::nullopt;
+    }
+
     virtual std::optional<std::string> explainRejection(
         const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
         const ModifierSet &modifiers) const {
@@ -148,6 +164,7 @@ class StaticFuncTypeResolver : public FuncTypeResolver {
     }
 
     FunctionType *funcType() const { return funcType_; }
+    FunctionType *fixedSignature() const override { return funcType_; }
 
   private:
     FunctionType *funcType_;
@@ -196,12 +213,21 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         return true;
     }
 
+    /// Declares that this rule accepts exactly one signature (a rule that adds a check, such
+    /// as a shape check, to a signature that is otherwise fixed). Returns the resolver.
+    DynamicFuncTypeResolver *declareFixedSignature(FunctionType *signature) {
+        fixed_ = signature;
+        return this;
+    }
+    FunctionType *fixedSignature() const override { return fixed_; }
+
     /// The declared number of with- and ordinary parameters; -1 for any number.
     int withCount() const { return withVars_.first; }
     int normCount() const { return normVars_.first; }
 
   private:
     std::string signature_;
+    FunctionType *fixed_ = nullptr;
     var_declare_t withVars_, normVars_;
     ResolverFunc resolver_;
 };

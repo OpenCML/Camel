@@ -87,7 +87,7 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         if (name.empty()) {
             return std::nullopt;
         }
-        return OperatorGroup::create(name, std::move(allResolvers));
+        return OperatorGroup::merged(name, std::move(allResolvers));
     }
     if (detail::EntityAccess::isDecoratedGraph(first)) {
         for (const auto &ent : entities) {

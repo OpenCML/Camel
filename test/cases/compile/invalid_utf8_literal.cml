@@ -1,0 +1,6 @@
+module invalid_utf8_literal
+func main(): int sync {
+    // 0xE4 alone is the first byte of a three-byte character, not a character
+    println('\xE4')
+    return 0
+}

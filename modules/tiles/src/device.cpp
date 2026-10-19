@@ -9,6 +9,7 @@
  */
 
 // Interned device storage types preserve the host tensor's static refinements.
+#include "camel/core/type/tree.h"
 #include "tiles/device.h"
 #include "camel/core/mm.h"
 #include "camel/core/type/composite/struct.h"
@@ -69,48 +70,27 @@ slot_t DeviceType::castSlotFrom(slot_t value, Type *other) const {
 }
 bool DeviceType::typeArguments() const { return true; }
 namespace {
+// `Device<T>` over a tree is a tree of `Device` leaves; what a tree and a path are comes from
+// core::type::tree (design principles 2.16, 2.17).
 Type *distributeDevice(Type *host, const std::string &path, std::string &error) {
-    if (host->code() == TypeCode::Tuple) {
-        auto *tuple = static_cast<TupleType *>(host);
-        // Nullable/fallible boxes and mutable cells are not ordinary tuple trees.
-        if (tuple->isTagged() || tuple->isCell()) {
-            error = "Device leaf '" + path + "' has unsupported type " + host->toString();
+    return core::type::tree::mapLeaves(
+        host,
+        [&](const std::string &leafPath, Type *leaf) -> Type * {
+            if (tensor::asTensorType(leaf) || leaf->code() == TypeCode::Float64 ||
+                leaf->code() == TypeCode::TypeVar)
+                return DeviceType::get(leaf);
+            error = "Device leaf '" + core::type::tree::displayPath(leafPath) +
+                    "' has unsupported type " + leaf->toString() + "; expected a tensor or float";
             return nullptr;
-        }
-        type_vec_t fields;
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            auto *field = distributeDevice(tuple->typeAt(i), path + "." + std::to_string(i), error);
-            if (!field)
-                return nullptr;
-            fields.push_back(field);
-        }
-        return TupleType::create(fields);
-    }
-    if (host->code() == TypeCode::Struct) {
-        auto *record = static_cast<StructType *>(host);
-        StructTypeFactory fields;
-        for (size_t i = 0; i < record->size(); ++i) {
-            const std::string name(record->fieldName(i));
-            auto *field = distributeDevice(record->typeAt(i), path + "." + name, error);
-            if (!field)
-                return nullptr;
-            fields.add(name, field);
-        }
-        return fields.build();
-    }
-    if (tensor::asTensorType(host) || host->code() == TypeCode::Float64 ||
-        host->code() == TypeCode::TypeVar)
-        return DeviceType::get(host);
-    error = "Device leaf '" + path + "' has unsupported type " + host->toString() +
-            "; expected a tensor or float";
-    return nullptr;
+        },
+        path);
 }
 } // namespace
 Type *DeviceType::cloneWithParams(std::span<Type *const> params) const {
     if (params.size() != 1)
         return nullptr;
     std::string error;
-    return distributeDevice(params[0], "$", error);
+    return distributeDevice(params[0], "", error);
 }
 Type *
 DeviceType::cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const {
@@ -118,7 +98,7 @@ DeviceType::cloneWithArguments(std::span<const TypeArgument> arguments, std::str
         error = "Device takes exactly one type argument";
         return nullptr;
     }
-    return distributeDevice(arguments[0].type, "$", error);
+    return distributeDevice(arguments[0].type, "", error);
 }
 const DeviceType *asDeviceType(const Type *type) {
     return type && type->code() == DeviceType::typeCode() ? static_cast<const DeviceType *>(type)

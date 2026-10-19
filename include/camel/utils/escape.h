@@ -24,6 +24,8 @@
 #include <iomanip>
 #include <sstream>
 
+#include "camel/utils/utf8.h"
+
 inline std::string encodeEscapes(const std::string &input) {
     std::ostringstream oss;
 
@@ -154,6 +156,31 @@ inline std::string decodeEscapes(const std::string &input) {
                     char ch = static_cast<char>(std::stoi(hex, nullptr, 16));
                     oss << ch;
                     i = j;
+                } else {
+                    oss << '\\' << next;
+                    i += 2;
+                }
+            } break;
+
+            case 'u': { // \u{H...}: one Unicode code point, written as 1 to 6 hex digits
+                size_t j       = i + 2;
+                uint32_t value = 0;
+                size_t digits  = 0;
+                if (j < len && input[j] == '{') {
+                    ++j;
+                    while (j < len && digits < 6 &&
+                           std::isxdigit(static_cast<unsigned char>(input[j]))) {
+                        const char d = input[j];
+                        value        = value * 16 + (d <= '9' ? d - '0' : (d | 0x20) - 'a' + 10);
+                        ++digits;
+                        ++j;
+                    }
+                }
+                if (digits > 0 && j < len && input[j] == '}' && camel::utf8::isScalarValue(value)) {
+                    std::string encoded;
+                    camel::utf8::encodeOne(value, encoded);
+                    oss << encoded;
+                    i = j + 1;
                 } else {
                     oss << '\\' << next;
                     i += 2;
