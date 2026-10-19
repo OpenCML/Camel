@@ -202,7 +202,8 @@ let area = match b {
 3. **节点标签**（`on nodes`）用现有的节点属性实现：区域上的事实累积，同名带参的内层为准。**声明标签**（`on func`、`on type`、`on field`）存在声明上，C++ 查询接口可读；编译期代码中的读取（`match type`、`fields`）随泛型第一期接入，本任务只提供存储与 C++ 查询。
 4. **数值许可改为标签**：标准库把 `reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals` 声明为 `on nodes` 的标签，`finite_math` 为别名组。删除编译器前端的 `numeric` 分支与名单、`@name(...)` 写法（旧写法给出指向 `#[reassociate]` 的诊断）、一字节许可列；核心语义层通过节点标签读取许可（标签与含义的对应只在一处）；所有读者（算式优化、`tensor::fuse`、`inspect`、`std::jgir`、Tiles）改为同一个辅助函数。Tiles 只改到能编译。
 5. **`@vjp` 改为 `#vjp<rule>`**（声明标签，值为规则函数的图引用），自动微分直接读取，删除靠宏求值与 `attachRule` 的做法。
-6. **`macro` 改为 `#foldable`**：`std::macro` 读标签；故障提前为编译错误只限一定执行的调用；删除函数类型中的 `Modifier::Macro`。删除关键字 `inner`、`outer`、`atomic`、`shared`（标准库签名中的 `inner func` 改为无函数体的声明）。
+6. **`macro` 改为标准标签 `#macro`**（不用导入）：`std::macro` 读标签，含义按设计原则第 3 节不变；求值失败按运行时故障处理，与任何遍运行中的故障相同；删除函数类型中的 `Modifier::Macro`。删除关键字 `inner`、`outer`、`atomic`、`shared`（标准库签名中的 `inner func` 改为无函数体的声明）。
+8. **标签可声明读取它的遍**：`tag 名 ... read_by 遍名`（写法可调整，报告中说明）；流水线中没有该遍时给出"标签没有效果"的警告。
 7. 许可、宏、自定义导数的原有测试改为新写法后全部通过；语言参考、标准库参考、诊断目录同步更新。
 
 ### H3：依赖节点属性的后续
@@ -265,3 +266,4 @@ let area = match b {
 4. ~~声明上的标签~~ 已并入 H2。原文：在节点标签机制（`include/camel/core/node_attrs.h`）之上，为函数、类型声明、结构体字段增加声明上的标签，登记方式相同；`fields T` 与 `match type` 能读到（随泛型第一期一起做时再接入）；**`@vjp` 改为函数声明上的标签**（值为规则函数的图引用），自动微分直接读取，删除 `modules/autodiff/operators.cpp` 中靠宏求值与 `attachRule` 的做法；测试覆盖跨模块使用与模块缓存。
 5. **未跑完全套测试**：三条地基（遍参数、效应统一、前端清理）合并时只跑了相关计划与冒烟测试。先跑一次全套，把与第 1.2 节基线相比新增的失败逐个修掉，写进报告。**这一项最先做。**
 6. **`#` 不再是注释**（2.20）：词法只保留首行 `#!`；仓库中所有 `#` 注释改为 `//`（`.cml` 文件、测试、文档示例、编辑器语法文件）；与 H2 同时合并。
+7. **撤回默认流水线登记**（设计原则 2.17 已改）：删除 `registerDefaultPipelinePass`、`--no-module-passes` 及相关测试与文档；遍参数语法与模块登记遍名保留。需要某个遍的库（如自动微分需要 `std::macro`）在前提不满足时给出说明要加哪个遍的诊断。
