@@ -125,6 +125,12 @@ class MacroEvaluator {
         const std::function<void(camel::core::context::Frame *, camel::runtime::GCGraph *)>
             &fillArgs,
         bool requireMacroGraph);
+    /// Runs the native operator `op` (the operator `oper`) with its arguments. The call has a
+    /// function-call scope of its own (camel/execute/function_call.h): an operator that calls
+    /// graphs calls them in this evaluator, with its depth and its stack check; any other masks
+    /// the scope of whatever runs outside (design: native subgraph call, item 7).
+    slot_t callNativeOperator(
+        operator_t op, camel::core::OperId oper, ArgsView &withView, ArgsView &normView);
     slot_t executeGraph(camel::core::context::Frame *frame, camel::runtime::GCGraph *runtimeGraph);
     /// The LOOP node `node` of `graph` run in `frame` (camel/runtime/loop.h), round by round:
     /// the loop is not a recursion, so it takes no depth, only kMaxMacroLoopRounds rounds.

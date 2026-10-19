@@ -43,8 +43,7 @@
  * (namespace `oper` below): the table interns their URIs first, in a fixed order. An operator
  * of a module that a pass of the same module recognises is interned once by that pass and
  * compared by id. Families are flags of the entry, derived from the URI when it is interned:
- * built-in (`:` prefix: no module protocol), marked (`:mark/`: the schedulers run it
- * themselves, it calls the function values it receives) and assignment (`:op/assn...`: `=`
+ * built-in (`:` prefix: no module protocol) and assignment (`:op/assn...`: `=`
  * and the compound assignments, which store into a variable cell).
  *
  * The implementation (the C++ function pointer) is deliberately not in the table: it is
@@ -102,16 +101,8 @@ inline constexpr OperId kNoOper = 0;
 namespace oper {
 inline constexpr OperId VarNew              = 1;  // ":var/new"  `var v = e`
 inline constexpr OperId VarGet              = 2;  // ":var/get"  reading a variable
-inline constexpr OperId MapArr              = 3;  // ":mark/map_arr"
-inline constexpr OperId ApplyArr            = 4;  // ":mark/apply_arr"
-inline constexpr OperId FilterArr           = 5;  // ":mark/filter_arr"
-inline constexpr OperId ReduceArr           = 6;  // ":mark/reduce_arr"
-inline constexpr OperId UnorderedReduceArr  = 7;  // ":mark/unordered_reduce_arr"
-inline constexpr OperId ForeachArr          = 8;  // ":mark/foreach_arr"
-inline constexpr OperId UnorderedForeachArr = 9;  // ":mark/unordered_foreach_arr"
-inline constexpr OperId Isolate             = 10; // ":mark/isolate"  `attempt`
-inline constexpr OperId VarPeek             = 11; // ":var/peek" a read whose value cannot be kept
-inline constexpr OperId kWellKnownCount     = 12; // kNoOper included
+inline constexpr OperId VarPeek             = 3;  // ":var/peek" a read whose value cannot be kept
+inline constexpr OperId kWellKnownCount     = 4;  // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -125,14 +116,6 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     "",
     ":var/new",
     ":var/get",
-    ":mark/map_arr",
-    ":mark/apply_arr",
-    ":mark/filter_arr",
-    ":mark/reduce_arr",
-    ":mark/unordered_reduce_arr",
-    ":mark/foreach_arr",
-    ":mark/unordered_foreach_arr",
-    ":mark/isolate",
     ":var/peek",
 };
 
@@ -199,10 +182,16 @@ class OperatorTable {
     /// interpreter's own. Lock-free.
     bool isBuiltin(OperId id) const { return (entries_[id].family & kFamilyBuiltin) != 0; }
 
-    /// A `:mark/` operator: the schedulers run it themselves rather than through a function
-    /// pointer, because it calls the function values it receives (the higher-order array
-    /// operators and `attempt`). Lock-free.
-    bool isMarked(OperId id) const { return (entries_[id].family & kFamilyMarked) != 0; }
+    /// The operator declares how it calls the function values it receives (the higher-order
+    /// array operators and `attempt`): the schedulers may run it themselves, by that declaration,
+    /// rather than through its function pointer. Always a `callsGraphs` operator. Lock-free.
+    bool isMarked(OperId id) const { return elementCalls(id) != nullptr; }
+
+    /// The operator's element-call declaration, or nullptr.
+    const sem::ElementCalls *elementCalls(OperId id) const {
+        const sem::OperatorSemantics *declared = semantics(id);
+        return declared && declared->elementCalls ? &*declared->elementCalls : nullptr;
+    }
 
     /// An assignment (`:op/assn`, `:op/assn_l`, `:op/assn_add_i`, ...): `=` or a compound
     /// assignment, storing its second operand (or the result of the operation) into the
@@ -391,10 +380,9 @@ class OperatorTable {
         kInspectsGraphs = 1 << 6,
     };
 
-    // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isMarked).
+    // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isAssignment).
     enum : uint8_t {
         kFamilyBuiltin    = 1 << 0,
-        kFamilyMarked     = 1 << 1,
         kFamilyAssignment = 1 << 2,
     };
 

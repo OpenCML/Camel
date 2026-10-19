@@ -851,34 +851,28 @@ camel::runtime::GCGraph *NodeVMSchedPass::apply(camel::runtime::GCGraph *graph, 
 void NodeVMSchedPass::evalMarkedOperator(
     camel::core::OperId oper, camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef,
     Frame &currFrame) {
-    namespace ops = camel::core::oper;
-    switch (oper) {
-    case ops::MapArr:
-    case ops::ApplyArr:
+    // The way the operator calls its function is its declaration's (OperatorSemantics::
+    // elementCalls); NodeVM runs every call in order, whatever the calls leave open.
+    const auto *calls = camel::core::OperatorTable::instance().elementCalls(oper);
+    ASSERT(calls != nullptr, "A marked operator declares how it calls its function.");
+    switch (calls->shape) {
+    case camel::core::sem::ElementShape::Map:
         // `apply` (f from T to T) returns a new array, like `map`: it no longer changes the
         // array it is given (design principles 2.12).
         evalMarkedOperator_map_arr(graph, nodeRef, currFrame);
         break;
-    case ops::FilterArr:
+    case camel::core::sem::ElementShape::Filter:
         evalMarkedOperator_filter_arr(graph, nodeRef, currFrame);
         break;
-    case ops::ReduceArr:
-    case ops::UnorderedReduceArr:
+    case camel::core::sem::ElementShape::Fold:
         evalMarkedOperator_reduce_arr(graph, nodeRef, currFrame);
         break;
-    case ops::ForeachArr:
-    case ops::UnorderedForeachArr:
+    case camel::core::sem::ElementShape::Foreach:
         evalMarkedOperator_foreach_arr(graph, nodeRef, currFrame);
         break;
-    case ops::Isolate:
+    case camel::core::sem::ElementShape::Isolate:
         evalMarkedOperator_isolate(graph, nodeRef, currFrame);
         break;
-    default:
-        ASSERT(
-            false,
-            std::format(
-                "Mark operator {} not implemented in NodeVM.",
-                camel::core::OperatorTable::instance().uri(oper)));
     }
 }
 

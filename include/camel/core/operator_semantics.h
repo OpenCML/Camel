@@ -326,6 +326,39 @@ struct Definition {
     bool operator==(const Definition &) const = default;
 };
 
+// ---- Element calls (higher-order operators) ---------------------------------------------------
+
+/// How an operator that calls a function value uses it.
+enum class ElementShape : uint8_t {
+    Map,     // the function on each element of an array: the results are the elements of the result
+    Filter,  // the function on each element: the elements it answers true for
+    Foreach, // the function on each element, for its effects; the operator gives nothing
+    Fold,    // the function on the running value and each element, from an initial value
+    Isolate, // the function once, with the remaining operands; a fault in it becomes an error
+             // value (`attempt`)
+};
+
+/**
+ * The declaration of a higher-order operator (design principles 2.17): it calls the function
+ * value it receives, for the elements of an array or once, in the way `shape` says. Schedulers
+ * choose how to run it from this record, not from the operator's name: the operands are the
+ * array first and the function first among the with operands (Isolate: the function is the first
+ * ordinary operand), a Fold's initial value is the second with operand.
+ *
+ * `independent` is the property that lets calls run at once: the calls on different elements do
+ * not depend on one another, so they may run in any order or in parallel (a Fold: the program
+ * leaves the order of combining open). An operator that does not declare it runs its calls in
+ * order. The operator must be declared `callsGraphs` in its traits, and every such operator
+ * has the native implementation (the function-call service, camel/execute/function_call.h) that a
+ * scheduler without a fast path for its shape, or the macro evaluator, runs.
+ */
+struct ElementCalls {
+    ElementShape shape = ElementShape::Map;
+    bool independent   = false;
+
+    bool operator==(const ElementCalls &) const = default;
+};
+
 // ---- The record --------------------------------------------------------------------------
 
 struct OperatorSemantics {
@@ -341,6 +374,8 @@ struct OperatorSemantics {
     NumericSemantics numeric;
     /// The binary laws (section 7b); nullopt: not a binary operator the laws speak of.
     std::optional<BinaryAlgebra> binary;
+    /// A higher-order operator's use of the function it calls; nullopt: not one.
+    std::optional<ElementCalls> elementCalls;
     /// The faults the operator can raise. nullopt: not declared, the operator's mayFault trait
     /// decides ("may fault, anyhow"). An empty list: it never faults.
     std::optional<std::vector<FaultSpec>> faults;

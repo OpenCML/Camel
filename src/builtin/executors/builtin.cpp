@@ -29,6 +29,7 @@ using namespace camel::core::rtdata;
 
 #include "../operators/cast.h"
 #include "../operators/graph.h"
+#include "../operators/higher_order.h"
 #include "../operators/io.h"
 #include "../operators/macro.h"
 #include "../operators/ops.h"
@@ -237,6 +238,16 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // struct
         {"struct/len_str", __len_str__},
         {"struct/len_arr", __len_arr__},
+        // The higher-order operators: the one implementation of what they mean, by the
+        // function-call service. Schedulers that run a shape of call faster by the operator's
+        // declaration (OperatorSemantics::elementCalls) do; the macro evaluator runs these.
+        {"mark/map_arr", __map_arr__},
+        {"mark/apply_arr", __map_arr__},
+        {"mark/filter_arr", __filter_arr__},
+        {"mark/reduce_arr", __reduce_arr__},
+        {"mark/unordered_reduce_arr", __reduce_arr__},
+        {"mark/foreach_arr", __foreach_arr__},
+        {"mark/unordered_foreach_arr", __foreach_arr__},
 
         {"struct/zip", __zip__},
 
@@ -357,7 +368,9 @@ void registerBuiltinOperatorTraits() {
                             ":mark/apply_arr",
                             ":mark/filter_arr",
                             ":mark/reduce_arr",
-                            ":mark/foreach_arr"}) {
+                            ":mark/foreach_arr",
+                            ":mark/unordered_reduce_arr",
+                            ":mark/unordered_foreach_arr"}) {
         registry.set(uri, {.pure = false, .callsGraphs = true});
     }
     // The fault-isolation node calls the function it is given, and its result depends on

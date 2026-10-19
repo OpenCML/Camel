@@ -1657,35 +1657,42 @@ slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *grap
     }
 }
 
+std::optional<slot_t> TaskflowExecSchedPass::runMarkedOperator(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    // How the operator calls its function is its declaration's (OperatorSemantics::
+    // elementCalls); the property that lets the calls run at once is `independent`, the
+    // operator's name does not matter.
+    using camel::core::sem::ElementShape;
+    const auto *calls =
+        OperatorTable::instance().elementCalls(graph->nodeBodyAs<GCOperBody>(nodeRef)->oper);
+    ASSERT(calls != nullptr, "A marked operator declares how it calls its function.");
+    switch (calls->shape) {
+    case ElementShape::Isolate:
+        return executeIsolateNode(graph, nodeRef, frame);
+    case ElementShape::Map: // `apply` returns a new array like `map` (design principles 2.12)
+        mark_map_arr(graph, nodeRef, frame);
+        break;
+    case ElementShape::Filter:
+        mark_filter_arr(graph, nodeRef, frame);
+        break;
+    case ElementShape::Fold:
+        calls->independent ? mark_unordered_reduce_arr(graph, nodeRef, frame)
+                           : mark_reduce_arr(graph, nodeRef, frame);
+        break;
+    case ElementShape::Foreach:
+        calls->independent ? mark_unordered_foreach_arr(graph, nodeRef, frame)
+                           : mark_foreach_arr(graph, nodeRef, frame);
+        break;
+    }
+    return std::nullopt;
+}
+
 slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     // On the calling thread: an operator decides itself whether its elements are worth
     // tasks (runElements). A task graph per operator, as before, cost more than a `reduce`
     // over a handful of elements.
-    switch (graph->nodeBodyAs<GCOperBody>(nodeRef)->oper) {
-    case oper::Isolate:
-        return executeIsolateNode(graph, nodeRef, frame);
-    case oper::MapArr:
-    case oper::ApplyArr: // `apply` returns a new array like `map` (design principles 2.12)
-        mark_map_arr(graph, nodeRef, frame);
-        break;
-    case oper::FilterArr:
-        mark_filter_arr(graph, nodeRef, frame);
-        break;
-    case oper::ReduceArr:
-        mark_reduce_arr(graph, nodeRef, frame);
-        break;
-    case oper::UnorderedReduceArr:
-        mark_unordered_reduce_arr(graph, nodeRef, frame);
-        break;
-    case oper::ForeachArr:
-        mark_foreach_arr(graph, nodeRef, frame);
-        break;
-    case oper::UnorderedForeachArr:
-        mark_unordered_foreach_arr(graph, nodeRef, frame);
-        break;
-    default:
-        break;
+    if (const auto value = runMarkedOperator(graph, nodeRef, frame)) {
+        return *value;
     }
     const auto *node = requireNode(graph, nodeRef);
     return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
@@ -2180,31 +2187,11 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Oper: {
         const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
-        switch (body->oper) {
-        case oper::MapArr:
-        case oper::ApplyArr:
-            mark_map_arr(graph, nodeRef, frame);
-            break;
-        case oper::FilterArr:
-            mark_filter_arr(graph, nodeRef, frame);
-            break;
-        case oper::ReduceArr:
-            mark_reduce_arr(graph, nodeRef, frame);
-            break;
-        case oper::UnorderedReduceArr:
-            mark_unordered_reduce_arr(graph, nodeRef, frame);
-            break;
-        case oper::ForeachArr:
-            mark_foreach_arr(graph, nodeRef, frame);
-            break;
-        case oper::UnorderedForeachArr:
-            mark_unordered_foreach_arr(graph, nodeRef, frame);
-            break;
-        case oper::Isolate:
-            return executeIsolateNode(graph, nodeRef, frame);
-        default: {
+        if (!OperatorTable::instance().isMarked(body->oper)) {
             return executePreparedOperator(graph, nodeRef, frame);
         }
+        if (const auto value = runMarkedOperator(graph, nodeRef, frame)) {
+            return *value;
         }
         return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
     }
@@ -2542,6 +2529,14 @@ gc_node_ref_t TaskflowExecSchedPass::branchArmEntryForLinear(
 
 namespace {
 
+// Whether the operator's declaration lets the calls on different elements run at once
+// (OperatorSemantics::elementCalls).
+bool elementsIndependent(GCGraph *graph, gc_node_ref_t nodeRef) {
+    const auto *calls =
+        OperatorTable::instance().elementCalls(graph->nodeBodyAs<GCOperBody>(nodeRef)->oper);
+    return calls != nullptr && calls->independent;
+}
+
 // The faults of the element calls of one unordered operator (map, apply, filter,
 // unordered_foreach; the chunks of unordered_reduce), which run concurrently and can fault
 // together. Design principles 2.10: elements that have started run to their end, elements
@@ -2662,7 +2657,7 @@ void TaskflowExecSchedPass::runElements(
     };
 
     bool done = false;
-    if (workers <= 1 || n == 1) {
+    if (workers <= 1 || n == 1 || !site.independent) {
         done = drain(false);
     } else if (boundedLight(*targetPlan)) {
         done = drain(true);
@@ -2691,7 +2686,8 @@ void TaskflowExecSchedPass::mark_map_arr(GCGraph *graph, gc_node_ref_t nodeRef, 
         graph,
         nodeRef,
         region.thread().callDepth,
-        region.thread().faultDomain};
+        region.thread().faultDomain,
+        elementsIndependent(graph, nodeRef)};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2731,7 +2727,8 @@ void TaskflowExecSchedPass::mark_filter_arr(GCGraph *graph, gc_node_ref_t nodeRe
         graph,
         nodeRef,
         region.thread().callDepth,
-        region.thread().faultDomain};
+        region.thread().faultDomain,
+        elementsIndependent(graph, nodeRef)};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2776,7 +2773,8 @@ void TaskflowExecSchedPass::mark_reduce_arr(GCGraph *graph, gc_node_ref_t nodeRe
         graph,
         nodeRef,
         region.thread().callDepth,
-        region.thread().faultDomain};
+        region.thread().faultDomain,
+        elementsIndependent(graph, nodeRef)};
     region.enter();
     const auto arrIdx     = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto withInputs = graph->withInputsOf(nodeRef);
@@ -2929,7 +2927,8 @@ void TaskflowExecSchedPass::mark_foreach_arr(GCGraph *graph, gc_node_ref_t nodeR
         graph,
         nodeRef,
         region.thread().callDepth,
-        region.thread().faultDomain};
+        region.thread().faultDomain,
+        elementsIndependent(graph, nodeRef)};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2960,7 +2959,8 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
         graph,
         nodeRef,
         region.thread().callDepth,
-        region.thread().faultDomain};
+        region.thread().faultDomain,
+        elementsIndependent(graph, nodeRef)};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());

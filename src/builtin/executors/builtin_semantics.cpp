@@ -186,10 +186,44 @@ void declareUnorderedReduce() {
     OperatorTable::instance().declareSemantics(
         uri,
         OperatorSemantics{
-            .key      = OperatorKey::of(uri),
-            .indexing = indexing,
-            .laws     = {law},
+            .key          = OperatorKey::of(uri),
+            .indexing     = indexing,
+            .laws         = {law},
+            .elementCalls = ElementCalls{.shape = ElementShape::Fold, .independent = true},
         });
+}
+
+/**
+ * How the higher-order operators call their function (design principles 2.17), the one place
+ * a scheduler or a code generator learns it from. `map`, `apply` and `filter` leave the order of
+ * their calls open: the function of one element does not depend on that of another, so they
+ * may run at once; `foreach` and `reduce` run in order, their unordered forms do not.
+ * `attempt` calls its function once and keeps its faults.
+ */
+void declareElementCalls() {
+    struct Row {
+        std::string_view uri;
+        ElementShape shape;
+        bool independent;
+    };
+    constexpr Row rows[] = {
+        {":mark/map_arr", ElementShape::Map, true},
+        {":mark/apply_arr", ElementShape::Map, true},
+        {":mark/filter_arr", ElementShape::Filter, true},
+        {":mark/foreach_arr", ElementShape::Foreach, false},
+        {":mark/unordered_foreach_arr", ElementShape::Foreach, true},
+        {":mark/reduce_arr", ElementShape::Fold, false},
+        {":mark/isolate", ElementShape::Isolate, false},
+    };
+    auto &table = OperatorTable::instance();
+    for (const Row &row : rows) {
+        OperatorSemantics record{.key = OperatorKey::of(row.uri)};
+        if (const auto id = table.lookup(row.uri); id && table.semantics(*id) != nullptr) {
+            record = *table.semantics(*id);
+        }
+        record.elementCalls = ElementCalls{.shape = row.shape, .independent = row.independent};
+        table.declareSemantics(row.uri, std::move(record));
+    }
 }
 
 } // namespace
@@ -238,6 +272,7 @@ void declareBuiltinOperatorSemantics() {
         }
     }
     declareUnorderedReduce();
+    declareElementCalls();
 }
 
 bool storesIntoCell(std::string_view name) { return name.starts_with("op/assn"); }

@@ -29,6 +29,7 @@
 #include "runtime.h"
 
 #include "camel/core/effect_trace.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/core/rtdata/array.h"
@@ -38,6 +39,7 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/function_call.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
 #include "camel/runtime/loop.h"
@@ -640,13 +642,42 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         if (camel::core::effect_trace::enabled()) [[unlikely]] {
             camel::core::effect_trace::setSite(ownerGraph->nodeOrigin(nodeRef));
         }
-        slot_t value = (*op)(withView, normView, *context_);
+        slot_t value = callNativeOperator(op, body->oper, withView, normView);
         framePool_.release(frame);
         return anchorResult(value, node->dataType(), node->flags);
     } catch (...) {
         framePool_.release(frame);
         throw;
     }
+}
+
+slot_t MacroEvaluator::callNativeOperator(
+    operator_t op, camel::core::OperId oper, ArgsView &withView, ArgsView &normView) {
+    camel::execute::FunctionInvoker invoker;
+    if (camel::core::OperatorTable::instance().callsGraphs(oper)) {
+        invoker = [this](
+                      ::Function *function,
+                      std::span<const slot_t> withArgs,
+                      std::span<const slot_t> normArgs) {
+            return executeFunction(
+                function,
+                [&](Frame *calleeFrame, GCGraph *callee) {
+                    const auto norm = callee->normPorts();
+                    const auto with = callee->withPorts();
+                    for (size_t i = 0; i < normArgs.size(); ++i) {
+                        calleeFrame->set(callee->node(norm[i])->dataIndex, normArgs[i]);
+                    }
+                    for (size_t i = 0; i < withArgs.size(); ++i) {
+                        calleeFrame->set(callee->node(with[i])->dataIndex, withArgs[i]);
+                    }
+                },
+                false);
+        };
+    }
+    // Also for an operator that calls no graphs: its empty invoker masks the scope of anything
+    // that runs outside this evaluator.
+    camel::execute::FunctionCallScope scope(*context_, std::move(invoker));
+    return (*op)(withView, normView, *context_);
 }
 
 slot_t MacroEvaluator::executeFunction(
@@ -1006,7 +1037,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             if (camel::core::effect_trace::enabled()) [[unlikely]] {
                 camel::core::effect_trace::setSite(runtimeGraph->nodeOrigin(runtimeNodeIndex));
             }
-            slot_t result = (*op)(withView, normView, *context_);
+            slot_t result = callNativeOperator(op, body->oper, withView, normView);
             frame->set(node->dataIndex, result);
         } break;
 

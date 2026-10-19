@@ -76,9 +76,6 @@ OperId OperatorTable::internLocked(std::string_view uri) {
     if (uri.starts_with(':')) {
         family |= kFamilyBuiltin;
     }
-    if (uri.starts_with(":mark/")) {
-        family |= kFamilyMarked;
-    }
     if (uri.starts_with(":op/assn")) {
         family |= kFamilyAssignment;
     }
@@ -341,6 +338,10 @@ std::string checkSemantics(
                 return "resources: its traits give it no external effect";
             }
         }
+    }
+    // 5b. A higher-order operator calls the function values it receives: its traits say so.
+    if (record.elementCalls && traits && !traits->callsGraphs) {
+        return "element calls: the operator calls graphs (declare callsGraphs in its traits)";
     }
     // 6. The definition names a function of a library module and binds each parameter to an
     //    operand. That the function's signature agrees with the operator's, that its effects

@@ -2,8 +2,10 @@
 
 Status: invocation service, NodeVM, both FastVM dispatch loops and JIT native
 operator paths are implemented. Parallel-scheduler invocation is implemented and covered by concurrent callback
-and GC-stress tests; macro bindings and the broader fault/observer acceptance
-coverage remain pending. No new language syntax or numerical permissions.
+and GC-stress tests. The macro evaluator binds the service (`MacroEvaluator::callNativeOperator`; every native operator
+gets a scope of its own, an empty one masking outer scopes when it calls no graphs). The higher-order array operators
+are native operators built on it (see "Higher-order operators"). The broader fault/observer acceptance
+coverage remains pending. No new language syntax or numerical permissions.
 This is a prerequisite for the portable execution boundary in
 [the approved Tiles route](../tiles-route/README.cn.md), section 3.3.
 
@@ -102,6 +104,26 @@ leaving it. Cover both prepared-operator paths, the linear execution mode and th
 task-graph execution path; do not solve this by suppressing collection throughout
 the callback. The existing handoff classifier already excludes `callsGraphs`
 operators from serial bytecode regions and should retain that restriction.
+
+## Higher-order operators
+
+`map`, `apply`, `filter`, `reduce`, `foreach` and the para module's `unordered_reduce` and
+`unordered_foreach` are ordinary native operators (`src/builtin/operators/higher_order.cpp`): each
+calls its function with `invokeFunction`, element after element, and that is the one definition of
+what they mean. Their traits say `callsGraphs`; `isMarked` is no longer a `:mark/` URI prefix but
+"the operator declares `OperatorSemantics::elementCalls`", always a `callsGraphs` operator
+(checked when the declaration is made).
+
+`elementCalls` (`sem::ElementCalls`: a shape `Map`, `Filter`, `Foreach`, `Fold` or `Isolate`, and
+`independent`) is what a scheduler or a code generator reads to run such an operator faster than
+through the callback: NodeVM, FastVM (its `SCHD` mark instructions), Taskflow and the C++ emitter each
+keep their fast path per shape and pick it from the declaration. `independent` is the property
+that the calls on different elements do not depend on one another (for a `Fold`: that the program
+left the order of combining open); Taskflow runs `independent` calls at once, in chunks, and any
+other operator in order. A new higher-order operator in a module declares its shape and
+`independent` and needs no change in a scheduler; without a declaration it runs through the
+native operator and the service. A user function cannot yet declare `independent`: that waits for
+declarations on functions (node attributes and decorators).
 
 ## Tiles integration after the service exists
 
