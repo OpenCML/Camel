@@ -92,7 +92,7 @@ analysis look into its two graphs, and nothing lowers it in the shared program.
 | Consumer | How it runs a LOOP |
 |---|---|
 | `std::nvm` | natively (`NodeVMSchedPass::evalLoop`): one call of the condition graph and one of the body graph per round, the state in the node's slot |
-| `std::fvm`, `std::jit` | the private lowering at its entry, by default (faster today, section 5). Natively under a debugger and with `CAMEL_FVM_NATIVE_LOOP=1`: one `SCHD` instruction (marks `LoopWhile`, `LoopFor`, `LoopForWhile`, the two graphs in extra words), run by `FastVMSchedPass::evalLoop` through the call path of the higher-order operators (a compiled body runs compiled), so that a debugger shows the loop's own graphs |
+| `std::fvm`, `std::jit` | the private lowering at its entry, by default (faster today, section 5). Natively under a debugger and with `std::fvm(native_loop=true)`: one `SCHD` instruction (marks `LoopWhile`, `LoopFor`, `LoopForWhile`, the two graphs in extra words), run by `FastVMSchedPass::evalLoop` through the call path of the higher-order operators (a compiled body runs compiled), so that a debugger shows the loop's own graphs |
 | `std::macro` evaluator | natively, round by round, at most 1,000,000 rounds |
 | `std::prl` | the private lowering at its entry and when a runtime callback supplies an original graph containing a loop |
 | `std::cpp` | the private lowering at its entry; the generated tail calls are loops |
@@ -133,6 +133,20 @@ it is written, on every back end (`modules.tiles` `loop_structure_*`, `linear.lo
 the next round; no number of rounds takes depth (`--max-recursion-depth 3` runs a million rounds
 on every back end: `linear.loops` `loops.not_recursion`).
 
+**One driver for the rounds.** NodeVM, the native loop of FastVM and the macro evaluator no
+longer each write the round: `camel/execute/loop_driver.h` holds the order of a round (the
+condition first, then the next element, then the body), the ports a round binds
+(`bindLoopRound`: the element, the k values of the state, the captures) and what ends the loop;
+each interpreter supplies a frame and a call (`driveLoopRounds` is a template, so the services are
+inlined). Iterating over more than arrays will be one change there. The macro evaluator's limit on
+the rounds of a loop is `--max-macro-rounds <n>` (else `CAMEL_MAX_MACRO_ROUNDS`; default
+1000000, 1 to 2^40), the way the nesting limit is `--max-macro-depth`.
+
+**Lowered or native on std::fvm and std::jit.** The choice is made once at the entry: native when
+an observer asks for loop frames (`ExecutionObserver::wantsLoopFrames`, true for the debugger) or
+with `CAMEL_FVM_NATIVE_LOOP=1`, lowered otherwise; the choice is logged under the `FastVM` scope.
+The two give the same results, faults and output.
+
 ## 5. Timings
 
 Ten million rounds, whole process, one container, three runs each, the median
@@ -142,7 +156,7 @@ same as a hand-written tail recursion; the one-value pair counts `i` to 10,000,0
 | Program | `std::nvm` | `std::fvm` | `std::jit` |
 |---|---|---|---|
 | loop, two values of state (default: nvm native, fvm/jit lowered) | 1.71 s | 1.33 s | 1.50 s |
-| the same, native instruction (`CAMEL_FVM_NATIVE_LOOP=1`) | | 2.61 s | 2.62 s |
+| the same, native instruction (`std::fvm(native_loop=true)`) | | 2.61 s | 2.62 s |
 | the same, hand-written tail recursion | 0.98 s | 0.49 s | 0.49 s |
 | loop, one value of state (default) | 0.94 s | 0.48 s | 0.82 s |
 | the same, native instruction | | 0.62 s | 0.59 s |

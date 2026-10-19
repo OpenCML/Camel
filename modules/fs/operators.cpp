@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -138,11 +138,6 @@ slot_t __fs_try_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *path    = norm.get<String *>(0);
     String *content = norm.get<String *>(1);
-    if (const auto bad = invalidUtf8Offset(content->view()))
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "fs.write_text",
-            "invalid UTF-8 at byte " + std::to_string(*bad) + "; use write_bytes for binary data");
     fs_impl::path p(path->c_str());
     auto parent = p.parent_path();
     if (!parent.empty() && !fs_impl::exists(parent)) {

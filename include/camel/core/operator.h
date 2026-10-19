@@ -25,6 +25,7 @@
 #include "camel/core/type/resolver.h"
 
 #include <functional>
+#include <stdexcept>
 #include <unordered_map>
 
 namespace camel::core::context {
@@ -95,12 +96,17 @@ class OperatorGroup {
         const std::string &name,
         const std::vector<std::pair<std::string, type::resolver_ptr_t>> &resolvers)
         : name_(name), resolvers_(resolvers) {
+        rejectOverlappingRules();
         publishResolvers();
     }
     OperatorGroup(
         const std::string &name,
-        const std::vector<std::pair<std::string, type::resolver_ptr_t>> &&resolvers)
+        const std::vector<std::pair<std::string, type::resolver_ptr_t>> &&resolvers,
+        bool registration = true)
         : name_(name), resolvers_(std::move(resolvers)) {
+        if (registration) {
+            rejectOverlappingRules();
+        }
         publishResolvers();
     }
 
@@ -113,6 +119,14 @@ class OperatorGroup {
         const std::string &name,
         const std::vector<std::pair<std::string, type::resolver_ptr_t>> &&resolvers) {
         return std::make_shared<OperatorGroup>(name, std::move(resolvers));
+    }
+    /// The group a program sees for a name that several modules export: the rules of all of
+    /// them. Whether two of them accept the same arguments is the program's business (an
+    /// ambiguity at the call), not a registration error, so nothing is rejected here.
+    static oper_group_ptr_t merged(
+        const std::string &name,
+        std::vector<std::pair<std::string, type::resolver_ptr_t>> &&resolvers) {
+        return std::make_shared<OperatorGroup>(name, std::move(resolvers), false);
     }
 
     const std::string &name() const { return name_; }
@@ -160,6 +174,36 @@ class OperatorGroup {
     }
 
   private:
+    /// Two rules of one group that accept exactly the same arguments cannot both be meant:
+    /// the first would silently win. A registration error, found when the module loads
+    /// (design principles 2.17). Only rules that declare a fixed signature can be compared.
+    void rejectOverlappingRules() const {
+        for (size_t i = 0; i < resolvers_.size(); ++i) {
+            const type::FunctionType *a =
+                resolvers_[i].second ? resolvers_[i].second->fixedSignature() : nullptr;
+            for (size_t j = i + 1; a != nullptr && j < resolvers_.size(); ++j) {
+                const type::FunctionType *b =
+                    resolvers_[j].second ? resolvers_[j].second->fixedSignature() : nullptr;
+                if (b == nullptr || a->withTypesCount() != b->withTypesCount() ||
+                    a->normTypesCount() != b->normTypesCount()) {
+                    continue;
+                }
+                bool same = true;
+                for (size_t k = 0; same && k < a->withTypesCount(); ++k) {
+                    same = a->withTypeAt(k)->equals(b->withTypeAt(k));
+                }
+                for (size_t k = 0; same && k < a->normTypesCount(); ++k) {
+                    same = a->normTypeAt(k)->equals(b->normTypeAt(k));
+                }
+                if (same) {
+                    throw std::logic_error(
+                        "operator group '" + name_ + "': the rules " + resolvers_[i].first +
+                        " and " + resolvers_[j].first + " both accept " + a->toString());
+                }
+            }
+        }
+    }
+
     /// Makes each overload's resolver findable by its URI (see OperatorTable::setResolver).
     void publishResolvers() const {
         for (const auto &[uri, resolver] : resolvers_) {

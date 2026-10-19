@@ -37,10 +37,9 @@ REPS=7 benchmarks/parallel/run.sh fib small_calls serial_math map_heavy driver_i
 # two builds side by side (ratio of the first to the second per configuration)
 BUILDS="new=$CAMEL_HOME old=/path/to/other/out/latest" benchmarks/parallel/run.sh fib
 
-# the bytecode hand-off on and off in one table: a build may carry variables of its own
-# (std::prl with CAMEL_TF_BYTECODE=0 evaluates every graph itself, as before 4.3.3)
-BUILDS="on=$CAMEL_HOME off=$CAMEL_HOME,CAMEL_TF_BYTECODE=0" \
-    CONFIGS="std::fvm std::prl:1,4 std::prl" benchmarks/parallel/run.sh fib small_calls
+# the bytecode hand-off on and off in one table: the off column is a parameter of the pass
+# (std::prl(bytecode=false) evaluates every graph itself, as before 4.3.3)
+CONFIGS="std::fvm std::prl std::prl(bytecode=false)" benchmarks/parallel/run.sh fib small_calls
 ```
 
 `run.sh` interleaves the configurations round by round and records the load average with

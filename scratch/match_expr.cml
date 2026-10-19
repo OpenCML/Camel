@@ -1,0 +1,10 @@
+func f(x: int): int {
+    return match x + 1 {
+        case 2 => 20
+        case _ => 0
+    }
+}
+
+func main(): void sync {
+    println(f(1))
+}

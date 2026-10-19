@@ -237,7 +237,13 @@ class Builder {
     node_ptr_t visitUsingNamespaceDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitExprStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitExitStmt(const AST::node_ptr_t &ast);
-    node_ptr_t visitStmtBlock(const AST::node_ptr_t &ast);
+    /// A block; one written with decorators is lowered by visitDecoratedBlock unless
+    /// `decorators` is false (it lowers the block itself).
+    node_ptr_t visitStmtBlock(const AST::node_ptr_t &ast, bool decorators = true);
+    /// `@d { ... }` (language reference 7.6): LINK(0)[FUNC (decorated block)[TYPE, EXEC,
+    /// ANNO...]], the block as a function of no parameters called where it is written. The
+    /// EXEC is the block lowered as without decorators (its scope, its exits, its value).
+    node_ptr_t visitDecoratedBlock(const AST::node_ptr_t &ast);
 
     // ast/data.h
     node_ptr_t visitData(const AST::node_ptr_t &ast);

@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,6 +66,7 @@
 #include "camel/core/type/base.h"
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -126,8 +127,8 @@ enum Permission : uint8_t {
 /// A set of permissions: one byte, 0 when none is granted.
 using PermissionMask = uint8_t;
 
-inline constexpr PermissionMask kNoPermissions  = 0;
-inline constexpr PermissionMask kFiniteMath     = kNoNans | kNoInfs | kNoSignedZeros | kFlushSubnormals;
+inline constexpr PermissionMask kNoPermissions = 0;
+inline constexpr PermissionMask kFiniteMath = kNoNans | kNoInfs | kNoSignedZeros | kFlushSubnormals;
 inline constexpr PermissionMask kAllPermissions = 0xFF;
 
 /// The source name of a single permission bit ("reassociate", ..., "no_nans", ...).
@@ -187,6 +188,79 @@ struct NumericSemantics {
     std::string algorithm;
 };
 
+// ---- Numeric policy (design principles 2.15, 2.16) -----------------------------------------
+
+/**
+ * Which relaxations a consumer applies on top of what the program grants. The permissions of a
+ * node are the program's own (@numeric); a policy is the consumer's: the algebra pass of
+ * 2.15 relaxes by default and takes `safe_fp=true` to be strict, a back end of 2.16 relaxes
+ * the accumulation order by default and has a safe mode. They are the same question, so the
+ * code asks it here: a rewrite or a schedule asks `permits(nodePermissions, required)`, and
+ * reorderFreedom (camel/core/index_semantics.h) takes the policy with the node's permissions.
+ */
+struct NumericPolicy {
+    /// Permissions every node has under this policy, with or without @numeric.
+    PermissionMask defaultGrants = kNoPermissions;
+    /// Whether the permissions a node carries count. A strict policy ignores them: even a node
+    /// with wider permissions keeps its canonical rounding path (2.15, safe mode).
+    bool nodeGrants = true;
+
+    /// Nothing but what the program writes (what the node's own permissions give).
+    static constexpr NumericPolicy explicitOnly() { return {kNoPermissions, true}; }
+    /// The default of 2.15 and 2.16: the order and grouping of a sum or product may change
+    /// (kReassociate), nothing else is assumed. Precision, approximate math, fused multiply-add
+    /// and the special values still need their permission.
+    static constexpr NumericPolicy relaxed() { return {kReassociate, true}; }
+    /// The safe mode (`safe_fp=true`): only what is exactly equivalent.
+    static constexpr NumericPolicy strict() { return {kNoPermissions, false}; }
+
+    /// The permissions a node with `node` has under this policy.
+    constexpr PermissionMask effective(PermissionMask node) const {
+        return static_cast<PermissionMask>(defaultGrants | (nodeGrants ? node : 0));
+    }
+    constexpr bool permits(PermissionMask node, PermissionMask required) const {
+        return (effective(node) & required) == required;
+    }
+    bool operator==(const NumericPolicy &) const = default;
+};
+
+// ---- Binary algebra (design section 7b) -----------------------------------------------------
+
+/**
+ * What a binary operator satisfies over one element type, declared beside the reduction laws
+ * so that an algebraic rewrite selects operators by these properties and not by name. The
+ * properties are about the exact operation: whether regrouping also keeps the bits is
+ * `exactAssociative` (wrapping integers) and otherwise needs the policy's reassociate.
+ */
+struct BinaryLaw {
+    /// The element type the law holds for (the scalar itself, or the element of a tensor).
+    type::TypeCode element = type::TypeCode::Void;
+    bool commutative       = false;
+    bool exactAssociative  = false;
+    /// The bit pattern, in `element`, of x with `x op neutral == x`; none when there is none.
+    std::optional<uint64_t> neutralBits;
+    /// The URI of the operator this one distributes over (a multiplication: the addition).
+    std::string distributesOver;
+    /// The URI of the operator that `x op y` is `x that (-y)` for (a subtraction: the
+    /// addition). Empty for the others.
+    std::string subtractionOf;
+
+    bool operator==(const BinaryLaw &) const = default;
+};
+
+/// The laws of a binary operator, per element type, and how its operands and result map to the
+/// element type they are laws about.
+struct BinaryAlgebra {
+    std::vector<BinaryLaw> laws;
+    /// The element type of a value of this type, nullopt when the laws do not speak of it. An
+    /// empty function reads a scalar number as its own element type. An elementwise operator over
+    /// a tensor says so here: the laws then hold element by element, and a rewrite may only
+    /// combine operands of the type of the result (no broadcasting).
+    std::function<std::optional<type::TypeCode>(const type::Type *)> elementOf;
+    /// The operator is elementwise over aggregates (tensors): a coefficient is a scalar constant.
+    bool elementwise = false;
+};
+
 // ---- Faults ------------------------------------------------------------------------------
 
 enum class FaultKind : uint8_t {
@@ -201,7 +275,7 @@ enum class FaultKind : uint8_t {
 std::string_view faultKindName(FaultKind kind);
 
 struct FaultSpec {
-    FaultKind kind  = FaultKind::Other;
+    FaultKind kind = FaultKind::Other;
     /// The operand whose value triggers the fault (index among the ordinary operands), 0xFF
     /// when none in particular does.
     uint8_t operand = 0xFF;
@@ -252,6 +326,39 @@ struct Definition {
     bool operator==(const Definition &) const = default;
 };
 
+// ---- Element calls (higher-order operators) ---------------------------------------------------
+
+/// How an operator that calls a function value uses it.
+enum class ElementShape : uint8_t {
+    Map,     // the function on each element of an array: the results are the elements of the result
+    Filter,  // the function on each element: the elements it answers true for
+    Foreach, // the function on each element, for its effects; the operator gives nothing
+    Fold,    // the function on the running value and each element, from an initial value
+    Isolate, // the function once, with the remaining operands; a fault in it becomes an error
+             // value (`attempt`)
+};
+
+/**
+ * The declaration of a higher-order operator (design principles 2.17): it calls the function
+ * value it receives, for the elements of an array or once, in the way `shape` says. Schedulers
+ * choose how to run it from this record, not from the operator's name: the operands are the
+ * array first and the function first among the with operands (Isolate: the function is the first
+ * ordinary operand), a Fold's initial value is the second with operand.
+ *
+ * `independent` is the property that lets calls run at once: the calls on different elements do
+ * not depend on one another, so they may run in any order or in parallel (a Fold: the program
+ * leaves the order of combining open). An operator that does not declare it runs its calls in
+ * order. The operator must be declared `callsGraphs` in its traits, and every such operator
+ * has the native implementation (the function-call service, camel/execute/function_call.h) that a
+ * scheduler without a fast path for its shape, or the macro evaluator, runs.
+ */
+struct ElementCalls {
+    ElementShape shape = ElementShape::Map;
+    bool independent   = false;
+
+    bool operator==(const ElementCalls &) const = default;
+};
+
 // ---- The record --------------------------------------------------------------------------
 
 struct OperatorSemantics {
@@ -265,6 +372,10 @@ struct OperatorSemantics {
     /// on another type (design section 7).
     std::vector<ReductionLaw> laws;
     NumericSemantics numeric;
+    /// The binary laws (section 7b); nullopt: not a binary operator the laws speak of.
+    std::optional<BinaryAlgebra> binary;
+    /// A higher-order operator's use of the function it calls; nullopt: not one.
+    std::optional<ElementCalls> elementCalls;
     /// The faults the operator can raise. nullopt: not declared, the operator's mayFault trait
     /// decides ("may fault, anyhow"). An empty list: it never faults.
     std::optional<std::vector<FaultSpec>> faults;

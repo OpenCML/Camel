@@ -1,6 +1,6 @@
 """Mixed state domains and cross-lane bodies stay on CPU between GPU regions.
 
-The raw std::tiles/std::nvm and std::tiles/std::jgir commands were inspected before
+The raw tiles::compile/std::nvm and tiles::compile/std::jgir commands were inspected before
 these assertions were added. This driver also verifies decorator rewriting at runtime.
 """
 import json
@@ -24,7 +24,7 @@ for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
         env = dict(ENV)
         if hidden:
             env['CUDA_VISIBLE_DEVICES'] = '-1'
-        for passes in [[vm], ['std::tiles', vm]]:
+        for passes in [[vm], ['tiles::compile', vm]]:
             result = run(passes, env)
             assert result.returncode == 0, (passes, hidden, result.stdout, result.stderr)
             lines = result.stdout.splitlines()
@@ -33,7 +33,7 @@ for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
             assert len(lines) == 7, lines
             for line in lines[5:]:
                 graph = json.loads(line)
-                if vm == 'std::nvm' or passes[0] == 'std::tiles':
+                if vm == 'std::nvm' or passes[0] == 'tiles::compile':
                     assert graph['regions'] == [], graph
                     assert sum(n['reason'] == 'context_arguments' for n in graph['excluded']) == 1, graph
                 else:
@@ -43,7 +43,7 @@ for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
                     assert len(graph['regions'][0]['outputs']) == 1, graph
     print(f'{vm}: multi-state LOOP pass/decorator, CPU boundaries and hidden CUDA PASS')
 
-result = run(['std::tiles', 'std::jgir'])
+result = run(['tiles::compile', 'std::jgir'])
 assert result.returncode == 0, result.stdout + result.stderr
 graphs = {g['name']: g for g in json.loads(result.stdout)['graphs']}
 for name in ['mixed', 'crosslane', 'differing']:

@@ -38,7 +38,7 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 - `.` cannot be used on an array (`xs.1` is `SemanticDiag::TypeNotIndexable`).
 - A subscript directly follows the expression being accessed, with no whitespace.
 - The slice forms `xs[a:b]` and `xs[a:b:c]` are reserved, not implemented: there is no dedicated diagnostic for them, and the compiler reports `SemanticDiag::NoMatchingFunction`, as "the subscript operator has no overload that accepts these arguments". Use `xs->slice<a, b>`.
-- **String subscripts are by byte**: `s[i]` is the `i`-th byte, and the result is a string containing just that one byte; an out-of-range subscript is likewise a fault. A single byte of a multi-byte character is not valid UTF-8 text by itself; to read by character use `char_at` and `codepoints` of the `str` module (see the [standard library reference](../../stdlib-reference.md)). Whether the result of a subscript is a one-byte string or a number is behaviour of the current implementation, not yet decided.
+- **String subscripts are by code point**: `s[i]` is the `i`-th code point, and the result is a string containing just that one character (`'中文'[0]` is `'中'`); an out-of-range subscript is likewise a fault. For the numbers use `codepoints` of the `str` module (see the [standard library reference](../../stdlib-reference.md)).
 
 ## 6.4 Calls
 
@@ -186,7 +186,7 @@ false
   - Float elements follow the rules of floats: an array that holds a `nan` does not equal itself, and `[0.0] == [-0.0]`.
   - A `T?` or `T!` by itself (not inside an array, tuple or struct) still has no `==`; open it first with `??`, `!!` or `match`.
 - **`x == null` and `x != null`** are defined for an `x` of type `T?`, in either order, and give a `bool`: the test of the tag of `x`, not a comparison of two values (the same node `??` branches on). It is an ordinary expression: `let has = x != null`. A nullable function value is compared with `null` the same way. A value that is never null (an `int`, a `T!`, a name already narrowed to a `T`) may be compared with `null` too: the result is fixed (`==` is always `false`, `!=` always `true`), the compiler warns (`SemanticDiag::NullTestNeverNull`), and the value itself is not evaluated. Two `T?` values compared with each other stay `SemanticDiag::NoMatchingFunction`; two function values cannot be compared.
-- `<`, `>`, `<=`, `>=`: numbers and `string` (by byte). Comparisons cannot be chained: `1 < 2 < 3` is a type error.
+- `<`, `>`, `<=`, `>=`: numbers and `string` (in code point order). Comparisons cannot be chained: `1 < 2 < 3` is a type error.
 - `===` and `!==` are not supported for now: the lexer knows the two tokens, and writing one is a located compile-time error, `SemanticDiag::ConstructNotSupported`. Compare values with `==` and `!=`.
 
 ### 6.7.4 Type conversion `as`

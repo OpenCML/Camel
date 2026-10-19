@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -140,6 +140,7 @@ struct GraphArenaLayout {
     size_t nodeBytes        = 0;
     size_t originBytes      = 0;
     size_t permissionBytes  = 0;
+    size_t attrBytes        = 0;
     size_t payloadBytes     = 0;
     size_t inputBytes       = 0;
     size_t normPortBytes    = 0;
@@ -179,8 +180,13 @@ GraphArenaLayout planGraphArenaLayout(
                                                      static_cast<size_t>(payload.nodeCount),
                                                      alignof(gc_payload_word_t))
                                                : 0,
-        .payloadBytes    = bytesForArray<gc_payload_word_t>(payload.payloadWordCount),
-        .inputBytes      = camel::core::mm::alignUp(
+        // The attribute column, only when some node has attributes.
+        .attrBytes    = payload.attrs ? camel::core::mm::alignUp(
+                                            sizeof(uint32_t) * static_cast<size_t>(payload.nodeCount),
+                                            alignof(gc_payload_word_t))
+                                      : 0,
+        .payloadBytes = bytesForArray<gc_payload_word_t>(payload.payloadWordCount),
+        .inputBytes   = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.edgeCount),
             alignof(gc_node_ref_t)),
         .normPortBytes = camel::core::mm::alignUp(
@@ -198,9 +204,9 @@ GraphArenaLayout planGraphArenaLayout(
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.nodeBytes + layout.originBytes + layout.permissionBytes + layout.payloadBytes +
-        layout.inputBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes +
-        layout.branchArmBytes;
+        layout.nodeBytes + layout.originBytes + layout.permissionBytes + layout.attrBytes +
+        layout.payloadBytes + layout.inputBytes + layout.normPortBytes + layout.withPortBytes +
+        layout.closureBytes + layout.branchArmBytes;
     // The frame layout comes last. The arrays before it may end at any 2-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
     if (frameSlots) {
@@ -688,6 +694,10 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
             plan.nodes.begin(),
             plan.nodes.end(),
             [&](const auto &planned) { return draft.nodePermissions(planned.draftId) != 0; }),
+        .attrs = std::any_of(
+            plan.nodes.begin(),
+            plan.nodes.end(),
+            [&](const auto &planned) { return draft.nodeAttrs(planned.draftId) != 0; }),
     };
 }
 
@@ -754,6 +764,9 @@ void emitDraftPayload(
         payload.origins[planned.ref] = static_cast<uint32_t>(origin);
         if (payload.permissions) {
             payload.permissions[planned.ref] = draft.nodePermissions(planned.draftId);
+        }
+        if (payload.attrs) {
+            payload.attrs[planned.ref] = draft.nodeAttrs(planned.draftId);
         }
         const GCNode &header = record;
 
@@ -985,6 +998,13 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
                 alignof(gc_payload_word_t)),
             alignof(gc_payload_word_t)));
     }
+    if (shape.attrs && shape.nodeCount > 0) {
+        payload.attrs = static_cast<uint32_t *>(arena.alloc(
+            camel::core::mm::alignUp(
+                sizeof(uint32_t) * static_cast<size_t>(shape.nodeCount),
+                alignof(gc_payload_word_t)),
+            alignof(gc_payload_word_t)));
+    }
     payload.payload          = arenaAllocArray<gc_payload_word_t>(arena, shape.payloadWordCount);
     payload.inputs           = arenaAllocArray<gc_node_ref_t>(arena, shape.edgeCount);
     payload.normPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
@@ -1006,6 +1026,7 @@ GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload) {
         .nodes            = payload.nodes,
         .origins          = payload.origins,
         .permissions      = payload.permissions,
+        .attrs            = payload.attrs,
         .inputs           = payload.inputs,
         .payload          = payload.payload,
         .normPorts        = payload.normPorts,
@@ -1346,6 +1367,10 @@ const std::string &GCGraph::name() const {
 std::span<const camel::core::SymId> GCGraph::captureNames() const {
     return debug_ ? std::span<const camel::core::SymId>(debug_->captureNames)
                   : std::span<const camel::core::SymId>();
+}
+
+uint32_t GCGraph::nodeAttrs(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) && nativePayload_.attrs ? nativePayload_.attrs[ref] : 0;
 }
 
 uint8_t GCGraph::nodePermissions(gc_node_ref_t ref) const {

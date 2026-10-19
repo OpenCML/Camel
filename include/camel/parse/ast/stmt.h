@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -134,7 +134,6 @@ class TypeDeclLoad : public StmtLoad {
     std::vector<std::string> params_;
 };
 
-
 class UsingNamespaceLoad : public StmtLoad {
   public:
     UsingNamespaceLoad(Reference ref) : StmtLoad(StmtType::UsingNamespace), ref_(ref) {}
@@ -180,6 +179,10 @@ class StmtBlockLoad : public StmtLoad {
     /// enclosing blocks. 0 when none.
     void grantNumeric(uint8_t permissions) { numeric_ |= permissions; }
     uint8_t numeric() const { return numeric_; }
+
+    // A block written with decorators (`@d { ... }`, language reference 7.6) has a second
+    // child, a RepeatedLoad("FuncAnno") of the decorators in the order written; the first is
+    // always the statements.
 
     const std::string toString() const override;
     const std::string geneCode() const override;

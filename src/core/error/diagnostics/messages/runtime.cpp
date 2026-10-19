@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -167,6 +167,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "--output <file> (-o) writes the value 'main' returns: a number, bool or text as "
                 "a text file, a tensor as a .npy file, a struct or tuple as a directory with one "
                 "file per member. Without it the value is printed on standard output.",
+            },
+        },
+        {
+            RuntimeDiag::InvalidPassParameter,
+            {
+                "InvalidPassParameter",
+                "Invalid pass specification '{0}': {1}.",
+                "A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the "
+                "values are constant expressions (bool, int, float or string). The message names "
+                "the parameter, the type it has and the parameters the pass declares.",
             },
         },
         {

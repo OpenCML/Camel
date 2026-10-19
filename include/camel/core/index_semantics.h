@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,7 +93,7 @@ namespace camel::core::sem {
 // ---- Expressions ---------------------------------------------------------------------------
 
 /// An expression of an instance's ExprPool.
-using ExprId = uint32_t;
+using ExprId                    = uint32_t;
 inline constexpr ExprId kNoExpr = ~ExprId{0};
 
 enum class ExprOp : uint8_t {
@@ -395,9 +395,9 @@ struct ReductionLaw {
     /// Constant: the bits of the starting value in the accumulator type (low 32 bits for f32).
     uint64_t initBits = 0;
     /// Operand: the with operand that holds the starting value.
-    uint8_t initOperand = 0xFF;
-    LawEmpty empty      = LawEmpty::Initial;
-    LawOrder order      = LawOrder::Ascending;
+    uint8_t initOperand  = 0xFF;
+    LawEmpty empty       = LawEmpty::Initial;
+    LawOrder order       = LawOrder::Ascending;
     LawFinalize finalize = LawFinalize::None;
     /// For these types and the operator's special values: regrouping (resp. permuting) the
     /// contributions gives the same bits. Never claimed for float addition or multiplication.
@@ -413,9 +413,9 @@ struct ReductionLaw {
 
 /// What a back end may do with a reduction at one node (design 7.3).
 struct ReorderFreedom {
-    bool regroup         = false; // combine in another grouping: a tree, blocks, split-k
-    bool permute         = false; // combine in another order: atomics, partials in any order
-    bool blockIdentity   = false; // every block may start from the identity; otherwise only the
+    bool regroup       = false;   // combine in another grouping: a tree, blocks, split-k
+    bool permute       = false;   // combine in another order: atomics, partials in any order
+    bool blockIdentity = false;   // every block may start from the identity; otherwise only the
                                   // first block starts from the initial value, the others from
                                   // their first contribution
     bool contract        = false; // a multiply and the add as one fused multiply-add
@@ -434,6 +434,11 @@ struct ReorderFreedom {
  *   changePrecision  a float accumulator and change_precision in g
  */
 ReorderFreedom reorderFreedom(const ReductionLaw &law, uint8_t granted);
+/// The freedom under a policy (camel/core/operator_semantics.h): `nodePermissions` are the
+/// node's own, the policy adds its defaults or, when strict, ignores them.
+struct NumericPolicy;
+ReorderFreedom
+reorderFreedom(const ReductionLaw &law, uint8_t nodePermissions, const NumericPolicy &policy);
 
 /// The text form of a law: "sum_f32: add f32 -> f64 -> f32, init 0x0, ascending, empty
 /// initial, commutative, identity 0x8000000000000000".
@@ -536,8 +541,8 @@ struct StridedView {
  * parameter it needs is unknown, or a coordinate is not affine in the dims (a floordiv or mod
  * of a dim: reshape across axes is not strided).
  */
-std::optional<StridedView> rowMajorView(
-    const IndexedInstance &instance, const Access &access, std::span<const int64_t> shape);
+std::optional<StridedView>
+rowMajorView(const IndexedInstance &instance, const Access &access, std::span<const int64_t> shape);
 
 /// True when `predicate` holds at `point` (every parameter it needs known; throws as
 /// ExprPool::evaluate otherwise). For consumers and tests that check conditions on known shapes.

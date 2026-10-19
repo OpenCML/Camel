@@ -1,0 +1,4 @@
+type Shape = enum {
+    Circle(float),
+    Empty,
+}

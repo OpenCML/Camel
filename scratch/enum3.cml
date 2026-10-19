@@ -1,0 +1,38 @@
+type Option<T> = enum {
+    Some(T),
+    None,
+}
+
+type Tree<T> = enum {
+    Leaf(T),
+    Node { left: Tree<T>, right: Tree<T> },
+}
+
+func unwrapOr(o: Option<int>, fallback: int): int {
+    return match o {
+        case Option::Some(v) => v
+        case Option::None => fallback
+    }
+}
+
+func sum(t: Tree<int>): int {
+    return match t {
+        case Tree::Leaf(v) => v
+        case Tree::Node { left, right } => sum(left) + sum(right)
+    }
+}
+
+func main(): void sync {
+    let a: Option<int> = Option::Some(42)
+    let b: Option<int> = Option::None
+    println(unwrapOr(a, 0))
+    println(unwrapOr(b, 7))
+    let t: Tree<int> = Tree::Node {
+        left: Tree::Leaf(1),
+        right: Tree::Node { left: Tree::Leaf(2), right: Tree::Leaf(3) },
+    }
+    println(sum(t))
+    println(a)
+    println(b)
+    println(t)
+}

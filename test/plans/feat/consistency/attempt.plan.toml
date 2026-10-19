@@ -360,8 +360,7 @@ desc = "onnx::export refuses the operator, at the `attempt`, and names it."
 kind = "negative"
 backends = false
 case = "../../../cases/consistency/attempt/refuse_translate.cml"
-args = ["${case}", "onnx::export"]
-envs = ["CAMEL_ONNX_OUT=tmp/test/consistency/attempt_refused.onnx"]
+args = ["${case}", 'onnx::export(out="tmp/test/consistency/attempt_refused.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 11

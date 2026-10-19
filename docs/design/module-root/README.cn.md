@@ -937,7 +937,7 @@ camel docs/design/module-root/examples/emu/b_hier.cml                     # 2.2
 camel docs/design/module-root/examples/emu/c_diamond.cml                  # 2.3
 camel docs/design/module-root/examples/uses/main.cml std::stats std::nvm  # 3.2
 python3 docs/design/module-root/examples/tools/root_stats.py examples exemplars benchmarks test/cases   # 2.6
-CAMEL_ONNX_OUT=/tmp/m.onnx camel docs/design/module-root/examples/onnx_let/main.cml std::macro std::opt onnx::export   # 7.8
+camel docs/design/module-root/examples/onnx_let/main.cml std::macro std::opt 'onnx::export(out="/tmp/m.onnx")'   # 7.8
 ```
 
 | 目录 | 内容 |

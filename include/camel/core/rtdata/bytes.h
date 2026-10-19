@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -13,6 +13,7 @@
 #include "camel/core/rtdata/base.h"
 #include <optional>
 #include <string_view>
+class String;
 namespace camel::core::rtdata {
 class BytesObject final : public Object {
   public:
@@ -33,4 +34,8 @@ class BytesObject final : public Object {
 };
 // Returns the first malformed byte; a missing value means valid UTF-8.
 std::optional<size_t> invalidUtf8Offset(std::string_view bytes);
+// A string from text that came from outside (a stream, the environment, a command line): a
+// `string` is always valid UTF-8 (design principles 2.17), so malformed text is a fault here,
+// named after `source`.
+String *checkedString(std::string_view text, mm::IAllocator &allocator, std::string_view source);
 } // namespace camel::core::rtdata

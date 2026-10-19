@@ -56,7 +56,7 @@ inner func replace(path: string, content: Bytes): void {
 
 /// Replaces the content of the file, creating it and its parent directories when needed.
 /// @effect writes a file
-/// @fails fault `FileSystemError` when a directory cannot be created; fault `FileOpenFailed` when the file cannot be opened; fault `InvalidArgument` for malformed UTF-8
+/// @fails fault `FileSystemError` when a directory cannot be created; fault `FileOpenFailed` when the file cannot be opened
 /// @example write_text('out/log.txt', 'done')
 inner func write_text(path: string, content: string): void {
     return 'fs:write_text'

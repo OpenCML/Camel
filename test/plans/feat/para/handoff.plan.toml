@@ -9,7 +9,7 @@ desc = "The parallel scheduler runs serial graphs on the bytecode interpreter (d
 # boundary between the two: output, the fault of the smallest index from serial code in map
 # elements, the recursion limit counted across the boundary, and the collector with several
 # threads inside interpreters. Every behaviour test also runs with the hand-off switched off
-# (CAMEL_TF_BYTECODE=0): the two must agree.
+# (std::prl(bytecode=false)): the two must agree.
 
 [defaults]
 kind = "behavior"
@@ -31,10 +31,9 @@ expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
 
 [[tests]]
 name = "shapes.prl_counts"
-desc = "Under std::prl the serial graphs of the program did run as bytecode, on more than one thread: the statistics line of the hand-off (CAMEL_TF_GC_STATS) shows compiled graphs, hosted calls and interpreters."
+desc = "Under std::prl the serial graphs of the program did run as bytecode, on more than one thread: the statistics line of the hand-off (std::prl(gc_stats=1)) shows compiled graphs, hosted calls and interpreters."
 case = "../../../cases/para/handoff/shapes.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_TF_GC_STATS=1"]
+args = ["-t", "4", "${case}", "${run_prl_gc_stats1}"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -47,10 +46,9 @@ assert(Number(m[3]) > 0, 'no hosted call was made')
 
 [[tests]]
 name = "shapes.prl_off"
-desc = "CAMEL_TF_BYTECODE=0 switches the hand-off off: the statistics line says so, and the output is the same."
+desc = "std::prl(bytecode=false) switches the hand-off off: the statistics line says so, and the output is the same."
 case = "../../../cases/para/handoff/shapes.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
-envs = ["CAMEL_TF_GC_STATS=1", "CAMEL_TF_BYTECODE=0"]
+args = ["-t", "4", "${case}", "${run_prl_gc_stats1_no_bytecode}"]
 expect_exit = 0
 expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
 expect_stderr_contains = ["[taskflow] bytecode: off"]
@@ -94,8 +92,7 @@ name = "fault_deep.prl_off"
 desc = "The same with the hand-off off."
 kind = "negative"
 case = "../../../cases/para/handoff/fault_deep.cml"
-args = ["${case}", "${run_prl}"]
-envs = ["CAMEL_TF_BYTECODE=0"]
+args = ["${case}", "${run_prl_no_bytecode}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 30
@@ -163,8 +160,8 @@ expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
 name = "depth_across.prl_off.fits"
 desc = "The same boundary with the hand-off off: A = 10, B = 987 runs."
 case = "../../../cases/para/handoff/depth_across.cml"
-args = ["${case}", "${run_prl}"]
-envs = ["A=10", "B=987", "CAMEL_TF_BYTECODE=0"]
+args = ["${case}", "${run_prl_no_bytecode}"]
+envs = ["A=10", "B=987"]
 expect_exit = 0
 expect_stdout_starts_with = "start\n997\ndone\n"
 
@@ -173,8 +170,8 @@ name = "depth_across.prl_off.exceeds"
 desc = "The same boundary with the hand-off off: A = 10, B = 988 stops."
 kind = "negative"
 case = "../../../cases/para/handoff/depth_across.cml"
-args = ["${case}", "${run_prl}"]
-envs = ["A=10", "B=988", "CAMEL_TF_BYTECODE=0"]
+args = ["${case}", "${run_prl_no_bytecode}"]
+envs = ["A=10", "B=988"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_line = 22

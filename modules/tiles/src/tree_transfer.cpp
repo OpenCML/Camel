@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -16,6 +16,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/tree.h"
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
@@ -25,40 +26,18 @@ namespace camel::tiles {
 using namespace core::type;
 namespace td = core::rtdata;
 Type *transferTreeType(Type *type, bool upload) {
-    if (type->code() == TypeCode::Tuple) {
-        auto *tuple = static_cast<TupleType *>(type);
-        if (tuple->isTagged() || tuple->isCell())
-            return nullptr;
-        type_vec_t fields;
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            auto *field = transferTreeType(tuple->typeAt(i), upload);
-            if (!field)
-                return nullptr;
-            fields.push_back(field);
+    return core::type::tree::mapLeaves(type, [&](const std::string &, Type *leaf) -> Type * {
+        if (!upload) {
+            const auto *device = asDeviceType(leaf);
+            return device ? device->hostType() : nullptr;
         }
-        return TupleType::create(fields);
-    }
-    if (type->code() == TypeCode::Struct) {
-        auto *record = static_cast<StructType *>(type);
-        StructTypeFactory fields;
-        for (size_t i = 0; i < record->size(); ++i) {
-            auto *field = transferTreeType(record->typeAt(i), upload);
-            if (!field)
-                return nullptr;
-            fields.add(std::string(record->fieldName(i)), field);
-        }
-        return fields.build();
-    }
-    if (!upload) {
-        const auto *device = asDeviceType(type);
-        return device ? device->hostType() : nullptr;
-    }
-    if (type->code() == TypeCode::Float64)
-        return DeviceType::get(type);
-    const auto *tensor = tensor::asTensorType(type);
-    return tensor && (!tensor->dtype() || *tensor->dtype() == TypeCode::Float32)
-               ? DeviceType::get(type)
-               : nullptr;
+        if (leaf->code() == TypeCode::Float64)
+            return DeviceType::get(leaf);
+        const auto *tensor = tensor::asTensorType(leaf);
+        return tensor && (!tensor->dtype() || *tensor->dtype() == TypeCode::Float32)
+                   ? DeviceType::get(leaf)
+                   : nullptr;
+    });
 }
 namespace {
 struct Leaf {

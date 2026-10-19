@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/tree.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/function_call.h"
 #include "modules/tensor/ops/registry.h"
@@ -397,29 +398,9 @@ slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
 }
 
 bool supportedLeaves(Type *type) {
-    if (type->code() == TypeCode::Float64)
-        return true;
-    if (tensor::asTensorType(type))
-        return true;
-    if (type->code() == TypeCode::Tuple) {
-        auto *tuple = static_cast<TupleType *>(type);
-        if (!tuple->size())
-            return false;
-        for (size_t i = 0; i < tuple->size(); ++i)
-            if (!supportedLeaves(tuple->typeAt(i)))
-                return false;
-        return true;
-    }
-    if (type->code() == TypeCode::Struct) {
-        auto *object = static_cast<StructType *>(type);
-        if (!object->size())
-            return false;
-        for (size_t i = 0; i < object->size(); ++i)
-            if (!supportedLeaves(object->typeAt(i)))
-                return false;
-        return true;
-    }
-    return false;
+    return !core::type::tree::firstRejectedLeaf(type, [](Type *leaf) {
+        return leaf->code() == TypeCode::Float64 || tensor::asTensorType(leaf) != nullptr;
+    });
 }
 // Placement changes storage, not the computation function's tensor signature.
 bool acceptsInput(Type *expected, Type *actual) {

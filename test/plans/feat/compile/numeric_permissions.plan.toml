@@ -126,12 +126,12 @@ expect_stdout_contains = ["StmtBlock: numeric(reassociate, contract)", "StmtBloc
 
 [[tests]]
 name = "invalid"
-desc = "An unknown permission, another annotation with names in parentheses, an empty @numeric() and a decorator on a block are SemanticDiag::InvalidAnnotation, each at its line."
+desc = "An unknown permission, another annotation with names in parentheses and an empty @numeric() are SemanticDiag::InvalidAnnotation, each at its line. (A decorator on a block is accepted, language reference 7.6: compile.decorators.)"
 kind = "negative"
 case = "../../../cases/compile/numeric/invalid.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["'fast' is not a permission", "invalid.cml:11:1", "The annotation '@kernelish' is not accepted", "invalid.cml:14:1", "it names no permission", "invalid.cml:17:1", "The annotation '@twice' is not accepted: a decorator applies to a function", "invalid.cml:21:5"]
+expect_output_contains = ["'fast' is not a permission", "invalid.cml:8:1", "The annotation '@kernelish' is not accepted", "invalid.cml:11:1", "it names no permission", "invalid.cml:14:1"]
 
 [[tests]]
 name = "library_gemm"

@@ -84,7 +84,6 @@ def main() -> int:
     for label, passes in [("operator", []), ("pass", ["std::macro", "std::opt", "onnx::export"])]:
         with tempfile.TemporaryDirectory() as tmp:
             env = dict(os.environ, CAMEL_HOME=str(HOME))
-            env.pop("CAMEL_ONNX_OUT", None)
             proc = subprocess.run(
                 [str(CAMEL), str(CASE), *passes], cwd=tmp, env=env, capture_output=True, text=True, timeout=200
             )

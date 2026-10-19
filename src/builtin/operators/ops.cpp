@@ -32,6 +32,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/int_div.h"
+#include "camel/utils/utf8.h"
 
 #include <cmath>
 
@@ -687,18 +688,22 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
             return arr->get<slot_t>(idx);
         }
         case TypeCode::String: {
-            // A string is bytes and its indices count bytes (design principles 2.9).
-            // Design principles 2.10: `'abc'[1]` is the string of that one byte (not a
-            // number; there is no byte type in the language). A byte of a multi-byte
-            // character is not a valid string by itself.
-            String *str = norm.get<String *>(0);
-            Int64 raw   = norm.get<Int64>(1);
-            size_t idx  = static_cast<size_t>(raw);
-            if (raw < 0 || idx >= str->size()) {
-                throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "a string", str->size());
+            // A string is valid UTF-8 and its indices count code points (design principles
+            // 2.17): `'中文'[0]` is `'中'`. The result is the string of that one character.
+            String *str                 = norm.get<String *>(0);
+            Int64 raw                   = norm.get<Int64>(1);
+            const std::string_view text = str->view();
+            // ASCII text (the common case): code point i is byte i.
+            const bool ascii   = camel::utf8::isAscii(text);
+            const size_t count = ascii ? text.size() : camel::utf8::count(text);
+            if (raw < 0 || static_cast<size_t>(raw) >= count) {
+                throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "a string", count);
             }
-            const char byte = str->data()[idx];
-            return toSlot(String::from(std::string(1, byte), mm::autoSpace()));
+            const size_t from = ascii ? static_cast<size_t>(raw)
+                                      : camel::utf8::offsetOf(text, static_cast<size_t>(raw));
+            const size_t to =
+                from + camel::utf8::sequenceLength(static_cast<unsigned char>(text[from]));
+            return toSlot(String::from(std::string(text.substr(from, to - from)), mm::autoSpace()));
         }
         case TypeCode::Struct: {
             Struct *st = norm.get<Struct *>(0);

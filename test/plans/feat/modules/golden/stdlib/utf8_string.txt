@@ -1,0 +1,13 @@
+4 中 文 x 😀 true
+0 3 1 1 true
+2 3 -1
+文x x😀
+[中, x😀] 中Wx😀 true 中中中
+3 é中X
+[   中][文   ][ ab  ][**😀***][中文]
+[     é][中]
+11 11 中文x😀
+héllo 1
+[20013, 25991, 120, 128512]
+true true
+true true false true

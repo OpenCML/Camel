@@ -18,7 +18,7 @@ for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
         env = dict(ENV)
         if hidden:
             env['CUDA_VISIBLE_DEVICES'] = '-1'
-        for case, passes in [('loop_boundaries', ['std::tiles', vm]),
+        for case, passes in [('loop_boundaries', ['tiles::compile', vm]),
                              ('loop_decorator_boundaries', [vm])]:
             result = run(case, passes, env)
             assert result.returncode == 0, (vm, hidden, case, result.stdout, result.stderr)
@@ -40,7 +40,7 @@ for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
         assert report[phase]['mismatches'] == 0, report[phase]
     print(f'{vm}: LOOP CPU boundaries, faults and benchmark permissions PASS')
 
-result = run('loop_boundaries', ['std::tiles', 'std::jgir'])
+result = run('loop_boundaries', ['tiles::compile', 'std::jgir'])
 assert result.returncode == 0, result.stdout + result.stderr
 graphs = {g['name']: g for g in json.loads(result.stdout)['graphs']}
 for name in ['effect', 'crosslane', 'conditional']:

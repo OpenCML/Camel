@@ -1,0 +1,12 @@
+type Shape = enum {
+    Circle(float),
+    Empty,
+}
+
+func main(): void sync {
+    let s = Shape::Empty
+    println(match s {
+        case Shape::Circle(r) => r
+        case Shape::Empty => 0.0
+    })
+}

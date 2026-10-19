@@ -18,7 +18,7 @@
  */
 
 // Type-directed state persistence: own bytes before IO, validate all files before rebuilding.
-#include "include/nn/checkpoint.h"
+#include "include/tree/checkpoint.h"
 #include "../../tensor/binary.h"
 #include "../../tensor/npy.h"
 #include "../../tensor/type.h"
@@ -32,9 +32,10 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/composite/struct.h"
+#include "camel/core/type/tree.h"
 #include "camel/core/type/typevar.h"
 #include "camel/utils/sha256.h"
-#include "include/nn/checkpoint_io.h"
+#include "include/tree/checkpoint_io.h"
 #include <algorithm>
 #include <bit>
 #include <charconv>
@@ -44,7 +45,7 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 
-namespace camel::nn {
+namespace camel::treelib {
 namespace {
 using namespace core::type;
 using namespace core::rtdata;
@@ -54,32 +55,15 @@ using Json   = nlohmann::json;
 using tensor::TensorObject;
 using utils::sha256Hex;
 
-bool internal(Type *type) {
-    if (type->code() == TypeCode::Struct)
-        return true;
-    if (type->code() != TypeCode::Tuple)
-        return false;
-    const auto t = static_cast<TupleType *>(type);
-    return !t->isTagged() && !t->isCell();
-}
-size_t arity(Type *type) {
-    return type->code() == TypeCode::Struct ? static_cast<StructType *>(type)->size()
-                                            : static_cast<TupleType *>(type)->size();
-}
-Type *memberType(Type *type, size_t i) {
-    return type->code() == TypeCode::Struct ? static_cast<StructType *>(type)->typeAt(i)
-                                            : static_cast<TupleType *>(type)->typeAt(i);
-}
-std::string memberName(Type *type, size_t i) {
-    return type->code() == TypeCode::Struct
-               ? std::string(static_cast<StructType *>(type)->fieldName(i))
-               : std::to_string(i);
-}
-std::string pathAt(const std::string &path, const std::string &name) {
-    return path.empty() ? name : path + "." + name;
-}
+// What a tree and a leaf are, and how a path is written: core::type::tree.
+using core::type::tree::arity;
+using core::type::tree::childName;
+using core::type::tree::childPath;
+using core::type::tree::childType;
+using core::type::tree::displayPath;
+using core::type::tree::isInternal;
 [[noreturn]] void mismatch(const std::string &path, const std::string &reason) {
-    throw std::invalid_argument((path.empty() ? "$" : path) + ": " + reason);
+    throw std::invalid_argument(displayPath(path) + ": " + reason);
 }
 std::string kind(Type *type) {
     if (tensor::asTensorType(type))
@@ -90,7 +74,7 @@ std::string kind(Type *type) {
     case TypeCode::Struct:
         return "struct";
     case TypeCode::Tuple:
-        if (internal(type))
+        if (isInternal(type))
             return "tuple";
         break;
     case TypeCode::Float32:
@@ -141,14 +125,14 @@ NativeNode snapshot(Type *type, slot_t value, const std::string &path, Checkpoin
     node.spec      = {{"kind", tag}, {"path", path}};
     if (tag == "unsupported")
         mismatch(path, "unsupported checkpoint leaf type " + type->toString());
-    if (internal(type)) {
+    if (isInternal(type)) {
         node.spec["members"] = Json::array();
         for (size_t i = 0; i < arity(type); ++i) {
-            const auto name    = memberName(type, i);
+            const auto name    = childName(type, i);
             const slot_t child = type->code() == TypeCode::Struct
                                      ? fromSlot<::Struct *>(value)->get<slot_t>(i)
                                      : fromSlot<::Tuple *>(value)->get<slot_t>(i);
-            auto nested        = snapshot(memberType(type, i), child, pathAt(path, name), files);
+            auto nested = snapshot(childType(type, i), child, childPath(path, type, i), files);
             node.spec["members"].push_back({{"name", name}, {"type", std::move(nested.spec)}});
         }
         return node;
@@ -194,19 +178,19 @@ NativeNode readNode(
     const auto tag = kind(type);
     if (tag == "unsupported" || spec.at("kind") != tag || spec.at("path") != path)
         mismatch(path, "checkpoint type structure differs from requested type");
-    if (internal(type)) {
+    if (isInternal(type)) {
         const auto &members = spec.at("members");
         if (!members.is_array() || members.size() != arity(type))
             mismatch(path, "member count differs");
         for (size_t i = 0; i < arity(type); ++i) {
-            const auto name = memberName(type, i);
+            const auto name = childName(type, i);
             if (members[i].at("name") != name)
-                mismatch(pathAt(path, name), "member name or order differs");
+                mismatch(childPath(path, type, i), "member name or order differs");
             node.children.push_back(readNode(
-                memberType(type, i),
+                childType(type, i),
                 members[i].at("type"),
                 directory,
-                pathAt(path, name)));
+                childPath(path, type, i)));
         }
         return node;
     }
@@ -258,12 +242,12 @@ NativeNode readNode(
 
 slot_t rebuild(Type *type, const NativeNode &node) {
     const auto tag = kind(type);
-    if (internal(type)) {
+    if (isInternal(type)) {
         const auto object = type->code() == TypeCode::Struct
                                 ? toSlot(::Struct::create(arity(type), mm::autoSpace()))
                                 : toSlot(::Tuple::create(arity(type), mm::autoSpace()));
         for (size_t i = 0; i < arity(type); ++i) {
-            const auto child = rebuild(memberType(type, i), node.children[i]);
+            const auto child = rebuild(childType(type, i), node.children[i]);
             if (type->code() == TypeCode::Struct)
                 fromSlot<::Struct *>(object)->set<slot_t>(
                     i,
@@ -317,7 +301,7 @@ slot_t saveKernel(ArgsView &, ArgsView &norm, Context &) {
     } catch (const std::exception &error) {
         core::error::throwRuntimeFault(
             core::error::RuntimeDiag::FileSystemError,
-            "nn.save_tree",
+            "tree.save_tree",
             directory,
             error.what());
     }
@@ -341,13 +325,49 @@ slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
         const auto restored = readNode(output->payloadType(), manifest.at("tree"), directory, "");
         if (!dataHash.empty() && manifest.at("dataset_manifest_sha256") != dataHash)
             std::cerr
-                << "warning: nn.load_tree: dataset manifest SHA-256 differs from checkpoint\n";
+                << "warning: tree.load_tree: dataset manifest SHA-256 differs from checkpoint\n";
         mm::NoCollectionScope guard;
         return makeOk(rebuild(output->payloadType(), restored), output);
     } catch (const std::exception &error) {
-        return makeError("CheckpointError", directory + ": " + error.what(), "<nn::load_tree>");
+        return makeError("CheckpointError", directory + ": " + error.what(), "<tree::load_tree>");
     }
 }
+// A leaf type no checkpoint can hold is a compile-time error that names the path (design
+// principles 2.17); a type variable is decided when the function is instantiated.
+bool supportedLeaf(Type *leaf) { return containsTypeVar(leaf) || kind(leaf) != "unsupported"; }
+std::optional<std::string> unsupportedLeaf(Type *tree) {
+    if (const auto bad = core::type::tree::firstRejectedLeaf(tree, supportedLeaf))
+        return "tree leaf '" + displayPath(bad->first) + "' has type " + bad->second->toString() +
+               ", which a checkpoint cannot hold (tensor, Bytes, string, bool, i32, int, f32, f64)";
+    return std::nullopt;
+}
+class SaveResolver final : public FuncTypeResolver {
+  public:
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm, const ModifierSet &mods) const override {
+        if (!fits(with, norm) || unsupportedLeaf(norm[1]))
+            return std::nullopt;
+        param_vec_t args;
+        for (auto t : norm)
+            args.emplace_back(t, false);
+        return FunctionType::create({}, args, Type::Void(), mods);
+    }
+    std::optional<std::string> explainRejection(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t,
+        const ModifierSet &) const override {
+        return fits(with, norm) ? unsupportedLeaf(norm[1]) : std::nullopt;
+    }
+    std::string signature() const override {
+        return "(dir: string, tree: T, dataset_manifest_sha256?: string) => void";
+    }
+
+  private:
+    static bool fits(const type_vec_t &with, const type_vec_t &norm) {
+        return with.empty() && (norm.size() == 2 || norm.size() == 3) &&
+               norm[0]->code() == TypeCode::String &&
+               (norm.size() == 2 || norm[2]->code() == TypeCode::String);
+    }
+};
 class LoadResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *>
@@ -357,45 +377,46 @@ class LoadResolver final : public FuncTypeResolver {
     std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,
         static_args_t, const ModifierSet &mods) const override {
-        if (!with.empty() || norm.empty() || norm.size() > 2 ||
-            !std::all_of(norm.begin(), norm.end(), [](Type *t) {
-                return t->code() == TypeCode::String;
-            }))
-            return std::nullopt;
-        Type *target = types.size() == 1 ? types[0] : types.empty() ? expected : nullptr;
-        if (types.empty())
-            if (const auto fallible = asFallible(target))
-                target = fallible->payloadType();
-        if (!target || containsTypeVar(target))
+        Type *target = targetOf(types, expected);
+        if (!fits(with, norm) || !target || containsTypeVar(target) || unsupportedLeaf(target))
             return std::nullopt;
         param_vec_t args;
         for (auto t : norm)
             args.emplace_back(t, false);
         return FunctionType::create({}, args, TupleType::fallible(target), mods);
     }
+    std::optional<std::string> explainCallRejection(
+        const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,
+        static_args_t, const ModifierSet &) const override {
+        Type *target = targetOf(types, expected);
+        return fits(with, norm) && target && !containsTypeVar(target) ? unsupportedLeaf(target)
+                                                                      : std::nullopt;
+    }
     std::string signature() const override {
         return "::<T>(dir: string, dataset_manifest_sha256?: string) => T!";
+    }
+
+  private:
+    static bool fits(const type_vec_t &with, const type_vec_t &norm) {
+        return with.empty() && !norm.empty() && norm.size() <= 2 &&
+               std::all_of(norm.begin(), norm.end(), [](Type *t) {
+                   return t->code() == TypeCode::String;
+               });
+    }
+    static Type *targetOf(const type_vec_t &types, Type *expected) {
+        Type *target = types.size() == 1 ? types[0] : types.empty() ? expected : nullptr;
+        if (types.empty())
+            if (const auto fallible = asFallible(target))
+                target = fallible->payloadType();
+        return target;
     }
 };
 } // namespace
 
 std::vector<oper_group_ptr_t> checkpointOperatorGroups() {
     return {
-        OperatorGroup::create("load_tree", {{"nn:load_tree", std::make_shared<LoadResolver>()}}),
-        OperatorGroup::create(
-            "save_tree",
-            {{"nn:save_tree",
-              DynamicFuncTypeResolver::create(
-                  {{0, {}}, {-1, {}}},
-                  "(dir: string, tree: T, dataset_manifest_sha256?: string) => void",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      if ((norm.size() != 2 && norm.size() != 3) ||
-                          norm[0]->code() != TypeCode::String ||
-                          (norm.size() == 3 && norm[2]->code() != TypeCode::String))
-                          return std::nullopt;
-                      return Type::Void();
-                  })}}),
+        OperatorGroup::create("load_tree", {{"tree:load_tree", std::make_shared<LoadResolver>()}}),
+        OperatorGroup::create("save_tree", {{"tree:save_tree", std::make_shared<SaveResolver>()}}),
     };
 }
 std::unordered_map<std::string, operator_t> checkpointKernels() {
@@ -403,12 +424,12 @@ std::unordered_map<std::string, operator_t> checkpointKernels() {
 }
 void declareCheckpointResources() {
     auto &table = core::OperatorTable::instance();
-    table.declare("nn", {{"save_tree", false}, {"load_tree", false}});
+    table.declare("tree", {{"save_tree", false}, {"load_tree", false}});
     auto reader = core::sem::externalAmbient("fs", core::sem::AccessMode::Read);
     reader.accesses.push_back(core::sem::ambientAccess("io:stderr", core::sem::AccessMode::Write));
-    table.declareResources("nn:load_tree", std::move(reader));
+    table.declareResources("tree:load_tree", std::move(reader));
     table.declareResources(
-        "nn:save_tree",
+        "tree:save_tree",
         core::sem::externalAmbient("fs", core::sem::AccessMode::ReadModifyWrite));
 }
-} // namespace camel::nn
+} // namespace camel::treelib

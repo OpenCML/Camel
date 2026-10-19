@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -460,6 +460,7 @@ class EncodeSession {
                 .runtimeFlags = header->runtimeFlags,
                 .origin       = header->origin,
                 .permissions  = header->permissions,
+                .attrs        = header->attrs,
             };
             std::vector<std::byte> payloadStorage;
 

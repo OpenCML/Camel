@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -87,7 +87,7 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         if (name.empty()) {
             return std::nullopt;
         }
-        return OperatorGroup::create(name, std::move(allResolvers));
+        return OperatorGroup::merged(name, std::move(allResolvers));
     }
     if (detail::EntityAccess::isDecoratedGraph(first)) {
         for (const auto &ent : entities) {
@@ -186,8 +186,7 @@ void Module::markImportedRefFromMod(const Reference &ref, const module_ptr_t &mo
 }
 
 void Module::markImportedRefFromMod(
-    const Reference &localRef, const Reference &remoteRef, const module_ptr_t &mod,
-    bool ambient) {
+    const Reference &localRef, const Reference &remoteRef, const module_ptr_t &mod, bool ambient) {
     auto &vec = importedRefMap_[localRef];
     auto it   = std::find_if(vec.begin(), vec.end(), [&](const ImportedRefBinding &binding) {
         return binding.mod == mod && binding.remoteRef == remoteRef;

@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Coverage statistics of the bytecode VM and its JIT, off unless the environment variable
-// CAMEL_FVM_STATS names a file. One JSON object is appended to the file for each run:
+// std::fvm(stats="file") names a file. One JSON object is appended to the file for each run:
 //
 //   {"jit": true, "graphs": [{"name": ..., "pc": ..., "ops": ..., "executed": ...,
 //     "status": "compiled" | "compilable" | "rejected" | "interpreter",
@@ -102,12 +102,11 @@ std::string jsonString(const std::string &text) {
 } // namespace
 
 void FastVMSchedPass::statsBegin() {
-    const char *path = std::getenv("CAMEL_FVM_STATS");
-    if (path == nullptr || path[0] == 0) {
+    if (statsPath_.empty()) {
         return;
     }
     stats_       = std::make_shared<Stats>();
-    stats_->path = path;
+    stats_->path = statsPath_;
     stats_->counts.assign(bytecodes_.capacity(), 0);
     opCounts_ = stats_->counts.data();
     for (const auto &[graph, pc] : offsetMap_) {
@@ -195,18 +194,19 @@ void FastVMSchedPass::statsWrite() {
     bool first      = true;
     for (const auto &record : stats_->graphs) {
         uint64_t executed = 0;
-        for (size_t p = record.pc; p < record.pc + record.length && p < stats_->counts.size(); ++p) {
+        for (size_t p = record.pc; p < record.pc + record.length && p < stats_->counts.size();
+             ++p) {
             executed += stats_->counts[p];
         }
-        const char *status = !jit                 ? "interpreter"
-                             : record.compiled    ? "compiled"
-                             : record.compilable  ? "compilable"
-                                                  : "rejected";
+        const char *status = !jit                ? "interpreter"
+                             : record.compiled   ? "compiled"
+                             : record.compilable ? "compilable"
+                                                 : "rejected";
         out += first ? "" : ", ";
-        first = false;
+        first            = false;
         const char *mode = !jit || !(record.compiled || record.compilable) ? ""
-                           : record.runtime.empty()                         ? "frameless"
-                                                                            : "framed";
+                           : record.runtime.empty()                        ? "frameless"
+                                                                           : "framed";
         out += std::format(
             "{{\"name\": {}, \"pc\": {}, \"ops\": {}, \"executed\": {}, \"status\": \"{}\", "
             "\"mode\": \"{}\", \"refSlots\": {}, \"reason\": {}, ",

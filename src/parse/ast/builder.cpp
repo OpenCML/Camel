@@ -521,18 +521,22 @@ Value Builder::visitBlockStmt(cst::BlockStmt context) {
         unwrapNodeAs<StmtBlockLoad>(res)->wait();
     }
     // `@numeric(...)` before a block grants its permissions to the block (design principles
-    // 2.13). A decorator takes a function and gives one; a block is not a function.
+    // 2.13). A decorator before a block decorates the block as a function of no parameters
+    // called where it is written (language reference 7.6): the decorators are the block's second
+    // child.
+    node_ptr_t decorators = nullptr;
     for (const auto &anno : context->all<cst::FuncAnno>()) {
         if (const auto permissions = numericAnnotationOf(anno)) {
             unwrapNodeAs<StmtBlockLoad>(res)->grantNumeric(*permissions);
-        } else {
-            diags_->of(SemanticDiag::InvalidAnnotation)
-                .at(rangeOf(anno->firstToken(), anno->lastToken()))
-                .commit(
-                    anno->get<cst::IdentRef>()->text(),
-                    "a decorator applies to a function, and this is a block; a block takes "
-                    "only '@numeric(...)'");
+            continue;
         }
+        if (!decorators) {
+            decorators = createNodeAs<RepeatedLoad>("FuncAnno");
+        }
+        *decorators << any2node(visitFuncAnno(anno));
+    }
+    if (decorators) {
+        *res << decorators;
     }
     LEAVE("BlockStmt");
     return res;
@@ -2431,7 +2435,23 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             } else if (child.node().is(NK::TypeArguments)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Instantiate);
                 setNodeTokenRangeByContext(exprNode, cst::TypeArguments(child.node()));
-                *exprNode << lhsNode << any2node(visitTypeList(child.node().get<cst::TypeList>()));
+                // Positional (`typeList`) or named (`A = int`): a named argument is a
+                // NamedTypeLoad that holds its type.
+                node_ptr_t typeArgs;
+                if (child.node().get<cst::TypeList>()) {
+                    typeArgs = any2node(visitTypeList(child.node().get<cst::TypeList>()));
+                } else {
+                    typeArgs = createNodeAs<RepeatedLoad>("Type");
+                    setNodeTokenRangeByContext(typeArgs, cst::TypeArguments(child.node()));
+                    for (const auto named : child.node().all<cst::NamedTypeArgument>()) {
+                        node_ptr_t namedNode = createNodeAs<NamedTypeLoad>(
+                            Reference(named->tok(TK::Identifier)->text()));
+                        setNodeTokenRangeByContext(namedNode, named);
+                        *namedNode << any2node(visitType(named->type()));
+                        *typeArgs << namedNode;
+                    }
+                }
+                *exprNode << lhsNode << typeArgs;
                 registerAstSemanticBundle(
                     exprNode,
                     {

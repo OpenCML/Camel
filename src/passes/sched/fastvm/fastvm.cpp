@@ -13,16 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: May. 06, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "fastvm.h"
-#include "camel/execute/observer.h"
-#include "camel/runtime/loop_lowering.h"
-#include "camel/execute/fault_isolation.h"
 #include "camel/core/module/module.h"
+#include "camel/execute/fault_isolation.h"
+#include "camel/execute/loop_driver.h"
+#include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/loop_lowering.h"
 #include "camel/utils/log.h"
 #include "opperf.h"
 
@@ -155,7 +156,6 @@ inline uint32_t incFastVmIndirectCallCountOf(camel::runtime::GCGraph *graph) {
     graph->setExtraSlot(kFastVmIndirectCallCountSlot, static_cast<uintptr_t>(next));
     return next;
 }
-
 
 // Direct-call layouts encode callee port slots during bytecode linking. Most calls move scalar
 // values between positive dynamic slots, so copying through slotBase() avoids the generic
@@ -347,7 +347,7 @@ constexpr size_t kLateBytecodeReserve = size_t{1} << 22; // 4M bytecodes, 32 MiB
 void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
     ASSERT(runtimeRoot != nullptr, "Runtime root graph is null.");
     auto linked = compileAndLink(context_, runtimeRoot, kFastVmCompileStrategy);
-    bytecodes_ = std::move(linked.codes);
+    bytecodes_  = std::move(linked.codes);
     bytecodes_.reserve(bytecodes_.size() + std::max(kLateBytecodeReserve, bytecodes_.size() * 4));
     offsetMap_ = std::move(linked.offsetMap);
     for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
@@ -363,7 +363,11 @@ void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
     // What is compiled is read from the graphs themselves, not from a table keyed by address: a
     // graph created at run time can be collected and its address reused by a new one.
     auto linked = compileAndLinkFrom(
-        context_, graph, kFastVmCompileStrategy, fastVmEntryPcOf, bytecodes_.size());
+        context_,
+        graph,
+        kFastVmCompileStrategy,
+        fastVmEntryPcOf,
+        bytecodes_.size());
     if (bytecodes_.size() + linked.codes.size() > bytecodes_.capacity()) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -389,9 +393,8 @@ void FastVMSchedPass::push(size_t pc, Frame *frame) {
         camel::execute::throwRecursionLimitReached(frame->graphName(), maxRecursionDepth_);
     }
     if (stackDepth_ == pcStack_.size()) [[unlikely]] {
-        const size_t grown = std::min(
-            pcStack_.size() * 2,
-            maxRecursionDepth_ + camel::execute::kEntryCalls);
+        const size_t grown =
+            std::min(pcStack_.size() * 2, maxRecursionDepth_ + camel::execute::kEntryCalls);
         pcStack_.resize(grown);
         frameStack_.resize(grown);
     }
@@ -479,13 +482,22 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     // Loops. By default they run as the tail recursion they mean, on a private copy of the
     // program (camel/runtime/loop_lowering.h): today that is faster here than the native
     // instruction (evalLoop), which enters the interpreter again for each of its two calls a
-    // round (docs/technical/39_loops.md, section 5). Under a debugger, and with
-    // CAMEL_FVM_NATIVE_LOOP=1, the program's own LOOP nodes run natively, so that the frames
-    // shown are the loop's condition and body (folded into their function). Making the native
-    // loop a bytecode loop, at least as fast as the lowering, is the next step.
-    const char *nativeLoops = std::getenv("CAMEL_FVM_NATIVE_LOOP");
-    if (camel::execute::executionObserver() == nullptr &&
-        !(nativeLoops != nullptr && std::string_view(nativeLoops) == "1")) {
+    // round (docs/technical/39_loops.md, section 5). Natively, so that the frames shown are the
+    // loop's condition and body (folded into their function): when an observer asks for them
+    // (ExecutionObserver::wantsLoopFrames: the debugger) and with std::fvm(native_loop=true).
+    // The two ways give the same results, faults and output; the choice is logged. Making the
+    // native loop a bytecode loop, at least as fast as the lowering, is the next step.
+    const auto *observer = camel::execute::executionObserver();
+    const bool observed  = observer != nullptr && observer->wantsLoopFrames();
+    const bool native    = observed || nativeLoop_;
+    CAMEL_LOG_INFO_S(
+        "FastVM",
+        "Loops run {} ({}).",
+        native ? "natively" : "lowered to tail recursion",
+        observed ? "an observer shows loop frames"
+        : native ? "native_loop=true"
+                 : "the default");
+    if (!native) {
         graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
     }
     camel::runtime::GCGraph *runtimeRoot = graph;
@@ -493,7 +505,7 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
 
     stackDepth_  = 0;
     nestedCalls_ = 0;
-    // Written however the run ends (no-op unless CAMEL_FVM_STATS is set).
+    // Written however the run ends (no-op unless std::fvm is given stats="file").
     struct StatsAtExit {
         FastVMSchedPass *vm;
         ~StatsAtExit() { vm->statsWrite(); }
@@ -597,7 +609,7 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
         const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         requireNestedCallRoom(&currFrame);
-        Frame *frame                   = framePool_.acquire(site.runtimeGraph);
+        Frame *frame = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
         slot_t result = callElement(site, frame);
@@ -621,7 +633,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
         const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         requireNestedCallRoom(&currFrame);
-        Frame *frame                   = framePool_.acquire(site.runtimeGraph);
+        Frame *frame = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
         slot_t result = callElement(site, frame);
@@ -660,53 +672,48 @@ void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
         }
         currFrame.set(self, state);
     }
-    // The ports of a round: (the element,) the values of the state, the captures.
-    const auto bind = [&](Frame *frame, camel::runtime::GCGraph *target, const slot_t *element) {
-        const auto norm = target->normPorts();
-        size_t port     = 0;
-        if (element != nullptr) {
-            frame->set(target->node(norm[port++])->dataIndex, *element);
+    // The rounds are the loop's (camel/execute/loop_driver.h); this interpreter supplies a frame
+    // and a call for each, through the call path of the higher-order operators.
+    struct Host {
+        FastVMSchedPass &vm;
+        Frame &currFrame;
+        data_idx_t self;
+        size_t k;
+        data_arr_t nargs;
+        data_arr_t wargs;
+        size_t first;
+        HigherOrderCallSite condSite, bodySite;
+
+        void beforeRound(size_t) {}
+        slot_t callRound(camel::runtime::GCGraph *target, const slot_t *element) {
+            vm.requireNestedCallRoom(&currFrame);
+            Frame *frame = vm.framePool_.acquire(target);
+            camel::execute::bindLoopRound(
+                frame,
+                target,
+                k,
+                element,
+                wargs.size(),
+                [&](size_t j) {
+                    return k == 1 ? currFrame.get<slot_t>(self)
+                                  : currFrame.get<Tuple *>(self)->get<slot_t>(j);
+                },
+                [&](size_t c) { return currFrame.get<slot_t>(wargs[c]); });
+            return vm.callElement(target == condSite.runtimeGraph ? condSite : bodySite, frame);
         }
-        if (k == 1) {
-            frame->set(target->node(norm[port])->dataIndex, currFrame.get<slot_t>(self));
-        } else {
-            Tuple *state = currFrame.get<Tuple *>(self);
-            for (size_t j = 0; j < k; ++j) {
-                frame->set(target->node(norm[port + j])->dataIndex, state->get<slot_t>(j));
-            }
-        }
-        const auto with = target->withPorts();
-        for (size_t c = 0; c < wargs.size(); ++c) {
-            frame->set(target->node(with[c])->dataIndex, currFrame.get<slot_t>(wargs[c]));
-        }
-    };
-    const HigherOrderCallSite condSite{
-        .runtimeGraph = cond,
-        .entryPc      = cond ? graphEntryPc(cond) : 0};
-    const HigherOrderCallSite bodySite{.runtimeGraph = body, .entryPc = graphEntryPc(body)};
-    for (size_t round = 0;; ++round) {
-        // Each round: the condition first, then the next element (camel/core/loop_kind.h).
-        if (cond != nullptr) {
-            requireNestedCallRoom(&currFrame);
-            Frame *frame = framePool_.acquire(cond);
-            bind(frame, cond, nullptr);
-            if (!fromSlot<Bool>(callElement(condSite, frame))) {
-                break;
-            }
-        }
-        slot_t element = NullSlot;
-        if (iterates) {
-            Array *array = currFrame.get<Array *>(nargs[0]);
-            if (round >= array->size()) {
-                break;
-            }
-            element = array->data()[round];
-        }
-        requireNestedCallRoom(&currFrame);
-        Frame *frame = framePool_.acquire(body);
-        bind(frame, body, iterates ? &element : nullptr);
-        currFrame.set(self, callElement(bodySite, frame));
-    }
+        Array *iterable() { return currFrame.get<Array *>(nargs[0]); }
+        void advance(slot_t next) { currFrame.set(self, next); }
+    } host{
+        *this,
+        currFrame,
+        self,
+        k,
+        nargs,
+        wargs,
+        first,
+        HigherOrderCallSite{.runtimeGraph = cond, .entryPc = cond ? graphEntryPc(cond) : 0},
+        HigherOrderCallSite{.runtimeGraph = body, .entryPc = graphEntryPc(body)}};
+    camel::execute::driveLoopRounds(camel::execute::LoopShape{cond, body, iterates, k}, host);
 }
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
@@ -728,7 +735,7 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
         const HigherOrderCallSite site = higherOrderCallSite(func);
         const slot_t args[]            = {currFrame.get<slot_t>(self), arr->data()[i]};
         requireNestedCallRoom(&currFrame);
-        Frame *frame                   = framePool_.acquire(site.runtimeGraph);
+        Frame *frame = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
 
         currFrame.set(self, callElement(site, frame));
@@ -745,7 +752,7 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
         const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
         requireNestedCallRoom(&currFrame);
-        Frame *frame                   = framePool_.acquire(site.runtimeGraph);
+        Frame *frame = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
         callElement(site, frame);
@@ -858,13 +865,13 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
 }
 
 void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
-    auto *jc          = static_cast<JitContext *>(jitCtx);
-    const auto kind   = static_cast<x64::JitFaultKind>(jc->faultKind);
-    const size_t pc   = jc->faultPc;
+    auto *jc        = static_cast<JitContext *>(jitCtx);
+    const auto kind = static_cast<x64::JitFaultKind>(jc->faultKind);
+    const size_t pc = jc->faultPc;
     // Only meaningful for NativeStackExhausted: the refused call had taken its unit already.
     const size_t budgetLeft = jc->depthBudget;
-    jc->faultKind     = 0;
-    jc->faultPc       = 0;
+    jc->faultKind           = 0;
+    jc->faultPc             = 0;
     if (kind == x64::JitFaultKind::PendingException) {
         // What a helper of framed code caught: located already where it is a fault.
         std::exception_ptr pending = std::move(jc->pending);
@@ -875,19 +882,13 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
     }
     // The fault is in the graph the frame belongs to (compiled code calls only itself), at the
     // bytecode it recorded: the position the interpreter reports for the same fault.
-    const ExecutionSite site = makePcExecutionSite(
-        context_->sourceContext(),
-        frame,
-        pc,
-        0,
-        "",
-        ExecutionSiteKind::JitPc);
+    const ExecutionSite site =
+        makePcExecutionSite(context_->sourceContext(), frame, pc, 0, "", ExecutionSiteKind::JitPc);
     const std::string graphName = frame->graphName();
     if (framePool_.isActive(frame))
         framePool_.release(frame);
     const RuntimeFault fault =
-        kind == x64::JitFaultKind::DivisionByZero
-            ? RuntimeFault::make(RuntimeDiag::DivisionByZero)
+        kind == x64::JitFaultKind::DivisionByZero ? RuntimeFault::make(RuntimeDiag::DivisionByZero)
         : kind == x64::JitFaultKind::MaxRecursionDepthExceeded
             ? RuntimeFault::make(
                   RuntimeDiag::MaxRecursionDepthExceeded,
@@ -927,7 +928,8 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
     // has framed code, that code becomes `cur` and nothing is returned: the loop enters it.
     // Otherwise the callee runs to its end here, in frameless code or in the interpreter, and
     // its result is returned.
-    auto startCallee = [&](camel::runtime::GCGraph *target, Frame *callee) -> std::optional<slot_t> {
+    auto startCallee = [&](camel::runtime::GCGraph *target,
+                           Frame *callee) -> std::optional<slot_t> {
         for (;;) {
             JitEntryFn targetFn = jitFnOf(target);
             if (targetFn != nullptr && fastVmJitFramedOf(target)) {
@@ -974,20 +976,20 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                 pc = jc->faultPc;
                 raiseJitFault(jitCtx, cur);
             }
-            const auto exitKind = static_cast<x64::JitExitKind>(jc->exitKind);
+            const auto exitKind  = static_cast<x64::JitExitKind>(jc->exitKind);
             bool activationEnded = false;
             if (exitKind == x64::JitExitKind::Return) {
                 framePool_.release(cur);
                 activationEnded = true;
             } else {
-                pc             = jc->exitPc;
-                resume         = jc->resumeAddr;
-                Bytecode *bc   = &bytecodes_[pc];
+                pc           = jc->exitPc;
+                resume       = jc->resumeAddr;
+                Bytecode *bc = &bytecodes_[pc];
                 switch (exitKind) {
                 case x64::JitExitKind::Call: {
                     fastVmCallBoundarySafepoint();
-                    bc           = materializeCallTarget(pc, bc);
-                    auto *target = getFuncExtraRuntimeGraph(bc);
+                    bc                 = materializeCallTarget(pc, bc);
+                    auto *target       = getFuncExtraRuntimeGraph(bc);
                     const size_t depth = stackDepth_;
                     push(pc, cur);
                     if (resumeStack_.size() < pcStack_.size())
@@ -1046,8 +1048,12 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                         Frame *callee = framePool_.acquire(target);
                         populateIndirectCallFrame(cur, callee, function, nargs, wargs);
                         ++nestedCalls_;
-                        const slot_t value =
-                            invokeCallOrJit(graphEntryPc(target), target, callee, jitCtx, callCount);
+                        const slot_t value = invokeCallOrJit(
+                            graphEntryPc(target),
+                            target,
+                            callee,
+                            jitCtx,
+                            callCount);
                         --nestedCalls_;
                         cur->set(bc->result, value);
                     }

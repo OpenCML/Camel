@@ -31,9 +31,9 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
             "sha256",
-            {{"crypto:sha256",
+            {{"crypto:sha256_str",
               StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String())},
-             {"crypto:sha256",
+             {"crypto:sha256_bytes",
               StaticFuncTypeResolver::create({}, {{BytesType::get(), false}}, Type::String())}}),
         OperatorGroup::create(
             "sha256_rounds",
@@ -64,7 +64,8 @@ bool CryptoModule::load() {
     camel::core::OperatorTable::instance().declare(
         "crypto",
         {
-            {"sha256", true},
+            {"sha256_str", true},
+            {"sha256_bytes", true},
             {"sha256_rounds", true},
         });
     loaded_ = true;

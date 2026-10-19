@@ -1,0 +1,10 @@
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+func main(): void sync {
+    let c = Shape::Circl(1.0)
+    println(c)
+}

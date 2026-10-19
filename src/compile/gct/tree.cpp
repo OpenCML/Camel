@@ -405,7 +405,9 @@ std::string Node::toString() const {
     case NodeKind::DECL:
         return "DECL: " + std::string(isFunc() ? "func " : "type ") + name();
     case NodeKind::FUNC:
-        return "FUNC: " + (name().empty() ? std::string("(anonymous)") : name());
+        return "FUNC: " + (name().empty()
+                               ? std::string(decoratedBlock() ? "(decorated block)" : "(anonymous)")
+                               : name());
     case NodeKind::NREF:
         return "NREF: " + name();
     case NodeKind::DREF:

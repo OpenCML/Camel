@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,4 +44,9 @@ void declareBuiltinOperatorSemantics();
 /// docs/design/op-semantics section 8): `:var/*` and the assignments (`names`: the built-in
 /// operator names, `op/assn...` among them) their variable cell, the console and the profiler
 /// their ambient state. Called after the traits.
+/// Whether the built-in operator `name` (without the leading ':') stores into a variable cell
+/// (the assignments). The one place that names the family: purity and the resource
+/// declarations both read it, nothing else infers effects from a name.
+bool storesIntoCell(std::string_view name);
+
 void declareBuiltinOperatorResources(std::span<const std::string_view> names);

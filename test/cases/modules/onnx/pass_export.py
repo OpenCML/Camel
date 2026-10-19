@@ -2,7 +2,7 @@
 
   equiv    each program is exported twice: by running it (`camel m.cml`, the
            export_model operator) and by the pipeline `camel m.cml std::macro
-           std::opt onnx::export` (CAMEL_ONNX_OUT names the file; the
+           std::opt onnx::export` (its parameter out names the file; the
            program is not executed). Both models must pass
            onnx.checker.check_model(full_check=True) and give bit-identical
            ONNX Runtime outputs on the same inputs (numpy array_equal).
@@ -73,6 +73,11 @@ def camel(args: list, env_extra: dict) -> subprocess.CompletedProcess:
     return subprocess.run([str(exe), *args], env=env, capture_output=True, text=True, cwd=REPO_ROOT)
 
 
+def with_out(passes: list, model: Path) -> list:
+    """The pass list with the model file given as the parameter out of onnx::export."""
+    return [f'onnx::export(out="{model.as_posix()}")' if p == "onnx::export" else p for p in passes]
+
+
 def rel(program: str) -> str:
     return (HERE / program).relative_to(REPO_ROOT).as_posix()
 
@@ -86,10 +91,10 @@ def equiv(out: Path) -> bool:
     for program in PROGRAMS:
         stem = Path(program).stem
         by_op, by_pass = out / f"{stem}.export_model.onnx", out / f"{stem}.pass.onnx"
-        proc = camel([rel(program)], {"ONNX_OUT": str(by_op), "CAMEL_ONNX_OUT": ""})
+        proc = camel([rel(program)], {"ONNX_OUT": str(by_op)})
         if proc.returncode != 0 or not by_op.exists():
             raise SystemExit(f"{program}: export_model run failed:\n{proc.stdout}\n{proc.stderr}")
-        proc = camel([rel(program), *PIPELINE], {"ONNX_OUT": "", "CAMEL_ONNX_OUT": str(by_pass)})
+        proc = camel([rel(program), *with_out(PIPELINE, by_pass)], {"ONNX_OUT": ""})
         if proc.returncode != 0:
             raise SystemExit(f"{program}: pipeline failed:\n{proc.stdout}\n{proc.stderr}")
         # The pass consumes the graph: the program (its println) must not have run.
@@ -144,8 +149,8 @@ def refuse(out: Path) -> bool:
     for program, passes, fragment, line in REFUSALS:
         model = out / f"{Path(program).stem}.refused.onnx"
         proc = camel(
-            ["--output-format", "json", rel(program), *passes],
-            {"ONNX_OUT": str(model), "CAMEL_ONNX_OUT": str(model)},
+            ["--output-format", "json", rel(program), *with_out(passes, model)],
+            {"ONNX_OUT": str(model)},
         )
         label = f"{program} [{' '.join(passes)}]"
         try:

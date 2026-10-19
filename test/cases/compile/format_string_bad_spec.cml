@@ -1,0 +1,5 @@
+module format_string_bad_spec
+func main(): int sync {
+    println('{:d}'->format<'text'>)
+    return 0
+}

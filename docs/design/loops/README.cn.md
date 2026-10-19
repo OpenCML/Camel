@@ -921,7 +921,7 @@ camel $E/macro_loop.cml std::macro std::nvm         # L2
 K=3 camel $E/invariant.cml std::opt std::rgir | grep -E 'label="loop|mul_l'   # L3
 camel $E/sum_tail.cml std::stats std::null          # 统计：5 张图 25 个节点
 camel $E/sum_tail.cml std::opt std::stats std::null    # 22 张图 68 个节点
-CAMEL_ONNX_OUT=/tmp/loop.onnx camel $E/export_tail.cml std::macro std::opt onnx::export   # L4
+camel $E/export_tail.cml std::macro std::opt 'onnx::export(out="/tmp/loop.onnx")'   # L4
 python3 -c "
 import onnx, collections
 def count(g, c):

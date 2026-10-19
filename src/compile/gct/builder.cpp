@@ -26,6 +26,7 @@
 #include "camel/core/data/composite/tuple.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
@@ -316,6 +317,8 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("float"), Type::Float64());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
+    // The type of binary data (design principles 2.17), a built-in name like `string`.
+    typeScope_->insert(Reference("Bytes"), camel::core::type::BytesType::get());
     // No `any`: see reportAnyType.
     typeScope_->insert(Reference("void"), Type::Void());
     // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 2.9).
@@ -1381,10 +1384,38 @@ node_ptr_t Builder::makeExec(bool synced, bool operands) {
 /*
 StmtBlock(bool sync) : Stmt* stmts ;
 */
-node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
+node_ptr_t Builder::visitDecoratedBlock(const AST::node_ptr_t &ast) {
+    ENTER("DecoratedBlock");
+    node_ptr_t execNode = visitStmtBlock(ast, false);
+    FunctionTypeFactory factory; // no parameters; the result is the block's value
+    FunctionType *type  = factory.buildOpen();
+    node_ptr_t typeNode = tree_->makeType(type, type->implMark());
+    node_ptr_t funcNode = tree_->makeFunc("");
+    funcNode->setDecoratedBlock();
+    *funcNode << typeNode << execNode;
+    for (const auto &annoAst : *ast->atAs<AST::RepeatedLoad>(1)) {
+        ASSERT(annoAst->type() == AST::LoadType::Data, "A decorator should lower to AST Data.");
+        node_ptr_t annoNode = tree_->makeAnno();
+        *annoNode << visitData(annoAst);
+        *funcNode << annoNode;
+    }
+    node_ptr_t linkNode = tree_->makeLink(0);
+    *linkNode << funcNode;
+    setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.block.type");
+    setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.block.func");
+    setOriginFromAst(context_, linkNode, ast, camel::source::OriginKind::GctNode, "gct.block.call");
+    LEAVE("DecoratedBlock");
+    return linkNode;
+}
+
+node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) {
     ENTER("StmtBlock");
     // Ensure the AST node is of the expected type (Stmt)
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for StmtBlock");
+    if (decorators && ast->size() > 1) {
+        LEAVE("StmtBlock");
+        return visitDecoratedBlock(ast);
+    }
 
     // Extract the statement block load and create an ExecLoad node
     // The ExecLoad node represents the execution of the statement block
@@ -1667,36 +1698,6 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
-    case AST::BinaryDataOp::Assign: {
-        opNode = tree_->makeDRef("__assn__");
-    } break;
-    case AST::BinaryDataOp::AssignAdd: {
-        opNode = tree_->makeDRef("__assn_add__");
-    } break;
-    case AST::BinaryDataOp::AssignSub: {
-        opNode = tree_->makeDRef("__assn_sub__");
-    } break;
-    case AST::BinaryDataOp::AssignMul: {
-        opNode = tree_->makeDRef("__assn_mul__");
-    } break;
-    case AST::BinaryDataOp::AssignDiv: {
-        opNode = tree_->makeDRef("__assn_div__");
-    } break;
-    case AST::BinaryDataOp::AssignMod: {
-        opNode = tree_->makeDRef("__assn_mod__");
-    } break;
-    case AST::BinaryDataOp::AssignMat: {
-        opNode = tree_->makeDRef("__assn_mat__");
-    } break;
-    case AST::BinaryDataOp::AssignExp: {
-        opNode = tree_->makeDRef("__assn_pow__");
-    } break;
-    case AST::BinaryDataOp::AssignAnd: {
-        opNode = tree_->makeDRef("__assn_and__");
-    } break;
-    case AST::BinaryDataOp::AssignOr: {
-        opNode = tree_->makeDRef("__assn_or__");
-    } break;
     case AST::BinaryDataOp::LogicalOr:
     case AST::BinaryDataOp::LogicalAnd: {
         // `||` and `&&` are branches, not operators (design principles 2.11).
@@ -1704,18 +1705,6 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         LEAVE("BinaryExpr");
         return res;
     }
-    case AST::BinaryDataOp::Or: {
-        opNode = tree_->makeDRef("__or__");
-    } break;
-    case AST::BinaryDataOp::And: {
-        opNode = tree_->makeDRef("__and__");
-    } break;
-    case AST::BinaryDataOp::Eq: {
-        opNode = tree_->makeDRef("__eq__");
-    } break;
-    case AST::BinaryDataOp::Neq: {
-        opNode = tree_->makeDRef("__neq__");
-    } break;
     case AST::BinaryDataOp::StrictEq:
     case AST::BinaryDataOp::StrictNeq: {
         // Design principles 2.10: `===` is not supported for now (and `!==` with it). It
@@ -1731,46 +1720,15 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 "with '==' and '!='");
         throw BuildAbortException();
     }
-    case AST::BinaryDataOp::Less: {
-        opNode = tree_->makeDRef("__lt__");
+    default: {
+        // Every other operator is a call of the group the table of operator_names.cpp gives
+        // its symbol: plain, compound assignment and `=` alike.
+        const auto group = camel::core::binaryOperatorGroup(AST::to_string(binaryExpr->op()));
+        ASSERT(group.has_value(), "Unknown binary operation");
+        if (!group)
+            return nullptr;
+        opNode = tree_->makeDRef(std::string(*group));
     } break;
-    case AST::BinaryDataOp::LessEq: {
-        opNode = tree_->makeDRef("__le__");
-    } break;
-    case AST::BinaryDataOp::Greater: {
-        opNode = tree_->makeDRef("__gt__");
-    } break;
-    case AST::BinaryDataOp::GreaterEq: {
-        opNode = tree_->makeDRef("__ge__");
-    } break;
-    case AST::BinaryDataOp::Add: {
-        opNode = tree_->makeDRef("__add__");
-    } break;
-    case AST::BinaryDataOp::Sub: {
-        opNode = tree_->makeDRef("__sub__");
-    } break;
-    case AST::BinaryDataOp::Mul: {
-        opNode = tree_->makeDRef("__mul__");
-    } break;
-    case AST::BinaryDataOp::Div: {
-        opNode = tree_->makeDRef("__div__");
-    } break;
-    case AST::BinaryDataOp::Mod: {
-        opNode = tree_->makeDRef("__mod__");
-    } break;
-    case AST::BinaryDataOp::Mat: {
-        opNode = tree_->makeDRef("__mat__");
-    } break;
-    case AST::BinaryDataOp::Pow: {
-        opNode = tree_->makeDRef("__pow__");
-    } break;
-    case AST::BinaryDataOp::Index: {
-        opNode = tree_->makeDRef("__idx__");
-    } break;
-    default:
-        // If the operator is unknown, assert and return nullptr
-        ASSERT(false, "Unknown binary operation");
-        return nullptr;
     }
     auto binaryAstBundle = astSemantic(context_, ast);
     setOriginFromOrigin(
@@ -2043,6 +2001,13 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         res = tree_->makeTypeApplication();
         *res << visitData(lhsASTNode);
         for (const auto &argument : *ast->atAs<AST::RepeatedLoad>(1)) {
+            if (argument->type() == AST::LoadType::NamedType) {
+                // `A = int`: the name as a constant, then the type (design principles 2.17).
+                const auto &named = argument->loadAs<AST::NamedTypeLoad>();
+                *res << tree_->makeData(std::make_shared<StringData>(named->getRef().toString()));
+                *res << tree_->makeType(visitType(argument->at(0)), ImplMark::Graph);
+                continue;
+            }
             Type *type = visitType(argument);
             *res << tree_->makeType(type, ImplMark::Graph);
         }
@@ -2565,7 +2530,15 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     case LiteralType::String: {
         // Decode escaped characters in the string and create a StringData object
         std::string decoded = decodeEscapes(str);
-        data                = tt::as_shared<Data>(make_shared<StringData>(decoded));
+        // A string is always valid UTF-8 (design principles 2.17); `'\xE4'` alone is not.
+        // Write the character itself or `\u{4E2D}`; a byte sequence is a `Bytes` value.
+        if (!camel::utf8::isValid(decoded)) {
+            diags_->of(SemanticDiag::InvalidLiteral)
+                .at(ast->load()->tokenRange())
+                .commit("string (not valid UTF-8; use \\u{...} or the character itself)", str);
+            throw BuildAbortException();
+        }
+        data = tt::as_shared<Data>(make_shared<StringData>(decoded));
     } break;
     case LiteralType::FString: {
         // FString (formatted string) is not supported

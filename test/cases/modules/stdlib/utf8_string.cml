@@ -1,0 +1,35 @@
+/**
+ * A string is always valid UTF-8, indexed and measured in code points (design principles
+ * 2.17); binary data is `Bytes`.
+ */
+module utf8_string
+
+import { split, trim, replace, find, substr, starts_with, repeat, bytes, from_bytes, codepoints, to_upper } from str
+import { encode, decode, size } from bytes
+import { sha256 } from crypto
+import { test } from re
+
+func main(): int sync {
+    let s = '中文x😀'
+    println(len(s), s[0], s[1], s[2], s[3], '中'[0] == '中')
+    println(len(''), len('abc'), len('é'), len('\u{1F600}'), '\u{4E2D}\u{6587}' == '中文')
+    println(s->find<'x'> ?? -1, s->find<'😀'> ?? -1, s->find<'z'> ?? -1)
+    println(s->substr<1, 2>, s->substr<2, 2>, s->substr<0, 0>)
+    println(s->split<'文'>, s->replace<'文', 'W'>, s->starts_with<'中'>, '中'->repeat<3>)
+    println(len('é中😀'->to_upper), 'é中x'->to_upper)
+
+    // formatting counts code points
+    println('[{:>4}][{:<4}][{:^5}][{:*^6}][{:.2}]'->format<'中', '文', 'ab', '😀', '中文😀'>)
+    println('[{:>6}][{}]'->format<'é', '中'>)
+
+    // the bytes of a string, and back
+    let b = encode(s)
+    println(size(b), bytes(s)->len, decode(b) !! 'bad')
+    println(from_bytes(bytes('héllo')), len(from_bytes([228, 184, 173])))
+    println(codepoints(s))
+    println(sha256('abc') == sha256(encode('abc')), sha256('中') == sha256(encode('中')))
+
+    // regular expressions: `.` is one character
+    println(test('^.$', '中'), test('^.{2}$', '中文'), test('^.$', 'ab'), test('文', 'a文b'))
+    return 0
+}

@@ -1,0 +1,4 @@
+func f(): void sync {
+    let v = ()
+    println(v)
+}

@@ -27,6 +27,7 @@
 #include "camel/core/type.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
+#include "camel/execute/pass/params.h"
 #include "camel/execute/pass/snapshot.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/init.h"
@@ -266,6 +267,7 @@ int runCommand(int argc, char *argv[]) {
             .maxRecursionDepth = Run::maxRecursionDepth,
             .maxMacroDepth     = Run::maxMacroDepth,
             .requireEntry      = !analyseOnly,
+            .maxMacroRounds    = Run::maxMacroRounds,
         },
         compileDiagsConfig);
     // However the run ends (main returns, a fault, exit(n)), it ends by returning from here:
@@ -480,6 +482,10 @@ int runCommand(int argc, char *argv[]) {
                     // All pass names, the fallback's included, are checked before the first
                     // snapshot is written and before any pass runs: an unknown name anywhere
                     // on the command line leaves no effect and no artefact.
+                    // The passes the program's modules register join before the first pass
+                    // that consumes the graph (design principles 2.17).
+                    Run::resolvedPassList =
+                        withDefaultPipelinePasses(Run::resolvedPassList, ctx, !Run::noModulePasses);
                     requireKnownPasses(Run::resolvedPassList, ctx);
                     requireKnownPasses(Run::fallbackPasses, ctx);
                     auto *graph = ctx->runtimeRootGraph();

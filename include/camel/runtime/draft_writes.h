@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,6 +36,7 @@
 #include "camel/runtime/draft.h"
 
 #include <string_view>
+#include <vector>
 
 namespace camel::runtime {
 
@@ -55,12 +56,12 @@ camel::core::type::FunctionType *operatorOverloadType(
     const camel::core::type::type_vec_t &norm);
 
 /**
- * True when the argument at position `index` of `user`'s norm (or with) inputs is passed to a
- * `var` parameter: of the operator overload an OPER resolved to, of the graph a FUNC calls, or
- * of the function type a CALL's callee has. An effectful OPER whose overload cannot be resolved
- * from the current node types is assumed to write all its arguments.
+ * True when the argument at position `index` of `user`'s norm (or with) inputs is written by
+ * `user`: for an OPER, what the operator's resource declaration says (design principles 2.17;
+ * an operator without one is read conservatively, OperatorTable::writesOperand); for a FUNC,
+ * a `var` parameter of the graph it calls; for a CALL, a `var` parameter of its callee's type.
  */
-bool isVarArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, size_t index);
+bool isWrittenArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, size_t index);
 
 /**
  * True when the value `id` holds may be written in place: it is passed to a `var` parameter,
@@ -68,5 +69,19 @@ bool isVarArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, siz
  * forwards, and a GATE over a written value is written too.
  */
 bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id);
+
+/**
+ * isWrittenInPlace for every node of a draft at once: the written slots are computed once, so a
+ * pass that asks about many nodes does not walk the users of each. A snapshot: valid while the
+ * pass adds no writer and no alias, as a rewrite of unwritten pure nodes does not.
+ */
+class WrittenSlots {
+  public:
+    explicit WrittenSlots(const GraphDraft &draft);
+    bool operator()(gc_node_ref_t id) const { return id < written_.size() && written_[id]; }
+
+  private:
+    std::vector<bool> written_;
+};
 
 } // namespace camel::runtime

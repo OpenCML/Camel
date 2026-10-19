@@ -7,7 +7,7 @@ tags = ["gpu", "modules", "tiles"]
 name = "compiled_region_fresh_inputs_and_captures"
 kind = "behavior"
 case = "../../cases/modules/tiles/compiled_region.cml"
-args = ["${case}", "std::tiles", "${backend}"]
+args = ["${case}", "tiles::compile", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
@@ -94,7 +94,7 @@ timeout_ms = 60000
 name = "public_region_pass"
 kind = "behavior"
 case = "../../cases/modules/tiles/public_pass.cml"
-args = ["${case}", "std::tiles", "${backend}"]
+args = ["${case}", "tiles::compile", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0

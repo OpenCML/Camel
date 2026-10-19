@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,20 +38,6 @@
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
-
-namespace {
-
-bool envIs(const char *name, char value) {
-    const char *raw = std::getenv(name);
-    return raw != nullptr && raw[0] == value && raw[1] == '\0';
-}
-
-bool envSet(const char *name) {
-    const char *raw = std::getenv(name);
-    return raw != nullptr && raw[0] != '\0' && !(raw[0] == '0' && raw[1] == '\0');
-}
-
-} // namespace
 
 // ---------------------------------------------------------------------------------------------
 // TaskflowBytecodeHandoff
@@ -151,10 +137,10 @@ std::string_view TaskflowExecSchedPass::serialObstacle(const GraphPlan &plan) co
                 return "an operator has no body";
             }
             // The higher-order operators and `attempt` declare that they call function values
-            // (OperatorTraits::callsGraphs); `:mark/` is how the schedulers recognise them.
+            // (OperatorTraits::callsGraphs), and a marked operator is always one of them.
             const auto &table = camel::core::OperatorTable::instance();
             const auto traits = table.find(body->oper);
-            if (table.isMarked(body->oper) || (traits && traits->callsGraphs)) {
+            if (traits && traits->callsGraphs) {
                 return "it has a higher-order operator";
             }
             if (!context_->execMgr().findWithoutImport(std::string(body->uri()))) {
@@ -180,17 +166,17 @@ std::string_view TaskflowExecSchedPass::serialObstacle(const GraphPlan &plan) co
 
 void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
     handoff_.reset();
-    const bool diag = envSet("CAMEL_TF_DIAG");
+    const bool diag = options_.diag;
     const auto off  = [&](std::string_view why) {
         if (diag) {
             std::cerr << std::format("[taskflow] bytecode hand-off is off: {}\n", why);
         }
     };
-    if (envIs("CAMEL_TF_BYTECODE", '0')) {
-        return off("CAMEL_TF_BYTECODE=0");
+    if (!options_.bytecode) {
+        return off("std::tf(bytecode=false)");
     }
     if (forceLinear_) {
-        return off("CAMEL_TF_LINEAR asks for the node-by-node evaluator");
+        return off("std::tf(linear=true) asks for the node-by-node evaluator");
     }
     // The interpreter reports to an execution observer from whichever thread runs it, and in
     // inspection mode it keeps one "current origin" for the whole process: both are for one

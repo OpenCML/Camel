@@ -4,15 +4,19 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Binary values preserve embedded NULs; text decoding rejects malformed Unicode.
 #include "camel/core/rtdata/bytes.h"
+#include "camel/core/error/runtime.h"
+#include "camel/core/rtdata/string.h"
+#include "camel/utils/utf8.h"
 #include <cstring>
 #include <limits>
 #include <ostream>
+#include <string>
 namespace camel::core::rtdata {
 BytesObject::BytesObject(size_t length) : length_(length) {}
 BytesObject *BytesObject::from(std::string_view bytes, mm::IAllocator &allocator) {
@@ -50,33 +54,19 @@ void BytesObject::print(std::ostream &os, const type::Type *) const {
 void BytesObject::onMoved() {}
 void BytesObject::updateRefs(const RefRelocator &, const type::Type *) {}
 std::optional<size_t> invalidUtf8Offset(std::string_view bytes) {
-    size_t i = 0;
-    while (i < bytes.size()) {
-        const size_t start = i;
-        const auto first   = static_cast<unsigned char>(bytes[i++]);
-        if (first < 0x80)
-            continue;
-        size_t count;
-        uint32_t value, least;
-        if (first >= 0xc2 && first <= 0xdf)
-            count = 1, value = first & 31, least = 0x80;
-        else if (first >= 0xe0 && first <= 0xef)
-            count = 2, value = first & 15, least = 0x800;
-        else if (first >= 0xf0 && first <= 0xf4)
-            count = 3, value = first & 7, least = 0x10000;
-        else
-            return start;
-        if (count > bytes.size() - i)
-            return start;
-        for (size_t j = 0; j < count; ++j) {
-            const auto next = static_cast<unsigned char>(bytes[i++]);
-            if ((next & 0xc0) != 0x80)
-                return start;
-            value = (value << 6) | (next & 63);
-        }
-        if (value < least || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff))
-            return start;
+    const size_t at = camel::utf8::invalidOffset(bytes);
+    if (at == camel::utf8::npos)
+        return std::nullopt;
+    return at;
+}
+String *checkedString(std::string_view text, mm::IAllocator &allocator, std::string_view source) {
+    if (const size_t at = camel::utf8::invalidOffset(text); at != camel::utf8::npos) {
+        throwRuntimeFault(
+            camel::core::error::RuntimeDiag::InvalidArgument,
+            std::string(source),
+            "a string must be valid UTF-8, but byte " + std::to_string(at) +
+                " is not (use Bytes for binary data)");
     }
-    return std::nullopt;
+    return String::from(std::string(text), allocator);
 }
 } // namespace camel::core::rtdata

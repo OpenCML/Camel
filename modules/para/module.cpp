@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,10 +21,10 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
-#include "camel/core/operator_traits.h"
 #include "executor.h"
 
 #include <optional>
@@ -123,11 +123,8 @@ bool ParaModule::load() {
             // Blocks until other calls arrive.
             {"rendezvous", false},
         });
-    // The unordered counterparts of foreach and reduce run a function the program passes in;
-    // what they do is what that function does.
-    camel::core::OperatorTable::instance().declare(
-        "",
-        {{"mark/unordered_foreach_arr", false}, {"mark/unordered_reduce_arr", false}});
+    // The unordered counterparts of foreach and reduce are declared with the other higher-order
+    // operators (the builtin traits and element calls): they call graphs like them.
     // The one meeting point of the process (docs/design/op-semantics 8).
     camel::core::OperatorTable::instance().declareResources(
         "para",

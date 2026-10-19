@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,8 +26,8 @@
  * path[, dynamic_axes[, target]])` call: the pass looks for it in the entry
  * graph the preceding passes left, where its arguments must be constants (the
  * function, with constant captures; the example values; the options). The
- * output path may instead come from the environment variable CAMEL_ONNX_OUT,
- * which overrides the call's path argument.
+ * output path may instead be given as the pass's parameter `out`,
+ * `onnx::export(out="model.onnx")`, which overrides the call's path argument.
  *
  * The pass translates the function's graph as the preceding passes left it
  * (exporter.h, translateFunction). It does not expand macros, devirtualize,
@@ -52,9 +52,13 @@ namespace camel::onnx::passes {
 
 class OnnxExportPass : public GraphTranslatePass {
   public:
-    using GraphTranslatePass::GraphTranslatePass;
+    explicit OnnxExportPass(const camel::core::context::context_ptr_t &ctx, std::string out = {})
+        : GraphTranslatePass(ctx), out_(std::move(out)) {}
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+
+  private:
+    std::string out_; // the parameter `out`; empty: not given
 };
 
 /// Registers the onnx module's passes (onnx::export) with the pass registry.

@@ -1,0 +1,16 @@
+type Option<T> = enum {
+    Some(T),
+    None,
+}
+
+func unwrapOr(o: Option<int>, fallback: int): int {
+    return match o {
+        case Option::Some(v) => v
+        case Option::None => fallback
+    }
+}
+
+func main(): void sync {
+    println(unwrapOr(Option::None, 9))
+    println(unwrapOr(Option::Some(4), 0))
+}

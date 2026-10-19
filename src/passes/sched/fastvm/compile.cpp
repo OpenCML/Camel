@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -78,27 +78,27 @@ static std::vector<data_idx_t> directCallDstSlotsOf(camel::runtime::GCGraph *tar
     return dstSlots;
 }
 
-/// The instruction that runs a marked operator (camel/core/operator_table.h), if the bytecode
-/// has one.
+/// The instruction that runs a marked operator (camel/core/operator_table.h), by the way its
+/// declaration says it calls its function (OperatorSemantics::elementCalls).
 static std::optional<MarkOpCode> markOpCodeOf(camel::core::OperId id) {
-    namespace oper = camel::core::oper;
-    switch (id) {
-    case oper::MapArr:
-    case oper::ApplyArr: // `apply` returns a new array like `map` (design principles 2.12)
-        return MarkOpCode::MapArr;
-    case oper::ReduceArr:
-    case oper::UnorderedReduceArr:
-        return MarkOpCode::ReduceArr;
-    case oper::FilterArr:
-        return MarkOpCode::FilterArr;
-    case oper::ForeachArr:
-    case oper::UnorderedForeachArr:
-        return MarkOpCode::ForeachArr;
-    case oper::Isolate:
-        return MarkOpCode::Isolate;
-    default:
+    using camel::core::sem::ElementShape;
+    const auto *calls = camel::core::OperatorTable::instance().elementCalls(id);
+    if (calls == nullptr) {
         return std::nullopt;
     }
+    switch (calls->shape) {
+    case ElementShape::Map: // `apply` returns a new array like `map` (design principles 2.12)
+        return MarkOpCode::MapArr;
+    case ElementShape::Fold:
+        return MarkOpCode::ReduceArr;
+    case ElementShape::Filter:
+        return MarkOpCode::FilterArr;
+    case ElementShape::Foreach:
+        return MarkOpCode::ForeachArr;
+    case ElementShape::Isolate:
+        return MarkOpCode::Isolate;
+    }
+    return std::nullopt;
 }
 
 /// The operators the bytecode runs as one instruction, by OperId (the table is built once, from

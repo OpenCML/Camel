@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -922,17 +922,22 @@ std::optional<std::string> checkLaw(const ReductionLaw &law) {
                                      law.kind == LawKind::MulAdd || law.kind == LawKind::FmaChain);
     if (floatArithmetic && law.exactAssociative) {
         return std::format(
-            "law {}: floating-point {} is not exactly associative", law.name, lawKindName(law.kind));
+            "law {}: floating-point {} is not exactly associative",
+            law.name,
+            lawKindName(law.kind));
     }
     if (law.init == LawInit::FirstContribution && law.empty != LawEmpty::Fault) {
         return std::format(
-            "law {}: it starts from its first contribution, so having none is a fault", law.name);
+            "law {}: it starts from its first contribution, so having none is a fault",
+            law.name);
     }
     if (law.init == LawInit::Operand && law.initOperand == 0xFF) {
         return std::format("law {}: it starts from an operand but names none", law.name);
     }
     if (law.kind == LawKind::Custom && law.combinerOperand == 0xFF) {
-        return std::format("law {}: a custom law names the operand of its combining function", law.name);
+        return std::format(
+            "law {}: a custom law names the operand of its combining function",
+            law.name);
     }
     if (law.kind != LawKind::Custom &&
         (law.input == type::TypeCode::Void || law.accumulator == type::TypeCode::Void ||
@@ -944,15 +949,22 @@ std::optional<std::string> checkLaw(const ReductionLaw &law) {
 
 ReorderFreedom reorderFreedom(const ReductionLaw &law, uint8_t granted) {
     const PermissionMask g =
-        granted | (law.order == LawOrder::Unordered ? PermissionMask{kReassociate} : PermissionMask{0});
+        granted |
+        (law.order == LawOrder::Unordered ? PermissionMask{kReassociate} : PermissionMask{0});
     ReorderFreedom f;
     f.regroup       = law.exactAssociative || (g & kReassociate) != 0;
     f.permute       = law.exactCommutative && f.regroup;
     f.blockIdentity = f.regroup && law.hasIdentity && law.init == LawInit::Constant &&
                       law.initBits == law.identityBits;
-    f.contract = law.kind == LawKind::FmaChain || (law.kind == LawKind::MulAdd && (g & kContract) != 0);
+    f.contract =
+        law.kind == LawKind::FmaChain || (law.kind == LawKind::MulAdd && (g & kContract) != 0);
     f.changePrecision = isFloat(law.accumulator) && (g & kChangePrecision) != 0;
     return f;
+}
+
+ReorderFreedom
+reorderFreedom(const ReductionLaw &law, uint8_t nodePermissions, const NumericPolicy &policy) {
+    return reorderFreedom(law, policy.effective(nodePermissions));
 }
 
 // ---- Transformations ------------------------------------------------------------------------

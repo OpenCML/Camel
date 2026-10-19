@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -279,8 +279,28 @@ class TaskflowGcRegion {
 
 class TaskflowBytecodeHandoff;
 
+/// Settings of a run of std::taskflow, the parameters of the pass (`std::tf(linear=true)`).
+struct TaskflowOptions {
+    /// Evaluate every graph node by node (the behaviour between commit 1559559a and the restore
+    /// of graph-level tasks). For comparison and diagnosis.
+    bool linear = false;
+    /// Fan every unordered higher-order call out, not only those worth it by measurement.
+    bool fanOutAll = false;
+    /// Print the decision for every graph and the reason when a graph stays node by node.
+    bool diag = false;
+    /// Hand graphs that need no parallelism to the bytecode interpreter; off: every graph is
+    /// evaluated by the scheduler itself.
+    bool bytecode = true;
+    /// 1: print the task graphs and collections of the run when it ends; 2: also one line per
+    /// collection.
+    int gcStats = 0;
+};
+
 class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
   public:
+    void setOptions(const TaskflowOptions &options) { options_ = options; }
+    const TaskflowOptions &options() const { return options_; }
+
     /// `max_concurrent_tasks` = 0: the thread limit of the context (`-t`), else the number of
     /// hardware threads.
     // Constructor and destructor are out of line (handoff.cpp): the pass owns a
@@ -478,8 +498,8 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     void requireCallRoom(
         TaskflowGcGate::ThreadState &thread, camel::runtime::GCGraph *callerGraph,
         camel::runtime::gc_node_ref_t callNode);
-    // CAMEL_TF_LINEAR=1: evaluate every graph node by node (the behaviour between commit
-    // 1559559a and the restore of graph-level tasks). For comparison and diagnosis.
+    TaskflowOptions options_;
+    // options_.linear for the run in progress.
     bool forceLinear_ = false;
 
     // ---- Granularity ----------------------------------------------------------------------
@@ -595,6 +615,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
         uint32_t depth                     = 0;
         TaskflowFaultDomain *domain        = nullptr;
+        /// The operator declares that the calls on different elements do not depend on one
+        /// another (OperatorSemantics::elementCalls): they may run at once. Without it they
+        /// run in order on the calling thread.
+        bool independent = false;
     };
     // Calls the function value held in slot `funcIdx` of `funcFrame` (its graph is
     // `targetGraph`, with plan `targetPlan`) on the calling thread: `fillArgs(span)` reads the
@@ -620,6 +644,11 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     slot_t executeLinearNode(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
         const GraphPlan *plan = nullptr);
+    /// Runs a marked operator by the way its declaration says it calls its function; the value of
+    /// `attempt` (which the scheduler runs itself), nullopt for the others (their result is in
+    /// the node's slot).
+    std::optional<slot_t> runMarkedOperator(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     slot_t executeLinearMarkedOperator(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
 

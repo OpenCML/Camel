@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -444,16 +444,20 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
         removeUserRef(oldInput, id, false, false, true);
     }
 
-    // A rewritten node keeps its source origin and its numeric permissions unless the rewrite
-    // gives it others.
-    const uint64_t origin      = draftNode->header.origin;
-    const uint8_t permissions  = draftNode->header.permissions;
+    // A rewritten node keeps its source origin, its numeric permissions and its attributes
+    // unless the rewrite gives it others.
+    const uint64_t origin     = draftNode->header.origin;
+    const uint8_t permissions = draftNode->header.permissions;
+    const uint32_t attrs      = draftNode->header.attrs;
     replaceNodeStorage(id, rebuildNode(id, init));
     if (init.origin == 0) {
         node(id)->header.origin = origin;
     }
     if (init.permissions == 0) {
         node(id)->header.permissions = permissions;
+    }
+    if (init.attrs == 0) {
+        node(id)->header.attrs = attrs;
     }
 
     // The input lists are read back from the rebuilt node, not from `init`: a caller that
@@ -466,7 +470,7 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     const auto copy = [](std::span<const gc_node_ref_t> refs) {
         return std::vector<gc_node_ref_t>(refs.begin(), refs.end());
     };
-    const DraftNode *rebuilt  = node(id);
+    const DraftNode *rebuilt = node(id);
     const auto newNormInputs = copy(DraftNodeView::normInputs(rebuilt));
     const auto newWithInputs = copy(DraftNodeView::withInputs(rebuilt));
     const auto newCtrlInputs = copy(DraftNodeView::ctrlInputs(rebuilt));

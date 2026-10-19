@@ -25,6 +25,7 @@
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/function_call.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/loop_driver.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
@@ -851,34 +852,28 @@ camel::runtime::GCGraph *NodeVMSchedPass::apply(camel::runtime::GCGraph *graph, 
 void NodeVMSchedPass::evalMarkedOperator(
     camel::core::OperId oper, camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef,
     Frame &currFrame) {
-    namespace ops = camel::core::oper;
-    switch (oper) {
-    case ops::MapArr:
-    case ops::ApplyArr:
+    // The way the operator calls its function is its declaration's (OperatorSemantics::
+    // elementCalls); NodeVM runs every call in order, whatever the calls leave open.
+    const auto *calls = camel::core::OperatorTable::instance().elementCalls(oper);
+    ASSERT(calls != nullptr, "A marked operator declares how it calls its function.");
+    switch (calls->shape) {
+    case camel::core::sem::ElementShape::Map:
         // `apply` (f from T to T) returns a new array, like `map`: it no longer changes the
         // array it is given (design principles 2.12).
         evalMarkedOperator_map_arr(graph, nodeRef, currFrame);
         break;
-    case ops::FilterArr:
+    case camel::core::sem::ElementShape::Filter:
         evalMarkedOperator_filter_arr(graph, nodeRef, currFrame);
         break;
-    case ops::ReduceArr:
-    case ops::UnorderedReduceArr:
+    case camel::core::sem::ElementShape::Fold:
         evalMarkedOperator_reduce_arr(graph, nodeRef, currFrame);
         break;
-    case ops::ForeachArr:
-    case ops::UnorderedForeachArr:
+    case camel::core::sem::ElementShape::Foreach:
         evalMarkedOperator_foreach_arr(graph, nodeRef, currFrame);
         break;
-    case ops::Isolate:
+    case camel::core::sem::ElementShape::Isolate:
         evalMarkedOperator_isolate(graph, nodeRef, currFrame);
         break;
-    default:
-        ASSERT(
-            false,
-            std::format(
-                "Mark operator {} not implemented in NodeVM.",
-                camel::core::OperatorTable::instance().uri(oper)));
     }
 }
 
@@ -1020,51 +1015,40 @@ void NodeVMSchedPass::evalLoop(
         }
         currFrame.set(stateSlot, state);
     }
-    // The ports of a round: (the element,) the values of the state, the captures.
-    const auto bind = [&](Frame *frame, GCGraph *target, const slot_t *element) {
-        const auto norm = target->normPorts();
-        size_t port     = 0;
-        if (element != nullptr) {
-            frame->set(dataIndexOf(target, norm[port++]), *element);
+    // The rounds are the loop's (camel/execute/loop_driver.h); this interpreter supplies a frame
+    // and a call for each.
+    struct Host {
+        NodeVMSchedPass &vm;
+        GCGraph *graph;
+        Frame &currFrame;
+        camel::runtime::gc_data_idx_t stateSlot;
+        size_t k;
+        std::span<const gc_node_ref_t> captures;
+        std::optional<gc_node_ref_t> iterableNode;
+
+        void beforeRound(size_t) {}
+        slot_t callRound(GCGraph *target, const slot_t *element) {
+            vm.requireRecursionRoom(graph);
+            Frame *frame = vm.framePool_.acquire(target);
+            camel::execute::bindLoopRound(
+                frame,
+                target,
+                k,
+                element,
+                captures.size(),
+                [&](size_t j) {
+                    return k == 1 ? currFrame.get<slot_t>(stateSlot)
+                                  : currFrame.get<Tuple *>(stateSlot)->get<slot_t>(j);
+                },
+                [&](size_t c) { return currFrame.get<slot_t>(dataIndexOf(graph, captures[c])); });
+            return vm.call(target, frame);
         }
-        if (k == 1) {
-            frame->set(dataIndexOf(target, norm[port]), currFrame.get<slot_t>(stateSlot));
-        } else {
-            Tuple *state = currFrame.get<Tuple *>(stateSlot);
-            for (size_t j = 0; j < k; ++j) {
-                frame->set(dataIndexOf(target, norm[port + j]), state->get<slot_t>(j));
-            }
-        }
-        const auto with = target->withPorts();
-        for (size_t c = 0; c < captures.size(); ++c) {
-            frame->set(
-                dataIndexOf(target, with[c]),
-                currFrame.get<slot_t>(dataIndexOf(graph, captures[c])));
-        }
-    };
-    for (size_t round = 0;; ++round) {
-        // Each round: the condition first, then the next element (camel/core/loop_kind.h).
-        if (cond != nullptr) {
-            requireRecursionRoom(graph);
-            Frame *frame = framePool_.acquire(cond);
-            bind(frame, cond, nullptr);
-            if (!fromSlot<Bool>(call(cond, frame))) {
-                break;
-            }
-        }
-        slot_t element = NullSlot;
-        if (iterable) {
-            Array *array = currFrame.get<Array *>(dataIndexOf(graph, *iterable));
-            if (round >= array->size()) {
-                break;
-            }
-            element = array->data()[round];
-        }
-        requireRecursionRoom(graph);
-        Frame *frame = framePool_.acquire(body);
-        bind(frame, body, iterable ? &element : nullptr);
-        currFrame.set(stateSlot, call(body, frame));
-    }
+        Array *iterable() { return currFrame.get<Array *>(dataIndexOf(graph, *iterableNode)); }
+        void advance(slot_t next) { currFrame.set(stateSlot, next); }
+    } host{*this, graph, currFrame, stateSlot, k, captures, iterable};
+    camel::execute::driveLoopRounds(
+        camel::execute::LoopShape{cond, body, iterable.has_value(), k},
+        host);
 }
 
 // The fault-isolation node (docs/technical/33_fault_isolation.md): a call of the function value

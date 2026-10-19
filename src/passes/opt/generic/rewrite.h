@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,6 +38,8 @@ using camel::runtime::GraphDraft;
 
 /// Bounded local scalar arithmetic. safeFp restricts float rules to strict equivalence.
 size_t algebraDraft(GraphDraft &draft, bool safeFp = false);
+/// The same under an explicit policy (camel/core/operator_semantics.h): safeFp is the strict one.
+size_t algebraDraft(GraphDraft &draft, const camel::core::sem::NumericPolicy &policy);
 
 /// Bypass a non-anchor forwarding gate by putting its waits on mandatory consumers.
 /// Conditional value consumers and costly shared barriers stay gates; edgeBudget bounds growth.

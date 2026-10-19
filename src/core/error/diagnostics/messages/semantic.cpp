@@ -281,9 +281,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "InvalidAnnotation",
                 "The annotation '@{0}' is not accepted: {1}.",
                 "A line that starts with '@' annotates the function declaration or the block "
-                "that follows. '@name' and '@name<args>' are decorators of a function; "
-                "'@numeric(...)' grants numeric permissions to a function or a block (design "
-                "principles 2.13).",
+                "that follows. '@name' and '@name<args>' are decorators of a function or of a "
+                "block; '@numeric(...)' grants numeric permissions to a function or a block "
+                "(design principles 2.13).",
             },
         },
         {

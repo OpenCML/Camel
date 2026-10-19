@@ -1,5 +1,5 @@
 module bytes_values
-import { Bytes, from_array, to_array, encode, decode, size, concat } from bytes
+import { from_array, to_array, encode, decode, size, concat } from bytes
 import { read_bytes, write_bytes, read_chunk, replace, file_size } from fs
 import { sha256 } from crypto
 import { get_env } from sys

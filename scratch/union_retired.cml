@@ -1,0 +1,2 @@
+func f(x: int | float): int { return 1 }
+func main(): int sync { return f(1) }
