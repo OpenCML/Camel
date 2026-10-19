@@ -55,7 +55,7 @@ void writeToStdout(const std::string &text, bool flush) {
 /// What `print` and `println` write for their arguments, without a line end: the arguments
 /// separated by one space, or, with a format (`print<fmt>(...)`), the format with the
 /// arguments put in. Returns the first argument (an effect function returns a value, design
-/// principles 2.10), null when there is none. `formatted` says whether a format was given.
+/// principles 3.1), null when there is none. `formatted` says whether a format was given.
 slot_t writeArguments(ArgsView &with, ArgsView &norm, std::ostringstream &out, bool &formatted) {
     slot_t result = norm.size() > 0 ? norm.slot(0) : NullSlot;
     formatted     = with.size() > 0;
@@ -106,7 +106,7 @@ slot_t writeArguments(ArgsView &with, ArgsView &norm, std::ostringstream &out, b
 
 // `print` ends nothing with a line end, with a format or without; `println` ends what it
 // writes with exactly one. (The formatted forms used to add one more: `print<fmt>` a line end
-// and `println<fmt>` an empty line. Design principles 2.13 calls that a defect of the
+// and `println<fmt>` an empty line. Design principles 10.6 calls that a defect of the
 // interpreter; the generated C++ programs copied it and were fixed with it.)
 slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::ostringstream out;

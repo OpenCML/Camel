@@ -9,7 +9,7 @@
  */
 
 /*
- * UTF-8, in one place (design principles 2.17: a `string` is always valid UTF-8, and its
+ * UTF-8, in one place (design principles 11.1: a `string` is always valid UTF-8, and its
  * indices and length count code points).
  *
  * Header-only and standard-only, so that the runtime of the generated C++ programs

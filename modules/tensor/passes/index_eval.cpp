@@ -536,7 +536,7 @@ std::optional<Num> fold(const sem::ReductionLaw &law, const std::vector<std::vec
     if (law.kind == sem::LawKind::ArgMax || law.kind == sem::LawKind::ArgMin) {
         // The position, in canonical order, of the first contribution equal (bit for bit, a
         // NaN as NaN) to the IEEE maximum (minimum) of them all, written from the standard's
-        // operation rather than from the kernel's comparison (design principles 2.14).
+        // operation rather than from the kernel's comparison (design principles 7.7).
         const bool max = law.kind == sem::LawKind::ArgMax;
         Num extreme    = convert(contributions[0][0], law.accumulator);
         for (size_t k = 1; k < contributions.size(); ++k) {

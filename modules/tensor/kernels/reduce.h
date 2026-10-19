@@ -26,7 +26,7 @@
  *
  * Float sums accumulate in double from +0 in ascending order; int64 and bool
  * sums accumulate exactly in int64, wrapping on overflow (design principles
- * 2.10, 2.14). The thread split never changes a result: each lane is summed
+ * 5.1, 7.7). The thread split never changes a result: each lane is summed
  * by one thread.
  */
 

@@ -1,6 +1,6 @@
 /**
  * A string is always valid UTF-8, indexed and measured in code points (design principles
- * 2.17); binary data is `Bytes`.
+ * 11.1); binary data is `Bytes`.
  */
 module utf8_string
 

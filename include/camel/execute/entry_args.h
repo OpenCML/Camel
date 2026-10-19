@@ -130,7 +130,7 @@ void registerEntryResultSaver(core::type::TypeCode code, EntryResultSaver saver)
  * `main`.
  *
  * All of this holds for a `main` that declares its return type (Context::entryResultDeclared;
- * design principles 2.10). The value of a `main` that declares none is not a result: nothing
+ * design principles 9.8). The value of a `main` that declares none is not a result: nothing
  * is printed, and with a file that is EntryResultNotWritten.
  *
  * Under a declared `T!`: a value that has not failed is treated as its `T`. A failed one is an

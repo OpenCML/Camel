@@ -1,4 +1,4 @@
-// A test under `||` does not narrow the arms of the `if` (design principles 2.12).
+// A test under `||` does not narrow the arms of the `if` (design principles 3.8).
 func f(x: int?, flag: bool): int {
     return if x != null || flag then x + 1 else 0
 }

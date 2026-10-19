@@ -1,5 +1,5 @@
 // Exported values: imported by name, reached through the module, used on the top level of the
-// importing module and inside its functions (design principles 2.11).
+// importing module and inside its functions (design principles 10.1).
 import { pi } from geometry
 import geometry
 

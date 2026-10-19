@@ -2,7 +2,7 @@ id = "compile.tagged"
 order = 324
 tier = "feat"
 tags = ["feat", "compile", "nullable", "fallible", "types"]
-desc = "The tagged forms `T?` and `T!`, the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` (design principles 2.9; docs/technical/29_nullable_and_fallible_values.md)."
+desc = "The tagged forms `T?` and `T!`, the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` (design principles 3.9; docs/technical/29_nullable_and_fallible_values.md)."
 
 [[tests]]
 name = "nullable"
@@ -1240,7 +1240,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "argument_enters"
-desc = "A plain value and null enter a `T?` parameter at a call (`f(5)`, `f(null)` with `f(x: int?)`; design principles 2.10). It used to be NoMatchingFunction. The positions are tested in consistency/entering.plan.toml."
+desc = "A plain value and null enter a `T?` parameter at a call (`f(5)`, `f(null)` with `f(x: int?)`; design principles 3.8). It used to be NoMatchingFunction. The positions are tested in consistency/entering.plan.toml."
 kind = "behavior"
 case = "../../../cases/compile/tagged/err_argument.cml"
 args = ["${case}"]

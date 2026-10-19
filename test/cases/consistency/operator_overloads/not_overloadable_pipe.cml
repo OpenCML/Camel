@@ -1,5 +1,5 @@
 /**
- * Refused declaration of an operator overload (design principles 2.12).
+ * Refused declaration of an operator overload (design principles 4.3).
  */
 module not_overloadable_pipe
 

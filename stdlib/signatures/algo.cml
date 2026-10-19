@@ -2,10 +2,10 @@
  * Signatures of the `algo` module (C++ operators, modules/algo).
  *
  * Sorting works on arrays of numbers (i32, int, f32, float) in ascending order. Every function
- * returns a new array and leaves its argument unchanged (design principles 2.12, 2.13); to sort a
+ * returns a new array and leaves its argument unchanged (design principles 11.3); to sort a
  * variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the variable's own
  * array in place when nothing else refers to it, an optimisation that does not change what the
- * program means (2.13). To sort anything else, or by a key, use `sort_by` of the `array` module.
+ * program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
  *
  * For reference only: these declarations are not compiled. They are checked against the
  * operators the module registers, and docs/stdlib-reference.md is generated from them

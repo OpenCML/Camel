@@ -18,7 +18,7 @@
  */
 
 /*
- * Numbers and text, and numbers between types: the rules of design principles 2.10 ("数值"),
+ * Numbers and text, and numbers between types: the rules of design principles 5.1 ("数值"),
  * in one place so that every conversion function, every back end and every printer applies the
  * same ones.
  *
@@ -148,7 +148,7 @@ template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_vi
 }
 
 /// The text of a floating-point number: the shortest digits that read back as the same number
-/// (design principles 2.10), laid out so that the text is always recognisable as a float.
+/// (design principles 7.7), laid out so that the text is always recognisable as a float.
 ///
 ///   - a number whose decimal exponent is from -4 to 15 is written without an exponent, with
 ///     at least one digit after the point: `2.0`, `100000.0`, `0.1`, `0.0001`;

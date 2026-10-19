@@ -48,7 +48,7 @@ add_definitions(-DNOMINMAX)
 # Every floating-point expression is rounded as written: no contraction of a * b + c into one
 # fused multiply-add. Clang contracts by default wherever the target has an FMA instruction,
 # which is always on arm64 and only with -mfma (or -march levels that imply it) on x86-64, so
-# the same source printed different numbers on macOS (docs/design-principles.cn.md 2.11: the
+# the same source printed different numbers on macOS (docs/design-principles.cn.md 11.5: the
 # output is the same bytes on every platform). Applies to libcamel, the modules and the tools.
 # The tensor unary kernels opt back in (modules/tensor/CMakeLists.txt); the GEMM writes its
 # fused multiply-adds explicitly.

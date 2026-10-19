@@ -1,5 +1,5 @@
 /**
- * Local algebra on elementwise tensor operators (design principles 2.15, 2.17): the operators
+ * Local algebra on elementwise tensor operators (design principles 7.3): the operators
  * declare the laws it uses (OperatorSemantics::binary), so a tensor expression is rewritten as the
  * scalar one is, under the same policy. Coefficients are scalar constants the element type holds
  * exactly; the other operand has the type of the result.

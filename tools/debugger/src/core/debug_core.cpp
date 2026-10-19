@@ -625,7 +625,7 @@ bool DebugCore::stepReached(const ShadowFrame &f, const Arrival &a) const {
         }
         return step_.into || depth < step_.depth || (depth == step_.depth && frame == step_.frame);
     case StepKind::Line:
-        // Design principles 2.11: the next line in execution order, not in the text.
+        // Design principles 12.1: the next line in execution order, not in the text.
         if (!located) {
             return false;
         }
@@ -1369,7 +1369,7 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
         return fail("no such frame");
     }
     // name ( '::' name )* ( '.' member | '[' index ']' )*: a full name such as
-    // `lib::Config::limit` names a value of a module's top level (design principles 2.12).
+    // `lib::Config::limit` names a value of a module's top level (design principles 10.2).
     const auto isNameChar = [](char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
                c == '_';

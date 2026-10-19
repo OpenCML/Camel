@@ -18,7 +18,7 @@
  */
 
 /*
- * Type variables and type functions (design principles 2.9).
+ * Type variables and type functions (design principles 5.6).
  *
  * Both exist only while a module is compiled; neither ever reaches a graph.
  *
@@ -134,7 +134,7 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings);
 /**
  * Collects what `actual` says about the variables of `pattern`: a variable that is not bound
  * yet is bound from the type found at ANY of its occurrences, binding or not (design
- * principles 2.10: the constraints all arguments give are collected, then solved). `actual`
+ * principles 5.5: the constraints all arguments give are collected, then solved). `actual`
  * may itself still hold variables (the type an argument is expected to have, not yet known in
  * full); a position where it does binds nothing. A `T?` / `T!` in `pattern` met by a type
  * that is not of that form takes the type as its payload (the value enters the form).

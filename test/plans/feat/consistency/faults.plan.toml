@@ -7,7 +7,7 @@ desc = "Run-time faults on the four back ends: the same output, exit code and lo
 # Every case runs on std::nvm, std::fvm, std::jit and std::prl. Unless an entry says otherwise the
 # four must agree on the exit code, on standard output (the program's output and, after it, the
 # diagnostic as printed) and on the name, code, line and column of the diagnostic. A fault stops
-# the program with one located diagnostic (design principles 2.9); what was printed before it is
+# the program with one located diagnostic (design principles 3.9); what was printed before it is
 # on standard output, complete and in order (expect_stdout_starts_with).
 
 [defaults]
@@ -208,7 +208,7 @@ expect_output_contains = ["Index -1 is out of range for an array of length 3."]
 
 [[tests]]
 name = "fault.array_index_constant"
-desc = "A constant index past the end of an array literal. Today this is the run-time fault on every back end (design principles 2.7 want a compile-time error where the length is known; an array literal has the type int[], whose length is not part of it)."
+desc = "A constant index past the end of an array literal. Today this is the run-time fault on every back end (design principles 3.9 want a compile-time error where the length is known; an array literal has the type int[], whose length is not part of it)."
 case = "../../../cases/consistency/faults/array_index_static.cml"
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 9
@@ -217,7 +217,7 @@ expect_stdout_starts_with = "before\n"
 
 [[tests]]
 name = "fault.slice_out_of_range"
-desc = "A slice whose end is past the end of the array, bounds only known at run time: a fault, as an index out of range is (design principles 2.10). It was cut to the array on all four back ends."
+desc = "A slice whose end is past the end of the array, bounds only known at run time: a fault, as an index out of range is (design principles 3.9). It was cut to the array on all four back ends."
 case = "../../../cases/consistency/faults/slice_out_of_range.cml"
 expect_diagnostic_name = "RuntimeDiag::SliceOutOfRange"
 expect_diagnostic_code = "0x04000052"
@@ -254,7 +254,7 @@ expect_diagnostic_column = 13
 
 [[tests]]
 name = "fault.int_text_trailing"
-desc = "int('12abc') is a fault: the whole string must be one number (design principles 2.10). It gave 12."
+desc = "int('12abc') is a fault: the whole string must be one number (design principles 5.1). It gave 12."
 case = "../../../cases/consistency/faults/int_text_trailing.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
 expect_diagnostic_line = 6
@@ -320,7 +320,7 @@ expect_output_contains = ["the tensor has shape [3, 2]"]
 
 [[tests]]
 name = "fault.in_unused"
-desc = "A faulting expression whose result nothing uses, outside a sync block, never runs (design principles 2.1): no fault."
+desc = "A faulting expression whose result nothing uses, outside a sync block, never runs (design principles 3.1): no fault."
 kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
@@ -381,7 +381,7 @@ expect_stdout_starts_with = "before\nafter\n"
 
 [[tests]]
 name = "end.error_reaches_main"
-desc = "An error value nobody handled is what main returns: UnhandledError on standard error at the place the error was made, exit code 1 (design principles 2.10; consistency.entry has the other forms)."
+desc = "An error value nobody handled is what main returns: UnhandledError on standard error at the place the error was made, exit code 1 (design principles 3.9; consistency.entry has the other forms)."
 kind = "behavior"
 case = "../../../cases/consistency/faults/error_reaches_main.cml"
 backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized", "diagnostics"]

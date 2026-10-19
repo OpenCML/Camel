@@ -19,7 +19,7 @@
 
 /*
  * The parameters of `main` in a program std::cpp writes. They are the inputs of the program and
- * are given on its command line as `camel` takes them (design principles 2.7, 2.13):
+ * are given on its command line as `camel` takes them (design principles 9.8, 10.6):
  *
  *     ./program --arg n=3 --arg name=hi
  *

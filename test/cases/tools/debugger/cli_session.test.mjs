@@ -1,6 +1,6 @@
 // The REPL of camel-db (docs/debugging.en.md, section 2), on both debuggable back ends: a user
 // types commands on its standard input. The same presentation as over DAP (design principles
-// 2.11, 2.12): the arm of a branch is part of the frame of its function unless `frames
+// 12.1): the arm of a branch is part of the frame of its function unless `frames
 // subgraphs` is asked for; a line step that goes past a line nothing uses the result of says
 // so; functions are named and found by their full names.
 

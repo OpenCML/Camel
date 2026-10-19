@@ -95,7 +95,7 @@ struct DraftNodeHeader {
     uint8_t runtimeFlags             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
     // The numeric permissions the program granted to the node with @numeric(...)
-    // (camel/core/operator_semantics.h, PermissionMask; design principles 2.13), 0 when none.
+    // (camel/core/operator_semantics.h, PermissionMask; design principles 7.5), 0 when none.
     // Graph content, not a derived fact: rewrites keep it as they keep the origin (a node that
     // replaces another inherits it, inlined and cloned nodes keep their own), and the encoder
     // writes it to the frozen graph's permission column (GCGraph::nodePermissions).

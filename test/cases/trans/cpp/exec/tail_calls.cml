@@ -1,4 +1,4 @@
-/// Tail calls do not make the stack grow (design principles 2.12): ten million steps of a
+/// Tail calls do not make the stack grow (design principles 10.6): ten million steps of a
 /// self tail call (it overflowed the native stack, docs/design/cpp-memory appendix B D8), and a
 /// pair of functions that call each other in tail position, a million steps.
 module tail_calls

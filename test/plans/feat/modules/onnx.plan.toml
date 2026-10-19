@@ -1518,7 +1518,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "ort_slice_bounds"
-desc = "A slice whose end depends on the model input (x[0 : int(sum(x))]) exported alone and inside a branch on the data: on ONNX Runtime, ends within [-n, n] give the NumPy slice (negative ones counted from the end) and ends outside make the run fail, as Camel faults (design principles 2.10). The ONNX Slice alone clamps, so each bound the exporter cannot prove in range goes through a Gather guard; it used to return the clamped slice."
+desc = "A slice whose end depends on the model input (x[0 : int(sum(x))]) exported alone and inside a branch on the data: on ONNX Runtime, ends within [-n, n] give the NumPy slice (negative ones counted from the end) and ends outside make the run fail, as Camel faults (design principles 3.9). The ONNX Slice alone clamps, so each bound the exporter cannot prove in range goes through a Gather guard; it used to return the clamped slice."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/ort_slice_bounds.py"
@@ -2420,7 +2420,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "export_var_append"
-desc = "export_model of a function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_append`, design principles 2.12): refused with a located diagnostic naming the append; the program's own run before the export still prints the tensor."
+desc = "export_model of a function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_append`, design principles 11.3): refused with a located diagnostic naming the append; the program's own run before the export still prints the tensor."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_var_append.cml"
 args = ["${case}", "std::macro"]

@@ -306,7 +306,7 @@ def run_one(program: dict, pipeline_id: str, passes: List[str], repeat: int, set
     env["CAMEL_EFFECT_TRACE"] = str(effects_path)
     cmd_passes = list(passes)
     if is_onnx:
-        # The model file is a parameter of the pass (design principles 2.17).
+        # The model file is a parameter of the pass (design principles 9.3).
         cmd_passes = [*passes[:-1], f'{pl.ONNX_TERMINAL}(out="{(tmp / "pass.onnx").as_posix()}")']
 
     cmd = [settings.camel, "--output-format", "json", program["path"], *cmd_passes]

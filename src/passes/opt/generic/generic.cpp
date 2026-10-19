@@ -752,7 +752,7 @@ size_t foldDraft(
                 // A constant expression that can only fault (`1 / 0`) is not folded: it is
                 // left as written, to fault with its position if the run reaches it, so the
                 // program behaves the same with and without the pass. The user is told once,
-                // where the expression is written (design principles 2.9).
+                // where the expression is written (design principles 3.9).
                 raisePassWarning(
                     ctx,
                     camel::core::error::RuntimeDiag::ConstantExpressionFaults,
@@ -789,7 +789,7 @@ size_t foldDraft(
 size_t cseDraft(GraphDraft &draft) {
     const auto regions = armRegions(draft);
     // The numeric permissions are part of the key: two otherwise identical operations granted
-    // different permissions (design principles 2.13) may compute different bits, and merging
+    // different permissions (design principles 7.5) may compute different bits, and merging
     // them would give one of them permissions it was not granted, or take some away. They are
     // not merged (docs/design/op-semantics 6.4).
     using Key = std::tuple<

@@ -1,6 +1,6 @@
 // mean of a tensor without elements: the kernel and its expanded definition
 // (sum(x) / (numel(x) as float), stdlib/tensor_definitions.cml) fault the same way, with
-// DivisionByZero (design principles 2.13: a kernel agrees with its definition, faults included).
+// DivisionByZero (design principles 7.1: a kernel agrees with its definition, faults included).
 import { Tensor, zeros, mean } from tensor
 
 func main(): int sync {

@@ -110,7 +110,7 @@ bool isWrittenArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith,
     switch (h->kind) {
     case GCNodeKind::Oper: {
         const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(user).data());
-        // The operator's resource declaration is the truth (design principles 2.17); its
+        // The operator's resource declaration is the truth (design principles 3.3); its
         // signature's `var` parameters are checked against it when it is registered.
         return camel::core::OperatorTable::instance().writesOperand(body->oper, isWith, index);
     }

@@ -859,7 +859,7 @@ void NodeVMSchedPass::evalMarkedOperator(
     switch (calls->shape) {
     case camel::core::sem::ElementShape::Map:
         // `apply` (f from T to T) returns a new array, like `map`: it no longer changes the
-        // array it is given (design principles 2.12).
+        // array it is given (design principles 11.3).
         evalMarkedOperator_map_arr(graph, nodeRef, currFrame);
         break;
     case camel::core::sem::ElementShape::Filter:

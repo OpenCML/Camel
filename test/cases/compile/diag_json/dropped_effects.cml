@@ -1,6 +1,6 @@
 /**
  * Outside a sync block an effectful expression whose result nothing uses does not run
- * (docs/design-principles.cn.md 2.1). That is legal; the compiler warns about each one
+ * (docs/design-principles.cn.md 3.1). That is legal; the compiler warns about each one
  * (SemanticDiag::EffectNotExecuted) and the program runs as written. Lines marked DROPPED get
  * the warning; nothing in a sync block does, nor does a pure expression.
  * Output: `kept 1` and `0 5`.

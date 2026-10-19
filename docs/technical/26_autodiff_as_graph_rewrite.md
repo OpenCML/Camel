@@ -301,7 +301,7 @@ position), `grad_effects_kept.*`.
 ### 4.4a Variables
 
 A variable (`var`) is a cell: the graph passes the cell and reads its content with
-the operator `:var/get` (design principles 2.5). **Gradients do not flow through
+the operator `:var/get` (design principles 3.5). **Gradients do not flow through
 variables.** This is a rule of the library, not of the language:
 
 - A `var` parameter is not a differentiable input; `grad` and `value_and_grad`

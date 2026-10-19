@@ -1,5 +1,5 @@
 /**
- * An import of a module brings its operator overloads (design principles 2.12): here an import
+ * An import of a module brings its operator overloads (design principles 4.3): here an import
  * by name of another name of the module.
  */
 import { mk } from base

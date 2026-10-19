@@ -22,7 +22,7 @@
  *
  * `sgemm` computes C = alpha * op(A) * op(B) + beta * C for row-major float
  * matrices, where op(X) is X or X^T. Each element of op(A) * op(B) is matmul's
- * canonical algorithm (design principles 2.13): a chain of fused multiply-adds
+ * canonical algorithm (design principles 7.1): a chain of fused multiply-adds
  * in ascending k from +0; alpha and beta are applied after the chain
  * (gemm_blocked.inl). It is the builtin backend: cache-blocked, packed,
  * register-tiled, parallel over tiles; the same bits on every processor.

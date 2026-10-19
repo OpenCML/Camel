@@ -106,7 +106,7 @@ TaskflowExecSchedPass::TaskflowExecSchedPass(
     : RuntimeGraphSchedulePass(ctx), executor_(workerCount(ctx, max_concurrent_tasks)) {
     if (ctx) {
         // The same count as on the other schedulers, with the same default (design
-        // principles 2.10).
+        // principles 3.9).
         maxRecursionDepth_ = camel::execute::recursionLimit(*ctx).frames;
     }
 }

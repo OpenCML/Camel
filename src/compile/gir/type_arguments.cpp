@@ -56,7 +56,7 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
         throw;
     }
     genericCalleeAllowed_ = outerAllowed;
-    // Positional, or all named `A = int` (design principles 2.17): in the tree a name is a
+    // Positional, or all named `A = int` (design principles 5.9): in the tree a name is a
     // constant string right before its type.
     type_vec_t types;
     std::vector<std::string> given;

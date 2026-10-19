@@ -805,13 +805,13 @@ class ModelBuilder {
                 ext.signatures.push_back(sourceSpelling(graph->funcType()->toString()));
             }
         } else if (entity.isValue()) {
-            // A constant a C++ module exports (`math::pi`; design principles 2.13).
+            // A constant a C++ module exports (`math::pi`; design principles 10.1).
             ext.kind = ExternalName::Kind::Value;
             if (const auto &value = entity.value(); value && value->type() != nullptr) {
                 ext.signatures.push_back(sourceSpelling(value->type()->toString()));
             }
         } else if (EntityAccess::isNode(entity)) {
-            // An exported value (design principles 2.11): a node of the program's root graph,
+            // An exported value (design principles 10.1): a node of the program's root graph,
             // there once a module has used the value.
             ext.kind = ExternalName::Kind::Value;
             auto *value =

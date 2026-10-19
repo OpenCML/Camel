@@ -367,7 +367,7 @@ std::string FunctionEmitter::definition() {
         out             = signatureOf(m) + " {\n";
         if (loops_) {
             // A call of the function itself in tail position jumps here (design principles
-            // 2.9: a tail call does not make the stack grow).
+            // 3.9: a tail call does not make the stack grow).
             out += "    for (;;) {\n";
             printBlock(out, body, 2);
             out += "    }\n";
@@ -385,7 +385,7 @@ std::string FunctionEmitter::definition() {
     }
     out += std::format(
         "// {} call each other in tail position: they run in one loop, so that those calls do\n"
-        "// not make the stack grow (design principles 2.9).\n",
+        "// not make the stack grow (design principles 3.9).\n",
         names);
     out += groupSignature() + " {\n    for (;;) {\n        switch (which) {\n";
     for (const Member &m : members_) {
@@ -638,7 +638,7 @@ bool FunctionEmitter::lowerNode(
         if (!inputs.empty()) {
             if (node->kind == GCNodeKind::Copy) {
                 // A copy of a value is that value: values have no identity (design principles
-                // 2.12), and every holder of a shared array sees it unchanged (array.h).
+                // 10.5), and every holder of a shared array sees it unchanged (array.h).
                 cppType(g, ref, node->dataType());
             }
             frame.values[ref] = valueOf(frame, inputs.front());
@@ -1328,7 +1328,7 @@ void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
 }
 
 void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out) {
-    // A call of a function value (design principles, section 1): with input 0 is the value,
+    // A call of a function value (design principles 2.1): with input 0 is the value,
     // the other `with` inputs and the normal ones its arguments.
     const GCGraph *g = frame.graph;
     const auto with  = g->withInputsOf(ref);
@@ -1363,7 +1363,7 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
 }
 
 void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
-    // A value entering `T?` or `T!` (design principles 2.10), `null` entering `T?`, a failed
+    // A value entering `T?` or `T!` (design principles 3.8), `null` entering `T?`, a failed
     // value passed on with another payload (`?->`), a conversion between numbers.
     const GCGraph *g          = frame.graph;
     const gc_node_ref_t input = g->normInputsOf(ref).front();

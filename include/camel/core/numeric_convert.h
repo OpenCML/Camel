@@ -19,7 +19,7 @@
 
 /*
  * The conversions between numbers, and from text to a number, that can fail when they run
- * (design principles 2.10, "数值"). The conversion functions (`int(x)`, `i32(x)`, `float(s)`,
+ * (design principles 5.1, "数值"). The conversion functions (`int(x)`, `i32(x)`, `float(s)`,
  * ...) and the `as` conversion (Type::castSlotFrom) both come here, so that the two spellings
  * and the four back ends fault on the same values with the same diagnostic.
  *

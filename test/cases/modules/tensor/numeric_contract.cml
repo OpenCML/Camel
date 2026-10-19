@@ -1,6 +1,6 @@
 /**
  * The special values of max, min and relu, and the canonical algorithms of matmul and softmax
- * (design principles 2.13: IEEE 754-2019 maximum/minimum, relu(x) = maximum(x, +0), matmul is
+ * (design principles 7.1: IEEE 754-2019 maximum/minimum, relu(x) = maximum(x, +0), matmul is
  * a fused multiply-add chain in ascending k, softmax agrees with its definition).
  */
 module numeric_contract

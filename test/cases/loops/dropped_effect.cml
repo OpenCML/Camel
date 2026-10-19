@@ -1,4 +1,4 @@
-// Outside a sync block, a loop whose value nothing takes does not run (design principles 2.1):
+// Outside a sync block, a loop whose value nothing takes does not run (design principles 3.1):
 // its effects are reported as not executed, as for any call.
 func f(): int {
     loop i = 0 while i < 3 do sync { println(i); i + 1 }

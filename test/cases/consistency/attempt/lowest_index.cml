@@ -1,6 +1,6 @@
 /**
  * Several elements of an unordered operator fault together: the fault reported is that of the
- * smallest element index (design principles 2.10), on every run and on every back end, so it
+ * smallest element index (design principles 3.6), on every run and on every back end, so it
  * is the one a back end that takes the elements in order reports. For nested operators the
  * outer index decides first, then the inner one.
  *

@@ -4,7 +4,7 @@ tier = "feat"
 tags = ["feat", "consistency", "runtime", "entry"]
 desc = "What main returns on the four back ends: the result of the program only under a declared return type; an unhandled error value at the exit of main"
 
-# Design principles 2.10 ("效应、错误与并行"):
+# Design principles 9.8 ("效应、错误与并行"):
 #   - only a `main` that declares its return type has a result (the exit code, what -o writes);
 #   - `println(x)` still returns `x`;
 #   - an error value that reaches the exit of `main` unhandled is reported on standard error

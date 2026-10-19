@@ -122,7 +122,7 @@ class TupleType : public CompositeType {
     static TupleType *cell(Type *valueType);
     bool isCell() const { return cell_; }
 
-    /// The two built-in tagged forms (design principles 2.9; the layout and the reasons for
+    /// The two built-in tagged forms (design principles 3.8; the layout and the reasons for
     /// it are in docs/technical/29_nullable_and_fallible_values.md). Like a cell, each has
     /// the layout of a tuple and is a distinct type; equal payload types yield the same
     /// object.
@@ -204,7 +204,7 @@ class TupleType : public CompositeType {
     const size_t *refsPtr() const { return refsPtr_; }
 };
 
-/// The fixed built-in error structure (design principles 2.9): `{ kind: string, message:
+/// The fixed built-in error structure (design principles 3.9): `{ kind: string, message:
 /// string, location: string }`. One object; every fallible type carries it.
 StructType *errorType();
 /// Field indices of errorType(), in its own field order.
@@ -230,7 +230,7 @@ inline TupleType *asFallible(Type *type) {
 }
 
 /// Whether a value of type `source` enters a position of type `target` by itself (design
-/// principles 2.10): it is assignable; or `target` is `T?` / `T!` and the value enters `T`
+/// principles 3.8): it is assignable; or `target` is `T?` / `T!` and the value enters `T`
 /// (so it is put into the form, one level at a time: an `int` enters `int?!`); or `source`
 /// is the type of `null` and `target` is a `T?`; or `source` is the type of the empty array
 /// literal `[]` and `target` is an array type. Never the other way: a `T?` is not a `T`.

@@ -124,7 +124,7 @@ namespace {
 
 /// Whether the function `main` declared at the top level of the entry module writes a return
 /// type (`func main(): int`). Only then is what it returns the result of the program (design
-/// principles 2.10). nullopt when the tree holds no such declaration (`main` bound some other
+/// principles 9.8). nullopt when the tree holds no such declaration (`main` bound some other
 /// way): the value then counts as it always did.
 std::optional<bool> entryDeclaresReturnType(const AST::node_ptr_t &node, int depth = 0) {
     if (!node || depth > 3) {
@@ -264,7 +264,7 @@ int runCommand(int argc, char *argv[]) {
         compileDiagsConfig);
     // However the run ends (main returns, a fault, exit(n)), it ends by returning from here:
     // the external resources the program still holds are released first, before the context
-    // and the modules that own their release code go away (design principles 2.9).
+    // and the modules that own their release code go away (design principles 3.9).
     struct ReleaseExternalResources {
         ~ReleaseExternalResources() { camel::core::rtdata::disposeAllForeignResources(); }
     } releaseExternalResources;
@@ -460,7 +460,7 @@ int runCommand(int argc, char *argv[]) {
                     // snapshot is written and before any pass runs: an unknown name anywhere
                     // on the command line leaves no effect and no artefact.
                     // The passes the program's modules register join before the first pass
-                    // that consumes the graph (design principles 2.17).
+                    // that consumes the graph (design principles 9.2).
                     Run::resolvedPassList = withDefaultPipelinePasses(
                         Run::resolvedPassList,
                         ctx,

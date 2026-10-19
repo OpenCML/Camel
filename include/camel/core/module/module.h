@@ -49,7 +49,7 @@ class Entity {
     Entity() = default;
     Entity(oper_group_ptr_t ops) : storage_(std::move(ops)) {}
     /// A constant value a module exports under a name (`math::pi`): written without
-    /// parentheses, and a constant of the graph where it is used (design principles 2.13).
+    /// parentheses, and a constant of the graph where it is used (design principles 10.1).
     /// Its type is the type of the data.
     explicit Entity(camel::core::data::data_ptr_t value) : storage_(std::move(value)) {}
     bool isOperGroup() const { return std::holds_alternative<oper_group_ptr_t>(storage_); }
@@ -91,7 +91,7 @@ using type_ns_ptr_t   = std::shared_ptr<Namespace<std::string, Type *>>;
 
 using context_ptr_t = camel::core::context::context_ptr_t;
 
-/// Which imports a lookup of an imported name looks at (design principles 2.12: one rule of
+/// Which imports a lookup of an imported name looks at (design principles 10.2: one rule of
 /// precedence, local > own module > imported by name > `using namespace` > built in, the first
 /// layer that has the name). `Named`: the names an `import` of this module brings, by name or
 /// through a module or namespace prefix (`m::f`); `Ambient`: what comes along without being
@@ -166,7 +166,7 @@ class Module : public std::enable_shared_from_this<Module> {
     const std::string &name() const { return name_; }
     const std::string &path() const { return path_; }
     /// The name the module gives itself (`module shapes`), empty when it has no declaration.
-    /// The module may qualify its own names with it, as with name() (design principles 2.12).
+    /// The module may qualify its own names with it, as with name() (design principles 10.2).
     const std::string &declaredName() const { return declaredName_; }
     void setDeclaredName(std::string name) { declaredName_ = std::move(name); }
 
@@ -177,7 +177,7 @@ class Module : public std::enable_shared_from_this<Module> {
     importedSource(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
 
     /// The full name `module::path::name` of the name `ref` of this module, as diagnostics show
-    /// it where names of several modules are listed (design principles 2.12, 2.13). The module
+    /// it where names of several modules are listed (design principles 10.2). The module
     /// is named by the name it declares, or else the name it was loaded under; the entry
     /// module without a `module` declaration has no name to show, and its names are shown
     /// without one, as the graph names show them.
@@ -187,7 +187,7 @@ class Module : public std::enable_shared_from_this<Module> {
     virtual bool loaded() const { return loaded_; }
     /// Makes the types the module exports readable (getExportedType). A module written in
     /// Camel declares them while its construction tree is built, so that modules importing
-    /// each other can use each other's types (design principles 2.11); a module of another
+    /// each other can use each other's types (design principles 10.1); a module of another
     /// kind is loaded.
     virtual void declareTypes() {
         if (!loaded()) {
@@ -242,7 +242,7 @@ class Module : public std::enable_shared_from_this<Module> {
     bool exportType(const Reference &ref, Type *type);
     bool exportEntity(const Reference &ref, const entity &ent);
     /// Exports the constant `value` under `ref` (a C++ module's `math::pi`; design principles
-    /// 2.13). A use of the name is that constant in the graph where it is used: no node of the
+    /// 10.1). A use of the name is that constant in the graph where it is used: no node of the
     /// root graph, no capture, nothing evaluated when the module is imported. Only data that
     /// can be a constant of a graph is accepted (scalars, strings, and composites of them).
     bool exportValue(const Reference &ref, camel::core::data::data_ptr_t value) {
@@ -270,7 +270,7 @@ class Module : public std::enable_shared_from_this<Module> {
         entity overloads;
     };
     /// Every overload of the operator function `group` (`__add__`) this module imported
-    /// (design principles 2.12: the overloads of an operator from every layer are one set):
+    /// (design principles 10.2: the overloads of an operator from every layer are one set):
     /// first the operator groups, merged; then what each module written in Camel that this
     /// one imports, in any form, exports under `group` or `group#k` (a generic overload),
     /// ordered by module name, then by name.

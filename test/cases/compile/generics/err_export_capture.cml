@@ -4,7 +4,7 @@ import { biased } from export_lib
 
 func main(): int sync {
     // The body of the instance uses a top-level value of the module that declares it: one
-    // instance for the whole program, under the one root graph (design principles 2.11).
+    // instance for the whole program, under the one root graph (design principles 10.1).
     println(biased(1))
     return 0
 }

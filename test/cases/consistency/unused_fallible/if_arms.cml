@@ -1,6 +1,6 @@
 /**
  * The arm of an `if` without `else` gives a value nothing takes: a `T!` there is warned
- * about, whatever form the `if` has (design principles 2.13), and only when the arm is the
+ * about, whatever form the `if` has (design principles 3.9), and only when the arm is the
  * one the `if` runs in a sync block.
  */
 func parse(s: string): int! {

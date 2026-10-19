@@ -1,7 +1,7 @@
 # Entry Parameters and the Export of a Pure Program
 
 This note describes how a `main` with parameters is compiled, run and exported. The normative
-text is `docs/design-principles.cn.md` section 2.7 (the rulings on `main` with parameters,
+text is `docs/design-principles.cn.md` section 9.8 (the rulings on `main` with parameters,
 `with` parameters, automatic module loading, entry and export). User-facing behaviour is in
 `docs/cli.md`.
 
@@ -135,11 +135,11 @@ the two kinds differently beyond their order.
   float32); the parameter is refused unless its value is given.
 - Dynamic axes come from the declared types only; there is no `dynamic_axes` or `target`
   option for the entry export (the target is the default, `onnxruntime-cpu`).
-- The parameter `out` of the pass is the way to name the file (passes take parameters, design principles 2.17).
+- The parameter `out` of the pass is the way to name the file (passes take parameters, design principles 9.3).
 - The result of `main` is neither printed nor written under `--timeit`.
 - `std::cpp` translates a `main` with parameters of type int, i32, float, f32, bool or string: the
   generated program reads them from its command line as `--arg name=value`, with the same reports
-  as `camel` (design principles 2.13; `include/camel/standalone/entry.h`). A parameter of another
+  as `camel` (design principles 10.6; `include/camel/standalone/entry.h`). A parameter of another
   type (a tensor, a struct) is refused with `TranslationRefused` at `main`.
 - An optimizer state (`nn` Adam state) is not accepted as a parameter type on the command line
   or as a declared model input.

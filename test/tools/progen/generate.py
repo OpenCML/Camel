@@ -51,7 +51,7 @@ FEATURES = {
                "(values and types; functions that call only each other; the rest), imported by "
                "name; not in the default set",
     "append": "xs->append<v> (a new array, xs unchanged) and acc = acc->append<v> (rebinding a variable, also in foreach element functions)",
-    "loop": "loops (design principles 2.13): `while` with a counter, `for` over an array, `for ... while`, one or several values of state, struct and tuple states, and loops whose body is a sync block with effects",
+    "loop": "loops (design principles 3.10): `while` with a counter, `for` over an array, `for ... while`, one or several values of state, struct and tuple states, and loops whose body is a sync block with effects",
     "opover": "operator overloads of the program (func operator +, unary -, *, <, []) on the struct P, next to the built-in operators",
 }
 # `modules` is left out of the default set: the feature set is part of every program's random
@@ -362,7 +362,7 @@ class Gen:
             parts.append(spec + self.r.choice([" ", ",", "|", ">", ""]))
         return N("fmt", args, t=STR, s="".join(parts))
 
-    # -- T? (design principles 2.10) ----------------------------------------------------------
+    # -- T? (design principles 3.8) ----------------------------------------------------------
     def null(self, t):
         return N("null", t=OPT(t))
 
@@ -409,7 +409,7 @@ class Gen:
         s.shown = True                     # printed by itself below, not through `format`
         return N("let", [e], name=s.name, ann=OPT(t))
 
-    # -- narrowing (design principles 2.11, 2.12) --------------------------------------------
+    # -- narrowing (design principles 3.8) --------------------------------------------
     def nullable_lets(self, t=None):
         """The names a test against null narrows: `T?` names bound by `let` or parameters."""
         return [s for s in self.scope if s.kind == "let" and not s.eff and s.t[0] == "opt" and
@@ -424,7 +424,7 @@ class Gen:
 
     def narrowable(self, cond, holds: bool):
         """The names in scope that `cond` narrows where it holds (`holds`) or where it does not
-        (design principles 2.11, 2.12): a test `x != null` (either order) that is `cond` or an
+        (design principles 3.8): a test `x != null` (either order) that is `cond` or an
         operand `&&` joins in it narrows where `cond` holds; `cond` being `x == null` narrows
         where it does not. The generator writes the arm with those names as a `T`, as the
         compiler sees them, also where the test was not written to narrow."""
@@ -509,7 +509,7 @@ class Gen:
         s = self.r.choice(self.nullable_lets())
         return self.logical("&&", self.null_test(s, False), lambda: self.expr(BOOL, d - 1))
 
-    # -- `&&` / `||` with effects on the right side (design principles 2.11) -----------------
+    # -- `&&` / `||` with effects on the right side (design principles 4.2) -----------------
     def logic_probe(self):
         """`func qN(a: int, b: bool): bool sync { println(...); b }`: an effect whose value is a
         bool, to stand on the right side of `&&` and `||`."""
@@ -548,7 +548,7 @@ class Gen:
         body = self.with_params(params, lambda: N("blk", [[], self.coalesce(t, 2)], t=t))
         self.add_func(name, params, t, body, self.fn_sym(name, params, t))
 
-    # -- context parameters and partial application (design principles 2.10) ------------------
+    # -- context parameters and partial application (design principles 4.4) ------------------
     def with_functions(self, ret=None, fn=None):
         return [s for s in self.scope if s.kind == "wfn" and (ret is None or s.ret == ret) and
                 (fn is None or FN([p[1] for p in s.params], s.ret) == fn)]
@@ -585,7 +585,7 @@ class Gen:
         o = [(3.0, lambda: N("arr", [self.expr(e, d - 1) for _ in range(self.r.choice([1, 2, 3, 3, 4]))], t=t)),
              (1.5, lambda: N("concat", [self.expr(t, d - 1), self.expr(t, d - 1)], t=t))]
         if self.on("append"):
-            # A new array; the array appended to is unchanged (design principles 2.12).
+            # A new array; the array appended to is unchanged (design principles 11.3).
             o.append((1.2, lambda: N("append", [self.expr(t, d - 1), self.expr(e, d - 1)], t=t)))
         named = self.values(t)
         if named:
@@ -1125,7 +1125,7 @@ class Gen:
 
     # -- loops ------------------------------------------------------------------------------
     def loop_node(self, t, d, make_body, bare=False):
-        """A loop whose value is a `t` (design principles 2.10, 2.13). The form is chosen at
+        """A loop whose value is a `t` (design principles 3.10). The form is chosen at
         random; every loop ends: a `while` counts rounds against a small bound, a `for` visits
         an array. `make_body(state_t, d)` gives the body, with the names of the head in scope;
         the loop's value is the state, or (unless `bare`) one value of it."""
@@ -1222,7 +1222,7 @@ class Gen:
         """`if c then e` as a statement: the arm is one expression of any type, whose value is
         dropped; an effect written there happens when the condition holds. A pure value there
         is a literal or a name: a call of a pure operator whose result is dropped is an error
-        (UnusedPureResult, design principles 2.12)."""
+        (UnusedPureResult, design principles 11.3)."""
         cond = self.expr(BOOL, 2)
 
         def make():
@@ -1324,7 +1324,7 @@ class Gen:
         return N("func", [body], name=name, params=params, ret=ret, syncfn=effectful and writes_captured(body))
 
     # -- the program ------------------------------------------------------------------------
-    # -- operator overloads of the program (design principles 2.12) ----------------------------
+    # -- operator overloads of the program (design principles 4.3) ----------------------------
     def operator_overloads(self):
         """`func operator +(a: P, b: P): P` and the others on the struct P. Their bodies are fixed;
         what varies is where the operators are used (operator_options)."""

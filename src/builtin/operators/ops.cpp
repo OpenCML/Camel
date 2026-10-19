@@ -90,7 +90,7 @@ slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 // `acc = acc->append<v>` written as a statement (Builder::rebindingAppendOf). The meaning is
 // that of the rebinding: `append` returns a new array and the variable is bound to it, the
-// old array unchanged (design principles 2.12). Changing the array in place gives the same
+// old array unchanged (design principles 11.3). Changing the array in place gives the same
 // result when nothing but the variable refers to it, which the cell records
 // (Tuple::holdsUnsharedArray): the flag is set only here, after storing an array made here,
 // and cleared by every read of the variable (:var/get) and every other write (:op/assn), so
@@ -103,7 +103,7 @@ slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // flag is a field of the cell, so it moves with it. Parallel scheduler: the operator runs on one
 // thread and reads and writes only its own cell; two threads use one cell at the same time
 // only when the elements of a parallel `map` write a captured `var`, whose order the
-// language leaves to the program (design principles 2.7) and which raced already when
+// language leaves to the program (design principles 3.6) and which raced already when
 // `append` changed the array in place.
 slot_t __builtin__assn_append__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell         = variableOf(norm);
@@ -135,7 +135,7 @@ slot_t __builtin__assn_append__(ArgsView &with, ArgsView &norm, Context &ctx) {
 //
 //     :op/assn_owned(xs, <the in-place form>(..., :var/take(xs)))
 //
-// The meaning is that of the rebinding (design principles 2.12, 2.13): the operator returns a
+// The meaning is that of the rebinding (design principles 11.3): the operator returns a
 // new array and the variable is bound to it. :var/take hands the in-place form an array no one
 // else refers to: the variable's own array when the variable is its only holder (the mark
 // __builtin__assn_append__ describes), otherwise a copy of it. The form changes that array and
@@ -380,7 +380,7 @@ slot_t __builtin__assn_pow_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return assignPow<Float64>(norm);
 }
 
-// `&=` and `|=` on bool: `a = a && b` and `a = a || b` (design principles 2.10: they are the
+// `&=` and `|=` on bool: `a = a && b` and `a = a || b` (design principles 4.2: they are the
 // boolean and / or; bit operations are functions, `bit_and` and the like of `math`). The right
 // side is an operand like any other, evaluated before the operator runs.
 slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -567,7 +567,7 @@ bool valuesEqualByContent(slot_t a, slot_t b, const Type *type) {
 // `==` and `!=`. Floats compare as numbers (IEEE: NaN equals nothing, itself included, and
 // the two zeros are equal), which is what FastVM and the JIT compile `==` on floats to;
 // comparing the slots would compare bit patterns. Arrays, tuples and structs compare by
-// content, element by element (design principles 2.10).
+// content, element by element (design principles 4.2).
 slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot<Bool>(valuesEqualByContent(norm.slot(0), norm.slot(1), norm.type(0)));
 }
@@ -576,7 +576,7 @@ slot_t __builtin__ne__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot<Bool>(!valuesEqualByContent(norm.slot(0), norm.slot(1), norm.type(0)));
 }
 
-// Strings are ordered by their bytes (design principles 2.9); a proper prefix comes first.
+// Strings are ordered by their bytes (design principles log 2.9); a proper prefix comes first.
 static int compareStrings(ArgsView &norm) {
     return norm.get<String *>(0)->compare(norm.get<String *>(1));
 }
@@ -834,7 +834,7 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
         case TypeCode::String: {
             // A string is valid UTF-8 and its indices count code points (design principles
-            // 2.17): `'中文'[0]` is `'中'`. The result is the string of that one character.
+            // 11.1): `'中文'[0]` is `'中'`. The result is the string of that one character.
             String *str                 = norm.get<String *>(0);
             Int64 raw                   = norm.get<Int64>(1);
             const std::string_view text = str->view();

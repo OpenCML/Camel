@@ -1,5 +1,5 @@
 /**
- * matmul's canonical algorithm (design principles 2.13): every element is one chain of fused
+ * matmul's canonical algorithm (design principles 7.1): every element is one chain of fused
  * multiply-adds in ascending k from +0, so the product has the same bits in every GEMM unit
  * (run with and without CAMEL_TENSOR_ISA=generic) and the fused forms of `x @ w + b` give the
  * bits of the unfused expression (run with and without tensor::fuse). K is beyond one cache

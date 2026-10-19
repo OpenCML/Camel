@@ -334,7 +334,7 @@ func main(): int {
 函数类型仍记录源码签名（参数类型 `T` 与 `var` 标记）；重载决议按值类型进行（`valueTypeOf`）。
 
 - 赋值之外不再有带 `var` 形参的内建或标准库算子：`append`、`extend`、`apply`、`algo::sort` 等返回新值，
-  不修改实参（设计原则 2.12）。写成语句的 `acc = acc->append<v>` 由图构建器写成 `:op/assn_append`
+  不修改实参（设计原则 11.3）。写成语句的 `acc = acc->append<v>` 由图构建器写成 `:op/assn_append`
   （`__assn_append__`，与 `:op/assn` 同族：`acc` 的单元作为 `var` 实参，记为对它的一次写入）；单元记录
   它持有的数组是否只被它引用，是时原地追加，否则复制（`src/builtin/operators/ops.cpp`）。模块的算子仍可以
   声明 `var` 形参：它们收到的是对象本身（`:var/get` 的结果），该调用记为对这个变量的一次写入。

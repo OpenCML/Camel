@@ -2,7 +2,7 @@
 // program to the next graph node that starts another source line (next, stepIn, stepOut) or to
 // the next node (granularity "instruction"); the line reached is the next one in execution
 // order, and a line the step went past because nothing uses its result is said in the debug
-// console (design principles 2.11). Also: recursion as a stack of frames, a tail recursion as
+// console (design principles 12.1). Also: recursion as a stack of frames, a tail recursion as
 // the one frame it is, with the arms of the branches folded into the frames of their function
 // (the default) or shown as the subgraphs they are (frames: "subgraphs"), and the arm of a
 // branch that is not taken.

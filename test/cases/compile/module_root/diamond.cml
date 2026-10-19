@@ -1,5 +1,5 @@
 // Two modules use a function of a third that uses its top-level value: the value is one node
-// of the one root graph, computed once, before `main` starts (design principles 2.11).
+// of the one root graph, computed once, before `main` starts (design principles 10.1).
 import { left } from diamond_a
 import { right } from diamond_b
 

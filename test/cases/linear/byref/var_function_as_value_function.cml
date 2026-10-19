@@ -1,6 +1,6 @@
 /**
  * A function with a `var` parameter passed where a function type without `var` is expected.
- * Rejected at compile time (docs/design-principles.cn.md 2.5, 2.6: a side effect
+ * Rejected at compile time (docs/design-principles.cn.md 3.5: a side effect
  * must be declared, and only a `var` can be changed).
  */
 module var_function_as_value_function

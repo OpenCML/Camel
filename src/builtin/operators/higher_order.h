@@ -18,7 +18,7 @@
  */
 
 /*
- * The higher-order array operators as ordinary native operators (design principles 2.17): each
+ * The higher-order array operators as ordinary native operators (design principles 3.6): each
  * calls its function value through the function-call service (camel/execute/function_call.h),
  * element after element, in order. This is the one implementation of what they mean; the
  * schedulers that have a faster way to run a shape of call (OperatorSemantics::elementCalls)

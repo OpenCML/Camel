@@ -407,7 +407,7 @@ slot_t __json_encode__(ArgsView &, ArgsView &norm, Context &ctx) {
 }
 
 // decode(text): a `Json!`. Text that is not JSON is an error value `JsonParseError`, not a
-// fault (design principles 2.13): decoding is an operation declared to fail, like parse_int.
+// fault (design principles 11.2): decoding is an operation declared to fail, like parse_int.
 slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &) {
     static const TupleType *result = TupleType::fallible(JsonType::get());
     String *str                    = norm.get<String *>(0);

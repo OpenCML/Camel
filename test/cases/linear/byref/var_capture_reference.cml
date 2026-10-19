@@ -1,6 +1,6 @@
 /**
  * A variable captured by an `if` arm or a lambda is captured by reference
- * (docs/design-principles.cn.md 2.5): a write inside goes through to the outer variable, and
+ * (docs/design-principles.cn.md 3.5): a write inside goes through to the outer variable, and
  * the lambda sees later writes from outside. Expected output:
  *   5 1      written in an `if` arm; the arm's value
  *   0 0      the other arm leaves it alone

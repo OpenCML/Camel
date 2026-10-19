@@ -31,14 +31,14 @@ class Context;
 
 namespace camel::execute {
 
-/// The limit on non-tail recursion (design principles 2.9: tail recursion is optimized, non-tail
+/// The limit on non-tail recursion (design principles 3.9: tail recursion is optimized, non-tail
 /// recursion gets a configurable limit). It counts the calls that are open at once and are not
 /// in tail position; a tail call replaces its caller and is not counted.
 ///
 /// It is given by `--max-recursion-depth <n>` (EntryConfig::maxRecursionDepth) or, without the
 /// option, by the environment variable CAMEL_MAX_RECURSION_DEPTH. Without either, every
 /// scheduler stops at kDefaultMaxRecursionDepth: the default is 1000 on all of them, and the
-/// parallel scheduler counts like the others (design principles 2.10, "默认值").
+/// parallel scheduler counts like the others (design principles 3.9, "默认值").
 ///
 /// What is counted is the same on every back end: each call of a function (written directly,
 /// made through a function value, or made by a higher-order operator for an element) that is
@@ -59,7 +59,7 @@ inline constexpr const char *kMaxMacroDepthEnvVar = "CAMEL_MAX_MACRO_DEPTH";
 inline constexpr const char *kMaxMacroDepthOption = "--max-macro-depth";
 
 /// The limit on the rounds one loop may run while std::macro evaluates it ahead of time (design
-/// principles 2.14; a loop that would not end makes the compilation fail instead of hang).
+/// principles 8; a loop that would not end makes the compilation fail instead of hang).
 /// `--max-macro-rounds <n>`, else CAMEL_MAX_MACRO_ROUNDS. Rounds do not nest, so the count has no
 /// relation to the stack and its range is wider than the depth limits'.
 inline constexpr size_t kDefaultMaxMacroRounds     = 1'000'000;

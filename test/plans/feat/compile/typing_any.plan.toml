@@ -3,7 +3,7 @@ order = 140
 tier = "feat"
 tags = ["feat", "compile", "diagnostics", "any"]
 
-# `any` (design principles 2.11, 2.12; docs/design/any-typing/README.cn.md). A slot typed `any`
+# `any` (design principles 5.10; docs/design/any-typing/README.cn.md). A slot typed `any`
 # records nothing about what entered it, so nothing may read it as a type of its own. Each
 # case is a reproducer of a defect of the study (appendix B) that used to crash or retype a
 # value silently.
@@ -92,7 +92,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.encode_function"
-desc = "json encode takes the types with a JSON form by a type rule instead of a parameter of type `any` (design principles 2.12); a function is refused when the call is compiled. It used to compile and fault at run time."
+desc = "json encode takes the types with a JSON form by a type rule instead of a parameter of type `any` (design principles 5.10); a function is refused when the call is compiled. It used to compile and fault at run time."
 kind = "negative"
 case = "../../../cases/compile/any_typing/encode_function.cml"
 args = ["${case}"]
@@ -128,7 +128,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.written_parameter"
-desc = "`any` is not a type a program can write (design principles 2.12): AnyNotAllowed, with the form recommended for the position. A parameter typed `any` (it compiled, and its slot was invisible to the collector: docs/design/any-typing, t11)."
+desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. A parameter typed `any` (it compiled, and its slot was invisible to the collector: docs/design/any-typing, t11)."
 kind = "negative"
 case = "../../../cases/compile/any_typing/written_parameter.cml"
 args = ["${case}"]
@@ -143,7 +143,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.written_return"
-desc = "`any` is not a type a program can write (design principles 2.12): AnyNotAllowed, with the form recommended for the position. A return type `any` (it compiled and printed `<any>`)."
+desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. A return type `any` (it compiled and printed `<any>`)."
 kind = "negative"
 case = "../../../cases/compile/any_typing/written_return.cml"
 args = ["${case}"]
@@ -158,7 +158,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.written_cast"
-desc = "`any` is not a type a program can write (design principles 2.12): AnyNotAllowed, with the form recommended for the position. `e as any`."
+desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. `e as any`."
 kind = "negative"
 case = "../../../cases/compile/any_typing/written_cast.cml"
 args = ["${case}"]
@@ -173,7 +173,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.written_with"
-desc = "`any` is not a type a program can write (design principles 2.12): AnyNotAllowed, with the form recommended for the position. A `with` parameter typed `any`."
+desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. A `with` parameter typed `any`."
 kind = "negative"
 case = "../../../cases/compile/any_typing/written_with.cml"
 args = ["${case}"]
@@ -188,7 +188,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.written_annotation"
-desc = "`any` is not a type a program can write (design principles 2.12): AnyNotAllowed, with the form recommended for the position. A `let` annotated `any` (it was FeatureNotSupported: dynamic type casting)."
+desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. A `let` annotated `any` (it was FeatureNotSupported: dynamic type casting)."
 kind = "negative"
 case = "../../../cases/compile/any_typing/written_annotation.cml"
 args = ["${case}"]
@@ -203,7 +203,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.written_type_decl"
-desc = "`any` is not a type a program can write (design principles 2.12): AnyNotAllowed, with the form recommended for the position. `any` in a type declaration (a struct field)."
+desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. `any` in a type declaration (a struct field)."
 kind = "negative"
 case = "../../../cases/compile/any_typing/written_type_decl.cml"
 args = ["${case}"]
@@ -218,7 +218,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.written_function_type"
-desc = "`any` is not a type a program can write (design principles 2.12): AnyNotAllowed, with the form recommended for the position. `any` as the result of a function type: the innermost position decides the advice."
+desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. `any` as the result of a function type: the innermost position decides the advice."
 kind = "negative"
 case = "../../../cases/compile/any_typing/written_function_type.cml"
 args = ["${case}"]

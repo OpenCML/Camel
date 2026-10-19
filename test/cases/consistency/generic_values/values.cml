@@ -1,5 +1,5 @@
 /**
- * A generic function may stand wherever a function is expected (design principles 2.10): the
+ * A generic function may stand wherever a function is expected (design principles 5.5): the
  * compiler builds the instance once the position fixes its type variables. That happens
  * while the program is compiled; the graph holds the instances and nothing else.
  */

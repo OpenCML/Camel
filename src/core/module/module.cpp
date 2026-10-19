@@ -448,7 +448,7 @@ Module::importedOperatorOverloads(const std::string &group) const {
         result.push_back({nullptr, Reference(group), std::move(*ops)});
     }
     // The overloads a module written in Camel exports (`export func operator +`): every
-    // import of the module brings them, whatever it names (design principles 2.12), so they
+    // import of the module brings them, whatever it names (design principles 10.2), so they
     // are looked up in the modules imported, not among the names imported. A generic overload
     // is exported under `group#k` (the GIR builder's exportOperatorOverloads).
     const auto isOverloadOf = [&](const Reference &ref) {

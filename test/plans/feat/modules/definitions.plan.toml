@@ -2,7 +2,7 @@ id = "modules.definitions"
 order = 374
 tier = "feat"
 tags = ["feat", "modules", "semantics", "definitions", "tensor"]
-desc = "The definition graphs of operators (camel/runtime/definitions.h, docs/design/op-semantics section 9; design principles 2.13: a definition graph is normative): the definitions the tensor module declares from stdlib/tensor_definitions.cml, the checks that refuse a definition, the kernels against their expanded definitions bit for bit on every back end, and gradients through the definitions against the operators' own derivative rules."
+desc = "The definition graphs of operators (camel/runtime/definitions.h, docs/design/op-semantics section 9; design principles 7.1: a definition graph is normative): the definitions the tensor module declares from stdlib/tensor_definitions.cml, the checks that refuse a definition, the kernels against their expanded definitions bit for bit on every back end, and gradients through the definitions against the operators' own derivative rules."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -159,7 +159,7 @@ assert(!byUri.get('tensor:matmul').semantics.definition, 'matmul has none')
 
 [[tests]]
 name = "mean_empty_fault"
-desc = "mean of a tensor without elements faults like its definition (sum(x) / (numel(x) as float), a float division by zero): the kernel raises DivisionByZero with the same message the expanded definition gives (mean_empty_fault_expanded), located at the call; the fault kinds agree, not only the fact of a fault (design principles 2.13)."
+desc = "mean of a tensor without elements faults like its definition (sum(x) / (numel(x) as float), a float division by zero): the kernel raises DivisionByZero with the same message the expanded definition gives (mean_empty_fault_expanded), located at the call; the fault kinds agree, not only the fact of a fault (design principles 7.1)."
 kind = "behavior"
 case = "../../../cases/definitions/mean_empty.cml"
 args = ["${case}", "${backend}"]

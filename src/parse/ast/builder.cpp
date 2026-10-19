@@ -438,11 +438,11 @@ Value Builder::visitImportDecl(cst::ImportDecl context) {
         import_->setPath(context->get<cst::ModuleName>()->text());
     }
     if (context->get<cst::IdentDef>()) {
-        // `import m as x`: the module under another name (design principles 2.12).
+        // `import m as x`: the module under another name (design principles 10.2).
         import_->setAs(Reference(context->get<cst::IdentDef>()->text()));
     } else if (context->get<cst::BracedImports>() || context->get<cst::ImportItem>()) {
         // importItem : identDef ('as' identDef)? -- the name in the module, then the name
-        // it has here. `import a from m` is `import { a } from m` (design principles 2.12).
+        // it has here. `import a from m` is `import { a } from m` (design principles 10.2).
         std::vector<Reference> refs;
         std::vector<Reference> locals;
         bool renamed     = false;
@@ -503,7 +503,7 @@ usingNamespaceDecl : USING NAMESPACE identRef ;
 */
 Value Builder::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
     ENTER("UsingNamespaceDecl");
-    // As written: what it names is found where it is used (design principles 2.12).
+    // As written: what it names is found where it is used (design principles 10.2).
     Reference ref        = value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>()));
     node_ptr_t usingNode = createNodeAs<UsingNamespaceLoad>(ref);
     setNodeTokenRangeByContext(usingNode, context);
@@ -521,7 +521,7 @@ Value Builder::visitBlockStmt(cst::BlockStmt context) {
         unwrapNodeAs<StmtBlockLoad>(res)->wait();
     }
     // `@numeric(...)` before a block grants its permissions to the block (design principles
-    // 2.13). A decorator before a block decorates the block as a function of no parameters
+    // 7.5). A decorator before a block decorates the block as a function of no parameters
     // called where it is written (language reference 7.6): the decorators are the block's second child.
     node_ptr_t decorators = nullptr;
     for (const auto &anno : context->all<cst::FuncAnno>()) {
@@ -684,7 +684,7 @@ Value Builder::visitFuncData(cst::FuncData context) {
 
 /*
 funcAnno   : '@' identRef (angledValues | parentIdents)? ;
-`@numeric(name, ...)`: the numeric permissions the program grants (design principles 2.13).
+`@numeric(name, ...)`: the numeric permissions the program grants (design principles 7.5).
 */
 std::optional<uint8_t> Builder::numericAnnotationOf(cst::FuncAnno context) {
     const auto names = context->get<cst::ParentIdents>();
@@ -761,7 +761,7 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");
 
     // Decorators are applied to the function; `@numeric(...)` grants its permissions to the
-    // function's body (design principles 2.13), which is where the GCT builder reads them.
+    // function's body (design principles 7.5), which is where the GCT builder reads them.
     node_ptr_t annoListNode    = nullptr;
     uint8_t numericPermissions = 0;
     for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
@@ -840,10 +840,10 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     *funcTypeNode << typeOptNode;
 
     // The name: an identifier, or the operator of an overload (`func operator +(a, b)`, design
-    // principles 2.12). An overload is a function under the reserved name of its operator
+    // principles 4.3). An overload is a function under the reserved name of its operator
     // (`__add__`), chosen by the symbol and the number of parameters (`-` with one is the
     // negation). It is not qualified by an enclosing namespace: an operator has no name a
-    // program could qualify, and every overload of it is one set (2.12). A symbol that cannot
+    // program could qualify, and every overload of it is one set (10.2). A symbol that cannot
     // be overloaded with that many parameters gets a name no program can write; the GCT
     // builder reports it with the reason.
     Reference ref;
@@ -926,7 +926,7 @@ Value Builder::visitNamespaceDecl(cst::NamespaceDecl context) {
     pushNamespace(nsRef);
 
     // The `using namespace` of the block apply to the declarations of the block (design
-    // principles 2.12), wherever in the block they are written: each declaration carries them,
+    // principles 10.2), wherever in the block they are written: each declaration carries them,
     // and they are not declarations of the module.
     std::vector<Reference> usings;
     for (const syn::Node item : context->nodes()) {
@@ -1092,7 +1092,7 @@ retStmt    : (RETURN | THROW) dataList ;
 Value Builder::visitRetStmt(cst::RetStmt context) {
     ENTER("RetStmt");
     // `throw e` returns an error value: an exit like `return`, whose value is the failed form
-    // of the function's declared `T!` (design principles 2.9; the graph builder checks the
+    // of the function's declared `T!` (design principles 3.9; the graph builder checks the
     // declaration).
     ExitType exitType   = context->tok(TK::KwThrow) ? ExitType::Throw : ExitType::Return;
     node_ptr_t exitNode = createNodeAs<ExitStmtLoad>(exitType);
@@ -1377,7 +1377,7 @@ Value Builder::visitPattern(cst::Pattern context) {
         res = createNodeAs<NullLoad>();
         setNodeTokenRangeByContext(res, context);
     } else if (context->get<cst::IdentRef>()) {
-        // The two fixed patterns over a tagged value (design principles 2.9): `v` binds the
+        // The two fixed patterns over a tagged value (design principles 3.8): `v` binds the
         // value taken out of a `T?` / `T!`, `error e` binds the error of a failed `T!`. Both
         // are a reference node; `error e` carries the bound name as its child. Whether the
         // scrutinee has such a type is known to the graph builder only, which reports an
@@ -1630,7 +1630,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
 
     default:
         // TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
-        // Not part of the language (design principles 2.9): its shape on the graph would
+        // Not part of the language (design principles 1): its shape on the graph would
         // depend on what the block contains. The diagnostic names what replaces it.
         diags_->of(SemanticDiag::TryCatchNotInLanguage)
             .at(rangeOf(context->firstToken(), context->lastToken()))
@@ -2036,7 +2036,7 @@ Value Builder::visitNullableExpr(cst::NullableExpr context) {
         } else {
             throw std::runtime_error("Invalid nullable operator: " + strOp);
         }
-        // `a ?? b` / `a !! b`: a branch on the tag of `a` (design principles 2.9).
+        // `a ?? b` / `a !! b`: a branch on the tag of `a` (design principles 3.9).
         if (context->expr(1)) {
             node_ptr_t dataExprNode = createNodeAs<ReservedExprLoad>(op);
             // Located at the operator: that is where its diagnostics point.
@@ -2203,7 +2203,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
         node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
         if (strOp == "?->") {
             // `x ?-> f`: a branch on the tag of `x`; the call is the arm taken when `x` has
-            // not failed (design principles 2.9). The marked receiver tells the GCT builder.
+            // not failed (design principles 3.9). The marked receiver tells the GCT builder.
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
             syn::TokenRef opToken  = tokenOf(context->child(i * 2 - 1));
             setNodeTokenRange(notNullNode, opToken->index(), opToken->index() + 1);
@@ -2593,7 +2593,7 @@ Value Builder::visitArrayData(cst::ArrayData context) {
     } else {
         *dataNode << createNodeAs<RepeatedLoad>("Data");
         if (context->tok(TK::KwFor)) {
-            // `[e for x in xs if c]` (design principles 2.10): `filter` then `map`. The parts
+            // `[e for x in xs if c]` (design principles 4.2): `filter` then `map`. The parts
             // are kept as they are written, after the (empty) element list: the element
             // expression, the name, the source and the optional condition. The GCT builder
             // lowers them to the two calls (visitComprehension).

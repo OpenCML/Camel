@@ -2,7 +2,7 @@ id = "consistency.unused_fallible"
 order = 364
 tier = "feat"
 tags = ["feat", "consistency", "compile", "fallible", "warnings"]
-desc = "A `T!` that is evaluated in a sync block and that nothing uses is a compile-time warning; `let _ = ...` drops it on purpose; a `main` without a declared return type ending in an error value is the same case (design principles 2.11, 2.12)."
+desc = "A `T!` that is evaluated in a sync block and that nothing uses is a compile-time warning; `let _ = ...` drops it on purpose; a `main` without a declared return type ending in an error value is the same case (design principles 3.9)."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -70,7 +70,7 @@ expect_output_not_contains = ["UnusedFallibleValue"]
 
 [[tests]]
 name = "unused_fallible.if_arms"
-desc = "The arm of an `if` without `else` whose `T!` nothing uses is warned about in every form: a narrowing `if`, a block arm, the end of a longer block; a value used by `!!` or dropped with `let _` is not (design principles 2.13)."
+desc = "The arm of an `if` without `else` whose `T!` nothing uses is warned about in every form: a narrowing `if`, a block arm, the end of a longer block; a value used by `!!` or dropped with `let _` is not (design principles 3.9)."
 kind = "behavior"
 case = "../../../cases/consistency/unused_fallible/if_arms.cml"
 args = ["-E", "short", "${case}", "${backend}"]

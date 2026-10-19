@@ -60,7 +60,7 @@ bool CryptoModule::load() {
     context_->registerExecutorFactory("crypto", [ctx = context_]() {
         return createCryptoExecutor(ctx);
     });
-    // The purity of every operator (design principles 2.9).
+    // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
         "crypto",
         {

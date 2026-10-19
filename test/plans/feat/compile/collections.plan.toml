@@ -2,7 +2,7 @@ id = "compile.collections"
 order = 330
 tier = "feat"
 tags = ["feat", "compile", "collections", "map", "set", "types"]
-desc = "The built-in collection types `Map<K, V>` and `Set<T>`: construction with `as`, the operators, generics, the four back ends, the optimisation pipelines, and every diagnostic with its position (design principles 2.9; docs/technical/31_map_and_set.md)."
+desc = "The built-in collection types `Map<K, V>` and `Set<T>`: construction with `as`, the operators, generics, the four back ends, the optimisation pipelines, and every diagnostic with its position (design principles 11.3; docs/technical/31_map_and_set.md)."
 
 # The positive cases are snapshots. Each runs on std::nvm, std::fvm, std::jit and std::prl,
 # which must agree on exit code and standard output, and the output is the golden file's. The
@@ -872,7 +872,7 @@ envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOU
 golden = "golden/collections/map_basic.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
-# --- one calling form (design principles 2.10) ---------------------------------------------
+# --- one calling form (design principles 11.4) ---------------------------------------------
 # The value worked on is the ordinary argument, the rest are with-arguments: put<k, v>(m) or
 # m->put<k, v>. The spelling with everything in the parentheses is no longer accepted, and a
 # call written that way (of these operators or of any library function) gets a hint that names

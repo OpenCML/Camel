@@ -2,7 +2,7 @@
  * The definitions of operators of the tensor module (docs/design/op-semantics, section 9).
  *
  * Each function here is the normative definition of the operator of its name (design
- * principles 2.13: a definition graph is normative): it computes exactly what the operator
+ * principles 7.1: a definition graph is normative): it computes exactly what the operator
  * computes, the axis, the numeric stabilization, the accumulator type and every conversion
  * included, from operators simpler than it. A kernel of the operator, fused or written by hand,
  * on any back end, must agree with it: bit for bit, except that a bounded function (exp, log)
@@ -52,7 +52,7 @@ export func mean(x: Tensor<f32>): float {
     return sum(x) / (numel(x) as float)
 }
 
-/// tensor:relu: maximum(x, +0) (design principles 2.13): a NaN gives NaN, -0 gives +0.
+/// tensor:relu: maximum(x, +0) (design principles 7.7): a NaN gives NaN, -0 gives +0.
 export func relu(x: Tensor<f32>): Tensor<f32> {
     return maximum(x, 0.0)
 }

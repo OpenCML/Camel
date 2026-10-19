@@ -271,7 +271,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "ConversionOutOfRange",
                 "Cannot convert {0} to {1}: {2}.",
                 "A conversion whose value does not fit the target type is a fault (design "
-                "principles 2.10): a float that is NaN, infinite or beyond the integer's range, "
+                "principles 5.1): a float that is NaN, infinite or beyond the integer's range, "
                 "or an integer beyond the range of a narrower integer type. Check the value "
                 "before converting it, or clamp it (min, max) to the range of the target.",
             },

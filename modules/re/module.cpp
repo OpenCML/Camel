@@ -46,7 +46,7 @@ bool ReModule::load() {
     if (loaded_)
         return true;
     context_->registerExecutorFactory("re", [ctx = context_]() { return createReExecutor(ctx); });
-    // The purity of every operator (design principles 2.9).
+    // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
         "re",
         {

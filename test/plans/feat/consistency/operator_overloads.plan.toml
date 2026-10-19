@@ -2,7 +2,7 @@ id = "consistency.operator_overloads"
 order = 363
 tier = "feat"
 tags = ["feat", "consistency", "compile", "operators"]
-desc = "Operator overloads written in Camel, `func operator +(a: V, b: V): V` (design principles 2.12; the notation is provisional): which operators can be overloaded, the overloads of every layer as one set (this module, imported modules, built-in and C++ module operators), generic overloads, entering `T?`, export and import, and the diagnostics for refused declarations, conflicts and ambiguous calls."
+desc = "Operator overloads written in Camel, `func operator +(a: V, b: V): V` (design principles 4.3; the notation is provisional): which operators can be overloaded, the overloads of every layer as one set (this module, imported modules, built-in and C++ module operators), generic overloads, entering `T?`, export and import, and the diagnostics for refused declarations, conflicts and ambiguous calls."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -212,7 +212,7 @@ expect_output_contains = ["no var parameters"]
 
 [[tests]]
 name = "operator_overloads.ambiguous_generic"
-desc = "Two generic overloads both accept the operands and neither has the operands' types exactly: the call is ambiguous and both are listed (design principles 2.13 prefers only an exact overload)."
+desc = "Two generic overloads both accept the operands and neither has the operands' types exactly: the call is ambiguous and both are listed (design principles 4.3 prefers only an exact overload)."
 kind = "negative"
 case = "../../../cases/consistency/operator_overloads/ambiguous_generic.cml"
 args = ["${case}"]
@@ -248,7 +248,7 @@ expect_output_contains = ["by module 'plus_a'"]
 
 [[tests]]
 name = "operator_overloads.struct_equality"
-desc = "An overload of `==` for exactly a struct type is more specific than the built-in comparison by content and is called (design principles 2.13); it gives `!=` as its negation; another struct type and the scalars keep the built-in operators. Alike on the four back ends."
+desc = "An overload of `==` for exactly a struct type is more specific than the built-in comparison by content and is called (design principles 4.3); it gives `!=` as its negation; another struct type and the scalars keep the built-in operators. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/operator_overloads/specific/struct_equality.cml"
 args = ["-E", "short", "${case}", "${backend}"]
@@ -269,7 +269,7 @@ expect_stdout = "true false false true\nfalse true\nfalse true\n"
 
 [[tests]]
 name = "operator_overloads.generic_and_exact"
-desc = "A generic overload and one for exactly the operand types both accept the operands: the exact one is called; operands it does not take go to the generic one (design principles 2.13)."
+desc = "A generic overload and one for exactly the operand types both accept the operands: the exact one is called; operands it does not take go to the generic one (design principles 4.3)."
 kind = "behavior"
 case = "../../../cases/consistency/operator_overloads/specific/generic_and_exact.cml"
 args = ["${case}"]
@@ -278,7 +278,7 @@ expect_stdout = "[y] [1, 2]\n"
 
 [[tests]]
 name = "operator_overloads.neq_refused"
-desc = "`!=` follows `==` and is not overloaded by itself (design principles 2.13): OperatorNotOverloadable with the reason."
+desc = "`!=` follows `==` and is not overloaded by itself (design principles 4.3): OperatorNotOverloadable with the reason."
 kind = "negative"
 case = "../../../cases/consistency/operator_overloads/specific/neq_refused.cml"
 args = ["-E", "short", "${case}"]
@@ -298,7 +298,7 @@ expect_output_contains = ["returns 'int', not 'bool'", ".cml:7:"]
 
 [[tests]]
 name = "operator_overloads.namespace_block"
-desc = "An operator declared in a namespace block belongs to the module (design principles 2.13): its signature names the block's types without a prefix, and importing the module brings it."
+desc = "An operator declared in a namespace block belongs to the module (design principles 4.3): its signature names the block's types without a prefix, and importing the module brings it."
 kind = "behavior"
 case = "../../../cases/consistency/operator_overloads/specific/ns/use_geo.cml"
 args = ["${case}"]

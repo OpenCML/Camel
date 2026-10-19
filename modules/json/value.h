@@ -18,7 +18,7 @@
  */
 
 /*
- * The type `Json` of the json module and its run-time object (design principles 2.12;
+ * The type `Json` of the json module and its run-time object (design principles 11.2;
  * docs/design/any-typing/README.cn.md, 4.4).
  *
  * `json.decode` gives a JSON value whose shape is known only when the program runs. Its static
@@ -43,7 +43,7 @@
  * through the write barrier, as every module object does).
  *
  * This is not a general dynamic type: the language has no run-time type discrimination
- * (design principles 2.9). A program looks into a Json only through the operators of the
+ * (design principles 3.8). A program looks into a Json only through the operators of the
  * module (kind, get, as_int, ...), each of which gives a value of a definite type.
  */
 

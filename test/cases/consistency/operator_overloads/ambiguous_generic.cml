@@ -1,6 +1,6 @@
 /**
  * Two overloads of the program accept the operands and neither is more specific: two generic
- * ones (design principles 2.13 prefers only an overload whose parameter types are exactly the
+ * ones (design principles 4.3 prefers only an overload whose parameter types are exactly the
  * operands). The call is ambiguous.
  */
 module ambiguous_generic

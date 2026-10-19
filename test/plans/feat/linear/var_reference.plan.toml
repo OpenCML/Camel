@@ -1229,7 +1229,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "let_appended"
-desc = "`append` written as a statement on a `let` array: it returns a new array and changes nothing (design principles 2.12), so the statement does nothing. It is a compile-time error, which says to use the result."
+desc = "`append` written as a statement on a `let` array: it returns a new array and changes nothing (design principles 11.3), so the statement does nothing. It is a compile-time error, which says to use the result."
 kind = "negative"
 case = "../../../cases/linear/byref/let_appended.cml"
 args = ["${case}"]
@@ -1243,7 +1243,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "param_sorted"
-desc = "`sort` written as a statement on a parameter: it returns a new array and changes nothing (design principles 2.12), so the statement does nothing. It is a compile-time error."
+desc = "`sort` written as a statement on a parameter: it returns a new array and changes nothing (design principles 11.3), so the statement does nothing. It is a compile-time error."
 kind = "negative"
 case = "../../../cases/linear/byref/param_sorted.cml"
 args = ["${case}"]
@@ -3632,7 +3632,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "var_array_append.macro"
-desc = "A differentiated function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_append`, design principles 2.12) and reads its length (`:var/peek`): no gradient flows through the array; value and gradient are those of the plain call, under std::macro on the node VM and the bytecode VM."
+desc = "A differentiated function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_append`, design principles 11.3) and reads its length (`:var/peek`): no gradient flows through the array; value and gradient are those of the plain call, under std::macro on the node VM and the bytecode VM."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_array_append.cml"
 args = ["${case}", "std::macro", "${backend}"]

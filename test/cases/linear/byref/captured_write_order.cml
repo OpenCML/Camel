@@ -1,7 +1,7 @@
 /**
  * A function, or a branch arm, that writes a captured variable (a module-level one included)
  * is a write of that variable where it is called or entered, exactly like a call with a `var`
- * argument (docs/design-principles.cn.md 2.6): reads written after it see the new value, and
+ * argument (docs/design-principles.cn.md 3.5): reads written after it see the new value, and
  * with `wait` the earlier direct users of the variable are ordered before it. A call of a
  * function that only reads the captured variable is a use of it.
  *

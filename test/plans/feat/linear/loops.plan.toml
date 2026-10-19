@@ -2,7 +2,7 @@ id = "linear.loops"
 order = 348
 tier = "feat"
 tags = ["feat", "linear", "loops"]
-desc = "The structured loop (design principles 2.10, 2.12, 2.13): the `do` form compiled to a LOOP node, run by every back end (nvm natively, fvm/jit/prl through the private lowering to tail recursion, fvm/jit natively under a debugger or with std::fvm(native_loop=true)), its diagnostics, and the refusals of the consumers that do not handle it yet."
+desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm natively, fvm/jit/prl through the private lowering to tail recursion, fvm/jit natively under a debugger or with std::fvm(native_loop=true)), its diagnostics, and the refusals of the consumers that do not handle it yet."
 
 [[tests]]
 name = "loops.native_callback"
@@ -51,7 +51,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.shapes"
-desc = "The four shapes of 2.13 on the four back ends: one state over an array (14), two states under a condition whose value is their tuple (5 10), a struct as the state and as the body (11), `for ... while` with an `if` body that stops at the first element above 9 (12) or runs out of elements (-1)."
+desc = "The four shapes of 3.10 on the four back ends: one state over an array (14), two states under a condition whose value is their tuple (5 10), a struct as the state and as the body (11), `for ... while` with an `if` body that stops at the first element above 9 (12) or runs out of elements (-1)."
 kind = "behavior"
 case = "../../../cases/loops/shapes.cml"
 args = ["${case}", "${backend}"]
@@ -77,7 +77,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.captures"
-desc = "One capture table for the condition and the body (2.12): the condition captures `limit`, the body `step` and `scale`; a `var` read in the body; nested loops whose inner graphs capture the outer state, in a `for` and in a two-state `while` (24 306 42 25 4)."
+desc = "One capture table for the condition and the body (3.10): the condition captures `limit`, the body `step` and `scale`; a `var` read in the body; nested loops whose inner graphs capture the outer state, in a `for` and in a two-state `while` (24 306 42 25 4)."
 kind = "behavior"
 case = "../../../cases/loops/captures.cml"
 args = ["${case}", "${backend}"]

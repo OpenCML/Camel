@@ -112,7 +112,7 @@ std::optional<Match> findMatch(const GraphDraft &draft) {
         for (size_t k = 0; k < 2; ++k) {
             const gc_node_ref_t mm = ins[k];
             // The fused node stands for the whole pattern, so every node of it must have been
-            // granted the same numeric permissions (design principles 2.13), which it keeps; its
+            // granted the same numeric permissions (design principles 7.5), which it keeps; its
             // node attributes are what each attribute's key lets one node of the pattern keep
             // (attr::merge), and a key that refuses keeps the nodes apart.
             if (operOf(draft, mm) != ops.matmul || draft.normInputsOf(mm).size() != 2 ||
@@ -193,7 +193,7 @@ void fuse(GraphDraft &draft, const Match &m) {
 
 /// The permissions a library GEMM needs: its own order and grouping of the accumulation
 /// (reassociate), and products that may be rounded separately or a different accumulation
-/// precision (change_precision). Design principles 2.13.
+/// precision (change_precision). Design principles 7.1.
 constexpr uint8_t kLibraryGemmPermissions =
     camel::core::sem::kReassociate | camel::core::sem::kChangePrecision;
 

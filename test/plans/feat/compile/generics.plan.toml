@@ -2,7 +2,7 @@ id = "compile.generics"
 order = 323
 tier = "feat"
 tags = ["feat", "compile", "generics", "types"]
-desc = "Generic functions bound with `typeas` (one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 2.9."
+desc = "Generic functions bound with `typeas` (one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 5.6."
 
 [[tests]]
 name = "explicit_type_arguments"
@@ -34,7 +34,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "explicit_type_arguments_by_name"
-desc = "Explicit type arguments by position (order of first appearance in the signature) or by name `A = int`, in any order (design principles 2.17)."
+desc = "Explicit type arguments by position (order of first appearance in the signature) or by name `A = int`, in any order (design principles 5.9)."
 kind = "behavior"
 case = "../../../cases/compile/generic_explicit_named.cml"
 args = ["${case}", "std::fvm"]
@@ -930,7 +930,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "generic_as_value"
-desc = "A generic function bound to a name without a type: nothing fixes its type variables (design principles 2.10; where a position does, see consistency/generic_values.plan.toml)."
+desc = "A generic function bound to a name without a type: nothing fixes its type variables (design principles 5.5; where a position does, see consistency/generic_values.plan.toml)."
 kind = "negative"
 case = "../../../cases/compile/generics/err_as_value.cml"
 args = ["${case}"]
@@ -1008,7 +1008,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "generic_exported_instances"
-desc = "One instance per set of types in the whole program (design principles 2.11): rev<int> is one graph, though two modules call it, named with the module that declares it (2.12)."
+desc = "One instance per set of types in the whole program (design principles 2.1): rev<int> is one graph, though two modules call it, named with the module that declares it (10.2)."
 kind = "behavior"
 case = "../../../cases/compile/generics/export_use.cml"
 args = ["${case}", "std::rgir"]
@@ -1038,7 +1038,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "generic_exported_capture"
-desc = "The body of an imported generic function uses a top-level value of its own module: one instance per set of types in the whole program, under the one root graph (design principles 2.11)."
+desc = "The body of an imported generic function uses a top-level value of its own module: one instance per set of types in the whole program, under the one root graph (design principles 10.1)."
 kind = "behavior"
 case = "../../../cases/compile/generics/err_export_capture.cml"
 args = ["${case}"]

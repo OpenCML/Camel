@@ -1,5 +1,5 @@
 /**
- * An array variable grown with `acc = acc->append<v>` (design principles 2.12) in the exported
+ * An array variable grown with `acc = acc->append<v>` (design principles 11.3) in the exported
  * function: an ONNX model has no growing arrays, so the export is refused with a located
  * diagnostic, as other state is (export_var_parameter); it must not crash or translate the
  * appends as something else.

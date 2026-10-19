@@ -2577,7 +2577,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
             continue;
         }
         if (operUriOf(g, last) == ":op/assn_append") {
-            // `acc = acc->append<v>` (design principles 2.12): an array grown in a variable,
+            // `acc = acc->append<v>` (design principles 11.3): an array grown in a variable,
             // which a model has no form for.
             unsupported(
                 act,

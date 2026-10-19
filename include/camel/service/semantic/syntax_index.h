@@ -100,7 +100,7 @@ struct Decl {
     std::string doc;              // the comment lines directly above
     std::string importedFrom;     // Import, Module: the module name as written
     /// A member of a namespace block (and a namespace): its name with the namespaces around
-    /// it, `Tools::inc`, as the language server shows it (design principles 2.13); empty for
+    /// it, `Tools::inc`, as the language server shows it (design principles 10.2); empty for
     /// any other declaration, which is shown by `name`.
     std::string qualified;
 

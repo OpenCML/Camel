@@ -223,7 +223,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
                 {
                     // Every other type: the text println writes for the value. A type rule,
-                    // not a parameter of type `any` (design principles 2.12): the operator
+                    // not a parameter of type `any` (design principles 5.10): the operator
                     // reads the argument with the static type it has at the call.
                     ":op/atos",
                     DynamicFuncTypeResolver::create(
@@ -699,7 +699,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(a: T, b: T) => bool, T an array, tuple or struct of comparable parts",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            // By content (design principles 2.10): both sides of one type,
+                            // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
                             // comparable (no function value, no tensor). Anything else has no
                             // overload, which is a located compile-time error.
@@ -769,7 +769,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         "(a: T, b: T) => bool, T an array, tuple or struct of comparable parts",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            // By content (design principles 2.10): both sides of one type,
+                            // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
                             // comparable (no function value, no tensor). Anything else has no
                             // overload, which is a located compile-time error.
@@ -787,7 +787,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // `===` and `!==` are not supported for now (design principles 2.10): the front end
+        // `===` and `!==` are not supported for now (design principles 4.2): the front end
         // refuses them, so there is no operator behind them.
         // <、<=、>、>=
         OperatorGroup::create(
@@ -1696,7 +1696,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     registerBuiltinOperatorTraits();
     registerBuiltinDerivatives();
-    // The operators over Map and Set (design principles 2.9). Those named like a group of
+    // The operators over Map and Set (design principles 11.3). Those named like a group of
     // this module (`len`, `contains`, `__idx__`, `__eq__`, `__neq__`) are further overloads
     // of it: one group is exported per name, the existing overloads first.
     std::vector<oper_group_ptr_t> collectionGroups = getCollectionOperatorGroups();
@@ -1717,7 +1717,7 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     for (const auto &group : collectionGroups) {
         exportEntity(group->name(), group);
     }
-    // The operators over T? and T! (design principles 2.9).
+    // The operators over T? and T! (design principles 3.8).
     for (const auto &group : getTaggedOperatorGroups()) {
         exportEntity(group->name(), group);
     }

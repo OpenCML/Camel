@@ -1,6 +1,6 @@
 /**
  * `append` and the other library operators return a new value and leave their argument as it
- * was (design principles 2.12): after `let ys = xs->append<4>` `xs` is unchanged; a variable is
+ * was (design principles 11.3): after `let ys = xs->append<4>` `xs` is unchanged; a variable is
  * changed only by binding it to the result, `acc = acc->append<5>`, as `x = x + 1` does.
  */
 module append_new

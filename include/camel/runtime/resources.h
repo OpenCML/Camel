@@ -40,7 +40,7 @@
  *                                then run in the order the program gives them.
  *   dependsOn(later, earlier)    computation dependence: the data edges (Norm, With) only.
  *   orderedBefore(a, b)          any path, control edges included (the order the front end
- *                                gave conflicting effects, design principles 2.5, 2.6).
+ *                                gave conflicting effects, design principles 3.3).
  *   requiredOrderings(graph)     every pair of nodes of a graph that conflict, with whether and
  *                                how the graph orders them.
  *
@@ -202,7 +202,7 @@ struct RequiredOrdering {
 
 /// Every conflicting pair of nodes of `graph`, by node order, except pairs in different arms of
 /// one branch (they never both run). A pair the graph does not order (ordered = false) is two
-/// effects on one resource the program left unordered (design principles 6, undecided: writes
+/// effects on one resource the program left unordered (design principles 15, undecided: writes
 /// through references outside a sync block without `wait`).
 std::vector<RequiredOrdering> requiredOrderings(const GCGraph &graph);
 

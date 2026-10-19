@@ -2,8 +2,8 @@
 
 This note describes how the two built-in forms `T?` ("may be null") and `T!` ("may have
 failed"), the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` are
-compiled. The normative text is `docs/design-principles.cn.md` sections 2.9, "空值、错误与故障",
-and 2.10, "分支与类型";
+compiled. The normative text is `docs/design-principles.cn.md` sections 3.8, "可空", 3.9, "错误与故障",
+and 3.7, "分支与 `match`";
 the user-facing description is in `docs/language/` (3.4, 6.6, 6.8.2, 7.3).
 
 Choices the design principles do not make are collected in section 10 as questions for the
@@ -27,7 +27,7 @@ library, 9 a defect met in a pass, 10 questions.
 
 A branch is the node pair `BRCH`/`JOIN` with one subgraph per arm, the structure `if` has.
 Nothing in this table depends on what `a`, `b`, `f` or the arms contain, which is the
-criterion of section 2.9. The right-hand side of `??` and `!!` is a subgraph of its own and
+criterion of section 1. The right-hand side of `??` and `!!` is a subgraph of its own and
 is entered only when the branch selects it: that is the whole of "evaluated only when needed".
 
 ## 2. Where the one-bit tag lives
@@ -125,7 +125,7 @@ main:
 `a` is evaluated once, in the enclosing graph; arm 1 captures it. The result type is `T`.
 
 When `b` is itself a `T?` (a `T!` for `!!`) the result is that type (design principles
-2.10): arm 1 then hands `a` on as it is instead of taking the value out. It is still one
+3.8): arm 1 then hands `a` on as it is instead of taking the value out. It is still one
 branch, so `a ?? b ?? 9` is two branches in sequence whichever way it is grouped.
 
 ### 3.2 `x ?-> f`
@@ -193,7 +193,7 @@ function or union payload).
 
 - `T?` is assignable from `T?` only, and `T!` from `T!` only (payloads equal).
 - A value of type `T` enters a `T?`/`T!` position by itself wherever the target type is
-  known (design principles 2.10); never the other way. The rule is two functions of the type
+  known (design principles 3.8); never the other way. The rule is two functions of the type
   library (`include/camel/core/type/composite/tuple.h`):
   - `entersImplicitly(target, source)`: `source` is assignable; or `target` is tagged and
     `source` enters its payload (so several levels are entered at once: `int` into `int?!`);
@@ -258,7 +258,7 @@ run time.
 
 `try` is recognised by the parser only to explain itself: `TryCatchNotInLanguage` (0x64), at
 the `try` keyword, pointing to `!!`, `?->` and fault isolation. `raise` and `T ? U` are
-untouched (undecided, design principles section 6).
+untouched (undecided, design principles section 15).
 
 ## 6. Errors and faults
 
@@ -336,9 +336,9 @@ through `std::opt::inline`, not through `std::opt`.
 Each is implemented as recommended; none changes the behaviour of an existing program.
 
 - **Q1. Does a `T` flow into a `T?`/`T!` position implicitly?** Ruled on (design principles
-  2.10): yes, wherever the target type is known; never the other way. Section 4.2.
-- **Q2. Nesting.** Ruled on (2.10): `T?!` and `T!?` allowed, `T??` and `T!!` rejected.
-- **Q3. What `throw` takes and how an error is made.** Ruled on (2.10): `throw e` with `e`
+  3.8): yes, wherever the target type is known; never the other way. Section 4.2.
+- **Q2. Nesting.** Ruled on (3.9): `T?!` and `T!?` allowed, `T??` and `T!!` rejected.
+- **Q3. What `throw` takes and how an error is made.** Ruled on (3.9): `throw e` with `e`
   an error value made by `error(kind, message)`; the compiler fills in the position.
 - **Q4. `match` on a tagged value.** Implemented: exactly two cases, the tagged one and one
   rest case; literal cases are not mixed in (`case null`, `case 0`, `case v` together is an
@@ -350,16 +350,16 @@ Each is implemented as recommended; none changes the behaviour of an existing pr
 - **Q6. `?->` on a `T?`.** Implemented: an error; the principles define `?->` for errors
   only. The AST name of the construct (`NotNullThen`) suggests null propagation was once
   meant.
-- **Q7. The right-hand side of `??`/`!!`.** Ruled on (2.10): a `T` gives a `T`, a `T?`
+- **Q7. The right-hand side of `??`/`!!`.** Ruled on (3.8): a `T` gives a `T`, a `T?`
   (`T!`) gives that type. Section 3.1.
 - **Q8. `let x: int! = v` written without a space** lexes `!=` as one token and is a syntax
   error; `let x: int! = v` with the space is accepted. Should the grammar accept the token,
   as it does `>=` after a type function's parameters?
-- **Q9. Arms of different forms.** Ruled on (2.10): the arms join, `if c then 1 else null`
+- **Q9. Arms of different forms.** Ruled on (3.8): the arms join, `if c then 1 else null`
   is an `int?`.
-- **Q10. `null` given to a parameter.** Ruled on (2.10): `f(null)` with `f(x: int?)`.
+- **Q10. `null` given to a parameter.** Ruled on (3.8): `f(null)` with `f(x: int?)`.
 - **Q11. A void expression where a `T?` is expected.** `null` has the type `void`, so any
-  `void` expression is accepted where `null` is. For a branch arm this is ruled on (2.11):
+  `void` expression is accepted where `null` is. For a branch arm this is ruled on (3.7):
   an arm without a value and an arm of type `T` make the branch a `T?`
   (`if c then 1 else f()` with a `f` that returns nothing is an `int?`). Under `as T?` and
   as an argument the same holds in the implementation and has not been ruled on.

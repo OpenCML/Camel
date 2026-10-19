@@ -1,6 +1,6 @@
 /**
  * Number to number: a value that does not fit the target type is a fault (design principles
- * 2.10): a float that is NaN, infinite or beyond the integer's range, an int beyond i32. A
+ * 5.1): a float that is NaN, infinite or beyond the integer's range, an int beyond i32. A
  * float inside the range truncates toward zero. A float too large for f32 becomes an infinity
  * (IEEE rounding, not a fault). The faults are shown through `attempt`.
  */

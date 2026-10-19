@@ -124,7 +124,7 @@ the pace of its last chunk, is worth 200 microseconds or more; otherwise the hel
 once, so that elements of seconds each run side by side from the first. With one worker, or one
 element, everything runs on the calling thread. The decision depends on time, so which thread
 ran an element and how many task graphs a run started can differ between two runs of a program
-with a light `map`; the result does not. The fault rule is unchanged (design principles 2.10):
+with a light `map`; the result does not. The fault rule is unchanged (design principles 3.6):
 elements that started run to their end, elements after the smallest faulting index known do not
 start, the fault of the smallest index is reported (`ElementFaults`); within a chunk the elements
 run in index order.
@@ -194,7 +194,7 @@ independent calls of heavy graphs. For a program that is sequential by its depen
 
 - The remaining factor of 4 to 6 on scalar code was the difference between walking the nodes
   of a graph and running its bytecode (`prl-light-graph-evaluator`). Decided by the owner
-  (design principles 2.11) and done as candidate (a): 4.3.3.
+  (design principles 9.10) and done as candidate (a): 4.3.3.
 - `DESIGN-QUESTION(prl-coarsening-pass)`: for scopes, the granularity is still the static rule
   of 4.3.1: two unordered calls of heavy graphs become a task graph every time, whatever their
   size at run time (a recursive split keeps making task graphs down to its leaves), and two
@@ -243,7 +243,7 @@ the thread itself.
 
 #### 4.3.3 Serial graphs run as bytecode (字节码移交)
 
-Design principles 2.11: the parallel scheduler hands subgraphs that have nothing to parallelise
+Design principles 9.10: the parallel scheduler hands subgraphs that have nothing to parallelise
 to the bytecode interpreter. Walking a graph node by node costs 4 to 6 times what its bytecode
 costs (4.3.2), and where nothing can run concurrently that is all the scheduler adds. The code
 is `src/passes/sched/taskflow/handoff.{h,cpp}` (the scheduler's side) and
@@ -302,7 +302,7 @@ its own through a thread-local slot that names the run.
 | Arguments | written into a frame of the interpreter's own pool, inside the thread's region (the collector's handshake, 4.3.2); the value comes back inside the region and the caller stores it before a collection can run |
 | Collector | the interpreter runs inside the region like any leaf work. Its safepoints (every `FUNC`, `TAIL`) call a hook the scheduler installs for the call (`FastVmSafepointScope`): when a collector wants in, leave the region, poll, enter again, which is what the scheduler does at a graph boundary. The interpreter's frames are roots through its frame pool and are traced only while their thread is stopped there |
 | Recursion limit | the interpreter counts its calls on top of the calls open on the thread (`ThreadState::callDepth`, which includes the hosted one), so the limit of 1000 is reached at the same call as on the scheduler, also inside a `map` element (`test/plans/feat/para/handoff.plan.toml`, `depth_across`) |
-| Faults | a fault leaves the interpreter as a located diagnostic that nothing has recorded (`DescribedFaultScope`), like one from `raiseFault`: the scheduler chooses among concurrent faults (design principles 2.10) and records the one that ends the run. An `attempt` boundary open on the thread is seen by the interpreter (thread-local state). Anything else an operator throws (`exit`) puts the interpreter back as it was before it passes on |
+| Faults | a fault leaves the interpreter as a located diagnostic that nothing has recorded (`DescribedFaultScope`), like one from `raiseFault`: the scheduler chooses among concurrent faults (design principles 3.6) and records the one that ends the run. An `attempt` boundary open on the thread is seen by the interpreter (thread-local state). Anything else an operator throws (`exit`) puts the interpreter back as it was before it passes on |
 | Call-backs | none (see "Which graphs") |
 
 **What changes that can be seen.** Nothing in the output, the exit code or the diagnostics of a
@@ -311,7 +311,7 @@ where they run (the interpreter polls at calls, the evaluator at calls and branc
 deep a non-tail recursion can go when `--max-recursion-depth` is raised far above the default:
 a serial recursion no longer nests on the native stack, so it completes on `std::prl` as it does
 on `std::fvm` instead of stopping when the thread's stack is nearly full (design principles
-2.12; `para.core.recursion_too_deep.prl`).
+10.5; `para.core.recursion_too_deep.prl`).
 
 **Switch.** `std::prl(bytecode=false)` turns the hand-off off: every graph is evaluated by the
 scheduler as before. For A/B measurements and as an escape hatch. The hand-off is also off under
@@ -400,7 +400,7 @@ higher-order operator; the entry graph's call of `main` is not counted (`kEntryC
   workers. The limit is the same as on the other back ends (1000 by default). A serial graph
   it hands to the bytecode interpreter (4.3.3) is counted by the interpreter on top of the
   thread's count, so the limit is reached at the same call; such a recursion does not nest on
-  the native stack (design principles 2.12).
+  the native stack (design principles 9.10).
 - All of them raise the fault with `camel::execute::throwRecursionLimitReached`, in the caller
   and before the callee's frame is taken, so the diagnostic is the same text at the same call
   expression.

@@ -361,10 +361,10 @@ Notes on single findings:
   function that calls the first, and the first passed as a value to `map`. Two more programs
   of the batches crash without passes in the same family (a nested function that reads a
   captured `var`, passed to `map` in one arm and called in the other).
-- **F18** against principles 2.9 ("a constant expression that must fault is left for run time;
+- **F18** against principles 3.9 ("a constant expression that must fault is left for run time;
   the program behaves the same with and without optimization"): without passes the function is
   never called, so nothing faults. The index is not a literal one; the reducer rejects
-  candidates with a literal index outside a literal array (2.7 makes those compile-time errors).
+  candidates with a literal index outside a literal array (3.9 makes those compile-time errors).
 - **F17, F36, F37.** The graph and the bytecode `std::opt::inline` leaves are right: `std::opt::inline std::fvm`
   runs the same bytecode and prints the expected lines, and so do the node VM and the parallel
   scheduler. Inlining the arms into the function makes it call only itself, which is the
@@ -482,20 +482,20 @@ its reference output (batches B, C and D need their `--features`, as in the tabl
 Each finding was compared with `docs/design-principles.cn.md` so that expected behaviour is not
 reported as a defect:
 
-- No finding relies on an effect outside a sync block (2.1, 2.4, misreadings 1 and 3): every
+- No finding relies on an effect outside a sync block (3.1, 3.2, misreadings 1 and 3): every
   `println`, write and effectful call of the programs is a statement of a sync block, and every
   function that prints has a sync body. The lost effects of F04-F10 are such statements.
-- No finding compares two pipelines (section 4, misreading 9). Each run is compared with the
+- No finding compares two pipelines (section 9, misreading 8). Each run is compared with the
   one output the principles allow for the program; the claim is "a standard pass must not make
   the program print something else" (section 4, last-but-two bullet).
-- No finding has an effect in a `map` or `filter` element function (2.7); `foreach` and `reduce`
+- No finding has an effect in a `map` or `filter` element function (3.6); `foreach` and `reduce`
   are ordered, which is what F12 depends on (the `reduce` is the first statement, the call the
   third).
 - No finding uses `wait` outside a sync block, a module-level variable, or two writers of one
   variable without order (section 6, undecided).
 - Macro: no finding is a refusal by `std::macro`; those are counted as legal (but see J1).
 - The reads of variables in the programs are after-the-fact reads in the same sync body (F11),
-  which 2.5 and 2.6 order by position.
+  which 3.5 and the log's 2.6 order by position.
 
 ## For the owner to decide
 
@@ -504,7 +504,7 @@ reported as a defect:
 at the call (`MacroEvaluationFailed`: "Operator ':mark/reduce_arr' is unavailable in macro
 execution"). 87 cells of the batches are this refusal; the generator now avoids declaring such
 functions `macro`.
-- Reading A: it is the ruling of 2.7 ("a failed macro evaluation is a compile-time error"), and
+- Reading A: it is the ruling of 8 ("a failed macro evaluation is a compile-time error"), and
   the diagnostic is located, so this is a legal refusal.
 - Reading B: the evaluation did not fail because of the program (as a division by zero would);
   the evaluator lacks an operator. Section 3 says a macro function *may* be evaluated ahead of
@@ -517,10 +517,10 @@ functions `macro`.
 sync body, where `wr` writes `c` and nothing reads `r` or `c` afterwards. The compiler warns
 that the call "is neither waited nor in a sync block ... the write runs only if the variable is
 read afterwards", and then the call runs (prints `wr`) under every pipeline tried.
-- Reading A (the warning): an arm is a sub-graph of its own, as a function is (2.4), so the
+- Reading A (the warning): an arm is a sub-graph of its own, as a function is (3.2), so the
   enclosing sync block does not order what is inside; the call should not run, and the
   behaviour is the defect.
-- Reading B (the behaviour): the `if` is one of the expressions of the sync block (2.2), the
+- Reading B (the behaviour): the `if` is one of the expressions of the sync block (3.4), the
   taken arm is its value, so it runs in order; the warning is wrong.
 The generator writes every effectful arm as `sync { ... }`, so no finding depends on this.
 

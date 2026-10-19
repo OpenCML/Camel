@@ -2,7 +2,7 @@ id = "compile.utf8_strings"
 order = 921
 tier = "feat"
 tags = ["feat", "compile", "strings", "utf8"]
-desc = "A string is always valid UTF-8 (design principles 2.17): a literal that is not is refused when the program is compiled; an escape that spells the bytes of a character is fine."
+desc = "A string is always valid UTF-8 (design principles 11.1): a literal that is not is refused when the program is compiled; an escape that spells the bytes of a character is fine."
 
 [[tests]]
 name = "invalid_utf8_literal"
@@ -29,7 +29,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "format_string_too_few_arguments"
-desc = "A constant `print<fmt>` format string with more placeholders than arguments is refused when the program is compiled (design principles 2.7), not when it runs."
+desc = "A constant `print<fmt>` format string with more placeholders than arguments is refused when the program is compiled (design principles 4.4), not when it runs."
 kind = "negative"
 case = "../../../cases/compile/format_string_checked.cml"
 args = ["${case}"]

@@ -1,4 +1,4 @@
-// `!` and `~` are at the level of the unary minus (design principles 2.12): looser than `^`,
+// `!` and `~` are at the level of the unary minus (design principles 4.2): looser than `^`,
 // tighter than `->` and the other binary operators. `!x->f` negates first, then passes on.
 func show(b: bool): string {
     return if b then 'yes' else 'no'

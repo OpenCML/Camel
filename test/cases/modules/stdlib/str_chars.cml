@@ -1,6 +1,6 @@
 /**
  * The str module, code points as numbers. A string is always valid UTF-8 (design principles
- * 2.17): `codepoints` cannot fail, `from_codepoints` returns `string!` for a number that is
+ * 11.1): `codepoints` cannot fail, `from_codepoints` returns `string!` for a number that is
  * not a code point.
  */
 module str_chars

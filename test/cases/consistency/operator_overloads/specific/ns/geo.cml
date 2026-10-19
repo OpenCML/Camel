@@ -1,4 +1,4 @@
-// An operator declared in a namespace block belongs to the module (design principles 2.13):
+// An operator declared in a namespace block belongs to the module (design principles 4.3):
 // importing the module brings it, as one declared at the top level.
 module geo
 

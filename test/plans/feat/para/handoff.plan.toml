@@ -2,7 +2,7 @@ id = "para.handoff"
 order = 351
 tier = "feat"
 tags = ["feat", "para", "consistency"]
-desc = "The parallel scheduler runs serial graphs on the bytecode interpreter (design principles 2.11): same output, faults and recursion limit as the other back ends"
+desc = "The parallel scheduler runs serial graphs on the bytecode interpreter (design principles 9.10): same output, faults and recursion limit as the other back ends"
 
 # std::prl hands every graph with nothing to parallelise to a bytecode interpreter of the
 # calling thread (docs/technical/06_runtime_and_execution.md, 4.3.3). These tests check the
@@ -75,7 +75,7 @@ expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
 
 [[tests]]
 name = "fault_deep"
-desc = "Faults raised deep in serial recursions inside map elements: isolated thirty times over (the interpreters must be left as they were), then one let through: of elements 5, 9 and 13 the fault of element 5 ends the program (design principles 2.10), with one diagnostic at the index expression."
+desc = "Faults raised deep in serial recursions inside map elements: isolated thirty times over (the interpreters must be left as they were), then one let through: of elements 5, 9 and 13 the fault of element 5 ends the program (design principles 3.9), with one diagnostic at the index expression."
 kind = "negative"
 case = "../../../cases/para/handoff/fault_deep.cml"
 backends = ["nvm", "fvm", "prl"]

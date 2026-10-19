@@ -115,7 +115,7 @@ bool ArrayType::equals(Type *other) const {
     return elemType_->equals(otherArr.elemType_);
 }
 
-// Converting a value to its own type is legal and does nothing (design principles 2.12): the
+// Converting a value to its own type is legal and does nothing (design principles 5.1): the
 // rule compares structure, so `xs as int[]` passes for `xs: int[]` however each was written.
 CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr)

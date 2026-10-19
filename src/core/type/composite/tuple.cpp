@@ -363,7 +363,7 @@ bool TupleType::equals(Type *other) const {
 }
 
 CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
-    // Converting a value to its own type is legal and does nothing (design principles 2.12):
+    // Converting a value to its own type is legal and does nothing (design principles 5.1):
     // decided by structure, so `t as (int, int)` passes for `t: (int, int)`.
     if (equals(sourceType))
         return CastSafety::Safe;
@@ -498,7 +498,7 @@ Type *camel::core::type::joinTypes(Type *a, Type *b) {
     }
     // A value and `null`: the value's type, nullable. (Asked first: `void` is assignable
     // from anything, which is not what joining with `null` means.)
-    // Design principles 2.11: an arm without a value (`void`: the literal `null`, a call of
+    // Design principles 3.7: an arm without a value (`void`: the literal `null`, a call of
     // a function that returns nothing, an empty block) and an arm of type `T` make the
     // branch a `T?`; the arm without a value gives `null`.
     if (a->code() == TypeCode::Void || b->code() == TypeCode::Void) {

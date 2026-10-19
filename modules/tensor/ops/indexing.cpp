@@ -345,7 +345,7 @@ std::optional<IndexedInstance> permuteIndexing(const InferContext &ctx) {
 /**
  * slice(x, axis, start, stop, step = 1), step > 0, with the bounds normalized as the kernel
  * does (a negative bound counts from the end). A bound still outside [0, n] is a fault (design
- * principles 2.10): the call has no instance. A stop before the start is the empty range (2.11):
+ * principles 3.9): the call has no instance. A stop before the start is the empty range (3.9):
  *
  *   params   start = static(2), step = static(4), len = derived = max(0, ceil((stop - start) / step))
  *   domain   one dim per axis; on `axis` d < len
@@ -817,7 +817,7 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
         t.emplace("expand_axis", Indexing{expandAxisIndexing, {}});
 
         // sum and mean of everything: f32 elements are added in f64; int64 and bool elements
-        // exactly in int64, wrapping (design principles 2.14), and the result converted to f64
+        // exactly in int64, wrapping (design principles 7.7), and the result converted to f64
         // once (mean divides in f64 first).
         t.emplace(
             "sum",
@@ -864,7 +864,7 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
                  extremumLaw("min_axis_i64", false, i64, LawEmpty::Fault),
                  extremumLaw("min_axis_bool", false, boolean, LawEmpty::Fault)}});
         // argmax and argmin over an axis: the position of the first extreme by IEEE maximum
-        // (minimum), the first NaN if any, +0 above -0 (design principles 2.14).
+        // (minimum), the first NaN if any, +0 above -0 (design principles 7.7).
         t.emplace(
             "argmax_axis",
             Indexing{
@@ -887,7 +887,7 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
                 {sumLaw("sum_to_f32", f32, f32, f32),
                  sumLaw("sum_to_i64", i64, f32, f32),
                  sumLaw("sum_to_bool", boolean, f32, f32)}});
-        // matmul: the fused multiply-add chain in ascending k from +0 (design principles 2.13,
+        // matmul: the fused multiply-add chain in ascending k from +0 (design principles 7.1,
         // Q7); merging partial sums (with reassociate) is an addition, which commutes.
         t.emplace(
             "matmul",

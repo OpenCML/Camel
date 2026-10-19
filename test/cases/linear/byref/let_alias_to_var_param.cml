@@ -1,6 +1,6 @@
 /**
  * A `let` name bound from a `var` is immutable: it cannot be passed to a `var` parameter.
- * Rejected at compile time (docs/design-principles.cn.md 2.5, 2.6: a side effect
+ * Rejected at compile time (docs/design-principles.cn.md 3.5: a side effect
  * must be declared, and only a `var` can be changed).
  */
 module let_alias_to_var_param

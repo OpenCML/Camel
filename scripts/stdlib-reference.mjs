@@ -17,7 +17,7 @@
 //       return 'protocol:operator'                 (the URI; `*` stands for any text, for a
 //   }                                               group of overloads that differ by type)
 //
-// A value a module exports (`math::pi`; design principles 2.13) is declared with its type and
+// A value a module exports (`math::pi`; design principles 10.1) is declared with its type and
 // a doc comment, and needs neither @pure nor a URI (it is not an operator):
 //
 //   /// What it is.
@@ -266,7 +266,7 @@ function renderDoc() {
     out.push('     (stdlib/signatures/*.cml) or the comments of the library (stdlib/*.cml) and regenerate. -->')
     out.push('')
     out.push('The functions of the core standard library, by module. The boundary is the one the design')
-    out.push('principles draw (section 2.9): a primitive that touches the system or is sensitive to')
+    out.push('principles draw (section 10.5): a primitive that touches the system or is sensitive to')
     out.push('performance is an operator written in C++, an opaque node of the graph; logic composed from')
     out.push('primitives is written in Camel, a subgraph that passes can see into.')
     out.push('')
@@ -280,7 +280,7 @@ function renderDoc() {
     out.push('- **Pure** operators depend on their arguments only: a pass may evaluate a call ahead of time,')
     out.push('  merge two equal calls or drop an unused one. An operator **with effects** is left alone, and')
     out.push('  its call runs only when it is reachable from a `sync` block or its result is used (design')
-    out.push('  principles 2.1). Every operator of these modules declares which it is.')
+    out.push('  principles 3.1). Every operator of these modules declares which it is.')
     out.push('- **Failure**: a *fault* stops the program with a located diagnostic (an index out of range, an')
     out.push('  argument outside what the operator defines). An *error* is a value: the function returns')
     out.push('  `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is')

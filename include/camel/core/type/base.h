@@ -80,7 +80,7 @@ enum class TypeCode : uint32_t {
     Struct   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00A),
     Function = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00B),
     Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00C),
-    // 0x00D was `any`, removed (design principles 2.11, 2.12): no value has a type that is
+    // 0x00D was `any`, removed (design principles 5.10): no value has a type that is
     // undetermined after compilation.
     Union    = makeTypeCode(TypeFlag::Composite | TypeFlag::Auxiliary, 0x00E),
     // Compile-time only (camel/core/type/typevar.h): a type variable of a generic function
@@ -124,7 +124,7 @@ enum class CastSafety {
     Forbidden = 0,
 };
 
-/// The name of a type as a program writes it (design principles 2.10): `int` and `float`
+/// The name of a type as a program writes it (design principles 5.1): `int` and `float`
 /// for the 64-bit integer and floating-point types, which the compiler knows by their width
 /// (`i64`, `f64`; a program may write those too). This function and sourceTypeSpelling are
 /// the one place the mapping is written: everything that prints a type (diagnostics, the

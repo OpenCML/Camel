@@ -23,7 +23,7 @@
  * included so each unit compiles the same algorithm with its own vector width
  * and target flags; it is not a public header.
  *
- * The arithmetic is the canonical algorithm of matmul (design principles 2.13):
+ * The arithmetic is the canonical algorithm of matmul (design principles 7.1):
  * every element of the product is one chain of fused multiply-adds in ascending
  * k, starting from +0,
  *

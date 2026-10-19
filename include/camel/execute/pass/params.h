@@ -18,7 +18,7 @@
  */
 
 /*
- * Pass parameters (design principles 2.17).
+ * Pass parameters (design principles 9.3).
  *
  * Every pass, scheduler and module pass is named on the pipeline as `name` or as
  * `name(key=value, ...)`. The values are Camel constant expressions (bool, int, float and string

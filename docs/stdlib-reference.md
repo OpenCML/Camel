@@ -4,7 +4,7 @@
      (stdlib/signatures/*.cml) or the comments of the library (stdlib/*.cml) and regenerate. -->
 
 The functions of the core standard library, by module. The boundary is the one the design
-principles draw (section 2.9): a primitive that touches the system or is sensitive to
+principles draw (section 10.5): a primitive that touches the system or is sensitive to
 performance is an operator written in C++, an opaque node of the graph; logic composed from
 primitives is written in Camel, a subgraph that passes can see into.
 
@@ -18,7 +18,7 @@ How to read an entry:
 - **Pure** operators depend on their arguments only: a pass may evaluate a call ahead of time,
   merge two equal calls or drop an unused one. An operator **with effects** is left alone, and
   its call runs only when it is reachable from a `sync` block or its result is used (design
-  principles 2.1). Every operator of these modules declares which it is.
+  principles 3.1). Every operator of these modules declares which it is.
 - **Failure**: a *fault* stops the program with a located diagnostic (an index out of range, an
   argument outside what the operator defines). An *error* is a value: the function returns
   `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is
@@ -472,7 +472,7 @@ type. The calls have no order among them, as for `map`.
 
 A fault (a division by zero, an index out of range, a recursion that is too deep, ...) ends
 the program with a located diagnostic. `attempt` isolates it at the boundary of one call
-(design principles 2.9; docs/technical/33_fault_isolation.md). The name is provisional.
+(design principles 3.9; docs/technical/33_fault_isolation.md). The name is provisional.
 
 #### `attempt`
 
@@ -1082,14 +1082,14 @@ argument.
   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
 - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
   returns an error value, and a wrong argument is a fault of the operator that meets it.
-- Order of evaluation (design principles 2.7). A function passed to one of these is applied
+- Order of evaluation (design principles 3.6). A function passed to one of these is applied
   with `map`: its calls on different elements have NO order among them and the parallel
   scheduler may run them at the same time; the result is put together by position and is
   the same on every back end. That holds for `find`, `any`, `all`, `count`, `flat_map`,
   `sort_by` and `zip_with`. None of them stops early: the function is applied to every
   element. A function with side effects belongs in `foreach` or `reduce`, which are ordered.
 - These are generic functions: there is one instance per set of element types in the whole
-  program, whichever module calls it (one root graph, design principles 2.11). `group_by`
+  program, whichever module calls it (one root graph, design principles 10.1). `group_by`
   is not here: it needs the map type.
 
 ### Rearranging
@@ -1309,7 +1309,7 @@ A constant is a value, written without parentheses: `pi`.
 
 ### Constants
 
-Values the module exports (design principles 2.13), written without parentheses.
+Values the module exports (design principles 10.1), written without parentheses.
 
 #### `pi`
 
@@ -1900,10 +1900,10 @@ element is NaN.
 ## `algo`: sorting and array primitives
 
 Sorting works on arrays of numbers (i32, int, f32, float) in ascending order. Every function
-returns a new array and leaves its argument unchanged (design principles 2.12, 2.13); to sort a
+returns a new array and leaves its argument unchanged (design principles 11.3); to sort a
 variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the variable's own
 array in place when nothing else refers to it, an optimisation that does not change what the
-program means (2.13). To sort anything else, or by a key, use `sort_by` of the `array` module.
+program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
 
 #### `sort`
 
@@ -2461,7 +2461,7 @@ decode: (text: string) => Json!
 
 The value a JSON text describes, as a `Json`: a value of a definite type whose content is
 known only when the program runs; an error value when the text is not JSON (design
-principles 2.13). Look into a Json with get, as_int, as_array and the other operators below,
+principles 11.2). Look into a Json with get, as_int, as_array and the other operators below,
 each of which gives a value of a definite type and takes a `Json?` as well, so that calls
 chain; read a part whose shape is known with decode_as. Prints as its JSON text. In the
 examples below, `j` is a Json decoded so.

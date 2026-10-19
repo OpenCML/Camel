@@ -57,7 +57,7 @@ camel::core::type::FunctionType *operatorOverloadType(
 
 /**
  * True when the argument at position `index` of `user`'s norm (or with) inputs is written by
- * `user`: for an OPER, what the operator's resource declaration says (design principles 2.17;
+ * `user`: for an OPER, what the operator's resource declaration says (design principles 3.3;
  * an operator without one is read conservatively, OperatorTable::writesOperand); for a FUNC,
  * a `var` parameter of the graph it calls; for a CALL, a `var` parameter of its callee's type.
  */

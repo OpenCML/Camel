@@ -1,11 +1,11 @@
 # Loops: the `do` Form, the LOOP Node and How Each Back End Runs It
 
 This note describes how a loop goes from source to execution. The normative text is
-`docs/design-principles.cn.md`, sections 2.10 (a loop is an expression with a state; no `break`
+`docs/design-principles.cn.md`, sections 3.10 (a loop is an expression with a state; no `break`
 or `continue`; a `LOOP` node lowered to tail recursion at each subsystem's entry, then made native
-one subsystem at a time), 2.12 (one capture table for the condition and the body; `for … while`
-is a third form of the same node; several values of state are a tuple) and 2.13 (the `do`
-syntax; `@numeric` covers loop bodies). The design work behind it is `docs/design/loops`, the
+one subsystem at a time; one capture table for the condition and the body; `for … while`
+is a third form of the same node; several values of state are a tuple; the `do`
+syntax) and 7.5 (`@numeric` covers loop bodies). The design work behind it is `docs/design/loops`, the
 node card is in `docs/design/graph-model` 3.5, and the consumer API is
 `docs/design/op-semantics` section 11.
 

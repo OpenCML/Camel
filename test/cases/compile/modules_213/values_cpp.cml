@@ -1,4 +1,4 @@
-// Design principles 2.13: a C++ module exports values. The constants of `math` are written
+// Design principles 10.1: a C++ module exports values. The constants of `math` are written
 // without parentheses, through the module name, by name, and in a function (where they are
 // constants of that function's graph, with no capture).
 import math

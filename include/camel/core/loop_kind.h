@@ -18,7 +18,7 @@
  */
 
 /*
- * The three forms of a loop (design principles 2.10, 2.12, 2.13; docs/design/graph-model 3.5,
+ * The three forms of a loop (design principles 3.10; docs/design/graph-model 3.5,
  * the LOOP card). The front end's tree (GCT), the graph's LOOP node and the consumer API
  * (camel/runtime/loop.h, LoopView) share this enumeration; its numeric values are stored in
  * frozen graphs and must not be renumbered.

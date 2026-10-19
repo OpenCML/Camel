@@ -2,7 +2,7 @@ id = "consistency.narrowing"
 order = 363
 tier = "feat"
 tags = ["feat", "consistency", "compile", "branches", "nullable"]
-desc = "A `T?` compared with `null` gives a bool, and the arm of an `if` that excludes null sees a `T` (design principles 2.11, 2.12): the same branch as a `match` on the nullable."
+desc = "A `T?` compared with `null` gives a bool, and the arm of an `if` that excludes null sees a `T` (design principles 3.8): the same branch as a `match` on the nullable."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -123,7 +123,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", ".cml:5:"]
 
 [[tests]]
 name = "narrowing.plain_with_null"
-desc = "A value that cannot be null may be compared with `null` (design principles 2.13): a name or any other value, either order; the result is fixed and each test is warned about (NullTestNeverNull)."
+desc = "A value that cannot be null may be compared with `null` (design principles 3.8): a name or any other value, either order; the result is fixed and each test is warned about (NullTestNeverNull)."
 kind = "behavior"
 case = "../../../cases/consistency/narrowing/compare_plain_with_null.cml"
 args = ["-E", "short", "${case}", "${backend}"]
@@ -142,7 +142,7 @@ assert(warned.some((l) => l.includes("'a' has type 'int', which is never null: t
 
 [[tests]]
 name = "narrowing.after_narrowing"
-desc = "In the arm where `x` is narrowed, `??` and a `match` with `case null` on `x` are allowed (KnownNotNull), also in a nested arm, and testing `x` against null again gives a fixed result (NullTestNeverNull); design principles 2.13. Alike on the four back ends."
+desc = "In the arm where `x` is narrowed, `??` and a `match` with `case null` on `x` are allowed (KnownNotNull), also in a nested arm, and testing `x` against null again gives a fixed result (NullTestNeverNull); design principles 3.8. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/narrowing/after_narrowing.cml"
 args = ["-E", "short", "${case}", "${backend}"]

@@ -1,4 +1,4 @@
-// Namespace members are shown by their full names (design principles 2.13): hover, the
+// Namespace members are shown by their full names (design principles 10.2): hover, the
 // outline, completion (the label is the full name; what is written is the member's own name,
 // which is in scope there or follows the `N::` already typed).
 

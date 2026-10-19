@@ -1,7 +1,7 @@
 /**
  * A parameter declared without `var` passed to a `var` parameter.
  * Rejected at compile time: only a name bound by `var` denotes a mutable object
- * (docs/design-principles.cn.md 2.5).
+ * (docs/design-principles.cn.md 3.5).
  */
 module param_to_var_param
 

@@ -616,7 +616,7 @@ std::string SemanticModel::declType(uint32_t file, uint32_t decl) const {
 namespace {
 /// `header`, the text of the declaration `d`, with the name it declares written in full
 /// (`func Tools::inc(x: int): int`): a member of a namespace is shown by its full name (design
-/// principles 2.13). The name is the first occurrence of it after the keyword.
+/// principles 10.2). The name is the first occurrence of it after the keyword.
 std::string withShownName(const Decl &d, const char *keyword) {
     if (d.qualified.empty()) {
         return d.header;
@@ -1114,7 +1114,7 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
             continue;
         }
         // A member of a namespace is shown by its full name and written by its own name,
-        // which is in scope here (design principles 2.12, 2.13).
+        // which is in scope here (design principles 10.2).
         Completion item;
         item.label  = decl.shownName();
         item.insert = decl.qualified.empty() ? std::string() : decl.name;

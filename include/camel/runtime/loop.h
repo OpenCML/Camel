@@ -19,8 +19,7 @@
 
 /*
  * The LOOP node as its consumers see it (docs/design/op-semantics, section 11; the node card in
- * docs/design/graph-model 3.5). A loop is an expression with a state (design principles 2.10,
- * 2.12, 2.13):
+ * docs/design/graph-model 3.5). A loop is an expression with a state (design principles 3.10):
  *
  *     loop s1 = a1, ..., sk = ak (for x in xs)? (while c)? do b
  *

@@ -1,6 +1,6 @@
 /**
  * Outside a sync block a call with an effect whose result nobody uses does not run (design
- * principles 2.1, 2.4): log prints nothing, on every back end.
+ * principles 3.1, 3.2): log prints nothing, on every back end.
  */
 module effect_not_used
 

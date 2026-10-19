@@ -343,7 +343,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "entry_args.cpp_bound"
-desc = "std::cpp translates a main with parameters (design principles 2.13): values bound with --arg when it translates are constants of the program."
+desc = "std::cpp translates a main with parameters (design principles 10.6): values bound with --arg when it translates are constants of the program."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::cpp"]
@@ -355,7 +355,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.cpp_open"
-desc = "Parameters left open are read by the generated program from its command line, --arg name=value as camel takes them, each by its declared type (design principles 2.13). That the program's output and reports agree with camel's is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
+desc = "Parameters left open are read by the generated program from its command line, --arg name=value as camel takes them, each by its declared type (design principles 10.6). That the program's output and reports agree with camel's is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "std::cpp"]

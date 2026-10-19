@@ -2,7 +2,7 @@
 
 This records implementation evidence against the language's numerical contract.
 Neither the CPU implementation nor the CUDA implementation is normative by
-itself. The language author's ruling is recorded in design principles 2.13 on
+itself. The language author's ruling is recorded in design principles 7 on
 `fsh-dev` (latest ruling verified at `d7d192de`). Basic arithmetic follows correctly rounded,
 ordered operations without contraction; transcendental functions require a
 declared ULP error bound. Five independent explicit permissions govern relaxation.

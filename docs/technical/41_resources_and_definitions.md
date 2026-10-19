@@ -13,7 +13,7 @@ ask, and no pass or back end expands a definition by default.
 
 ### 1.1 What is declared
 
-Only some things have an identity a program can observe (design principles 2.12): a `var` cell,
+Only some things have an identity a program can observe (design principles 10.5): a `var` cell,
 an object changed in place, an object a module wraps. Besides those, some state is named by no
 value: the file system, the console, a module's random generator. An operator's
 `OperatorSemantics::resources` (`sem::ResourceSpec`) says, per access:
@@ -96,7 +96,7 @@ The higher-order `:mark/` operators (they run the functions they are given), `py
   data edges, a resource conflict is answered here, asynchronous completion is not the core's.
 - `requiredOrderings(graph)`: every conflicting pair of nodes of a graph, except nodes in
   different arms of one branch (they never both run), with whether the graph orders them and
-  whether by data. A pair the graph leaves unordered is the case design principles section 6
+  whether by data. A pair the graph leaves unordered is the case design principles section 15
   lists as undecided (writes through references outside a sync block without `wait`).
 
 The fact kind `core.resources` (Node, class ii, reads declarations) is the node's

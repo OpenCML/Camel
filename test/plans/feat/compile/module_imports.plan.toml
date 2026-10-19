@@ -13,7 +13,7 @@ timeout_ms = 8000
 
 # ---- D1: an imported function that uses a value of the top level of its own module ----
 # All modules build into one root graph and a capture is bound to the value it captures
-# (design principles 2.11): these used to be ImportedFunctionUsesModuleValue (and before that,
+# (design principles 10.1): these used to be ImportedFunctionUsesModuleValue (and before that,
 # a silent use of the importer's value of the same name).
 
 [[tests]]
@@ -90,7 +90,7 @@ expect_exit = 0
 expect_output_not_contains = ["Error", "Warn"]
 
 # ---- D2: using an exported value ----
-# Exported values are nodes of the program's one root graph (design principles 2.11).
+# Exported values are nodes of the program's one root graph (design principles 10.1).
 
 [[tests]]
 name = "imports.d2_value"
@@ -129,7 +129,7 @@ expect_exit = 0
 expect_stdout_exact = "2\n"
 
 # ---- D3: modules that import each other ----
-# Supported (design principles 2.11): loading declares every module before any body is built.
+# Supported (design principles 10.1): loading declares every module before any body is built.
 
 [[tests]]
 name = "imports.d3_mutual"
@@ -162,7 +162,7 @@ expect_stdout_exact = "8\n"
 
 [[tests]]
 name = "imports.d5_conflict"
-desc = "Two imports bring `f(int)`: the first was taken silently (printed 2). Design principles 2.10: an error, at the second import with the first."
+desc = "Two imports bring `f(int)`: the first was taken silently (printed 2). Design principles 10.2: an error, at the second import with the first."
 kind = "negative"
 case = "../../../cases/compile/module_imports/d5_conflict.cml"
 args = ["-E", "short", "${case}"]
@@ -213,7 +213,7 @@ expect_stdout_exact = "2\n"
 
 [[tests]]
 name = "imports.d4_cpp_computed"
-desc = "A top-level value that is computed (`let k = seven()`) is computed before main starts (design principles 2.11): std::cpp makes the root graph a function of the program, `top_level`, that computes it and calls main with it; neither call counts towards the recursion limit (it crashed the old emitter, and was then refused)."
+desc = "A top-level value that is computed (`let k = seven()`) is computed before main starts (design principles 10.1): std::cpp makes the root graph a function of the program, `top_level`, that computes it and calls main with it; neither call counts towards the recursion limit (it crashed the old emitter, and was then refused)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d4_cpp_computed.cml"
 args = ["${case}", "std::cpp"]

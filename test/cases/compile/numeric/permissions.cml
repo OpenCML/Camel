@@ -1,6 +1,6 @@
 /**
  * @numeric(...) grants numeric permissions to a function or a block, and to the code written
- * in it: arms, loop bodies, lambdas (design principles 2.13). A function it calls does not
+ * in it: arms, loop bodies, lambdas (design principles 7.5). A function it calls does not
  * inherit them. Permissions only allow other results; the CPU back ends compute the canonical
  * results with or without them, so this program prints the same with every back end.
  */

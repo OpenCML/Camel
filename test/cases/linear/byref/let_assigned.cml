@@ -1,7 +1,7 @@
 /**
  * Assignment to a `let` name (the assignment operators take the target as a `var` parameter).
  * Rejected at compile time: only a name bound by `var` denotes a mutable object
- * (docs/design-principles.cn.md 2.5).
+ * (docs/design-principles.cn.md 3.5).
  */
 module let_assigned
 

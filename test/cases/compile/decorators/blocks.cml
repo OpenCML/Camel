@@ -2,7 +2,7 @@
  * A decorated block is the block as a function of no parameters, passed to its decorators and
  * called where it is written (language reference 7.6). It behaves as the same block without
  * decorators: its scope, its `return` (the value of the block), its value; and in a sync body,
- * the statements of a block that is not `sync` run only when something needs them (2.2), the
+ * the statements of a block that is not `sync` run only when something needs them (3.4), the
  * statements of a `sync` block always. Each case is written twice, without and with a
  * decorator (`plain`, applied as it runs; `mark`, applied as the program is built), and
  * prints the same.

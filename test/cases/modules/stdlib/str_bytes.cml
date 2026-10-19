@@ -1,5 +1,5 @@
 /**
- * The str module: length and indices count code points (design principles 2.17); `bytes` and
+ * The str module: length and indices count code points (design principles 11.1); `bytes` and
  * `from_bytes` convert to and from the UTF-8 bytes.
  * The subject is the ordinary argument, the rest are with-arguments
  * (DESIGN-QUESTION(param-style)).
@@ -82,7 +82,7 @@ func main(): int sync {
     // the bytes of a character
     println(from_bytes([228, 184, 173]), len(from_bytes([228, 184, 173])))
 
-    // indexing: the character at the index, as a string (design principles 2.17)
+    // indexing: the character at the index, as a string (design principles 11.1)
     let s = 'hello'
     println(s[0], s[4], len(s[1]))
     println('中'[0] == '中', '中文'[1], len('中文'), len('😀'), bytes('é'[0]))

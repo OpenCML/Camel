@@ -1,5 +1,5 @@
 /**
- * `T!` (design principles 2.9): a value that may have failed. `throw e` returns the error
+ * `T!` (design principles 3.9): a value that may have failed. `throw e` returns the error
  * form, `a !! b` gives a fallback, `x ?-> f` hands an error on and calls `f` otherwise, and
  * `match` with `case error e` reads the error.
  */

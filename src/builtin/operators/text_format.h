@@ -12,7 +12,7 @@
  * Text as an argument of `format` (and of `print` / `println` with a format string).
  *
  * A string is valid UTF-8 and its length is its number of code points (design principles
- * 2.17). fmt pads by the display width of a character (a wide character counts 2), which is
+ * 11.1). fmt pads by the display width of a character (a wide character counts 2), which is
  * neither; this type reads the specification `[[fill]align][width][.precision][s]` itself and
  * counts code points, as the runtime of the generated C++ programs does.
  */

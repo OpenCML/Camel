@@ -105,7 +105,7 @@ class Builder {
     Value visitNamespaceDecl(syntax::cst::NamespaceDecl context);
     /// `topLevel`: a declaration of the module or of a namespace block, whose names take the
     /// path of the enclosing namespaces (`namespace Config { let limit = 10 }` declares
-    /// `Config::limit`, design principles 2.12); a local declaration does not.
+    /// `Config::limit`, design principles 10.2); a local declaration does not.
     Value visitDataDecl(syntax::cst::DataDecl context, bool topLevel = false);
     Value visitTypeDecl(syntax::cst::TypeDecl context);
     Value visitRetStmt(syntax::cst::RetStmt context);

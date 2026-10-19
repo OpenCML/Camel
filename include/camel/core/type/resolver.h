@@ -83,7 +83,7 @@ class FuncTypeResolver {
      * rule is then exactly that function type. nullptr for a rule that accepts a family of
      * types (its result is computed from the argument types). Whether an overload of the
      * program is "more specific" than a rule of an operator is decided from this declaration
-     * and nothing else (design principles 2.13, 2.17).
+     * and nothing else (design principles 4.3, log 2.17).
      */
     virtual FunctionType *fixedSignature() const { return nullptr; }
 

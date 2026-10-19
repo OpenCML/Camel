@@ -2,7 +2,7 @@ id = "modules.tensor.compound_assign"
 order = 364
 tier = "feat"
 tags = ["feat", "modules", "tensor", "assignment"]
-desc = "t += u on a tensor computes a new tensor and rebinds the variable; nothing is changed in place (design principles 2.10)"
+desc = "t += u on a tensor computes a new tensor and rebinds the variable; nothing is changed in place (design principles 4.2)"
 
 [[tests]]
 name = "tensor.compound_assign"

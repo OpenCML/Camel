@@ -37,7 +37,7 @@ and only the comparison between the two collectors within one row means anything
 - Two defects that exist with both collectors were met while measuring: a reference held in
   a slot typed `any` was not seen by the collector, and allocation in the mark-sweep collector
   can stall after a sweep (both in section 6.4). The first was far easier to hit with the
-  generational collector and is gone (`any` is removed, design principles 2.12); the second
+  generational collector and is gone (`any` is removed, design principles 5.10); the second
   does not occur with it.
 
 ## 2. What the option is
@@ -371,7 +371,7 @@ a module outside it has been checked by nobody.
 ### 6.4 Known problems, not fixed
 
 **A reference in a slot typed `any` is invisible to the collector (both collectors).** Fixed
-since by removing `any` (design principles 2.12; `docs/design/any-typing/README.cn.md`): no
+since by removing `any` (design principles 5.10; `docs/design/any-typing/README.cn.md`): no
 type on a committed graph is undetermined, and `json.decode` gives a `Json`, an object that
 describes itself and is traced through the types its kinds fix. The program below no longer
 compiles (`d as string[]`); written with `decode_as` or the `Json` accessors it is correct in
@@ -481,7 +481,7 @@ Recommendation: **not yet; keep mark-sweep as the default for now and make the s
 two things are settled.**
 
 - The `any` question (6.4, and section 9 of the handle rules). Settled by design principles
-  2.12 and closed: `any` is removed and `json.decode` gives a self-describing `Json`, so no
+  5.10 and closed: `any` is removed and `json.decode` gives a self-describing `Json`, so no
   slot holds a reference the collector cannot trace.
 - A run on the other platforms the project supports, Windows at least, with the default test
   set in both modes.

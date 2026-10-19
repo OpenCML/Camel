@@ -1,5 +1,5 @@
 /**
- * `A(i); wait modify(i); B(i)` outside a sync block (docs/design-principles.cn.md 2.6): the
+ * `A(i); wait modify(i); B(i)` outside a sync block (docs/design-principles-log.cn.md 2.6): the
  * compiler orders A -> modify -> B. A observes the old value of i, B the new one, and A has
  * completed before modify starts. Expected output:
  *   A 1

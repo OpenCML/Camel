@@ -107,7 +107,7 @@ expect_stdout_exact = "18.0\n9.0\n"
 
 [[tests]]
 name = "blocks"
-desc = "Each block is written without and with a decorator (applied as it runs, or as the program is built) and prints the same on the four back ends: the value of the block and its `return`, a `return` in the middle of a function, its scope, a decorator of the program. In a sync body a block that is not `sync` and whose value nothing takes runs none of its statements, decorated or not (design principles 2.2); a `sync` block runs them, and writes a variable of the function."
+desc = "Each block is written without and with a decorator (applied as it runs, or as the program is built) and prints the same on the four back ends: the value of the block and its `return`, a `return` in the middle of a function, its scope, a decorator of the program. In a sync body a block that is not `sync` and whose value nothing takes runs none of its statements, decorated or not (design principles 3.4); a `sync` block runs them, and writes a variable of the function."
 kind = "behavior"
 case = "../../../cases/compile/decorators/blocks.cml"
 args = ["${case}", "${backend}"]

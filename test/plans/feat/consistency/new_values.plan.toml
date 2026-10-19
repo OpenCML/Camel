@@ -2,7 +2,7 @@ id = "consistency.new_values"
 order = 364
 tier = "feat"
 tags = ["feat", "consistency", "compile", "collections", "gc"]
-desc = "Library operators return new values and leave their arguments unchanged (design principles 2.12): `append`, `extend`, `apply`, `algo`'s `sort`; the rebinding `acc = acc->append<v>` and its in-place implementation, under collection stress with both collectors; a pure operation whose result is unused is a compile-time error that gives the rebinding as the fix."
+desc = "Library operators return new values and leave their arguments unchanged (design principles 11.3): `append`, `extend`, `apply`, `algo`'s `sort`; the rebinding `acc = acc->append<v>` and its in-place implementation, under collection stress with both collectors; a pure operation whose result is unused is a compile-time error that gives the rebinding as the fix."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -321,7 +321,7 @@ expect_output_contains = ["'out = out->append<7>'"]
 
 [[tests]]
 name = "new_values.sort_rebinding"
-desc = "`xs = xs->sort` binds the variable to a sorted array and leaves every other holder of the old one as it was (design principles 2.13): a local, `sort(xs)`, merge_sort, a var parameter, a captured variable, floats. Alike on the four back ends."
+desc = "`xs = xs->sort` binds the variable to a sorted array and leaves every other holder of the old one as it was (design principles 11.3): a local, `sort(xs)`, merge_sort, a var parameter, a captured variable, floats. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["${case}", "${backend}"]

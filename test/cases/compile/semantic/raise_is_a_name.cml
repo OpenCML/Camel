@@ -1,5 +1,5 @@
 /**
- * `raise` is not part of the language (design principles 2.10): it is an ordinary name. An
+ * `raise` is not part of the language (design principles 3.9): it is an ordinary name. An
  * error value is returned with `throw`.
  */
 module raise_is_a_name

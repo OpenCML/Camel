@@ -51,7 +51,7 @@ test/cases/linear/nvm/var_params.cml
 test/cases/compile/module_imports/d4_cpp_computed.cml
 test/cases/consistency/faults/top_level_fault.cml
 
-# && and || as branches, null tests and narrowing (design principles 2.11, 2.12).
+# && and || as branches, null tests and narrowing (design principles 3.8).
 test/cases/consistency/logical/short_circuit.cml
 test/cases/consistency/logical/pure.cml
 test/cases/consistency/narrowing/narrow.cml
@@ -64,10 +64,10 @@ test/cases/consistency/new_values/rebinding_loop.cml
 test/cases/consistency/new_values/peek_loop.cml
 test/cases/consistency/new_values/peek.cml
 
-# Output of print / println with a format (design principles 2.13).
+# Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
 
-# The parameters of `main` from the command line, as camel reads them (design principles 2.13):
+# The parameters of `main` from the command line, as camel reads them (design principles 10.6):
 # all given; none (the report of the missing ones); a value that is not of the declared type; an
 # unknown name; a name given twice.
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=0.5 --arg name=hi --arg loud=true
@@ -76,7 +76,7 @@ test/cases/compile/entry_args/scalars.cml --arg n=x --arg rate=0.5 --arg name=hi
 test/cases/compile/entry_args/scalars.cml --arg m=1
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg n=4
 
-# Loops (design principles 2.13), run through the private lowering to tail recursion.
+# Loops (design principles 3.10), run through the private lowering to tail recursion.
 test/cases/loops/shapes.cml
 test/cases/loops/effects.cml
 test/cases/loops/captures.cml

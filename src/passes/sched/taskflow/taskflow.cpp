@@ -1663,7 +1663,7 @@ std::optional<slot_t> TaskflowExecSchedPass::runMarkedOperator(GCGraph *graph, g
     switch (calls->shape) {
     case ElementShape::Isolate:
         return executeIsolateNode(graph, nodeRef, frame);
-    case ElementShape::Map: // `apply` returns a new array like `map` (design principles 2.12)
+    case ElementShape::Map: // `apply` returns a new array like `map` (design principles 11.3)
         mark_map_arr(graph, nodeRef, frame);
         break;
     case ElementShape::Filter:
@@ -2534,7 +2534,7 @@ bool elementsIndependent(GCGraph *graph, gc_node_ref_t nodeRef) {
 
 // The faults of the element calls of one unordered operator (map, apply, filter,
 // unordered_foreach; the chunks of unordered_reduce), which run concurrently and can fault
-// together. Design principles 2.10: elements that have started run to their end, elements
+// together. Design principles 3.6: elements that have started run to their end, elements
 // that have not started do not start, and of several faults the one of the smallest index is
 // reported. So that the report does not depend on which element a worker happened to pick
 // first, "do not start" is applied to the elements *after* the smallest faulting index known:

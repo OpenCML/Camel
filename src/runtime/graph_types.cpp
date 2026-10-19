@@ -19,7 +19,7 @@
 
 /*
  * The type invariant of an encoded graph, checked at every commit: every type on a graph is
- * determined (design principles 2.11: "no value has a type that is still undetermined at run
+ * determined (design principles 5.10: "no value has a type that is still undetermined at run
  * time"; docs/design/any-typing/README.cn.md, 4.6).
  *
  * The types that describe a graph are its function type (ports and result) and the layouts of
@@ -111,7 +111,7 @@ void check(const GCGraph *graph, const Type *type, const char *where) {
         throw std::runtime_error(
             std::format(
                 "Runtime graph '{}' has an undetermined type: '{}' in its {} ('{}'). Every type "
-                "on a committed graph is determined (design principles 2.11).",
+                "on a committed graph is determined (design principles 5.1).",
                 graph->name(),
                 found->toString(),
                 where,

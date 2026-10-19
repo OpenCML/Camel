@@ -24,7 +24,7 @@
  * portable unit, an AVX2+FMA unit, and an AVX-512F unit (x86-64 builds). The
  * widest unit the CPU and OS support is selected at first use, so default
  * builds stay portable while still using wide vectors where available. Every
- * operator uses it (matmul's canonical algorithm, design principles 2.13). With
+ * operator uses it (matmul's canonical algorithm, design principles 7.1). With
  * CAMEL_TENSOR_USE_CBLAS, sgemmLibrary forwards to cblas_sgemm; only the
  * tensor:matmul_blas operator calls it, which tensor::fuse substitutes for a
  * matmul whose node was granted the permissions a library order needs.

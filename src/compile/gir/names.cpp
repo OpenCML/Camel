@@ -19,7 +19,7 @@
 
 /*
  * What a name written in a function body or an initializer stands for (design principles
- * 2.12, "模块与命名空间"; the graph model, section 8). Namespaces are not objects: a name of
+ * 10.2, "模块与命名空间"; the graph model, section 8). Namespaces are not objects: a name of
  * a module is a path (`Tools::inc`), and these rules only decide which path a written name
  * means. There is one rule of precedence, the first layer that has the name wins:
  *

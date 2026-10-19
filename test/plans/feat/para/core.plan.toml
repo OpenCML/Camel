@@ -393,7 +393,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "recursion_too_deep.prl"
-desc = "With the limit raised to 1000000, depth(400000) is far deeper than a native stack holds. main and depth are serial, so std::prl runs them on the bytecode interpreter, which keeps direct calls off the native stack: the recursion completes, as on std::fvm (design principles 2.12). The two back ends agree. (Without the option every scheduler stops at 1000: consistency.limits, para.handoff.)"
+desc = "With the limit raised to 1000000, depth(400000) is far deeper than a native stack holds. main and depth are serial, so std::prl runs them on the bytecode interpreter, which keeps direct calls off the native stack: the recursion completes, as on std::fvm (design principles 9.10). The two back ends agree. (Without the option every scheduler stops at 1000: consistency.limits, para.handoff.)"
 kind = "behavior"
 case = "../../../cases/para/core/recursion_too_deep.cml"
 args = ["-t", "4", "--max-recursion-depth", "1000000", "${case}", "${backend}"]

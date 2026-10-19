@@ -343,7 +343,7 @@ PassParam safeFpParameter() {
         PassParamType::Bool,
         false,
         "keep the algebraic stage to strictly equivalent floating-point transformations "
-        "(design principles 2.15)"};
+        "(design principles 7.4)"};
 }
 
 PassDescriptor optimizeDescriptor() {

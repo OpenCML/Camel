@@ -141,7 +141,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 ### 3.5 模块导出的值
 
-C++ 模块也可以导出值（设计原则 2.13）：在构造函数里 `exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi))`（`Module::exportValue`，公开接口 `include/camel/core/module/module.h`）。程序写 `math::pi`（或 `import { pi } from math` 后写 `pi`），不带括号；用到的地方就是这个常量，与写一个字面量相同：图上是使用处所在的图里的一个 `DATA` 节点，没有 root 上的节点，也不需要捕获。能导出的是能作为图中常量的数据（标量、字符串以及它们组成的复合数据），类型就是数据的类型。同一个名字只能导出一样东西：一个值与一个算子组不能同名。
+C++ 模块也可以导出值（设计原则 10.1）：在构造函数里 `exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi))`（`Module::exportValue`，公开接口 `include/camel/core/module/module.h`）。程序写 `math::pi`（或 `import { pi } from math` 后写 `pi`），不带括号；用到的地方就是这个常量，与写一个字面量相同：图上是使用处所在的图里的一个 `DATA` 节点，没有 root 上的节点，也不需要捕获。能导出的是能作为图中常量的数据（标量、字符串以及它们组成的复合数据），类型就是数据的类型。同一个名字只能导出一样东西：一个值与一个算子组不能同名。
 
 ## 4. 语义性质（纯度）注册
 
@@ -167,7 +167,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 登记发生在模块加载时：
 
-- 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`src/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get` 登记为 `stateOnly`；`io/`、`profiler/` 不登记。`append`、`extend` 返回新数组，登记为纯（设计原则 2.12）；`:op/assn_append`（写成语句的 `acc = acc->append<v>`）属于 `op/assn` 族，不纯。
+- 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`src/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get` 登记为 `stateOnly`；`io/`、`profiler/` 不登记。`append`、`extend` 返回新数组，登记为纯（设计原则 11.3）；`:op/assn_append`（写成语句的 `acc = acc->append<v>`）属于 `op/assn` 族，不纯。
 - `.cmo` 模块：在 `load()` 中直接调用 `OperatorTable::instance().set(uri, traits)`。例如 `modules/math/module.cpp` 把 `getMathOpsMap()` 中的全部算子登记为纯。
 
 另有两处按 URI 或按值类型登记的信息，供需要的模块使用：
@@ -242,7 +242,7 @@ traits 之外，算子表的每一项可以带一份只读、带版本的语义�
 
 ## 7. 纯度声明的规则与检查
 
-设计原则 2.9：算子的纯度必须声明；没有声明的算子按有副作用对待（少优化，不会算错）。
+设计原则 3.3：算子的纯度必须声明；没有声明的算子按有副作用对待（少优化，不会算错）。
 
 - 模块在 `load()` 里为**每一个**算子声明，有副作用的也要写出来：
 

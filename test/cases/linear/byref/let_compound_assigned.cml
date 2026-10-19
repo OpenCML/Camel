@@ -1,6 +1,6 @@
 /**
  * Compound assignment to a `let` name.
- * Rejected at compile time (docs/design-principles.cn.md 2.5, 2.6: a side effect
+ * Rejected at compile time (docs/design-principles.cn.md 3.5: a side effect
  * must be declared, and only a `var` can be changed).
  */
 module let_compound_assigned

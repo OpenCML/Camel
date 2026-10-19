@@ -145,7 +145,7 @@ struct ExitRequest {
 // ---- The recursion limit ----
 
 /// The number of calls that are open, not in tail position, below the current function (design
-/// principles 2.9; camel/execute/limits.h). It is an argument of every generated function that
+/// principles 3.9; camel/execute/limits.h). It is an argument of every generated function that
 /// makes calls, so that it lives in a register.
 using Depth = uint32_t;
 
@@ -219,7 +219,7 @@ inline std::size_t stackBytesFor(uint32_t limit) {
 /// Runs the entry of a generated program and gives the process's exit code.
 ///
 /// `entry` returns the exit code the program's `main` gives (the generated code decides it
-/// from main's declared type, design principles 2.10). A fault ends the program: the output
+/// from main's declared type, design principles 9.8). A fault ends the program: the output
 /// written so far is flushed, then the report is written to standard output (where `camel`
 /// writes its diagnostics) and the exit code is 1. `exit(n)` ends it with n.
 ///
@@ -227,7 +227,7 @@ inline std::size_t stackBytesFor(uint32_t limit) {
 /// `translatedLimit` is the limit the program was translated with.
 template <typename Entry> int run(uint32_t translatedLimit, Entry &&entry) {
 #ifdef _WIN32
-    // The program writes the same bytes on every platform (design principles 2.11): no CRLF.
+    // The program writes the same bytes on every platform (design principles 11.5): no CRLF.
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
     recursionLimit = translatedLimit;

@@ -246,7 +246,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "not_supported.strict_equal"
-desc = "`===` is rejected at the comparison (design principles 2.10); it used to compile and was false for two equal string literals."
+desc = "`===` is rejected at the comparison (design principles 4.1); it used to compile and was false for two equal string literals."
 kind = "negative"
 case = "../../../cases/compile/not_supported/strict_equal.cml"
 args = ["${case}"]

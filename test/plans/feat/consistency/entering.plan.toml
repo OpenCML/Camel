@@ -2,7 +2,7 @@ id = "consistency.entering"
 order = 357
 tier = "feat"
 tags = ["feat", "consistency", "compile", "nullable", "fallible"]
-desc = "A value enters a T? / T! position by itself where the target type is known, never the other way; [] takes its element type from its position; a nullable right side of ?? (design principles 2.10)"
+desc = "A value enters a T? / T! position by itself where the target type is known, never the other way; [] takes its element type from its position; a nullable right side of ?? (design principles 3.8)"
 
 # docs/technical/29_nullable_and_fallible_values.md section 4.2. Every behaviour test runs on
 # the four back ends, which must agree, and through the optimisation and inlining pipelines.

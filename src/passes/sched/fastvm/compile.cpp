@@ -87,7 +87,7 @@ static std::optional<MarkOpCode> markOpCodeOf(camel::core::OperId id) {
         return std::nullopt;
     }
     switch (calls->shape) {
-    case ElementShape::Map: // `apply` returns a new array like `map` (design principles 2.12)
+    case ElementShape::Map: // `apply` returns a new array like `map` (design principles 11.3)
         return MarkOpCode::MapArr;
     case ElementShape::Fold:
         return MarkOpCode::ReduceArr;

@@ -20,12 +20,12 @@
 /*
  * The semantics of the built-in scalar arithmetic (`:op/` operators on i32, int, f32 and
  * float): their stable keys, numeric semantics and faults (camel/core/operator_semantics.h,
- * docs/design/op-semantics section 6.2, design principles 2.13).
+ * docs/design/op-semantics section 6.2, design principles 7.1).
  *
  *   integer + - * neg, comparisons    exact (two's complement, wrapping)
  *   integer / %                       exact; a zero divisor is a fault
  *   float + - *                       one correctly rounded IEEE step in the operand type
- *   float /                           the same; a divisor of +0 or -0 is a fault (2.9)
+ *   float /                           the same; a divisor of +0 or -0 is a fault (3.9)
  *   float neg, comparisons            exact
  *
  * Every operator is declared at version 1.0. Operators not listed here (pow, the untyped
@@ -194,7 +194,7 @@ void declareUnorderedReduce() {
 }
 
 /**
- * How the higher-order operators call their function (design principles 2.17), the one place
+ * How the higher-order operators call their function (design principles 3.6), the one place
  * a scheduler or a code generator learns it from. `map`, `apply` and `filter` leave the order of
  * their calls open: the function of one element does not depend on that of another, so they
  * may run at once; `foreach` and `reduce` run in order, their unordered forms do not.

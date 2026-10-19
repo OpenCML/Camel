@@ -18,7 +18,7 @@
  */
 
 /*
- * Built-in operators over the tagged forms `T?` and `T!` (design principles 2.9;
+ * Built-in operators over the tagged forms `T?` and `T!` (design principles 3.8;
  * docs/technical/29_nullable_and_fallible_values.md).
  *
  * The first group is what `??`, `!!`, `?->`, `throw` and the `match` patterns are lowered

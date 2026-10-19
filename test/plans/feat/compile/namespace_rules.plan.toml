@@ -4,7 +4,7 @@ tier = "feat"
 tags = ["feat", "compile", "semantic", "modules", "namespace"]
 desc = "Namespaces and imports by the rulings of 2026-10-14: lookup in namespace blocks, scoped using, one precedence rule, import forms, values in namespaces, own-module qualification"
 
-# Design principles 2.12 ("模块与命名空间"); docs/design/graph-model/README.cn.md section 8.
+# Design principles 10.2 ("模块与命名空间"); docs/design/graph-model/README.cn.md section 8.
 # p01-p26 are the probes of the table in 8.1 (docs/design/graph-model/examples/ns), one test per
 # row, with the outcome the rulings give; p27-p32 are new.
 
@@ -314,7 +314,7 @@ expect_stdout_contains = ["lib::root", "lib::Tools::inc", "lib::Deep::Inner::thr
 
 [[tests]]
 name = "ns.p33_reopen_using"
-desc = "Reopening a namespace block does not carry the `using namespace` of an earlier block of it (design principles 2.13): the first block uses `inc` unqualified, the second cannot."
+desc = "Reopening a namespace block does not carry the `using namespace` of an earlier block of it (design principles 10.2): the first block uses `inc` unqualified, the second cannot."
 kind = "negative"
 case = "../../../cases/compile/namespace_rules/p33_reopen_using.cml"
 args = ["-E", "short", "${case}"]
@@ -325,7 +325,7 @@ expect_output_contains = ["Unresolved reference: 'inc'"]
 
 [[tests]]
 name = "ns.p34_ambiguous_qualified"
-desc = "An ambiguous name lists its candidates by their full names, `module::path::name`, whatever aliases the imports gave the modules (design principles 2.13)."
+desc = "An ambiguous name lists its candidates by their full names, `module::path::name`, whatever aliases the imports gave the modules (design principles 10.2)."
 kind = "negative"
 case = "../../../cases/compile/namespace_rules/p34_ambiguous_qualified.cml"
 args = ["-E", "short", "${case}"]
@@ -336,7 +336,7 @@ expect_output_contains = ["The name 'inc' is ambiguous here: lib::Tools::inc, li
 
 [[tests]]
 name = "ns.p35_ambiguous_type"
-desc = "The same for a type name: the candidates by their full names (design principles 2.13)."
+desc = "The same for a type name: the candidates by their full names (design principles 10.2)."
 kind = "negative"
 case = "../../../cases/compile/namespace_rules/p35_ambiguous_type.cml"
 args = ["-E", "short", "${case}"]

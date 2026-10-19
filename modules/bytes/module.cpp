@@ -31,7 +31,7 @@ using namespace camel::core::rtdata;
 using namespace camel::core::error;
 namespace mm = camel::core::mm;
 slot_t encodeKernel(ArgsView &, ArgsView &norm, Context &) {
-    // A string is always valid UTF-8 (design principles 2.17), so encoding cannot fail.
+    // A string is always valid UTF-8 (design principles 11.1), so encoding cannot fail.
     const std::string text(norm.get<::String *>(0)->view());
     return toSlot(BytesObject::from(text, mm::autoSpace()));
 }

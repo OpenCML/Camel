@@ -67,7 +67,7 @@ constexpr std::array<OverloadableForm, 19> kForms = {{
 }};
 
 /// A compound assignment `x op= y`: the group that holds its built-in overloads and the plain
-/// operator it follows (design principles 2.11: `a += b` is `a = a + b`).
+/// operator it follows (design principles 4.2: `a += b` is `a = a + b`).
 struct CompoundForm {
     std::string_view plainSymbol;
     std::string_view assignGroup;
@@ -124,7 +124,7 @@ std::optional<std::string_view> overloadableOperatorGroup(std::string_view symbo
 }
 
 std::optional<std::string_view> whyNotOverloadable(std::string_view symbol) {
-    // `!=` is an operator of the program, but it follows `==` (design principles 2.13):
+    // `!=` is an operator of the program, but it follows `==` (design principles 4.3):
     // an overload of `==` gives it, so that the two cannot disagree. Its group stays in
     // kForms, where the compiler looks it up to apply that overload.
     if (symbol == "!=") {
