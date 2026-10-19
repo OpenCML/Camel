@@ -27,6 +27,7 @@
 #include "camel/core/process_exit.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "pass_spec.h"
 #include "camel/passes/test/control.h"
 #include "camel/passes/trans/json/gir.h"
 #include "camel/runtime/capacity.h"
@@ -63,6 +64,7 @@
 #include <format>
 #include <iostream>
 #include <map>
+#include <set>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -78,10 +80,24 @@ GCGraph *NullGraphIRPass::apply(GCGraph *graph, std::ostream &os) {
     return nullptr;
 }
 
-using PassScope    = Scope<std::string, PassFactory, std::string>;
-using PassScopePtr = scope_ptr_t<std::string, PassFactory, std::string>;
+using PassScope    = Scope<std::string, PassDescriptor, std::string>;
+using PassScopePtr = scope_ptr_t<std::string, PassDescriptor, std::string>;
 
 namespace {
+
+std::string trimText(std::string_view value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos)
+        return {};
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return std::string(value.substr(first, last - first + 1));
+}
+
+/// The name of a specification, parameters removed.
+std::string specName(const std::string &spec) {
+    const auto open = spec.find('(');
+    return trimText(open == std::string::npos ? spec : spec.substr(0, open));
+}
 
 FastVMConfig makeDefaultFastVmJitConfig() {
 #if !ENABLE_FASTVM_JIT
@@ -251,22 +267,26 @@ std::vector<std::string> splitPath(const std::string &path) {
     return result;
 }
 
-PassFactory lookupInScope(PassScopePtr scope, const std::vector<std::string> &path) {
+std::optional<PassDescriptor>
+lookupInScope(PassScopePtr scope, const std::vector<std::string> &path) {
     if (path.empty())
-        return nullptr;
+        return std::nullopt;
     for (size_t i = 0; i < path.size() - 1; ++i) {
         scope = scope->enter(path[i]);
         if (!scope)
-            return nullptr;
+            return std::nullopt;
     }
     auto opt = scope->get(path.back(), false);
-    return opt ? *opt : nullptr;
+    if (!opt)
+        return std::nullopt;
+    return *opt;
 }
 
 void collectPassPaths(
-    PassScopePtr scope, const std::string &prefix, std::vector<std::string> &out) {
-    for (const auto &[key, _] : scope->map()) {
-        out.push_back(prefix.empty() ? key : prefix + "::" + key);
+    PassScopePtr scope, const std::string &prefix,
+    std::vector<std::pair<std::string, PassDescriptor>> &out) {
+    for (const auto &[key, descriptor] : scope->map()) {
+        out.emplace_back(prefix.empty() ? key : prefix + "::" + key, descriptor);
     }
     scope->forEachNamedInner([&](const std::string &name, const PassScopePtr &child) {
         collectPassPaths(child, prefix.empty() ? name : prefix + "::" + name, out);
@@ -277,19 +297,25 @@ void collectPassPaths(
 // `def(factory, {...})` creates a node with both a factory and children, and
 // `scope({...})` creates a pure namespace node.
 struct PassDef {
-    std::optional<PassFactory> value;
+    std::optional<PassDescriptor> value;
     // shared_ptr: vector<pair<..., PassDef>> would instantiate vector while PassDef is still
     // incomplete; Clang + libstdc++ reject that ([vector] requires a complete element type).
     std::vector<std::pair<std::string, std::shared_ptr<PassDef>>> children;
 };
 
-PassDef def(PassFactory f) { return PassDef{.value = std::move(f), .children = {}}; }
+PassDef def(PassDescriptor f) { return PassDef{.value = std::move(f), .children = {}}; }
 
-PassDef def(PassFactory f, std::initializer_list<std::pair<const char *, PassDef>> list) {
+PassDef def(PassFactory f) { return def(passWithoutParameters(std::move(f))); }
+
+PassDef def(PassDescriptor f, std::initializer_list<std::pair<const char *, PassDef>> list) {
     PassDef r{.value = std::move(f), .children = {}};
     for (const auto &[k, v] : list)
         r.children.emplace_back(k, std::make_shared<PassDef>(v));
     return r;
+}
+
+PassDef def(PassFactory f, std::initializer_list<std::pair<const char *, PassDef>> list) {
+    return def(passWithoutParameters(std::move(f)), list);
 }
 
 PassDef scope(std::initializer_list<std::pair<const char *, PassDef>> list) {
@@ -309,6 +335,126 @@ void buildPassScope(PassScopePtr s, const PassDef &def) {
             buildPassScope(sub, child);
         }
     }
+}
+
+PassParam safeFpParameter() {
+    return PassParam{
+        "safe_fp",
+        PassParamType::Bool,
+        false,
+        "keep the algebraic stage to strictly equivalent floating-point transformations "
+        "(design principles 2.15)"};
+}
+
+PassDescriptor optimizeDescriptor() {
+    PassDescriptor d;
+    d.doc    = "the standard optimization pipeline";
+    d.params = {safeFpParameter()};
+    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
+        OptimizeRewriteConfig config;
+        config.safeFloatingPoint = args.getBool("safe_fp");
+        return std::make_unique<OptimizeRewritePass>(ctx, config);
+    };
+    return d;
+}
+
+PassDescriptor algebraDescriptor() {
+    PassDescriptor d;
+    d.doc    = "algebraic simplification";
+    d.params = {safeFpParameter()};
+    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<AlgebraPass>(ctx, args.getBool("safe_fp"));
+    };
+    return d;
+}
+
+PassParam nativeLoopParameter() {
+    return PassParam{
+        "native_loop",
+        PassParamType::Bool,
+        false,
+        "run the program's LOOP nodes natively instead of lowering them to tail recursion "
+        "(debugging; slower today)"};
+}
+
+PassParam statsParameter() {
+    return PassParam{
+        "stats",
+        PassParamType::String,
+        std::string(),
+        "append per-graph bytecode and execution counts of the run to this file"};
+}
+
+PassDescriptor fastVmDescriptor(bool jit) {
+    PassDescriptor d;
+    d.doc    = jit ? "the bytecode interpreter with on-demand native code"
+                   : "the bytecode interpreter";
+    d.params = {nativeLoopParameter(), statsParameter()};
+    if (jit) {
+        d.params.push_back(PassParam{
+            "hot_threshold",
+            PassParamType::Int,
+            int64_t{1},
+            "calls from one call site before a graph is compiled; 0 compiles at the first call "
+            "(short test programs then run as compiled code too)"});
+    }
+    d.make = [jit](const context_ptr_t &ctx, const PassArgs &args) {
+        FastVMConfig config = jit ? makeDefaultFastVmJitConfig() : FastVMConfig{};
+        config.nativeLoop   = args.getBool("native_loop");
+        config.statsPath    = args.getString("stats");
+        if (jit) {
+            const int64_t threshold = args.getInt("hot_threshold");
+            config.jitHotThreshold  = threshold < 0 ? 0 : static_cast<size_t>(threshold);
+        }
+        return std::make_unique<FastVMSchedPass>(ctx, config);
+    };
+    return d;
+}
+
+PassDescriptor taskflowDescriptor() {
+    PassDescriptor d;
+    d.doc    = "the parallel scheduler";
+    d.params = {
+        PassParam{
+            "linear",
+            PassParamType::Bool,
+            false,
+            "evaluate every graph node by node (for comparison and diagnosis)"},
+        PassParam{
+            "fanout_all",
+            PassParamType::Bool,
+            false,
+            "fan every unordered higher-order call out, not only those worth it by measurement"},
+        PassParam{
+            "diag",
+            PassParamType::Bool,
+            false,
+            "print the decision for every graph and why a graph stays node by node"},
+        PassParam{
+            "bytecode",
+            PassParamType::Bool,
+            true,
+            "hand graphs that need no parallelism to the bytecode interpreter; false: the "
+            "scheduler evaluates every graph itself"},
+        PassParam{
+            "gc_stats",
+            PassParamType::Int,
+            int64_t{0},
+            "1: print the task graphs and collections of the run when it ends; 2: also one "
+            "line per collection"},
+    };
+    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+        TaskflowOptions options;
+        options.linear    = args.getBool("linear");
+        options.fanOutAll = args.getBool("fanout_all");
+        options.diag      = args.getBool("diag");
+        options.bytecode  = args.getBool("bytecode");
+        options.gcStats   = static_cast<int>(args.getInt("gc_stats"));
+        auto pass         = std::make_unique<TaskflowExecSchedPass>(ctx);
+        pass->setOptions(options);
+        return pass;
+    };
+    return d;
 }
 
 #define PASS(T) [](const context_ptr_t &ctx) { return std::make_unique<T>(ctx); }
@@ -356,12 +502,12 @@ PassScopePtr initPassScope() {
                      })},
                     {"nodevm", def(PASS(NodeVMSchedPass))},
                     {"fastvm",
-                     def(PASS(FastVMSchedPass),
+                     def(fastVmDescriptor(false),
                          {
                              {"bytecode", def(PASS(BytecodeDumpPass))},
                              {"linked_bytecode", def(PASS(LinkedBytecodeDumpPass))},
                              {"jit",
-                              def(PASS1(FastVMSchedPass, makeDefaultFastVmJitConfig()),
+                              def(fastVmDescriptor(true),
                                   {
                                       {"dump",
                                        scope({
@@ -373,7 +519,7 @@ PassScopePtr initPassScope() {
                                   })},
                          })},
                     {"opt",
-                     def(PASS(OptimizeRewritePass),
+                     def(optimizeDescriptor(),
                          {
                              {"inline",
                               def(PASS1(InlineRewritePass, InlineRewriteConfig{}),
@@ -403,12 +549,12 @@ PassScopePtr initPassScope() {
                              {"devirtualize", def(PASS(DevirtualizeRewritePass))},
                              {"specialize", def(PASS(SpecializeRewritePass))},
                              {"fold", def(PASS(ConstantFoldPass))},
-                             {"algebra", def(PASS(AlgebraPass))},
+                             {"algebra", def(algebraDescriptor())},
                              {"cse", def(PASS(CommonSubexpressionPass))},
                              {"dce", def(PASS(DeadCodePass))},
                              {"ctrl", def(PASS(ControlReductionPass))},
                          })},
-                    {"taskflow", def(PASS(TaskflowExecSchedPass))},
+                    {"taskflow", def(taskflowDescriptor())},
                     {"tfdump", def(PASS(TfDumpPass))},
                 }),
             },
@@ -427,8 +573,6 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::inline::small", "std::opt::inline::small"},
     {"std::inline::arm", "std::opt::inline::arm"},
     {"std::inline::hybrid", "std::opt::inline::hybrid"},
-    // The implementation and executor remain in the bundled Tiles module.
-    {"std::tiles", "tiles::compile"},
     // Standard scheduler aliases
     {"std::default", "std::nodevm"},
     {"std::linear", "std::nodevm"},
@@ -467,7 +611,7 @@ std::unordered_map<std::string, std::string> passAliases = {
 
 struct ModulePassRegistry {
     std::mutex mutex;
-    std::map<std::string, PassFactory> factories; // ordered for the "available passes" listing
+    std::map<std::string, PassDescriptor> passes; // ordered for the "available passes" listing
 };
 
 ModulePassRegistry &modulePasses() {
@@ -475,11 +619,33 @@ ModulePassRegistry &modulePasses() {
     return registry;
 }
 
-PassFactory findModulePass(const std::string &path) {
+struct ModuleAliasRegistry {
+    std::mutex mutex;
+    std::map<std::string, std::string> aliases;
+};
+
+ModuleAliasRegistry &moduleAliases() {
+    static ModuleAliasRegistry registry;
+    return registry;
+}
+
+struct DefaultPassRegistry {
+    std::mutex mutex;
+    std::set<std::pair<int, std::string>> entries; // (priority, spec): the run order
+};
+
+DefaultPassRegistry &defaultPasses() {
+    static DefaultPassRegistry registry;
+    return registry;
+}
+
+std::optional<PassDescriptor> findModulePass(const std::string &path) {
     auto &registry = modulePasses();
     std::lock_guard lock(registry.mutex);
-    auto it = registry.factories.find(path);
-    return it == registry.factories.end() ? nullptr : it->second;
+    auto it = registry.passes.find(path);
+    if (it == registry.passes.end())
+        return std::nullopt;
+    return it->second;
 }
 
 } // namespace
@@ -561,7 +727,7 @@ void deliverPassWarnings(Context &ctx, const std::string &name) {
     state.delivered = state.raised.size();
     std::vector<Diagnostic> promoted;
     for (auto it = fresh.begin(); it != fresh.end();) {
-        it->stage = "pass:" + name;
+        it->stage = "pass:" + specName(name);
         if (it->severity == Severity::Error) {
             promoted.push_back(std::move(*it));
             it = fresh.erase(it);
@@ -617,166 +783,172 @@ void setPassWarningHandler(PassWarningHandler handler, void *userData) {
     }
 }
 
-void registerModulePass(const std::string &path, PassFactory factory) {
+void registerModulePass(const std::string &path, PassDescriptor descriptor) {
     auto &registry = modulePasses();
     std::lock_guard lock(registry.mutex);
-    registry.factories.insert_or_assign(path, std::move(factory));
+    registry.passes.insert_or_assign(path, std::move(descriptor));
+}
+
+void registerModulePass(const std::string &path, PassFactory factory) {
+    registerModulePass(path, passWithoutParameters(std::move(factory)));
+}
+
+void registerPassAlias(const std::string &alias, const std::string &target) {
+    // The core's names are the core's: an alias in `std::`, or a bare name that `std::` already
+    // has (bare names are tried in `std::` first), would shadow or replace them.
+    const bool bare = alias.find("::") == std::string::npos;
+    if (alias.starts_with("std::") || passAliases.contains(alias) ||
+        (bare && (passAliases.contains("std::" + alias) ||
+                  lookupInScope(passScope, splitPath("std::" + alias))))) {
+        CAMEL_LOG_WARN_S(
+            "Pass",
+            "alias '{}' -> '{}' ignored: the name belongs to the core's std:: namespace",
+            alias,
+            target);
+        return;
+    }
+    auto &registry = moduleAliases();
+    std::lock_guard lock(registry.mutex);
+    registry.aliases.insert_or_assign(alias, target);
+}
+
+void registerDefaultPipelinePass(const std::string &spec, int priority) {
+    auto &registry = defaultPasses();
+    std::lock_guard lock(registry.mutex);
+    registry.entries.insert({priority, spec});
 }
 
 namespace {
 
-/// The factory of a pass name, or null. Prints nothing.
-PassFactory lookupPassFactory(const std::string &name) {
-    // Parameterized optimization entries share the same policy. Parse and validate before
-    // returning a factory, so a malformed option after a consuming pass still fails preflight.
-    if (const auto open = name.find('('); open != std::string::npos) {
-        if (name.back() != ')') {
-            return nullptr;
-        }
-        const auto trim = [](std::string_view value) {
-            const auto first = value.find_first_not_of(" \t\r\n");
-            if (first == std::string_view::npos)
-                return std::string_view{};
-            const auto last = value.find_last_not_of(" \t\r\n");
-            return value.substr(first, last - first + 1);
-        };
-        const auto path = trim(std::string_view(name).substr(0, open));
-        if (path != "std::opt" && path != "std::opt::algebra") {
-            return nullptr;
-        }
-        auto args   = trim(std::string_view(name).substr(open + 1, name.size() - open - 2));
-        bool safeFp = false;
-        if (!args.empty()) {
-            const auto equal = args.find('=');
-            if (equal == std::string_view::npos || trim(args.substr(0, equal)) != "safe_fp") {
-                return nullptr;
-            }
-            const auto value = trim(args.substr(equal + 1));
-            if (value != "true" && value != "false") {
-                return nullptr;
-            }
-            safeFp = value == "true";
-        }
-        if (path == "std::opt::algebra") {
-            return [safeFp](const context_ptr_t &ctx) {
-                return std::make_unique<AlgebraPass>(ctx, safeFp);
-            };
-        }
-        return [safeFp](const context_ptr_t &ctx) {
-            OptimizeRewriteConfig config;
-            config.safeFloatingPoint = safeFp;
-            return std::make_unique<OptimizeRewritePass>(ctx, config);
-        };
+std::string resolveAlias(const std::string &name) {
+    if (auto it = passAliases.find(name); it != passAliases.end()) {
+        return it->second;
     }
+    auto &registry = moduleAliases();
+    std::lock_guard lock(registry.mutex);
+    auto it = registry.aliases.find(name);
+    return it == registry.aliases.end() ? name : it->second;
+}
+
+/// Test-only passes, off unless the environment enables them (CAMEL_ENABLE_TEST_PASSES is a
+/// gate on what exists, not a setting of a pass).
+const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
+#define TEST_PASS(K, T)                                                                           \
+    {                                                                                             \
+        K, [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {                         \
+            return std::make_unique<T>(ctx);                                                      \
+        }                                                                                         \
+    }
+    static const std::vector<std::pair<std::string, PassFactory>> table = {
+        TEST_PASS(kNativeCallbackTestPass, NativeCallbackTestPass),
+        TEST_PASS(kDropCallArgumentPass, DropCallArgumentTestPass),
+        TEST_PASS(kOvergrowGraphPass, OvergrowGraphTestPass),
+        TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
+        TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
+        TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
+        TEST_PASS(kIndexSemanticsTestPass, IndexSemanticsTestPass),
+        TEST_PASS(kDefinitionsTestPass, DefinitionsTestPass),
+        TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
+        TEST_PASS(kResourcesTestPass, ResourcesTestPass),
+        TEST_PASS(kControlTestPass, ControlTestPass),
+        TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
+        TEST_PASS(kFactSeedTestPass, FactSeedTestPass),
+        TEST_PASS(kFactCheckTestPass, FactCheckTestPass),
+        TEST_PASS(kFactPersistTestPass, FactPersistTestPass),
+    };
+#undef TEST_PASS
+    return table;
+}
+
+/// The descriptor of a pass name (no parameters written), or nothing.
+std::optional<PassDescriptor> findDescriptor(const std::string &name) {
     // 1. Resolve aliases
-    std::string resolved = name;
-    auto aliasIt         = passAliases.find(name);
-    if (aliasIt != passAliases.end()) {
-        resolved = aliasIt->second;
-    }
+    const std::string resolved = resolveAlias(name);
 
     // 2. Full paths with :: search by scope hierarchy
     if (resolved.find("::") != std::string::npos) {
         auto path = splitPath(resolved);
         if (!path.empty()) {
-            auto factory = lookupInScope(passScope, path);
-            if (factory)
-                return factory;
+            if (auto found = lookupInScope(passScope, path))
+                return found;
         }
     } else {
         // 3. No :: try std::name first, then the global name
-        auto stdPath = splitPath("std::" + resolved);
-        auto factory = lookupInScope(passScope, stdPath);
-        if (factory)
-            return factory;
-        auto globalPath = std::vector<std::string>{resolved};
-        factory         = lookupInScope(passScope, globalPath);
-        if (factory)
-            return factory;
+        if (auto found = lookupInScope(passScope, splitPath("std::" + resolved)))
+            return found;
+        if (auto found = lookupInScope(passScope, std::vector<std::string>{resolved}))
+            return found;
     }
 
     // 4. Passes contributed by loaded modules (full names such as "tensor::fuse")
-    if (auto factory = findModulePass(resolved)) {
-        return factory;
+    if (auto found = findModulePass(resolved)) {
+        return found;
     }
 
-    // 5. Test-only passes, off unless the environment enables them.
-    if (resolved == kNativeCallbackTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<NativeCallbackTestPass>(ctx);
-        };
+    // 5. Test-only passes.
+    if (std::getenv(kTestPassesEnvVar) != nullptr) {
+        for (const auto &[testName, factory] : testPasses()) {
+            if (resolved == testName) {
+                return passWithoutParameters(factory);
+            }
+        }
     }
-    if (resolved == kDropCallArgumentPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<DropCallArgumentTestPass>(ctx);
-        };
+    return std::nullopt;
+}
+
+struct ResolvedPass {
+    PassFactory factory;                // the pass with its parameters bound; null if not usable
+    bool known = false;                 // the name is a pass
+    std::optional<std::string> problem; // the parameters are wrong
+};
+
+/// Resolves `name` or `name(key=value, ...)`. Prints nothing.
+ResolvedPass resolvePass(const std::string &spec) {
+    ResolvedPass result;
+    const auto descriptor = findDescriptor(specName(spec));
+    if (!descriptor) {
+        return result;
     }
-    if (resolved == kOvergrowGraphPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<OvergrowGraphTestPass>(ctx);
-        };
+    result.known = true;
+    camel::execute::detail::ParsedSpec parsed;
+    if (auto problem = camel::execute::detail::parseSpec(spec, parsed)) {
+        result.problem = std::move(problem);
+        return result;
     }
-    if (resolved == kLeakBranchArmPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<LeakBranchArmTestPass>(ctx);
-        };
+    PassArgs args;
+    if (auto problem =
+            camel::execute::detail::bindArgs(parsed.name, descriptor->params, parsed, args)) {
+        result.problem = std::move(problem);
+        return result;
     }
-    if (resolved == kShareBranchArmPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<ShareBranchArmTestPass>(ctx);
-        };
+    result.factory = [make = descriptor->make, args = std::move(args)](const context_ptr_t &ctx) {
+        return make(ctx, args);
+    };
+    return result;
+}
+
+Diagnostic invalidParameterDiagnostic(const std::string &spec, const std::string &problem) {
+    setPipelineStage("pass:" + specName(spec));
+    auto diag  = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem);
+    diag.stage = "pass:" + specName(spec);
+    setPipelineStage("");
+    return diag;
+}
+
+void printPass(std::ostream &help, const std::string &path, const PassDescriptor &descriptor) {
+    help << std::format("  {}", path);
+    if (!descriptor.params.empty()) {
+        help << std::format("({})", camel::execute::detail::describeParams(descriptor.params));
     }
-    if (resolved == kOperatorSemanticsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<OperatorSemanticsTestPass>(ctx);
-        };
+    help << '\n';
+    if (!descriptor.doc.empty()) {
+        help << std::format("      {}\n", descriptor.doc);
     }
-    if (resolved == kIndexSemanticsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<IndexSemanticsTestPass>(ctx);
-        };
+    for (const auto &param : descriptor.params) {
+        if (!param.doc.empty()) {
+            help << std::format("      {}: {}\n", param.name, param.doc);
+        }
     }
-    if (resolved == kDefinitionsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<DefinitionsTestPass>(ctx);
-        };
-    }
-    if (resolved == kExpandDefinitionsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<ExpandDefinitionsTestPass>(ctx);
-        };
-    }
-    if (resolved == kResourcesTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<ResourcesTestPass>(ctx);
-        };
-    }
-    if (resolved == kControlTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<ControlTestPass>(ctx);
-        };
-    }
-    if (resolved == kFactStoreTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<FactStoreTestPass>(ctx);
-        };
-    }
-    if (resolved == kFactSeedTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<FactSeedTestPass>(ctx);
-        };
-    }
-    if (resolved == kFactCheckTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<FactCheckTestPass>(ctx);
-        };
-    }
-    if (resolved == kFactPersistTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
-        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
-            return std::make_unique<FactPersistTestPass>(ctx);
-        };
-    }
-    return nullptr;
 }
 
 /// Lists the available passes on stderr. The listing is help text for the command line:
@@ -784,18 +956,18 @@ PassFactory lookupPassFactory(const std::string &name) {
 void listAvailablePasses(const std::string &name) {
     std::ostream &help = std::cerr;
     help << std::format("Pass <{}> not found, available passes are:\n", name);
-    std::vector<std::string> allPaths;
+    std::vector<std::pair<std::string, PassDescriptor>> allPaths;
     collectPassPaths(passScope, "", allPaths);
-    for (const auto &p : allPaths) {
-        help << std::format("  {}\n", p);
+    for (const auto &[path, descriptor] : allPaths) {
+        printPass(help, path, descriptor);
     }
     {
         auto &registry = modulePasses();
         std::lock_guard lock(registry.mutex);
-        if (!registry.factories.empty()) {
+        if (!registry.passes.empty()) {
             help << std::format("Passes contributed by loaded modules:\n");
-            for (const auto &entry : registry.factories) {
-                help << std::format("  {}\n", entry.first);
+            for (const auto &[path, descriptor] : registry.passes) {
+                printPass(help, path, descriptor);
             }
         }
     }
@@ -803,51 +975,66 @@ void listAvailablePasses(const std::string &name) {
     for (const auto &[alias, target] : passAliases) {
         help << std::format("  {} -> {}\n", alias, target);
     }
+    {
+        auto &registry = moduleAliases();
+        std::lock_guard lock(registry.mutex);
+        for (const auto &[alias, target] : registry.aliases) {
+            help << std::format("  {} -> {}\n", alias, target);
+        }
+    }
     help << std::endl;
-    help << "Optimization options: std::opt(safe_fp=true|false), "
-            "std::opt::algebra(safe_fp=true|false); default: false.\n";
+    help << "A pass is written `name` or `name(key=value, ...)`; the values are constants "
+            "(bool, int, float, string).\n";
 }
 
 } // namespace
 
 PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     (void)os;
-    auto factory = lookupPassFactory(name);
-    if (!factory) {
+    auto resolved = resolvePass(name);
+    if (resolved.problem) {
+        throw invalidParameterDiagnostic(name, *resolved.problem);
+    }
+    if (!resolved.factory) {
         listAvailablePasses(name);
     }
-    return factory;
+    return resolved.factory;
 }
 
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {
-        if (lookupPassFactory(name)) {
+        auto resolved = resolvePass(name);
+        if (resolved.problem) {
+            throw invalidParameterDiagnostic(name, *resolved.problem);
+        }
+        if (resolved.factory) {
             continue;
         }
         // `<module>::<pass>`: the pass is contributed by a module the program did not import.
         // Loading the module registers it.
         if (ctx) {
-            std::string resolved = name;
-            if (auto aliasIt = passAliases.find(name); aliasIt != passAliases.end()) {
-                resolved = aliasIt->second;
-            }
-            const size_t sep = resolved.find("::");
-            if (sep != std::string::npos && sep > 0 && resolved.substr(0, sep) != "std") {
+            const std::string resolvedName = resolveAlias(specName(name));
+            const size_t sep               = resolvedName.find("::");
+            if (sep != std::string::npos && sep > 0 && resolvedName.substr(0, sep) != "std") {
                 try {
-                    (void)ctx->importModule(resolved.substr(0, sep));
+                    (void)ctx->importModule(resolvedName.substr(0, sep));
                 } catch (const Diagnostic &) {
                     // No such module: the name stays unknown and is reported below.
                 } catch (const std::exception &) {
                 }
-                if (lookupPassFactory(name)) {
+                resolved = resolvePass(name);
+                if (resolved.problem) {
+                    throw invalidParameterDiagnostic(name, *resolved.problem);
+                }
+                if (resolved.factory) {
                     continue;
                 }
             }
         }
         listAvailablePasses(name);
-        setPipelineStage("pass:" + name);
+        setPipelineStage("pass:" + specName(name));
         auto unknown  = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(name);
-        unknown.stage = "pass:" + name;
+        unknown.stage = "pass:" + specName(name);
         setPipelineStage("");
         throw unknown;
     }
@@ -856,7 +1043,7 @@ void requireKnownPasses(const std::vector<std::string> &passes, const context_pt
 std::optional<size_t>
 firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (size_t i = 0; i < passes.size(); ++i) {
-        auto factory = lookupPassFactory(passes[i]);
+        auto factory = resolvePass(passes[i]).factory;
         if (!factory) {
             continue;
         }
@@ -867,6 +1054,48 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
         }
     }
     return std::nullopt;
+}
+
+std::vector<std::string> withDefaultPipelinePasses(
+    const std::vector<std::string> &pipeline, const context_ptr_t &ctx, bool enabled) {
+    std::set<std::pair<int, std::string>> entries;
+    {
+        auto &registry = defaultPasses();
+        std::lock_guard lock(registry.mutex);
+        entries = registry.entries;
+    }
+    if (!enabled || entries.empty()) {
+        return pipeline;
+    }
+    // The name a specification is known by, aliases resolved: `tiles` and `tiles::compile`
+    // are one pass.
+    const auto canonical = [](const std::string &spec) {
+        const std::string name = resolveAlias(specName(spec));
+        if (name.find("::") == std::string::npos &&
+            lookupInScope(passScope, splitPath("std::" + name))) {
+            return "std::" + name;
+        }
+        return name;
+    };
+    std::set<std::string> written;
+    for (const auto &spec : pipeline) {
+        written.insert(canonical(spec));
+    }
+    std::vector<std::string> inserted;
+    for (const auto &[priority, spec] : entries) {
+        (void)priority;
+        if (written.insert(canonical(spec)).second) {
+            inserted.push_back(spec);
+        }
+    }
+    if (inserted.empty()) {
+        return pipeline;
+    }
+    const size_t at = firstConsumingPass(pipeline, ctx).value_or(pipeline.size());
+    std::vector<std::string> result(pipeline.begin(), pipeline.begin() + at);
+    result.insert(result.end(), inserted.begin(), inserted.end());
+    result.insert(result.end(), pipeline.begin() + at, pipeline.end());
+    return result;
 }
 
 std::optional<Diagnostic>
@@ -881,7 +1110,7 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
     }
     auto warning =
         DiagnosticBuilder::of(RuntimeDiag::PassesNeverRun).commit(passes[*consumer], rest);
-    warning.stage = "pass:" + passes[*consumer];
+    warning.stage = "pass:" + specName(passes[*consumer]);
     return warning;
 }
 
@@ -922,7 +1151,7 @@ PassApplyResult applyPassesDetailed(
                 ~StageScope() { setPipelineStage(""); }
             } stageScope(
                 dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ? std::string("run")
-                                                                         : "pass:" + p);
+                                                                         : "pass:" + specName(p));
             // A program runs only when every parameter of `main` has a value. Parameters
             // left open are fine for rewriting and translation (they are the inputs of what
             // is translated); nothing may execute with a slot nobody filled.
@@ -960,7 +1189,7 @@ PassApplyResult applyPassesDetailed(
                 // representation the program ran into, not a broken graph: it is reported with
                 // the graph, the quantity, the size reached and the limit, at the function the
                 // graph was compiled from (or at one of its nodes).
-                setPipelineStage("pass:" + p);
+                setPipelineStage("pass:" + specName(p));
                 auto diag = ctx->rtmDiags()->of(RuntimeDiag::GraphTooLarge);
                 if (e.origin() != camel::source::kInvalidOriginId) {
                     diag.atOrigin(e.origin());
@@ -978,7 +1207,7 @@ PassApplyResult applyPassesDetailed(
                 // that is too large this is a limit the program (or what the pass made of it)
                 // ran into: it is reported with the space, the usage, the limit and the
                 // setting that raises it, at the graph that was being built when one is known.
-                setPipelineStage("pass:" + p);
+                setPipelineStage("pass:" + specName(p));
                 auto diag = ctx->rtmDiags()->of(RuntimeDiag::MemoryExhausted);
                 if (e.origin() != camel::source::kInvalidOriginId) {
                     diag.atOrigin(e.origin());
@@ -993,7 +1222,7 @@ PassApplyResult applyPassesDetailed(
                 // --output-format json stays a valid diagnostics array. There is no source
                 // position for it. The stage names the pass even for a scheduling pass: the
                 // failure belongs to the pass, whatever part of the program had run.
-                setPipelineStage("pass:" + p);
+                setPipelineStage("pass:" + specName(p));
                 std::string what = e.what();
                 while (!what.empty() && (what.back() == '.' || what.back() == '\n')) {
                     what.pop_back(); // the diagnostic's message ends the sentence itself
@@ -1023,7 +1252,7 @@ PassApplyResult applyPassesDetailed(
             }
             CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> next graph '{}'", p, graph->name());
         } else {
-            setPipelineStage("pass:" + p);
+            setPipelineStage("pass:" + specName(p));
             auto unknown = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
             setPipelineStage("");
             throw unknown;

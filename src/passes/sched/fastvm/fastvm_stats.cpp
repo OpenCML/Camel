@@ -18,7 +18,7 @@
  */
 
 // Coverage statistics of the bytecode VM and its JIT, off unless the environment variable
-// CAMEL_FVM_STATS names a file. One JSON object is appended to the file for each run:
+// std::fvm(stats="file") names a file. One JSON object is appended to the file for each run:
 //
 //   {"jit": true, "graphs": [{"name": ..., "pc": ..., "ops": ..., "executed": ...,
 //     "status": "compiled" | "compilable" | "rejected" | "interpreter",
@@ -102,12 +102,11 @@ std::string jsonString(const std::string &text) {
 } // namespace
 
 void FastVMSchedPass::statsBegin() {
-    const char *path = std::getenv("CAMEL_FVM_STATS");
-    if (path == nullptr || path[0] == 0) {
+    if (statsPath_.empty()) {
         return;
     }
     stats_       = std::make_shared<Stats>();
-    stats_->path = path;
+    stats_->path = statsPath_;
     stats_->counts.assign(bytecodes_.capacity(), 0);
     opCounts_ = stats_->counts.data();
     for (const auto &[graph, pc] : offsetMap_) {

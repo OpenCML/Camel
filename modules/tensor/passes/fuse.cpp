@@ -28,6 +28,7 @@
 #include "../ops/registry.h"
 
 #include "camel/core/operator_semantics.h"
+#include "camel/execute/pass/params.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
 
@@ -36,6 +37,7 @@
 #include <array>
 #include <format>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 namespace camel::tensor::passes {
@@ -238,6 +240,54 @@ GCGraph *TensorFusePass::apply(GCGraph *graph, std::ostream &) {
     return context_->runtimeRootGraph();
 }
 
+namespace {
+
+/// A test of pass parameters and of the default pipeline (test/plans/feat/opt/pass_params): it
+/// prints the parameters it received and changes nothing.
+class ParamEchoTestPass : public GraphIRPass {
+  public:
+    ParamEchoTestPass(const core::context::context_ptr_t &ctx, PassArgs args)
+        : GraphIRPass(ctx), args_(std::move(args)) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        os << std::format(
+            "test_echo: n={} ratio={} label={} flag={}\n",
+            args_.getInt("n"),
+            args_.getFloat("ratio"),
+            args_.getString("label"),
+            args_.getBool("flag"));
+        return graph;
+    }
+
+  private:
+    PassArgs args_;
+};
+
+void registerParamEchoTestPass() {
+    PassDescriptor descriptor;
+    descriptor.doc    = "test only: prints its parameters";
+    descriptor.params = {
+        PassParam{"n", PassParamType::Int, int64_t{1}, "an int"},
+        PassParam{"ratio", PassParamType::Float, 0.5, "a float"},
+        PassParam{"label", PassParamType::String, std::string("echo"), "a string"},
+        PassParam{"flag", PassParamType::Bool, false, "a bool"},
+    };
+    descriptor.make = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<ParamEchoTestPass>(ctx, args);
+    };
+    registerModulePass("tensor::test_echo", std::move(descriptor));
+    // The module's alias, and the pass that joins the pipeline with the module, only when the
+    // test asks for it (CAMEL_ENABLE_TEST_PASSES=module-default): other tests that enable the
+    // test passes must not see an extra pass.
+    registerPassAlias("tensor::echo", "tensor::test_echo");
+    const char *mode = std::getenv("CAMEL_ENABLE_TEST_PASSES");
+    if (mode != nullptr && std::string_view(mode) == "module-default") {
+        registerDefaultPipelinePass("tensor::test_echo(label=\"default\")", 10);
+    }
+}
+
+} // namespace
+
 void registerTensorPasses() {
     registerModulePass("tensor::fuse", [](const core::context::context_ptr_t &ctx) {
         return std::make_unique<TensorFusePass>(ctx);
@@ -248,6 +298,7 @@ void registerTensorPasses() {
         registerModulePass("tensor::test_index_eval", [](const core::context::context_ptr_t &ctx) {
             return std::make_unique<IndexEvalTestPass>(ctx);
         });
+        registerParamEchoTestPass();
     }
 }
 
