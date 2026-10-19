@@ -293,15 +293,19 @@ std::string locationOf(const core::context::Context &ctx, uint64_t origin) {
 /// Reads the request `node` of the entry graph. A request the pass cannot read because it is
 /// made in the arm of a branch decided at run time is refused at that branch: what the arm
 /// computes is not a constant of the graph (it waits for the branch), and that, not the
-/// argument the reading stumbled on, is what the program has to change.
+/// argument the reading stumbled on, is what the program has to change. A refusal about the
+/// request's own target (the function cannot be exported at all) is more specific and is kept.
 Request readEntryRequest(
     const core::context::Context &ctx, GCGraph *g, gc_node_ref_t node, const std::string &out) {
+    // A refusal about the request's own target (the function cannot be exported at all) is more
+    // specific than the branch it sits in, so it propagates as it is.
+    const Request request = readRequest(g, node, out);
     // Whether the arm runs is decided at run time: the pass cannot tell whether the request is
-    // made, whatever its arguments are. Refuse before reading the arguments, which may well be
-    // constants of the arm and would otherwise look like a request made unconditionally.
+    // made, so a readable request in such an arm is refused too. Its arguments are constants of
+    // the arm, not of the graph, and would otherwise look like a request made unconditionally.
     const auto brch = runtimeBranchOver(g, node);
     if (!brch) {
-        return readRequest(g, node, out);
+        return request;
     }
     const auto cond            = g->normInputsOf(*brch);
     const std::string location = locationOf(ctx, originNear(g, node));
