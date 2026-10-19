@@ -2,6 +2,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
 add_camel_module(
   NAME tensor
   SOURCES
+    binary.cpp
     dtype.cpp
     interop.cpp
     npy.cpp
