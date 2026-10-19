@@ -523,6 +523,14 @@ Based on [the design review of 2026-10-19](roadmap.cn.md). The first item is the
 - **Field names computed at compile time are bracketed**: in a comprehension, the `n` of `[n]: e` is a compile-time value, while the `n` of `n: e` is a literal field name; compile-time field access is written `t.[n]`.
 - **Structural types are finite**: a struct or tuple cannot contain itself directly or indirectly; recursive types go through `enum` only. Computation in type functions therefore terminates by the structure of types, with an adjustable expansion limit as well (2.14).
 
+### 2.19 Type identity and name lookup in generics (2026-10-19)
+
+- **Named structs and `enum`s are nominal types**: `type Point = { x: float, y: float }` creates a new type whose identity is its name plus the module that declares it, and which belongs to that module. Tuples, arrays, function types, and `type Name = another existing type` are aliases compared by structure (such as `type Pair<T> = (T, T)`).
+- **An unnamed struct value can be used directly as a named type of the same structure**: `let p: Point = { x: 1.0, y: 2.0 }`, fields matched by name. **Between two named types an explicit conversion is required** (`m as Seconds`), even when their structures match; fields correspond by name. A "wrapped number" (such as `Meters`) is written as a one-field struct, with no extra syntax.
+- **Field order**: a named type's canonical order is its declaration order; for an unnamed struct type the written order is part of the type (a different order is a different type). Leaf order of parameter trees, checkpoints and `tree_paths` follows the canonical order (2.16).
+- **Name lookup in generic function bodies**: names are always looked up lexically at the definition; an operation on a value whose type depends on a type variable (such as `==` at a leaf, or overload selection for a callback's arguments) additionally looks for overloads in the module that declares that value's type. What the caller imported is not consulted. To use a different operation, pass the function explicitly (such as `tree_eq<my_eq>(a, b)`).
+- **Generic types are invariant**: `Array<int>` cannot be used as `Array<int?>`; implicit conversions apply only to leaf values and do not pass through the parameters of generic types.
+
 ## 3. `macro`
 
 - `macro` is a native marker provided by the language core to help with dynamic graph rewriting: a function marked `macro` can be evaluated early by the `std::macro` pass, which computes the static values and forms a new static graph.
