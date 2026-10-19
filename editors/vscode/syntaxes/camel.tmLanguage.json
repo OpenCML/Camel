@@ -153,7 +153,7 @@
       "match": "\\{(?::[^{}'\"\\n]*)?\\}"
     },
     "decorator": {
-      "comment": "funcAnno: '@' identRef angledValues? ahead of a function declaration. '@' is also a binary operator, so a decorator is recognised at the start of a line only.",
+      "comment": "funcAnno: '@' identRef angledValues? ahead of a function declaration or a block (design principles 2.17). '@' is also a binary operator, so a decorator is recognised at the start of a line only.",
       "name": "meta.decorator.camel",
       "match": "^\\s*(@)((?:[A-Za-z_][A-Za-z_0-9]*::)*)([A-Za-z_][A-Za-z_0-9]*)",
       "captures": {
