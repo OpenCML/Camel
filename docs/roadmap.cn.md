@@ -14,7 +14,7 @@
 4. **前端清理**（2.17）：`string` 保证 UTF-8，`Bytes` 内建；参数树路径与叶子规则统一；类型实参可按名字写；审查前端报告中的其余条目。
 5. **泛型按结构体、元组字段递归的设计稿**（待讨论，见第 5 节）。
 
-**地基之后、可交给其他开发者的：**
+**地基之后、可交给其他开发者的**（任务书见 [交接任务书](handover/README.cn.md)，编号 H1–H4）：
 
 - **`enum`**：`type Shape = enum { Circle(float), Rect { w: float, h: float }, Empty }`，`Shape::Rect { ... }` 构造，`match` 列全成员时不需要 `case _`。只有一种封闭的 `enum`。退役 `T ? U` 与 `A | B`。旧的半成品在 `lane/enum`（只有头文件），应基于最新代码重做。
 - **数值许可改为库装饰器**（在 `enum` 之后）：`@numeric<Reassociate, Contract>`，许可是标准库 `numeric` 中的封闭 `enum`；编译器中不再有专为 `numeric` 写的代码；取消 `@name(...)` 写法，不做兼容过渡。其他模块需要自己的放宽时，定义自己的 `enum` 与装饰器。
