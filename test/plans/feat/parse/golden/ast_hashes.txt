@@ -1250,6 +1250,7 @@ fb0cb297c3edc8be ok test/cases/feat/mm/gc/gc_macro_constants.cml
 bff6d6086a0c443f ok test/cases/feat/mm/gc/gc_prl_blocked_worker.cml
 a23ef073b2e65d89 ok test/cases/feat/mm/gc/gc_prl_scheduler.cml
 92d9356278f9e266 ok test/cases/feat/mm/gc/gc_soak.cml
+7a0f8071c0519b31 ok test/cases/format/match_and_type_arguments.cml
 142d55bf675322e8 ok test/cases/format/minus.cml
 ad80ceb4d3c7a1fb ok test/cases/format/mixed_arguments.cml
 9728ed05ff8c66fa ok test/cases/format/namespace_messy.cml
@@ -1525,7 +1526,7 @@ a8fa3e15cf5ea732 ok test/cases/modules/onnx/refusals/main_reaches_loop.cml
 85f86c726346934f ok test/cases/modules/onnx/refusals/unended_unrolling.cml
 d91092e026f0f841 ok test/cases/modules/onnx/refusals/var_arm.cml
 3aae962ef103af94 ok test/cases/modules/onnx/refusals/var_outer.cml
-8ab2b7b081f1c6e1 ok test/cases/modules/onnx/refusals/var_param.cml
+d02bf5329e412d30 ok test/cases/modules/onnx/refusals/var_param.cml
 d1107a262096b1bc ok test/cases/modules/std/algo/basic.cml
 3666dc6396a32e7d ok test/cases/modules/std/crypto/basic.cml
 056c4e2e9fd4fec6 ok test/cases/modules/std/fs/basic.cml
@@ -1958,7 +1959,7 @@ e62998983c4b023c ok test/cases/trans/macro/chain.cml
 7b7ee644377c2536 ok test/cases/trans/macro/deep_chain.cml
 7f4e61136192f7ad ok test/cases/trans/macro/failed_depth.cml
 47ce403f74ee1534 ok test/cases/trans/macro/failed_evaluation.cml
-663484a6ed005d0e ok test/cases/trans/macro/failed_no_rule.cml
+97a4128f9943749c ok test/cases/trans/macro/failed_no_rule.cml
 b1027dce101308d5 ok test/cases/trans/macro/failed_unreached.cml
 d646c87d61fb7cbb ok test/cases/trans/macro/function_arg.cml
 d81a91c048c960c5 ok test/cases/trans/macro/functor.cml
@@ -1966,6 +1967,7 @@ b0dae26d80eb7de2 ok test/cases/trans/macro/not_static.cml
 9cd778635aeec338 ok test/cases/trans/macro/pipeline.cml
 54f2132a1c778db3 ok test/cases/trans/macro/runtime_boundary.cml
 20f94f161ef82746 ok test/cases/trans/macro/static_object_access.cml
+235edc2b3086899d ok test/plans/feat/format/golden/match_and_type_arguments.cml
 fd0085d4accf46b4 ok test/plans/feat/format/golden/mixed_arguments.cml
 a5db29965a226f05 ok test/plans/feat/format/golden/namespace.cml
 84451c2364b8eb0c ok test/plans/feat/format/golden/options.cml
