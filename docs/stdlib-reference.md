@@ -2620,13 +2620,25 @@ Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 
 ```camel
 sha256: (s: string) => string
-sha256: (s: Bytes) => string
 ```
 
 The SHA-256 digest of the bytes of s, as 64 lower-case hexadecimal digits.
 
 - Pure.
 - Example: `sha256('abc')` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
+
+#### `sha256`
+
+```camel
+sha256: (s: Bytes) => string
+```
+
+The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits. The two overloads are
+two operators (`crypto:sha256_str`, `crypto:sha256_bytes`); the one is chosen when the program is
+compiled.
+
+- Pure.
+- Example: `sha256(encode('abc')) == sha256('abc')` gives `true`
 
 #### `sha256_rounds`
 
