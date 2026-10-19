@@ -52,6 +52,10 @@ size_t checkedBytes(std::span<const int64_t> shape, size_t width) {
 }
 } // namespace
 
+size_t tensorPayloadSize(type::TypeCode dtype, std::span<const int64_t> shape) {
+    return checkedBytes(shape, elementSize(normalizeTensorDType(dtype)));
+}
+
 std::string tensorToLittleEndian(const TensorObject *tensor) {
     std::string bytes;
     if (tensor->byteSize()) {
@@ -66,7 +70,7 @@ TensorObject *tensorFromLittleEndian(
     mm::IAllocator &allocator) {
     dtype                 = normalizeTensorDType(dtype);
     const size_t width    = elementSize(dtype);
-    const size_t expected = checkedBytes(shape, width);
+    const size_t expected = tensorPayloadSize(dtype, shape);
     if (input.size() != expected) {
         throw ShapeError(
             "binary tensor payload has " + std::to_string(input.size()) +

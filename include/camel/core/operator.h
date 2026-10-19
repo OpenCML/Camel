@@ -51,8 +51,15 @@ class ArgsView {
     virtual type::TypeCode code(size_t index) const  = 0;
     virtual type::Type *type(size_t index) const     = 0;
 
+    /// Static output layout of this monomorphic call, not a runtime type-valued argument.
+    type::Type *resultType() const { return resultType_; }
+    void setResultType(type::Type *result) { resultType_ = result; }
+
     template <typename T> T get(size_t index) const { return rtdata::fromSlot<T>(slot(index)); }
     template <typename T> void set(size_t index, T value) { setSlot(index, rtdata::toSlot(value)); }
+
+  private:
+    type::Type *resultType_ = nullptr;
 };
 
 using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &ctx);

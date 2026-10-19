@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,9 +21,10 @@
 
 #include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"
-#include "camel/core/operator_traits.h"
 #include "camel/core/module/module.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
+#include "include/nn/checkpoint.h"
 #include "layers.h"
 #include "optim.h"
 #include "state.h"
@@ -42,6 +43,8 @@ NnModule::NnModule(context_ptr_t ctx) : BuiltinModule("nn", ctx) {
     for (const auto &group : camel::nn::optimizerOperatorGroups()) {
         exportEntity(group->name(), group);
     }
+    for (const auto &group : camel::nn::checkpointOperatorGroups())
+        exportEntity(group->name(), group);
 }
 
 module_ptr_t NnModule::create(context_ptr_t ctx) { return std::make_shared<NnModule>(ctx); }
@@ -62,6 +65,7 @@ bool NnModule::load() {
         "nn",
         {{"save_params",
           camel::core::sem::externalAmbient("fs", camel::core::sem::AccessMode::ReadModifyWrite)}});
+    camel::nn::declareCheckpointResources();
     loaded_ = true;
     return true;
 }
