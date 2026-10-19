@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,8 +51,15 @@ class ArgsView {
     virtual type::TypeCode code(size_t index) const  = 0;
     virtual type::Type *type(size_t index) const     = 0;
 
+    /// Static output layout of this monomorphic call, not a runtime type-valued argument.
+    type::Type *resultType() const { return resultType_; }
+    void setResultType(type::Type *result) { resultType_ = result; }
+
     template <typename T> T get(size_t index) const { return rtdata::fromSlot<T>(slot(index)); }
     template <typename T> void set(size_t index, T value) { setSlot(index, rtdata::toSlot(value)); }
+
+  private:
+    type::Type *resultType_ = nullptr;
 };
 
 using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &ctx);
@@ -132,6 +139,21 @@ class OperatorGroup {
             auto optType = resolver->resolveWith(with, norm, normStatics, modifiers);
             if (optType) {
                 return std::make_shared<OperatorIndex>(name_, std::move(*optType), uri);
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// A typed call: the type context is consumed by the resolver before a node is made.
+    std::optional<oper_idx_ptr_t> resolveForCall(
+        const type::type_vec_t &types, type::Type *expectedResult, const type::type_vec_t &with,
+        const type::type_vec_t &norm, type::static_args_t normStatics,
+        const ModifierSet &modifiers) const {
+        for (const auto &[uri, resolver] : resolvers_) {
+            auto result =
+                resolver->resolveForCall(types, expectedResult, with, norm, normStatics, modifiers);
+            if (result) {
+                return std::make_shared<OperatorIndex>(name_, *result, uri);
             }
         }
         return std::nullopt;

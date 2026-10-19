@@ -1,9 +1,10 @@
 #include "module.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_traits.h"
+#include "camel/core/type/bytes.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
-#include "camel/core/operator_traits.h"
 #include "executor.h"
 
 using namespace camel::core::context;
@@ -11,6 +12,23 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
+    exportType(Reference("Bytes"), BytesType::get());
+    exportEntity(
+        "read_bytes",
+        OperatorGroup::create(
+            "read_bytes",
+            {{"fs:read_bytes",
+              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, BytesType::get())}}));
+    for (const std::string name : {"write_bytes", "replace"})
+        exportEntity(
+            name,
+            OperatorGroup::create(
+                name,
+                {{"fs:" + name,
+                  StaticFuncTypeResolver::create(
+                      {},
+                      {{Type::String(), false}, {BytesType::get(), false}},
+                      Type::Void())}}));
     exportEntity(
         "read_text",
         OperatorGroup::create(
@@ -69,7 +87,7 @@ FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
               StaticFuncTypeResolver::create(
                   {},
                   {{Type::String(), false}, {Type::Int64(), false}, {Type::Int64(), false}},
-                  Type::String())}}));
+                  BytesType::get())}}));
     exportEntity(
         "mkdir",
         OperatorGroup::create(
@@ -98,6 +116,9 @@ bool FsModule::load() {
             {"read_text", false},
             {"try_read_text", false},
             {"read_chunk", false},
+            {"read_bytes", false},
+            {"write_bytes", false},
+            {"replace", false},
             {"exists", false},
             {"is_file", false},
             {"is_dir", false},
@@ -116,6 +137,9 @@ bool FsModule::load() {
                 {"read_text", externalAmbient("fs", AccessMode::Read)},
                 {"try_read_text", externalAmbient("fs", AccessMode::Read)},
                 {"read_chunk", externalAmbient("fs", AccessMode::Read)},
+                {"read_bytes", externalAmbient("fs", AccessMode::Read)},
+                {"write_bytes", externalAmbient("fs", AccessMode::ReadModifyWrite)},
+                {"replace", externalAmbient("fs", AccessMode::ReadModifyWrite)},
                 {"exists", externalAmbient("fs", AccessMode::Read)},
                 {"is_file", externalAmbient("fs", AccessMode::Read)},
                 {"is_dir", externalAmbient("fs", AccessMode::Read)},

@@ -432,3 +432,12 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["Public Tiles pass: module loading and deferred target selection PASS"]
 timeout_ms = 20000
+[[tests]]
+name = "device_tree_rejects_unsupported_leaf_with_path"
+kind = "negative"
+case = "../../../cases/modules/tiles/device_tree_invalid.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["Device leaf '$.block.1.label'", "unsupported type string"]
+timeout_ms = 10000

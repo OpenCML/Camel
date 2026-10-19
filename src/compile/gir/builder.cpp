@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -927,6 +927,8 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return visitLinkNode(node);
     case GCT::NodeKind::WITH:
         return visitWithNode(node);
+    case GCT::NodeKind::TAPP:
+        return visitTypeApplication(node);
     case GCT::NodeKind::ACCS:
         return visitAccsNode(node);
     case GCT::NodeKind::BRCH:
@@ -977,6 +979,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
 
 compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
+    ExpectedValueScope functionScope(expectedValueType_, nullptr);
     std::string name         = gct->name();
     GCT::node_ptr_t typeLoad = gct->at(0);
     Type *type               = typeLoad->dataType();
@@ -1259,15 +1262,6 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
             return nullptr;
         }
     }
-    if (TupleType *repeated = findRepeatedMark(substituteTypeVars(signature, bindings))) {
-        diags_->of(SemanticDiag::TaggedTypeNesting)
-            .atOrigin(origin->origin())
-            .commit(
-                repeated->toString(),
-                asTagged(repeated->payloadType())->payloadType()->toString());
-        throw BuildAbortException();
-    }
-    rejectInvalidCollectionKey(substituteTypeVars(signature, bindings), origin);
     compile_graph_ptr_t graph = instantiateGeneric(tmpl, bindings, origin);
     if (!graph->funcType()->hasExitType()) {
         diags_->of(SemanticDiag::CallingIncompleteFunction)
@@ -1322,7 +1316,7 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
 compile_graph_ptr_t Builder::resolveGenericCall(
     const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
     std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
-    const GCT::node_ptr_t &call) {
+    const GCT::node_ptr_t &call, Type *expectedResult) {
     FunctionType *signature = tmpl->funcType;
     const size_t withCount  = signature->withTypesCount();
     const size_t normCount  = signature->normTypesCount();
@@ -1445,6 +1439,9 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             unifyTypeVars(patternAt(i), actualAt(i), bindings);
         }
     }
+    if (expectedResult && signature->hasExitType()) {
+        unifyTypeVars(signature->exitType(), expectedResult, bindings);
+    }
     // 3. The waiting arguments, as long as one of them can be given its types: the parameter
     // it is passed to, with what is known so far, is the function it has to be; its instance
     // then says what is still open in that parameter (its return type).
@@ -1500,8 +1497,9 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     if (!open.empty()) {
         reject(
             "the type variable(s) " + openText +
-            " cannot be determined from the arguments (a 'null' or an empty array says nothing "
-            "about them)");
+            " cannot be determined from the arguments or expected result; give an expected type "
+            "or explicit " +
+            tmpl->name + "::<...> type arguments");
     }
     // ...and then every argument is held to its parameter exactly as for an ordinary function.
     for (size_t i = 0; i < withCount + normCount; ++i) {
@@ -1518,19 +1516,6 @@ compile_graph_ptr_t Builder::resolveGenericCall(
                     typeBindingsToString(bindings)));
         }
     }
-    // `T?` with `T = int?` would be `int??`: the same mark twice is rejected where a type is
-    // written, and so it is where substitution writes it (design principles 2.10: `int?!`
-    // is allowed, `int??` and `int!!` are not).
-    if (TupleType *repeated = findRepeatedMark(substituteTypeVars(signature, bindings))) {
-        diags_->of(SemanticDiag::TaggedTypeNesting)
-            .atOrigin(call->origin())
-            .commit(
-                repeated->toString(),
-                asTagged(repeated->payloadType())->payloadType()->toString());
-        throw BuildAbortException();
-    }
-    // Likewise a key type: `Set<T>` with `T = float` (DESIGN-QUESTION(map-key-types)).
-    rejectInvalidCollectionKey(substituteTypeVars(signature, bindings), call);
     return instantiateGeneric(tmpl, bindings, call);
 }
 
@@ -1819,6 +1804,18 @@ void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) 
 
 compile_graph_ptr_t Builder::instantiateGeneric(
     const template_ptr_t &tmpl, const type_bindings_t &bindings, const GCT::node_ptr_t &call) {
+    ExpectedValueScope instanceScope(expectedValueType_, nullptr);
+    // All routes (inferred calls, function values and ::<T>) enforce the same type rules.
+    Type *concrete = substituteTypeVars(tmpl->funcType, bindings);
+    if (TupleType *repeated = findRepeatedMark(concrete)) {
+        diags_->of(SemanticDiag::TaggedTypeNesting)
+            .atOrigin(call->origin())
+            .commit(
+                repeated->toString(),
+                asTagged(repeated->payloadType())->payloadType()->toString());
+        throw BuildAbortException();
+    }
+    rejectInvalidCollectionKey(concrete, call);
     const auto sameBindings = [&](const type_bindings_t &other) {
         if (other.size() != bindings.size()) {
             return false;
@@ -3451,6 +3448,7 @@ void Builder::exportOperatorOverloads(const std::string &group, const GCT::node_
 
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
+    ExpectedValueScope expectedScope(expectedValueType_, boundType(gct->targetType()));
     if (const auto &operand = gct->at(0);
         operand->type() == GCT::NodeKind::DATA && containsTypeVar(gct->targetType()) &&
         asTagged(gct->targetType()) == nullptr &&
@@ -3840,8 +3838,18 @@ node_handle_t Builder::overloadValueFor(
     if (std::holds_alternative<oper_group_ptr_t>(target)) {
         const auto &ops = std::get<oper_group_ptr_t>(target);
         oper_idx_ptr_t chosen;
+        const auto typed = explicitOperatorTypes_.find(node);
+        const type_vec_t explicitTypes =
+            typed == explicitOperatorTypes_.end() ? type_vec_t{} : typed->second;
+        const std::vector<StaticArg> statics(normTypes.size());
         for (const auto &[uri, resolver] : ops->resolvers()) {
-            auto type = resolver->resolve(withTypes, normTypes, Modifier::None);
+            auto type = resolver->resolveForCall(
+                explicitTypes,
+                expected->exitType(),
+                withTypes,
+                normTypes,
+                statics,
+                Modifier::None);
             if (!type || !(*type)->hasExitType() ||
                 !(*type)->exitType()->equals(expected->exitType())) {
                 continue;
@@ -3852,6 +3860,7 @@ node_handle_t Builder::overloadValueFor(
             chosen = std::make_shared<OperatorIndex>(ops->name(), *type, uri);
         }
         if (chosen) {
+            explicitOperatorTypes_.erase(node);
             if (compile_graph_ptr_t graph = operatorValueGraphOf(chosen, origin)) {
                 return createFuncDataNode(graph, true, false);
             }
@@ -5228,6 +5237,8 @@ void Builder::requireMutableArgument(const Argument &arg, const std::string &cal
 
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
+    Type *expectedResult = expectedValueType_;
+    ExpectedValueScope callScope(expectedValueType_, nullptr);
     // Whether this call is a statement whose value nothing takes; the calls inside it are not.
     const bool unusedStatement = gct == unusedStatement_;
     unusedStatement_           = nullptr;
@@ -5241,8 +5252,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             return rebound;
         }
     }
-    genericCalleeAllowed_ =
-        gct->at(0)->type() == GCT::NodeKind::DREF || gct->at(0)->type() == GCT::NodeKind::WITH;
+    genericCalleeAllowed_ = gct->at(0)->type() == GCT::NodeKind::DREF ||
+                            gct->at(0)->type() == GCT::NodeKind::WITH ||
+                            gct->at(0)->type() == GCT::NodeKind::TAPP;
     any targetNodeRes     = visit(gct->at(0));
     genericCalleeAllowed_ = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
@@ -5291,7 +5303,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return nodeTypeOf(inputNode);
     };
 
+    FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
     for (size_t i = 1; i < gct->size(); i++) {
+        Type *wanted = argumentSignature && i <= argumentSignature->normTypesCount()
+                           ? argumentSignature->normTypeAt(i - 1)
+                           : nullptr;
+        ExpectedValueScope argumentScope(
+            expectedValueType_,
+            wanted && !containsTypeVar(wanted) ? wanted : nullptr);
         node_handle_t inputNode = visitOperand(gct->at(i), gct);
         normInputs.push_back({inputNode, gct->at(i)});
         normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
@@ -5536,7 +5555,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputs,
             withInputTypes,
             normInputTypes,
-            gct);
+            gct,
+            expectedResult);
         if (!targetGraph->funcType()->hasExitType()) {
             diags_->of(SemanticDiag::CallingIncompleteFunction)
                 .atOrigin(gct->origin())
@@ -5653,6 +5673,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             auto ops = std::get<oper_group_ptr_t>(drefTarget);
+            if (auto expanded = explicitOperatorTypes_.contains(targetNode)
+                                    ? nullptr
+                                    : expandTreeCall(ops, withInputs, normInputs, gct)) {
+                LEAVE("LINK");
+                return expanded;
+            }
             settleGenericOperatorArguments(
                 ops,
                 withInputs,
@@ -5678,8 +5704,19 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             for (const Argument &input : normInputs) {
                 normStatics.push_back(staticArgOf(input.node));
             }
-            const auto &res =
-                ops->resolve(withInputTypes, normInputTypes, normStatics, Modifier::None);
+            type_vec_t explicitTypes;
+            if (auto typed = explicitOperatorTypes_.find(targetNode);
+                typed != explicitOperatorTypes_.end()) {
+                explicitTypes = std::move(typed->second);
+                explicitOperatorTypes_.erase(typed);
+            }
+            const auto &res = ops->resolveForCall(
+                explicitTypes,
+                expectedResult,
+                withInputTypes,
+                normInputTypes,
+                normStatics,
+                Modifier::None);
             if (!res.has_value() && withInputs.empty()) {
                 // `x == null` / `x != null` over a `T?`: the tag of `x`, not a comparison of
                 // two values (design principles 2.11).
@@ -6076,13 +6113,21 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     ENTER("WITH");
     // `f<w>(x)`: the callee of the call is the target of the binding.
     genericCalleeAllowed_ =
-        std::exchange(genericCalleeAllowed_, false) && gct->at(0)->type() == GCT::NodeKind::DREF;
+        std::exchange(genericCalleeAllowed_, false) &&
+        (gct->at(0)->type() == GCT::NodeKind::DREF || gct->at(0)->type() == GCT::NodeKind::TAPP);
     any targetNodeRes     = visit(gct->at(0));
     genericCalleeAllowed_ = false;
     // As in visitLinkNode: a lambda written in place gives its graph.
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
     vector<Argument> inputs;
+    FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
     for (size_t i = 1; i < gct->size(); i++) {
+        Type *wanted = argumentSignature && i <= argumentSignature->withTypesCount()
+                           ? argumentSignature->withTypeAt(i - 1)
+                           : nullptr;
+        ExpectedValueScope argumentScope(
+            expectedValueType_,
+            wanted && !containsTypeVar(wanted) ? wanted : nullptr);
         inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});
     }
     auto &bound = boundWithArgs_[targetNode];
@@ -6197,6 +6242,11 @@ std::string Builder::bindTemporary(node_handle_t node) {
     std::string name = "$tagged" + std::to_string(tagTemporaries_++);
     insertNode(name, node);
     return name;
+}
+
+void Builder::registerTreeOrigin(
+    node_handle_t node, const GCT::node_ptr_t &origin, const char *kind) {
+    registerNodeOrigin(context_, node, origin, kind);
 }
 
 node_handle_t
@@ -7519,6 +7569,7 @@ node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
+    ExpectedValueScope expectedScope(expectedValueType_, declaredExitTypeHere());
     // `return f`: the function value of a function named here. The name itself is not a
     // value, and left in place it reached the end of compilation as a DREF node.
     node_handle_t resNode = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);

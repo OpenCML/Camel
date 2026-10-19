@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,7 +48,7 @@ std::string OtherType::typeName() const {
     return OtherTypeRegistry::getTypeName(code_);
 }
 
-OtherType *
+Type *
 OtherType::cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const {
     std::vector<Type *> types;
     types.reserve(arguments.size());
@@ -67,7 +67,7 @@ Type **OtherType::copyParams(std::span<Type *const> params) {
         return nullptr;
     size_t n     = params.size();
     void *arrMem = allocTypeStorage(TypeStorageKind::Params, n * sizeof(Type *), alignof(Type *));
-    Type **p = static_cast<Type **>(arrMem);
+    Type **p     = static_cast<Type **>(arrMem);
     for (size_t i = 0; i < n; ++i)
         p[i] = params[i];
     return p;

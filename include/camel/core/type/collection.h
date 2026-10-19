@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -74,7 +74,7 @@ class CollectionType : public OtherType {
     CastSafety castSafetyFrom(Type *sourceType) const override;
     slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
     bool assignableFrom(Type *sourceType) const override;
-    OtherType *
+    Type *
     cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const override;
 
   protected:

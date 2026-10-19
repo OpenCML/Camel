@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -88,8 +88,7 @@ TokenRef Node::tok(TokenKind k, size_t nth) const {
     const NodeData &d = tree_->data(id_);
     for (uint32_t i = 0; i < d.childCount; ++i) {
         const uint32_t word = tree_->childWord(d.firstChild + i);
-        if ((word & Tree::kTokenBit) != 0 &&
-            tree_->tokens()[word & ~Tree::kTokenBit].kind == k) {
+        if ((word & Tree::kTokenBit) != 0 && tree_->tokens()[word & ~Tree::kTokenBit].kind == k) {
             if (nth == 0) {
                 return TokenRef(tree_, word & ~Tree::kTokenBit);
             }
@@ -107,8 +106,7 @@ size_t Node::tokCount(TokenKind k) const {
     const NodeData &d = tree_->data(id_);
     for (uint32_t i = 0; i < d.childCount; ++i) {
         const uint32_t word = tree_->childWord(d.firstChild + i);
-        if ((word & Tree::kTokenBit) != 0 &&
-            tree_->tokens()[word & ~Tree::kTokenBit].kind == k) {
+        if ((word & Tree::kTokenBit) != 0 && tree_->tokens()[word & ~Tree::kTokenBit].kind == k) {
             ++count;
         }
     }
@@ -140,9 +138,9 @@ Tree ParserImpl::run() {
 
 void ParserImpl::close(size_t mark, NK kind) {
     NodeData node;
-    node.kind       = kind;
-    node.firstChild = static_cast<uint32_t>(tree_.children_.size());
-    node.childCount = static_cast<uint32_t>(stack_.size() - mark);
+    node.kind         = kind;
+    node.firstChild   = static_cast<uint32_t>(tree_.children_.size());
+    node.childCount   = static_cast<uint32_t>(stack_.size() - mark);
     const uint32_t id = static_cast<uint32_t>(tree_.nodes_.size());
     // The node spans from its first to its last token. A child without tokens (a node the
     // parser closed empty in a wrong text) does not count.
@@ -387,8 +385,7 @@ void ParserImpl::parseDecl() {
         return parseTypeDecl();
     case TK::KwExport: {
         const TK next = peek(1);
-        if (next == TK::KwLet || next == TK::KwVar || next == TK::KwType ||
-            next == TK::LBrace ||
+        if (next == TK::KwLet || next == TK::KwVar || next == TK::KwType || next == TK::LBrace ||
             ((next == TK::KwInner || next == TK::KwOuter) && peek(2) == TK::KwType)) {
             return parseExportDecl();
         }
@@ -576,10 +573,10 @@ void ParserImpl::parseModuleDecl() {
     close(m, NK::ModuleDecl);
 }
 
-/// importDecl : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from' moduleName)
-/// A name followed by `from` is the one name imported (design principles 2.12: `import a from m`
-/// is `import { a } from m`), otherwise the start of the module name; `import m as x` gives the
-/// module another name.
+/// importDecl : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from'
+/// moduleName) A name followed by `from` is the one name imported (design principles 2.12: `import
+/// a from m` is `import { a } from m`), otherwise the start of the module name; `import m as x`
+/// gives the module another name.
 void ParserImpl::parseImportDecl() {
     const size_t m = mark();
     bump();
@@ -587,8 +584,9 @@ void ParserImpl::parseImportDecl() {
         parseBracedImports();
         expect(TK::KwFrom);
         parseModuleName();
-    } else if (cur_ == TK::Identifier && (peek(1) == TK::KwFrom || peek(1) == TK::KwAs) &&
-               (peek(1) == TK::KwFrom || peek(3) == TK::KwFrom)) {
+    } else if (
+        cur_ == TK::Identifier && (peek(1) == TK::KwFrom || peek(1) == TK::KwAs) &&
+        (peek(1) == TK::KwFrom || peek(3) == TK::KwFrom)) {
         parseImportItem();
         expect(TK::KwFrom);
         parseModuleName();
@@ -716,9 +714,9 @@ void ParserImpl::parseFuncAnno() {
 }
 
 /// A statement that starts with annotations: a function declaration, or an annotated block
-/// (blockStmt's second form; `@numeric(...)` on a block, design principles 2.13). The annotations are read first; a
-/// block follows when the next token is '{' or `sync {`, anything else continues the function
-/// declaration. After an annotation '{' is always a block, never a struct literal.
+/// (blockStmt's second form; `@numeric(...)` on a block, design principles 2.13). The annotations
+/// are read first; a block follows when the next token is '{' or `sync {`, anything else continues
+/// the function declaration. After an annotation '{' is always a block, never a struct literal.
 void ParserImpl::parseAnnotatedStmt() {
     const size_t m = mark();
     while (cur_ == TK::At) {
@@ -776,12 +774,13 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
 
 /// operatorName : IDENTIFIER (OPERATOR | '[' ']')
 ///
-/// The IDENTIFIER is the name `operator`; OPERATOR is any operator token. An operator overload (design principles 2.12): `func operator +(a: V, b: V): V`. The notation
-/// is provisional, and this production is the whole of it in the parser: `operator` is not a
-/// keyword (a function may still be called `operator`), it starts this form only right after
-/// `func` and before an operator token other than `(`. Every operator token is taken here;
-/// which of them can be overloaded, and with how many parameters, is decided when the
-/// declaration is compiled (camel/core/operator_names.h), so that the error can say why.
+/// The IDENTIFIER is the name `operator`; OPERATOR is any operator token. An operator overload
+/// (design principles 2.12): `func operator +(a: V, b: V): V`. The notation is provisional, and
+/// this production is the whole of it in the parser: `operator` is not a keyword (a function may
+/// still be called `operator`), it starts this form only right after `func` and before an operator
+/// token other than `(`. Every operator token is taken here; which of them can be overloaded, and
+/// with how many parameters, is decided when the declaration is compiled
+/// (camel/core/operator_names.h), so that the error can say why.
 bool ParserImpl::atOperatorName() const {
     return cur_ == TK::Identifier && tree_.tokens_.text(pos_) == "operator" &&
            isPunctuation(peek(1)) && peek(1) != TK::LParen;
@@ -942,7 +941,7 @@ void ParserImpl::parseIdentRef(NK kind) {
     }
     const size_t m = mark();
     bump();
-    while (cur_ == TK::ColonColon) {
+    while (cur_ == TK::ColonColon && peek(1) != TK::Lt && peek(1) != TK::LAngle) {
         bump();
         if (cur_ != TK::Identifier) {
             if (isKeyword(cur_)) {

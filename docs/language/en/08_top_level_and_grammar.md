@@ -155,7 +155,7 @@ linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
-annoExpr           : accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
+annoExpr           : accessExpr (indices | parentArgues | angledValues | typeArguments | '!' | memberAccess)*
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
 primaryData        : identRef | literal | arrayData | structData | tupleData | funcData
@@ -170,6 +170,7 @@ indexValues        : indexValue (',' indexValue)*
 indices            : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']'
 parentArgues       : '(' argumentList? ','? ')'
 angledValues       : '<' argumentList? ','? '>'
+typeArguments      : '::' '<' typeList ','? '>'
 arrayData          : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' dataExpr ('if' dataExpr)?)?
                      ']'
 structData         : '{' (pairedValues ','?)? '}'

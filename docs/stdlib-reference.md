@@ -33,13 +33,14 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 |---|---|---|---|
 | [built-in](#built-in-functions) | none | C++ | 47 |
 | [str](#str) | `import { ... } from str` | C++ | 20 |
+| [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 45 |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
 | [algo](#algo) | `import { ... } from algo` | C++ | 8 |
 | [random](#random) | `import { ... } from random` | C++ | 7 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
-| [fs](#fs) | `import { ... } from fs` | C++ | 10 |
+| [fs](#fs) | `import { ... } from fs` | C++ | 13 |
 | [os](#os) | `import { ... } from os` | C++ | 8 |
 | [sys](#sys) | `import { ... } from sys` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
@@ -925,6 +926,78 @@ The count code points of s that start at code point start.
 - Pure.
 - Failure: error `EncodingError` when s is not valid UTF-8; fault `IndexOutOfRange` when start or start + count lies outside the string; fault `InvalidArgument` when count is negative.
 - Example: `'h€llo'->char_substr<1, 2> !! '?'` gives `'€l'`
+
+<a id="bytes"></a>
+
+## `bytes`: immutable binary values and UTF-8 conversion
+
+#### `encode`
+
+```camel
+encode: (text: string) => Bytes
+```
+
+Encodes valid UTF-8 text as an immutable Bytes value.
+
+- Pure.
+- Failure: fault `InvalidArgument` when legacy string content is malformed UTF-8.
+- Example: `encode('hello')`
+
+#### `decode`
+
+```camel
+decode: (content: Bytes) => string!
+```
+
+Decodes UTF-8, returning an EncodingError value for malformed input.
+
+- Pure.
+- Example: `decode(encode('中文')) !! ''`
+
+#### `from_array`
+
+```camel
+from_array: (values: int[]) => Bytes
+```
+
+Copies integers in the inclusive range 0..255 into a binary value.
+
+- Pure.
+- Failure: fault `InvalidArgument` for an element outside 0..255.
+- Example: `from_array([0, 128, 255])`
+
+#### `to_array`
+
+```camel
+to_array: (content: Bytes) => int[]
+```
+
+Copies each byte into an integer array.
+
+- Pure.
+- Example: `to_array(encode('AB'))` gives `[65, 66]`
+
+#### `size`
+
+```camel
+size: (content: Bytes) => int
+```
+
+The number of bytes in the binary value.
+
+- Pure.
+- Example: `size(encode('abc'))` gives `3`
+
+#### `concat`
+
+```camel
+concat: (left: Bytes, right: Bytes) => Bytes
+```
+
+Concatenates two binary values without decoding either one.
+
+- Pure.
+- Example: `concat(encode('header'), from_array([0, 255]))`
 
 <a id="array"></a>
 
@@ -2015,7 +2088,7 @@ read_text: (path: string) => string
 The whole content of the file.
 
 - With effects: reads a file.
-- Failure: fault `FileOpenFailed` when the file cannot be opened; use try_read_text to handle that in the program.
+- Failure: fault `FileOpenFailed` when the file cannot be opened; fault `InvalidArgument` for malformed UTF-8; use read_bytes for binary files.
 - Example: `read_text('notes.txt')` gives `the text of the file`
 
 #### `try_read_text`
@@ -2027,13 +2100,13 @@ try_read_text: (path: string) => string!
 The whole content of the file, or an error value.
 
 - With effects: reads a file.
-- Failure: error `IOError` when the path is a directory, or the file cannot be opened or read.
+- Failure: error `IOError` when the path is a directory, or the file cannot be opened or read; error `EncodingError` for malformed UTF-8.
 - Example: `try_read_text('notes.txt') !! ''` gives `the text, or '' when it cannot be read`
 
 #### `read_chunk`
 
 ```camel
-read_chunk: (path: string, offset: int, size: int) => string
+read_chunk: (path: string, offset: int, size: int) => Bytes
 ```
 
 Up to size bytes of the file starting at byte offset; fewer at the end of the file.
@@ -2041,6 +2114,39 @@ Up to size bytes of the file starting at byte offset; fewer at the end of the fi
 - With effects: reads a file.
 - Failure: fault `InvalidArgument` when offset or size is negative; fault `FileOpenFailed` or `FileSystemError` when the file cannot be opened or read.
 - Example: `read_chunk('notes.txt', 0, 16)` gives `the first 16 bytes`
+
+#### `read_bytes`
+
+```camel
+read_bytes: (path: string) => Bytes
+```
+
+The complete binary content, preserving every byte.
+
+- With effects: reads a file.
+- Example: `read_bytes('pixels.bin')`
+
+#### `write_bytes`
+
+```camel
+write_bytes: (path: string, content: Bytes) => void
+```
+
+Writes binary content, creating parent directories when needed.
+
+- With effects: writes a file.
+- Example: `write_bytes('pixels.bin', payload)`
+
+#### `replace`
+
+```camel
+replace: (path: string, content: Bytes) => void
+```
+
+Flushes a temporary in the same directory and atomically replaces the destination.
+
+- With effects: writes and replaces a file.
+- Example: `replace('checkpoint.bin', payload)`
 
 #### `write_text`
 
@@ -2051,7 +2157,7 @@ write_text: (path: string, content: string) => void
 Replaces the content of the file, creating it and its parent directories when needed.
 
 - With effects: writes a file.
-- Failure: fault `FileSystemError` when a directory cannot be created; fault `FileOpenFailed` when the file cannot be opened.
+- Failure: fault `FileSystemError` when a directory cannot be created; fault `FileOpenFailed` when the file cannot be opened; fault `InvalidArgument` for malformed UTF-8.
 - Example: `write_text('out/log.txt', 'done')`
 
 #### `exists`
@@ -2445,6 +2551,7 @@ Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 
 ```camel
 sha256: (s: string) => string
+sha256: (s: Bytes) => string
 ```
 
 The SHA-256 digest of the bytes of s, as 64 lower-case hexadecimal digits.

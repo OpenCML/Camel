@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1936,6 +1936,8 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     }
     camel::execute::FunctionCallScope invocation(*context_, std::move(invoker));
     auto invoke = [&](operator_t function, ArgsView &with, ArgsView &normal) {
+        with.setResultType(graph->node(nodeRef)->dataType());
+        normal.setResultType(with.resultType());
         const slot_t result = function(with, normal, *context_);
         // Publish before this region is released, including on the task-graph path.
         frame->set(dataIndexOf(graph, nodeRef), result);

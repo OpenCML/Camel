@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -99,11 +99,11 @@ OperatorSemantics bounded(float ulp, SpecialValues specials, std::string algorit
 
 // The permissions a chain of additions or multiplications can use: regroup or reorder it
 // (reassociate), fuse a multiply into the next add (contract), compute at another precision.
-constexpr PermissionMask kArith   = kReassociate | kContract | kChangePrecision | kFiniteMath;
+constexpr PermissionMask kArith = kReassociate | kContract | kChangePrecision | kFiniteMath;
 // A reduction in a declared accumulator type, in ascending order.
-constexpr PermissionMask kReduce  = kReassociate | kChangePrecision | kFiniteMath;
+constexpr PermissionMask kReduce = kReassociate | kChangePrecision | kFiniteMath;
 // One correctly rounded operation that has an approximate counterpart (division, square root).
-constexpr PermissionMask kApprox  = kApproxMath | kChangePrecision | kFiniteMath;
+constexpr PermissionMask kApprox = kApproxMath | kChangePrecision | kFiniteMath;
 
 const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
     static const std::unordered_map<std::string_view, OperatorSemantics> table = [] {
@@ -229,6 +229,12 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
                 "principles 2.13); contract has nothing to add"));
 
         // ---- Layout: moves, no arithmetic ----
+        t.emplace("to_bytes", layout("row-major payload bits encoded in little-endian byte order"));
+        for (const char *name : {"from_bytes_f32", "from_bytes_i64", "from_bytes_bool"}) {
+            t.emplace(
+                name,
+                layout("little-endian payload bits decoded exactly into row-major storage"));
+        }
         t.emplace("reshape", layout("the elements in row-major order, in a new shape"));
         t.emplace("flatten", layout("the elements in row-major order, as one axis"));
         t.emplace("unsqueeze", layout("the elements unchanged, with an axis of extent 1 added"));

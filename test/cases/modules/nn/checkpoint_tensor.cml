@@ -1,0 +1,27 @@
+module checkpoint_tensor
+import { Tensor, new, from_bytes, to_bytes } from tensor
+import { from_array, to_array } from bytes
+import { save_tree, load_tree } from nn
+func original(): Tensor<f32> {
+    return from_bytes::<f32>(from_array([1, 0, 128, 127, 1, 0, 192, 127, 0, 0, 128, 127, 1, 0, 0, 0]), [4])
+}
+func main(mode: int, dir: string): int sync {
+    return if mode == 0 then sync {
+        save_tree(dir, original())
+        println(to_array(to_bytes(load_tree::<Tensor<f32>>(dir) !! original())))
+        return 0
+    } else if mode == 1 then sync {
+        let _ = println(load_tree::<Tensor<int>>(dir))
+        return 0
+    } else if mode == 2 then sync {
+        let _ = println(load_tree::<Tensor<f32, const [3]>>(dir))
+        return 0
+    } else if mode == 3 then sync {
+        let loaded: Tensor<f32>! = load_tree(dir)
+        let _ = println(loaded)
+        return 0
+    } else if mode == 4 then sync {
+        save_tree(dir, new([9.0]))
+        return 0
+    } else 2
+}

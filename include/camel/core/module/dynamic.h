@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 23, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,7 +28,7 @@ namespace camel::core::module {
 /** ABI version between the host and a .cmo module; reject mismatches to avoid crashes from
  *
  * interpreter/module version drift. */
-#define CAMEL_MODULE_ABI_VERSION 1
+#define CAMEL_MODULE_ABI_VERSION 3
 
 /** Factory that a .cmo dynamic library must implement: create and return a module instance from
  *

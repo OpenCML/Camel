@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "executor.h"
 #include "../tensor/ops/registry.h"
+#include "include/nn/checkpoint.h"
 #include "optim.h"
 
 namespace {
@@ -34,6 +35,7 @@ class NnExecutor : public Executor {
 
 executor_ptr_t createNnExecutor(camel::core::context::context_ptr_t ctx) {
     auto kernels = camel::nn::optimizerKernels();
+    kernels.merge(camel::nn::checkpointKernels());
     kernels.merge(camel::tensor::ops::OpRegistry::instance().kernelMap("nn"));
     return std::make_shared<NnExecutor>(std::move(ctx), std::move(kernels));
 }

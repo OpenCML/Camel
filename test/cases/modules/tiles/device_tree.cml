@@ -1,0 +1,33 @@
+module tiles_device_tree
+import { Tensor, reshape, sum, abs, zeros } from tensor
+import { value_and_grad } from autodiff
+import { Device, upload, download, run_device } from tiles
+
+type Model = { weight: Tensor<f32>, block: (Tensor<f32>, float) }
+type ExplicitDeviceModel = { weight: Device<Tensor<f32>>, block: (Device<Tensor<f32>>, Device<float>) }
+func identity(p: Device<Model>): ExplicitDeviceModel { return p }
+func typed_upload(p: typeas P): Device<P> sync { return upload(p) }
+func loss(p: Model): float { return sum(p.weight * p.weight) + sum(p.block.0 * p.block.0) }
+func descend(p: Model, g: Model): Model {
+    return { weight: p.weight - g.weight * 0.01, block: (p.block.0 - g.block.0 * 0.01, p.block.1) }
+}
+func initialize(): Model {
+    return { weight: reshape([1.0, 2.0, 3.0], [3]), block: (zeros([0, 2]), 1.0000000000000002) }
+}
+func main(): int sync {
+    let p = initialize()
+    let resident: Device<Model> = identity(typed_upload(p))
+    let restored: Model = download(resident)
+    println(sum(abs(restored.weight - p.weight)))
+    println(sum(restored.block.0))
+    println(restored.block.1 - p.block.1)
+    let vg = value_and_grad(loss)
+    let measured: (Device<float>, Device<Model>) = run_device<vg>(resident)
+    println(download(measured.0) - loss(p))
+    let updated: Device<Model> = run_device<descend>((resident, measured.1))
+    let actual: Model = download(updated)
+    let expected: Model = descend(p, vg(p).1)
+    println(sum(abs(actual.weight - expected.weight)))
+    println(download(resident).block.1 - p.block.1)
+    return 0
+}

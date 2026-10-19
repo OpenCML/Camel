@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -79,6 +79,15 @@ class FuncTypeResolver {
         const ModifierSet &modifiers) const {
         (void)normStatics;
         return resolve(with, norm, modifiers);
+    }
+
+    /// Types supplied with f::<T> and the expected result are compile-time context only.
+    /// Ordinary resolvers reject explicit types; they never become with-argument values.
+    virtual std::optional<FunctionType *> resolveForCall(
+        const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
+        const type_vec_t &norm, static_args_t normStatics, const ModifierSet &modifiers) const {
+        (void)expectedResult;
+        return types.empty() ? resolveWith(with, norm, normStatics, modifiers) : std::nullopt;
     }
 
     /**

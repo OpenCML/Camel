@@ -1,0 +1,6 @@
+module binary_overflow_error
+import { from_bytes, to_bytes, zeros, sum } from tensor
+func main(): int sync {
+    println(sum(from_bytes::<f32>(to_bytes(zeros([0])), [9223372036854775807, 2])))
+    return 0
+}

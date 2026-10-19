@@ -310,12 +310,12 @@ let half = s.params->tree_map<(x: Tensor<f32>): Tensor<bf16> => x as Tensor<bf16
 
 - 新增不可变的字节序列类型 `Bytes`。`string` 只表示文本（UTF-8）。
 - 文件接口分两套：`read_text`/`write_text` 处理 `string`；新增 `read_bytes(path): Bytes`、`write_bytes(path, b)`；`read_chunk` 返回 `Bytes`（现在返回字符串，属不兼容变化，随本项一起改）。
-- 转换：`decode(b): string!`（非法 UTF-8 时为错误值）、`encode(s): Bytes`；张量与字节互转 `from_bytes<f32>(b, shape)`、`to_bytes(t)`，按小端序。
+- 转换：`decode(b): string!`（非法 UTF-8 时为错误值）、`encode(s): Bytes`；张量与字节互转 `from_bytes::<f32>(b, shape)`、`to_bytes(t)`，按小端序。类型实参采用设计原则 2.13 已裁定的 `::<T>`，与值上下文参数 `<w>` 分开。
 - 原子替换：`fs::replace(path, b)` 写入同目录的临时文件、刷盘后改名。`write_*` 保持原样（技术选择：不改变已有函数的行为）。
 
 ### 8.2 检查点
 
-- `save_tree(dir, t)` 与 `load_tree<T>(dir): T!`：每个叶子一个文件，以 `tree_paths` 命名（张量为 `.npy`，标量与键为文本），另写一个清单（类型结构、dtype、形状、Camel 版本）。先写到临时目录，完成后整体改名发布。载入时按 `T` 检查结构、dtype 与形状，不符时给出路径。
+- `save_tree(dir, t)` 与 `load_tree::<T>(dir): T!`：每个叶子一个文件，以 `tree_paths` 命名（张量为 `.npy`，标量与键为文本），另写一个清单（类型结构、dtype、形状、Camel 版本）。先写到临时目录，完成后整体改名发布。载入时按 `T` 检查结构、dtype 与形状，不符时给出路径。目标类型也可按设计原则 2.13 由期望类型推出。
 - 训练状态就是一棵树：参数、优化器状态、EMA、键、步数、数据游标。由于随机数由键与步数决定，**随机状态就是两个普通的值**，无需另存生成器的内部状态；恢复后的训练与不中断时逐位相同。
 - 数据版本：清单中记录数据集清单的哈希，载入时不符则警告。
 

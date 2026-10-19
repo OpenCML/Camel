@@ -5,6 +5,46 @@ tags = ["feat", "compile", "generics", "types"]
 desc = "Generic functions bound with `typeas` (one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 2.9."
 
 [[tests]]
+name = "explicit_type_arguments"
+desc = "Explicit ::<T>, combination with value contexts, function values and result inference from declarations/parameters/returns."
+kind = "behavior"
+case = "../../../cases/compile/generic_explicit_types.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const wanted = ['7', 'typed', '[5, 5, 5]', '9', '0', '0', '0', '0', '0', '(4, pair)']
+assert(input.normalized.stdout.trim() === wanted.join(String.fromCharCode(10)), 'explicit instantiation or contextual result inference changed')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_arguments_preserve_tag_rules"
+desc = "Explicit instantiation enforces the same repeated-tag restrictions as inferred generic calls."
+kind = "negative"
+case = "../../../cases/compile/generic_explicit_nullable_error.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedTypeNesting"
+expect_output_contains = ["int??", "marks 'int' twice"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_argument_arity"
+desc = "A type application reports an incorrect number of type arguments before runtime."
+kind = "negative"
+case = "../../../cases/compile/generic_explicit_arity_error.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_output_contains = ["expected 1 type argument(s), got 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
 name = "basic"
 desc = "One and several type variables; a second call with the same types uses the instance of the first."
 kind = "behavior"
@@ -760,16 +800,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "typeas_in_return_type"
-desc = "`typeas` in the return type of a declaration: there is no argument to take the type from."
+name = "return_type_without_context"
+desc = "A return-only type variable is valid but this call has neither an expected result nor explicit type arguments."
 kind = "negative"
 case = "../../../cases/compile/generics/err_typeas_return.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TypeVariableNotAllowed"
-expect_diagnostic_line = 3
-expect_diagnostic_column = 27
-expect_output_contains = ["a return type has no argument to take the type from"]
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 17
+expect_output_contains = ["cannot be determined", "make::<...>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
