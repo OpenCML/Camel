@@ -4,6 +4,64 @@ tier = "feat"
 tags = ["feat", "modules", "tensor"]
 
 [[tests]]
+name = "binary_roundtrip"
+desc = "Typed and context-inferred binary decoding preserves storage bits, including NaN payloads and subnormals."
+kind = "behavior"
+case = "../../../cases/modules/tensor/binary_roundtrip.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+const floats = '[0, 0, 128, 63, 0, 0, 32, 192, 0, 0, 0, 0, 0, 0, 0, 128]'
+assert(lines.length === 10 && [0, 1, 2, 9].every(i => lines[i] === floats), 'float bits, inference or typed function value changed')
+assert(lines[3] === '-1.5', 'parameter-context inference failed')
+assert(lines[4] === '[1, 0, 0, 0, 0, 0, 32, 0, 254, 255, 255, 255, 255, 255, 255, 255]', 'int64 bits changed')
+assert(lines[5] === '[1, 0, 1]' && lines[6] === '0', 'bool or empty decode failed')
+assert(lines[7] === '[1, 0, 128, 127, 1, 0, 192, 127, 0, 0, 128, 127, 1, 0, 0, 0]', 'NaN payload, infinity or subnormal bits changed')
+assert(lines[8] === '[0, 0, 128, 63]', 'scalar tensor decode failed')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "binary_payload_length"
+desc = "Binary decoding rejects a byte count that does not match dtype and shape."
+kind = "negative"
+case = "../../../cases/modules/tensor/binary_length_error.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_output_contains = ["payload has 3 bytes", "require 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "binary_bool_encoding"
+desc = "Binary bool storage must use the canonical byte values 0 and 1."
+kind = "negative"
+case = "../../../cases/modules/tensor/binary_bool_error.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["must contain only 0 or 1 at byte 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "binary_shape_overflow"
+desc = "The binary tensor shape cannot overflow its byte count before allocation."
+kind = "negative"
+case = "../../../cases/modules/tensor/binary_overflow_error.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_output_contains = ["byte count overflows the address space"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
 name = "binary_bytes"
 desc = "Little-endian tensor payloads preserve f32 signed zero, exact int64, bool, empty and view data."
 kind = "behavior"

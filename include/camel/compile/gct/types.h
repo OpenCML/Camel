@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,6 +45,7 @@ enum class NodeKind : uint8_t {
     WAIT, // `wait`; child: the expression waited for
     LINK, // a call; children: the callee, the arguments
     WITH, // with-arguments bound to a callee; children: the callee, the arguments
+    TAPP, // explicit type application; children: the callee, TYPE arguments; no runtime value
     ACCS, // an element or a field of its child
     BRCH, // a branch; children: what is branched on, CASE...
     CASE, // an arm of a branch

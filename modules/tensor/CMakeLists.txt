@@ -20,6 +20,7 @@ add_camel_module(
     kernels/reduce.cpp
     kernels/unary_generic.cpp
     ops/catalog.cpp
+    ops/binary_ops.cpp
     ops/creation_ops.cpp
     ops/elementwise_ops.cpp
     ops/gradient_ops.cpp

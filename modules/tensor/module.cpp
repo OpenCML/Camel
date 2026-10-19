@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,13 +28,14 @@
 #include "camel/core/context/context.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator_traits.h"
-#include "camel/runtime/node_roles.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/executor.h"
-#include "ops/registry.h"
-#include "passes/fuse.h"
+#include "camel/runtime/node_roles.h"
 #include "dtype.h"
 #include "npy.h"
+#include "ops/binary_ops.h"
+#include "ops/registry.h"
+#include "passes/fuse.h"
 #include "tensor.h"
 #include "type.h"
 
@@ -56,6 +57,9 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     camel::tensor::ops::registerTensorOps();
     camel::tensor::passes::registerTensorPasses();
     exportType(Reference("Tensor"), camel::tensor::TensorType::Default());
+    const auto binary = camel::tensor::ops::fromBytesOperatorGroup();
+    exportEntity(Reference("from_bytes"), binary);
+    exportEntity(Reference(std::vector<std::string>{"Tensor"}, "from_bytes"), binary);
     for (const auto &group : OpRegistry::instance().operatorGroups("tensor")) {
         exportEntity(group->name(), group);
         if (group->name().starts_with("__")) {
@@ -97,7 +101,8 @@ bool TensorModule::load() {
     static const bool loaderAdded = [] {
         camel::execute::registerEntryArgumentLoader(
             camel::tensor::TensorType::typeCode(),
-            [](const std::string &text, camel::core::type::Type *declared,
+            [](const std::string &text,
+               camel::core::type::Type *declared,
                camel::core::type::Type *&valueType) -> slot_t {
                 namespace tensor = camel::tensor;
                 std::filesystem::path path(text);
@@ -106,8 +111,7 @@ bool TensorModule::load() {
                 }
                 if (!std::filesystem::exists(path)) {
                     throw std::runtime_error(
-                        "a Tensor parameter takes a .npy file, and '" + text +
-                        "' does not exist");
+                        "a Tensor parameter takes a .npy file, and '" + text + "' does not exist");
                 }
                 tensor::TensorObject *t = tensor::loadNpy(path, camel::core::mm::autoSpace());
                 const slot_t value =
@@ -147,7 +151,7 @@ bool TensorModule::load() {
         {"scalar-boundary", "scalar boundary (tensor <-> host number)", "#fff2cc"},
         [](const camel::runtime::GCGraph &graph,
            camel::runtime::gc_node_ref_t ref) -> std::optional<std::string> {
-            namespace rt = camel::runtime;
+            namespace rt           = camel::runtime;
             const rt::GCNode *node = graph.node(ref);
             if (node->kind != rt::GCNodeKind::Oper || !node->dataType()) {
                 return std::nullopt;

@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,7 @@
 #include "../dtype.h"
 #include "camel/core/derivative.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/type/bytes.h"
 #include "camel/core/type/resolver.h"
 #include "support.h"
 
@@ -76,6 +77,8 @@ bool matchesKind(ParamKind kind, Type *type) {
         return type && type->code() == TypeCode::Bool;
     case ParamKind::String:
         return type && type->code() == TypeCode::String;
+    case ParamKind::Bytes:
+        return type && BytesType::get()->equals(type);
     case ParamKind::IntArray:
         return isIntArray(type);
     }

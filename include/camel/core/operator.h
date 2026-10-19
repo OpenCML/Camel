@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -132,6 +132,21 @@ class OperatorGroup {
             auto optType = resolver->resolveWith(with, norm, normStatics, modifiers);
             if (optType) {
                 return std::make_shared<OperatorIndex>(name_, std::move(*optType), uri);
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// A typed call: the type context is consumed by the resolver before a node is made.
+    std::optional<oper_idx_ptr_t> resolveForCall(
+        const type::type_vec_t &types, type::Type *expectedResult, const type::type_vec_t &with,
+        const type::type_vec_t &norm, type::static_args_t normStatics,
+        const ModifierSet &modifiers) const {
+        for (const auto &[uri, resolver] : resolvers_) {
+            auto result =
+                resolver->resolveForCall(types, expectedResult, with, norm, normStatics, modifiers);
+            if (result) {
+                return std::make_shared<OperatorIndex>(name_, *result, uri);
             }
         }
         return std::nullopt;

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,9 +45,10 @@
  *
  * Line breaks (rule 2). Where `nl_` is set, an operator that could also start a statement does
  * not continue an expression across a line break: `+`, `-` (a negation) and `@` (an
- * annotation). A symbol of two roles that starts a line has the role that starts something. Every other operator of the table can only be binary and continues the
- * expression wherever it stands. A token the grammar requires (the operand after an operator,
- * `then`, `=>`, a closing bracket) is taken wherever it stands, too.
+ * annotation). A symbol of two roles that starts a line has the role that starts something. Every
+ * other operator of the table can only be binary and continues the expression wherever it stands. A
+ * token the grammar requires (the operand after an operator, `then`, `=>`, a closing bracket) is
+ * taken wherever it stands, too.
  */
 
 #include "parser_impl.h"
@@ -211,8 +212,7 @@ void ParserImpl::parseEquality() {
     const size_t m = mark();
     parseRelational();
     bool any = false;
-    while ((cur_ == TK::EqEq || cur_ == TK::NotEq || cur_ == TK::EqEqEq ||
-            cur_ == TK::NotEqEq) &&
+    while ((cur_ == TK::EqEq || cur_ == TK::NotEq || cur_ == TK::EqEqEq || cur_ == TK::NotEqEq) &&
            !panic_) {
         bump();
         parseRelational();
@@ -385,16 +385,21 @@ void ParserImpl::parseComp() {
     }
 }
 
-/// annoExpr : accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
-/// memberAccess : '.' (IDENTIFIER | INTEGER | REAL)
-/// Rule 1: an index, a call, an angle-bracket argument list and the postfix `!` touch the
-/// expression before them. For `<` the lexer has decided already (LAngle).
+/// annoExpr : accessExpr (indices | parentArgues | angledValues | typeArguments | '!' |
+/// memberAccess)* memberAccess : '.' (IDENTIFIER | INTEGER | REAL) Rule 1: an index, a call, an
+/// angle-bracket argument list and the postfix `!` touch the expression before them. For `<` the
+/// lexer has decided already (LAngle).
 void ParserImpl::parseAnno() {
     const size_t m = mark();
     parseAccess();
     bool any = false;
     while (!panic_) {
         if (adjacent()) {
+            if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
+                parseTypeArguments();
+                any = true;
+                continue;
+            }
             // `xs[]` is not an index: the empty brackets are an array literal of their own, as
             // they always were (two statements on a line).
             if (cur_ == TK::LBracket && peek(1) != TK::RBracket) {
@@ -675,6 +680,21 @@ void ParserImpl::parseAngledValues() {
     close(m, NK::AngledValues);
 }
 
+/// typeArguments : '::' '<' typeList ','? '>'
+void ParserImpl::parseTypeArguments() {
+    const size_t m = mark();
+    bump(); // ::
+    const uint32_t open = pos_;
+    bump(); // < (not an expression's with-argument list)
+    {
+        Scope scope(*this, false, open);
+        parseTypeList(TK::Gt);
+        eat(TK::Comma);
+        expect(TK::Gt);
+    }
+    close(m, NK::TypeArguments);
+}
+
 /// arrayData : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' dataExpr ('if' dataExpr)?)?
 ///             ']'
 void ParserImpl::parseArrayData() {
@@ -882,9 +902,9 @@ void ParserImpl::parsePattern() {
         break;
     }
     default:
-        if (cur_ == TK::Integer || cur_ == TK::Real || cur_ == TK::String ||
-            cur_ == TK::MultiStr || cur_ == TK::FString || cur_ == TK::KwTrue ||
-            cur_ == TK::KwFalse || cur_ == TK::KwNull || literalSignAhead()) {
+        if (cur_ == TK::Integer || cur_ == TK::Real || cur_ == TK::String || cur_ == TK::MultiStr ||
+            cur_ == TK::FString || cur_ == TK::KwTrue || cur_ == TK::KwFalse ||
+            cur_ == TK::KwNull || literalSignAhead()) {
             parseLiteral();
         } else {
             unexpected({SyntaxError::PatternItem});

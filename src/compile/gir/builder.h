@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -561,6 +561,15 @@ class Builder {
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
+    Type *expectedValueType_   = nullptr;
+    struct ExpectedValueScope {
+        Type *&current;
+        Type *outer;
+        ExpectedValueScope(Type *&slot, Type *expected)
+            : current(slot), outer(std::exchange(slot, expected)) {}
+        ~ExpectedValueScope() { current = outer; }
+    };
+    std::unordered_map<node_handle_t, camel::core::type::type_vec_t> explicitOperatorTypes_;
     std::unordered_map<node_handle_t, template_ptr_t> genericDrefs_;
     // The templates of functions written in place (anonymousTemplateOf): nothing else owns
     // them.
@@ -591,7 +600,8 @@ class Builder {
     compile_graph_ptr_t resolveGenericCall(
         const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
-        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
+        Type *expectedResult = nullptr);
     /// A function written in place whose type still holds a type variable (the element
     /// functions of a list comprehension): a template without a name, registered where it
     /// stands. Its marker node is what the name of a generic function gives.
@@ -851,6 +861,8 @@ class Builder {
     node_handle_t visitWaitNode(const GCT::node_ptr_t &gct);
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitTypeApplication(const GCT::node_ptr_t &gct);
+    FunctionType *signatureForArgumentContext(node_handle_t target) const;
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
     /// A loop (design principles 2.10, 2.12, 2.13; camel/runtime/loop.h): the first values and

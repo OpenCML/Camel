@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -365,7 +365,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TypeVariableNotAllowed",
                 "'typeas {0}' cannot bind a type variable here: {1}.",
-                "A type variable is bound where its type first appears among the parameters of "
+                "A type variable is declared where it first appears in the parameters or result of "
                 "a function declaration, e.g. 'func first(xs: (typeas T)[]): T', and is "
                 "written as plain '{0}' everywhere after that.",
             },
@@ -384,8 +384,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TypeVariableNotBindable",
                 "The type variable '{0}' of '{1}' can never be bound: {2}.",
-                "A type variable takes the type found at the position of 'typeas {0}' in the "
-                "type of an argument. That position must be reachable through arrays, tuples, "
+                "A type variable must remain present in a parameter or result type. Its position "
+                "must be reachable through arrays, tuples, "
                 "structs and function types.",
             },
         },
@@ -397,7 +397,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "A type variable takes the type of the argument found at its 'typeas' position, "
                 "or, when that argument says nothing (a 'null', a generic function that is "
                 "itself waiting for its types), at another occurrence; every parameter is then "
-                "checked against its type with the variables replaced. A value enters a 'T?' "
+                "checked against its type with the variables replaced. Result-only variables take "
+                "their types from the expected result or explicit f::<T> arguments. A value enters "
+                "a 'T?' "
                 "or 'T!' parameter by itself; nothing else is converted. Signature: {3}",
             },
         },

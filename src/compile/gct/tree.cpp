@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 13, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -221,6 +221,8 @@ node_ptr_t Tree::makeWith(size_t argCount) {
     return node;
 }
 
+node_ptr_t Tree::makeTypeApplication() { return makeNode(NodeKind::TAPP); }
+
 node_ptr_t Tree::makeAccs(size_t index) {
     Node *node            = makeNode(NodeKind::ACCS);
     node->payload_.number = index;
@@ -281,8 +283,7 @@ node_ptr_t Tree::makeExpt(const std::vector<Reference> &exports) {
 }
 
 node_ptr_t Tree::makeLoop(
-    camel::core::LoopKind kind, const std::vector<std::string> &state,
-    const std::string &element) {
+    camel::core::LoopKind kind, const std::vector<std::string> &state, const std::string &element) {
     const bool hasElement = camel::core::loopHasIterable(kind);
     const size_t count    = state.size() + (hasElement ? 1 : 0);
     Node *node            = makeNode(NodeKind::LOOP);
@@ -372,6 +373,8 @@ std::string Node::toString() const {
         return "LINK: argcnt=" + std::to_string(argCount());
     case NodeKind::WITH:
         return "WITH: argcnt=" + std::to_string(argCount());
+    case NodeKind::TAPP:
+        return "TAPP";
     case NodeKind::ACCS:
         return "ACCS: " + (accessByIndex() ? std::to_string(accessIndex()) : accessKey());
     case NodeKind::BRCH:

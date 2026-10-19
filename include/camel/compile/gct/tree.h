@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 13, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,6 +93,7 @@ class Tree {
     node_ptr_t makeWait();
     node_ptr_t makeLink(size_t argCount);
     node_ptr_t makeWith(size_t argCount);
+    node_ptr_t makeTypeApplication();
     node_ptr_t makeAccs(size_t index);
     node_ptr_t makeAccs(const std::string &key);
     node_ptr_t makeBrch(BranchKind kind = BranchKind::Cond);

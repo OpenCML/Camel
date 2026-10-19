@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,6 +44,8 @@ std::string to_string(NodeKind kind) {
         return "LINK";
     case NodeKind::WITH:
         return "WITH";
+    case NodeKind::TAPP:
+        return "TAPP";
     case NodeKind::ACCS:
         return "ACCS";
     case NodeKind::BRCH:

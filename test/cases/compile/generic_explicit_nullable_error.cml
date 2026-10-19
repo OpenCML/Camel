@@ -1,0 +1,6 @@
+module generic_explicit_nullable_error
+func optional(x: typeas T): T? { return null }
+func main(): int sync {
+    println(optional::<int?>(null))
+    return 0
+}
