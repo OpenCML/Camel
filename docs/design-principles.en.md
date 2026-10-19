@@ -549,6 +549,40 @@ Two mechanisms whose underpinnings differ greatly, so their syntax is clearly di
 - **Libraries check their own prerequisites**: when a pass they need is not in the pipeline, they give a diagnostic saying which pass to add (section 4). Modules cannot change the pipeline automatically.
 - **A generic function may omit its return type**, inferred from its body at each instantiation; ordinary functions must write it; editor hover shows the type inferred at each call.
 
+### 2.21 Schedules and the lifetime of tags (2026-10-19)
+
+- **A tendency (not a prohibition)**: Camel source expresses the intent of a computation without loss; what depends on the environment, where and how to compute (tiling, layout, placement, memory strategy), is in principle not written in the source but injected by the execution context (pass parameters, schedule files), in a format and granularity decided by the library that reads it. Existing practice such as `@gpu` stays.
+- **For the performance ceiling, schedules may be written in source**: the previous item is a tendency and does not exclude the expert path. Block-level kernels (`Tile<T,[shape]>` and `#kernel`, Tiles route section 6) write block shapes in the source under the author's direct control, alongside the high-level path where Tiles decides.
+- **Schedules go down to functions**: for finer control, extract that part into a function and schedule it by function. After inlining, the inline origin recorded on the nodes still maps them back to the original function. Autotuning records results by the structural identity of a computation (operator, shapes, types, neighbourhood), not by names. The language provides no mechanism for naming individual steps of a computation.
+- **A tag is used up by the pass that reads it**: once a pass has applied a tag, the tag may cease to exist, and later passes (such as inlining) are not constrained by it. The order of passes is the user's to arrange (section 4).
+- **Inlining keeps the origin**: the inliner records the inlined function's identity and its declaration tags in the inline origin of the nodes; a pass reading a tag that finds it only on inlined nodes warns that the tag had no effect because the function was inlined before the pass, and says how to reorder.
+
+### 2.22 Defaults of numeric permissions: relaxed by default, tightened by declaration (2026-10-19)
+
+This supersedes what 2.13, 2.15, 2.16 and 2.17 say about defaults; the definition of the permissions and their lexical rules (2.13) are unchanged.
+
+| Permission | Default | Note |
+|---|---|---|
+| `reassociate` | **granted** | changing the order and grouping of additions: the basis of parallel reductions and blocked matmul |
+| `contract` | **granted** | fusing a multiply and an add into one FMA |
+| `approx_math` | not granted; grant with a tag | approximate transcendental functions |
+| `change_precision` | not granted; grant with a tag | computing at lower precision (TF32, BF16 and the like) |
+| `finite_math` | not granted; grant with a tag | assuming no NaN, infinity, negative zero or subnormal |
+
+- **Tightening**: the tag `#strict` makes the tagged function or block compute bit for bit by the canonical algorithm, using no permission at all (default ones included); for a whole program, the safe mode of pipeline parameters (such as `std::opt(safe_fp=true)` and the parameters of the same name of each back end).
+- **Two guarantees stay**: two runs on the same device with the same configuration give bit-identical results (no technique whose result varies with scheduling, such as floating-point atomic adds); the canonical algorithm on the CPU remains the reference, tests comparing bit for bit in strict mode and within error bounds in default mode.
+- Bit-identical results across devices are no longer the default; they need strict mode.
+
+### 2.23 The main line of the AI stack (2026-10-19)
+
+- **Memory and devices**: `Device<T>` stays. A transfer is an ordinary operation with an effect; it may be written explicitly, inserted by a Camel transformation function applied to a function value ("passes are functions", see "the direction for passes written in Camel" above), or done automatically by an optimization pass. Asynchrony is not part of the semantics: order comes from data dependence and `sync`; streams, events and overlapped execution are the back end's implementation.
+- **Schedules can be written in Camel too**: the intent is one function, scheduled in another module by a transformation function (or a decorator), not only through passes composed on the command line.
+- **Low-level computation is also expressed as Camel graphs**, with no separate intermediate representation: physical operations (loading a block, block matmul, synchronisation and the like) are operators registered by the back-end library, with semantic declarations and, where possible, a CPU reference implementation; each lowering step is a graph-to-graph rewrite, and only the last prints target code. Where possible the graph after each step still runs on the CPU and can be checked against the reference.
+- **Permission `nondeterministic`** (not granted by default; granted with a tag): allows techniques whose result varies with scheduling, such as floating-point atomic adds or split-K merged with atomics. The "reproducible on one device" guarantee of 2.22 holds when this permission is absent.
+- **Native C++ modules are legitimate but not to be leaned on**: whatever Camel can express is written in Camel unless there is a clear reason (performance, flexibility and the like); expressiveness problems met in implementation are discussed one by one, and common needs are taken into the language core.
+- **Distribution**: sharding is written as the tag `#shard<[axis, ...]>`, which can go on function parameters (a new tag position, "parameter"); axis names are abstract and axis sizes are injected at execution; the same information can go in a schedule file. The standard library's `shard` pass infers how each result is sharded, inserts communication (ordinary operators with effects) and reports inconsistencies; at an operator it cannot see through (a native operator with no declared index map) it falls back to gathering before computing, correct but slower. The type system is unchanged. The order of cross-device sums follows 2.22.
+- **The facts of an operator are standard tags**: purity, faults, resources, numeric class, index map (which input elements each output element is computed from) and the like are standard tags on the operator declaration, their meaning given in this specification; C++ operators declare them through the same tag registration interface, and Camel functions have them inferred from their bodies. There are no separate concepts of "index semantics" or "operator semantics"; the existing `operator_semantics` and `index_semantics` remain as the internal storage of these standard tags.
+
 ## 3. `macro`
 
 - `macro` is a native marker provided by the language core to help with dynamic graph rewriting: a function marked `macro` can be evaluated early by the `std::macro` pass, which computes the static values and forms a new static graph.
