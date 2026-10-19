@@ -1290,10 +1290,38 @@ node_ptr_t Builder::makeExec(bool synced, bool operands) {
 /*
 StmtBlock(bool sync) : Stmt* stmts ;
 */
-node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
+node_ptr_t Builder::visitDecoratedBlock(const AST::node_ptr_t &ast) {
+    ENTER("DecoratedBlock");
+    node_ptr_t execNode = visitStmtBlock(ast, false);
+    FunctionTypeFactory factory; // no parameters; the result is the block's value
+    FunctionType *type  = factory.buildOpen();
+    node_ptr_t typeNode = tree_->makeType(type, type->implMark());
+    node_ptr_t funcNode = tree_->makeFunc("");
+    funcNode->setDecoratedBlock();
+    *funcNode << typeNode << execNode;
+    for (const auto &annoAst : *ast->atAs<AST::RepeatedLoad>(1)) {
+        ASSERT(annoAst->type() == AST::LoadType::Data, "A decorator should lower to AST Data.");
+        node_ptr_t annoNode = tree_->makeAnno();
+        *annoNode << visitData(annoAst);
+        *funcNode << annoNode;
+    }
+    node_ptr_t linkNode = tree_->makeLink(0);
+    *linkNode << funcNode;
+    setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.block.type");
+    setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.block.func");
+    setOriginFromAst(context_, linkNode, ast, camel::source::OriginKind::GctNode, "gct.block.call");
+    LEAVE("DecoratedBlock");
+    return linkNode;
+}
+
+node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) {
     ENTER("StmtBlock");
     // Ensure the AST node is of the expected type (Stmt)
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for StmtBlock");
+    if (decorators && ast->size() > 1) {
+        LEAVE("StmtBlock");
+        return visitDecoratedBlock(ast);
+    }
 
     // Extract the statement block load and create an ExecLoad node
     // The ExecLoad node represents the execution of the statement block

@@ -67,6 +67,7 @@
 #pragma once
 
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/symbol.h"
@@ -86,6 +87,11 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+namespace camel::core::data {
+class Data;
+using data_ptr_t = std::shared_ptr<Data>;
+} // namespace camel::core::data
 
 namespace camel::core {
 
@@ -176,6 +182,31 @@ struct OperatorTraits {
 using TypeFolder = std::function<std::optional<slot_t>(
     std::span<type::Type *const> types, type::static_args_t statics, mm::IAllocator &allocator)>;
 
+/**
+ * What an operator used as a decorator grants (language reference 7.6): an attribute
+ * (camel/core/node_attrs.h) on the nodes written in the function or block it decorates, the
+ * arms, loop bodies and lambdas written there included, and on no function they call.
+ *
+ * The operator itself takes its with-arguments and one function and returns a function of the
+ * same type (OperatorTraits as for any operator). When a decorator names it with with-arguments
+ * that are constants, the graph builder applies it while it builds the function: it gives the
+ * nodes the attribute and drops the call, so passes see the attribute and the function stays
+ * the one written. Anywhere else (a decorator that names it through a variable, arguments known
+ * only at run time, a call written as a call) the operator runs like any other; its function is
+ * then the decorator's runtime form, which may return the function unchanged
+ * (camel::core::module::attrDecoratorIdentity): an attribute only allows a library to do
+ * something else, so a node without it is always correct.
+ */
+struct AttrGrant {
+    /// The attribute key's name; the library registers the key with its kind and rules
+    /// (attr::registerKey).
+    std::string key;
+    /// The value granted for the with-arguments of one use, given as the constants written
+    /// (aligned with the with-parameters); nullopt when the constants do not give one, and the
+    /// decorator is then applied when it runs. Null: attr::unit() whatever the arguments.
+    std::function<std::optional<attr::AttrValueId>(std::span<const data::data_ptr_t> with)> value;
+};
+
 class OperatorTable {
   public:
     static OperatorTable &instance();
@@ -261,6 +292,15 @@ class OperatorTable {
 
     /// The in-place form of the operator `uri`, or nullopt when it has none.
     std::optional<std::string> inPlaceForm(std::string_view uri) const;
+
+    // ---- Decorators that grant attributes (language reference 7.6) -------------------------
+
+    /// Declares that the operator `uri`, used as a decorator, grants an attribute (AttrGrant).
+    /// Module load time; std::invalid_argument when the key is not a valid key name.
+    void declareGrant(std::string_view uri, AttrGrant grant);
+
+    /// What the operator `uri` grants, or nullptr when it is not declared to grant anything.
+    std::shared_ptr<const AttrGrant> grantOf(std::string_view uri) const;
 
     // ---- Type rules -----------------------------------------------------------------------
 
@@ -388,6 +428,8 @@ class OperatorTable {
         std::unique_ptr<TypeFolder> folder;
         /// The in-place form (setInPlaceForm); kEmptySym when there is none.
         SymId inPlace = kEmptySym;
+        /// What it grants as a decorator (declareGrant), or nullptr.
+        std::shared_ptr<const AttrGrant> grant;
         /// The published semantics record (owned by declarations_), or nullptr.
         std::atomic<const sem::OperatorSemantics *> semantics{nullptr};
     };

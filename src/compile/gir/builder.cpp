@@ -998,6 +998,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     }
     rejectRedeclaredFunction(name, funcType, gct);
     rejectOperatorConflict(name, funcType, gct);
+    staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);
     buildFuncBody(gct, graph, funcType, name);
     if (name.empty()) {
@@ -1005,13 +1006,11 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     }
     leaveScope();
 
-    std::vector<GCT::node_ptr_t> annoNodes;
-    for (size_t i = 2; i < gct->size(); ++i) {
-        const auto &annoNode = gct->at(i);
-        if (annoNode && annoNode->type() == GCT::NodeKind::ANNO) {
-            annoNodes.push_back(annoNode);
-        }
-    }
+    // The decorators that grant attributes as the program is built were applied to the body
+    // (buildFuncBody); the others make the decorated function. A decorated block applies its
+    // own where it is called (visitDecoratedBlock).
+    const std::vector<GCT::node_ptr_t> annoNodes =
+        gct->decoratedBlock() ? std::vector<GCT::node_ptr_t>{} : appliedDecoratorsOf(gct);
     if (!annoNodes.empty()) {
         graph_ptr_t decorated = buildDecoratedGraph(name, graph, annoNodes);
         insertDecoratedGraph(name, decorated);
@@ -1025,6 +1024,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
 void Builder::stampPermissions(node_handle_t operNode) const {
     if (operNode != nullptr) {
         operNode->header.permissions = numericPermissions_;
+        operNode->header.attrs       = currentAttrs_;
     }
 }
 
@@ -1038,6 +1038,9 @@ void Builder::buildFuncBody(
     NumericPermissionScope permissions(
         numericPermissions_,
         body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0);
+    // The attributes its decorators grant join those in force where it is written (each key's
+    // combine rule, camel/core/node_attrs.h), for everything written in it.
+    AttrScope attrs(currentAttrs_, camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first));
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -1066,7 +1069,16 @@ void Builder::buildFuncBody(
         if (!funcType->hasExitType()) {
             inferredExitGraphs_.insert(graph.get()); // the body sets it from now on
         }
-        setBodyResult(graph, visitBodyNode(gct->at(1)));
+        // A decorated block whose value nothing takes is a function whose value is dropped:
+        // it returns nothing, and a `return` in it gives no value (visitExitNode). Not a sync
+        // block: its statements run in order whatever is done with its value, as they do
+        // when the block is written without decorators.
+        const bool dropped = droppedBodies_.contains(gct->at(1)) && !gct->at(1)->synced();
+        if (dropped) {
+            droppedGraphs_.insert(graph.get());
+        }
+        node_handle_t bodyResult = visitBodyNode(gct->at(1));
+        setBodyResult(graph, dropped ? nullptr : bodyResult);
         // A body declared `: void` drops the value of its last statement.
         if (!inferredExitGraphs_.contains(graph.get()) &&
             isVoidGraphExitType(funcType->exitType())) {
@@ -1126,13 +1138,10 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             diags_->of(SemanticDiag::Redeclaration).atOrigin(child->origin()).commit(name);
             continue;
         }
-        for (size_t k = 2; k < child->size(); ++k) {
-            if (child->at(k) && child->at(k)->type() == GCT::NodeKind::ANNO) {
-                diags_->of(SemanticDiag::GenericFunctionUnsupported)
-                    .atOrigin(child->origin())
-                    .commit(name, "decorated: a decorator takes a function value");
-                break;
-            }
+        if (!appliedDecoratorsOf(child).empty()) {
+            diags_->of(SemanticDiag::GenericFunctionUnsupported)
+                .atOrigin(child->origin())
+                .commit(name, "decorated: a decorator takes a function value");
         }
         auto tmpl = std::make_shared<GenericTemplate>();
         // An operator's template is named as the program writes it (`operator +`), in its
@@ -1147,6 +1156,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->graphScope     = graphScope_;
         tmpl->decoratedScope = decoratedScope_;
         tmpl->templateScope  = templateScope_;
+        tmpl->attrs          = currentAttrs_;
         // A generic function of a namespace (registered at the top level) is in that
         // namespace; one written in a body is where the body is.
         tmpl->namespacePath = currGraph_ == rootGraph_ ? Reference(name).paths() : namespacePath_;
@@ -1174,6 +1184,7 @@ node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
     tmpl->graphScope       = graphScope_;
     tmpl->decoratedScope   = decoratedScope_;
     tmpl->templateScope    = templateScope_;
+    tmpl->attrs            = currentAttrs_;
     tmpl->namespacePath    = namespacePath_;
     tmpl->usingFrames      = usingFrames_;
     node_handle_t drefNode = currGraph_->addDrefNode(
@@ -1934,6 +1945,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     compile_graph_ptr_t graph;
     try {
         BuildState saved(*this, *tmpl);
+        AttrScope attrs(currentAttrs_, tmpl->attrs);
         currGraph_      = tmpl->ownerGraph;
         module_         = tmpl->module;
         namespacePath_  = tmpl->namespacePath;
@@ -2454,8 +2466,9 @@ void Builder::reportUndeclaredCapturedWrites() {
     // captured, itself or through the functions it calls, has side effects as well. This is a
     // declaration check only: the modifier changes nothing in how calls are compiled.
     for (const BuiltFunction &function : unit_->builtFunctions) {
-        if (function.graph->funcType()->modifiers().sync()) {
-            continue;
+        if (function.graph->funcType()->modifiers().sync() ||
+            blockGraphs_.contains(function.graph)) {
+            continue; // declared so, or a decorated block (no declaration to write it on)
         }
         std::vector<std::string> names;
         for (node_handle_t variable : capturedWritesOf(function.graph)) {
@@ -2849,12 +2862,8 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             if (known == topLevelFunctions_.end()) {
                 continue;
             }
-            const auto &func = known->second->gct;
-            for (size_t k = 2; k < func->size(); ++k) {
-                if (func->at(k)->type() == GCT::NodeKind::ANNO) {
-                    ensureFunctionBuilt(candidate);
-                    break;
-                }
+            if (!appliedDecoratorsOf(known->second->gct).empty()) {
+                ensureFunctionBuilt(candidate);
             }
         }
     }
@@ -4938,6 +4947,9 @@ Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcV
     GCT::node_ptr_t linkNode = tree_->makeLink(1);
     *linkNode << tree_->clone(decorator);
     *linkNode << tree_->makeDRef(tmpRefName);
+    // A call of the decorator is reported at the decorator.
+    linkNode->setOrigin(decorator->origin());
+    linkNode->at(1)->setOrigin(decorator->origin());
 
     node_handle_t decoratedValue = visitLinkNode(linkNode);
     nodeScope_                   = nodeScope_->leave();
@@ -5001,6 +5013,185 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
         nodeTypeOf(decoratedValue));
     leaveScope();
     return decoratedGraph;
+}
+
+// ---- Decorators that grant attributes, decorated blocks (language reference 7.6) ------------
+
+std::optional<camel::core::attr::AttrSetId> Builder::staticGrantOf(const GCT::node_ptr_t &anno) {
+    if (auto it = staticGrants_.find(anno); it != staticGrants_.end()) {
+        return it->second;
+    }
+    // Asked first where the decorator is written (visitFuncNode before it enters the
+    // function, registerGenericTemplates): the names of the decorator and of its arguments are
+    // resolved there.
+    const auto compute = [&]() -> std::optional<camel::core::attr::AttrSetId> {
+        const GCT::node_ptr_t expr = anno->at(0);
+        GCT::node_ptr_t callee     = expr;
+        std::vector<GCT::node_ptr_t> args;
+        if (expr->type() == GCT::NodeKind::WITH) {
+            callee = expr->at(0);
+            for (size_t i = 1; i < expr->size(); ++i) {
+                args.push_back(expr->at(i));
+            }
+        }
+        // A name the program binds itself (a value, a function, a generic function) is not
+        // the operator: the decorator is applied as any other.
+        const auto programName = [&](const std::string &written) {
+            const std::string name = moduleLevelName(written);
+            return nodeAt(name).has_value() || templateScope_->get(name).has_value() ||
+                   graphsAt(name).has_value() || decoratedGraphAt(name).has_value() ||
+                   (unit_ != nullptr && unit_->values.contains(name));
+        };
+        // The entity an imported name stands for (design principles 2.12, layers 3 to 5).
+        const auto imported =
+            [&](const GCT::node_ptr_t &ref) -> std::optional<camel::core::module::entity> {
+            const std::string written = ref->name();
+            if (programName(written) || isOperatorName(written)) {
+                return std::nullopt;
+            }
+            if (module_->hasImportedRef(written, ImportLayer::Named)) {
+                return module_->getImportedEntity(written, ImportLayer::Named);
+            }
+            if (auto match = throughUsing(written, ref)) {
+                return match->ownName.empty() ? match->entity : std::nullopt;
+            }
+            if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
+                return module_->getImportedEntity(written, ImportLayer::Ambient);
+            }
+            return std::nullopt;
+        };
+        if (callee->type() != GCT::NodeKind::DREF) {
+            return std::nullopt;
+        }
+        const auto entity = imported(callee);
+        if (!entity.has_value() || !entity->isOperGroup() ||
+            entity->operGroup()->resolvers().size() != 1) {
+            return std::nullopt;
+        }
+        const auto grant = camel::core::OperatorTable::instance().grantOf(
+            entity->operGroup()->resolvers().front().first);
+        if (grant == nullptr) {
+            return std::nullopt;
+        }
+        // The with-arguments must be constants: literals, or constants a module exports.
+        std::vector<data_ptr_t> values;
+        for (const GCT::node_ptr_t &arg : args) {
+            if (arg->type() == GCT::NodeKind::DATA) {
+                values.push_back(arg->data());
+                continue;
+            }
+            if (arg->type() != GCT::NodeKind::DREF) {
+                return std::nullopt;
+            }
+            const auto value = imported(arg);
+            if (!value.has_value() || !value->isValue()) {
+                return std::nullopt;
+            }
+            values.push_back(value->value());
+        }
+        const std::optional<camel::core::attr::AttrValueId> granted =
+            grant->value ? grant->value(values)
+                         : std::optional<camel::core::attr::AttrValueId>(camel::core::attr::unit());
+        if (!granted.has_value()) {
+            return std::nullopt;
+        }
+        return camel::core::attr::single(camel::core::attr::key(grant->key), *granted);
+    };
+    std::optional<camel::core::attr::AttrSetId> result;
+    try {
+        result = compute();
+    } catch (const BuildAbortException &) {
+        result = std::nullopt; // reported, if at all, when the decorator is applied
+    }
+    staticGrants_.emplace(anno, result);
+    return result;
+}
+
+std::pair<camel::core::attr::AttrSetId, size_t>
+Builder::staticGrantsOf(const GCT::node_ptr_t &func) {
+    std::vector<GCT::node_ptr_t> annos;
+    for (size_t i = 2; i < func->size(); ++i) {
+        if (func->at(i) && func->at(i)->type() == GCT::NodeKind::ANNO) {
+            annos.push_back(func->at(i));
+        }
+    }
+    camel::core::attr::AttrSetId granted = camel::core::attr::kNoAttrs;
+    size_t count                         = 0;
+    // The decorator written last applies first: a run of granting ones from there is applied
+    // to the function as written, before any other decorator sees it.
+    for (auto it = annos.rbegin(); it != annos.rend(); ++it) {
+        const auto grant = staticGrantOf(*it);
+        if (!grant.has_value()) {
+            break;
+        }
+        granted = camel::core::attr::unite(granted, *grant);
+        ++count;
+    }
+    return {granted, count};
+}
+
+std::vector<GCT::node_ptr_t> Builder::appliedDecoratorsOf(const GCT::node_ptr_t &func) {
+    std::vector<GCT::node_ptr_t> annos;
+    for (size_t i = 2; i < func->size(); ++i) {
+        if (func->at(i) && func->at(i)->type() == GCT::NodeKind::ANNO) {
+            annos.push_back(func->at(i));
+        }
+    }
+    annos.resize(annos.size() - staticGrantsOf(func).second);
+    return annos;
+}
+
+node_handle_t Builder::visitDecoratedBlock(const GCT::node_ptr_t &link, bool unused) {
+    ENTER("DECORATED_BLOCK");
+    // `@d { ... }` is the block as a function of no parameters, passed to the decorators and
+    // called right where it is written (language reference 7.6). The block is lowered as a
+    // plain block would be (its scope, its exits, its value); the function's value is the
+    // block's, and is dropped when nothing takes the block's value.
+    const GCT::node_ptr_t func = link->at(0);
+    const GCT::node_ptr_t body = func->at(1);
+    staticGrantsOf(func); // resolved here, where the decorators are written
+    const std::vector<GCT::node_ptr_t> decorators = appliedDecoratorsOf(func);
+    if (decorators.empty()) {
+        // Every decorator grants attributes as the program is built: what they make is the
+        // block's own function with the attributes, called here, which is the block itself
+        // with the attributes. Built in place, as the same block without decorators is.
+        AttrScope attrs(
+            currentAttrs_,
+            camel::core::attr::unite(currentAttrs_, staticGrantsOf(func).first));
+        unusedStatement_     = unused ? body : nullptr;
+        node_handle_t result = visitExecNode(body);
+        LEAVE("DECORATED_BLOCK");
+        return result;
+    }
+    if (unused) {
+        droppedBodies_.insert(body);
+    }
+    compile_graph_ptr_t graph = visitFuncNode(func);
+    blockGraphs_.insert(graph.get());
+    node_handle_t value = createFuncDataNode(graph, true, false);
+    for (auto it = decorators.rbegin(); it != decorators.rend(); ++it) {
+        value = applyDecoratorAnno(*it, value);
+    }
+    // The call, as if written here: `(decorated)()`.
+    const std::string scopeName = "__block_tmp_scope_" + std::to_string(syntheticRefIndex_);
+    const std::string refName   = "__block_tmp_ref_" + std::to_string(syntheticRefIndex_++);
+    nodeScope_                  = nodeScope_->enter(scopeName);
+    nodeScope_->insert(refName, value);
+    GCT::node_ptr_t call = tree_->makeLink(0);
+    GCT::node_ptr_t ref  = tree_->makeDRef(refName);
+    ref->setOrigin(link->origin());
+    call->setOrigin(link->origin());
+    *call << ref;
+    node_handle_t result{};
+    try {
+        result = visitLinkNode(call);
+    } catch (...) {
+        nodeScope_ = nodeScope_->leave();
+        throw;
+    }
+    nodeScope_ = nodeScope_->leave();
+    LEAVE("DECORATED_BLOCK");
+    return result;
 }
 
 graph_set_ptr_t
@@ -5242,6 +5433,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // Whether this call is a statement whose value nothing takes; the calls inside it are not.
     const bool unusedStatement = gct == unusedStatement_;
     unusedStatement_           = nullptr;
+    if (gct->at(0)->type() == GCT::NodeKind::FUNC && gct->at(0)->decoratedBlock()) {
+        node_handle_t result = visitDecoratedBlock(gct, unusedStatement);
+        LEAVE("LINK");
+        return result;
+    }
     if (unusedStatement) {
         if (node_handle_t rebound = rebindingAppendOf(gct)) {
             LEAVE("LINK");
@@ -7612,11 +7808,13 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         }
     }
     checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
-    setGraphReturnFromResult(
-        currGraph_,
-        nodeIdOf(outputAnchor),
-        nodeIdOf(resNode),
-        nodeTypeOf(resNode));
+    if (!droppedGraphs_.contains(currGraph_.get())) {
+        setGraphReturnFromResult(
+            currGraph_,
+            nodeIdOf(outputAnchor),
+            nodeIdOf(resNode),
+            nodeTypeOf(resNode));
+    }
 
     LEAVE("EXIT");
     return resNode;
@@ -7859,7 +8057,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     const GCT::Node *outerStatement = unusedStatement_;
     // A block that is itself a statement whose value nothing takes drops the value of its last
     // statement too.
-    const bool valueDropped = gct == unusedStatement_;
+    const bool valueDropped = gct == unusedStatement_ || droppedBodies_.contains(gct);
     std::pair<GCT::node_ptr_t, node_handle_t> lastStatement{};
     for (size_t i = 0; i < gct->size(); i++) {
         StatementState before(*this);
@@ -7936,10 +8134,8 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
             if (declaration->graph == nullptr || declaration->names.front() != name) {
                 continue;
             }
-            for (size_t k = 2; k < declaration->gct->size(); ++k) {
-                if (declaration->gct->at(k)->type() == GCT::NodeKind::ANNO) {
-                    return true;
-                }
+            if (!appliedDecoratorsOf(declaration->gct).empty()) {
+                return true;
             }
         }
         return false;

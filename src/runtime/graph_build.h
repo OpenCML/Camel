@@ -56,6 +56,8 @@ struct GCGraphPayloadShape {
     gc_cnt_t branchArmCount = 0;
     // Whether some node has numeric permissions: only then the graph has a permission column.
     bool permissions = false;
+    // Whether some node has attributes: only then the graph has an attribute column.
+    bool attrs = false;
 };
 
 struct GCGraphPayloadArena {
@@ -67,6 +69,7 @@ struct GCGraphPayloadArena {
     GCNode *nodes              = nullptr; // nodeCount + 1 records
     uint32_t *origins          = nullptr; // nodeCount source origins
     uint8_t *permissions       = nullptr; // nodeCount numeric permissions, or null
+    uint32_t *attrs            = nullptr; // nodeCount attribute sets, or null
     gc_node_ref_t *inputs      = nullptr;
     gc_payload_word_t *payload = nullptr;
     gc_node_ref_t *normPorts = nullptr;

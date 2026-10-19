@@ -37,6 +37,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/type/resolver.h"
 #include "camel/core/type/typevar.h"
 
@@ -300,6 +301,46 @@ class Builder {
         }
         ~NumericPermissionScope() { current = outer; }
     };
+    // The node attributes in force where the builder is (camel/core/node_attrs.h): those
+    // decorators granted, as the program is built, to the functions
+    // and decorated blocks the builder is in, lexically: a function built from elsewhere (a
+    // top-level function referred to before its turn, an instance of a generic function)
+    // starts from what was in force where it is written. Stamped with the permissions
+    // (stampPermissions).
+    camel::core::attr::AttrSetId currentAttrs_ = camel::core::attr::kNoAttrs;
+    /// Sets currentAttrs_ for a scope and puts the previous value back at its end.
+    struct AttrScope {
+        camel::core::attr::AttrSetId &current;
+        camel::core::attr::AttrSetId outer;
+        AttrScope(camel::core::attr::AttrSetId &c, camel::core::attr::AttrSetId attrs)
+            : current(c), outer(c) {
+            current = attrs;
+        }
+        ~AttrScope() { current = outer; }
+    };
+    /// What the decorators of the function `func` (a FUNC with ANNO children) grant as the
+    /// program is built, and how many of them do: the innermost ones (written last) that
+    /// name an operator declared to grant an attribute, with constant with-arguments
+    /// (OperatorTable::grantOf), up to the first that does not. The others are applied when
+    /// the decorated function is made, as before.
+    std::pair<camel::core::attr::AttrSetId, size_t> staticGrantsOf(const GCT::node_ptr_t &func);
+    /// The attributes one decorator grants as the program is built; nullopt when it is not
+    /// such a decorator (see staticGrantsOf). Remembered per ANNO node.
+    std::optional<camel::core::attr::AttrSetId> staticGrantOf(const GCT::node_ptr_t &anno);
+    std::unordered_map<const GCT::Node *, std::optional<camel::core::attr::AttrSetId>>
+        staticGrants_;
+    /// The decorators of `func` that are applied to its function value (the ones
+    /// staticGrantsOf does not take), outermost first.
+    std::vector<GCT::node_ptr_t> appliedDecoratorsOf(const GCT::node_ptr_t &func);
+    /// A call of a decorated block (`@d { ... }`: a LINK of a FUNC with decoratedBlock()).
+    node_handle_t visitDecoratedBlock(const GCT::node_ptr_t &link, bool unused);
+    // The bodies whose value is dropped: a decorated block whose value nothing takes is a
+    // function whose value is dropped, as a plain block drops the value of its last statement.
+    std::unordered_set<const GCT::Node *> droppedBodies_;
+    std::unordered_set<const DraftGraphBuilder *> droppedGraphs_; // their graphs
+    // The graphs of decorated blocks: written as blocks, they are not functions a program
+    // declares, and get no declaration check (reportUndeclaredCapturedWrites).
+    std::unordered_set<const DraftGraphBuilder *> blockGraphs_;
     // Inside a `var` declaration: the names it binds are variables.
     bool declaresVariable_ = false;
 
@@ -535,6 +576,8 @@ class Builder {
         graph_scope_ptr_t graphScope;
         decorated_scope_ptr_t decoratedScope;
         std::shared_ptr<Scope<std::string, std::shared_ptr<GenericTemplate>>> templateScope;
+        // The node attributes in force where it was declared (currentAttrs_).
+        camel::core::attr::AttrSetId attrs = camel::core::attr::kNoAttrs;
         // The namespace and the `using namespace` in force where it was declared: its body
         // resolves its names as if it were built there.
         std::vector<std::string> namespacePath;

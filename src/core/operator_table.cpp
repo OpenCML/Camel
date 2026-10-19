@@ -22,6 +22,7 @@
  */
 
 #include "camel/core/operator_table.h"
+#include "camel/core/node_attrs.h"
 
 #include "camel/utils/assert.h"
 
@@ -184,6 +185,22 @@ std::optional<std::string> OperatorTable::inPlaceForm(std::string_view uri) cons
         return std::nullopt;
     }
     return std::string(symbolText(form));
+}
+
+void OperatorTable::declareGrant(std::string_view uri, AttrGrant grant) {
+    (void)attr::key(grant.key); // validates the name
+    auto shared = std::make_shared<const AttrGrant>(std::move(grant));
+    std::unique_lock lock(mutex_);
+    entries_[internLocked(uri)].grant = std::move(shared);
+}
+
+std::shared_ptr<const AttrGrant> OperatorTable::grantOf(std::string_view uri) const {
+    const auto id = lookup(uri);
+    if (!id) {
+        return nullptr;
+    }
+    std::shared_lock lock(mutex_);
+    return entries_[*id].grant;
 }
 
 void OperatorTable::setTypeFolder(std::string_view uri, TypeFolder folder) {

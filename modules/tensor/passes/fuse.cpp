@@ -27,6 +27,7 @@
 
 #include "../ops/registry.h"
 
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
@@ -90,6 +91,7 @@ struct Match {
     gc_node_ref_t add;
     gc_node_ref_t relu; // kInvalidNodeRef when not fused
     gc_node_ref_t bias;
+    uint32_t attrs = 0; // the node attributes the fused node keeps (attr::merge)
 };
 
 /// The first fusable pattern in the draft's current state. Rewrites change operands of other
@@ -108,18 +110,33 @@ std::optional<Match> findMatch(const GraphDraft &draft) {
         for (size_t k = 0; k < 2; ++k) {
             const gc_node_ref_t mm = ins[k];
             // The fused node stands for the whole pattern, so every node of it must have been
-            // granted the same numeric permissions (design principles 2.13), which it keeps.
+            // granted the same numeric permissions (design principles 2.13), which it keeps; its
+            // node attributes are what each attribute's key lets one node of the pattern keep
+            // (attr::merge), and a key that refuses keeps the nodes apart.
             if (operOf(draft, mm) != ops.matmul || draft.normInputsOf(mm).size() != 2 ||
                 !isPrivateIntermediate(draft, mm, id) ||
                 draft.nodePermissions(mm) != draft.nodePermissions(id)) {
                 continue;
             }
-            Match m{.matmul = mm, .add = id, .relu = kInvalidNodeRef, .bias = ins[1 - k]};
+            const auto attrs = camel::core::attr::merge(draft.nodeAttrs(mm), draft.nodeAttrs(id));
+            if (!attrs.has_value()) {
+                continue;
+            }
+            Match m{
+                .matmul = mm,
+                .add    = id,
+                .relu   = kInvalidNodeRef,
+                .bias   = ins[1 - k],
+                .attrs  = *attrs};
             const auto users = draft.normUsersOf(id);
             if (users.size() == 1 && operOf(draft, users[0]) == ops.relu &&
                 isPrivateIntermediate(draft, id, users[0]) &&
                 draft.nodePermissions(users[0]) == draft.nodePermissions(id)) {
-                m.relu = users[0];
+                if (const auto withRelu =
+                        camel::core::attr::merge(m.attrs, draft.nodeAttrs(users[0]))) {
+                    m.relu  = users[0];
+                    m.attrs = *withRelu;
+                }
             }
             return m;
         }
@@ -154,6 +171,7 @@ void fuse(GraphDraft &draft, const Match &m) {
     draft.setNormInputs(fused, inputs);
     draft.setCtrlInputs(fused, ctrl);
     draft.setNodePermissions(fused, draft.nodePermissions(m.add));
+    draft.setNodeAttrs(fused, m.attrs);
 
     draft.replaceAllValueUses(root, fused);
     draft.replaceAllCtrlUses(root, fused);
@@ -198,6 +216,7 @@ size_t useLibraryGemm(GraphDraft &draft) {
         draft.setNormInputs(blas, in);
         draft.setCtrlInputs(blas, ctl);
         draft.setNodePermissions(blas, draft.nodePermissions(id));
+        draft.setNodeAttrs(blas, draft.nodeAttrs(id));
         draft.replaceAllValueUses(id, blas);
         draft.replaceAllCtrlUses(id, blas);
         draft.retargetBranchArmAnchors(id, blas, blas);

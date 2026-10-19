@@ -25,6 +25,7 @@
 
 #include "camel/runtime/reachable.h"
 
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/base.h"
@@ -195,6 +196,9 @@ void dumpOperatorInstances(GCGraph *root, std::ostream &os) {
                     (instance ? jsonLines(core::sem::toString(*instance, s)) : std::string("null"));
             if (const uint8_t granted = graph->nodePermissions(ref); granted != 0) {
                 line += ",\"permissions\":" + jsonString(core::sem::permissionsText(granted));
+            }
+            if (const uint32_t attrs = graph->nodeAttrs(ref); attrs != 0) {
+                line += ",\"attrs\":" + jsonString(core::attr::text(attrs));
             }
             if (const auto freedom = reorderFreedomOf(*graph, ref)) {
                 line += ",\"freedom\":" + freedomJson(*freedom);
