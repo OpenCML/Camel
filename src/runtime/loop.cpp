@@ -48,67 +48,6 @@ std::span<const gc_node_ref_t> capturePortsOf(const GCGraph *graph) {
     return graph->withPorts().empty() ? graph->closureNodes() : graph->withPorts();
 }
 
-struct EffectWalk {
-    std::unordered_map<const GCGraph *, EffectSummary> done;
-    std::unordered_set<const GCGraph *> active;
-
-    EffectSummary of(const GCGraph *graph) {
-        if (graph == nullptr) {
-            return {};
-        }
-        if (auto it = done.find(graph); it != done.end()) {
-            return it->second;
-        }
-        if (!active.insert(graph).second) {
-            // A graph that reaches itself: a recursion, which may not end. What it does
-            // besides is what the walk that is under way collects.
-            EffectSummary recursion;
-            recursion.mayNotTerminate = true;
-            return recursion;
-        }
-        const auto &table = camel::core::OperatorTable::instance();
-        EffectSummary summary;
-        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
-            const GCNode *node = graph->node(ref);
-            switch (node->kind) {
-            case GCNodeKind::Oper: {
-                const auto oper = graph->nodeBodyAs<GCOperBody>(ref)->oper;
-                const auto traits = table.find(oper);
-                summary.external |= table.hasExternalEffect(oper);
-                // What an operator writes is its resource declaration's (design principles 2.17).
-                summary.writesVariables |= table.writesProgramState(oper);
-                summary.mayFault |= !traits || traits->mayFault;
-                if (traits && traits->callsGraphs) {
-                    // It runs the function values it receives: not known here.
-                    summary.external        = true;
-                    summary.mayNotTerminate = true;
-                }
-                break;
-            }
-            case GCNodeKind::Call:
-                summary.external        = true;
-                summary.mayFault        = true;
-                summary.mayNotTerminate = true;
-                break;
-            case GCNodeKind::Func:
-                summary |= of(graph->directCalleeGraphOf(ref));
-                break;
-            case GCNodeKind::Loop:
-                summary |= of(graph->loopCondGraphOf(ref));
-                summary |= of(graph->loopBodyGraphOf(ref));
-                summary.mayFault        = true;
-                summary.mayNotTerminate = true;
-                break;
-            default:
-                break;
-            }
-        }
-        active.erase(graph);
-        done.emplace(graph, summary);
-        return summary;
-    }
-};
-
 [[noreturn]] void loopFails(const GCGraph *graph, gc_node_ref_t node, const std::string &why) {
     throw std::runtime_error(
         std::format("Runtime graph '{}' has LOOP node {}: {}.", graph->name(), node, why));
@@ -117,8 +56,6 @@ struct EffectWalk {
 std::string typeText(const Type *type) { return type ? type->toString() : std::string("none"); }
 
 } // namespace
-
-EffectSummary effectSummaryOf(const GCGraph *graph) { return EffectWalk{}.of(graph); }
 
 LoopView::LoopView(const GCGraph &graph, gc_node_ref_t node) : graph_(&graph), node_(node) {
     const GCNode *record = graph.node(node);
@@ -194,9 +131,8 @@ std::optional<gc_node_ref_t> LoopView::nextStateComponent(size_t j) const {
 }
 
 EffectSummary LoopView::effects() const {
-    EffectWalk walk;
-    EffectSummary summary   = walk.of(cond_);
-    summary |= walk.of(body_);
+    EffectSummary summary   = effectSummaryOf(cond_);
+    summary |= effectSummaryOf(body_);
     summary.mayFault        = true;
     summary.mayNotTerminate = true;
     return summary;
