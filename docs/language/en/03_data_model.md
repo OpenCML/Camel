@@ -151,37 +151,37 @@ Struct types are compared by the names and types of their fields; `type` only gi
 
 ### 3.3.4 Strings
 
-A string is an immutable sequence of bytes; both length and subscripts are by byte. The built-in operations:
+A string is immutable text and is **always valid UTF-8**; length and subscripts count code points: `len('中文')` is 2 and `'中'[0]` is `'中'`. Binary data is the built-in type `Bytes` (a type name like `string`, not imported), converted explicitly: `bytes::encode`, `bytes::decode` (malformed UTF-8 gives an error value); making a string from invalid bytes, as in `str::from_bytes([255])`, is a fault right there. The built-in operations:
 
 | Form | Result |
 |---|---|
-| `len(s)` | Number of bytes |
-| `s->contains<sub>` | Whether `sub` occurs in `s` (bytes are compared); the empty string always does: `'hello'->contains<'ell'>` is `true`. Written like `contains` on an array |
+| `len(s)` | Number of code points |
+| `s->contains<sub>` | Whether `sub` occurs in `s` (compared byte by byte, which gives the same result as by code point); the empty string always does: `'hello'->contains<'ell'>` is `true`. Written like `contains` on an array |
 | `a + b` | Concatenation |
-| `==`, `!=`, `<`, `>`, `<=`, `>=` | Byte-by-byte comparison; a proper prefix comes first |
+| `==`, `!=`, `<`, `>`, `<=`, `>=` | Comparison in code point order (the same as UTF-8 byte order); a proper prefix comes first |
 | `string(x)`, `int(s)`, `float(s)`, `parse_int(s)`, `parse_float(s)` | Conversion, see 3.2 |
 | `fmt->format<a, b, ...>` | Formatting: `{}` takes the arguments in order; `{:.2f}`, `{:5d}`, `{:.17g}` and the like specify a format; too few arguments is a fault |
 | `strs->join<sep>` | Joins an array of strings |
-| `s[i]` | The `i`-th byte; the result is a string containing just that one byte; an out-of-range subscript is a fault |
+| `s[i]` | The `i`-th code point; the result is a string containing just that one character; an out-of-range subscript is a fault |
 
-The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): by byte, `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr`, `starts_with`, `ends_with`, `repeat`, `bytes`; by code point, `char_count`, `char_at`, `char_substr`, `codepoints`, `from_codepoints`.
+The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr` (index and length in code points), `starts_with`, `ends_with`, `repeat`, `bytes`, `from_bytes`, `codepoints`, `from_codepoints`.
 
 ```cml
-import { split, trim, to_upper, char_count } from str
+import { split, trim, to_upper } from str
 
 func main(): int sync {
     println('a, b ,c'->split<','>->map<(w: string): string => trim(w)>)
-    println('héllo'->to_upper, len('héllo'), char_count('héllo'), 'hello'[1])
+    println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
     return 0
 }
 ```
 
 ```text
 [a, b, c]
-HéLLO 6 5 e
+HéLLO 5 é e
 ```
 
-Whether the result of `s[i]` is a one-byte string or a number is behaviour of the current implementation, not yet decided.
+The result of `s[i]` is a one-character string, not a number; use `str::codepoints` for the numbers. In a string literal the escape `\xHH` can only build valid UTF-8 (`'\xE4\xB8\xAD'` is `'中'`; `'\xE4'` alone is a compile-time error); `\u{4E2D}` writes a code point directly.
 
 ### 3.3.5 Values that cannot be compared
 

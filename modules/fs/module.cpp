@@ -12,7 +12,6 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
-    exportType(Reference("Bytes"), BytesType::get());
     exportEntity(
         "read_bytes",
         OperatorGroup::create(

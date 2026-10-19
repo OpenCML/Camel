@@ -21,8 +21,10 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/bytes.h"
 
 #include "float_format.h"
+#include "text_format.h"
 #include "fmt/args.h"
 
 namespace mm = camel::core::mm;
@@ -88,7 +90,7 @@ slot_t writeArguments(ArgsView &with, ArgsView &norm, std::ostringstream &out, b
         default:
             std::ostringstream oss;
             printSlot(oss, norm.slot(i), norm.type(i));
-            store.push_back(oss.str());
+            store.push_back(camel::builtin::CodePointText{oss.str()});
             break;
         }
     }
@@ -140,6 +142,6 @@ slot_t __op_input__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::string input;
     std::getline(std::cin, input);
 
-    String *str = String::from(input, mm::autoSpace());
+    String *str = camel::core::rtdata::checkedString(input, mm::autoSpace(), "input");
     return toSlot(str);
 }

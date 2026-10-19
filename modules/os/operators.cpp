@@ -24,7 +24,9 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/process_exit.h"
+#include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/utils/utf8.h"
 
 #include <memory>
 
@@ -69,11 +71,17 @@ bool setRawMode(bool enable) {
     return true;
 }
 bool hasInput() { return _kbhit() != 0; }
+// `maxChars` counts characters (code points), and a character is read whole.
 std::string readInput(int maxChars = -1) {
     std::string result;
-    while (hasInput() && (maxChars < 0 || static_cast<int>(result.size()) < maxChars)) {
+    int chars = 0;
+    while (hasInput() && (maxChars < 0 || chars < maxChars)) {
         char ch = _getch();
         result += ch;
+        size_t more = camel::utf8::sequenceLength(static_cast<unsigned char>(ch)) - 1;
+        while (more-- > 0 && hasInput())
+            result += static_cast<char>(_getch());
+        ++chars;
     }
     return result;
 }
@@ -114,13 +122,19 @@ bool hasInput() {
     FD_SET(STDIN_FILENO, &fds);
     return select(STDIN_FILENO + 1, &fds, nullptr, nullptr, &tv) > 0;
 }
+// `maxChars` counts characters (code points), and a character is read whole.
 std::string readInput(int maxChars = -1) {
     std::string result;
     char ch;
-    while (hasInput() && (maxChars < 0 || static_cast<int>(result.size()) < maxChars)) {
+    int chars = 0;
+    while (hasInput() && (maxChars < 0 || chars < maxChars)) {
         if (read(STDIN_FILENO, &ch, 1) <= 0)
             break;
         result += ch;
+        size_t more = camel::utf8::sequenceLength(static_cast<unsigned char>(ch)) - 1;
+        while (more-- > 0 && read(STDIN_FILENO, &ch, 1) > 0)
+            result += ch;
+        ++chars;
     }
     return result;
 }
@@ -180,7 +194,7 @@ slot_t __os_whoami__(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "<whoami> failed");
     }
 #endif
-    return toSlot(String::from(username, mm::autoSpace()));
+    return toSlot(checkedString(username, mm::autoSpace(), "os.whoami"));
 }
 
 slot_t __os_cpu_count__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -211,12 +225,12 @@ slot_t __os_has_input__(ArgsView &with, ArgsView &norm, Context &) {
 }
 
 slot_t __os_get_char__(ArgsView &with, ArgsView &norm, Context &) {
-    return toSlot(String::from(Terminal::readInput(1), mm::autoSpace()));
+    return toSlot(checkedString(Terminal::readInput(1), mm::autoSpace(), "os.get_char"));
 }
 
 slot_t __os_get_chars__(ArgsView &with, ArgsView &norm, Context &) {
     Int64 maxChars = norm.get<Int64>(0);
-    return toSlot(String::from(Terminal::readInput(static_cast<int>(maxChars)), mm::autoSpace()));
+    return toSlot(checkedString(Terminal::readInput(static_cast<int>(maxChars)), mm::autoSpace(), "os.get_chars"));
 }
 
 slot_t __os_clear_input_buffer__(ArgsView &with, ArgsView &norm, Context &) {

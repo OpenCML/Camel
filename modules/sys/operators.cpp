@@ -20,6 +20,7 @@
 #include "operators.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
 
 #include <cstdlib>
@@ -34,12 +35,12 @@ slot_t __sys_get_env__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const char *val = std::getenv(key->c_str());
     if (!val)
         return toSlot(String::from("", mm::autoSpace()));
-    return toSlot(String::from(val, mm::autoSpace()));
+    return toSlot(checkedString(val, mm::autoSpace(), "sys.get_env"));
 }
 
 slot_t __sys_get_cwd__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::string cwd = std::filesystem::current_path().string();
-    return toSlot(String::from(cwd, mm::autoSpace()));
+    return toSlot(checkedString(cwd, mm::autoSpace(), "sys.get_cwd"));
 }
 
 std::unordered_map<std::string, operator_t> getSysOpsMap() {

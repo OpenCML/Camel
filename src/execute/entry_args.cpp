@@ -31,6 +31,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/source/manager.h"
 #include "camel/utils/number_text.h"
+#include "camel/utils/utf8.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -247,6 +248,9 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
         return rooted(rtdata::toSlot<bool>(text == "true"), declared);
     }
     case TypeCode::String:
+        if (!camel::utf8::isValid(text)) {
+            refuse("it is not valid UTF-8 (a string is always valid UTF-8)");
+        }
         return rooted(
             rtdata::toSlot<::String *>(::String::from(text, mm::autoSpace())),
             declared);

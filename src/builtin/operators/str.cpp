@@ -25,6 +25,7 @@
 #include "camel/utils/type.h"
 
 #include "float_format.h"
+#include "text_format.h"
 #include "fmt/args.h"
 #include "fmt/core.h"
 
@@ -35,6 +36,36 @@ using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
+
+std::optional<std::string> checkFormatPattern(
+    std::string_view pattern, std::span<camel::core::type::Type *const> argumentTypes) {
+    fmt::dynamic_format_arg_store<fmt::format_context> store;
+    for (const camel::core::type::Type *type : argumentTypes) {
+        switch (type->code()) {
+        case TypeCode::Int32:
+            store.push_back(Int32{0});
+            break;
+        case TypeCode::Int64:
+            store.push_back(Int64{0});
+            break;
+        case TypeCode::Float32:
+            store.push_back(camel::builtin::LanguageFloat<Float32>{0});
+            break;
+        case TypeCode::Float64:
+            store.push_back(camel::builtin::LanguageFloat<Float64>{0});
+            break;
+        default:
+            store.push_back(camel::builtin::CodePointText{""});
+            break;
+        }
+    }
+    try {
+        (void)fmt::vformat(std::string(pattern), store);
+    } catch (const fmt::format_error &e) {
+        return std::string(e.what());
+    }
+    return std::nullopt;
+}
 
 slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *fmtStrObj = norm.get<String *>(0);
@@ -63,7 +94,7 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
             // fallback to string
             std::ostringstream oss;
             printSlot(oss, with.slot(i), with.type(i));
-            store.push_back(oss.str());
+            store.push_back(camel::builtin::CodePointText{oss.str()});
             break;
         }
     }

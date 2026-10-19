@@ -782,7 +782,7 @@ The modules that come with Camel are `str` (strings), `array` (arrays), `math`, 
 ```cml
 module stdlib_demo
 
-import { split, trim, to_upper, replace, find, char_count } from str
+import { split, trim, to_upper, replace, find } from str
 import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
 import { mean } from statistics
@@ -792,7 +792,7 @@ func main(): int sync {
     let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w: string): string => trim(w)>
     println(words)
     println(words->unique->sort_by<(w: string): int => len(w)>->take<2>)
-    println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'), char_count('héllo'))
+    println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
 
     // A result that may not exist is a T?.
     let at_l = 'hello'->find<'l'> ?? -1
@@ -811,7 +811,7 @@ func main(): int sync {
 ```text
 [pear, fig, apple, fig]
 [fig, pear]
-HELLO a+b+c 6 5
+HELLO a+b+c 5
 2 -1
 10 [5, -1, 4, -1, 3] [3, 1, 4, 1, 5]
 2.3333333333333335 5.0 2
@@ -819,7 +819,7 @@ HELLO a+b+c 6 5
 ```
 
 - **The calling convention**: the value a function works on is its ordinary parameter, and the values that configure the call are `with` parameters. So every library function can be attached to a pipe: `s->trim->split<','>`, `xs->unique->sort_by<key>->take<2>`.
-- Strings are measured in bytes: `len('héllo')` is 6; to count by character use `char_count`, which gives 5. `s[i]` takes out the `i`-th byte.
+- A string is always valid UTF-8 and is measured in code points: `len('héllo')` is 5, and `s[i]` takes out the `i`-th character. Binary data is `Bytes`.
 - A function that may have no result returns `T?` (such as `find` when nothing is found), taken out with `??`; out-of-range arguments and arguments outside the domain are faults.
 - A detail of writing: angle brackets touch the name before them (`find<x>`), and the comparison `<` has a space before it (`a < b`). The two are never confused, and one argument list may hold several calls with angle brackets: `f<a>(x), g<b>(y)`.
 - The `array` module consists of generic functions written in Camel, which are visible subgraphs on the graph; the functions of `str` and `math` are C++ operators, each a single node on the graph.

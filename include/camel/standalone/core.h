@@ -23,8 +23,8 @@
  * sections 7 and 3.3).
  *
  * Everything under include/camel/standalone/ is header-only and uses the C++20 standard
- * library and nothing else of Camel except two headers of camel/utils that are themselves
- * standard-only (number_text.h, int_div.h) and big_stack_thread.h. A generated program
+ * library and nothing else of Camel except three headers of camel/utils that are themselves
+ * standard-only (number_text.h, int_div.h, utf8.h) and big_stack_thread.h. A generated program
  * compiles with `c++ -std=c++20 -I<camel>/include x.cpp` and does not link libcamel.
  *
  * Faults. A place of the program where a fault can happen is a Site, a constant the generated

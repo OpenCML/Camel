@@ -30,12 +30,14 @@
  * last use (std::move) and nothing else refers to the block, the bytes are appended in place,
  * so building a string piece by piece in a loop is linear.
  *
- * Strings are bytes and their lengths and indices count bytes (design principles 2.9).
+ * A string is valid UTF-8 and its lengths and indices count code points (design principles
+ * 2.17).
  */
 
 #pragma once
 
 #include "camel/standalone/core.h"
+#include "camel/utils/utf8.h"
 
 #include <algorithm>
 #include <compare>
@@ -134,16 +136,25 @@ class Str {
     Rep *rep_ = nullptr;
 };
 
-/// `len(s)` (:struct/len_str): the number of bytes.
-inline int64_t length(const Str &s) { return static_cast<int64_t>(s.size()); }
+/// `len(s)` (:struct/len_str): the number of code points (a string is valid UTF-8; design
+/// principles 2.17).
+inline int64_t length(const Str &s) { return static_cast<int64_t>(camel::utf8::count(s.view())); }
 
-/// `s[i]` (:op/idx_str): the string of the one byte at `i` (design principles 2.10). An index
-/// outside the string is IndexOutOfRange at `site` (values: the index, "a string", the length).
-inline Str byteAt(const Str &s, int64_t index, const Site &site) {
-    if (index < 0 || static_cast<std::size_t>(index) >= s.size()) [[unlikely]] {
-        fault(site, {std::to_string(index), "a string", std::to_string(s.size())});
+/// `s[i]` (:op/idx_str): the string of the one character at code point `i`. An index outside
+/// the string is IndexOutOfRange at `site` (values: the index, "a string", the length).
+inline Str charAt(const Str &s, int64_t index, const Site &site) {
+    const std::string_view text = s.view();
+    const bool ascii            = camel::utf8::isAscii(text);
+    const std::size_t count     = ascii ? text.size() : camel::utf8::count(text);
+    if (index < 0 || static_cast<std::size_t>(index) >= count) [[unlikely]] {
+        fault(site, {std::to_string(index), "a string", std::to_string(count)});
     }
-    return Str(std::string_view(s.data() + index, 1));
+    const std::size_t from =
+        ascii ? static_cast<std::size_t>(index)
+              : camel::utf8::offsetOf(text, static_cast<std::size_t>(index));
+    return Str(text.substr(
+        from,
+        camel::utf8::sequenceLength(static_cast<unsigned char>(text[from]))));
 }
 
 /// `s->contains<sub>` (:struct/contains_str): whether the bytes of `sub` occur in `s`.

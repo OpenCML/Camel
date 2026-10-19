@@ -26,6 +26,7 @@
 #include "camel/core/data/composite/tuple.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/typevar.h"
@@ -315,6 +316,8 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("float"), Type::Float64());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
+    // The type of binary data (design principles 2.17), a built-in name like `string`.
+    typeScope_->insert(Reference("Bytes"), camel::core::type::BytesType::get());
     // No `any`: see reportAnyType.
     typeScope_->insert(Reference("void"), Type::Void());
     // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 2.9).
@@ -2456,7 +2459,15 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     case LiteralType::String: {
         // Decode escaped characters in the string and create a StringData object
         std::string decoded = decodeEscapes(str);
-        data                = tt::as_shared<Data>(make_shared<StringData>(decoded));
+        // A string is always valid UTF-8 (design principles 2.17); `'\xE4'` alone is not.
+        // Write the character itself or `\u{4E2D}`; a byte sequence is a `Bytes` value.
+        if (!camel::utf8::isValid(decoded)) {
+            diags_->of(SemanticDiag::InvalidLiteral)
+                .at(ast->load()->tokenRange())
+                .commit("string (not valid UTF-8; use \\u{...} or the character itself)", str);
+            throw BuildAbortException();
+        }
+        data              = tt::as_shared<Data>(make_shared<StringData>(decoded));
     } break;
     case LiteralType::FString: {
         // FString (formatted string) is not supported
