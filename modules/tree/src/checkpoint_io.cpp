@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
+#include <cstdint>
 #include <fstream>
 #include <limits>
 #include <stdexcept>

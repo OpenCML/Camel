@@ -4,12 +4,15 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Native completion and ownership of one CUDA submission, independent of Camel's heap.
 #pragma once
+
+#include <memory>
+#include <vector>
 #ifdef CAMEL_TILES_CUDA
 #include "tiles/device.h"
 #include "tiles/internal/cuda_resources.h"

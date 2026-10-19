@@ -4,12 +4,15 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Finalize CUDA work exactly once, retaining executable, inputs and faults until completion.
 #include "tiles/internal/cuda_submission.h"
+
+#include <memory>
+#include <mutex>
 #ifdef CAMEL_TILES_CUDA
 #include <climits>
 #include <stdexcept>
