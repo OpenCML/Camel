@@ -552,9 +552,26 @@ Two mechanisms whose underpinnings differ greatly, so their syntax is clearly di
 ### 2.21 Schedules and the lifetime of tags (2026-10-19)
 
 - **A tendency (not a prohibition)**: Camel source expresses the intent of a computation without loss; what depends on the environment, where and how to compute (tiling, layout, placement, memory strategy), is in principle not written in the source but injected by the execution context (pass parameters, schedule files), in a format and granularity decided by the library that reads it. Existing practice such as `@gpu` stays.
+- **For the performance ceiling, schedules may be written in source**: the previous item is a tendency and does not exclude the expert path. Block-level kernels (`Tile<T,[shape]>` and `#kernel`, Tiles route section 6) write block shapes in the source under the author's direct control, alongside the high-level path where Tiles decides.
 - **Schedules go down to functions**: for finer control, extract that part into a function and schedule it by function. After inlining, the inline origin recorded on the nodes still maps them back to the original function. Autotuning records results by the structural identity of a computation (operator, shapes, types, neighbourhood), not by names. The language provides no mechanism for naming individual steps of a computation.
 - **A tag is used up by the pass that reads it**: once a pass has applied a tag, the tag may cease to exist, and later passes (such as inlining) are not constrained by it. The order of passes is the user's to arrange (section 4).
 - **Inlining keeps the origin**: the inliner records the inlined function's identity and its declaration tags in the inline origin of the nodes; a pass reading a tag that finds it only on inlined nodes warns that the tag had no effect because the function was inlined before the pass, and says how to reorder.
+
+### 2.22 Defaults of numeric permissions: relaxed by default, tightened by declaration (2026-10-19)
+
+This supersedes what 2.13, 2.15, 2.16 and 2.17 say about defaults; the definition of the permissions and their lexical rules (2.13) are unchanged.
+
+| Permission | Default | Note |
+|---|---|---|
+| `reassociate` | **granted** | changing the order and grouping of additions: the basis of parallel reductions and blocked matmul |
+| `contract` | **granted** | fusing a multiply and an add into one FMA |
+| `approx_math` | not granted; grant with a tag | approximate transcendental functions |
+| `change_precision` | not granted; grant with a tag | computing at lower precision (TF32, BF16 and the like) |
+| `finite_math` | not granted; grant with a tag | assuming no NaN, infinity, negative zero or subnormal |
+
+- **Tightening**: the tag `#strict` makes the tagged function or block compute bit for bit by the canonical algorithm, using no permission at all (default ones included); for a whole program, the safe mode of pipeline parameters (such as `std::opt(safe_fp=true)` and the parameters of the same name of each back end).
+- **Two guarantees stay**: two runs on the same device with the same configuration give bit-identical results (no technique whose result varies with scheduling, such as floating-point atomic adds); the canonical algorithm on the CPU remains the reference, tests comparing bit for bit in strict mode and within error bounds in default mode.
+- Bit-identical results across devices are no longer the default; they need strict mode.
 
 ## 3. `macro`
 

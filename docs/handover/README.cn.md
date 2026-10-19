@@ -200,7 +200,7 @@ let area = match b {
 1. **`tag` 声明**：解析 `export tag 名 <参数> on 位置列表` 与别名组 `tag 名 = [ ... ]`；标签是与函数、类型同一命名空间的名字，可导入、可限定。C++ 模块用同一套登记接口声明标签（把现有的 `declareGrant`、`attr::registerKey` 收为"登记一个标签"）。
 2. **`#` 写法**：`#名`、`#名<参数>`、`#[a, b<v>]`，可写在函数、类型声明、结构体字段、代码块前；贴到 `on` 未列出的位置是编译错误；参数是编译期的值。`#` 不再是注释（见 H6 第 6 项）。
 3. **节点标签**（`on nodes`）用现有的节点属性实现：区域上的事实累积，同名带参的内层为准。**声明标签**（`on func`、`on type`、`on field`）存在声明上，C++ 查询接口可读；编译期代码中的读取（`match type`、`fields`）随泛型第一期接入，本任务只提供存储与 C++ 查询。
-4. **数值许可改为标签**：标准库把 `reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals` 声明为 `on nodes` 的标签，`finite_math` 为别名组。删除编译器前端的 `numeric` 分支与名单、`@name(...)` 写法（旧写法给出指向 `#[reassociate]` 的诊断）、一字节许可列；核心语义层通过节点标签读取许可（标签与含义的对应只在一处）；所有读者（算式优化、`tensor::fuse`、`inspect`、`std::jgir`、Tiles）改为同一个辅助函数。Tiles 只改到能编译。
+4. **数值许可改为标签，默认值按设计原则 2.22**：`reassociate`、`contract` 默认授予，其余用标签授予；新增标签 `#strict`（不使用任何许可，含默认许可）；核心的 `NumericPolicy` 以 2.22 为默认策略，安全模式参数即严格策略。标准库把 `reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals` 声明为 `on nodes` 的标签，`finite_math` 为别名组。删除编译器前端的 `numeric` 分支与名单、`@name(...)` 写法（旧写法给出指向 `#[reassociate]` 的诊断）、一字节许可列；核心语义层通过节点标签读取许可（标签与含义的对应只在一处）；所有读者（算式优化、`tensor::fuse`、`inspect`、`std::jgir`、Tiles）改为同一个辅助函数。Tiles 只改到能编译。
 5. **`@vjp` 改为 `#vjp<rule>`**（声明标签，值为规则函数的图引用），自动微分直接读取，删除靠宏求值与 `attachRule` 的做法。
 6. **`macro` 改为标准标签 `#macro`**（不用导入）：`std::macro` 读标签，含义按设计原则第 3 节不变；求值失败按运行时故障处理，与任何遍运行中的故障相同；删除函数类型中的 `Modifier::Macro`。删除关键字 `inner`、`outer`、`atomic`、`shared`（标准库签名中的 `inner func` 改为无函数体的声明）。
 8. **标签可声明读取它的遍**：`tag 名 ... read_by 遍名`（写法可调整，报告中说明）；流水线中没有该遍时给出"标签没有效果"的警告。
