@@ -22,7 +22,8 @@
 | 函数 | `(x: T) => R` | 见 [6.9](06_expressions.md#69-lambda-与函数类型) |
 | 可能为空 | `T?` | 见 3.4 |
 | 可能出错 | `T!` | 见 3.4 |
-| 映射、集合 | `Map<K, V>`、`Set<T>` | 见 3.5 |
+| 映射、集合 | `Map<K, V>`、`Set<T>` | 见 3.6 |
+| 枚举 | `Shape`，`Option<int>` | 见 3.5 |
 | 无值 | `void` | 没有返回值的函数的返回类型；它唯一的值打印为 `null` |
 | 模块类型 | 如 `Tensor`、`Tensor<f32, const [2, 3]>` | 由模块引入，尖括号里的实参由该类型自己解释 |
 
@@ -35,6 +36,7 @@
 | 返回类型 `any` | 写出实际返回的类型，或者不写，由函数体推断 |
 | `e as any` | 去掉，值保持自己的类型 |
 | 不同类型的值并排放（`any[]`、`(int, any)`） | 元组或结构体：`(int, string)`、`{ id: int, name: string }` |
+| 值是几种可能之一 | `enum`：`type Shape = enum { Circle(float), Empty }`（见 3.5） |
 | 形状事先知道的 JSON | `json::decode_as(text, shape)`，结果是 `T!` |
 | 形状事先不知道的 JSON | `json::decode(text)` 给出 `Json!`：文字不是 JSON 时是错误值 `JsonParseError`（不是故障，设计原则 2.13），否则是 `Json`，类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），并接受 `Json?` 以便链式取值，例如 `j->get<'server'>->get<'port'>->as_int ?? 8080`；`as_float` 也接受整数，`get<下标>` 越界给 `null`（2.13 定下的访问器设计）。形状已知时用 `decode_as`，目标类型暂由一个“形状值”给出 |
 
@@ -115,7 +117,7 @@ println(xs[0], len(xs), grid[0][1])
   | `zip(xs, ys)` | `(x, y)` 元组的数组；三个或更多数组得到相应元数的元组（`zip(xs, ys, zs)`）；长度必须相同 |
   | `strs->join<sep>` | 把 `string[]` 连成一个字符串 |
   | `map`、`filter`、`reduce`、`foreach` | 见 [6.10](06_expressions.md#610-高阶算子) |
-  | `xs->append<v>`、`xs->extend<ys>` | 在末尾加上 `v`（或 `ys` 的各个元素）的**新数组**，`xs` 不变；要追加到变量上写 `xs = xs->append<v>`（见 3.6） |
+  | `xs->append<v>`、`xs->extend<ys>` | 在末尾加上 `v`（或 `ys` 的各个元素）的**新数组**，`xs` 不变；要追加到变量上写 `xs = xs->append<v>`（见 3.7） |
 
 - 更多的数组函数在 `array` 模块里，使用前要导入（`import { reverse, sum } from array`）：`reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`any`、`all`、`count`、`sum`、`min`、`max`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md)。
 
@@ -185,7 +187,7 @@ HéLLO 6 5 e
 
 ### 3.3.5 不能比较的值
 
-`==`、`!=` 用于数值、`bool`、`string`、`Map`、`Set`，以及数组、元组、结构体：后三者按内容逐个比较，元素类型本身要能比较（[6.7.3](06_expressions.md#673-比较)）。函数、含函数值的复合值、单独的 `T?`/`T!` 没有 `==`（编译期错误）。`===` 见 [6.7.3](06_expressions.md#673-比较)。
+`==`、`!=` 用于数值、`bool`、`string`、`Map`、`Set`、枚举，以及数组、元组、结构体：后三者按内容逐个比较，元素类型本身要能比较（[6.7.3](06_expressions.md#673-比较)）。函数、含函数值的复合值、单独的 `T?`/`T!` 没有 `==`（编译期错误）。`===` 见 [6.7.3](06_expressions.md#673-比较)。
 
 ## 3.4 可能为空 `T?` 与可能出错 `T!`
 
@@ -239,9 +241,56 @@ error DivByZero: the divisor is zero
 
 **错误与故障是两回事。** 只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障：程序带位置终止，`!!` 接不住它（见 [4.6](04_execution_model.md#46-故障退出与资源上限)）。
 
-**当前实现的行为，尚待确定**：`?->` 只对 `T!` 有定义；`match` 对这两种值恰好两个分支；它们可以打印，但除了 `T?` 与 `null` 比较之外不能用 `==` 比较。早先预留的记号 `T ? U` 与 `T!` 的关系未定，使用它是编译期错误（`SemanticDiag::FeatureNotSupported`）。
+**当前实现的行为，尚待确定**：`?->` 只对 `T!` 有定义；`match` 对这两种值恰好两个分支；它们可以打印，但除了 `T?` 与 `null` 比较之外不能用 `==` 比较。
 
-## 3.5 映射与集合
+早先预留的记号 `T ? U` 已退役：`?` 只是可空标记，`T ?` 后面接类型的那条特殊读法没有了，写它得到 `SemanticDiag::ReservedTypeQuestionRetired`。
+
+## 3.5 枚举 `enum`
+
+`enum` 是一个**名义类型**：一个值恰好是声明里列出的变体之一，每个变体可以不带数据、带一个元组或带一个结构体。两个同形的 `enum` 是不同的类型。
+
+```cml
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+type Option<T> = enum { Some(T), None }
+type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
+```
+
+**声明。** `type 名字 = enum { 变体, ... }`，末尾逗号可有可无。变体三种形状：`Empty`（无数据）、`Circle(float)`（一个或多个位置字段）、`Rect { w: float, h: float }`（具名字段，字段之间用 `,` 分隔）。同一个 `enum` 里变体名不能重复（`DuplicateEnumVariant`），结构体变体内字段名不能重复（`DuplicateEnumField`）。类型可以带参数（`Option<T>`），变体的字段类型可以引用这个 `enum` 本身（`Tree<T>`），也可以引用别的 `enum`。`enum` 是关键字，不能用作名字。
+
+**构造。** 变体写在类型名后面，用 `::` 限定：`Shape::Circle(1.0)`、`Shape::Rect { w: 2.0, h: 3.0 }`、`Shape::Empty`。结构体变体要写全字段，顺序不限；元组变体按位置给全。无数据的变体就是那个值本身，不写括号。构造出的值有类型 `Shape`；泛型实例的参数由字段的实参推出（`Option::Some(42)` 是 `Option<int>`），推不出时（`Option::None`）由期望的类型推出（`let x: Option<int> = Option::None`、实参位置、返回类型），仍推不出是编译期错误（`EnumTypeArgumentNotInferred`）。字段的类型必须与声明一致（`EnumFieldTypeMismatch`），个数与字段名也必须一致（`EnumVariantFieldCount`、`EnumConstructionMismatch`）；字段的实参按与声明字段相同的规则接受自动装入（`int` 进入 `float` 字段不自动，数值之间仍不做隐式转换）。
+
+**`match`。** 枚举靠 `match` 取出数据，不能直接取字段（`b.w` 是 `EnumFieldAccess`，诊断提示用 `match`）：
+
+```cml
+func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+        case Shape::Rect { w, h } => w * h
+        case Shape::Empty => 0.0
+    }
+}
+```
+
+- 元组变体的模式给出全部位置，不要的字段写 `_`：`case Shape::Circle(_)`；结构体变体的模式只写要绑定的字段，没写的字段忽略，可以改名 `{ w: width }`，简写 `{ w }` 绑定同名变量；无数据的变体只写名字 `case Shape::Empty`；`case _` 匹配剩下的所有值。
+- **穷尽**：列全了所有变体就不必写 `case _`；漏了变体又没有 `case _` 是编译期错误 `EnumMatchNotExhaustive`，诊断列出漏掉的变体名。已被前面的臂覆盖的变体再写一次给警告（`EnumVariantCaseRepeated`）；`case _` 之后的臂永远不执行，给警告（`MatchCaseAfterWildcard`）。
+- 模式必须写现在匹配的类型的变体，前缀（`Shape::`）与变体名都要对：写错是 `EnumPatternMismatch`，诊断列出该类型声明的变体。
+- **第一版不支持嵌套模式**：`case Shape::Circle(0.0)` 这种把模式写在字段位置的写法给出"暂不支持"（`ConstructNotSupported`），要求为每个字段写名字或 `_`，在臂里再匹配。
+- `match` 的值可以是任意表达式，包括返回 `enum` 的调用；各臂结果类型的统一与现有的 `match` 相同（[6.8.2](06_expressions.md#682-match)）。
+
+**相等与打印。** 同一个 `enum` 实例类型的两个值可以 `==`、`!=`：先比变体，再按声明顺序逐字段比较；任一字段类型不能比较时，这个 `enum` 也不能比较（编译期错误）。打印与源码写法一致：`Shape::Circle(1.0)`、`Shape::Rect { w: 2.0, h: 3.0 }`、`Shape::Empty`；泛型实例不打印类型参数（`Option::Some(42)`，不是 `Option::Some<int>(42)`）。
+
+**泛型。** `Option<int>` 与 `Option<float>` 是两个不同的类型，各是各的值。字段类型可以再用参数：`type Pair<A, B> = enum { Both(A, B), Neither }`，`Pair<int, string>` 的 `Both` 收一个 `int` 和一个 `string`。
+
+**图上。** 不增加节点种类：构造是"装入一个标签和数据"，`match` 是"取标签、按标签分支、在臂里取出数据"，与 `T?`、`T!` 相同。取标签与取字段是普通的内部算子（`__enum_tag__`、`__enum_field__`），调度器不对它们按名字特判。`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::macro` 都支持 `enum`；`std::cpp` 与 ONNX 导出、自动微分暂时给出带位置的拒绝。
+
+**已退役。** 类型位置上的 `A | B` 已退役：一个值只有一种类型，值是几种可能之一时写 `enum`（`SemanticDiag::UnionTypeRetired`，`|` 只留给逻辑或）；`T ? U` 同样退役（`SemanticDiag::ReservedTypeQuestionRetired`）。
+
+## 3.6 映射与集合
 
 `Map<K, V>` 与 `Set<T>` 是内建类型，不需要 `import`。没有专门的字面量，用数组加 `as` 构造：
 
@@ -320,7 +369,7 @@ func main(): int sync {
 
 实现与取舍见 [技术文档 31](../technical/31_map_and_set.md)。
 
-## 3.6 `let`、`var` 与引用
+## 3.7 `let`、`var` 与引用
 
 - `let` 引入不可变的名字，`var` 引入可变的变量。同一个作用域里同一个名字不能声明两次（`SemanticDiag::Redeclaration`）。
 - **只能给整个变量赋值。** 字段与元素不可赋值：`p.x = 5`、`xs[0] = 5` 是编译期错误 `SemanticDiag::AssignmentTargetNotVariable`。给变量一个新的值：`p = { x: 5, y: p.y }`。

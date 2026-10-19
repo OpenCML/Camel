@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -795,8 +795,15 @@ pattern
 */
 any Formatter::visitPattern(cst::Pattern context) {
     if (context->get<cst::IdentRef>()) {
-        // `error e`: the bound name is part of the pattern.
+        // `error e`: the bound name is part of the pattern. A variant path may carry the
+        // field patterns of the variant: `Shape::Circle(r)`, `Shape::Rect { w, h }`.
         string result = any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
+        if (const auto tuple = context->get<cst::EnumTuplePattern>()) {
+            return result + any_cast<string>(visitEnumTuplePattern(tuple));
+        }
+        if (const auto record = context->get<cst::EnumStructPattern>()) {
+            return result + any_cast<string>(visitEnumStructPattern(record));
+        }
         if (context->get<cst::IdentDef>()) {
             result += " " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
         }
@@ -1285,6 +1292,84 @@ any Formatter::visitStructType(cst::StructType context) {
 }
 
 /*
+enumType
+    : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
+    ;
+*/
+any Formatter::visitEnumType(cst::EnumType context) {
+    const auto variants = vec(context->all<cst::EnumVariant>());
+    return "enum {" + formatList(variants, context, ", ", ",", PaddingNL | PaddingSP | PushScope) +
+           "}";
+}
+
+/*
+enumVariant
+    : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
+    ;
+*/
+any Formatter::visitEnumVariant(cst::EnumVariant context) {
+    string result = any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (const auto types = context->get<cst::TypeList>()) {
+        result += "(" + any_cast<string>(visitTypeList(types)) + ")";
+    } else {
+        const auto fields = vec(context->all<cst::EnumField>());
+        if (!fields.empty()) {
+            result += "{" +
+                      formatList(fields, context, ", ", ",", PaddingNL | PaddingSP | PushScope) +
+                      "}";
+        }
+    }
+    return result;
+}
+
+/*
+enumField
+    : identDef ':' typeExpr
+    ;
+*/
+any Formatter::visitEnumField(cst::EnumField context) {
+    return any_cast<string>(visitIdentDef(context->get<cst::IdentDef>())) + ": " +
+           any_cast<string>(visitType(context->type()));
+}
+
+/*
+enumTuplePattern
+    : '(' (pattern (',' pattern)*)? ','? ')'
+    ;
+*/
+any Formatter::visitEnumTuplePattern(cst::EnumTuplePattern context) {
+    return "(" + formatList(vec(context->all<cst::Pattern>()), context, ", ", ",", PaddingSP) +
+           (hasTrailingComma(context) ? "," : "") + ")";
+}
+
+/*
+enumStructPattern
+    : '{' (IDENTIFIER (':' pattern)? ','?)* '}'
+    ;
+*/
+any Formatter::visitEnumStructPattern(cst::EnumStructPattern context) {
+    string body;
+    bool first = true;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        const auto child = context->child(i);
+        if (!child.isToken() || child.token()->kind() != TK::Identifier) {
+            continue;
+        }
+        if (!first) {
+            body += ", ";
+        }
+        first = false;
+        body += child.text();
+        // The pattern after the colon renames or takes the field apart.
+        if (i + 1 < context->childCount() && context->child(i + 1).isNode()) {
+            body += ": " + any_cast<string>(visit(context->child(i + 1).node()));
+            ++i;
+        }
+    }
+    return "{" + body + (hasTrailingComma(context) ? "," : "") + "}";
+}
+
+/*
 typeList
     : typeExpr (',' typeExpr)*
     ;
@@ -1449,6 +1534,11 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(SpecType)
         CAMEL_FORMAT(ConstData)
         CAMEL_FORMAT(StructType)
+        CAMEL_FORMAT(EnumType)
+        CAMEL_FORMAT(EnumVariant)
+        CAMEL_FORMAT(EnumField)
+        CAMEL_FORMAT(EnumTuplePattern)
+        CAMEL_FORMAT(EnumStructPattern)
         CAMEL_FORMAT(TupleType)
         CAMEL_FORMAT(FuncType)
 #undef CAMEL_FORMAT

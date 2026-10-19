@@ -23,7 +23,7 @@ func main(): int sync {
 }
 ```
 
-**纯运算的结果没有被使用是错误。** 一条语句是一个声明为纯的算子的调用（`xs->append<5>`、`sort(xs)`、`a + b`），而它的值没有被使用时（它不是块的最后一条语句，或者块的值被丢弃：声明为 `: void` 的函数体、写在 `foreach` 上的元素函数、没有 `else` 的 `if` 的臂、写成语句的块），它什么也不做：这样的算子返回新值、不修改参数（设计原则 2.12）。这是编译期错误 `SemanticDiag::UnusedPureResult`；`xs` 是变量时，诊断提示改写为重新绑定 `xs = xs->append<5>`（[3.6](03_data_model.md#36-letvar-与引用)）。
+**纯运算的结果没有被使用是错误。** 一条语句是一个声明为纯的算子的调用（`xs->append<5>`、`sort(xs)`、`a + b`），而它的值没有被使用时（它不是块的最后一条语句，或者块的值被丢弃：声明为 `: void` 的函数体、写在 `foreach` 上的元素函数、没有 `else` 的 `if` 的臂、写成语句的块），它什么也不做：这样的算子返回新值、不修改参数（设计原则 2.12）。这是编译期错误 `SemanticDiag::UnusedPureResult`；`xs` 是变量时，诊断提示改写为重新绑定 `xs = xs->append<5>`（[3.7](03_data_model.md#37-letvar-与引用)）。
 
 使用这个值指用 `!!`、`?->` 或 `match` 拆开它、把它传下去，或者返回它。有意丢弃写 `let _ = ...`（[7.2](#72-let-与-var)）。没有 `else` 的 `if`，其臂给出的值也同样警告；**没有声明返回类型**的 `main` 以一个值结尾时也一样：只有声明了返回类型的 `main` 才有结果（[4.1](04_execution_model.md#41-程序与入口)），没有声明的 `main` 结尾处的错误值无处可去。同步块之外没有什么可警告的：没有人使用的值根本不求值。可以用 `-Wno-unused-fallible-value` 关掉这个警告。
 
@@ -400,7 +400,7 @@ id
 - 可以 `export`，在别的模块里以 `模块::Pair<int>` 使用。
 - 模块类型（如 `Tensor<f32, const [2, 3]>`）的尖括号由该类型自己解释，实参可以是类型或 `const 数据`。
 
-类型表达式里保留、尚未实现的部分：类型运算 `&`、`\`、`+`、`-`、`^`，`typeof`、`keyof`、`名字 of T`、`T ? U`（`SemanticDiag::FeatureNotSupported` 或语法错误），它们的含义尚未决定。联合类型 `A | B` 能写出来，但成员类型的值并不能进入它（`int` 不能传给 `int | string` 的形参），目前没有实际用途。`enum` 是保留字，没有对应的语法。
+类型表达式里保留、尚未实现的部分：类型运算 `&`、`\`、`+`、`-`、`^`，以及 `typeof`、`keyof`、`名字 of T`（`SemanticDiag::FeatureNotSupported` 或语法错误），它们的含义尚未决定。`T ? U` 已退役（`SemanticDiag::ReservedTypeQuestionRetired`）；联合类型 `A | B` 也已退役，值是几种可能之一时写 `enum`（`SemanticDiag::UnionTypeRetired`，见 [3.5](03_data_model.md#35-枚举-enum)）。
 
 ## 7.8 块
 
@@ -411,3 +411,4 @@ sync? { 语句 ... }
 块是表达式：它的值由块里的 `return` 给出，没有 `return` 时没有值。块引入一个作用域。带 `sync` 的块按书写顺序执行其中的语句（[4.3.1](04_execution_model.md#431-同步块块修饰符)）；不带 `sync` 的块按依赖求值。
 
 块用作函数体、分支臂、lambda 体，也可以单独作语句。
+

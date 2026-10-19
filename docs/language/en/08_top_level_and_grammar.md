@@ -72,16 +72,19 @@ Subscripts, arguments and `with` arguments must directly follow the expression b
 ## 8.4 Types
 
 ```
-typeExpr : unionType ('?' | '!')*
-unionType: arrayType ('|' arrayType)*
-arrayType: specType ('[' ']')*
-specType : primaryType ('<' (type | const data), ... '>')?
+typeDecl  : 'type' name ('<' parameters, ... '>')? '=' (type | enumBody)
+typeExpr  : arrayType ('?' | '!')*
+arrayType : specType ('[' ']')*
+specType  : primaryType ('<' (type | const data), ... '>')?
 primaryType : name | '(' type ')' | '(' type, ... ')' | '{' name: type, ... '}'
             | modifier* '(' parameters ')' '=>' type | typeas name
+enumBody  : 'enum' '{' variant, ... '}'
+variant   : name | name '(' type, ... ')' | name '{' name: type, ... '}'
 ```
 
 - `T?`, `T!`: [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t).
 - `typeas T`: [7.5](07_statements.md#75-generic-functions).
+- `enum`: [3.5](03_data_model.md#35-enums). `A | B` in a type position is retired and gives `SemanticDiag::UnionTypeRetired`.
 - Angle brackets: the arguments of a type function ([7.7](07_statements.md#77-type-declarations)) or the arguments of a module type.
 
 ## 8.5 The complete grammar
@@ -102,7 +105,7 @@ stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
 moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
 moduleDecl         : 'module' identDef
-importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from' moduleName)
+importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from'
 bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
 importItem         : identDef ('as' identDef)?
 exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
@@ -155,8 +158,7 @@ linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
-annoExpr           : accessExpr (indices | parentArgues | angledValues | typeArguments | '!' | memberAccess)*
-memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
+annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!' |
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
 primaryData        : identRef | literal | arrayData | structData | tupleData | funcData
 literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
@@ -177,8 +179,10 @@ structData         : '{' (pairedValues ','?)? '}'
 tupleData          : '(' dataList? ','? ')'
 funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
-pattern            : identRef identDef? | literal | '(' (dataList | identList)? ','? ')'
-                     | '{' (pairedValues | identList)? ','? '}' | '_'
+pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
+                     | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
+enumTuplePattern   : '(' (pattern (',' pattern)*)? ','? ')'
+enumStructPattern  : '{' (IDENTIFIER (':' pattern)? ','?)* '}'
 loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
@@ -194,13 +198,16 @@ typeUnit           : (identDef 'of')? arrayType
 arrayType          : specType ('[' ']')*
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 typeOrData         : typeExpr | 'const' dataExpr
-primaryType        : structType | identRef | '(' typeExpr ')' | tupleType | funcType
+primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
                      | 'typeof' dataExpr | 'typeas' identDef
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : identDef ':' typeExpr
 funcType           : modifiers? angledParams? parentParams '=>' typeExpr
 typeList           : typeExpr (',' typeExpr)*
+enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
+enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
+enumField          : identDef ':' typeExpr
 ```
 
 <!-- grammar:end -->

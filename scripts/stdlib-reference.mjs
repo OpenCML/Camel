@@ -421,7 +421,14 @@ function verifyOps() {
                 continue
             }
             checked++
+            // One operator is declared once per type it accepts (unions are retired), and the
+            // declarations of a name share one description: the doc comment is read with the
+            // first of them.
+            const firstEntry = sameName[0]
             for (const entry of matching) {
+                if (entry !== firstEntry) {
+                    continue
+                }
                 const declaredPure = entry.purity === 'pure'
                 if (entry.purity === null) {
                     problems.push(`${file}:${entry.line}: '${entry.name}' says neither @pure nor @effect`)
@@ -436,6 +443,9 @@ function verifyOps() {
             const hit = ops.some((op) => op.name === entry.name && uriMatches(entry.uri, op.uri))
             if (!hit) {
                 problems.push(`${file}:${entry.line}: '${entry.name}' (${entry.uri}) is declared but no such operator is registered`)
+            }
+            if (entries.find((each) => each.name === entry.name) !== entry) {
+                continue
             }
             if (entry.doc.length === 0) problems.push(`${file}:${entry.line}: '${entry.name}' has no description`)
             if (entry.examples.length === 0) problems.push(`${file}:${entry.line}: '${entry.name}' has no @example`)
