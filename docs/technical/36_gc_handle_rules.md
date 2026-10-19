@@ -8,7 +8,7 @@ may be managed by a generational collector and may move; foreign memory is owned
 Camel-native object and stays outside the movable heap; **a module does not keep a raw pointer
 to a Camel object across calls.**
 
-The rules hold for both collectors (`--gc mark-sweep`, the default, and `--gc generational`).
+The rules hold for both collectors (`--gc generational`, the default, and `--gc mark-sweep`).
 Under mark-sweep an object keeps its address, so a violation of rules 2, 3 and 6 goes unnoticed
 until the object is freed; under the generational collector it reads moved memory. Write code
 for the generational collector.

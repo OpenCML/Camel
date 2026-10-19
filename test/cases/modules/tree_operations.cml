@@ -1,0 +1,21 @@
+module tree_operations
+import { tree_map, tree_unzip, tree_reduce, tree_leaves, tree_paths } from tree
+func twice(x: typeas T): T { return x + x }
+func bump(x: int): int { return x + 1 }
+func bump(x: float): float { return x + 0.5 }
+func main(): int sync {
+    let p = { w: 3.0, block: (4.0, 5.0) }
+    println(tree_map<(a: float, b: float): float => a + b>(p, p))
+    println(tree_map<twice>({ count: 2, weight: 1.5 }))
+    println(tree_map<bump>({ count: 2, weight: 1.5 }))
+    let r = tree_map<(a: float, b: float) => (a + b, a - b, a * b)>(p, p)
+    println(tree_unzip(r, p))
+    // A secondary tree's aggregate at a reference leaf is a whole argument.
+    println(tree_map<(a: float, b: (float, float)): float => a + b.0 + b.1>(p, tree_map<(a: float) => (a, a)>(p)))
+    println(tree_reduce<(acc: float, x: float): float => acc - x>(p, 20.0))
+    println(tree_leaves(p))
+    println(tree_paths(p))
+    println(tree_map<(a: int[]): int => len(a)>({ samples: [1, 2, 3] }))
+    println(tree_reduce<(a: float, b: float): float => a + b>((10000000000000000.0, -10000000000000000.0, 1.0), 0.0))
+    return 0
+}

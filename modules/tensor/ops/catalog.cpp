@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,11 +22,12 @@
  */
 
 #include "catalog.h"
+#include "binary_ops.h"
 #include "registry.h"
 
+#include "../type.h"
 #include "camel/core/operator_table.h"
 #include "camel/runtime/core_facts.h"
-#include "../type.h"
 
 #include <mutex>
 
@@ -56,15 +57,22 @@ void declareResourcesAndDefinitions() {
             {"set_num_threads", externalAmbient("tensor:threads", AccessMode::Write)},
             {"num_threads", externalAmbient("tensor:threads", AccessMode::Read)},
         });
-    const auto operand = [](uint8_t index, std::optional<DefinitionDefault> fallback = std::nullopt) {
-        return DefinitionParam{.kind = DefinitionParam::Kind::Norm, .operand = index, .fallback = fallback};
+    const auto operand = [](uint8_t index,
+                            std::optional<DefinitionDefault> fallback = std::nullopt) {
+        return DefinitionParam{
+            .kind     = DefinitionParam::Kind::Norm,
+            .operand  = index,
+            .fallback = fallback};
     };
     const std::string library = "tensor_definitions";
     // softmax(t, axis = -1), log_softmax(t, axis = -1): the axis may be left out.
     for (const char *name : {"softmax", "log_softmax"}) {
         table.declareDefinition(
             std::string("tensor:") + name,
-            Definition{.module = library, .function = name, .params = {operand(0), operand(1, int64_t{-1})}});
+            Definition{
+                .module   = library,
+                .function = name,
+                .params   = {operand(0), operand(1, int64_t{-1})}});
     }
     for (const char *name : {"mean", "relu", "sigmoid"}) {
         table.declareDefinition(
@@ -86,6 +94,7 @@ void registerTensorOps() {
               reductionOps,
               linalgOps,
               utilityOps,
+              binaryOps,
               gradientOps}) {
             for (OpDef &def : family()) {
                 defs.push_back(std::move(def));
@@ -98,12 +107,15 @@ void registerTensorOps() {
         // The core's shape facts (core.shape, camel/runtime/core_facts.h) read a tensor's
         // element type and extents from its type, which this module defines.
         camel::runtime::fact::registerShapeReader(
-            [](const camel::core::type::Type *type) -> std::optional<camel::runtime::fact::TensorShape> {
+            [](const camel::core::type::Type *type)
+                -> std::optional<camel::runtime::fact::TensorShape> {
                 const TensorType *tensor = asTensorType(type);
                 if (tensor == nullptr) {
                     return std::nullopt;
                 }
-                return camel::runtime::fact::TensorShape{.dtype = tensor->dtype(), .dims = tensor->shape()};
+                return camel::runtime::fact::TensorShape{
+                    .dtype = tensor->dtype(),
+                    .dims  = tensor->shape()};
             });
     });
 }

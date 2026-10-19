@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,6 +61,7 @@ enum class ParamKind {
     Number,             // any numeric scalar
     Bool,
     String,
+    Bytes,
     IntArray, // int[]
 };
 
@@ -126,8 +127,7 @@ using IndexFn = std::function<std::optional<core::sem::IndexedInstance>(const In
 /// The result as a constant when the argument types (and constant arguments) fix it, e.g. the
 /// shape of a tensor whose type carries its shape; nullopt otherwise. Mirrored into the core
 /// OperatorTable (setTypeFolder), which std::opt::fold consults.
-using FoldFn =
-    std::function<std::optional<slot_t>(const InferContext &, core::mm::IAllocator &)>;
+using FoldFn = std::function<std::optional<slot_t>(const InferContext &, core::mm::IAllocator &)>;
 
 /// Semantic properties used by exporters and, mirrored into the core OperatorTable on
 /// registration, by generic graph passes. Operators are pure unless marked otherwise.

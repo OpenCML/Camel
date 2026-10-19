@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -577,14 +577,14 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-S", "--scheduler") & value("scheduler type", schedular)) % "scheduler type",
          (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
          (option("--max-recursion-depth") & value("calls", maxRecursionDepthOpt)) %
-             "limit on calls open at once that are not tail calls (default: 256 on std::nvm and "
-             "std::fvm, the native stack on std::tf; also CAMEL_MAX_RECURSION_DEPTH)",
+             "limit on calls open at once that are not tail calls (default: 1000 on every "
+             "scheduler; also CAMEL_MAX_RECURSION_DEPTH)",
          (option("--max-macro-depth") & value("calls", maxMacroDepthOpt)) %
              "limit on nested calls while std::macro evaluates a call (default: 64; also "
              "CAMEL_MAX_MACRO_DEPTH)",
          (option("--gc") & value("collector", gcModeOpt)) %
-             "collector of run-time values: mark-sweep (default; objects keep their address) or "
-             "generational (young objects are copied); also CAMEL_GC",
+             "collector of run-time values: generational (default; young objects are copied) or "
+             "mark-sweep (objects keep their address); also CAMEL_GC",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",

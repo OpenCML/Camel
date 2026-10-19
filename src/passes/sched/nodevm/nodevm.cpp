@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1139,6 +1139,8 @@ slot_t NodeVMSchedPass::evalNativeOperator(
     data_arr_t wargs{indices.data() + normCnt, indices.size() - normCnt};
     FrameArgsView withView(*currFrame, wargs);
     FrameArgsView normView(*currFrame, nargs);
+    withView.setResultType(currRuntimeGraph->node(nodeRef)->dataType());
+    normView.setResultType(withView.resultType());
 
     if (camel::core::effect_trace::enabled()) [[unlikely]] {
         camel::core::effect_trace::setSite(currRuntimeGraph->nodeOrigin(nodeRef));

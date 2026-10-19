@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -2505,6 +2505,8 @@ std::optional<Value> Evaluator::foldConstantOper(
     }
     FoldArgsView withView(std::move(withSlots), std::move(withTypes));
     FoldArgsView normView(std::move(normSlots), std::move(normTypes));
+    withView.setResultType(resultType);
+    normView.setResultType(resultType);
     slot_t result;
     try {
         result = (*found)(withView, normView, ctx_);

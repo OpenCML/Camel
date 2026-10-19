@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -153,6 +153,8 @@ std::string_view kindText(ParamKind kind) {
         return "bool";
     case ParamKind::String:
         return "string";
+    case ParamKind::Bytes:
+        return "Bytes";
     case ParamKind::IntArray:
         return "int[]";
     }

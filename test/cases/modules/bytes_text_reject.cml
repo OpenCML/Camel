@@ -1,0 +1,10 @@
+module bytes_text_reject
+import { from_array } from bytes
+import { write_bytes, read_text } from fs
+import { get_env } from sys
+func main(): int sync {
+    let path = get_env('TEMP') + '/camel-bytes-invalid-text.bin'
+    write_bytes(path, from_array([255]))
+    println(read_text(path))
+    return 0
+}

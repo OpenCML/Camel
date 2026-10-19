@@ -63,8 +63,9 @@ class DeviceType final : public core::type::OtherType {
     core::type::CastSafety castSafetyFrom(core::type::Type *other) const override;
     slot_t castSlotFrom(slot_t value, core::type::Type *other) const override;
     bool typeArguments() const override;
-    core::type::OtherType *
-    cloneWithParams(std::span<core::type::Type *const> params) const override;
+    core::type::Type *cloneWithParams(std::span<core::type::Type *const> params) const override;
+    core::type::Type *cloneWithArguments(
+        std::span<const core::type::TypeArgument> arguments, std::string &error) const override;
 
   private:
     explicit DeviceType(core::type::Type *host);

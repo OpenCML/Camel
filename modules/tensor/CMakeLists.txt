@@ -2,6 +2,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
 add_camel_module(
   NAME tensor
   SOURCES
+    binary.cpp
     dtype.cpp
     interop.cpp
     npy.cpp
@@ -19,6 +20,7 @@ add_camel_module(
     kernels/reduce.cpp
     kernels/unary_generic.cpp
     ops/catalog.cpp
+    ops/binary_ops.cpp
     ops/creation_ops.cpp
     ops/elementwise_ops.cpp
     ops/gradient_ops.cpp

@@ -1,0 +1,22 @@
+id = "modules.bytes"
+order = 369
+tier = "feat"
+tags = ["feat", "modules", "bytes"]
+
+[[tests]]
+name = "binary_io_decoding_and_atomic_replace"
+kind = "behavior"
+case = "../../../cases/modules/bytes_values.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "[0, 65, 0, 255, 13, 10, 128, 0]\n[65, 0, 255, 13, 10, 128]\n0\n26aa5dd8eb311cb23d596c9ecb8cd1d959e3215033223177ee68a40f3ac4e2f0\ninvalid UTF-8\n中文 UTF-8\n[65, 0, 66]\n11\n[111, 107, 58, 0, 65, 0, 255, 13, 10, 128, 0]\n{ raw: 8, more: (3, 8) }\n0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "text_reader_rejects_binary_content"
+kind = "negative"
+case = "../../../cases/modules/bytes_text_reject.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["invalid UTF-8 at byte 0", "use read_bytes for binary data"]
+timeout_ms = 10000

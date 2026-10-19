@@ -1,2 +1,2 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
-add_camel_module(NAME fs)
+add_camel_module(NAME fs SOURCES executor.cpp module.cpp operators.cpp binary.cpp)

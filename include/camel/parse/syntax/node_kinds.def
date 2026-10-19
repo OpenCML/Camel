@@ -55,6 +55,7 @@ CAMEL_NODE(ParentParams, Other)        // '(' pairedParams? ','? ')'
 CAMEL_NODE(ParentArgues, Other)        // '(' argumentList? ','? ')'
 CAMEL_NODE(AngledParams, Other)        // '<' pairedParams? ','? '>'
 CAMEL_NODE(AngledValues, Other)        // '<' argumentList? ','? '>'
+CAMEL_NODE(TypeArguments, Other)       // '::' '<' typeList ','? '>'
 CAMEL_NODE(Pattern, Other)             // identRef identDef? | literal | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
 CAMEL_NODE(MatchCase, Other)           // 'case' pattern ('|' pattern)* '=>' blockExpr
 CAMEL_NODE(CatchClause, Other)         // 'catch' identDef ':' typeExpr stmtBlock
@@ -87,7 +88,7 @@ CAMEL_NODE(CastExpr, Expr)             // linkExpr ('as' | 'is') typeExpr
 CAMEL_NODE(UnaryExpr, Expr)            // ('!' | '~') linkExpr, '-' negPower
 CAMEL_NODE(LinkExpr, Expr)             // negExpr (('->' | '?->') compExpr)*
 CAMEL_NODE(CompExpr, Expr)             // annoExpr (('..' | '?..') annoExpr)*
-CAMEL_NODE(AnnoExpr, Expr)             // accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
+CAMEL_NODE(AnnoExpr, Expr)             // accessExpr (indices | parentArgues | angledValues | typeArguments | '!' | memberAccess)*
 CAMEL_NODE(AccessExpr, Expr)           // primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
 CAMEL_NODE(RefData, Expr)              // identRef, as an operand
 CAMEL_NODE(Literal, Expr)              // ('+' | '-')? (INTEGER | REAL) | STRING | MULTI_STR | FSTRING | 'true' | 'false' | 'null'

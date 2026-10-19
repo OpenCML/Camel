@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 26, 2024
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,7 +66,8 @@ inline std::string quoteForDiagnostic(std::string text) {
 }
 
 inline void setNodeOriginByOffsets(
-    const node_ptr_t &node, size_t startOffset, size_t endOffset, const std::string &label = "ast") {
+    const node_ptr_t &node, size_t startOffset, size_t endOffset,
+    const std::string &label = "ast") {
     if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId) {
         return;
     }
@@ -129,8 +130,8 @@ deriveAstAnchorOrigin(const node_ptr_t &owner, syn::TokenRef token, const std::s
         label);
 }
 
-inline camel::source::origin_id_t deriveAstAnchorOrigin(
-    const node_ptr_t &owner, syn::Node context, const std::string &label) {
+inline camel::source::origin_id_t
+deriveAstAnchorOrigin(const node_ptr_t &owner, syn::Node context, const std::string &label) {
     if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId || !context ||
         !context->firstToken() || !context->lastToken()) {
         return camel::source::kInvalidOriginId;
@@ -231,8 +232,7 @@ inline void setNodeTokenRangeByContext(const node_ptr_t &node, syn::Node context
 }
 
 /// The range from the first of two sibling nodes to the last.
-inline void setNodeTokenRangeBetween(
-    const node_ptr_t &node, syn::Node first, syn::Node last) {
+inline void setNodeTokenRangeBetween(const node_ptr_t &node, syn::Node first, syn::Node last) {
     if (!first || !last) {
         node->load()->setTokenRange(0, 0);
         return;
@@ -415,7 +415,6 @@ Value Builder::visitStmtList(cst::StmtList context) {
     return block;
 }
 
-
 /*
 moduleDecl : MODULE identDef ;
 */
@@ -446,7 +445,7 @@ Value Builder::visitImportDecl(cst::ImportDecl context) {
         // it has here. `import a from m` is `import { a } from m` (design principles 2.12).
         std::vector<Reference> refs;
         std::vector<Reference> locals;
-        bool renamed = false;
+        bool renamed     = false;
         const auto items = context->get<cst::BracedImports>()
                                ? context->get<cst::BracedImports>()->all<cst::ImportItem>()
                                : context->all<cst::ImportItem>();
@@ -486,7 +485,8 @@ Value Builder::visitExportDecl(cst::ExportDecl context) {
         res = any2node(visitTypeDecl(context->get<cst::TypeDecl>()));
         export_->addRef(res->loadAs<TypeDeclLoad>()->ref());
     } else if (context->get<cst::BracedIdents>()) {
-        for (const auto ident : context->get<cst::BracedIdents>()->get<cst::IdentList>()->all<cst::IdentDef>()) {
+        for (const auto ident :
+             context->get<cst::BracedIdents>()->get<cst::IdentList>()->all<cst::IdentDef>()) {
             export_->addRef(qualifyRef(Reference(ident->text())));
         }
     }
@@ -629,15 +629,14 @@ Value Builder::visitFuncData(cst::FuncData context) {
         typeOptNode,
         context->firstToken()->index(),
         (context->type() ? context->type()->lastToken()->index()
-                             : context->get<cst::ParentParams>()->firstToken()->index()) +
+                         : context->get<cst::ParentParams>()->firstToken()->index()) +
             1);
     setNodeOriginByOffsets(
         typeOptNode,
         static_cast<size_t>(context->firstToken()->begin()),
-        static_cast<size_t>(
-            (context->type() ? context->type()->lastToken()
-                                 : context->get<cst::ParentParams>()->firstToken())
-                ->end()));
+        static_cast<size_t>((context->type() ? context->type()->lastToken()
+                                             : context->get<cst::ParentParams>()->firstToken())
+                                ->end()));
     if (context->type()) {
         node_ptr_t typeNode = any2node(visitType(context->type()));
         *typeOptNode << typeNode;
@@ -690,7 +689,7 @@ std::optional<uint8_t> Builder::numericAnnotationOf(cst::FuncAnno context) {
         return std::nullopt;
     }
     const std::string annotation = context->get<cst::IdentRef>()->text();
-    auto reject = [&](const std::string &why) {
+    auto reject                  = [&](const std::string &why) {
         diags_->of(SemanticDiag::InvalidAnnotation)
             .at(rangeOf(context->firstToken(), context->lastToken()))
             .commit(annotation, why);
@@ -704,9 +703,10 @@ std::optional<uint8_t> Builder::numericAnnotationOf(cst::FuncAnno context) {
     uint8_t granted = 0;
     const auto list = names->get<cst::IdentList>();
     if (!list) {
-        reject("it names no permission; write one or more of reassociate, contract, "
-               "approx_math, change_precision, finite_math, no_nans, no_infs, "
-               "no_signed_zeros, flush_subnormals");
+        reject(
+            "it names no permission; write one or more of reassociate, contract, "
+            "approx_math, change_precision, finite_math, no_nans, no_infs, "
+            "no_signed_zeros, flush_subnormals");
         return uint8_t{0};
     }
     for (const auto &ident : list->all<cst::IdentDef>()) {
@@ -739,8 +739,8 @@ Value Builder::visitFuncAnno(cst::FuncAnno context) {
     node_ptr_t annoNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
     setNodeTokenRangeByContext(annoNode, context);
     *annoNode << createNodeAs<RefDataLoad>(ref);
-    auto [dataList, namedDataList] =
-        value_cast<std::pair<node_ptr_t, node_ptr_t>>(visitAngledValues(context->get<cst::AngledValues>()));
+    auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+        visitAngledValues(context->get<cst::AngledValues>()));
     *annoNode << dataList << namedDataList;
 
     LEAVE("FuncAnno");
@@ -759,7 +759,7 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
 
     // Decorators are applied to the function; `@numeric(...)` grants its permissions to the
     // function's body (design principles 2.13), which is where the GCT builder reads them.
-    node_ptr_t annoListNode = nullptr;
+    node_ptr_t annoListNode    = nullptr;
     uint8_t numericPermissions = 0;
     for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
         if (const auto permissions = numericAnnotationOf(funcAnno)) {
@@ -847,11 +847,11 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     std::string operatorSymbol;
     syn::Node nameNode = context->get<cst::IdentRef>();
     if (const auto operatorName = context->get<cst::OperatorName>()) {
-        nameNode               = operatorName;
-        operatorSymbol         = operatorName->text().substr(std::string_view("operator").size());
-        const size_t arity     = funcTypeNode->at(1)->size();
-        const auto group       = camel::core::overloadableOperatorGroup(operatorSymbol, arity);
-        ref = Reference(group ? std::string(*group) : "operator " + operatorSymbol);
+        nameNode           = operatorName;
+        operatorSymbol     = operatorName->text().substr(std::string_view("operator").size());
+        const size_t arity = funcTypeNode->at(1)->size();
+        const auto group   = camel::core::overloadableOperatorGroup(operatorSymbol, arity);
+        ref                = Reference(group ? std::string(*group) : "operator " + operatorSymbol);
     } else {
         ref = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
     }
@@ -964,11 +964,6 @@ Value Builder::visitNamespaceDecl(cst::NamespaceDecl context) {
     return nodes;
 }
 
-
-
-
-
-
 /*
 dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
 */
@@ -1050,7 +1045,7 @@ Value Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
     string uri;
     ImplMark implMark = ImplMark::Graph;
-    Reference ref     = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
+    Reference ref = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
     if (context->get<cst::ImplMark>()) {
         if (context->get<cst::ImplMark>()->tok(TK::KwInner)) {
             implMark = ImplMark::Inner;
@@ -1096,7 +1091,7 @@ Value Builder::visitRetStmt(cst::RetStmt context) {
     // `throw e` returns an error value: an exit like `return`, whose value is the failed form
     // of the function's declared `T!` (design principles 2.9; the graph builder checks the
     // declaration).
-    ExitType exitType = context->tok(TK::KwThrow) ? ExitType::Throw : ExitType::Return;
+    ExitType exitType   = context->tok(TK::KwThrow) ? ExitType::Throw : ExitType::Return;
     node_ptr_t exitNode = createNodeAs<ExitStmtLoad>(exitType);
     setNodeTokenRangeByContext(exitNode, context);
     if (context->get<cst::DataList>()) {
@@ -1105,8 +1100,6 @@ Value Builder::visitRetStmt(cst::RetStmt context) {
     LEAVE("RetStmt");
     return exitNode;
 }
-
-
 
 /*
 indexValue   : '...'? dataExpr ;
@@ -1153,7 +1146,8 @@ Value Builder::visitKeyValuePair(cst::KeyValuePair context) {
             .commit("...", "spreading is not implemented");
     }
     // The error above stops compilation; a placeholder key keeps the rest of the file checked.
-    Reference ref(context->get<cst::IdentDef>() ? context->get<cst::IdentDef>()->text() : std::string("_"));
+    Reference ref(
+        context->get<cst::IdentDef>() ? context->get<cst::IdentDef>()->text() : std::string("_"));
     node_ptr_t namedDataNode = createNodeAs<NamedDataLoad>(ref);
     setNodeTokenRangeByContext(namedDataNode, context);
     if (context->expr()) {
@@ -1318,8 +1312,8 @@ Value Builder::visitParentArgues(cst::ParentArgues context) {
     setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
     if (context->get<cst::ArgumentList>()) {
-        auto res =
-            value_cast<std::pair<node_ptr_t, node_ptr_t>>(visitArgumentList(context->get<cst::ArgumentList>()));
+        auto res = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+            visitArgumentList(context->get<cst::ArgumentList>()));
         dataList      = res.first;
         namedDataList = res.second;
     }
@@ -1351,8 +1345,8 @@ Value Builder::visitAngledValues(cst::AngledValues context) {
     setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
     if (context->get<cst::ArgumentList>()) {
-        auto res =
-            value_cast<std::pair<node_ptr_t, node_ptr_t>>(visitArgumentList(context->get<cst::ArgumentList>()));
+        auto res = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+            visitArgumentList(context->get<cst::ArgumentList>()));
         dataList      = res.first;
         namedDataList = res.second;
     }
@@ -1389,7 +1383,8 @@ Value Builder::visitPattern(cst::Pattern context) {
             diags_->of(SemanticDiag::ConstructNotSupported)
                 .at(rangeOf(context->firstToken(), context->lastToken()))
                 .commit(
-                    context->get<cst::IdentRef>()->text() + " " + context->get<cst::IdentDef>()->text(),
+                    context->get<cst::IdentRef>()->text() + " " +
+                        context->get<cst::IdentDef>()->text(),
                     "the only pattern of two words is 'error e'");
         }
         res = createNodeAs<RefDataLoad>(Reference(context->get<cst::IdentRef>()->text()));
@@ -1403,9 +1398,9 @@ Value Builder::visitPattern(cst::Pattern context) {
     } else {
         // Tuple and struct patterns are in the grammar, but what they destructure and bind
         // has not been decided. They used to end in an internal error without a position.
-        const char *kind = context->get<cst::IdentRef>()                       ? "an identifier pattern"
+        const char *kind = context->get<cst::IdentRef>()          ? "an identifier pattern"
                            : context->firstToken()->text() == "(" ? "a tuple pattern"
-                                                                     : "a struct pattern";
+                                                                  : "a struct pattern";
         diags_->of(SemanticDiag::ConstructNotSupported)
             .at(rangeOf(context->firstToken(), context->lastToken()))
             .commit(
@@ -1470,7 +1465,6 @@ Value Builder::visitMatchCase(cst::MatchCase context) {
     return caseNodes;
 }
 
-
 /*
 ctrlExpr
     : IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
@@ -1515,11 +1509,9 @@ Value Builder::visitCtrlExpr(syn::Node context) {
                     "then"),
                 semanticPart(
                     camel::source::SemanticRole::Keyword,
-                    context->tok(TK::KwElse) ? deriveAstAnchorOrigin(
-                                          ctrlNode,
-                                          context->tok(TK::KwElse),
-                                          "ast.if.else")
-                                    : camel::source::kInvalidOriginId,
+                    context->tok(TK::KwElse)
+                        ? deriveAstAnchorOrigin(ctrlNode, context->tok(TK::KwElse), "ast.if.else")
+                        : camel::source::kInvalidOriginId,
                     -1,
                     "else"),
                 semanticPart(
@@ -1615,7 +1607,10 @@ Value Builder::visitCtrlExpr(syn::Node context) {
                 "match"),
             semanticPart(
                 camel::source::SemanticRole::BranchCondition,
-                deriveAstAnchorOrigin(ctrlNode, context->get<cst::IdentRef>(), "ast.match.scrutinee"),
+                deriveAstAnchorOrigin(
+                    ctrlNode,
+                    context->get<cst::IdentRef>(),
+                    "ast.match.scrutinee"),
                 -1,
                 ref.ident()),
         };
@@ -1644,7 +1639,6 @@ Value Builder::visitCtrlExpr(syn::Node context) {
     LEAVE("CtrlExpr");
     return ctrlNode;
 }
-
 
 /*
 waitExpr : WAIT? assignExpr ;
@@ -1760,9 +1754,9 @@ Ordinary binary operators that evaluate both sides: BinaryDataOp::Or and And. `|
 are LogicalOr and LogicalAnd, which a later stage turns into branches.
 */
 Value Builder::visitEagerLogicExpr(syn::Node context) {
-    const bool isOr     = context.is(NK::OrExpr);
-    node_ptr_t lhsNode  = any2node(visitExpr(context->expr(0)));
-    const size_t count  = context->exprs().size();
+    const bool isOr    = context.is(NK::OrExpr);
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
+    const size_t count = context->exprs().size();
     for (size_t i = 1; i < count; ++i) {
         node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
         node_ptr_t dataExprNode =
@@ -1828,8 +1822,8 @@ equalityExpr
 */
 Value Builder::visitEqualityExpr(cst::EqualityExpr context) {
     ENTER("EqualityExpr");
-    node_ptr_t lhsNode = any2node(visitExpr(
-        context->expr(0))); // get the left hand side of the equality expr
+    node_ptr_t lhsNode =
+        any2node(visitExpr(context->expr(0))); // get the left hand side of the equality expr
     for (size_t i = 1; i < context->exprs().size(); ++i) {
         BinaryDataOp op;
         string strOp = context->child(i * 2 - 1)->text();
@@ -2096,8 +2090,7 @@ Value Builder::visitUnaryExpr(syn::Node context) {
             } else if (context->tok(TK::KwIs)) {
                 op = ReservedDataOp::Is;
             } else {
-                throw std::runtime_error(
-                    "Invalid unary operator: " + context->child(0)->text());
+                throw std::runtime_error("Invalid unary operator: " + context->child(0)->text());
             }
             if (context->tok(TK::KwIs)) {
                 // There is no run-time type test. `x is T` used to be accepted with a warning
@@ -2118,7 +2111,8 @@ Value Builder::visitUnaryExpr(syn::Node context) {
                         camel::source::SemanticRole::Operator,
                         deriveAstAnchorOrigin(
                             res,
-                            context->tok(TK::KwAs) ? context->tok(TK::KwAs) : context->tok(TK::KwIs),
+                            context->tok(TK::KwAs) ? context->tok(TK::KwAs)
+                                                   : context->tok(TK::KwIs),
                             "ast.unary.keyword"),
                         -1,
                         context->tok(TK::KwAs) ? "as" : "is"),
@@ -2172,10 +2166,7 @@ Value Builder::visitUnaryExpr(syn::Node context) {
             {
                 semanticPart(
                     camel::source::SemanticRole::Operator,
-                    deriveAstAnchorOrigin(
-                        res,
-                        tokenOf(context->child(0)),
-                        "ast.unary.operator"),
+                    deriveAstAnchorOrigin(res, tokenOf(context->child(0)), "ast.unary.operator"),
                     -1,
                     strOp),
                 semanticPart(
@@ -2211,7 +2202,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
             // `x ?-> f`: a branch on the tag of `x`; the call is the arm taken when `x` has
             // not failed (design principles 2.9). The marked receiver tells the GCT builder.
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
-            syn::TokenRef opToken = tokenOf(context->child(i * 2 - 1));
+            syn::TokenRef opToken  = tokenOf(context->child(i * 2 - 1));
             setNodeTokenRange(notNullNode, opToken->index(), opToken->index() + 1);
             setNodeOriginByOffsets(
                 notNullNode,
@@ -2333,11 +2324,8 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             node_ptr_t exprNode = nullptr;
             if (child.node().is(NK::Indices)) {
                 exprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::Index);
-                setNodeTokenRangeByContext(
-                    exprNode,
-                    cst::Indices(child.node()));
-                node_ptr_t rhsNode =
-                    any2node(visitIndices(cst::Indices(child.node())));
+                setNodeTokenRangeByContext(exprNode, cst::Indices(child.node()));
+                node_ptr_t rhsNode = any2node(visitIndices(cst::Indices(child.node())));
                 *exprNode << lhsNode << rhsNode;
                 registerAstSemanticBundle(
                     exprNode,
@@ -2365,9 +2353,7 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
                     });
             } else if (child.node().is(NK::ParentArgues)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
-                setNodeTokenRangeByContext(
-                    exprNode,
-                    cst::ParentArgues(child.node()));
+                setNodeTokenRangeByContext(exprNode, cst::ParentArgues(child.node()));
                 auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
                     visitParentArgues(cst::ParentArgues(child.node())));
                 *exprNode << lhsNode << dataList << namedDataList;
@@ -2393,12 +2379,28 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
                 registerAstSemanticBundle(exprNode, std::move(parts));
             } else if (child.node().is(NK::MemberAccess)) {
                 auto access = cst::MemberAccess(child.node());
-                exprNode     = makeMemberAccess(lhsNode, access->child(0), access->child(1), access);
+                exprNode    = makeMemberAccess(lhsNode, access->child(0), access->child(1), access);
+            } else if (child.node().is(NK::TypeArguments)) {
+                exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Instantiate);
+                setNodeTokenRangeByContext(exprNode, cst::TypeArguments(child.node()));
+                *exprNode << lhsNode << any2node(visitTypeList(child.node().get<cst::TypeList>()));
+                registerAstSemanticBundle(
+                    exprNode,
+                    {
+                        semanticPart(
+                            camel::source::SemanticRole::Callee,
+                            nodeOrigin(lhsNode),
+                            -1,
+                            "callee"),
+                        semanticPart(
+                            camel::source::SemanticRole::GenericArgument,
+                            nodeOrigin(exprNode->at(1)),
+                            -1,
+                            "typeArgs"),
+                    });
             } else if (child.node().is(NK::AngledValues)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
-                setNodeTokenRangeByContext(
-                    exprNode,
-                    cst::AngledValues(child.node()));
+                setNodeTokenRangeByContext(exprNode, cst::AngledValues(child.node()));
                 auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
                     visitAngledValues(cst::AngledValues(child.node())));
                 *exprNode << lhsNode << dataList << namedDataList;
@@ -2436,13 +2438,12 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
     return lhsNode;
 }
 
-node_ptr_t Builder::makeMemberAccess(
-    node_ptr_t lhs, syn::Child dot, syn::Child member,
-    syn::Node range) {
+node_ptr_t
+Builder::makeMemberAccess(node_ptr_t lhs, syn::Child dot, syn::Child member, syn::Node range) {
     syn::TokenRef memberToken = tokenOf(member);
-    std::string memberText     = member->text();
-    size_t memberBegin         = memberToken ? memberToken->begin() : 0;
-    size_t memberEnd           = memberToken ? memberToken->end() : 0;
+    std::string memberText    = member->text();
+    size_t memberBegin        = memberToken ? memberToken->begin() : 0;
+    size_t memberEnd          = memberToken ? memberToken->end() : 0;
     if (memberToken && memberToken.kind() == TK::Real) {
         // `t.0.1`: the lexer reads `0.1` as one REAL. It stands for two indices, the first
         // applied here and the second to its result.
@@ -2509,17 +2510,10 @@ node_ptr_t Builder::makeMemberAccess(
         {
             semanticPart(
                 camel::source::SemanticRole::Operator,
-                deriveAstAnchorOrigin(
-                    dataNode,
-                    tokenOf(dot),
-                    "ast.access.dot"),
+                deriveAstAnchorOrigin(dataNode, tokenOf(dot), "ast.access.dot"),
                 -1,
                 "."),
-            semanticPart(
-                camel::source::SemanticRole::Receiver,
-                nodeOrigin(lhs),
-                -1,
-                "target"),
+            semanticPart(camel::source::SemanticRole::Receiver, nodeOrigin(lhs), -1, "target"),
             semanticPart(
                 camel::source::SemanticRole::MemberName,
                 nodeOrigin(rhsNode),
@@ -2528,7 +2522,6 @@ node_ptr_t Builder::makeMemberAccess(
         });
     return dataNode;
 }
-
 
 /*
 accessExpr
@@ -2590,7 +2583,7 @@ Value Builder::visitArrayData(cst::ArrayData context) {
                 exprs.push_back(expr);
             }
             // The name after `for` is an expression node of its own when a bare name is one.
-            const size_t written = 2 + (context->has(TK::KwIf) ? 1 : 0);
+            const size_t written  = 2 + (context->has(TK::KwIf) ? 1 : 0);
             const bool nameIsExpr = exprs.size() == written + 1;
             const syn::Node nameSyntax =
                 nameIsExpr ? exprs[1] : syn::Node(context->get<cst::IdentRef>());

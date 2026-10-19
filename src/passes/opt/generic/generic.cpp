@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -742,7 +742,9 @@ size_t foldDraft(
                 op = *found;
             }
             type::Type *resultType = draft.header(id)->dataType;
-            slot_t result          = NullSlot;
+            with->setResultType(resultType);
+            norm->setResultType(resultType);
+            slot_t result = NullSlot;
             try {
                 result = (*op)(*with, *norm, ctx);
             } catch (const camel::core::error::RuntimeFault &fault) {
