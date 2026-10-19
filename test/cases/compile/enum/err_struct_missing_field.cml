@@ -1,0 +1,9 @@
+type Shape = enum {
+    Rect { w: float, h: float },
+    Empty,
+}
+
+func main(): void sync {
+    let s = Shape::Rect { w: 1.0 }
+    println(s)
+}
