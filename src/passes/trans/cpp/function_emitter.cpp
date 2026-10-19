@@ -1608,22 +1608,22 @@ bool FunctionEmitter::lowerVariable(
 
 bool FunctionEmitter::lowerHigherOrder(
     Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out) {
-    namespace oper = camel::core::oper;
-    static const std::unordered_map<camel::core::OperId, std::string> kOperators = {
-        {oper::MapArr, "map"},
-        {oper::ApplyArr, "map"},
-        {oper::FilterArr, "filter"},
-        {oper::ReduceArr, "reduce"},
-        {oper::ForeachArr, "foreach"},
-        {oper::UnorderedReduceArr, "reduce"},
-        {oper::UnorderedForeachArr, "foreach"},
-        {oper::Isolate, "attempt"},
-    };
+    // The generated program's own runtime (hof.h) has one entry per shape of call; which one an
+    // operator uses is its declaration's (OperatorSemantics::elementCalls).
+    using camel::core::sem::ElementShape;
     const GCGraph *g = frame.graph;
-    auto it          = kOperators.find(operatorId(g, ref));
-    if (it == kOperators.end()) {
+    const auto *calls = camel::core::OperatorTable::instance().elementCalls(operatorId(g, ref));
+    if (calls == nullptr) {
         return false;
     }
+    const std::pair<camel::core::OperId, std::string> entry{
+        operatorId(g, ref),
+        calls->shape == ElementShape::Map       ? "map"
+        : calls->shape == ElementShape::Filter  ? "filter"
+        : calls->shape == ElementShape::Fold    ? "reduce"
+        : calls->shape == ElementShape::Foreach ? "foreach"
+                                                : "attempt"};
+    const auto *it = &entry;
     // Each call of the element function counts as an open call made here.
     const std::string site = program_.sites.siteFor(
         g,

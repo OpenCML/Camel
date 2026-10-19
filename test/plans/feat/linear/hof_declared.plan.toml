@@ -1,0 +1,74 @@
+id = "linear.hof_declared"
+order = 921
+tier = "feat"
+tags = ["feat", "linear", "higher_order", "macro", "loops"]
+desc = "The higher-order array operators are native operators that call their function through the function-call service, and the schedulers run them by their declaration (OperatorSemantics::elementCalls), not by name (design principles 2.17): the macro evaluator runs them; a loop under std::macro stops at the rounds limit, which --max-macro-rounds and CAMEL_MAX_MACRO_ROUNDS set like the nesting limit."
+
+[[tests]]
+name = "hof.macro"
+desc = "map, filter and reduce in a macro function are evaluated ahead of time: the call folds to 38."
+kind = "behavior"
+case = "../../../cases/macro/hof_calls.cml"
+args = ["${case}", "std::macro", "std::rgir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\"38\", type=\"DATA\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "hof.run"
+desc = "The same program runs on every back end without std::macro."
+kind = "behavior"
+case = "../../../cases/macro/hof_calls.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["38"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "macro_rounds.default"
+desc = "A thousand rounds are within the default limit of a million."
+kind = "behavior"
+case = "../../../cases/loops/macro.cml"
+args = ["${case}", "std::macro", "std::rgir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\"500500\", type=\"DATA\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "macro_rounds.option"
+desc = "With --max-macro-rounds 100 the loop of a thousand rounds fails the evaluation and names the option."
+kind = "behavior"
+case = "../../../cases/loops/macro.cml"
+args = ["--max-macro-rounds", "100", "${case}", "std::macro"]
+expect_exit = 1
+expect_output_contains = ["more than 100 rounds", "--max-macro-rounds", "CAMEL_MAX_MACRO_ROUNDS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "macro_rounds.environment"
+desc = "CAMEL_MAX_MACRO_ROUNDS sets the same limit."
+kind = "behavior"
+case = "../../../cases/loops/macro.cml"
+args = ["${case}", "std::macro"]
+envs = ["CAMEL_MAX_MACRO_ROUNDS=100"]
+expect_exit = 1
+expect_output_contains = ["more than 100 rounds"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "macro_rounds.refused"
+desc = "A limit that is no integer in range is refused before anything runs."
+kind = "behavior"
+case = "../../../cases/loops/macro.cml"
+args = ["--max-macro-rounds", "0", "${case}", "std::macro"]
+expect_exit = 1
+expect_output_contains = ["Invalid --max-macro-rounds value"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

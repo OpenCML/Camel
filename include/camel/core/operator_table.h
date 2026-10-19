@@ -43,8 +43,7 @@
  * (namespace `oper` below): the table interns their URIs first, in a fixed order. An operator
  * of a module that a pass of the same module recognises is interned once by that pass and
  * compared by id. Families are flags of the entry, derived from the URI when it is interned:
- * built-in (`:` prefix: no module protocol), marked (`:mark/`: the schedulers run it
- * themselves, it calls the function values it receives) and assignment (`:op/assn...`: `=`
+ * built-in (`:` prefix: no module protocol) and assignment (`:op/assn...`: `=`
  * and the compound assignments, which store into a variable cell).
  *
  * The implementation (the C++ function pointer) is deliberately not in the table: it is
@@ -108,16 +107,8 @@ inline constexpr OperId kNoOper = 0;
 namespace oper {
 inline constexpr OperId VarNew              = 1;  // ":var/new"  `var v = e`
 inline constexpr OperId VarGet              = 2;  // ":var/get"  reading a variable
-inline constexpr OperId MapArr              = 3;  // ":mark/map_arr"
-inline constexpr OperId ApplyArr            = 4;  // ":mark/apply_arr"
-inline constexpr OperId FilterArr           = 5;  // ":mark/filter_arr"
-inline constexpr OperId ReduceArr           = 6;  // ":mark/reduce_arr"
-inline constexpr OperId UnorderedReduceArr  = 7;  // ":mark/unordered_reduce_arr"
-inline constexpr OperId ForeachArr          = 8;  // ":mark/foreach_arr"
-inline constexpr OperId UnorderedForeachArr = 9;  // ":mark/unordered_foreach_arr"
-inline constexpr OperId Isolate             = 10; // ":mark/isolate"  `attempt`
-inline constexpr OperId VarPeek             = 11; // ":var/peek" a read whose value cannot be kept
-inline constexpr OperId kWellKnownCount     = 12; // kNoOper included
+inline constexpr OperId VarPeek             = 3;  // ":var/peek" a read whose value cannot be kept
+inline constexpr OperId kWellKnownCount     = 4;  // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -131,14 +122,6 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     "",
     ":var/new",
     ":var/get",
-    ":mark/map_arr",
-    ":mark/apply_arr",
-    ":mark/filter_arr",
-    ":mark/reduce_arr",
-    ":mark/unordered_reduce_arr",
-    ":mark/foreach_arr",
-    ":mark/unordered_foreach_arr",
-    ":mark/isolate",
     ":var/peek",
 };
 
@@ -148,8 +131,9 @@ struct OperatorTraits {
     bool pure = false;
     /// Output element i depends only on input elements i (after broadcasting).
     bool elementwise = false;
-    /// Not pure, but without an effect outside the program's own variables: it creates or
-    /// reads a variable (`:var/new`, `:var/get`). Its result depends on when it runs, so it
+    /// Not pure, but without an effect outside the program's own variables: it creates, reads
+    /// or changes a variable (`:var/new`, `:var/get`, `:var/take`); which of them is its
+    /// resource declaration's to say, the effect summaries read it there. Its result depends on when it runs, so it
     /// is never folded, merged or moved across a write; it is not an effect a user can
     /// observe, so it is not reported as one (effect trace).
     bool stateOnly = false;
@@ -229,10 +213,16 @@ class OperatorTable {
     /// interpreter's own. Lock-free.
     bool isBuiltin(OperId id) const { return (entries_[id].family & kFamilyBuiltin) != 0; }
 
-    /// A `:mark/` operator: the schedulers run it themselves rather than through a function
-    /// pointer, because it calls the function values it receives (the higher-order array
-    /// operators and `attempt`). Lock-free.
-    bool isMarked(OperId id) const { return (entries_[id].family & kFamilyMarked) != 0; }
+    /// The operator declares how it calls the function values it receives (the higher-order
+    /// array operators and `attempt`): the schedulers may run it themselves, by that declaration,
+    /// rather than through its function pointer. Always a `callsGraphs` operator. Lock-free.
+    bool isMarked(OperId id) const { return elementCalls(id) != nullptr; }
+
+    /// The operator's element-call declaration, or nullptr.
+    const sem::ElementCalls *elementCalls(OperId id) const {
+        const sem::OperatorSemantics *declared = semantics(id);
+        return declared && declared->elementCalls ? &*declared->elementCalls : nullptr;
+    }
 
     /// An assignment (`:op/assn`, `:op/assn_l`, `:op/assn_add_i`, ...): `=` or a compound
     /// assignment, storing its second operand (or the result of the operation) into the
@@ -383,6 +373,25 @@ class OperatorTable {
         return entries_[id].semantics.load(std::memory_order_acquire);
     }
 
+    /// Whether running the operator writes the resource the ordinary (or with) operand `index`
+    /// names: from its resource declaration (design principles 2.17), the one source of what
+    /// an operator writes. An operator without a declaration is read conservatively: every
+    /// operand of a non-pure one, except that the operands of one that calls or reads the graphs
+    /// of the function values it receives are not written by the operator (what the callee does
+    /// to them is the callee's, reached through the function value).
+    bool writesOperand(OperId id, bool isWith, size_t index) const;
+
+    /// Whether the operator declares an access to a resource of class `cls` (`writesOnly`: a
+    /// write). An undeclared operator declares none.
+    bool touchesClass(OperId id, sem::ResourceClass cls, bool writesOnly = false) const;
+
+    /// Whether the operator declares a write to a cell or to an object changed in place: state
+    /// of the program itself (not ambient state, not a module's objects).
+    bool writesProgramState(OperId id) const {
+        return touchesClass(id, sem::ResourceClass::Variable, true) ||
+               touchesClass(id, sem::ResourceClass::Object, true);
+    }
+
     /// The stable key of an operator that has semantics, nullopt otherwise.
     std::optional<sem::OperatorKey> key(OperId id) const;
 
@@ -411,10 +420,9 @@ class OperatorTable {
         kInspectsGraphs = 1 << 6,
     };
 
-    // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isMarked).
+    // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isAssignment).
     enum : uint8_t {
         kFamilyBuiltin    = 1 << 0,
-        kFamilyMarked     = 1 << 1,
         kFamilyAssignment = 1 << 2,
     };
 

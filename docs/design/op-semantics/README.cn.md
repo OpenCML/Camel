@@ -700,6 +700,14 @@ granted = 节点的许可列 ∪ (law.order == Unordered ? {a} : ∅)
 
 "提高累加精度"（例如把 `sum_to` 的 f32 累加换成 f64）同样改变结果的位，五项许可里没有它（(d) 说的是降低）。本稿按字面：**不允许**，除非负责人把 (d) 定为"改变精度"（Q8）。
 
+### 7.4 二元代数律与数值策略（2026-10-19 审查后）
+
+归约律说的是"一串贡献怎样合并"；`+`、`-`、`*` 这类二元算子还有自己的代数事实，改写遍（`std::opt::algebra`）要用，却不该靠名字认。`OperatorSemantics::binary`（`sem::BinaryAlgebra`，`camel/core/operator_semantics.h`）按元素类型声明 `BinaryLaw`：是否可交换、是否在位上精确可结合（回绕的整数是，浮点不是）、中性元的位型、"对哪个算子分配"（乘对加）、"是哪个算子的减"（减是加的减）。`elementOf` 说明一个操作数或结果的类型对应哪个元素类型，`elementwise` 说明算子逐元素作用在聚合（张量）上，系数是标量常量。
+
+`std::opt::algebra` 在算子表里找"声明了对另一个算子分配、且二者都可交换"的算子对，把它们当作乘与加，再找声明了"是该加法的减"的算子；内建的 `:op/add_i/l/f/d` 与张量的 `tensor:add`、`subtract`、`multiply`（float32 元素）同样处理，核心里不再有算子 URI 清单。张量的规则多一条限制：被合并的两项必须与结果同类型（不做广播），系数是元素类型精确表示的标量常量。整数张量不在其内：内核对整数的契约没有声明为精确可结合。
+
+2.15 与 2.16 的"默认放宽"是**策略**，不是节点的许可：`sem::NumericPolicy`（`defaultGrants` 加上"节点自带的许可算不算"）有三个取值——`explicitOnly()`（只认节点写的）、`relaxed()`（默认，附带 `reassociate`）、`strict()`（`safe_fp=true`：默认什么都不给，节点的许可也不算）。改写遍问 `policy.permits(节点许可, 所需许可)`；`reorderFreedom(law, 节点许可, policy)` 与 `reorderFreedomOf(graph, node, policy)` 是同一个问题在归约上的形式，`core.reorder` 事实用 `explicitOnly()`。Tiles 的 `relaxed` 掩码（`cuda.cpp`、`schedule.cpp`）仍是它自己的一份，等它改读这里的策略。
+
 ---
 
 ## 8. 资源
@@ -766,6 +774,12 @@ struct ResourceSpec {
 ### 8.3 与效应摘要的关系
 
 图的效应摘要（四个位：出口依赖外部效应、写了捕获的变量、读了捕获的变量、可能故障）是由节点算出来的图级概括（图模型 3.10 的 I14）。资源声明让这个概括可以细化：一个只读捕获单元的算子不必按"写"处理；一次 `Mapped` 区域的写只与重叠的区域冲突。细化的结果是可推导的事实（第 10 节），不改变效应摘要本身的定义。
+
+### 8.4 声明是效应的唯一来源（2026-10-19 审查后，设计原则 2.17）
+
+优化遍问"这个节点写不写它的某个操作数"，答案只来自资源声明：`OperatorTable::writesOperand`（算子）、足迹（`footprintOf`，被调的图）、`touchesClass`（声明碰哪一类资源）。`draft_writes.h` 的 `isWrittenArgument`、`isWrittenInPlace`（现在对共享的 GATE 有访问集，不再指数地重走）与 `WrittenSlots`（一次算出整张草稿的答案，algebra 不再自带一份）都由它们推出；CSE 的"读变量"是"声明了对 `Variable` 类资源的访问"，`EffectSummary::writesVariables` 是"声明了对 `Variable` 或 `Object` 的写"，所以 `:var/take` 与就地形式也算写入，不再靠 `:op/assn` 前缀与固定的 `VarGet` id。没有声明的非纯算子按保守读法写它的每个操作数；例外是调用或读取函数值的图的算子（高阶算子、宏算子、导出器）：它们的操作数是函数，不是资源。
+
+签名里的 `var` 形参由声明检查（登记时，`setResolver` 与 `declareSemantics` 无论哪个后到都检查）：`var` 形参必须被声明写；写 `Variable` 或 `Object` 类资源的操作数必须是 `var` 形参；`Foreign` 类（模块包装的句柄）可以经普通操作数写。不一致是声明错误（`std::invalid_argument`）。纯度仍由模块逐个声明；内建的 `op/assn*` 家族只在 `storesIntoCell` 一处点名。
 
 ---
 

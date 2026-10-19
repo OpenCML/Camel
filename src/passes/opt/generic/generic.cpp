@@ -836,9 +836,11 @@ size_t cseDraft(GraphDraft &draft) {
         for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
             for (gc_node_ref_t in : inputs) {
                 const auto *h = draft.header(in);
+                // A read of a cell is an operator that declares an access to a variable.
                 if (isWrittenInPlace(draft, in) ||
                     (h && h->kind == GCNodeKind::Oper &&
-                     camel::core::oper::isVariableRead(operIdOf(draft, in)))) {
+                     camel::core::OperatorTable::instance().touchesClass(
+                         operIdOf(draft, in), camel::core::sem::ResourceClass::Variable))) {
                     return true;
                 }
             }

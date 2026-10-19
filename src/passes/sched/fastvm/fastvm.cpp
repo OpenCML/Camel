@@ -18,6 +18,7 @@
  */
 
 #include "fastvm.h"
+#include "camel/execute/loop_driver.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/loop_lowering.h"
 #include "camel/execute/fault_isolation.h"
@@ -479,11 +480,20 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     // Loops. By default they run as the tail recursion they mean, on a private copy of the
     // program (camel/runtime/loop_lowering.h): today that is faster here than the native
     // instruction (evalLoop), which enters the interpreter again for each of its two calls a
-    // round (docs/technical/39_loops.md, section 5). Under a debugger, and with
-    // std::fvm(native_loop=true), the program's own LOOP nodes run natively, so that the frames
-    // shown are the loop's condition and body (folded into their function). Making the native
-    // loop a bytecode loop, at least as fast as the lowering, is the next step.
-    if (camel::execute::executionObserver() == nullptr && !nativeLoop_) {
+    // round (docs/technical/39_loops.md, section 5). Natively, so that the frames shown are the
+    // loop's condition and body (folded into their function): when an observer asks for them
+    // (ExecutionObserver::wantsLoopFrames: the debugger) and with std::fvm(native_loop=true).
+    // The two ways give the same results, faults and output; the choice is logged. Making the
+    // native loop a bytecode loop, at least as fast as the lowering, is the next step.
+    const auto *observer = camel::execute::executionObserver();
+    const bool observed  = observer != nullptr && observer->wantsLoopFrames();
+    const bool native    = observed || nativeLoop_;
+    CAMEL_LOG_INFO_S(
+        "FastVM",
+        "Loops run {} ({}).",
+        native ? "natively" : "lowered to tail recursion",
+        observed ? "an observer shows loop frames" : native ? "native_loop=true" : "the default");
+    if (!native) {
         graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
     }
     camel::runtime::GCGraph *runtimeRoot = graph;
@@ -658,53 +668,48 @@ void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
         }
         currFrame.set(self, state);
     }
-    // The ports of a round: (the element,) the values of the state, the captures.
-    const auto bind = [&](Frame *frame, camel::runtime::GCGraph *target, const slot_t *element) {
-        const auto norm = target->normPorts();
-        size_t port     = 0;
-        if (element != nullptr) {
-            frame->set(target->node(norm[port++])->dataIndex, *element);
+    // The rounds are the loop's (camel/execute/loop_driver.h); this interpreter supplies a frame
+    // and a call for each, through the call path of the higher-order operators.
+    struct Host {
+        FastVMSchedPass &vm;
+        Frame &currFrame;
+        data_idx_t self;
+        size_t k;
+        data_arr_t nargs;
+        data_arr_t wargs;
+        size_t first;
+        HigherOrderCallSite condSite, bodySite;
+
+        void beforeRound(size_t) {}
+        slot_t callRound(camel::runtime::GCGraph *target, const slot_t *element) {
+            vm.requireNestedCallRoom(&currFrame);
+            Frame *frame = vm.framePool_.acquire(target);
+            camel::execute::bindLoopRound(
+                frame,
+                target,
+                k,
+                element,
+                wargs.size(),
+                [&](size_t j) {
+                    return k == 1 ? currFrame.get<slot_t>(self)
+                                  : currFrame.get<Tuple *>(self)->get<slot_t>(j);
+                },
+                [&](size_t c) { return currFrame.get<slot_t>(wargs[c]); });
+            return vm.callElement(target == condSite.runtimeGraph ? condSite : bodySite, frame);
         }
-        if (k == 1) {
-            frame->set(target->node(norm[port])->dataIndex, currFrame.get<slot_t>(self));
-        } else {
-            Tuple *state = currFrame.get<Tuple *>(self);
-            for (size_t j = 0; j < k; ++j) {
-                frame->set(target->node(norm[port + j])->dataIndex, state->get<slot_t>(j));
-            }
-        }
-        const auto with = target->withPorts();
-        for (size_t c = 0; c < wargs.size(); ++c) {
-            frame->set(target->node(with[c])->dataIndex, currFrame.get<slot_t>(wargs[c]));
-        }
-    };
-    const HigherOrderCallSite condSite{
-        .runtimeGraph = cond,
-        .entryPc      = cond ? graphEntryPc(cond) : 0};
-    const HigherOrderCallSite bodySite{.runtimeGraph = body, .entryPc = graphEntryPc(body)};
-    for (size_t round = 0;; ++round) {
-        // Each round: the condition first, then the next element (camel/core/loop_kind.h).
-        if (cond != nullptr) {
-            requireNestedCallRoom(&currFrame);
-            Frame *frame = framePool_.acquire(cond);
-            bind(frame, cond, nullptr);
-            if (!fromSlot<Bool>(callElement(condSite, frame))) {
-                break;
-            }
-        }
-        slot_t element = NullSlot;
-        if (iterates) {
-            Array *array = currFrame.get<Array *>(nargs[0]);
-            if (round >= array->size()) {
-                break;
-            }
-            element = array->data()[round];
-        }
-        requireNestedCallRoom(&currFrame);
-        Frame *frame = framePool_.acquire(body);
-        bind(frame, body, iterates ? &element : nullptr);
-        currFrame.set(self, callElement(bodySite, frame));
-    }
+        Array *iterable() { return currFrame.get<Array *>(nargs[0]); }
+        void advance(slot_t next) { currFrame.set(self, next); }
+    } host{
+        *this,
+        currFrame,
+        self,
+        k,
+        nargs,
+        wargs,
+        first,
+        HigherOrderCallSite{.runtimeGraph = cond, .entryPc = cond ? graphEntryPc(cond) : 0},
+        HigherOrderCallSite{.runtimeGraph = body, .entryPc = graphEntryPc(body)}};
+    camel::execute::driveLoopRounds(camel::execute::LoopShape{cond, body, iterates, k}, host);
 }
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(

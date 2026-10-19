@@ -1065,7 +1065,7 @@ struct Node {
     uint16_t inBegin;     // 输入表里本节点第一条输入的下标；Norm 段从这里开始
     uint16_t withBegin;   // With 段的起点
     uint16_t ctrlBegin;   // Ctrl 段的起点；到下一个节点的 inBegin 为止
-    uint16_t payload;     // 负载区里的偏移（4 字节为单位）；0 表示没有负载
+    uint16_t payload;     // 负载区里的偏移（8 字节为一字，见 3b 的实施记录）；kNoPayload（0xFFFF）表示没有负载
 };
 ```
 

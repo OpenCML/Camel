@@ -259,6 +259,7 @@ int runCommand(int argc, char *argv[]) {
             .maxThreads        = Run::maxThreads > 0 ? static_cast<size_t>(Run::maxThreads) : 0,
             .maxRecursionDepth = Run::maxRecursionDepth,
             .maxMacroDepth     = Run::maxMacroDepth,
+            .maxMacroRounds    = Run::maxMacroRounds,
         },
         compileDiagsConfig);
     // However the run ends (main returns, a fault, exit(n)), it ends by returning from here:

@@ -49,6 +49,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `-t`, `--threads <num>`: Maximum number of threads  
 - `--max-recursion-depth <n>`: Limit on the calls that may be open at once without being tail calls (1 to 1000000; see "Resource limits"). Also `CAMEL_MAX_RECURSION_DEPTH=<n>`; the option wins  
 - `--max-macro-depth <n>`: Limit on nested calls while `std::macro` evaluates a call ahead of time (default 64; same range). Also `CAMEL_MAX_MACRO_DEPTH=<n>`  
+- `--max-macro-rounds <n>`: Limit on the rounds one loop may run while `std::macro` evaluates it ahead of time (default 1000000, 1 to 2^40); a loop past it fails the evaluation. Also `CAMEL_MAX_MACRO_ROUNDS=<n>`; the option wins  
 - `--gc <collector>`: Collector of run-time values: `generational` (default; young objects are copied and die cheaply) or `mark-sweep` (an object keeps its address; see "The collector"). Also `CAMEL_GC=<collector>`; the option wins  
 - `-n`, `--no-cache`: Disable cache modules  
 - `-I`, `--include <dir>`: Add module search path (can be used multiple times)  

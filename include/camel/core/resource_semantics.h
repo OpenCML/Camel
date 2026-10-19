@@ -198,6 +198,20 @@ ResourceSpec conservativeResources(size_t normCount, size_t withCount, bool pure
 /// conservative reading, not a declaration); a Same or View result names an operand.
 std::optional<std::string> checkResources(const ResourceSpec &spec);
 
+/// Whether the spec writes the resource that the ordinary (or with) operand `index` names.
+bool writesOperand(const ResourceSpec &spec, bool isWith, size_t index);
+
+/// Whether the spec reads or writes a resource of class `cls` at all (`writesOnly`: writes).
+bool touchesClass(const ResourceSpec &spec, ResourceClass cls, bool writesOnly = false);
+
+/// The declaration against the `var` parameters of the operator's signature (design principles
+/// 2.17: the resource declaration is the truth about effects, the signature is checked against
+/// it): nullopt when they agree. A `var` parameter is declared written; a cell (Variable) or an
+/// object changed in place (Object) is written only through a `var` parameter; a Foreign
+/// resource is a handle a module wraps and may be written through an ordinary operand.
+std::optional<std::string> checkVarParameters(
+    const ResourceSpec &spec, const std::vector<bool> &withVars, const std::vector<bool> &normVars);
+
 /// The text form, for `camel inspect --ops` and diagnostics: "rmw variable norm 0 whole; result
 /// fresh", "read ambient fs; external", "none".
 std::string toString(const ResourceSpec &spec);

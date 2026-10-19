@@ -133,6 +133,20 @@ it is written, on every back end (`modules.tiles` `loop_structure_*`, `linear.lo
 the next round; no number of rounds takes depth (`--max-recursion-depth 3` runs a million rounds
 on every back end: `linear.loops` `loops.not_recursion`).
 
+**One driver for the rounds.** NodeVM, the native loop of FastVM and the macro evaluator no
+longer each write the round: `camel/execute/loop_driver.h` holds the order of a round (the
+condition first, then the next element, then the body), the ports a round binds
+(`bindLoopRound`: the element, the k values of the state, the captures) and what ends the loop;
+each interpreter supplies a frame and a call (`driveLoopRounds` is a template, so the services are
+inlined). Iterating over more than arrays will be one change there. The macro evaluator's limit on
+the rounds of a loop is `--max-macro-rounds <n>` (else `CAMEL_MAX_MACRO_ROUNDS`; default
+1000000, 1 to 2^40), the way the nesting limit is `--max-macro-depth`.
+
+**Lowered or native on std::fvm and std::jit.** The choice is made once at the entry: native when
+an observer asks for loop frames (`ExecutionObserver::wantsLoopFrames`, true for the debugger) or
+with `CAMEL_FVM_NATIVE_LOOP=1`, lowered otherwise; the choice is logged under the `FastVM` scope.
+The two give the same results, faults and output.
+
 ## 5. Timings
 
 Ten million rounds, whole process, one container, three runs each, the median

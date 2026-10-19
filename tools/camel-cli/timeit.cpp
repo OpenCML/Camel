@@ -258,6 +258,7 @@ RunInvocation makeRunInvocation(const std::string &inputPath) {
             .searchPaths = std::move(searchPaths),
             .maxRecursionDepth = Run::maxRecursionDepth,
             .maxMacroDepth     = Run::maxMacroDepth,
+            .maxMacroRounds    = Run::maxMacroRounds,
         },
         DiagsConfig{
             .total_limit         = -1,

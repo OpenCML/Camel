@@ -69,6 +69,15 @@ class FuncTypeResolver {
 
     virtual std::string signature() const = 0;
 
+    /// Which parameters of the overload are `var`, when its parameter counts are fixed: the
+    /// with parameters, then the ordinary ones. False when it cannot be told (a variadic or
+    /// computed signature). The resource declaration of the operator is checked against it.
+    virtual bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const {
+        (void)with;
+        (void)norm;
+        return false;
+    }
+
     /**
      * Resolution that may also use the values of constant arguments, for operators whose result
      * type depends on them (e.g. a tensor constructor whose shape is given by a shape literal).
@@ -128,6 +137,16 @@ class StaticFuncTypeResolver : public FuncTypeResolver {
 
     std::string signature() const override { return funcType_->toString(); }
 
+    bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
+        for (size_t i = 0; i < funcType_->withTypesCount(); ++i) {
+            with.push_back(funcType_->withIsVarAt(i));
+        }
+        for (size_t i = 0; i < funcType_->normTypesCount(); ++i) {
+            norm.push_back(funcType_->normIsVarAt(i));
+        }
+        return true;
+    }
+
     FunctionType *funcType() const { return funcType_; }
 
   private:
@@ -167,6 +186,15 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         const ModifierSet &modifiers) const override;
 
     std::string signature() const override { return signature_; }
+
+    bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
+        if (withVars_.first == -1 || normVars_.first == -1) {
+            return false;
+        }
+        with = withVars_.second;
+        norm = normVars_.second;
+        return true;
+    }
 
     /// The declared number of with- and ordinary parameters; -1 for any number.
     int withCount() const { return withVars_.first; }

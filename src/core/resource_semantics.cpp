@@ -122,6 +122,54 @@ ResourceSpec conservativeResources(size_t normCount, size_t withCount, bool pure
     return spec;
 }
 
+bool writesOperand(const ResourceSpec &spec, bool isWith, size_t index) {
+    const auto kind = isWith ? ResourceBinding::Kind::With : ResourceBinding::Kind::Norm;
+    for (const ResourceAccess &access : spec.accesses) {
+        if (access.binding.kind == kind && access.binding.index == index && writes(access.mode)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool touchesClass(const ResourceSpec &spec, ResourceClass cls, bool writesOnly) {
+    for (const ResourceAccess &access : spec.accesses) {
+        if (access.resource.cls == cls && (!writesOnly || writes(access.mode))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::optional<std::string> checkVarParameters(
+    const ResourceSpec &spec, const std::vector<bool> &withVars, const std::vector<bool> &normVars) {
+    for (const bool isWith : {false, true}) {
+        const std::vector<bool> &vars = isWith ? withVars : normVars;
+        for (size_t i = 0; i < vars.size(); ++i) {
+            const bool written = writesOperand(spec, isWith, i);
+            if (vars[i] && !written) {
+                return std::format(
+                    "the signature has a var {} parameter {} that the declaration does not write",
+                    isWith ? "with" : "ordinary", i);
+            }
+            if (!vars[i] && !isWith) {
+                // A cell or an in-place object is written through a var parameter only.
+                for (const ResourceAccess &access : spec.accesses) {
+                    if (access.binding.kind == ResourceBinding::Kind::Norm && access.binding.index == i &&
+                        writes(access.mode) && (access.resource.cls == ResourceClass::Variable ||
+                                                access.resource.cls == ResourceClass::Object)) {
+                        return std::format(
+                            "the declaration writes a {} through ordinary parameter {}, which is "
+                            "not a var parameter",
+                            resourceClassName(access.resource.cls), i);
+                    }
+                }
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 std::optional<std::string> checkResources(const ResourceSpec &spec) {
     const auto named = [](ResourceClass cls) {
         return cls == ResourceClass::Foreign || cls == ResourceClass::Ambient;

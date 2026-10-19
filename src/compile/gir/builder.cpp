@@ -6025,8 +6025,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // `foreach` drops what its element function gives: the value of the body of a
             // function written in place here is a value nothing takes (design principles
             // 2.12). A function named here may be used elsewhere, where its value counts.
-            if (const auto uri = targetOperator->uri();
-                uri == ":mark/foreach_arr" || uri == ":mark/unordered_foreach_arr") {
+            if (const auto operId = camel::core::OperatorTable::instance().lookup(targetOperator->uri());
+                operId && camel::core::OperatorTable::instance().elementCalls(*operId) != nullptr &&
+                camel::core::OperatorTable::instance().elementCalls(*operId)->shape ==
+                    camel::core::sem::ElementShape::Foreach) {
                 for (const Argument &input : withInputs) {
                     if (input.expr == nullptr) {
                         continue;

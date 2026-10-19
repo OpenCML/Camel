@@ -615,6 +615,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
         uint32_t depth                     = 0;
         TaskflowFaultDomain *domain        = nullptr;
+        /// The operator declares that the calls on different elements do not depend on one
+        /// another (OperatorSemantics::elementCalls): they may run at once. Without it they
+        /// run in order on the calling thread.
+        bool independent = false;
     };
     // Calls the function value held in slot `funcIdx` of `funcFrame` (its graph is
     // `targetGraph`, with plan `targetPlan`) on the calling thread: `fillArgs(span)` reads the
@@ -640,6 +644,11 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     slot_t executeLinearNode(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
         const GraphPlan *plan = nullptr);
+    /// Runs a marked operator by the way its declaration says it calls its function; the value of
+    /// `attempt` (which the scheduler runs itself), nullopt for the others (their result is in
+    /// the node's slot).
+    std::optional<slot_t> runMarkedOperator(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     slot_t executeLinearMarkedOperator(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
 

@@ -144,6 +144,28 @@ size_t macroDepthLimit(const core::context::Context &context) {
     return fromEnvironment.value_or(kDefaultMaxMacroDepth);
 }
 
+std::optional<size_t> parseRoundLimit(std::string_view text) {
+    size_t value   = 0;
+    const char *b  = text.data();
+    const char *e  = text.data() + text.size();
+    auto [ptr, ec] = std::from_chars(b, e, value);
+    if (text.empty() || ec != std::errc() || ptr != e || value == 0 || value > kMaxRoundsLimit) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+size_t macroRoundLimit(const core::context::Context &context) {
+    if (const size_t option = context.maxMacroRounds(); option != 0) {
+        return std::min(option, kMaxRoundsLimit);
+    }
+    static const std::optional<size_t> fromEnvironment = [] {
+        const char *raw = std::getenv(kMaxMacroRoundsEnvVar);
+        return raw == nullptr ? std::nullopt : parseRoundLimit(raw);
+    }();
+    return fromEnvironment.value_or(kDefaultMaxMacroRounds);
+}
+
 size_t framePoolBytes(size_t limit) {
     constexpr size_t kBytesPerCall = 4096;
     constexpr size_t kMaxBytes     = size_t{256} * 1024 * 1024;
