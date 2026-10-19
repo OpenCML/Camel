@@ -596,7 +596,7 @@ expect_exit = 1
 verify_script = '''
 ({input,assert})=>{
  assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
- assert((input.normalized.stdout+input.normalized.stderr).includes('UnrecognizedGraphPass'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
 }
 '''
 
@@ -608,7 +608,7 @@ expect_exit = 1
 verify_script = '''
 ({input,assert})=>{
  assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
- assert((input.normalized.stdout+input.normalized.stderr).includes('UnrecognizedGraphPass'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
 }
 '''
 
@@ -620,7 +620,7 @@ expect_exit = 1
 verify_script = '''
 ({input,assert})=>{
  assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
- assert((input.normalized.stdout+input.normalized.stderr).includes('UnrecognizedGraphPass'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
 }
 '''
 
@@ -632,7 +632,7 @@ expect_exit = 1
 verify_script = '''
 ({input,assert})=>{
  assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
- assert((input.normalized.stdout+input.normalized.stderr).includes('UnrecognizedGraphPass'),'missing diagnostic');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
 }
 '''
 

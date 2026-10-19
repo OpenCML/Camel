@@ -25,6 +25,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
+#include "camel/execute/pass/params.h"
 #include "camel/execute/pass/snapshot.h"
 #include "camel/utils/log.h"
 #include "compile.h"
@@ -249,7 +250,7 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
     st.compiledPending = false;
 
     std::string notice;
-    const std::vector<std::string> passes = debuggablePasses(st.runPasses, notice);
+    std::vector<std::string> passes = debuggablePasses(st.runPasses, notice);
     // A debug adapter shows the notice from the core's event; other clients read the log.
     if (!notice.empty() && !quiet)
         std::cerr << notice << std::endl;
@@ -281,6 +282,7 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
     try {
         static const std::vector<std::string> defaultFallback{"std::default"};
         st.ctx->clearProcessExitCode();
+        passes = withDefaultPipelinePasses(passes, st.ctx);
         requireKnownPasses(passes, st.ctx);
         auto *graph = st.ctx->runtimeRootGraph();
         // The values given for the parameters of `main` become constants of the entry graph

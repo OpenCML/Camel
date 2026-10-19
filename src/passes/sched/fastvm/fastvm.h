@@ -95,6 +95,12 @@ struct FastVMConfig {
     JitMode jitMode        = JitMode::Disabled;
     size_t jitHotThreshold = 1;
     bool enableJitTraceMir = false;
+    /// Run the program's own LOOP nodes natively instead of lowering them to tail recursion
+    /// (`std::fvm(native_loop=true)`; always the case under a debugger).
+    bool nativeLoop = false;
+    /// File that receives per-graph bytecode and execution counts at the end of the run
+    /// (`std::fvm(stats="file")`); empty: none.
+    std::string statsPath;
 };
 
 class FastVMSchedPass : public RuntimeGraphSchedulePass {
@@ -174,11 +180,13 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     constexpr bool jitEnabled() const { return false; }
 #endif
 
-    // Coverage statistics (fastvm_stats.cpp), off unless CAMEL_FVM_STATS names a file. While
+    // Coverage statistics (fastvm_stats.cpp), off unless std::fvm is given stats="file". While
     // they are on, opCounts_ points to one counter per bytecode pc and the interpreter counts
     // every bytecode it runs; otherwise it is null and the interpreter is not slowed.
     struct Stats;
     std::shared_ptr<Stats> stats_;
+    bool nativeLoop_ = false;
+    std::string statsPath_;
     uint64_t *opCounts_ = nullptr;
     size_t graphLengthOf(camel::runtime::GCGraph *graph) const; // in bytecode units; 0 unknown
     void statsBegin();
@@ -274,18 +282,13 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
                   break;
               }
               c.hotThreshold = config.jitHotThreshold;
-              // A switch for testing the compiler: CAMEL_JIT_HOT_THRESHOLD=0 compiles a graph
-              // at its first call instead of at the second from one call site, so that short
-              // programs (the random ones of test/tools/progen) run as compiled code too.
-              if (const char *threshold = std::getenv("CAMEL_JIT_HOT_THRESHOLD");
-                  threshold != nullptr && threshold[0] >= '0' && threshold[0] <= '9') {
-                  c.hotThreshold = static_cast<size_t>(std::strtoull(threshold, nullptr, 10));
-              }
               return c;
           }()),
           enableJitTraceMir_(config.enableJitTraceMir)
 #endif
     {
+        nativeLoop_ = config.nativeLoop;
+        statsPath_  = config.statsPath;
         framePool_.registerGcTracer();
     }
     virtual ~FastVMSchedPass();

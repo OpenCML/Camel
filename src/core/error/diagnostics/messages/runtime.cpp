@@ -170,6 +170,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::InvalidPassParameter,
+            {
+                "InvalidPassParameter",
+                "Invalid pass specification '{0}': {1}.",
+                "A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the "
+                "values are constant expressions (bool, int, float or string). The message names "
+                "the parameter, the type it has and the parameters the pass declares.",
+            },
+        },
+        {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",

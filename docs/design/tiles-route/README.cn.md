@@ -292,6 +292,6 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 5. **没有原生实现的算子降低其定义图**（`expandDefinition`），不照 CPU 内核复刻；梯度与融合产生的算子由核心补语义声明与定义图（第 4 条）。
 6. **设备故障读核心的 `FaultSpec` 与归约规律的空区间规则**，报告带故障种类与源码位置（第 9 条）。
 7. **BF16 cuBLAS 的批偏移用核心的访问映射**，与 `ddpm-primitives.md` 的描述一致（第 10 条）。
-8. **许可对应实现的规则读核心的统一判定**（2.16、2.17：库实现的 f32 矩阵乘默认可用、BF16 只需 `change_precision`、安全模式由遍参数给出），不在模块内各写一份（第 6 条）。遍参数的通用语法由核心提供（2.17），设备选择改用遍参数，不用环境变量。
-9. 遍名用 `tiles::` 前缀，别名由模块登记；核心别名表中的 `std::tiles` 由核心删去（第 11 条，2.17）。
+8. **许可对应实现的规则读核心的统一判定**（2.16、2.17：库实现的 f32 矩阵乘默认可用、BF16 只需 `change_precision`、安全模式由遍参数给出），不在模块内各写一份（第 6 条）。遍参数的通用语法由核心提供（2.17），设备选择改用遍参数，不用环境变量。核心已提供：`registerModulePass(path, PassDescriptor)` 让模块遍声明参数（名字、类型、默认值、说明），`tiles::compile(device=1)` 即可写出；`CAMEL_TILES_DEVICE`（`capability.cpp` 的 `configuredCudaOrdinal`，后端初始化与测试都读它）和 `CAMEL_TILES_NVRTC`（进程环境，可保留）尚未迁移——设备序号要先从遍实例传到后端初始化，这属于模块内部的改动，由 Tiles 做；核心这一侧已不再读它。
+9. 遍名用 `tiles::` 前缀，别名由模块登记；核心别名表中的 `std::tiles` 由核心删去（第 11 条，2.17）。已删去（`registerPassAlias`、`registerDefaultPipelinePass` 已提供；核心的测试与文档改写为 `tiles::compile`）。Tiles 尚待做的两件事：用 `registerPassAlias` 登记它想要的短名；`@gpu` 改为编译期标注后用 `registerDefaultPipelinePass("tiles::compile")` 登记，使不写遍名时 `@gpu` 仍然生效（默认流水线的遍在第一个消耗图的遍之前运行，`--no-module-passes` 可关闭）。
 

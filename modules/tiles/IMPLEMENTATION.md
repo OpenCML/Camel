@@ -100,7 +100,7 @@ Do not run builds and tests concurrently against the same output directory.
 ## Remaining work
 
 The existing kernel families use structured physical statements and consume core
-index contracts. `std::tiles` and `@gpu` extract supported regions, compile static
+index contracts. `tiles::compile` and `@gpu` extract supported regions, compile static
 shapes and rewrite their boundaries with resident leaf transfers. Static-array
 lane-local For loops support multiple compatible states in one device recurrence.
 Remaining work includes symbolic shape code generation, dynamic domains and

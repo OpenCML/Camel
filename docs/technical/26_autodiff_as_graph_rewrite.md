@@ -399,13 +399,13 @@ on `fn`.
 
 What exists (`modules/onnx/passes/export.cpp`, `docs/cli.md`):
 
-    CAMEL_ONNX_OUT=model.onnx camel m.cml std::macro std::opt onnx::export
+    camel m.cml std::macro std::opt 'onnx::export(out="model.onnx")'
 
 - `onnx::export` is registered by the `onnx` module and is the last pass of the
   pipeline; it consumes the graph, so the program does not run. The export
   request is the program's own `onnx.export_model(fn, example, path, ...)`
   call, which the pass finds in the entry graph with constant arguments (no new
-  syntax, no new command-line option). `CAMEL_ONNX_OUT` overrides the path.
+  syntax, no new command-line option). the parameter `out` of the pass overrides the path.
 - It refuses, with the diagnostic `RuntimeDiag::TranslationRefused` at the node
   and the name of the missing pass, a graph that still has a call (not inlined,
   or the entry graph still calling `main`) or an unexpanded macro operator. It

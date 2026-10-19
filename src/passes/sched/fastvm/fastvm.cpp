@@ -480,12 +480,10 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     // program (camel/runtime/loop_lowering.h): today that is faster here than the native
     // instruction (evalLoop), which enters the interpreter again for each of its two calls a
     // round (docs/technical/39_loops.md, section 5). Under a debugger, and with
-    // CAMEL_FVM_NATIVE_LOOP=1, the program's own LOOP nodes run natively, so that the frames
+    // std::fvm(native_loop=true), the program's own LOOP nodes run natively, so that the frames
     // shown are the loop's condition and body (folded into their function). Making the native
     // loop a bytecode loop, at least as fast as the lowering, is the next step.
-    const char *nativeLoops = std::getenv("CAMEL_FVM_NATIVE_LOOP");
-    if (camel::execute::executionObserver() == nullptr &&
-        !(nativeLoops != nullptr && std::string_view(nativeLoops) == "1")) {
+    if (camel::execute::executionObserver() == nullptr && !nativeLoop_) {
         graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
     }
     camel::runtime::GCGraph *runtimeRoot = graph;
@@ -493,7 +491,7 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
 
     stackDepth_  = 0;
     nestedCalls_ = 0;
-    // Written however the run ends (no-op unless CAMEL_FVM_STATS is set).
+    // Written however the run ends (no-op unless std::fvm is given stats="file").
     struct StatsAtExit {
         FastVMSchedPass *vm;
         ~StatsAtExit() { vm->statsWrite(); }

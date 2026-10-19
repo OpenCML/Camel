@@ -87,7 +87,7 @@ or test-enablement checks. Test passes use the same rewriting implementation.
 
 With explicit device operators this component inserts typed uploads, resident
 calls and host-visible downloads. `tiles::test_outline_resident` exercises this
-GPU-required path. The public `std::tiles` alias loads `tiles::compile`, which
+GPU-required path. The public `tiles::compile` pass loads the module and
 uses preferred resident execution without test output or CUDA initialization
 during rewriting. This is the static-shape region implementation; symbolic
 shape compilation and cost-based target selection remain pending.

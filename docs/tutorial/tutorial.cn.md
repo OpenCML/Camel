@@ -1030,7 +1030,7 @@ tensor([[      2.],
 **导出它**：同一份源码，换一组遍。程序里没有为导出写任何东西，连 `import onnx` 都不需要：
 
 ```bash
-CAMEL_ONNX_OUT=model.onnx camel docs/tutorial/examples/15_model.cml std::macro std::opt onnx::export
+camel docs/tutorial/examples/15_model.cml std::macro std::opt 'onnx::export(out="model.onnx")'
 ```
 
 ```text

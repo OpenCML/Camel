@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-149 diagnostics: 135 errors, 14 warnings.
+150 diagnostics: 136 errors, 14 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -164,6 +164,7 @@ prints one entry.
 | `0x04000050` | [RuntimeDiag::ConversionOutOfRange](#conversionoutofrange) | Error |
 | `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error |
 | `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error |
+| `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -4160,6 +4161,24 @@ func main(): int sync {
     return 0
 }
 ```
+
+### InvalidPassParameter
+
+`0x04000060` · Error · `RuntimeDiag::InvalidPassParameter`
+
+**Message**
+
+```text
+Invalid pass specification '{0}': {1}.
+```
+
+**Help**
+
+```text
+A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### PassesNeverRun
 

@@ -1,0 +1,13 @@
+/**
+ * A program for the tests of pass parameters (test/plans/feat/opt/pass_params.plan.toml): it
+ * imports the tensor module, so that the module's passes (and, in the test that asks for them,
+ * the passes it registers for the default pipeline) exist, and prints one line.
+ */
+module plain
+
+import { Tensor } from tensor
+
+func main(): int sync {
+    println("camel-ran-marker")
+    return 0
+}

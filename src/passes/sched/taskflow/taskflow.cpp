@@ -230,11 +230,6 @@ int64_t steadyNowNs() {
         .count();
 }
 
-bool envSwitch(const char *name) {
-    const char *raw = std::getenv(name);
-    return raw != nullptr && raw[0] != '\0' && !(raw[0] == '0' && raw[1] == '\0');
-}
-
 struct PlanMismatch {
     std::string reason;
 };
@@ -243,14 +238,13 @@ struct PlanMismatch {
 
 namespace {
 
-// CAMEL_TF_GC_STATS=2: one line per collection, and per time the collector gave up.
-bool gcTraceEnabled() {
-    static const bool enabled = [] {
-        const char *raw = std::getenv("CAMEL_TF_GC_STATS");
-        return raw != nullptr && raw[0] == '2';
-    }();
-    return enabled;
+// std::tf(gc_stats=2): one line per collection, and per time the collector gave up. Set by the
+// run in progress; the collector's gate is one per process.
+std::atomic<bool> &gcTraceFlag() {
+    static std::atomic<bool> flag{false};
+    return flag;
 }
+bool gcTraceEnabled() { return gcTraceFlag().load(std::memory_order_relaxed); }
 
 // Resident set of the process in MB (0 where /proc is not available).
 long residentMegabytes() {
@@ -673,7 +667,7 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
             plan->scopes.clear();
             plan->branches.clear();
             plan->structured = false;
-            if (envSwitch("CAMEL_TF_DIAG")) {
+            if (options_.diag) {
                 std::cerr << std::format(
                     "[taskflow] graph '{}' is evaluated node by node: {}\n",
                     graph->name(),
@@ -681,7 +675,7 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
             }
         }
     }
-    if (plan->structured && envSwitch("CAMEL_TF_DIAG")) {
+    if (plan->structured && options_.diag) {
         size_t parallelScopes = 0;
         size_t chains         = 0;
         for (const auto &scope : plan->scopes) {
@@ -1081,8 +1075,9 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     // context's program keeps its LOOP nodes: camel/runtime/loop_lowering.h).
     graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
 
-    forceLinear_ = envSwitch("CAMEL_TF_LINEAR");
-    fanOutAll_   = envSwitch("CAMEL_TF_FANOUT_ALL");
+    forceLinear_ = options_.linear;
+    fanOutAll_   = options_.fanOutAll;
+    gcTraceFlag().store(options_.gcStats >= 2, std::memory_order_relaxed);
     taskGraphsRun_.store(0, std::memory_order_relaxed);
     {
         std::lock_guard lock(heavyMutex_);
@@ -1098,7 +1093,7 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
         executionGraphs_.clear();
     }
     linearArmEntryCache_.clear();
-    const bool gcStats = envSwitch("CAMEL_TF_GC_STATS");
+    const bool gcStats = options_.gcStats > 0;
     TaskflowGcGate::instance().resetStats();
     prepareBytecodeHandoff(graph);
     // The bytecode side of the run, on the line after the collector's.
