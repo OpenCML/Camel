@@ -127,7 +127,7 @@
 | 编号 | 任务 | 前提 | 状态 |
 |---|---|---|---|
 | H1 | `enum` | 无，可以立即开始 | 待开始 |
-| H2 | 数值许可改为库装饰器 | H1 已合并；地基"装饰器通用机制"已合并 | 等待前提 |
+| H2 | 标签机制与数值许可改为标签 | 无（地基已合并） | 待开始 |
 | H3 | 依赖节点属性的后续 | 地基"装饰器通用机制"已合并 | 等待前提 |
 | H4 | 已裁定未开工的小项 | 无（各小项另注） | 待开始 |
 | H5 | 命名类型 | H1 已合并 | 等待前提 |
@@ -191,39 +191,19 @@ let area = match b {
 
 ---
 
-### H2：数值许可改为库装饰器
+### H2：标签机制与数值许可改为标签
 
-**前提**：H1 已合并；地基"装饰器通用机制"已合并（提供通用节点属性、装饰器修饰代码块、能改写函数图的装饰器）。开始前读那条地基的提交与报告，弄清这三样的接口。
+**前提**：地基"装饰器通用机制"已合并（已满足）。不再依赖 H1。
 
-**依据**：设计原则 2.13（数值契约与许可规则）、2.17；`docs/design/op-semantics/README.cn.md` 中许可的部分；审查报告 `runtime.cn.md` 第 3 条。
+**依据**：设计原则 **2.20**（全文照做）、2.13（许可的规则）；节点标签的底层已有：`include/camel/core/node_attrs.h`、`OperatorTable::declareGrant`。
 
-**现状**：`@numeric(reassociate, contract)` 是构建语法树时的硬编码分支（`src/parse/ast/builder.cpp` 比较字符串 `"numeric"`、写死名单），解析器为它有一种 `@name(...)` 写法（`src/parse/syntax/parser.cpp` 的 `parentIdents`），图上是一字节的许可列（`GCGraph::nodePermissions`，8 位已用满，0 同时表示"无许可"和"未指定"）。读许可的地方很多：`grep -rn "nodePermissions\|PermissionMask\|permissions" src include modules`。
-
-**目标**：
-
-```camel
-import { numeric, Reassociate, Contract } from numeric   // 导入方式按标准库惯例，见下
-
-@numeric<Reassociate, Contract>
-func dot(a: Tensor<f32>, b: Tensor<f32>): f32 { ... }
-
-func loss(x: Tensor<f32>): f32 {
-    let a = exact_part(x)
-    @numeric<Reassociate> {
-        let s = sum(a)
-        ...
-    }
-}
-```
-
-1. **许可是标准库 `numeric` 模块里的封闭 `enum`**：`Reassociate`、`Contract`、`ApproxMath`、`ChangePrecision`、`NoNans`、`NoInfs`、`NoSignedZeros`、`FlushSubnormals`，另有 `FiniteMath` 表示后四项之和（装饰器把它展开为四项）。其他模块不能往里加成员；需要自己的放宽时定义自己的 `enum` 与装饰器。
-2. **`numeric` 是标准库里的普通装饰器**，用地基提供的"改写函数图的装饰器"实现：把许可集合写进节点属性（键由 `numeric` 模块注册），作用于被修饰的函数或代码块自己的节点，以及其中在词法上定义的子图（分支臂、循环体、lambda），**不作用于它调用的其他函数**（2.13）。嵌套时取并集。必须在优化遍之前生效。
-3. **编译器前端不再有任何 `numeric` 专用代码**：删除 `builder.cpp` 中的分支与名单、解析器的 `@name(...)` 写法。旧写法 `@numeric(reassociate)` 给出诊断，指向 `@numeric<Reassociate>`。**不保留兼容**。
-4. **许可的含义仍由核心的数值契约定义**（2.13 是语言规范）：核心语义层（`operator_semantics`、`reorderFreedom`、2.15/2.16 的默认策略）通过节点属性读取许可；属性的键与 `enum` 成员到内部表示的对应关系只在一处定义。一字节的许可列删除，改为节点属性；所有读者（算式优化、`tensor::fuse`、`inspect --ops`、`std::jgir` 输出、Tiles）改为通过同一个核心辅助函数读取。Tiles 是另一个 AI 的模块：只改到能编译、行为不变为止，并在 `docs/design/tiles-route/README.cn.md` 第 11 节末尾加一句接口变化的说明。
-5. **行为不变**：现有许可相关的测试（`numeric_permissions` 计划、算式优化、融合、定义图、索引语义、算子语义、Tiles 计划）全部改为新写法后照样通过；`inspect` 输出中许可的显示可以改为成员名，报告里列出。
-6. **文档**：语言参考中 `@numeric(` 全部改为新写法；`docs/design/op-semantics/README.cn.md` 的相关段落；诊断目录。
-
----
+1. **`tag` 声明**：解析 `export tag 名 <参数> on 位置列表` 与别名组 `tag 名 = [ ... ]`；标签是与函数、类型同一命名空间的名字，可导入、可限定。C++ 模块用同一套登记接口声明标签（把现有的 `declareGrant`、`attr::registerKey` 收为"登记一个标签"）。
+2. **`#` 写法**：`#名`、`#名<参数>`、`#[a, b<v>]`，可写在函数、类型声明、结构体字段、代码块前；贴到 `on` 未列出的位置是编译错误；参数是编译期的值。`#` 不再是注释（见 H6 第 6 项）。
+3. **节点标签**（`on nodes`）用现有的节点属性实现：区域上的事实累积，同名带参的内层为准。**声明标签**（`on func`、`on type`、`on field`）存在声明上，C++ 查询接口可读；编译期代码中的读取（`match type`、`fields`）随泛型第一期接入，本任务只提供存储与 C++ 查询。
+4. **数值许可改为标签**：标准库把 `reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals` 声明为 `on nodes` 的标签，`finite_math` 为别名组。删除编译器前端的 `numeric` 分支与名单、`@name(...)` 写法（旧写法给出指向 `#[reassociate]` 的诊断）、一字节许可列；核心语义层通过节点标签读取许可（标签与含义的对应只在一处）；所有读者（算式优化、`tensor::fuse`、`inspect`、`std::jgir`、Tiles）改为同一个辅助函数。Tiles 只改到能编译。
+5. **`@vjp` 改为 `#vjp<rule>`**（声明标签，值为规则函数的图引用），自动微分直接读取，删除靠宏求值与 `attachRule` 的做法。
+6. **`macro` 改为 `#foldable`**：`std::macro` 读标签；故障提前为编译错误只限一定执行的调用；删除函数类型中的 `Modifier::Macro`。删除关键字 `inner`、`outer`、`atomic`、`shared`（标准库签名中的 `inner func` 改为无函数体的声明）。
+7. 许可、宏、自定义导数的原有测试改为新写法后全部通过；语言参考、标准库参考、诊断目录同步更新。
 
 ### H3：依赖节点属性的后续
 
@@ -282,5 +262,6 @@ func loss(x: Tensor<f32>): f32 {
 1. **前端**（审查 frontend）：第 6 条，期望类型合并为一条通道；第 7 条，`append` 的就地改写改走通用的 `setInPlaceForm`（牵涉 `std::cpp` 发射器、ONNX 导出器与测试）；第 15 条，语言服务器的类型与命名空间解析取自编译器（编译器先要记录类型名的声明来源）；`TypeCode::Byte` 的移除（会移动类型码与转换表，单独做）。`from_bytes::<T>` 按类型分 URI、`load_tree` 运行时读类型，等泛型（设计稿 `docs/design/generic-structure`）实现后再改，不在本任务。
 2. **运行时**（审查 runtime）：第 9 条 `:graph/original` 改为引用表中的关系；第 10 条控制边约简移出编码器与建图器；`OperatorTraits` 的位由语义记录推出。用户函数声明"元素互不依赖"（2.17）用节点上的标签实现。
 3. **遍参数**：`--timeit` 不加入模块登记的默认遍；`CAMEL_OPT_GROWTH_BUDGET` 改为 `std::opt::inline` 的参数；调试用的跟踪变量是否改为参数，按第 4 节提问。
-4. **声明上的标签**（设计原则 2.20）：在节点标签机制（`include/camel/core/node_attrs.h`）之上，为函数、类型声明、结构体字段增加声明上的标签，登记方式相同；`fields T` 与 `match type` 能读到（随泛型第一期一起做时再接入）；**`@vjp` 改为函数声明上的标签**（值为规则函数的图引用），自动微分直接读取，删除 `modules/autodiff/operators.cpp` 中靠宏求值与 `attachRule` 的做法；测试覆盖跨模块使用与模块缓存。
+4. ~~声明上的标签~~ 已并入 H2。原文：在节点标签机制（`include/camel/core/node_attrs.h`）之上，为函数、类型声明、结构体字段增加声明上的标签，登记方式相同；`fields T` 与 `match type` 能读到（随泛型第一期一起做时再接入）；**`@vjp` 改为函数声明上的标签**（值为规则函数的图引用），自动微分直接读取，删除 `modules/autodiff/operators.cpp` 中靠宏求值与 `attachRule` 的做法；测试覆盖跨模块使用与模块缓存。
 5. **未跑完全套测试**：三条地基（遍参数、效应统一、前端清理）合并时只跑了相关计划与冒烟测试。先跑一次全套，把与第 1.2 节基线相比新增的失败逐个修掉，写进报告。**这一项最先做。**
+6. **`#` 不再是注释**（2.20）：词法只保留首行 `#!`；仓库中所有 `#` 注释改为 `//`（`.cml` 文件、测试、文档示例、编辑器语法文件）；与 H2 同时合并。
