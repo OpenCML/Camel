@@ -200,7 +200,7 @@ func softmax_row(x: Tile<f32, [1, 1024]>): Tile<f32, [1, 1024]> {
 - 它不改变语义：去掉 `@kernel`，或在 CPU 上执行，它仍是普通函数，结果仍是 GPU 结果的参考语义。
 - 它由 Tiles 模块提供，是标注而不是语言关键字（与计划中的 `@numeric(...)` 同类；行首的 `@` 是标注，见 2.11）。编辑器与语言服务器据此标出内核。
 - 写法仍是第 6.2 节的函数式写法；`@kernel` 不引入第 6.3 节的指针与程序编号。
-- **实现途径（2026-10-19，设计原则 2.17）**：核心已有通用的节点属性与"授予属性的装饰器"，`@kernel` 可以完全在 Tiles 模块里实现，不需要核心为它写代码：模块导出 `attrDecoratorGroup("kernel", "tiles:kernel", 0, ...)`（`camel/core/module/attr_decorator.h`），在 `load()` 里 `OperatorTable::declareGrant("tiles:kernel", {.key = "tiles.kernel"})`，执行器把 `kernel` 映射到 `attrDecoratorIdentity`。程序写 `@kernel func f(...)`（或 `@kernel { ... }`）时，建图阶段就给 `f` 自己的节点及其中写下的分支臂、循环体、lambda 加上属性 `tiles.kernel`（不含被调函数）；Tiles 以 `GCGraph::nodeAttrs(ref)`（`camel/core/node_attrs.h` 的 `attr::valueOf(set, attr::key("tiles.kernel"))`）读出并据此检查。属性随内联、克隆、`LOOP` 降低保留，`std::gir` 显示为 `attrs="tiles.kernel"`。数值许可（`nodePermissions`）暂不变，待 `enum` 实现后一并迁到同一机制，届时另行说明。
+- **实现途径（2026-10-19）**：核心已有通用的节点属性与"授予属性的装饰器"，`@kernel` 可以完全在 Tiles 模块里实现，不需要核心为它写代码：模块导出 `attrDecoratorGroup("kernel", "tiles:kernel", 0, ...)`（`camel/core/module/attr_decorator.h`），在 `load()` 里以 `attr::registerKey("tiles.kernel", {...})` 登记这个键（值的种类与合并规则：标记用 `Unit`，嵌套取内层，只与相同的值合并），再 `OperatorTable::declareGrant("tiles:kernel", {.key = "tiles.kernel"})`，执行器把 `kernel` 映射到 `attrDecoratorIdentity`。程序写 `@kernel func f(...)`（或 `@kernel { ... }`）时，建图阶段就给 `f` 自己的节点及其中写下的分支臂、循环体、lambda 加上属性 `tiles.kernel`（不含被调函数）；Tiles 以 `GCGraph::nodeAttrs(ref)`（`camel/core/node_attrs.h` 的 `attr::valueOf(set, attr::key("tiles.kernel"))`）读出并据此检查。属性随内联、克隆、`LOOP` 降低保留，`std::gir` 显示为 `attrs="tiles.kernel"`。值的种类还有任意宽度的标志集、整数、字符串、图的引用与元组（如设备偏好可用一个 `Symbol` 值的键）。数值许可（`nodePermissions`）暂不变，待 `enum` 实现后一并迁到同一机制，届时另行说明。
 
 ### 6.4 原子与不规则写入
 
