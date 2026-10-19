@@ -159,6 +159,7 @@ negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
+memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
 primaryData        : identRef | literal | arrayData | structData | tupleData | funcData
 literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
