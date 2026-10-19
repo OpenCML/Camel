@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -867,6 +867,25 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
         }
     }
     return std::nullopt;
+}
+
+bool passListTranslatesProgram(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+    for (const auto &name : passes) {
+        auto factory = lookupPassFactory(name);
+        if (!factory) {
+            continue;
+        }
+        const auto pass = factory(ctx);
+        // The first pass that consumes the graph decides what the list does. Before it, rewrite
+        // passes only transform the program; after it, the graph is gone.
+        if (dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
+            return true;
+        }
+        if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
+            return false;
+        }
+    }
+    return false;
 }
 
 std::optional<Diagnostic>

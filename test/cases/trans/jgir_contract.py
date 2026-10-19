@@ -63,4 +63,67 @@ assert found_duplicate
 for retired in ("dot", "rdot", "graphviz", "readable_graphviz", "annotated_graphviz", "readable_annotated_graphviz"):
     p = subprocess.run([EXE, SOURCE, "std::" + retired], cwd=ROOT, capture_output=True, text=True)
     assert p.returncode != 0, retired
+
+# A library module has no `main`. Translating it is not executing it, so every graph dump
+# must work; only a run still requires an entry (acceptance for the no-main library fix).
+LIBRARY = str(ROOT / "test/cases/trans/library_module.cml")
+KNOWN_KINDS = {
+    "DATA", "PORT", "CAST", "COPY", "FILL", "ACCS",
+    "BRCH", "JOIN", "CALL", "FUNC", "OPER", "SYNC", "GATE", "LOOP",
+}
+def invoke(*args):
+    return subprocess.run([EXE, *args], cwd=ROOT, capture_output=True, text=True)
+
+lib_dot = invoke(LIBRARY, "std::gir")
+assert lib_dot.returncode == 0, lib_dot.stderr
+assert "digraph GraphIR" in lib_dot.stdout and lib_dot.stdout.strip()
+
+lib_json = invoke(LIBRARY, "std::jgir")
+assert lib_json.returncode == 0, lib_json.stderr
+library = json.loads(lib_json.stdout)
+assert library["format"] == "camel.gir" and library["version"] == 1
+assert library["graphs"], "a library module still has graphs"
+lib_graphs = {g["id"]: g for g in library["graphs"]}
+assert len(lib_graphs) == len(library["graphs"])
+assert library["root"] in lib_graphs
+lib_node_ids = set()
+for g in lib_graphs.values():
+    local = {n["id"] for n in g["nodes"]}
+    assert len(local) == len(g["nodes"]) and not lib_node_ids.intersection(local)
+    lib_node_ids.update(local)
+    assert g["exit"] in local, "every graph has a real exit node"
+    assert all(d in lib_graphs for d in g["dependencies"])
+    assert all(n["kind"] in KNOWN_KINDS for n in g["nodes"])
+# The front end requires every graph to be reachable from root through dependencies.
+reachable, todo = set(), [library["root"]]
+while todo:
+    gid = todo.pop()
+    if gid in reachable:
+        continue
+    reachable.add(gid)
+    todo.extend(lib_graphs[gid]["dependencies"])
+assert reachable == set(lib_graphs), "every library graph is reachable from root"
+
+lib_inspect = invoke("inspect", "-g", LIBRARY)
+assert lib_inspect.returncode == 0, lib_inspect.stderr
+assert "digraph GraphIR" in lib_inspect.stdout and lib_inspect.stdout.strip()
+
+lib_run = invoke(LIBRARY)
+assert lib_run.returncode != 0, "executing a library module still requires main"
+assert "EntryModuleMissingMain" in (lib_run.stdout + lib_run.stderr)
+# The entry requirement is not about compilation: naming a scheduler is still a run.
+for scheduler in ("std::fvm", "std::jit"):
+    scheduled = invoke(LIBRARY, scheduler)
+    assert scheduled.returncode != 0, scheduler
+    assert "EntryModuleMissingMain" in (scheduled.stdout + scheduled.stderr), scheduler
+
+# `check` analyses a module without entering it: a library passes it. A program with main
+# keeps the same behaviour.
+lib_check = invoke("check", LIBRARY)
+assert lib_check.returncode == 0, (lib_check.stdout + lib_check.stderr)
+assert "EntryModuleMissingMain" not in (lib_check.stdout + lib_check.stderr)
+main_check = invoke("check", SOURCE)
+assert main_check.returncode == 0, (main_check.stdout + main_check.stderr)
+
+print("Library module GIR without main: PASS")
 print("GIR formats and JSON v1: PASS")

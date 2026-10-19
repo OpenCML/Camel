@@ -655,6 +655,13 @@ void Builder::buildEntryCall() {
     } else if (context_->requireEntry()) {
         diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
         throw BuildAbortException();
+    } else {
+        // A library module (no `main`) has no entry call. The root graph still needs a
+        // well-formed exit: the graph dumps (std::gir, std::jgir, `inspect -g`) and every
+        // reachability walk end at it, and an invalid exit is not a graph one can encode.
+        // Nothing executes this root, so the exit is an empty (void) return.
+        auto empty = rootGraph_->addStaticDataNode(Data::null());
+        setGraphReturnFromResult(rootGraph_, nodeIdOf(empty), nodeIdOf(empty), Type::Void());
     }
 }
 
