@@ -53,6 +53,21 @@ try {
             }
         }
         checkLeaf(manifest.tree)
+        // The checkpoint's names are exactly the paths of tree_paths (design principles 2.17):
+        // one file per leaf, named by the path, and the manifest records the same path.
+        const pathsText = invoke('checkpoint_roundtrip.cml', pass, 6, directory).stdout.trim()
+        const treePaths = pathsText.slice(1, -1).split(', ')
+        const leafPaths = []
+        const collect = node => {
+            if (node.members) for (const child of node.members) collect(child.type)
+            else leafPaths.push(node.path)
+        }
+        collect(manifest.tree)
+        assert.deepEqual(leafPaths, treePaths, 'manifest paths differ from tree_paths')
+        for (const leaf of treePaths) {
+            const files = fs.readdirSync(directory).filter(name => name.slice(0, name.lastIndexOf('.')) === leaf)
+            assert.equal(files.length, 1, `no file named by the path ${leaf}`)
+        }
     }
     const stress = {
         CAMEL_GC: 'generational', CAMEL_GC_ENABLE_YOUNG_COPYING: '1', CAMEL_GC_VERIFY: 'both',

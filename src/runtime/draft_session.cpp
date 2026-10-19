@@ -651,7 +651,8 @@ bool sameStaticValue(slot_t before, slot_t after, Type *type, const GraphMap &re
 
 /**
  * The commit encoded `after` from the draft of `before`, and they have the same content: the
- * same records, edges, payloads, ports, anchors, permissions, frame and static layout, the same
+ * same records, edges, payloads, ports, anchors, permissions, attributes, frame and static
+ * layout, the same
  * static values and the same graphs referred to (each by its copy). Source positions do not
  * count. A pass that asked to edit a graph and changed nothing leaves it the same graph to the
  * fact store (GCGraph::serial). Conservative: what it cannot compare counts as a change.
@@ -673,7 +674,8 @@ bool sameContent(const GCGraph &before, const GCGraph &after, const GraphMap &re
         a->returnNode != b->returnNode || a->returnKind != b->returnKind ||
         before.funcType() != after.funcType() || before.closureType() != after.closureType() ||
         before.staticDataType() != after.staticDataType() ||
-        before.hasNodePermissions() != after.hasNodePermissions()) {
+        before.hasNodePermissions() != after.hasNodePermissions() ||
+        before.hasNodeAttrs() != after.hasNodeAttrs()) {
         return false;
     }
     if (!sameArray(a->nodes, b->nodes, size_t(a->nodeCount) + 1) ||
@@ -682,7 +684,8 @@ bool sameContent(const GCGraph &before, const GCGraph &after, const GraphMap &re
         !sameArray(a->withPorts, b->withPorts, a->withPortCount) ||
         !sameArray(a->closure, b->closure, a->closureCount) ||
         !sameArray(a->branchArms, b->branchArms, a->branchArmCount) ||
-        (before.hasNodePermissions() && !sameArray(a->permissions, b->permissions, a->nodeCount))) {
+        (before.hasNodePermissions() && !sameArray(a->permissions, b->permissions, a->nodeCount)) ||
+        (before.hasNodeAttrs() && !sameArray(a->attrs, b->attrs, a->nodeCount))) {
         return false;
     }
     // Payloads, node by node: an OPER's cached implementation pointer is not content.

@@ -68,7 +68,7 @@ SCHEDULING = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl", "std::n
 
 # Environment variables the harness sets itself; a plan value for them is not part of a
 # program's environment.
-HARNESS_ENV = {"CAMEL_ONNX_OUT", "CAMEL_EFFECT_TRACE"}
+HARNESS_ENV = {"CAMEL_EFFECT_TRACE"}
 
 # Programs whose native value of the exported function is observable in the zero-pass run, so
 # the exported model can be compared with native execution (the artifact gate). The inputs

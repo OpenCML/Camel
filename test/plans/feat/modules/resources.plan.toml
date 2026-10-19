@@ -32,12 +32,17 @@ for (const [check, reason] of [
   ['effectful_touches_nothing', 'an operator that is not pure touches, allocates or affects something'],
   ['external_against_state_only', 'its traits give it no external effect'],
   ['allocates_ambient', 'an operator allocates a variable, an object or a foreign resource'],
+  ['var_param_not_written', 'the signature has a var ordinary parameter 0 that the declaration does not write'],
+  ['written_without_var', 'the declaration writes a variable through ordinary parameter 0, which is not a var parameter'],
+  ['late_resolver', 'the signature has a var ordinary parameter 0 that the declaration does not write'],
 ]) {
   const m = out.match(new RegExp(`RESOURCES ${check} (.*)`))
   assert(m && m[1].startsWith('rejected:') && m[1].includes(reason), `${check}: ${m ? m[1] : 'missing'}`)
 }
 for (const l of [
   'RESOURCES valid accepted', 'RESOURCES refines_external accepted', 'RESOURCES pure_touches_none accepted',
+  'RESOURCES var_param_written accepted', 'RESOURCES late_declared accepted',
+  'RESOURCES writes var_op 1 plain_op 1 late_op 0',
   'RESOURCES version semtest:pure@1.5 semtest:cell_write@1.0',
   'RESOURCES text write variable norm 0 whole',
   'RESOURCES conservative rmw unknown norm 0 region unknown; rmw unknown norm 1 region unknown; rmw unknown with 0 region unknown; result unknown; external',

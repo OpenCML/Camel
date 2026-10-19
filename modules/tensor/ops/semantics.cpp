@@ -41,6 +41,9 @@
 #include "indexing.h"
 #include "op_def.h"
 
+#include "../type.h"
+
+#include <bit>
 #include <string>
 #include <unordered_map>
 
@@ -250,11 +253,47 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
 
 } // namespace
 
+namespace {
+
+/// The binary laws of the elementwise arithmetic, over float32 elements (the case the
+/// declarations describe): the same laws as the scalar `+`, `-`, `*` hold for each element, so
+/// an algebraic rewrite that works on the declared laws treats a tensor expression and a scalar
+/// one alike. Integer elements are left out: the kernels' integer contract is not declared
+/// here as exactly associative.
+std::optional<BinaryAlgebra> binaryLaws(std::string_view name) {
+    constexpr std::string_view sum = "tensor:add";
+    BinaryLaw law{.element = TypeCode::Float32};
+    if (name == "add") {
+        law.commutative = true;
+        law.neutralBits = std::bit_cast<uint32_t>(-0.0f);
+    } else if (name == "subtract") {
+        law.subtractionOf = std::string(sum);
+        law.neutralBits   = 0;
+    } else if (name == "multiply") {
+        law.commutative     = true;
+        law.neutralBits     = std::bit_cast<uint32_t>(1.0f);
+        law.distributesOver = std::string(sum);
+    } else {
+        return std::nullopt;
+    }
+    BinaryAlgebra algebra{.laws = {law}, .elementwise = true};
+    algebra.elementOf = [](const camel::core::type::Type *type) -> std::optional<TypeCode> {
+        if (const TensorType *tensor = asTensorType(type)) {
+            return tensor->dtype();
+        }
+        return std::nullopt;
+    };
+    return algebra;
+}
+
+} // namespace
+
 void attachSemantics(std::vector<OpDef> &defs) {
     const auto &table = declarations();
     for (OpDef &def : defs) {
         if (auto it = table.find(def.name); it != table.end()) {
             def.semantics = it->second;
+            def.semantics->binary = binaryLaws(def.name);
             attachIndexing(def);
         }
     }

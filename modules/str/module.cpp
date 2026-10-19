@@ -18,8 +18,8 @@
  */
 
 /*
- * The string library (design principles 2.9: a string is stored as bytes, its length and
- * indices count bytes, and separate operators read and write it by code point).
+ * The string library (design principles 2.17: a string is valid UTF-8, its length and
+ * indices count code points; `bytes`/`from_bytes` cross to the UTF-8 bytes).
  *
  * Every operator is a primitive written in C++ and is pure. The string an operator works on is
  * its one ordinary argument and everything else is a `with` argument, as for the built-in
@@ -63,7 +63,6 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     const param_list_t ss = {{S, false}, {S, false}};
     const param_list_t xs = {{ints, false}};
     static const std::vector<oper_group_ptr_t> groups = {
-        // ---- by byte ----
         group("split", s, s, strings),
         group("trim", {}, s, S),
         group("trim_start", {}, s, S),
@@ -78,13 +77,8 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
         group("repeat", i, s, S),
         group("bytes", {}, s, ints),
         group("from_bytes", {}, xs, S),
-        // ---- by code point (UTF-8) ----
-        group("is_valid_utf8", {}, s, B),
-        group("codepoints", {}, s, TupleType::fallible(ints)),
+        group("codepoints", {}, s, ints),
         group("from_codepoints", {}, xs, TupleType::fallible(S)),
-        group("char_count", {}, s, TupleType::fallible(I)),
-        group("char_at", i, s, TupleType::fallible(S)),
-        group("char_substr", ii, s, TupleType::fallible(S)),
     };
     return groups;
 }

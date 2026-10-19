@@ -118,38 +118,6 @@ expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 8
 
 [[tests]]
-name = "stdlib.fault.char_at"
-desc = "char_at past the last character (the string is valid UTF-8: not an error value)."
-case = "../../../cases/modules/stdlib/fault_char_at.cml"
-expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.char_at.opt"
-desc = "The same through std::opt."
-case = "../../../cases/modules/stdlib/fault_char_at.cml"
-backends = false
-args = ["${case}", "std::opt", "std::fvm"]
-expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.char_substr"
-desc = "char_substr whose range runs past the last character."
-case = "../../../cases/modules/stdlib/fault_char_substr.cml"
-expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.char_substr.opt"
-desc = "The same through std::opt."
-case = "../../../cases/modules/stdlib/fault_char_substr.cml"
-backends = false
-args = ["${case}", "std::opt", "std::fvm"]
-expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 7
-
-[[tests]]
 name = "stdlib.fault.split_empty"
 desc = "split with an empty separator."
 case = "../../../cases/modules/stdlib/fault_split_empty.cml"
@@ -228,6 +196,20 @@ backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.from_bytes_utf8"
+desc = "from_bytes with bytes that are not valid UTF-8: a string is always valid UTF-8 (2.17), so this is a fault here."
+case = "../../../cases/modules/stdlib/fault_from_bytes_utf8.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.index_char"
+desc = "A string index past the last character (counted in code points, not bytes)."
+case = "../../../cases/modules/stdlib/fault_string_index.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.shl_width"

@@ -32,8 +32,10 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | Module | Import | Written in | Functions |
 |---|---|---|---|
 | [built-in](#built-in-functions) | none | C++ | 47 |
-| [str](#str) | `import { ... } from str` | C++ | 20 |
+| [str](#str) | `import { ... } from str` | C++ | 16 |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
+| [tree](#tree) | `import { ... } from tree` | C++ | 7 |
+| [tensor](#tensor) | `import { ... } from tensor` | C++ | 2 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 45 |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
@@ -679,12 +681,11 @@ Whether every element of s is an element of other.
 
 ## `str`: strings
 
-A string is stored as bytes: `len(s)` and `s[i]` count bytes, and so do the functions of the
-first group below. The second group reads and writes a string by Unicode code point (UTF-8).
+A string is always valid UTF-8, and its length and indices count Unicode code points:
+`len('中文')` is 2 and `'中文'[0]` is `'中'`. Binary data is `Bytes`; `bytes` and `from_bytes`
+below convert to and from the UTF-8 bytes of a string.
 The string a function works on is its ordinary argument; everything else is a with-argument,
 so calls chain: `s->trim->split<','>`.
-
-### By byte
 
 #### `split`
 
@@ -739,7 +740,7 @@ s without the ASCII white space at its end.
 to_upper: (s: string) => string
 ```
 
-s with the ASCII letters a-z in upper case. Every other byte is kept as it is, so letters
+s with the ASCII letters a-z in upper case. Every other character is kept as it is, so letters
 outside ASCII do not change: to_upper('é') is 'é'.
 
 - Pure.
@@ -751,7 +752,7 @@ outside ASCII do not change: to_upper('é') is 'é'.
 to_lower: (s: string) => string
 ```
 
-s with the ASCII letters A-Z in lower case. Every other byte is kept as it is.
+s with the ASCII letters A-Z in lower case. Every other character is kept as it is.
 
 - Pure.
 - Example: `to_lower('HeLLo')` gives `'hello'`
@@ -774,7 +775,7 @@ s with every occurrence of from replaced by to, found from left to right without
 find: <sub: string> (s: string) => int?
 ```
 
-The byte index of the first occurrence of sub in s, or null when there is none. An empty
+The index (in code points) of the first occurrence of sub in s, or null when there is none. An empty
 sub is found at 0.
 
 - Pure.
@@ -786,7 +787,7 @@ sub is found at 0.
 substr: <start: int, length: int> (s: string) => string
 ```
 
-The length bytes of s that start at byte start.
+The length characters of s that start at character start.
 
 - Pure.
 - Failure: fault `IndexOutOfRange` when start or start + length lies outside the string; fault `InvalidArgument` when length is negative.
@@ -823,7 +824,7 @@ repeat: <count: int> (s: string) => string
 s written count times in a row.
 
 - Pure.
-- Failure: fault `InvalidArgument` when count is negative or the result would be longer than a string can be (4 GiB).
+- Failure: fault `InvalidArgument` when count is negative or the result would be longer than a string can be (4 GiB of UTF-8).
 - Example: `'ab'->repeat<3>` gives `'ababab'`
 
 #### `bytes`
@@ -843,41 +844,25 @@ The bytes of s as numbers 0 to 255.
 from_bytes: (xs: int[]) => string
 ```
 
-The string made of the given bytes. The result need not be valid UTF-8.
+The string made of the given UTF-8 bytes.
 
 - Pure.
-- Failure: fault `InvalidArgument` when an element is not in 0 to 255.
+- Failure: fault `InvalidArgument` when an element is not in 0 to 255 or the bytes are not valid UTF-8 (a string is always valid UTF-8; binary data is `Bytes`).
 - Example: `from_bytes([104, 105])` gives `'hi'`
+- Example: `from_bytes([255])` gives `fault: not valid UTF-8`
 
-### By code point
-
-A string need not be valid UTF-8, so a function that decodes it can fail: it returns `T!`
-with an error of kind `EncodingError`. Decoding is strict: overlong forms, surrogates
-(U+D800 to U+DFFF), values above U+10FFFF, stray continuation bytes and sequences cut short
-are all invalid. An index out of range is a fault, as everywhere.
-
-#### `is_valid_utf8`
-
-```camel
-is_valid_utf8: (s: string) => bool
-```
-
-Whether s is valid UTF-8. The empty string is.
-
-- Pure.
-- Example: `is_valid_utf8(from_bytes([255]))` gives `false`
+### Code points as numbers
 
 #### `codepoints`
 
 ```camel
-codepoints: (s: string) => int[]!
+codepoints: (s: string) => int[]
 ```
 
 The code points of s.
 
 - Pure.
-- Failure: error `EncodingError` when s is not valid UTF-8.
-- Example: `codepoints('h€') !! [0]` gives `[104, 8364]`
+- Example: `codepoints('h€')` gives `[104, 8364]`
 
 #### `from_codepoints`
 
@@ -885,47 +870,11 @@ The code points of s.
 from_codepoints: (xs: int[]) => string!
 ```
 
-The string made of the given code points, encoded as UTF-8.
+The string made of the given code points.
 
 - Pure.
 - Failure: error `EncodingError` when an element is not a code point (negative, above 0x10FFFF, or a surrogate).
 - Example: `from_codepoints([104, 8364]) !! ''` gives `'h€'`
-
-#### `char_count`
-
-```camel
-char_count: (s: string) => int!
-```
-
-The number of code points in s (len(s) is the number of bytes).
-
-- Pure.
-- Failure: error `EncodingError` when s is not valid UTF-8.
-- Example: `char_count('h€') !! -1` gives `2`
-
-#### `char_at`
-
-```camel
-char_at: <index: int> (s: string) => string!
-```
-
-The code point number index of s, as a string.
-
-- Pure.
-- Failure: error `EncodingError` when s is not valid UTF-8; fault `IndexOutOfRange` when index is not below the number of code points.
-- Example: `'h€'->char_at<1> !! '?'` gives `'€'`
-
-#### `char_substr`
-
-```camel
-char_substr: <start: int, count: int> (s: string) => string!
-```
-
-The count code points of s that start at code point start.
-
-- Pure.
-- Failure: error `EncodingError` when s is not valid UTF-8; fault `IndexOutOfRange` when start or start + count lies outside the string; fault `InvalidArgument` when count is negative.
-- Example: `'h€llo'->char_substr<1, 2> !! '?'` gives `'€l'`
 
 <a id="bytes"></a>
 
@@ -940,7 +889,6 @@ encode: (text: string) => Bytes
 Encodes valid UTF-8 text as an immutable Bytes value.
 
 - Pure.
-- Failure: fault `InvalidArgument` when legacy string content is malformed UTF-8.
 - Example: `encode('hello')`
 
 #### `decode`
@@ -998,6 +946,127 @@ Concatenates two binary values without decoding either one.
 
 - Pure.
 - Example: `concat(encode('header'), from_array([0, 255]))`
+
+<a id="tree"></a>
+
+## `tree`: parameter trees and checkpoints
+
+#### `tree_map`
+
+```camel
+tree_map: <f: (leaf: A) => B> (tree: T) => U
+```
+
+Applies f to the leaves in the same place of the trees (one tree, or several of the same
+shape: the callback then takes one leaf of each), and gives a tree of the results. The shape
+is that of the first tree.
+
+- With effects: whatever the callback does.
+- Example: `tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })` gives `{ a: 2, b: (3, 4) }`
+
+#### `tree_reduce`
+
+```camel
+tree_reduce: <f: (acc: R, leaf: A) => R> (tree: T, init: R) => R
+```
+
+Folds the leaves from the first to the last with f, starting from init.
+
+- With effects: whatever the callback does.
+- Example: `tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)` gives `6`
+
+#### `tree_unzip`
+
+```camel
+tree_unzip: (tree: T, reference: S) => U
+```
+
+Turns a tree of tuples into a tuple of trees: the shape is that of `reference`, and every
+leaf of `tree` at a leaf of the reference is a tuple of the same length.
+
+- Pure.
+- Example: `tree_unzip({ a: (1, 2.0) }, { a: 0 })` gives `({ a: 1 }, { a: 2.0 })`
+
+#### `tree_leaves`
+
+```camel
+tree_leaves: (tree: T) => L
+```
+
+The leaves of a tree, as a tuple.
+
+- Pure.
+- Example: `tree_leaves({ a: 1, b: (2, 3) })` gives `(1, 2, 3)`
+
+#### `tree_paths`
+
+```camel
+tree_paths: (tree: T) => P
+```
+
+The paths of the leaves, as a tree of the same shape.
+
+- Pure.
+- Example: `tree_paths({ a: 1, b: (2, 3) })` gives `{ a: 'a', b: ('b.0', 'b.1') }`
+
+#### `save_tree`
+
+```camel
+save_tree: (dir: string, tree: T, dataset_manifest_sha256: string) => void
+```
+
+Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
+tensor), with a manifest that records the types, sizes and SHA-256 sums. The directory is
+replaced as a whole or not at all. A leaf type a checkpoint cannot hold (anything but a
+tensor, `Bytes`, `string`, `bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that
+names the path.
+
+- With effects: writes the directory.
+- Failure: fault `FileSystemError` when the directory cannot be written.
+- Example: `save_tree('out/ckpt', { w: zeros([2, 2]), step: 10 })`
+
+#### `load_tree`
+
+```camel
+load_tree: (dir: string, dataset_manifest_sha256: string) => T!
+```
+
+Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
+the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
+`CheckpointError` value, nothing is partly loaded. T is the explicit type argument or the
+expected type of the result.
+
+- With effects: reads the directory.
+- Example: `load_tree::<{ w: Tensor<f32>, step: int }>('out/ckpt') !! initial()`
+
+<a id="tensor"></a>
+
+## `tensor`: binary conversion
+
+#### `to_bytes`
+
+```camel
+to_bytes: (t: Tensor) => Bytes
+```
+
+The little-endian bytes of the elements of a tensor, in row-major order.
+
+- Pure.
+- Example: `to_bytes(new([1.0, 2.0]))`
+
+#### `from_bytes`
+
+```camel
+from_bytes: (bytes: Bytes, shape: int[]) => Tensor
+```
+
+A tensor of the given shape made of little-endian elements. The element type is the explicit
+type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result;
+it is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the number of bytes does not fit the shape and the element type.
+- Example: `from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])`
 
 <a id="array"></a>
 
@@ -2157,7 +2226,7 @@ write_text: (path: string, content: string) => void
 Replaces the content of the file, creating it and its parent directories when needed.
 
 - With effects: writes a file.
-- Failure: fault `FileSystemError` when a directory cannot be created; fault `FileOpenFailed` when the file cannot be opened; fault `InvalidArgument` for malformed UTF-8.
+- Failure: fault `FileSystemError` when a directory cannot be created; fault `FileOpenFailed` when the file cannot be opened.
 - Example: `write_text('out/log.txt', 'done')`
 
 #### `exists`
@@ -2551,13 +2620,25 @@ Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 
 ```camel
 sha256: (s: string) => string
-sha256: (s: Bytes) => string
 ```
 
 The SHA-256 digest of the bytes of s, as 64 lower-case hexadecimal digits.
 
 - Pure.
 - Example: `sha256('abc')` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
+
+#### `sha256`
+
+```camel
+sha256: (s: Bytes) => string
+```
+
+The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits. The two overloads are
+two operators (`crypto:sha256_str`, `crypto:sha256_bytes`); the one is chosen when the program is
+compiled.
+
+- Pure.
+- Example: `sha256(encode('abc')) == sha256('abc')` gives `true`
 
 #### `sha256_rounds`
 

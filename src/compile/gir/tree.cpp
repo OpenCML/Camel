@@ -16,6 +16,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/tree.h"
 #include <numeric>
 
 namespace camel::compile::gir {
@@ -23,29 +24,15 @@ using namespace core::type;
 using namespace core::data;
 using namespace core::error;
 namespace {
-bool internal(Type *type) {
-    if (type->code() == TypeCode::Struct)
-        return true;
-    if (type->code() != TypeCode::Tuple)
-        return false;
-    const auto *tuple = static_cast<TupleType *>(type);
-    return !tuple->isTagged() && !tuple->isCell();
-}
-size_t sizeOf(Type *type) {
-    return type->code() == TypeCode::Struct ? static_cast<StructType *>(type)->size()
-                                            : static_cast<TupleType *>(type)->size();
-}
-Type *fieldType(Type *type, size_t i) {
-    return type->code() == TypeCode::Struct ? static_cast<StructType *>(type)->typeAt(i)
-                                            : static_cast<TupleType *>(type)->typeAt(i);
-}
-std::string fieldName(Type *type, size_t i) {
-    return type->code() == TypeCode::Struct
-               ? std::string(static_cast<StructType *>(type)->fieldName(i))
-               : std::to_string(i);
-}
+// What a tree and a leaf are, and how a path is written, is core::type::tree (one definition
+// for the compiler, the checkpoints and the modules).
+namespace tr = core::type::tree;
+bool internal(Type *type) { return tr::isInternal(type); }
+size_t sizeOf(Type *type) { return tr::arity(type); }
+Type *fieldType(Type *type, size_t i) { return tr::childType(type, i); }
+std::string fieldName(Type *type, size_t i) { return tr::childName(type, i); }
 std::string childPath(const std::string &path, Type *type, size_t i) {
-    return (path.empty() ? "" : path + ".") + fieldName(type, i);
+    return tr::childPath(path, type, i);
 }
 } // namespace
 node_handle_t Builder::expandTreeCall(
@@ -60,7 +47,7 @@ node_handle_t Builder::expandTreeCall(
     const auto fail = [&](const std::string &path, const std::string &why) -> void {
         diags_->of(SemanticDiag::ArgumentsRejected)
             .atOrigin(origin->origin())
-            .commit(ops->name(), "tree leaf '" + (path.empty() ? "$" : path) + "'", why);
+            .commit(ops->name(), "tree leaf '" + core::type::tree::displayPath(path) + "'", why);
         throw BuildAbortException();
     };
     const bool map = uri == "tree:tree_map", reduce = uri == "tree:tree_reduce";

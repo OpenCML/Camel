@@ -372,8 +372,8 @@ name = "gc_prl_blocked_worker.generational"
 desc = "One worker of a parallel map sleeps 1.2 s inside an operator while five allocate 150 MB (generational, two threads): the collector gives up waiting for it and the others go on allocating; nothing fails or waits for the sleeper."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_prl_blocked_worker.cml"
-args = ["-t", "2", "${case}", "--arg", "millis=1200", "--arg", "rounds=4000", "${run_prl}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1", "CAMEL_TF_GC_STATS=1"]
+args = ["-t", "2", "${case}", "--arg", "millis=1200", "--arg", "rounds=4000", "${run_prl_gc_stats1}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_prl_blocked_worker sums=[1, 260000, 264000, 256000, 260000, 264000]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -384,8 +384,8 @@ name = "gc_prl_blocked_worker.mark_sweep"
 desc = "One worker of a parallel map sleeps 1.2 s inside an operator while five allocate 150 MB (mark-sweep, two threads): the collector gives up waiting for it and the others go on allocating; nothing fails or waits for the sleeper."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_prl_blocked_worker.cml"
-args = ["-t", "2", "${case}", "--arg", "millis=1200", "--arg", "rounds=4000", "${run_prl}"]
-envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1", "CAMEL_TF_GC_STATS=1"]
+args = ["-t", "2", "${case}", "--arg", "millis=1200", "--arg", "rounds=4000", "${run_prl_gc_stats1}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_prl_blocked_worker sums=[1, 260000, 264000, 256000, 260000, 264000]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

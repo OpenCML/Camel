@@ -14,3 +14,27 @@ expect_exit = 0
 expect_stdout_contains = ["native checkpoints: schedulers, restart equality, GC, exact bits and rejection checks passed"]
 normalizers = ["normalize_newlines", "strip_ansi"]
 timeout_ms = 60000
+
+[[tests]]
+name = "unsupported_leaf_is_a_compile_error"
+desc = "A checkpoint leaf of a type no checkpoint can hold (an array) is refused when the program is compiled, with the path of the leaf."
+kind = "negative"
+case = "../../../cases/modules/nn/checkpoint_unsupported_leaf.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["tree leaf 'weights'", "cannot hold"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "unsupported_load_target_is_a_compile_error"
+desc = "The same for the type argument of load_tree: the path of the leaf is named."
+kind = "negative"
+case = "../../../cases/modules/nn/checkpoint_unsupported_load.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["tree leaf 'block.f'", "cannot hold"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

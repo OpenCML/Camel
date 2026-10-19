@@ -23,7 +23,7 @@
  * On the graph it is one OPER node with the URI kFaultIsolationUri whose first input is a
  * function value and whose other inputs are the arguments: a marked call of the subgraph of
  * that function. A fault raised inside the call becomes, at the node, the failed form of the
- * node's `T!`. Every scheduler runs the node itself (it is one of the `:mark/...` operators);
+ * node's `T!`. Every scheduler runs the node itself (it declares how it calls its function: ElementShape::Isolate);
  * this header holds what they share: the names, the type rule, and the conversion of a fault
  * that reached the boundary into an error value.
  */
@@ -44,8 +44,8 @@ namespace camel::execute {
 /// contain it.
 inline constexpr const char *kFaultIsolationName = "attempt";
 
-/// The URI of the operator. Schedulers recognise it by its id, camel::core::oper::Isolate
-/// (camel/core/operator_table.h), which the operator table gives this URI.
+/// The URI of the operator. Schedulers recognise it by its declaration, not its name: it
+/// declares ElementShape::Isolate (camel/core/operator_semantics.h).
 inline constexpr std::string_view kFaultIsolationUri = ":mark/isolate";
 
 /// The result type of the operator applied to arguments of the types `norm` (the function value

@@ -296,7 +296,7 @@ Rules buildRules() {
     // ---- Strings (ops.cpp __builtin__add_ss__, __builtin__idx__; struct.cpp) ----
     r[":op/add_s"]             = infix("+");
     r[":struct/len_str"]       = runtimeFunction("length");
-    r[":op/idx_str"]           = faultingFunction("byteAt", RuntimeDiag::IndexOutOfRange, 3);
+    r[":op/idx_str"]           = faultingFunction("charAt", RuntimeDiag::IndexOutOfRange, 3);
     r[":str/join"]             = withArgument("join");
     r[":struct/contains_str"] = {
         [](OperatorCall &c) -> std::optional<std::string> {

@@ -18,6 +18,7 @@
  */
 
 #include "graphviz.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/passes/trans/gir_metadata.h"
 
@@ -376,7 +377,13 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             (valueType.empty() ? "" : std::format(", value_type=\"{}\"", escape(valueType))) +
             (permissions == 0
                  ? ""
-                 : std::format(", numeric=\"{}\"", camel::core::sem::permissionsText(permissions)));
+                 : std::format(", numeric=\"{}\"", camel::core::sem::permissionsText(permissions))) +
+            // The attributes libraries attached to the node (language reference 7.6), likewise.
+            (graph->nodeAttrs(nodeRef) == 0
+                 ? ""
+                 : std::format(
+                       ", attrs=\"{}\"",
+                       escape(camel::core::attr::text(graph->nodeAttrs(nodeRef)))));
         // Boundary roles: a role attribute; styled dumps also fill the node with its first role's
         // color and list every role in the tooltip.
         string roleAttr, roleFill, roleTooltip;

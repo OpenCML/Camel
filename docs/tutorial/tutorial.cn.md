@@ -782,7 +782,7 @@ func main(): int sync {
 ```cml
 module stdlib_demo
 
-import { split, trim, to_upper, replace, find, char_count } from str
+import { split, trim, to_upper, replace, find } from str
 import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
 import { mean } from statistics
@@ -792,7 +792,7 @@ func main(): int sync {
     let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w: string): string => trim(w)>
     println(words)
     println(words->unique->sort_by<(w: string): int => len(w)>->take<2>)
-    println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'), char_count('héllo'))
+    println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
 
     // A result that may not exist is a T?.
     let at_l = 'hello'->find<'l'> ?? -1
@@ -811,7 +811,7 @@ func main(): int sync {
 ```text
 [pear, fig, apple, fig]
 [fig, pear]
-HELLO a+b+c 6 5
+HELLO a+b+c 5
 2 -1
 10 [5, -1, 4, -1, 3] [3, 1, 4, 1, 5]
 2.3333333333333335 5.0 2
@@ -819,7 +819,7 @@ HELLO a+b+c 6 5
 ```
 
 - **调用的约定**：函数要处理的值是它的普通参数，配置这次调用的值是 `with` 参数。所以库函数都能接在管道上：`s->trim->split<','>`、`xs->unique->sort_by<key>->take<2>`。
-- 字符串按字节：`len('héllo')` 是 6；按字符计数用 `char_count`，是 5。`s[i]` 取出第 `i` 个字节。
+- 字符串总是合法的 UTF-8，长度与下标按码点：`len('héllo')` 是 5，`s[i]` 取出第 `i` 个字符。二进制数据是 `Bytes`。
 - 可能没有结果的函数返回 `T?`（如 `find` 找不到时），用 `??` 取出；越界、不在定义域内的实参是故障。
 - 一个书写上的细节：尖括号要紧贴它前面的名字（`find<x>`），而比较运算符 `<` 前面要有空格（`a < b`）。这样两者不会混淆，同一个实参表里可以有几个带尖括号的调用：`f<a>(x), g<b>(y)`。
 - `array` 模块是用 Camel 写的泛型函数，在图上是看得见的子图；`str`、`math` 的函数是 C++ 算子，在图上是一个节点。
@@ -1030,7 +1030,7 @@ tensor([[      2.],
 **导出它**：同一份源码，换一组遍。程序里没有为导出写任何东西，连 `import onnx` 都不需要：
 
 ```bash
-CAMEL_ONNX_OUT=model.onnx camel docs/tutorial/examples/15_model.cml std::macro std::opt onnx::export
+camel docs/tutorial/examples/15_model.cml std::macro std::opt 'onnx::export(out="model.onnx")'
 ```
 
 ```text

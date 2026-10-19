@@ -78,6 +78,8 @@ struct EntryConfig {
     // environment variables and the defaults.
     size_t maxRecursionDepth = 0;
     size_t maxMacroDepth     = 0;
+    // Limit on the rounds of one loop under std::macro (`--max-macro-rounds`); 0: not given.
+    size_t maxMacroRounds = 0;
 
     // Editor analysis can omit the executable entry and supply unsaved module texts.
     bool requireEntry = true;
@@ -166,6 +168,7 @@ class Context : public std::enable_shared_from_this<Context> {
     size_t maxThreads() const { return entryConfig_.maxThreads; }
     size_t maxRecursionDepth() const { return entryConfig_.maxRecursionDepth; }
     size_t maxMacroDepth() const { return entryConfig_.maxMacroDepth; }
+    size_t maxMacroRounds() const { return entryConfig_.maxMacroRounds; }
     error::DiagsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
     error::diagnostics_ptr_t rtmDiags() const { return runtimeDiagSink_; }

@@ -42,11 +42,13 @@ def main() -> int:
         env = dict(os.environ, CAMEL_HOME=str(HOME))
         for label, passes, var in [
             ("operator", [], "EXPORT_VAR_PARAMETER_OUT"),
-            ("pass", ["std::macro", "std::opt", "onnx::export"], "CAMEL_ONNX_OUT"),
+            ("pass", ["std::macro", "std::opt", "onnx::export"], "EXPORT_VAR_PARAMETER_OUT"),
         ]:
             out = Path(tmp) / f"{label}.onnx"
             run_env = dict(env, EXPORT_VAR_PARAMETER_OUT=str(Path(tmp) / "unused.onnx"))
             run_env[var] = str(out)
+            # The pass names the file by its parameter; the operator's program reads the variable.
+            passes = [f'onnx::export(out="{out.as_posix()}")' if p == "onnx::export" else p for p in passes]
             proc = subprocess.run([str(CAMEL), str(CASE), *passes], env=run_env, capture_output=True, text=True, timeout=120)
             if proc.returncode != 0 or not out.exists():
                 print(f"{label}: export failed ({proc.returncode}): {proc.stdout.strip()[:400]} {proc.stderr.strip()[:400]}")

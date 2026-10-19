@@ -1,0 +1,35 @@
+/**
+ * Whether std::opt::cse merges two equal expressions with different node attributes is the
+ * rule of each attribute's key (camel/core/node_attrs.h): a mark merges only with a mark, so
+ * the products of `twice` stay two; flags merge to their intersection, so `relaxed` keeps one
+ * product, with the flags both have.
+ */
+module cse
+import { mark, flags } from test_attrs
+
+func twice(a: float, b: float): float {
+    let p = a * b
+    let q = a * b
+    @mark
+    {
+        let s = a * b
+        let t = a * b
+        return p + q + s + t
+    }
+}
+
+@flags<1>
+func relaxed(a: float, b: float): float {
+    let p = a * b
+    @flags<2>
+    {
+        let s = a * b
+        return p + s
+    }
+}
+
+func main(): int sync {
+    println(twice(1.5, 3.0))
+    println(relaxed(1.5, 3.0))
+    return 0
+}

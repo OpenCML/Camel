@@ -29,6 +29,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/draft.h"
@@ -368,6 +369,7 @@ ExpandResult expandDefinition(
     // The call of the definition, in the node's place: its value, its control edges, its
     // source position.
     const uint8_t permissions = draft.nodePermissions(node);
+    const uint32_t attrs      = draft.nodeAttrs(node);
     const uint64_t origin     = draft.nodeOrigin(node);
     const std::vector<gc_node_ref_t> ctrl(
         draft.ctrlInputsOf(node).begin(),
@@ -394,8 +396,9 @@ ExpandResult expandDefinition(
         return result;
     }
     // The definition's own operations are the expanded operation: they get its permissions
-    // too (design 6.4). Calls of other functions keep theirs (they are not inlined here).
-    if (permissions != 0) {
+    // and its attributes too (design 6.4). Calls of other functions keep theirs (they are not
+    // inlined here).
+    if (permissions != 0 || attrs != 0) {
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             if (!draft.alive(id) || (id < before.size() && before[id])) {
                 continue;
@@ -403,6 +406,7 @@ ExpandResult expandDefinition(
             const GCNodeKind kind = draft.header(id)->kind;
             if (kind == GCNodeKind::Oper || kind == GCNodeKind::Loop) {
                 draft.setNodePermissions(id, draft.nodePermissions(id) | permissions);
+                draft.setNodeAttrs(id, camel::core::attr::unite(draft.nodeAttrs(id), attrs));
             }
         }
     }

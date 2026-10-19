@@ -239,7 +239,7 @@ func main(): int sync {
 - **A type variable takes its type from the arguments.** First the type of the argument at its `typeas` position; when the argument there says nothing (it is `null`, or a generic function that is itself waiting for its types), the type found at another occurrence. The constraints of all arguments are collected before any is checked: every parameter is then checked against its type with the variables replaced, without implicit conversion (except that a value enters a `T?`/`T!` parameter, see [3.4](03_data_model.md)). `pick(true, 1, 2.5)` is an error (`T` is bound to `int`); a variable that cannot be determined is a compile-time error, and the diagnostic says which.
 - `typeas` can appear in these positions: array elements, tuple elements, struct fields, the parameters and return value of a function type, the inner type of `T?`/`T!`, the arguments of `Map`/`Set` and of type functions. It cannot appear in a union type, nor as an argument of a module type.
 - `typeas` can appear in the parameters (including `with` parameters) or result type of a function declaration. A variable must be declared before use (`with` parameters first); declaring it twice or using an existing type name is an error.
-- A result-only variable is inferred from an expected type: `let xs: int[] = empty()`, a known parameter type, or a declared return position. Without sufficient context, provide explicit type arguments: `empty::<int>()`. Types follow their first occurrence in the signature and are consumed at compile time. Value context arguments remain `f<w>`; combine them as `f::<T><w>(x)`. An explicit instance can also be a function value: `let f = id::<int>`.
+- A result-only variable is inferred from an expected type: `let xs: int[] = empty()`, a known parameter type, or a declared return position. Without sufficient context, provide explicit type arguments: `empty::<int>()`. Types follow their first occurrence in the signature (`with` parameters first) or can be given by name, which does not depend on position: `pair::<A = int, B = string>(..)`. One list is all positional or all named, never mixed; by name every type variable must be given, and a wrong or repeated name is a compile-time error; built-in operators take their type arguments by position only. Type arguments are consumed at compile time. Value context arguments remain `f<w>`; combine them as `f::<T><w>(x)`. An explicit instance can also be a function value: `let f = id::<int>`.
 - **The function body is checked at instantiation.** Type errors in the function body are reported at instantiation; the diagnostic gives the position of the error in the function body and states which instance it is and which call instantiated it. A generic function that is never called is not checked.
 - Recursive generic functions can be used (the return type must be written out). A function that switches to a larger type at every recursion cannot terminate instantiation, and an error is reported when the nesting reaches 8 levels.
 - `T` can be used in the function body: the parameter types of a lambda, `let z: T = 0`, `e as T`.
@@ -316,6 +316,32 @@ func main(): int sync {
 
 A call of an annotated function is checked against the parameters of the function the annotation returns. Annotated functions can take part in overloading.
 
+An annotation may also stand before a block. The block is then a function of no parameters, passed to the annotation, and the function the annotation returns is called right where the block is written. Otherwise the block behaves as without the annotation: its names are not visible after it, a `return` in it gives the block's value, and when nothing takes its value, its statements run only as a block without the annotation would run them ([7.8](#78-blocks)).
+
+```cml
+func doubled(f: () => int): () => int {
+    return () => f() * 2
+}
+
+func next_doubled(x: int): int {
+    @doubled
+    {
+        return x + 1
+    }
+}
+
+func main(): int sync {
+    println(next_doubled(4))    // (4 + 1) * 2
+    return 0
+}
+```
+
+```text
+10
+```
+
+A library can declare an annotation that **grants an attribute** to the code it is written on, instead of wrapping it: written with constant arguments, it is applied as the graph is built, and the nodes of that function or block (with the branch arms, loop bodies and lambdas written in it, not the functions they call) carry the attribute, which passes and back ends of that library read; the library declares the kind of the attribute's values and how they combine and merge (`camel/core/node_attrs.h`). Such an annotation does not change what the code computes.
+
 ### 7.6.1 `@numeric`: numeric permissions
 
 `@numeric(permission, ...)` before a function declaration or a block grants that code permissions to change floating-point results (design principles 2.13). It is not a decorator: it does not change the function's value, it only relaxes the canonical algorithm ([3.2.1](03_data_model.md#321-the-numeric-contract-of-floating-point)).
@@ -350,7 +376,7 @@ func norm(x: float, y: float): float {
 - **A permission allows, it never requires.** The CPU back ends (`std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::cpp`) always give the canonical results; later back ends (Tiles, for example) may use other algorithms on the nodes that have a permission.
 - There is no module-wide default and no command-line or pipeline switch; a back end's entry point (such as `tiles.run`) takes no permissions.
 - The permissions are recorded on every node of the graph: `std::rgir` and `std::gir` show `numeric="..."` on the nodes that have any, `camel inspect -a` and `-c` on the blocks. Common-subexpression merging and tensor fusion do not merge nodes with different permissions.
-- An unknown permission, another name followed by parentheses (`@foo(x)`), an empty `@numeric()` and a decorator written on a block are compile-time errors, `SemanticDiag::InvalidAnnotation`.
+- An unknown permission, another name followed by parentheses (`@foo(x)`) and an empty `@numeric()` are compile-time errors, `SemanticDiag::InvalidAnnotation`.
 
 ## 7.7 Type declarations
 

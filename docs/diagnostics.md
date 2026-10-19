@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-149 diagnostics: 135 errors, 14 warnings.
+150 diagnostics: 136 errors, 14 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -164,6 +164,7 @@ prints one entry.
 | `0x04000050` | [RuntimeDiag::ConversionOutOfRange](#conversionoutofrange) | Error |
 | `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error |
 | `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error |
+| `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -1638,20 +1639,16 @@ func main(): int sync {
 **Help**
 
 ```text
-A type variable is bound where its type first appears among the parameters of a function declaration, e.g. 'func first(xs: (typeas T)[]): T', and is written as plain '{0}' everywhere after that.
+A type variable is declared where it first appears in the parameters or result of a function declaration, e.g. 'func first(xs: (typeas T)[]): T', and is written as plain '{0}' everywhere after that.
 ```
 
-**Example** (`test/cases/compile/generics/err_typeas_return.cml`, run as `camel test/cases/compile/generics/err_typeas_return.cml`)
+**Example** (`test/cases/compile/generics/err_typeas_let.cml`, run as `camel test/cases/compile/generics/err_typeas_let.cml`)
 
 ```camel
-module err_typeas_return
-
-func make(x: int): typeas T {
-    return x
-}
+module err_typeas_let
 
 func main(): int sync {
-    println(make(1))
+    let f = (x: typeas T) => x
     return 0
 }
 ```
@@ -1700,7 +1697,7 @@ The type variable '{0}' of '{1}' can never be bound: {2}.
 **Help**
 
 ```text
-A type variable takes the type found at the position of 'typeas {0}' in the type of an argument. That position must be reachable through arrays, tuples, structs and function types.
+A type variable must remain present in a parameter or result type. Its position must be reachable through arrays, tuples, structs and function types.
 ```
 
 **Example** (`test/cases/compile/generics/err_union.cml`, run as `camel test/cases/compile/generics/err_union.cml`)
@@ -1731,20 +1728,16 @@ The generic function '{0}' cannot be called with argument types {1}: {2}.
 **Help**
 
 ```text
-A type variable takes the type of the argument found at its 'typeas' position, or, when that argument says nothing (a 'null', a generic function that is itself waiting for its types), at another occurrence; every parameter is then checked against its type with the variables replaced. A value enters a 'T?' or 'T!' parameter by itself; nothing else is converted. Signature: {3}
+A type variable takes the type of the argument found at its 'typeas' position, or, when that argument says nothing (a 'null', a generic function that is itself waiting for its types), at another occurrence; every parameter is then checked against its type with the variables replaced. Result-only variables take their types from the expected result or explicit f::<T> arguments. A value enters a 'T?' or 'T!' parameter by itself; nothing else is converted. Signature: {3}
 ```
 
-**Example** (`test/cases/compile/generics/err_mismatch.cml`, run as `camel test/cases/compile/generics/err_mismatch.cml`)
+**Example** (`test/cases/compile/generic_explicit_arity_error.cml`, run as `camel test/cases/compile/generic_explicit_arity_error.cml`)
 
 ```camel
-module err_mismatch
-
-func pick(c: bool, a: typeas T, b: T): T {
-    return if c then a else b
-}
-
+module generic_explicit_arity_error
+func id(x: typeas T): T { return x }
 func main(): int sync {
-    println(pick(true, 1, 2.5))
+    println(id::<int, string>(1))
     return 0
 }
 ```
@@ -2000,17 +1993,13 @@ The type '{0}' marks '{1}' twice.
 'T?' may be null and 'T!' may have failed; a second mark of the same kind adds nothing a program could tell apart. 'T?!' and 'T!?' are allowed.
 ```
 
-**Example** (`test/cases/compile/tagged/err_nesting.cml`, run as `camel test/cases/compile/tagged/err_nesting.cml`)
+**Example** (`test/cases/compile/generic_explicit_nullable_error.cml`, run as `camel test/cases/compile/generic_explicit_nullable_error.cml`)
 
 ```camel
-module err_nesting
-
-func ok(x: int?!): int { return 1 }
-
-func f(x: (int?)?): int { return 1 }
-
+module generic_explicit_nullable_error
+func optional(x: typeas T): T? { return null }
 func main(): int sync {
-    println('never printed')
+    println(optional::<int?>(null))
     return 0
 }
 ```
@@ -2833,17 +2822,13 @@ The annotation '@{0}' is not accepted: {1}.
 **Help**
 
 ```text
-A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function; '@numeric(...)' grants numeric permissions to a function or a block (design principles 2.13).
+A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@numeric(...)' grants numeric permissions to a function or a block (design principles 2.13).
 ```
 
 **Example** (`test/cases/compile/numeric/invalid.cml`, run as `camel test/cases/compile/numeric/invalid.cml`)
 
 ```camel
 module invalid
-
-func twice(f: (x: int) => int): (x: int) => int {
-    return (x: int) => f(f(x))
-}
 
 @numeric(reassociate, fast)
 func a(x: float): float { return x * 2.0 }
@@ -2853,13 +2838,6 @@ func b(x: float): float { return x * 2.0 }
 
 @numeric()
 func c(x: float): float { return x * 2.0 }
-
-func d(x: float): float {
-    @twice
-    {
-        return x * 2.0
-    }
-}
 
 func main(): int sync {
     return 0
@@ -3542,21 +3520,14 @@ Tensor shape mismatch in '{0}': {1}.
 Check the shapes of all operands involved in the operation and ensure they are compatible for broadcasting or direct computation.
 ```
 
-**Example** (`test/cases/modules/tensor/runtime_shape_column.cml`, run as `camel test/cases/modules/tensor/runtime_shape_column.cml std::nvm`)
+**Example** (`test/cases/modules/tensor/binary_length_error.cml`, run as `camel test/cases/modules/tensor/binary_length_error.cml std::fvm`)
 
 ```camel
-module runtime_shape_column
-
-import { Tensor, ones, reshape } from tensor
-
-func f(a: Tensor, b: Tensor): Tensor {
-    let c = a + a
-    return c @ b
-}
-
+module binary_length_error
+import { from_bytes, sum } from tensor
+import { from_array } from bytes
 func main(): int sync {
-    let n = 3
-    println(f(ones([2, n]), ones([2, n])))
+    println(sum(from_bytes::<f32>(from_array([0, 0, 0]), [1])))
     return 0
 }
 ```
@@ -4190,6 +4161,24 @@ func main(): int sync {
     return 0
 }
 ```
+
+### InvalidPassParameter
+
+`0x04000060` · Error · `RuntimeDiag::InvalidPassParameter`
+
+**Message**
+
+```text
+Invalid pass specification '{0}': {1}.
+```
+
+**Help**
+
+```text
+A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### PassesNeverRun
 

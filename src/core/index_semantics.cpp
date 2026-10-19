@@ -955,6 +955,10 @@ ReorderFreedom reorderFreedom(const ReductionLaw &law, uint8_t granted) {
     return f;
 }
 
+ReorderFreedom reorderFreedom(const ReductionLaw &law, uint8_t nodePermissions, const NumericPolicy &policy) {
+    return reorderFreedom(law, policy.effective(nodePermissions));
+}
+
 // ---- Transformations ------------------------------------------------------------------------
 
 namespace {

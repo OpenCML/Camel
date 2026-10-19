@@ -66,6 +66,8 @@ enum class RuntimeDiag : uint32_t {
     ConversionOutOfRange   = 0x000050,
     UnhandledError         = 0x000051,
     SliceOutOfRange        = 0x000052,
+    // The pipeline's pass specifications `name(key=value, ...)` (design principles 2.17).
+    InvalidPassParameter   = 0x000060,
     // Warnings (severity bits = Warn).
     PassesNeverRun = 0x10000F,
     ConstantExpressionFaults = 0x100015,

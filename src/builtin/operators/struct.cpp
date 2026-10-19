@@ -26,6 +26,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/type.h"
+#include "camel/utils/utf8.h"
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;
@@ -35,7 +36,8 @@ using namespace camel::core::type;
 
 slot_t __len_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *s = norm.get<String *>(0);
-    return rtdata::toSlot(static_cast<Int64>(s->size()));
+    // Code points, not bytes (design principles 2.17).
+    return rtdata::toSlot(static_cast<Int64>(camel::utf8::count(s->view())));
 }
 
 slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {

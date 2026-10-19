@@ -26,4 +26,5 @@
 #include "pass/sched.h"
 #include "pass/snapshot.h"
 #include "pass/trans.h"
+#include "pass/params.h"
 #include "pass/warnings.h"

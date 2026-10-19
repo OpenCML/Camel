@@ -84,12 +84,14 @@ extern std::vector<std::string> entryArgs;
 
 extern bool profile;
 extern bool noCache;
+extern bool noModulePasses;
 extern bool semanticOnly;
 extern int maxThreads;
 /// --max-recursion-depth / --max-macro-depth: the limits given on the command line, 0 when the
 /// option is absent (camel/execute/limits.h; the environment variables are read there).
 extern size_t maxRecursionDepth;
 extern size_t maxMacroDepth;
+extern size_t maxMacroRounds; // --max-macro-rounds
 } // namespace Run
 
 namespace Check {

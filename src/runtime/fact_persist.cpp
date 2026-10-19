@@ -29,6 +29,7 @@
 
 #include "camel/runtime/fact_persist.h"
 
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/func.h"
@@ -115,6 +116,11 @@ uint64_t ownContentHash(const GCGraph &graph) {
         h.u64(static_cast<uint64_t>(static_cast<int64_t>(node.dataIndex)));
         h.str(mangled(node.dataType()));
         h.u64(graph.nodePermissions(ref));
+        // Attributes by their names (the interned ids differ between processes); nothing for a
+        // node without any, so that the hash of a graph without attributes is unchanged.
+        if (const uint32_t attrs = graph.nodeAttrs(ref); attrs != 0) {
+            h.str("attrs:" + camel::core::attr::text(attrs));
+        }
         h.refs(graph.normInputsOf(ref));
         h.refs(graph.withInputsOf(ref));
         h.refs(graph.ctrlInputsOf(ref));

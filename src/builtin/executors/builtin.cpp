@@ -29,6 +29,7 @@ using namespace camel::core::rtdata;
 
 #include "../operators/cast.h"
 #include "../operators/graph.h"
+#include "../operators/higher_order.h"
 #include "../operators/io.h"
 #include "../operators/macro.h"
 #include "../operators/ops.h"
@@ -237,6 +238,16 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // struct
         {"struct/len_str", __len_str__},
         {"struct/len_arr", __len_arr__},
+        // The higher-order operators: the one implementation of what they mean, by the
+        // function-call service. Schedulers that run a shape of call faster by the operator's
+        // declaration (OperatorSemantics::elementCalls) do; the macro evaluator runs these.
+        {"mark/map_arr", __map_arr__},
+        {"mark/apply_arr", __map_arr__},
+        {"mark/filter_arr", __filter_arr__},
+        {"mark/reduce_arr", __reduce_arr__},
+        {"mark/unordered_reduce_arr", __reduce_arr__},
+        {"mark/foreach_arr", __foreach_arr__},
+        {"mark/unordered_foreach_arr", __foreach_arr__},
 
         {"struct/zip", __zip__},
 
@@ -342,7 +353,7 @@ void registerBuiltinOperatorTraits() {
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
         // Every operator over Map and Set (coll/) returns a new value and changes nothing.
-        const bool pure = (key.starts_with("op/") && !key.starts_with("op/assn")) ||
+        const bool pure = (key.starts_with("op/") && !storesIntoCell(key)) ||
                           key.starts_with("coll/") || kPureHelpers.contains(key);
         // Declared either way: an operator without a declaration is treated the same as one
         // declared to have effects, but only a declaration says that somebody looked.
@@ -357,7 +368,9 @@ void registerBuiltinOperatorTraits() {
                             ":mark/apply_arr",
                             ":mark/filter_arr",
                             ":mark/reduce_arr",
-                            ":mark/foreach_arr"}) {
+                            ":mark/foreach_arr",
+                            ":mark/unordered_reduce_arr",
+                            ":mark/unordered_foreach_arr"}) {
         registry.set(uri, {.pure = false, .callsGraphs = true});
     }
     // The fault-isolation node calls the function it is given, and its result depends on
@@ -371,6 +384,14 @@ void registerBuiltinOperatorTraits() {
     registry.set(":var/get", {.stateOnly = true});
     registry.set(":var/peek", {.stateOnly = true});
     registry.set(":var/take", {.stateOnly = true});
+    // What the compiler does at a call because of the operator (design principles 2.17).
+    registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
+    registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});
+    registry.declareCallSpec(":mark/unordered_foreach_arr", {.discardsCallbackResult = true});
+    for (const char *uri : {":io/print", ":io/println"}) {
+        registry.declareCallSpec(uri, {.formatWithArg = 0, .checkFormat = checkFormatPattern});
+    }
+    registry.declareCallSpec(":str/format", {.formatNormArg = 0, .checkFormat = checkFormatPattern});
     declareBuiltinOperatorSemantics();
     std::vector<std::string_view> names;
     for (const auto &[name, op] : getOpsImplMap()) {

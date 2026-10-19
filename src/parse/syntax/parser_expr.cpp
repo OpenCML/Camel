@@ -680,7 +680,10 @@ void ParserImpl::parseAngledValues() {
     close(m, NK::AngledValues);
 }
 
-/// typeArguments : '::' '<' typeList ','? '>'
+/// typeArguments : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
+/// namedTypeArgument : IDENTIFIER '=' typeExpr
+/// The arguments are all positional or all named (design principles 2.17): `f::<int, string>`
+/// or `f::<A = int, B = string>`.
 void ParserImpl::parseTypeArguments() {
     const size_t m = mark();
     bump(); // ::
@@ -688,7 +691,20 @@ void ParserImpl::parseTypeArguments() {
     bump(); // < (not an expression's with-argument list)
     {
         Scope scope(*this, false, open);
-        parseTypeList(TK::Gt);
+        if (cur_ == TK::Identifier && peek(1) == TK::Assign) {
+            while (!panic_) {
+                const size_t named = mark();
+                eat(TK::Identifier);
+                eat(TK::Assign);
+                parseType();
+                close(named, NK::NamedTypeArgument);
+                if (cur_ != TK::Comma || peek(1) == TK::Gt)
+                    break;
+                bump();
+            }
+        } else {
+            parseTypeList(TK::Gt);
+        }
         eat(TK::Comma);
         expect(TK::Gt);
     }

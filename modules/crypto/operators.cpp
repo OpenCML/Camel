@@ -35,16 +35,20 @@ using camel::utils::sha256Hex;
 
 std::unordered_map<std::string, operator_t> getCryptoOpsMap() {
     return {
-        {"sha256", __crypto_sha256__},
+        {"sha256_str", __crypto_sha256_str__},
+        {"sha256_bytes", __crypto_sha256_bytes__},
         {"sha256_rounds", __crypto_sha256_rounds__},
     };
 }
 
-slot_t __crypto_sha256__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    const auto input = camel::core::type::isBytesType(norm.type(0))
-                           ? norm.get<BytesObject *>(0)->view()
-                           : norm.get<String *>(0)->view();
-    return toSlot(String::from(sha256Hex(input), mm::autoSpace()));
+// One URI per signature (the overload is chosen when the program is compiled): the digest of the
+// UTF-8 bytes of a string, and of a Bytes value.
+slot_t __crypto_sha256_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(String::from(sha256Hex(norm.get<String *>(0)->view()), mm::autoSpace()));
+}
+
+slot_t __crypto_sha256_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(String::from(sha256Hex(norm.get<BytesObject *>(0)->view()), mm::autoSpace()));
 }
 
 slot_t __crypto_sha256_rounds__(ArgsView &with, ArgsView &norm, Context &ctx) {

@@ -38,7 +38,9 @@
  * 6. The source position of each node is a column parallel to the records (nodeOrigin): one
  *    32-bit origin id per node, 0 when the node has none. Beside it, only in a graph where some
  *    node has any, the numeric permissions the program granted with @numeric(...): one byte per
- *    node (nodePermissions; design principles 2.13, docs/design/op-semantics 6.3).
+ *    node (nodePermissions; design principles 2.13, docs/design/op-semantics 6.3), and the
+ *    attributes libraries attached to the nodes: one 32-bit interned set per node
+ *    (nodeAttrs; camel/core/node_attrs.h, language reference 7.6).
  * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
  *    FUNC node names its callee by an index into it (GCFuncRef), and the graphs the function
  *    constants of the static area point to, the graphs written inside this one and the graphs
@@ -343,6 +345,7 @@ struct GCGraphNativePayload {
     GCNode *nodes              = nullptr; // nodeCount + 1 records (the last is a sentinel)
     uint32_t *origins          = nullptr; // nodeCount source origins (0: none)
     uint8_t *permissions       = nullptr; // nodeCount numeric permissions; null when all are 0
+    uint32_t *attrs            = nullptr; // nodeCount attribute sets; null when all are 0
     gc_node_ref_t *inputs      = nullptr; // edgeCount entries
     gc_payload_word_t *payload = nullptr; // payloadWordCount words
     gc_node_ref_t *normPorts   = nullptr;
@@ -405,6 +408,11 @@ class GCGraph : public camel::core::rtdata::Object {
     uint8_t nodePermissions(gc_node_ref_t ref) const;
     /// True when some node of the graph has numeric permissions.
     bool hasNodePermissions() const { return nativePayload_.permissions != nullptr; }
+    /// The attributes (camel/core/node_attrs.h, AttrSetId) of node `ref`, 0 when none; the
+    /// graph has no attribute column when no node has any.
+    uint32_t nodeAttrs(gc_node_ref_t ref) const;
+    /// True when some node of the graph has attributes.
+    bool hasNodeAttrs() const { return nativePayload_.attrs != nullptr; }
     /// The names of the values the function captures from where it was written, in the order
     /// it captured them (symbols of camel/core/symbol.h). Compile and debug metadata: what a
     /// capture is bound to at run time is the closure tuple and the with-inputs of a call.

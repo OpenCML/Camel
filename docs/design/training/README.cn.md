@@ -308,7 +308,7 @@ let half = s.params->tree_map<(x: Tensor<f32>): Tensor<bf16> => x as Tensor<bf16
 
 ### 8.1 字节类型 `Bytes`
 
-- 新增不可变的字节序列类型 `Bytes`。`string` 只表示文本（UTF-8）。
+- 新增不可变的字节序列类型 `Bytes`，是内建类型名（和 `string` 一样不必导入）。`string` 只表示文本，总是合法的 UTF-8，长度与下标按码点计（设计原则 2.17）；用非法字节造字符串（`str::from_bytes([255])`）在调用处就是故障。
 - 文件接口分两套：`read_text`/`write_text` 处理 `string`；新增 `read_bytes(path): Bytes`、`write_bytes(path, b)`；`read_chunk` 返回 `Bytes`（现在返回字符串，属不兼容变化，随本项一起改）。
 - 转换：`decode(b): string!`（非法 UTF-8 时为错误值）、`encode(s): Bytes`；张量与字节互转 `from_bytes::<f32>(b, shape)`、`to_bytes(t)`，按小端序。类型实参采用设计原则 2.13 已裁定的 `::<T>`，与值上下文参数 `<w>` 分开。
 - 原子替换：`fs::replace(path, b)` 写入同目录的临时文件、刷盘后改名。`write_*` 保持原样（技术选择：不改变已有函数的行为）。

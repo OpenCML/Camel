@@ -1,0 +1,52 @@
+id = "compile.utf8_strings"
+order = 921
+tier = "feat"
+tags = ["feat", "compile", "strings", "utf8"]
+desc = "A string is always valid UTF-8 (design principles 2.17): a literal that is not is refused when the program is compiled; an escape that spells the bytes of a character is fine."
+
+[[tests]]
+name = "invalid_utf8_literal"
+desc = "'\xE4' alone is not a character."
+kind = "negative"
+case = "../../../cases/compile/invalid_utf8_literal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidLiteral"
+expect_output_contains = ["not valid UTF-8"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "escape_spelling_a_character"
+desc = "'\xE4\xB8\xAD' is the one character U+4E2D."
+kind = "behavior"
+case = "../../../cases/compile/utf8_escape_bytes.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "中 1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "format_string_too_few_arguments"
+desc = "A constant `print<fmt>` format string with more placeholders than arguments is refused when the program is compiled (design principles 2.7), not when it runs."
+kind = "negative"
+case = "../../../cases/compile/format_string_checked.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["format string '{} and {}'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "format_string_bad_specification"
+desc = "The same for `format`: a specification the argument's type does not take."
+kind = "negative"
+case = "../../../cases/compile/format_string_bad_spec.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["format string '{:d}'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

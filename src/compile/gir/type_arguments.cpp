@@ -11,6 +11,9 @@
 // Explicit types are consumed while building concrete graphs, never passed as values.
 #include "builder.h"
 #include "builder_support.h"
+#include "camel/core/data/primary.h"
+#include "camel/utils/str.h"
+#include <algorithm>
 #include <utility>
 
 namespace camel::compile::gir {
@@ -35,9 +38,8 @@ FunctionType *Builder::signatureForArgumentContext(node_handle_t target) const {
     } else if (std::holds_alternative<oper_group_ptr_t>(named)) {
         const auto ops = std::get<oper_group_ptr_t>(named);
         if (ops->resolvers().size() == 1) {
-            if (const auto fixed =
-                    dynamic_cast<StaticFuncTypeResolver *>(ops->resolvers()[0].second.get())) {
-                return fixed->funcType();
+            if (FunctionType *fixed = ops->resolvers()[0].second->fixedSignature()) {
+                return fixed;
             }
         }
     }
@@ -54,14 +56,58 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
         throw;
     }
     genericCalleeAllowed_ = outerAllowed;
+    // Positional, or all named `A = int` (design principles 2.17): in the tree a name is a
+    // constant string right before its type.
     type_vec_t types;
+    std::vector<std::string> given;
     for (size_t i = 1; i < gct->size(); ++i) {
+        if (gct->at(i)->type() == GCT::NodeKind::DATA && i + 1 < gct->size()) {
+            given.push_back(std::static_pointer_cast<core::data::StringData>(gct->at(i)->data())
+                                ->data());
+            ++i;
+        }
         types.push_back(boundType(gct->at(i)->dataType()));
     }
     if (const auto found = genericDrefs_.find(target); found != genericDrefs_.end()) {
         const auto tmpl = found->second;
         std::vector<std::string> names;
         collectTypeVars(tmpl->funcType, names);
+        if (!given.empty()) {
+            // By name: each type variable of the signature once, in any order.
+            std::vector<Type *> byPosition(names.size(), nullptr);
+            for (size_t i = 0; i < given.size(); ++i) {
+                const auto at = std::ranges::find(names, given[i]);
+                std::string problem;
+                if (at == names.end())
+                    problem = "'" + given[i] + "' is not a type parameter of " + tmpl->name;
+                else if (byPosition[static_cast<size_t>(at - names.begin())] != nullptr)
+                    problem = "type parameter '" + given[i] + "' is given twice";
+                if (!problem.empty()) {
+                    diags_->of(SemanticDiag::GenericArgumentsMismatch)
+                        .atOrigin(gct->origin())
+                        .commit(
+                            tmpl->name,
+                            "explicit type arguments",
+                            problem + " (its type parameters: " + strutil::join(names, ", ", [](const std::string &n) { return n; }) + ")",
+                            tmpl->funcType->toString());
+                    throw BuildAbortException();
+                }
+                byPosition[static_cast<size_t>(at - names.begin())] = types[i];
+            }
+            for (size_t i = 0; i < names.size(); ++i) {
+                if (byPosition[i] == nullptr) {
+                    diags_->of(SemanticDiag::GenericArgumentsMismatch)
+                        .atOrigin(gct->origin())
+                        .commit(
+                            tmpl->name,
+                            "explicit type arguments",
+                            "type parameter '" + names[i] + "' is not given",
+                            tmpl->funcType->toString());
+                    throw BuildAbortException();
+                }
+            }
+            types = std::move(byPosition);
+        }
         if (names.size() != types.size()) {
             diags_->of(SemanticDiag::GenericArgumentsMismatch)
                 .atOrigin(gct->origin())
@@ -83,6 +129,12 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
     }
     if (nodeIsKind(target, runtime::GCNodeKind::Dref) &&
         std::holds_alternative<oper_group_ptr_t>(nodeGraphOf(target)->drefTarget(target))) {
+        if (!given.empty()) {
+            diags_->of(SemanticDiag::InvalidTypeArgument)
+                .atOrigin(gct->origin())
+                .commit("::<...>", "a built-in operator takes its type arguments by position");
+            throw BuildAbortException();
+        }
         explicitOperatorTypes_[target] = std::move(types);
         return target;
     }

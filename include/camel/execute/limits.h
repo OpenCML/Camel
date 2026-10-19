@@ -58,6 +58,15 @@ inline constexpr size_t kDefaultMaxMacroDepth     = 64;
 inline constexpr const char *kMaxMacroDepthEnvVar = "CAMEL_MAX_MACRO_DEPTH";
 inline constexpr const char *kMaxMacroDepthOption = "--max-macro-depth";
 
+/// The limit on the rounds one loop may run while std::macro evaluates it ahead of time (design
+/// principles 2.14; a loop that would not end makes the compilation fail instead of hang).
+/// `--max-macro-rounds <n>`, else CAMEL_MAX_MACRO_ROUNDS. Rounds do not nest, so the count has no
+/// relation to the stack and its range is wider than the depth limits'.
+inline constexpr size_t kDefaultMaxMacroRounds     = 1'000'000;
+inline constexpr size_t kMaxRoundsLimit            = size_t{1} << 40;
+inline constexpr const char *kMaxMacroRoundsEnvVar = "CAMEL_MAX_MACRO_ROUNDS";
+inline constexpr const char *kMaxMacroRoundsOption = "--max-macro-rounds";
+
 /// The largest value either limit accepts. The interpreters nest on the native stack (NodeVM
 /// for every call, FastVM for calls through function values and higher-order operators, the
 /// macro evaluator and std::tf for every call), so a count alone cannot promise that the stack
@@ -92,6 +101,11 @@ struct RecursionLimit {
 /// command line reports it before anything runs).
 RecursionLimit recursionLimit(const core::context::Context &context);
 size_t macroDepthLimit(const core::context::Context &context);
+/// A round limit written as text: a decimal integer from 1 to kMaxRoundsLimit.
+std::optional<size_t> parseRoundLimit(std::string_view text);
+/// The rounds one loop may run under std::macro in `context`: the option, else the environment,
+/// else kDefaultMaxMacroRounds.
+size_t macroRoundLimit(const core::context::Context &context);
 
 /// The fault of a call that is not in tail position and would be open call number `limit + 1`.
 /// `graphName` is the graph the call is written in. Every back end raises this one, so the

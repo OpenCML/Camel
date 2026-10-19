@@ -200,6 +200,7 @@ func softmax_row(x: Tile<f32, [1, 1024]>): Tile<f32, [1, 1024]> {
 - 它不改变语义：去掉 `@kernel`，或在 CPU 上执行，它仍是普通函数，结果仍是 GPU 结果的参考语义。
 - 它由 Tiles 模块提供，是标注而不是语言关键字（与计划中的 `@numeric(...)` 同类；行首的 `@` 是标注，见 2.11）。编辑器与语言服务器据此标出内核。
 - 写法仍是第 6.2 节的函数式写法；`@kernel` 不引入第 6.3 节的指针与程序编号。
+- **实现途径（2026-10-19）**：核心已有通用的节点属性与"授予属性的装饰器"，`@kernel` 可以完全在 Tiles 模块里实现，不需要核心为它写代码：模块导出 `attrDecoratorGroup("kernel", "tiles:kernel", 0, ...)`（`camel/core/module/attr_decorator.h`），在 `load()` 里以 `attr::registerKey("tiles.kernel", {...})` 登记这个键（值的种类与合并规则：标记用 `Unit`，嵌套取内层，只与相同的值合并），再 `OperatorTable::declareGrant("tiles:kernel", {.key = "tiles.kernel"})`，执行器把 `kernel` 映射到 `attrDecoratorIdentity`。程序写 `@kernel func f(...)`（或 `@kernel { ... }`）时，建图阶段就给 `f` 自己的节点及其中写下的分支臂、循环体、lambda 加上属性 `tiles.kernel`（不含被调函数）；Tiles 以 `GCGraph::nodeAttrs(ref)`（`camel/core/node_attrs.h` 的 `attr::valueOf(set, attr::key("tiles.kernel"))`）读出并据此检查。属性随内联、克隆、`LOOP` 降低保留，`std::gir` 显示为 `attrs="tiles.kernel"`。值的种类还有任意宽度的标志集、整数、字符串、图的引用与元组（如设备偏好可用一个 `Symbol` 值的键）。数值许可（`nodePermissions`）暂不变，待 `enum` 实现后一并迁到同一机制，届时另行说明。
 
 ### 6.4 原子与不规则写入
 
@@ -291,6 +292,17 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 5. **没有原生实现的算子降低其定义图**（`expandDefinition`），不照 CPU 内核复刻；梯度与融合产生的算子由核心补语义声明与定义图（第 4 条）。
 6. **设备故障读核心的 `FaultSpec` 与归约规律的空区间规则**，报告带故障种类与源码位置（第 9 条）。
 7. **BF16 cuBLAS 的批偏移用核心的访问映射**，与 `ddpm-primitives.md` 的描述一致（第 10 条）。
-8. **许可对应实现的规则读核心的统一判定**（2.16、2.17：库实现的 f32 矩阵乘默认可用、BF16 只需 `change_precision`、安全模式由遍参数给出），不在模块内各写一份（第 6 条）。遍参数的通用语法由核心提供（2.17），设备选择改用遍参数，不用环境变量。
-9. 遍名用 `tiles::` 前缀，别名由模块登记；核心别名表中的 `std::tiles` 由核心删去（第 11 条，2.17）。
+8. **许可对应实现的规则读核心的统一判定**（2.16、2.17：库实现的 f32 矩阵乘默认可用、BF16 只需 `change_precision`、安全模式由遍参数给出），不在模块内各写一份（第 6 条）。遍参数的通用语法由核心提供（2.17），设备选择改用遍参数，不用环境变量。核心已提供：`registerModulePass(path, PassDescriptor)` 让模块遍声明参数（名字、类型、默认值、说明），`tiles::compile(device=1)` 即可写出；`CAMEL_TILES_DEVICE`（`capability.cpp` 的 `configuredCudaOrdinal`，后端初始化与测试都读它）和 `CAMEL_TILES_NVRTC`（进程环境，可保留）尚未迁移——设备序号要先从遍实例传到后端初始化，这属于模块内部的改动，由 Tiles 做；核心这一侧已不再读它。
+9. 遍名用 `tiles::` 前缀，别名由模块登记；核心别名表中的 `std::tiles` 由核心删去（第 11 条，2.17）。已删去（`registerPassAlias`、`registerDefaultPipelinePass` 已提供；核心的测试与文档改写为 `tiles::compile`）。Tiles 尚待做的两件事：用 `registerPassAlias` 登记它想要的短名；`@gpu` 改为编译期标注后用 `registerDefaultPipelinePass("tiles::compile")` 登记，使不写遍名时 `@gpu` 仍然生效（默认流水线的遍在第一个消耗图的遍之前运行，`--no-module-passes` 可关闭）。
 
+
+### 11.1 参数树：核心已有唯一的树视图（2026-10-19，核心侧已做）
+
+"什么是树、什么是叶子"与路径的写法现在只有一份：`include/camel/core/type/tree.h`（`core::type::tree`：`isInternal`、`arity`、`childType`、`childName`、`childPath`、`displayPath`、`forEachLeaf`、`firstRejectedLeaf`、`mapLeaves`）。规则按 2.16、2.17：结构体与普通元组是内部节点，`T?`/`T!`（带标记的元组）与可变格是叶子；空结构体、空元组在各处都是没有叶子的内部节点；路径是字段名（元组为下标）用点连接，`blocks.0.w`，根的路径为空。
+
+Tiles 里按类型工作的三处已机械地改用它，行为变化只有两点：`supportedLeaves` 不再拒绝空元组/空结构体（与 `tree_map` 一致），`Device<T>` 的诊断里路径不再带 `$.` 前缀（根写作 `<root>`）。其余各处是按值或按节点遍历的同类展开，不是机械替换，留给 Tiles：
+
+- `tree_transfer.cpp` 的 `walk` 与 `rebuild`（按值）；
+- `graph_values.cpp:31/42/69`、`compiler.cpp:139/475/495/941`、`region_outline.cpp:45`、`module.cpp` 的 `acceptsInput` 与 126/199/239/459 行（按节点或按类型对位）。
+
+这些应改为调用 `tree::isInternal`/`arity`/`childType`，不要再自己写 `code() == Tuple || Struct`。

@@ -25,7 +25,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "stdlib.str_bytes"
-desc = "The str module by byte: split, trim, case, replace, find, substr, starts_with/ends_with, repeat, bytes/from_bytes and indexing, with empty strings and non-ASCII text."
+desc = "The str module (code points): split, trim, case, replace, find, substr, starts_with/ends_with, repeat, bytes/from_bytes and indexing, with empty strings and non-ASCII text."
 case = "../../../cases/modules/stdlib/str_bytes.cml"
 golden = "golden/stdlib/str_bytes.txt"
 
@@ -47,7 +47,7 @@ args = ["${case}", "std::macro", "std::opt", "std::nvm"]
 
 [[tests]]
 name = "stdlib.str_chars"
-desc = "The str module by code point: codepoints, from_codepoints, char_count, char_at, char_substr, is_valid_utf8; invalid UTF-8 is an error value."
+desc = "The str module, code points as numbers: codepoints, from_codepoints; a string is always valid UTF-8."
 case = "../../../cases/modules/stdlib/str_chars.cml"
 golden = "golden/stdlib/str_chars.txt"
 
@@ -220,3 +220,17 @@ case = "../../../cases/modules/stdlib/array_large.cml"
 golden = "golden/stdlib/array_large.txt"
 backends = false
 args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.utf8_string"
+desc = "A string is always valid UTF-8 and counts code points: len, index, find, substr, split, formatting widths, regular expressions, the bytes of a string, sha256 of a string and of its Bytes."
+case = "../../../cases/modules/stdlib/utf8_string.cml"
+golden = "golden/stdlib/utf8_string.txt"
+
+[[tests]]
+name = "stdlib.utf8_string.inline_opt"
+desc = "The same through std::opt::inline std::opt."
+case = "../../../cases/modules/stdlib/utf8_string.cml"
+golden = "golden/stdlib/utf8_string.txt"
+backends = false
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
