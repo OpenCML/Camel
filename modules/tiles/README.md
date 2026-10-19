@@ -25,11 +25,11 @@ For programs with static f32 tensor shapes, the experimental region pass avoids
 wrapping individual functions:
 
 ```text
-camel program.cml std::tiles std::fvm
+camel program.cml tiles::compile std::fvm
 ```
 
-`std::tiles` loads the bundled module automatically (`tiles::compile` is its full
-module name). It extracts supported, pure, dependency-convex regions and inserts
+`tiles::compile` loads the bundled module automatically (the core no longer has a
+`std::tiles` alias; Tiles registers its own names). It extracts supported, pure, dependency-convex regions and inserts
 explicit resident inputs, calls and host reads. Shared device results remain
 resident across regions. Other nodes execute normally on the selected scheduler.
 The rewrite itself does not initialize CUDA; runtime prefers CUDA and falls back
@@ -39,8 +39,8 @@ are not retried. No special import or test environment variable is required.
 Current limits: dynamically shaped tensors, symbolic dimensions and unsupported
 operators remain outside selected regions; CPU fallback interprets the region
 through the current scheduler. Compiled CPU kernels, device cost-based placement
-and shape-polymorphic compilation are not yet implemented. Use `std::tiles std::gir`
-or `std::tiles std::jgir` to inspect the rewritten graph.
+and shape-polymorphic compilation are not yet implemented. Use `tiles::compile std::gir`
+or `tiles::compile std::jgir` to inspect the rewritten graph.
 
 `gpu` is a function decorator that prefers GPU execution:
 
@@ -59,7 +59,7 @@ nested decorated calls are supported. Inside a GPU compilation, a nested dispatc
 is lowered as the underlying computation, without host execution or a nested GPU
 launch. Numeric permissions remain attached to the original operator nodes.
 For statically shaped eligible tensor regions, decorating the function uses the
-same region extraction and resident transfers as `std::tiles`. Unsupported nodes
+same region extraction and resident transfers as `tiles::compile`. Unsupported nodes
 stay on CPU while supported regions prefer GPU; captures and CPU effects are
 preserved. Partitioning happens once when the decorated function value is built.
 Static regions now generate their launch plans and CUDA source from parameter types
@@ -286,7 +286,7 @@ inside the body remain unsupported. These are computation boundaries for `@gpu`
 fallback; explicit `run` and `source` report an unsupported computation. Scalar
 division faults during device execution are reported without CPU replay. Region
 analysis reads the body to establish the supported subset. A selected loop region
-owns that body, and `std::tiles` does not outline it independently. Unsupported
+owns that body, and `tiles::compile` does not outline it independently. Unsupported
 loops remain CPU boundaries; the graph pass may still select eligible regions
 in their unclaimed body graphs, as it does in other reachable graphs.
 
