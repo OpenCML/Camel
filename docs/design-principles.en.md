@@ -469,7 +469,7 @@ At present all complicated type computation is implemented directly by operators
 
 ### 2.14 Supplementary rulings (2026-10-16)
 
-- **Debugger**: returning from a branch arm to the join does not stop on the same line a second time, and a breakpoint on that line hits only on the first entry; an inlined function still shows as a frame of its own (the user wrote two functions and sees two frames; inlining is an optimization).
+- **Debugger**: returning from a branch arm to the join does not stop on the same line a second time, and a breakpoint on that line hits only on the first entry; ~~an inlined function still shows as a frame of its own~~ (withdrawn 2026-10-19: Camel's optimizations merge and reorder inlined computation, so a synthesised frame is often untrue; inlined code shows in the caller's frame, annotated with the function and call it came from, see the regions of the graph store second design, 3.3).
 - **The accessors of `Json` also accept `Json!`**, so that a failed parse chains too.
 - **The value of NaN**: a NaN produced by `max`, `min` or `relu` is always the canonical quiet NaN (printed `nan`). NaNs from ordinary arithmetic are not constrained by this.
 - **`argmax` and `argmin`** compare by IEEE 754-2019 `maximum` and `minimum`: with a NaN they return the position of the first NaN; on a tie the position of the first extreme, +0 being greater than -0.
