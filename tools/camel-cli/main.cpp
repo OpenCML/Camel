@@ -482,10 +482,6 @@ int runCommand(int argc, char *argv[]) {
                     // All pass names, the fallback's included, are checked before the first
                     // snapshot is written and before any pass runs: an unknown name anywhere
                     // on the command line leaves no effect and no artefact.
-                    // The passes the program's modules register join before the first pass
-                    // that consumes the graph (design principles 2.17).
-                    Run::resolvedPassList =
-                        withDefaultPipelinePasses(Run::resolvedPassList, ctx, !Run::noModulePasses);
                     requireKnownPasses(Run::resolvedPassList, ctx);
                     requireKnownPasses(Run::fallbackPasses, ctx);
                     auto *graph = ctx->runtimeRootGraph();

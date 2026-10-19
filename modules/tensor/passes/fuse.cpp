@@ -295,14 +295,7 @@ void registerParamEchoTestPass() {
         return std::make_unique<ParamEchoTestPass>(ctx, args);
     };
     registerModulePass("tensor::test_echo", std::move(descriptor));
-    // The module's alias, and the pass that joins the pipeline with the module, only when the
-    // test asks for it (CAMEL_ENABLE_TEST_PASSES=module-default): other tests that enable the
-    // test passes must not see an extra pass.
     registerPassAlias("tensor::echo", "tensor::test_echo");
-    const char *mode = std::getenv("CAMEL_ENABLE_TEST_PASSES");
-    if (mode != nullptr && std::string_view(mode) == "module-default") {
-        registerDefaultPipelinePass("tensor::test_echo(label=\"default\")", 10);
-    }
 }
 
 } // namespace

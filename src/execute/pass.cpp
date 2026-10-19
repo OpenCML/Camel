@@ -630,16 +630,6 @@ ModuleAliasRegistry &moduleAliases() {
     return registry;
 }
 
-struct DefaultPassRegistry {
-    std::mutex mutex;
-    std::set<std::pair<int, std::string>> entries; // (priority, spec): the run order
-};
-
-DefaultPassRegistry &defaultPasses() {
-    static DefaultPassRegistry registry;
-    return registry;
-}
-
 std::optional<PassDescriptor> findModulePass(const std::string &path) {
     auto &registry = modulePasses();
     std::lock_guard lock(registry.mutex);
@@ -811,12 +801,6 @@ void registerPassAlias(const std::string &alias, const std::string &target) {
     auto &registry = moduleAliases();
     std::lock_guard lock(registry.mutex);
     registry.aliases.insert_or_assign(alias, target);
-}
-
-void registerDefaultPipelinePass(const std::string &spec, int priority) {
-    auto &registry = defaultPasses();
-    std::lock_guard lock(registry.mutex);
-    registry.entries.insert({priority, spec});
 }
 
 namespace {
@@ -1074,48 +1058,6 @@ bool passListTranslatesProgram(const std::vector<std::string> &passes, const con
         }
     }
     return false;
-}
-
-std::vector<std::string> withDefaultPipelinePasses(
-    const std::vector<std::string> &pipeline, const context_ptr_t &ctx, bool enabled) {
-    std::set<std::pair<int, std::string>> entries;
-    {
-        auto &registry = defaultPasses();
-        std::lock_guard lock(registry.mutex);
-        entries = registry.entries;
-    }
-    if (!enabled || entries.empty()) {
-        return pipeline;
-    }
-    // The name a specification is known by, aliases resolved: `tiles` and `tiles::compile`
-    // are one pass.
-    const auto canonical = [](const std::string &spec) {
-        const std::string name = resolveAlias(specName(spec));
-        if (name.find("::") == std::string::npos &&
-            lookupInScope(passScope, splitPath("std::" + name))) {
-            return "std::" + name;
-        }
-        return name;
-    };
-    std::set<std::string> written;
-    for (const auto &spec : pipeline) {
-        written.insert(canonical(spec));
-    }
-    std::vector<std::string> inserted;
-    for (const auto &[priority, spec] : entries) {
-        (void)priority;
-        if (written.insert(canonical(spec)).second) {
-            inserted.push_back(spec);
-        }
-    }
-    if (inserted.empty()) {
-        return pipeline;
-    }
-    const size_t at = firstConsumingPass(pipeline, ctx).value_or(pipeline.size());
-    std::vector<std::string> result(pipeline.begin(), pipeline.begin() + at);
-    result.insert(result.end(), inserted.begin(), inserted.end());
-    result.insert(result.end(), pipeline.begin() + at, pipeline.end());
-    return result;
 }
 
 std::optional<Diagnostic>
