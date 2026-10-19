@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,6 +36,7 @@
 #include "modes.h"
 
 #include <algorithm>
+#include <exception>
 #include <iomanip>
 #include <iostream>
 
@@ -81,44 +82,57 @@ std::string withSortedImports(const std::string &structure) {
 } // namespace
 
 int runHashes(const std::vector<std::string> &files) {
+    int failures = 0;
     for (const std::string &path : files) {
         // The diagnostics name the file; the hash must not depend on where the file lies.
-        const ParseOutcome outcome = parseText("file.cml", readFile(path));
-        std::cout << std::hex << std::setw(16) << std::setfill('0') << fnv1a(outcome.dump)
-                  << std::dec << " " << (outcome.accepted ? "ok " : "no ") << path << "\n";
+        try {
+            const ParseOutcome outcome = parseText("file.cml", readFile(path));
+            std::cout << std::hex << std::setw(16) << std::setfill('0') << fnv1a(outcome.dump)
+                      << std::dec << " " << (outcome.accepted ? "ok " : "no ") << path << "\n";
+        } catch (const std::exception &e) {
+            // A file the front end cannot read is a failure of the check, not of the tool: name
+            // the file and go on with the rest, so one file does not hide the others.
+            std::cout << "error " << path << ": " << e.what() << "\n";
+            ++failures;
+        }
     }
-    return 0;
+    return failures == 0 ? 0 : 1;
 }
 
 int runFormatCheck(const std::vector<std::string> &files) {
-    size_t checked = 0, skipped = 0, changed = 0, unstable = 0;
+    size_t checked = 0, skipped = 0, changed = 0, unstable = 0, broken = 0;
     for (const std::string &path : files) {
-        const ParseOutcome original = parseText(path, readFile(path));
-        if (!original.accepted || original.formatted.empty()) {
-            ++skipped;
-            continue;
-        }
-        ++checked;
-        const ParseOutcome again = parseText(path, original.formatted);
-        if (!again.accepted ||
-            withSortedImports(again.structure) != withSortedImports(original.structure)) {
-            ++changed;
-            std::cout << "CHANGED " << path
-                      << (again.accepted ? " (another AST)" : " (does not parse)") << "\n";
-            if (!again.accepted) {
-                std::cout << "    " << again.diagnostics.substr(0, 400) << "\n";
+        try {
+            const ParseOutcome original = parseText(path, readFile(path));
+            if (!original.accepted || original.formatted.empty()) {
+                ++skipped;
+                continue;
             }
-            continue;
-        }
-        if (again.formatted != original.formatted) {
-            ++unstable;
-            std::cout << "UNSTABLE " << path << "\n";
+            ++checked;
+            const ParseOutcome again = parseText(path, original.formatted);
+            if (!again.accepted ||
+                withSortedImports(again.structure) != withSortedImports(original.structure)) {
+                ++changed;
+                std::cout << "CHANGED " << path
+                          << (again.accepted ? " (another AST)" : " (does not parse)") << "\n";
+                if (!again.accepted) {
+                    std::cout << "    " << again.diagnostics.substr(0, 400) << "\n";
+                }
+                continue;
+            }
+            if (again.formatted != original.formatted) {
+                ++unstable;
+                std::cout << "UNSTABLE " << path << "\n";
+            }
+        } catch (const std::exception &e) {
+            ++broken;
+            std::cout << "BROKEN " << path << ": " << e.what() << "\n";
         }
     }
     std::cout << "FMTCHECK files=" << files.size() << " checked=" << checked
               << " skipped(not accepted)=" << skipped << " changed=" << changed
-              << " unstable=" << unstable << "\n";
-    return changed == 0 ? 0 : 1;
+              << " unstable=" << unstable << " broken=" << broken << "\n";
+    return changed == 0 && broken == 0 ? 0 : 1;
 }
 
 } // namespace parsecheck
