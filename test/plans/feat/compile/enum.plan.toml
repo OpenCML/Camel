@@ -330,8 +330,7 @@ name = "refuse_onnx"
 desc = "onnx::export refuses a model whose input is an enum: a model input is a tensor, a number, or a struct or tuple of those."
 kind = "negative"
 case = "../../../cases/compile/enum/refuse_onnx.cml"
-args = ["-E", "short", "${case}", "onnx::export"]
-envs = ["CAMEL_ONNX_OUT=enum_never_written.onnx"]
+args = ["-E", "short", "${case}", "onnx::export(out=\"enum_never_written.onnx\")"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 15
