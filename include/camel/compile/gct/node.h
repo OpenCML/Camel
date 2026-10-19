@@ -32,7 +32,7 @@
  *     DATA              payload: the constant (a pointer to a shared_ptr the tree keeps)
  *     TYPE              payload: the type; tag: ImplMark
  *     DECL              payload: the name; flag: a function is declared
- *     FUNC, NREF, DREF  payload: the name
+ *     FUNC, NREF, DREF  payload: the name; FUNC flag: a decorated block
  *     LINK, WITH        payload: the number of arguments written
  *     ACCS              payload: the index, or the key when the flag is clear
  *     BRCH              tag: BranchKind
@@ -138,6 +138,18 @@ class Node {
                 kind_ == NodeKind::DREF,
             "The node has no name");
         return *payload_.name;
+    }
+
+    /// FUNC: the function a decorated block is (`@d { ... }`, design principles 2.17): its body
+    /// is the block, its ANNO children are the block's decorators, and the LINK that is its
+    /// parent calls it where the block is written.
+    bool decoratedBlock() const {
+        check(NodeKind::FUNC);
+        return (flags_ & kFlagA) != 0;
+    }
+    void setDecoratedBlock() {
+        check(NodeKind::FUNC);
+        flags_ |= kFlagA;
     }
 
     /// DECL: whether a function is declared (else a type).

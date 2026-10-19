@@ -181,6 +181,10 @@ class StmtBlockLoad : public StmtLoad {
     void grantNumeric(uint8_t permissions) { numeric_ |= permissions; }
     uint8_t numeric() const { return numeric_; }
 
+    // A block written with decorators (`@d { ... }`, design principles 2.17) has a second
+    // child, a RepeatedLoad("FuncAnno") of the decorators in the order written; the first is
+    // always the statements.
+
     const std::string toString() const override;
     const std::string geneCode() const override;
 

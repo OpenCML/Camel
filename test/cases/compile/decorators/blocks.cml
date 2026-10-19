@@ -1,0 +1,133 @@
+/**
+ * A decorated block is the block as a function of no parameters, passed to its decorators and
+ * called where it is written (design principles 2.17). It behaves as the same block without
+ * decorators: its scope, its `return` (the value of the block), its value; and in a sync body,
+ * the statements of a block that is not `sync` run only when something needs them (2.2), the
+ * statements of a `sync` block always. Each case is written twice, without and with a
+ * decorator (`plain`, applied as it runs; `mark`, applied as the program is built), and
+ * prints the same.
+ */
+module blocks
+import { plain, mark } from test_attrs
+
+/// A decorator of the program: the function, its result doubled.
+func doubled(f: () => int): () => int {
+    return () => f() * 2
+}
+
+func value_of(x: int): int {
+    let y = x + 1
+    {
+        return y * 10
+    }
+}
+func value_of_d(x: int): int {
+    let y = x + 1
+    @plain
+    {
+        return y * 10
+    }
+}
+
+func middle(x: int): int {
+    {
+        return 100
+    }
+    return x
+}
+func middle_d(x: int): int {
+    @plain
+    {
+        return 100
+    }
+    return x
+}
+
+func unused(tag: string): int sync {
+    {
+        println(tag + " a")
+        println(tag + " b")
+    }
+    println(tag + " after")
+    return 0
+}
+func unused_d(tag: string): int sync {
+    @plain
+    {
+        println(tag + " a")
+        println(tag + " b")
+    }
+    println(tag + " after")
+    return 0
+}
+func unused_m(tag: string): int sync {
+    @mark
+    {
+        println(tag + " a")
+        println(tag + " b")
+    }
+    println(tag + " after")
+    return 0
+}
+
+func synced(tag: string): int sync {
+    sync {
+        println(tag + " a")
+        println(tag + " b")
+    }
+    println(tag + " after")
+    return 0
+}
+func synced_d(tag: string): int sync {
+    @plain sync {
+        println(tag + " a")
+        println(tag + " b")
+    }
+    println(tag + " after")
+    return 0
+}
+
+func writes(x: int): int sync {
+    var v = x
+    sync {
+        v = v + 10
+    }
+    return v
+}
+func writes_d(x: int): int sync {
+    var v = x
+    @plain sync {
+        v = v + 10
+    }
+    return v
+}
+
+func scoped(x: int): int {
+    let y = 1
+    @plain
+    {
+        let y = 2
+    }
+    return x + y
+}
+
+func by_program(x: int): int {
+    @doubled
+    {
+        return x + 1
+    }
+}
+
+func main(): int sync {
+    println(value_of(1), value_of_d(1))
+    println(middle(7), middle_d(7))
+    unused("plain")
+    unused_d("decorated")
+    unused_m("granted")
+    synced("plain")
+    synced_d("decorated")
+    println(writes(5), writes_d(5))
+    println(scoped(3))
+    println(by_program(4))
+    return 0
+}
