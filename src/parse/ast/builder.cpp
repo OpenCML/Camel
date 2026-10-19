@@ -1387,6 +1387,15 @@ Value Builder::visitPattern(cst::Pattern context) {
                         context->get<cst::IdentDef>()->text(),
                     "the only pattern of two words is 'error e'");
         }
+        if (context->get<cst::EnumTuplePattern>() || context->get<cst::EnumStructPattern>() ||
+            context->get<cst::IdentRef>()->text().find("::") != std::string::npos) {
+            // A variant without fields is written by its qualified name (`case Shape::Empty`):
+            // a plain name would be a binding, and what an identifier pattern binds over a
+            // value that is not `T?` / `T!` has not been decided.
+            res = any2node(visitEnumPattern(context, context->get<cst::IdentRef>()));
+            LEAVE("Pattern");
+            return res;
+        }
         res = createNodeAs<RefDataLoad>(Reference(context->get<cst::IdentRef>()->text()));
         setNodeTokenRangeByContext(res, context);
         if (context->get<cst::IdentDef>()) {
@@ -1532,38 +1541,51 @@ Value Builder::visitCtrlExpr(syn::Node context) {
                     "else"),
             });
     } break;
-    case NK::MatchExpr: // MATCH identRef '{' matchCase+ '}'
+    case NK::MatchExpr: // MATCH logicalOrExpr '{' matchCase+ '}'
     {
-        Reference ref(context->get<cst::IdentRef>()->text());
-        ctrlNode = createNodeAs<MatchExprLoad>(ref);
+        ctrlNode = createNodeAs<MatchExprLoad>();
         setNodeTokenRangeByContext(ctrlNode, context);
+        node_ptr_t subjectNode = any2node(visitExpr(context->expr()));
+        // The subject is evaluated once, before the cases; the graph builder tests its value.
+        *ctrlNode << subjectNode;
         node_ptr_t casesNode = createNodeAs<RepeatedLoad>("MatchCase");
         setNodeTokenRangeByContext(casesNode, context);
         cst::MatchCase wildcardCase;
+        bool wildcardSeen = false;
         for (const auto matchCase : context->all<cst::MatchCase>()) {
+            if (wildcardSeen) {
+                // The branch takes its last arm when no value matches, and `case _` always
+                // matches: a case written after it is never taken (it used to be entered in
+                // the wildcard's place).
+                diags_->of(SemanticDiag::MatchCaseAfterWildcard)
+                    .at(rangeOf(matchCase->firstToken(), matchCase->lastToken()))
+                    .commit();
+                continue;
+            }
             // One node per pattern of the case (see visitMatchCase).
             for (const node_ptr_t &caseNode :
                  value_cast<std::vector<node_ptr_t>>(visitMatchCase(matchCase))) {
                 *casesNode << caseNode;
             }
             // The first case that matches is taken, so nothing after the wildcard can be.
-            // The branch takes its last arm when no value matches: a case left after the
-            // wildcard used to be entered in its place.
             if (casesNode->size() > 0 &&
                 casesNode->at(casesNode->size() - 1)->front()->type() == LoadType::Null) {
                 wildcardCase = matchCase;
-                break;
+                wildcardSeen = true;
             }
         }
-        if (wildcardCase && casesNode->size() == 1) {
+        if (wildcardCase && casesNode->size() == 1 &&
+            subjectNode->load()->type() == LoadType::Data &&
+            std::dynamic_pointer_cast<RefDataLoad>(subjectNode->load()) != nullptr) {
             // Only the wildcard is left: the match is its body, whatever the value. A branch
             // without a value to compare is read as an `if` on a boolean, so this is built as
-            // one whose condition is true (the scrutinee used to be read as that boolean, and
-            // an arm that does not exist entered when it was false).
+            // one whose condition is true. Reading the name has no effect, so dropping the
+            // read is not observable; a subject that is a call is kept in the general form
+            // below, which evaluates it.
             ctrlNode = createNodeAs<IfExprLoad>();
             setNodeTokenRangeByContext(ctrlNode, context);
             node_ptr_t condNode = createNodeAs<LiteralLoad>(Literal(LiteralType::Boolean, "true"));
-            setNodeTokenRangeByContext(condNode, context->get<cst::IdentRef>());
+            setNodeTokenRangeByContext(condNode, context);
             node_ptr_t thenNode      = casesNode->at(0)->at(1);
             node_ptr_t elseBlockNode = createNodeAs<OptionalLoad>("StmtBlock");
             setNodeTokenRangeByContext(elseBlockNode, wildcardCase->lastChild().node());
@@ -1599,6 +1621,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
             break;
         }
         *ctrlNode << casesNode;
+        std::string subjectText                        = syn::Node(context->expr())->text();
         std::vector<camel::source::SemanticPart> parts = {
             semanticPart(
                 camel::source::SemanticRole::Keyword,
@@ -1607,12 +1630,9 @@ Value Builder::visitCtrlExpr(syn::Node context) {
                 "match"),
             semanticPart(
                 camel::source::SemanticRole::BranchCondition,
-                deriveAstAnchorOrigin(
-                    ctrlNode,
-                    context->get<cst::IdentRef>(),
-                    "ast.match.scrutinee"),
+                nodeOrigin(subjectNode),
                 -1,
-                ref.ident()),
+                subjectText),
         };
         for (size_t i = 0; i < casesNode->size(); ++i) {
             auto caseOrigin = nodeOrigin(casesNode->at(i));
@@ -2380,6 +2400,34 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             } else if (child.node().is(NK::MemberAccess)) {
                 auto access = cst::MemberAccess(child.node());
                 exprNode    = makeMemberAccess(lhsNode, access->child(0), access->child(1), access);
+            } else if (child.node().is(NK::StructData)) {
+                // `Shape::Rect { w: 2 }`: a struct-shape variant is built from a struct literal,
+                // which is one argument. The graph builder decides by the shape of the variant
+                // whether the literal is its payload or its only field.
+                exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
+                setNodeTokenRangeByContext(exprNode, cst::StructData(child.node()));
+                node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
+                *dataList << any2node(visitStructData(cst::StructData(child.node())));
+                *exprNode << lhsNode << dataList << createNodeAs<RepeatedLoad>("NamedData");
+                registerAstSemanticBundle(
+                    exprNode,
+                    {
+                        semanticPart(
+                            camel::source::SemanticRole::Callee,
+                            nodeOrigin(lhsNode),
+                            -1,
+                            "callee"),
+                        semanticPart(
+                            camel::source::SemanticRole::ArgList,
+                            nodeOrigin(dataList),
+                            -1,
+                            "args"),
+                        semanticPart(
+                            camel::source::SemanticRole::Argument,
+                            nodeOrigin(dataList->front()),
+                            0,
+                            "payload"),
+                    });
             } else if (child.node().is(NK::TypeArguments)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Instantiate);
                 setNodeTokenRangeByContext(exprNode, cst::TypeArguments(child.node()));
@@ -2692,6 +2740,109 @@ Value Builder::visitLiteral(cst::Literal context) {
     }
     Literal literal(type, data);
     return literal;
+}
+
+/*
+pattern
+    : identRef ('(' (pattern (',' pattern)*)? ','? ')' | '{' (IDENTIFIER (':' pattern)? ','?)* '}'
+      | identDef)?
+    | literal
+    | '_'
+    ;
+*/
+Value Builder::visitEnumPattern(cst::Pattern context, cst::IdentRef ref) {
+    ENTER("EnumPattern");
+    const auto structPattern = context->get<cst::EnumStructPattern>();
+    node_ptr_t node =
+        createNodeAs<EnumPatternLoad>(Reference(ref->text()), static_cast<bool>(structPattern));
+    setNodeTokenRangeByContext(node, context);
+    auto &fields    = node->loadAs<EnumPatternLoad>()->fields();
+    const auto bind = [&](cst::Pattern pattern, const std::string &name) {
+        std::string binding;
+        if (pattern->text() != "_") {
+            if (pattern->get<cst::IdentRef>() && !pattern->get<cst::EnumTuplePattern>() &&
+                !pattern->get<cst::EnumStructPattern>()) {
+                binding = pattern->get<cst::IdentRef>()->text();
+            } else {
+                // Nested patterns are read so that the message is about the language rather
+                // than about the grammar; what they would bind has not been decided.
+                diags_->of(SemanticDiag::ConstructNotSupported)
+                    .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
+                    .commit(
+                        pattern->text(),
+                        "a nested pattern is not supported; write a name or '_' for each field and "
+                        "match inside the arm");
+            }
+        }
+        fields.push_back(EnumPatternField{name, binding});
+    };
+    if (structPattern) {
+        for (size_t i = 0; i < structPattern->childCount(); ++i) {
+            const auto child = structPattern->child(i);
+            if (!child.isToken() || child.token()->kind() != TK::Identifier) {
+                continue;
+            }
+            std::string name = child.text();
+            const auto next  = structPattern->child(i + 1);
+            if (next.isToken() && next.token()->kind() == TK::Colon) {
+                const auto value = structPattern->child(i + 2);
+                if (value.isNode()) {
+                    bind(cst::Pattern(value.node()), name);
+                }
+            } else {
+                // `{ w, h }` binds the field of that name.
+                fields.push_back(EnumPatternField{name, name});
+            }
+        }
+    } else if (const auto tuplePattern = context->get<cst::EnumTuplePattern>()) {
+        for (const auto pattern : tuplePattern->all<cst::Pattern>()) {
+            bind(pattern, "");
+        }
+    }
+    LEAVE("EnumPattern");
+    return node;
+}
+
+/*
+enumType
+    : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
+    ;
+enumVariant
+    : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
+    ;
+enumField
+    : identDef ':' typeExpr
+    ;
+*/
+Value Builder::visitEnumType(cst::EnumType context) {
+    ENTER("EnumType");
+    node_ptr_t typeNode = createNodeAs<EnumTypeLoad>();
+    setNodeTokenRangeByContext(typeNode, context);
+    auto &variants = typeNode->loadAs<EnumTypeLoad>()->variants();
+    for (const auto variantContext : context->all<cst::EnumVariant>()) {
+        EnumVariantDecl variant;
+        variant.name = variantContext->get<cst::IdentDef>()->text();
+        // The field types are the child nodes of the declaration, one list per variant in the
+        // order the variants are written; GCT reads them back in that order.
+        node_ptr_t fieldTypes = createNodeAs<RepeatedLoad>("EnumField");
+        setNodeTokenRangeByContext(fieldTypes, variantContext);
+        if (const auto tuple = variantContext->get<cst::TypeList>()) {
+            variant.shape = EnumVariantShape::Tuple;
+            for (const auto type : tuple->types()) {
+                *fieldTypes << any2node(visitType(type));
+            }
+        } else if (variantContext->get<cst::EnumField>()) {
+            variant.shape = EnumVariantShape::Struct;
+            for (const auto field : variantContext->all<cst::EnumField>()) {
+                variant.fieldNames.push_back(field->get<cst::IdentDef>()->text());
+                *fieldTypes << any2node(visitType(field->type()));
+            }
+        }
+        variants.push_back(std::move(variant));
+        *typeNode << fieldTypes;
+    }
+    LEAVE("EnumType");
+    return typeNode;
 }
 
 /*
@@ -3199,6 +3350,8 @@ Value Builder::visitType(syn::Node context) {
         return visitTypeOfType(cst::TypeOfType(context));
     case NK::TypeAsType:
         return visitTypeAsType(cst::TypeAsType(context));
+    case NK::EnumType:
+        return visitEnumType(cst::EnumType(context));
     default:
         throw std::runtime_error(
             "Builder: not a type: " + std::string(syn::nodeKindName(context.kind())));

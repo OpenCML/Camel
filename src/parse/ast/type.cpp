@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -109,6 +109,17 @@ const std::string ArrayTypeLoad::geneCode() const {
 }
 
 const std::string StructTypeLoad::geneCode() const { return "{}"; }
+
+const std::string EnumTypeLoad::geneCode() const {
+    std::string result = "enum {";
+    for (size_t i = 0; i < variants_.size(); ++i) {
+        if (i > 0) {
+            result += ",";
+        }
+        result += variants_[i].name;
+    }
+    return result + "}";
+}
 
 const std::string TupleTypeLoad::geneCode() const { return "()"; }
 

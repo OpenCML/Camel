@@ -200,6 +200,26 @@ const std::string FuncDataLoad::geneCode() const {
 
 const std::string RefDataLoad::geneCode() const { return ref_.toString(); }
 
+const std::string EnumPatternLoad::geneCode() const {
+    std::string result = ref_.toString();
+    result += structShape_ ? "{" : "(";
+    for (size_t i = 0; i < fields_.size(); ++i) {
+        if (i > 0) {
+            result += ",";
+        }
+        if (structShape_) {
+            result += fields_[i].name;
+            if (fields_[i].binding != fields_[i].name) {
+                result += ":" + fields_[i].binding;
+            }
+        } else {
+            result += fields_[i].binding.empty() ? "_" : fields_[i].binding;
+        }
+    }
+    result += structShape_ ? "}" : ")";
+    return result;
+}
+
 } // namespace camel::parse::ast
 
 namespace camel::parse::ast {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -263,6 +263,31 @@ class Node {
         check(NodeKind::CASE);
         return *payload_.name;
     }
+    /// CASE of an enum variant (CaseType::Enum): the variant as written, and the fields the
+    /// pattern binds (design principles 2.13). For a tuple pattern the bindings are one per
+    /// position, in order, with an empty name for `_`; for a struct pattern `fields` and
+    /// `bindings` are the fields written, in the order written.
+    struct EnumCase {
+        const std::string *label;     // `Shape::Rect`
+        const std::string **fields;   // the field names of a struct pattern
+        const std::string **bindings; // the names bound, one per entry of the pattern
+        size_t count;
+
+        static size_t bytesFor(size_t count) {
+            return sizeof(EnumCase) + 2 * count * sizeof(const std::string *);
+        }
+    };
+    const EnumCase &enumCase() const {
+        check(NodeKind::CASE);
+        ASSERT(caseType() == CaseType::Enum, "The case names no enum variant");
+        return *payload_.enumCase;
+    }
+    /// CASE of an enum variant: the pattern is written `{ ... }` (struct) rather than `( ... )`.
+    bool enumStructPattern() const {
+        check(NodeKind::CASE);
+        ASSERT(caseType() == CaseType::Enum, "The case names no enum variant");
+        return (flags_ & kFlagA) != 0;
+    }
 
     /// CAST: the target type.
     Type *targetType() const {
@@ -301,6 +326,7 @@ class Node {
         const std::string *name;
         uint64_t number;
         const NameList *names;
+        const EnumCase *enumCase;
     };
 
     // The meaning of the two kind-specific flags is given with each accessor above.

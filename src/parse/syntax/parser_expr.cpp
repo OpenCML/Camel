@@ -385,10 +385,11 @@ void ParserImpl::parseComp() {
     }
 }
 
-/// annoExpr : accessExpr (indices | parentArgues | angledValues | typeArguments | '!' |
-/// memberAccess)* memberAccess : '.' (IDENTIFIER | INTEGER | REAL) Rule 1: an index, a call, an
+/// annoExpr : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
+/// | memberAccess)* memberAccess : '.' (IDENTIFIER | INTEGER | REAL) Rule 1: an index, a call, an
 /// angle-bracket argument list and the postfix `!` touch the expression before them. For `<` the
-/// lexer has decided already (LAngle).
+/// lexer has decided already (LAngle). `Shape::Rect { w: 2 }` is a struct variant construction:
+/// a struct literal follows a variant path, never a name that could be a value.
 void ParserImpl::parseAnno() {
     const size_t m = mark();
     parseAccess();
@@ -422,6 +423,11 @@ void ParserImpl::parseAnno() {
                 any = true;
                 continue;
             }
+        }
+        if (cur_ == TK::LBrace && braceIsStruct(0) && lastRefIsPath()) {
+            parseStructData();
+            any = true;
+            continue;
         }
         if (cur_ == TK::Dot) {
             const TK member = peek(1);
@@ -810,11 +816,13 @@ void ParserImpl::parseIf() {
     close(m, NK::IfExpr);
 }
 
-/// The `match` of ctrlExpr.
+/// The `match` of ctrlExpr: `match` logicalOrExpr '{' matchCase+ '}'.
+/// The subject is any expression; the `{` after it opens the cases (a struct literal after a
+/// name is read only when the name is a variant path, `Shape::Rect { ... }`).
 void ParserImpl::parseMatch() {
     const size_t m = mark();
     bump();
-    parseIdentRef(NK::IdentRef);
+    parseLogicalOr();
     if (panic_ || !expect(TK::LBrace)) {
         return close(m, NK::MatchExpr);
     }
@@ -849,16 +857,21 @@ void ParserImpl::parseMatchCase() {
     close(m, NK::MatchCase);
 }
 
-/// pattern : identRef identDef? | literal | '(' (dataList | identList)? ','? ')'
-///         | '{' (pairedValues | identList)? ','? '}' | '_'
+/// pattern : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
+///         | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
 /// A parenthesized pattern is read as a dataList (the first alternative, which every identList
-/// also is); a braced one as pairedValues when it starts with `name:` or `...`.
+/// also is); a braced one as pairedValues when it starts with `name:` or `...`. A path with a
+/// `::` followed by `(` or `{` is an enum pattern: the variant and the fields it binds.
 void ParserImpl::parsePattern() {
     const size_t m = mark();
     switch (cur_) {
     case TK::Identifier:
         parseIdentRef(NK::IdentRef);
-        if (cur_ == TK::Identifier) {
+        if (cur_ == TK::LParen) {
+            parseEnumTuplePattern();
+        } else if (cur_ == TK::LBrace) {
+            parseEnumStructPattern();
+        } else if (cur_ == TK::Identifier) {
             parseIdentDef();
         }
         break;
@@ -912,6 +925,54 @@ void ParserImpl::parsePattern() {
         }
     }
     close(m, NK::Pattern);
+}
+
+/// enumTuplePattern : '(' (pattern (',' pattern)*)? ','? ')'
+/// A field the branch does not need is `_`. Nesting is read, so that the compiler can say it is
+/// not supported yet instead of the parser refusing the program.
+void ParserImpl::parseEnumTuplePattern() {
+    const size_t m = mark();
+    bump();
+    {
+        Scope scope(*this, false);
+        if (cur_ != TK::RParen && cur_ != TK::Comma) {
+            parsePattern();
+            while (cur_ == TK::Comma && peek(1) != TK::RParen && !panic_) {
+                bump();
+                parsePattern();
+            }
+        }
+        eat(TK::Comma);
+    }
+    if (!panic_) {
+        expectListEnd(TK::RParen);
+    }
+    close(m, NK::EnumTuplePattern);
+}
+
+/// enumStructPattern : '{' (IDENTIFIER (':' pattern)? ','?)* '}'
+/// `{ w, h }` binds the fields of those names, `{ w: width }` binds the field `w` to `width`,
+/// and `{ w: _ }` binds nothing.
+void ParserImpl::parseEnumStructPattern() {
+    const size_t m = mark();
+    bump();
+    {
+        Scope scope(*this, false);
+        while (cur_ == TK::Identifier && !panic_) {
+            bump();
+            if (eat(TK::Colon)) {
+                parsePattern();
+            }
+            if (cur_ != TK::Comma) {
+                break;
+            }
+            bump();
+        }
+    }
+    if (!panic_) {
+        expectListEnd(TK::RBrace);
+    }
+    close(m, NK::EnumStructPattern);
 }
 
 /// The `try` of ctrlExpr (reserved: the AST builder reports it as not part of the language).
