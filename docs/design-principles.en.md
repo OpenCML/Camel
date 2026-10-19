@@ -512,6 +512,11 @@ Based on [the design review of 2026-10-19](roadmap.cn.md). The first item is the
 - **Parallelism of higher-order functions comes from a declared property** (elements independent of each other), not from a name; a user function declaring the same property can run in parallel too.
 - **Resource declarations are the truth about effects**; a `var` in a signature is checked against them, and a disagreement is a declaration error.
 
+### 2.18 Computation on types (2026-10-19)
+
+- **One language only.** Computing types from types and generating code from the structure of a type are written in the main language: types are compile-time values, type functions are ordinary functions run at compile time, using the same constructs as value-level code (see [Generics over structure](design/generic-structure/README.cn.md)). There is no separate type-level language (such as TypeScript's conditional types, mapped types and `infer`).
+- **No shorthand for what can already be expressed.** New syntax is introduced only where the main language truly cannot express something, and it is a marker or a position, not another set of computation rules. `typeas` is such a case: it binds a type variable at a position in a signature, which the main language could not do. Future `typeof`, `keyof` and the like, if they can be written as compile-time functions taking types as values (such as `fields(T)`), are ordinary functions, not keywords.
+
 ## 3. `macro`
 
 - `macro` is a native marker provided by the language core to help with dynamic graph rewriting: a function marked `macro` can be evaluated early by the `std::macro` pass, which computes the static values and forms a new static graph.
