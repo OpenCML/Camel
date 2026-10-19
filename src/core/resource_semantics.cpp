@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -72,7 +72,8 @@ std::string_view resultAliasName(ResultAlias::Kind kind) {
     return "unknown";
 }
 
-ResourceAccess operandAccess(ResourceClass cls, uint8_t operand, AccessMode mode, std::string name) {
+ResourceAccess
+operandAccess(ResourceClass cls, uint8_t operand, AccessMode mode, std::string name) {
     return ResourceAccess{
         .resource = Resource{.cls = cls, .name = std::move(name)},
         .binding  = ResourceBinding{.kind = ResourceBinding::Kind::Norm, .index = operand},
@@ -94,7 +95,8 @@ ResourceSpec externalAmbient(std::string name, AccessMode mode) {
     return ResourceSpec{.accesses = {ambientAccess(std::move(name), mode)}, .externalEffect = true};
 }
 
-ResourceSpec conservativeResources(size_t normCount, size_t withCount, bool pure, bool externalEffect) {
+ResourceSpec
+conservativeResources(size_t normCount, size_t withCount, bool pure, bool externalEffect) {
     ResourceSpec spec;
     if (pure) {
         return spec;
@@ -102,20 +104,24 @@ ResourceSpec conservativeResources(size_t normCount, size_t withCount, bool pure
     // Every operand may name a resource the operator reads and writes, whole; the result may be
     // any of them. Indexes past a byte are not representable, and no operator has that many.
     for (size_t i = 0; i < normCount && i < 0xFF; ++i) {
-        spec.accesses.push_back(ResourceAccess{
-            .resource = Resource{},
-            .binding  = ResourceBinding{.kind = ResourceBinding::Kind::Norm, .index = uint8_t(i)},
-            .region   = ResourceRegion{.kind = ResourceRegion::Kind::Unknown},
-            .mode     = AccessMode::ReadModifyWrite,
-        });
+        spec.accesses.push_back(
+            ResourceAccess{
+                .resource = Resource{},
+                .binding =
+                    ResourceBinding{.kind = ResourceBinding::Kind::Norm, .index = uint8_t(i)},
+                .region = ResourceRegion{.kind = ResourceRegion::Kind::Unknown},
+                .mode   = AccessMode::ReadModifyWrite,
+            });
     }
     for (size_t i = 0; i < withCount && i < 0xFF; ++i) {
-        spec.accesses.push_back(ResourceAccess{
-            .resource = Resource{},
-            .binding  = ResourceBinding{.kind = ResourceBinding::Kind::With, .index = uint8_t(i)},
-            .region   = ResourceRegion{.kind = ResourceRegion::Kind::Unknown},
-            .mode     = AccessMode::ReadModifyWrite,
-        });
+        spec.accesses.push_back(
+            ResourceAccess{
+                .resource = Resource{},
+                .binding =
+                    ResourceBinding{.kind = ResourceBinding::Kind::With, .index = uint8_t(i)},
+                .region = ResourceRegion{.kind = ResourceRegion::Kind::Unknown},
+                .mode   = AccessMode::ReadModifyWrite,
+            });
     }
     spec.result         = ResultAlias{.kind = ResultAlias::Kind::Unknown};
     spec.externalEffect = externalEffect;
@@ -142,7 +148,8 @@ bool touchesClass(const ResourceSpec &spec, ResourceClass cls, bool writesOnly) 
 }
 
 std::optional<std::string> checkVarParameters(
-    const ResourceSpec &spec, const std::vector<bool> &withVars, const std::vector<bool> &normVars) {
+    const ResourceSpec &spec, const std::vector<bool> &withVars,
+    const std::vector<bool> &normVars) {
     for (const bool isWith : {false, true}) {
         const std::vector<bool> &vars = isWith ? withVars : normVars;
         for (size_t i = 0; i < vars.size(); ++i) {
@@ -150,18 +157,21 @@ std::optional<std::string> checkVarParameters(
             if (vars[i] && !written) {
                 return std::format(
                     "the signature has a var {} parameter {} that the declaration does not write",
-                    isWith ? "with" : "ordinary", i);
+                    isWith ? "with" : "ordinary",
+                    i);
             }
             if (!vars[i] && !isWith) {
                 // A cell or an in-place object is written through a var parameter only.
                 for (const ResourceAccess &access : spec.accesses) {
-                    if (access.binding.kind == ResourceBinding::Kind::Norm && access.binding.index == i &&
-                        writes(access.mode) && (access.resource.cls == ResourceClass::Variable ||
-                                                access.resource.cls == ResourceClass::Object)) {
+                    if (access.binding.kind == ResourceBinding::Kind::Norm &&
+                        access.binding.index == i && writes(access.mode) &&
+                        (access.resource.cls == ResourceClass::Variable ||
+                         access.resource.cls == ResourceClass::Object)) {
                         return std::format(
                             "the declaration writes a {} through ordinary parameter {}, which is "
                             "not a var parameter",
-                            resourceClassName(access.resource.cls), i);
+                            resourceClassName(access.resource.cls),
+                            i);
                     }
                 }
             }
@@ -177,15 +187,18 @@ std::optional<std::string> checkResources(const ResourceSpec &spec) {
     for (const ResourceAccess &access : spec.accesses) {
         const Resource &r = access.resource;
         if (r.cls == ResourceClass::Unknown) {
-            return std::string("an access names the class of its resource (unknown is the reading "
-                               "of an undeclared operator, not a declaration)");
+            return std::string(
+                "an access names the class of its resource (unknown is the reading "
+                "of an undeclared operator, not a declaration)");
         }
         if (named(r.cls) && r.name.empty()) {
             return std::format("a resource of class {} has a name", resourceClassName(r.cls));
         }
         if (!named(r.cls) && !r.name.empty()) {
             return std::format(
-                "a resource of class {} has no name ('{}')", resourceClassName(r.cls), r.name);
+                "a resource of class {} has no name ('{}')",
+                resourceClassName(r.cls),
+                r.name);
         }
         const bool ambientBinding = access.binding.kind == ResourceBinding::Kind::Ambient;
         if ((r.cls == ResourceClass::Ambient) != ambientBinding) {
@@ -207,17 +220,16 @@ std::optional<std::string> checkResources(const ResourceSpec &spec) {
         }
     }
     const ResultAlias::Kind k = spec.result.kind;
-    if ((k == ResultAlias::Kind::Same || k == ResultAlias::Kind::View) && spec.result.operand == 0xFF) {
+    if ((k == ResultAlias::Kind::Same || k == ResultAlias::Kind::View) &&
+        spec.result.operand == 0xFF) {
         return std::format("a result that is {} names its operand", resultAliasName(k));
     }
     return std::nullopt;
 }
 
 std::string toString(const ResourceAccess &access) {
-    std::string out = std::format(
-        "{} {}",
-        accessModeName(access.mode),
-        resourceClassName(access.resource.cls));
+    std::string out =
+        std::format("{} {}", accessModeName(access.mode), resourceClassName(access.resource.cls));
     if (!access.resource.name.empty()) {
         out += " " + access.resource.name;
     }

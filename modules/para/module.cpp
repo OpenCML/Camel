@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,10 +21,10 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
-#include "camel/core/operator_traits.h"
 #include "executor.h"
 
 #include <optional>

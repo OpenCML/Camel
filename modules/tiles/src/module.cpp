@@ -4,12 +4,11 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Public module boundary: function graphs are inspected, never traced by executing the body.
-#include "camel/core/type/tree.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm/gen.h"
 #include "camel/core/mm/root_handle.h"
@@ -22,6 +21,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/tree.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/function_call.h"
 #include "modules/tensor/ops/registry.h"

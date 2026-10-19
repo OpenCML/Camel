@@ -86,7 +86,8 @@ template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Hos
     for (size_t round = 0;; ++round) {
         host.beforeRound(round);
         // Each round: the condition first, then the next element (camel/core/loop_kind.h).
-        if (shape.cond != nullptr && !camel::core::rtdata::fromSlot<bool>(host.callRound(shape.cond, nullptr))) {
+        if (shape.cond != nullptr &&
+            !camel::core::rtdata::fromSlot<bool>(host.callRound(shape.cond, nullptr))) {
             break;
         }
         slot_t element = NullSlot;

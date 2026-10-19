@@ -13,11 +13,10 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Apr. 04, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include <format>
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
@@ -27,6 +26,7 @@
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/utils/utf8.h"
+#include <format>
 
 #include <memory>
 
@@ -230,7 +230,10 @@ slot_t __os_get_char__(ArgsView &with, ArgsView &norm, Context &) {
 
 slot_t __os_get_chars__(ArgsView &with, ArgsView &norm, Context &) {
     Int64 maxChars = norm.get<Int64>(0);
-    return toSlot(checkedString(Terminal::readInput(static_cast<int>(maxChars)), mm::autoSpace(), "os.get_chars"));
+    return toSlot(checkedString(
+        Terminal::readInput(static_cast<int>(maxChars)),
+        mm::autoSpace(),
+        "os.get_chars"));
 }
 
 slot_t __os_clear_input_buffer__(ArgsView &with, ArgsView &norm, Context &) {

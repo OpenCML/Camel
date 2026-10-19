@@ -66,7 +66,11 @@ an integer drops the fraction.
 #### `int`
 
 ```camel
-int: (x: i32 | int | f32 | float | string) => int
+int: (x: i32) => int
+int: (x: int) => int
+int: (x: f32) => int
+int: (x: float) => int
+int: (x: string) => int
 ```
 
 x as a 64-bit integer.
@@ -78,7 +82,11 @@ x as a 64-bit integer.
 #### `i64`
 
 ```camel
-i64: (x: i32 | int | f32 | float | string) => int
+i64: (x: i32) => int
+i64: (x: int) => int
+i64: (x: f32) => int
+i64: (x: float) => int
+i64: (x: string) => int
 ```
 
 The same as int.
@@ -90,7 +98,11 @@ The same as int.
 #### `i32`
 
 ```camel
-i32: (x: i32 | int | f32 | float | string) => i32
+i32: (x: i32) => i32
+i32: (x: int) => i32
+i32: (x: f32) => i32
+i32: (x: float) => i32
+i32: (x: string) => i32
 ```
 
 x as a 32-bit integer.
@@ -102,7 +114,11 @@ x as a 32-bit integer.
 #### `float`
 
 ```camel
-float: (x: i32 | int | f32 | float | string) => float
+float: (x: i32) => float
+float: (x: int) => float
+float: (x: f32) => float
+float: (x: float) => float
+float: (x: string) => float
 ```
 
 x as a 64-bit float.
@@ -114,7 +130,11 @@ x as a 64-bit float.
 #### `f64`
 
 ```camel
-f64: (x: i32 | int | f32 | float | string) => float
+f64: (x: i32) => float
+f64: (x: int) => float
+f64: (x: f32) => float
+f64: (x: float) => float
+f64: (x: string) => float
 ```
 
 The same as float.
@@ -126,7 +146,11 @@ The same as float.
 #### `f32`
 
 ```camel
-f32: (x: i32 | int | f32 | float | string) => f32
+f32: (x: i32) => f32
+f32: (x: int) => f32
+f32: (x: f32) => f32
+f32: (x: float) => f32
+f32: (x: string) => f32
 ```
 
 x as a 32-bit float.
@@ -276,7 +300,8 @@ The strings of xs joined with sep between them.
 #### `len`
 
 ```camel
-len: (x: string | T[]) => int
+len: (x: string) => int
+len: (x: T[]) => int
 ```
 
 The number of bytes of a string, or of elements of an array.
@@ -493,7 +518,8 @@ isolated.
 #### `len`
 
 ```camel
-len: (c: Map<K, V> | Set<T>) => int
+len: (c: Map<K, V>) => int
+len: (c: Set<T>) => int
 ```
 
 The number of entries of a map or of elements of a set.
@@ -537,7 +563,8 @@ A map with value stored under key; an existing entry of that key is replaced. m 
 #### `remove`
 
 ```camel
-remove: <key: K> (c: Map<K, V> | Set<K>) => Map<K, V> | Set<K>
+remove: <key: K> (c: Map<K, V>) => Map<K, V>
+remove: (c: Set<K>) => Set<K>
 ```
 
 A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
@@ -548,7 +575,8 @@ A map without the entry of key, or a set without the element; a key or element t
 #### `has`
 
 ```camel
-has: <key: K> (c: Map<K, V> | Set<K>) => bool
+has: <key: K> (c: Map<K, V>) => bool
+has: (c: Set<K>) => bool
 ```
 
 Whether a map has an entry of key, or a set has the element.
@@ -1360,7 +1388,10 @@ A NaN. It equals nothing, itself included: test with is_nan.
 #### `abs`
 
 ```camel
-abs: (x: i32 | int | f32 | float) => i32 | int | f32 | float
+abs: (x: i32) => i32
+abs: (x: int) => int
+abs: (x: f32) => f32
+abs: (x: float) => float
 ```
 
 The absolute value. The smallest integer has no positive counterpart: its absolute value is
@@ -1372,7 +1403,10 @@ not defined.
 #### `sqrt`
 
 ```camel
-sqrt: (x: i32 | int | f32 | float) => f32 | float
+sqrt: (x: i32) => f32
+sqrt: (x: int) => float
+sqrt: (x: f32) => f32
+sqrt: (x: float) => float
 ```
 
 The square root. An integer argument is converted: i32 gives f32, int gives float.
@@ -1383,7 +1417,8 @@ The square root. An integer argument is converted: i32 gives f32, int gives floa
 #### `exp`
 
 ```camel
-exp: (x: f32 | float) => f32 | float
+exp: (x: f32) => f32
+exp: (x: float) => float
 ```
 
 e raised to the power x.
@@ -1394,7 +1429,8 @@ e raised to the power x.
 #### `expm1`
 
 ```camel
-expm1: (x: f32 | float) => f32 | float
+expm1: (x: f32) => f32
+expm1: (x: float) => float
 ```
 
 exp(x) - 1, accurate for x near 0.
@@ -1405,7 +1441,8 @@ exp(x) - 1, accurate for x near 0.
 #### `log`
 
 ```camel
-log: (x: f32 | float) => f32 | float
+log: (x: f32) => f32
+log: (x: float) => float
 ```
 
 The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is NaN.
@@ -1416,7 +1453,8 @@ The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is N
 #### `log2`
 
 ```camel
-log2: (x: f32 | float) => f32 | float
+log2: (x: f32) => f32
+log2: (x: float) => float
 ```
 
 The logarithm to base 2.
@@ -1427,7 +1465,8 @@ The logarithm to base 2.
 #### `log10`
 
 ```camel
-log10: (x: f32 | float) => f32 | float
+log10: (x: f32) => f32
+log10: (x: float) => float
 ```
 
 The logarithm to base 10.
@@ -1438,7 +1477,8 @@ The logarithm to base 10.
 #### `log1p`
 
 ```camel
-log1p: (x: f32 | float) => f32 | float
+log1p: (x: f32) => f32
+log1p: (x: float) => float
 ```
 
 log(1 + x), accurate for x near 0.
@@ -1449,7 +1489,8 @@ log(1 + x), accurate for x near 0.
 #### `pow`
 
 ```camel
-pow: (x: f32 | float, y: f32 | float) => f32 | float
+pow: (x: f32, y: f32) => f32
+pow: (x: float, y: float) => float
 ```
 
 x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gives NaN.
@@ -1460,7 +1501,8 @@ x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gi
 #### `hypot`
 
 ```camel
-hypot: (x: f32 | float, y: f32 | float) => f32 | float
+hypot: (x: f32, y: f32) => f32
+hypot: (x: float, y: float) => float
 ```
 
 The square root of x*x + y*y, without overflow in the squares.
@@ -1471,7 +1513,8 @@ The square root of x*x + y*y, without overflow in the squares.
 #### `sin`
 
 ```camel
-sin: (x: f32 | float) => f32 | float
+sin: (x: f32) => f32
+sin: (x: float) => float
 ```
 
 The sine of x, x in radians.
@@ -1482,7 +1525,8 @@ The sine of x, x in radians.
 #### `cos`
 
 ```camel
-cos: (x: f32 | float) => f32 | float
+cos: (x: f32) => f32
+cos: (x: float) => float
 ```
 
 The cosine of x, x in radians.
@@ -1493,7 +1537,8 @@ The cosine of x, x in radians.
 #### `tan`
 
 ```camel
-tan: (x: f32 | float) => f32 | float
+tan: (x: f32) => f32
+tan: (x: float) => float
 ```
 
 The tangent of x, x in radians.
@@ -1504,7 +1549,8 @@ The tangent of x, x in radians.
 #### `asin`
 
 ```camel
-asin: (x: f32 | float) => f32 | float
+asin: (x: f32) => f32
+asin: (x: float) => float
 ```
 
 The arc sine, in radians; NaN outside -1 to 1.
@@ -1515,7 +1561,8 @@ The arc sine, in radians; NaN outside -1 to 1.
 #### `acos`
 
 ```camel
-acos: (x: f32 | float) => f32 | float
+acos: (x: f32) => f32
+acos: (x: float) => float
 ```
 
 The arc cosine, in radians; NaN outside -1 to 1.
@@ -1526,7 +1573,8 @@ The arc cosine, in radians; NaN outside -1 to 1.
 #### `atan`
 
 ```camel
-atan: (x: f32 | float) => f32 | float
+atan: (x: f32) => f32
+atan: (x: float) => float
 ```
 
 The arc tangent, in radians.
@@ -1537,7 +1585,8 @@ The arc tangent, in radians.
 #### `atan2`
 
 ```camel
-atan2: (y: f32 | float, x: f32 | float) => f32 | float
+atan2: (y: f32, x: f32) => f32
+atan2: (y: float, x: float) => float
 ```
 
 The angle of the point (x, y) in radians, between -pi and pi. Note the order: y first.
@@ -1548,7 +1597,8 @@ The angle of the point (x, y) in radians, between -pi and pi. Note the order: y 
 #### `sinh`
 
 ```camel
-sinh: (x: f32 | float) => f32 | float
+sinh: (x: f32) => f32
+sinh: (x: float) => float
 ```
 
 The hyperbolic sine.
@@ -1559,7 +1609,8 @@ The hyperbolic sine.
 #### `cosh`
 
 ```camel
-cosh: (x: f32 | float) => f32 | float
+cosh: (x: f32) => f32
+cosh: (x: float) => float
 ```
 
 The hyperbolic cosine.
@@ -1570,7 +1621,8 @@ The hyperbolic cosine.
 #### `tanh`
 
 ```camel
-tanh: (x: f32 | float) => f32 | float
+tanh: (x: f32) => f32
+tanh: (x: float) => float
 ```
 
 The hyperbolic tangent.
@@ -1583,7 +1635,8 @@ The hyperbolic tangent.
 #### `floor`
 
 ```camel
-floor: (x: f32 | float) => f32 | float
+floor: (x: f32) => f32
+floor: (x: float) => float
 ```
 
 The largest whole number not above x, as a float.
@@ -1594,7 +1647,8 @@ The largest whole number not above x, as a float.
 #### `ceil`
 
 ```camel
-ceil: (x: f32 | float) => f32 | float
+ceil: (x: f32) => f32
+ceil: (x: float) => float
 ```
 
 The smallest whole number not below x, as a float.
@@ -1605,7 +1659,8 @@ The smallest whole number not below x, as a float.
 #### `round`
 
 ```camel
-round: (x: f32 | float) => f32 | float
+round: (x: f32) => f32
+round: (x: float) => float
 ```
 
 The nearest whole number, halves away from zero, as a float.
@@ -1616,7 +1671,8 @@ The nearest whole number, halves away from zero, as a float.
 #### `trunc`
 
 ```camel
-trunc: (x: f32 | float) => f32 | float
+trunc: (x: f32) => f32
+trunc: (x: float) => float
 ```
 
 x without its fraction (rounded toward zero), as a float.
@@ -1629,7 +1685,10 @@ x without its fraction (rounded toward zero), as a float.
 #### `min`
 
 ```camel
-min: (a: i32 | int | f32 | float, b: i32 | int | f32 | float) => i32 | int | f32 | float
+min: (a: i32, b: i32) => i32
+min: (a: int, b: int) => int
+min: (a: f32, b: f32) => f32
+min: (a: float, b: float) => float
 ```
 
 The smaller of two numbers of one type (IEEE 754 minimum). With a NaN on either side
@@ -1641,7 +1700,10 @@ the result is NaN; -0 is below +0.
 #### `max`
 
 ```camel
-max: (a: i32 | int | f32 | float, b: i32 | int | f32 | float) => i32 | int | f32 | float
+max: (a: i32, b: i32) => i32
+max: (a: int, b: int) => int
+max: (a: f32, b: f32) => f32
+max: (a: float, b: float) => float
 ```
 
 The larger of two numbers of one type (IEEE 754 maximum). With a NaN on either side
@@ -1653,7 +1715,10 @@ the result is NaN; -0 is below +0.
 #### `clamp`
 
 ```camel
-clamp: (x: i32 | int | f32 | float, lo: i32 | int | f32 | float, hi: i32 | int | f32 | float) => i32 | int | f32 | float
+clamp: (x: i32, lo: i32, hi: i32) => i32
+clamp: (x: int, lo: int, hi: int) => int
+clamp: (x: f32, lo: f32, hi: f32) => f32
+clamp: (x: float, lo: float, hi: float) => float
 ```
 
 x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
@@ -1665,7 +1730,10 @@ x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
 #### `sign`
 
 ```camel
-sign: (x: i32 | int | f32 | float) => i32 | int | f32 | float
+sign: (x: i32) => i32
+sign: (x: int) => int
+sign: (x: f32) => f32
+sign: (x: float) => float
 ```
 
 -1, 0 or 1 by the sign of x, in the type of x. The sign of a NaN is NaN.
@@ -1676,7 +1744,8 @@ sign: (x: i32 | int | f32 | float) => i32 | int | f32 | float
 #### `is_nan`
 
 ```camel
-is_nan: (x: f32 | float) => bool
+is_nan: (x: f32) => bool
+is_nan: (x: float) => bool
 ```
 
 Whether x is a NaN.
@@ -1687,7 +1756,8 @@ Whether x is a NaN.
 #### `is_inf`
 
 ```camel
-is_inf: (x: f32 | float) => bool
+is_inf: (x: f32) => bool
+is_inf: (x: float) => bool
 ```
 
 Whether x is positive or negative infinity.
@@ -1700,7 +1770,8 @@ Whether x is positive or negative infinity.
 #### `gcd`
 
 ```camel
-gcd: (a: i32 | int, b: i32 | int) => i32 | int
+gcd: (a: i32, b: i32) => i32
+gcd: (a: int, b: int) => int
 ```
 
 The greatest common divisor, never negative; gcd(0, 0) is 0.
@@ -1712,7 +1783,8 @@ The greatest common divisor, never negative; gcd(0, 0) is 0.
 #### `lcm`
 
 ```camel
-lcm: (a: i32 | int, b: i32 | int) => i32 | int
+lcm: (a: i32, b: i32) => i32
+lcm: (a: int, b: int) => int
 ```
 
 The least common multiple, never negative; 0 when either argument is 0.
@@ -1724,7 +1796,8 @@ The least common multiple, never negative; 0 when either argument is 0.
 #### `bin`
 
 ```camel
-bin: (x: i32 | int) => string
+bin: (x: i32) => string
+bin: (x: int) => string
 ```
 
 The digits of x in base 2 with the prefix 0b; a negative number is shown as its 64-bit
@@ -1736,7 +1809,8 @@ two's complement.
 #### `oct`
 
 ```camel
-oct: (x: i32 | int) => string
+oct: (x: i32) => string
+oct: (x: int) => string
 ```
 
 The digits of x in base 8 with the prefix 0o.
@@ -1747,7 +1821,8 @@ The digits of x in base 8 with the prefix 0o.
 #### `hex`
 
 ```camel
-hex: (x: i32 | int) => string
+hex: (x: i32) => string
+hex: (x: int) => string
 ```
 
 The digits of x in base 16, in upper case, with the prefix 0x.
@@ -1763,7 +1838,8 @@ bits, `i32` has 32.
 #### `bit_and`
 
 ```camel
-bit_and: (a: i32 | int, b: i32 | int) => i32 | int
+bit_and: (a: i32, b: i32) => i32
+bit_and: (a: int, b: int) => int
 ```
 
 The bits set in both a and b.
@@ -1774,7 +1850,8 @@ The bits set in both a and b.
 #### `bit_or`
 
 ```camel
-bit_or: (a: i32 | int, b: i32 | int) => i32 | int
+bit_or: (a: i32, b: i32) => i32
+bit_or: (a: int, b: int) => int
 ```
 
 The bits set in a or in b.
@@ -1785,7 +1862,8 @@ The bits set in a or in b.
 #### `bit_xor`
 
 ```camel
-bit_xor: (a: i32 | int, b: i32 | int) => i32 | int
+bit_xor: (a: i32, b: i32) => i32
+bit_xor: (a: int, b: int) => int
 ```
 
 The bits set in exactly one of a and b.
@@ -1796,7 +1874,8 @@ The bits set in exactly one of a and b.
 #### `bit_not`
 
 ```camel
-bit_not: (x: i32 | int) => i32 | int
+bit_not: (x: i32) => i32
+bit_not: (x: int) => int
 ```
 
 Every bit of x inverted; the same as the operator ~.
@@ -1807,7 +1886,8 @@ Every bit of x inverted; the same as the operator ~.
 #### `shl`
 
 ```camel
-shl: (x: i32 | int, count: i32 | int) => i32 | int
+shl: (x: i32, count: i32) => i32
+shl: (x: int, count: int) => int
 ```
 
 x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
@@ -1820,7 +1900,8 @@ change. The count may be of either integer type.
 #### `shr`
 
 ```camel
-shr: (x: i32 | int, count: i32 | int) => i32 | int
+shr: (x: i32, count: i32) => i32
+shr: (x: int, count: int) => int
 ```
 
 x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
@@ -1839,7 +1920,10 @@ in float.
 #### `mean`
 
 ```camel
-mean: (xs: (i32 | int | f32 | float)[]) => float
+mean: (xs: i32[]) => float
+mean: (xs: int[]) => float
+mean: (xs: f32[]) => float
+mean: (xs: float[]) => float
 ```
 
 The arithmetic mean; 0 for an empty array.
@@ -1850,7 +1934,10 @@ The arithmetic mean; 0 for an empty array.
 #### `stdev`
 
 ```camel
-stdev: (xs: (i32 | int | f32 | float)[]) => float
+stdev: (xs: i32[]) => float
+stdev: (xs: int[]) => float
+stdev: (xs: f32[]) => float
+stdev: (xs: float[]) => float
 ```
 
 The sample standard deviation (divisor n - 1); 0 for fewer than two elements.
@@ -1861,7 +1948,10 @@ The sample standard deviation (divisor n - 1); 0 for fewer than two elements.
 #### `variance`
 
 ```camel
-variance: (xs: (i32 | int | f32 | float)[]) => float
+variance: (xs: i32[]) => float
+variance: (xs: int[]) => float
+variance: (xs: f32[]) => float
+variance: (xs: float[]) => float
 ```
 
 The sample variance (divisor n - 1), the square of stdev; 0 for fewer than two elements.
@@ -1872,7 +1962,10 @@ The sample variance (divisor n - 1), the square of stdev; 0 for fewer than two e
 #### `median`
 
 ```camel
-median: (xs: (i32 | int | f32 | float)[]) => float?
+median: (xs: i32[]) => float?
+median: (xs: int[]) => float?
+median: (xs: f32[]) => float?
+median: (xs: float[]) => float?
 ```
 
 The middle value of the sorted elements, the mean of the two middle ones for an even
@@ -1884,7 +1977,10 @@ count; null for an empty array, NaN when an element is NaN.
 #### `quantile`
 
 ```camel
-quantile: <q: float> (xs: (i32 | int | f32 | float)[]) => float?
+quantile: <q: float> (xs: i32[]) => float?
+quantile: (xs: int[]) => float?
+quantile: (xs: f32[]) => float?
+quantile: (xs: float[]) => float?
 ```
 
 The q-quantile, q from 0 to 1, by linear interpolation between the two nearest ranks
@@ -1993,7 +2089,12 @@ module.
 #### `argsort`
 
 ```camel
-argsort: (keys: (i32 | int | f32 | float | bool | string)[]) => int[]
+argsort: (keys: i32[]) => int[]
+argsort: (keys: int[]) => int[]
+argsort: (keys: f32[]) => int[]
+argsort: (keys: float[]) => int[]
+argsort: (keys: bool[]) => int[]
+argsort: (keys: string[]) => int[]
 ```
 
 The positions of the keys in ascending order of key; equal keys keep their order (a stable
@@ -2473,7 +2574,8 @@ examples below, `j` is a Json decoded so.
 #### `decode_as`
 
 ```camel
-decode_as: <shape: T> (text: string | Json) => T!
+decode_as: <shape: T> (text: string) => T!
+decode_as: (text: Json) => T!
 ```
 
 The value a JSON text (or a Json decoded before) describes, decoded to the type of shape;
@@ -2509,7 +2611,8 @@ Whether a Json is the JSON null.
 #### `get`
 
 ```camel
-get: <key: string> (j: Json | Json?) => Json?
+get: <key: string> (j: Json) => Json?
+get: (j: Json?) => Json?
 ```
 
 The member key of an object; null when j is not an object, has no such member, or is null
@@ -2521,7 +2624,8 @@ itself (so that calls chain: j->get<'a'>->get<'b'>).
 #### `get`
 
 ```camel
-get: <index: int> (j: Json | Json?) => Json?
+get: <index: int> (j: Json) => Json?
+get: (j: Json?) => Json?
 ```
 
 The element index of an array; null when j is not an array, the index is out of range, or j
@@ -2533,7 +2637,8 @@ is null itself.
 #### `as_bool`
 
 ```camel
-as_bool: (j: Json | Json?) => bool?
+as_bool: (j: Json) => bool?
+as_bool: (j: Json?) => bool?
 ```
 
 The bool a Json holds; null for any other kind.
@@ -2544,7 +2649,8 @@ The bool a Json holds; null for any other kind.
 #### `as_int`
 
 ```camel
-as_int: (j: Json | Json?) => int?
+as_int: (j: Json) => int?
+as_int: (j: Json?) => int?
 ```
 
 The integer a Json holds; null for any other kind (a number with a fraction is not an int).
@@ -2555,7 +2661,8 @@ The integer a Json holds; null for any other kind (a number with a fraction is n
 #### `as_float`
 
 ```camel
-as_float: (j: Json | Json?) => float?
+as_float: (j: Json) => float?
+as_float: (j: Json?) => float?
 ```
 
 The number a Json holds, an integer included; null for any other kind.
@@ -2566,7 +2673,8 @@ The number a Json holds, an integer included; null for any other kind.
 #### `as_string`
 
 ```camel
-as_string: (j: Json | Json?) => string?
+as_string: (j: Json) => string?
+as_string: (j: Json?) => string?
 ```
 
 The string a Json holds; null for any other kind.
@@ -2577,7 +2685,8 @@ The string a Json holds; null for any other kind.
 #### `as_array`
 
 ```camel
-as_array: (j: Json | Json?) => Json[]?
+as_array: (j: Json) => Json[]?
+as_array: (j: Json?) => Json[]?
 ```
 
 The elements of a JSON array; null for any other kind.
@@ -2588,7 +2697,8 @@ The elements of a JSON array; null for any other kind.
 #### `as_object`
 
 ```camel
-as_object: (j: Json | Json?) => Map<string, Json>?
+as_object: (j: Json) => Map<string, Json>?
+as_object: (j: Json?) => Map<string, Json>?
 ```
 
 The members of a JSON object, by name; null for any other kind.

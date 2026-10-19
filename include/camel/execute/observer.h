@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,12 +59,12 @@ enum class InstructionEffect : uint8_t {
 };
 
 struct InstructionSite {
-    size_t pc                          = 0;
-    core::context::Frame *frame        = nullptr;
-    camel::source::origin_id_t origin  = camel::source::kInvalidOriginId;
+    size_t pc                         = 0;
+    core::context::Frame *frame       = nullptr;
+    camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
     /// The frame slot the instruction writes its result to; 0 when it writes none.
-    int32_t resultSlot                 = 0;
-    InstructionEffect effect           = InstructionEffect::None;
+    int32_t resultSlot       = 0;
+    InstructionEffect effect = InstructionEffect::None;
 };
 
 class ExecutionObserver {

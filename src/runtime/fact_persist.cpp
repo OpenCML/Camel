@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,7 +81,7 @@ std::string mangled(const camel::core::type::Type *type) { return type ? type->m
 /// The value of a static constant: a scalar by its bits, an object by its printed form.
 void hashStatic(Fnv &h, const GCGraph &graph, const GCNode &node) {
     const camel::core::type::Type *type = node.dataType();
-    const slot_t slot = graph.staticArea()->get<slot_t>(size_t(-node.dataIndex));
+    const slot_t slot                   = graph.staticArea()->get<slot_t>(size_t(-node.dataIndex));
     if (type == nullptr || !type->isGCTraced()) {
         h.u64(static_cast<uint64_t>(slot));
         return;
@@ -132,10 +132,11 @@ uint64_t ownContentHash(const GCGraph &graph) {
             h.str(key ? key->toString() : "");
             const auto traits = table.find(oper);
             h.u64(
-                !traits ? 0xFF
-                        : (uint64_t(traits->pure) | uint64_t(traits->elementwise) << 1 |
-                           uint64_t(traits->stateOnly) << 2 | uint64_t(traits->mayFault) << 3 |
-                           uint64_t(traits->callsGraphs) << 4 | uint64_t(traits->inspectsGraphs) << 5));
+                !traits
+                    ? 0xFF
+                    : (uint64_t(traits->pure) | uint64_t(traits->elementwise) << 1 |
+                       uint64_t(traits->stateOnly) << 2 | uint64_t(traits->mayFault) << 3 |
+                       uint64_t(traits->callsGraphs) << 4 | uint64_t(traits->inspectsGraphs) << 5));
             break;
         }
         case GCNodeKind::Func:
@@ -192,7 +193,7 @@ uint64_t ownContentHash(const GCGraph &graph) {
 }
 
 std::string_view field(std::string_view &rest) {
-    const size_t tab = rest.find('\t');
+    const size_t tab           = rest.find('\t');
     const std::string_view out = rest.substr(0, tab);
     rest = tab == std::string_view::npos ? std::string_view{} : rest.substr(tab + 1);
     return out;
@@ -262,9 +263,9 @@ std::string toText(const PortableFact &fact) {
 
 std::optional<PortableFact> parsePortableFact(std::string_view line) {
     PortableFact fact;
-    std::string_view rest = line;
-    fact.kind             = std::string(field(rest));
-    const auto version    = number<uint16_t>(field(rest));
+    std::string_view rest          = line;
+    fact.kind                      = std::string(field(rest));
+    const auto version             = number<uint16_t>(field(rest));
     const std::string_view anchors = field(rest);
     const std::string_view hashes  = field(rest);
     fact.value                     = std::string(rest);
@@ -305,24 +306,24 @@ std::vector<PortableFact> exportFacts(FactStore &store, GCGraph *root) {
         byLineage.emplace(graph->lineage(), graph);
     }
     std::unordered_map<const GCGraph *, uint64_t> hashes;
-    const auto portable = [&](const KindInfo &kind, std::span<const Anchor> anchors,
-                              const void *value) {
-        PortableFact fact{.kind = kind.key, .version = kind.version};
-        std::vector<const GCGraph *> distinct;
-        for (const Anchor &anchor : anchors) {
-            fact.anchors.emplace_back(anchor.graph->stableId(), anchor.node);
-            if (std::find(distinct.begin(), distinct.end(), anchor.graph) == distinct.end()) {
-                distinct.push_back(anchor.graph);
-                auto [it, inserted] = hashes.try_emplace(anchor.graph, 0);
-                if (inserted) {
-                    it->second = portableGraphHash(anchor.graph);
+    const auto portable =
+        [&](const KindInfo &kind, std::span<const Anchor> anchors, const void *value) {
+            PortableFact fact{.kind = kind.key, .version = kind.version};
+            std::vector<const GCGraph *> distinct;
+            for (const Anchor &anchor : anchors) {
+                fact.anchors.emplace_back(anchor.graph->stableId(), anchor.node);
+                if (std::find(distinct.begin(), distinct.end(), anchor.graph) == distinct.end()) {
+                    distinct.push_back(anchor.graph);
+                    auto [it, inserted] = hashes.try_emplace(anchor.graph, 0);
+                    if (inserted) {
+                        it->second = portableGraphHash(anchor.graph);
+                    }
+                    fact.graphHashes.push_back(it->second);
                 }
-                fact.graphHashes.push_back(it->second);
             }
-        }
-        fact.value = kind.encode(value);
-        return fact;
-    };
+            fact.value = kind.encode(value);
+            return fact;
+        };
 
     std::vector<PortableFact> out;
     std::vector<StoredFact> stored;

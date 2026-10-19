@@ -1,0 +1,65 @@
+// Enums: construction, matching, printing and equality (design principles 2.13).
+
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+type Slot = enum {
+    Empty,
+    Full(Shape),
+}
+
+func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+        case Shape::Rect { w, h } => w * h
+        case Shape::Empty => 0.0
+    }
+}
+
+func describe(s: Shape): string {
+    return match s {
+        case Shape::Circle(r) => "circle"
+        case Shape::Rect { w, h } => "rect"
+        case _ => "empty"
+    }
+}
+
+func main(): void sync {
+    let a = Shape::Circle(1.0)
+    let b = Shape::Rect { w: 2.0, h: 3.0 }
+    let c = Shape::Empty
+
+    println(area(a))
+    println(area(b))
+    println(area(c))
+    println(describe(a))
+    println(describe(b))
+    println(describe(c))
+
+    println(a)
+    println(b)
+    println(c)
+
+    println(a == Shape::Circle(1.0))
+    println(a == Shape::Circle(2.0))
+    println(b == Shape::Rect { w: 2.0, h: 3.0 })
+    println(b != Shape::Rect { w: 2.0, h: 4.0 })
+    println(c == Shape::Empty)
+    println(a != b)
+
+    // A variant of a variant: an enum is a value like any other.
+    let full = Slot::Full(b)
+    println(full)
+    println(full == Slot::Full(b))
+    println(full == Slot::Empty)
+
+    // An array of enums, read back and matched.
+    let shapes: Shape[] = [a, b, c]
+    let total = loop sum = 0.0 for shape in shapes do {
+        sum + area(shape)
+    }
+    println(total)
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -58,6 +58,7 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
     case TK::Lt:
     case TK::KwTypeof:
     case TK::KwTypeas:
+    case TK::KwEnum:
         return true;
     default:
         return false;
@@ -143,8 +144,7 @@ void ParserImpl::parseKeyUnionDiffType() {
     const size_t m = mark();
     parseKeyInterType();
     bool any = false;
-    while ((cur_ == TK::Plus || cur_ == TK::Minus) && typeStartsAt(1) && !lineBreak() &&
-           !panic_) {
+    while ((cur_ == TK::Plus || cur_ == TK::Minus) && typeStartsAt(1) && !lineBreak() && !panic_) {
         bump();
         parseKeyInterType();
         any = true;
@@ -227,7 +227,7 @@ void ParserImpl::parseSpecType() {
     close(m, NK::SpecType);
 }
 
-/// primaryType : structType | identRef | '(' typeExpr ')' | tupleType | funcType
+/// primaryType : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
 ///             | 'typeof' dataExpr | 'typeas' identDef
 /// tupleType   : '(' typeList? ','? ')'
 /// A `(` opens a function type when its head is that of a parameter list (`(name:`, `(var`, or
@@ -239,6 +239,8 @@ void ParserImpl::parsePrimaryType() {
         return parseIdentRef(NK::RefType);
     case TK::LBrace:
         return parseStructType();
+    case TK::KwEnum:
+        return parseEnumType();
     case TK::Lt:
     case TK::KwSync:
     case TK::KwMacro:
@@ -360,6 +362,79 @@ void ParserImpl::parseTypeList(TK closer) {
         parseType();
     }
     close(m, NK::TypeList);
+}
+
+/// enumType : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
+/// A variant without a field list is a unit variant; `Name(T, ...)` carries a tuple and
+/// `Name { field: T, ... }` a struct. The names of the fields of a struct variant are part of
+/// its declaration, so a variant is written in one of those two shapes only.
+void ParserImpl::parseEnumType() {
+    const size_t m = mark();
+    bump();
+    if (!expect(TK::LBrace)) {
+        return;
+    }
+    {
+        Scope scope(*this, false);
+        if (cur_ == TK::Identifier) {
+            parseEnumVariant();
+            while (cur_ == TK::Comma && peek(1) == TK::Identifier && !panic_) {
+                bump();
+                parseEnumVariant();
+            }
+        }
+        eat(TK::Comma);
+    }
+    if (!panic_) {
+        expectListEnd(TK::RBrace);
+    }
+    close(m, NK::EnumType);
+}
+
+/// enumVariant : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
+void ParserImpl::parseEnumVariant() {
+    const size_t m = mark();
+    parseIdentDef();
+    if (!panic_ && cur_ == TK::LParen) {
+        bump();
+        {
+            Scope scope(*this, false);
+            if (cur_ != TK::RParen && cur_ != TK::Comma) {
+                parseTypeList(TK::RParen);
+            }
+            eat(TK::Comma);
+        }
+        if (!panic_) {
+            expectListEnd(TK::RParen);
+        }
+    } else if (!panic_ && cur_ == TK::LBrace) {
+        bump();
+        {
+            Scope scope(*this, false);
+            if (cur_ == TK::Identifier) {
+                parseEnumField();
+                while (cur_ == TK::Comma && peek(1) == TK::Identifier && !panic_) {
+                    bump();
+                    parseEnumField();
+                }
+            }
+            eat(TK::Comma);
+        }
+        if (!panic_) {
+            expectListEnd(TK::RBrace);
+        }
+    }
+    close(m, NK::EnumVariant);
+}
+
+/// enumField : identDef ':' typeExpr
+void ParserImpl::parseEnumField() {
+    const size_t m = mark();
+    parseIdentDef();
+    if (!panic_ && expect(TK::Colon)) {
+        parseType();
+    }
+    close(m, NK::EnumField);
 }
 
 } // namespace camel::parse::syntax

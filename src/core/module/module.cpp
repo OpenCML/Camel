@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -186,8 +186,7 @@ void Module::markImportedRefFromMod(const Reference &ref, const module_ptr_t &mo
 }
 
 void Module::markImportedRefFromMod(
-    const Reference &localRef, const Reference &remoteRef, const module_ptr_t &mod,
-    bool ambient) {
+    const Reference &localRef, const Reference &remoteRef, const module_ptr_t &mod, bool ambient) {
     auto &vec = importedRefMap_[localRef];
     auto it   = std::find_if(vec.begin(), vec.end(), [&](const ImportedRefBinding &binding) {
         return binding.mod == mod && binding.remoteRef == remoteRef;

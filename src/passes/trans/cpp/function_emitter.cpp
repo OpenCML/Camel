@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1611,7 +1611,7 @@ bool FunctionEmitter::lowerHigherOrder(
     // The generated program's own runtime (hof.h) has one entry per shape of call; which one an
     // operator uses is its declaration's (OperatorSemantics::elementCalls).
     using camel::core::sem::ElementShape;
-    const GCGraph *g = frame.graph;
+    const GCGraph *g  = frame.graph;
     const auto *calls = camel::core::OperatorTable::instance().elementCalls(operatorId(g, ref));
     if (calls == nullptr) {
         return false;

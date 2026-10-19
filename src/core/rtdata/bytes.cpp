@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -13,10 +13,10 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/utils/utf8.h"
-#include <string>
 #include <cstring>
 #include <limits>
 #include <ostream>
+#include <string>
 namespace camel::core::rtdata {
 BytesObject::BytesObject(size_t length) : length_(length) {}
 BytesObject *BytesObject::from(std::string_view bytes, mm::IAllocator &allocator) {

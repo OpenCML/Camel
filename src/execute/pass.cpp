@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,11 +27,11 @@
 #include "camel/core/process_exit.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
-#include "pass_spec.h"
 #include "camel/passes/test/control.h"
 #include "camel/passes/trans/json/gir.h"
 #include "camel/runtime/capacity.h"
 #include "macro/macro.h"
+#include "pass_spec.h"
 #include "passes/opt/devirtualize/devirtualize.h"
 #include "passes/opt/generic/generic.h"
 #include "passes/opt/inline/inline.h"
@@ -64,9 +64,9 @@
 #include <format>
 #include <iostream>
 #include <map>
-#include <set>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -387,16 +387,17 @@ PassParam statsParameter() {
 
 PassDescriptor fastVmDescriptor(bool jit) {
     PassDescriptor d;
-    d.doc    = jit ? "the bytecode interpreter with on-demand native code"
-                   : "the bytecode interpreter";
+    d.doc =
+        jit ? "the bytecode interpreter with on-demand native code" : "the bytecode interpreter";
     d.params = {nativeLoopParameter(), statsParameter()};
     if (jit) {
-        d.params.push_back(PassParam{
-            "hot_threshold",
-            PassParamType::Int,
-            int64_t{1},
-            "calls from one call site before a graph is compiled; 0 compiles at the first call "
-            "(short test programs then run as compiled code too)"});
+        d.params.push_back(
+            PassParam{
+                "hot_threshold",
+                PassParamType::Int,
+                int64_t{1},
+                "calls from one call site before a graph is compiled; 0 compiles at the first call "
+                "(short test programs then run as compiled code too)"});
     }
     d.make = [jit](const context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config = jit ? makeDefaultFastVmJitConfig() : FastVMConfig{};
@@ -833,11 +834,11 @@ std::string resolveAlias(const std::string &name) {
 /// Test-only passes, off unless the environment enables them (CAMEL_ENABLE_TEST_PASSES is a
 /// gate on what exists, not a setting of a pass).
 const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
-#define TEST_PASS(K, T)                                                                           \
-    {                                                                                             \
-        K, [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {                         \
-            return std::make_unique<T>(ctx);                                                      \
-        }                                                                                         \
+#define TEST_PASS(K, T)                                                                            \
+    {                                                                                              \
+        K, [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {                          \
+            return std::make_unique<T>(ctx);                                                       \
+        }                                                                                          \
     }
     static const std::vector<std::pair<std::string, PassFactory>> table = {
         TEST_PASS(kNativeCallbackTestPass, NativeCallbackTestPass),
@@ -1054,6 +1055,25 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
         }
     }
     return std::nullopt;
+}
+
+bool passListTranslatesProgram(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+    for (const auto &name : passes) {
+        auto factory = resolvePass(name).factory;
+        if (!factory) {
+            continue;
+        }
+        const auto pass = factory(ctx);
+        // The first pass that consumes the graph decides what the list does. Before it, rewrite
+        // passes only transform the program; after it, the graph is gone.
+        if (dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
+            return true;
+        }
+        if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
+            return false;
+        }
+    }
+    return false;
 }
 
 std::vector<std::string> withDefaultPipelinePasses(

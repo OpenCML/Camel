@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -97,9 +97,9 @@ class BytesExecutor final : public Executor {
 class BytesModule final : public BuiltinModule {
   public:
     explicit BytesModule(context_ptr_t ctx) : BuiltinModule("bytes", std::move(ctx)) {
-        auto *b = BytesType::get();
-        auto *s = Type::String();
-        auto *a = ArrayType::create(Type::Int64());
+        auto *b        = BytesType::get();
+        auto *s        = Type::String();
+        auto *a        = ArrayType::create(Type::Int64());
         const auto add = [&](const std::string &name, const param_init_list_t &args, Type *result) {
             exportEntity(
                 name,

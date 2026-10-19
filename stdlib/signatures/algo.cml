@@ -74,6 +74,21 @@ inner func unique(xs: T[]): T[] {
 /// primitive behind `sort_by` of the `array` module.
 /// @pure
 /// @example argsort([30, 10, 20])    // [1, 2, 0]
-inner func argsort(keys: (i32 | int | f32 | float | bool | string)[]): int[] {
+inner func argsort(keys: i32[]): int[] {
+    return 'algo:argsort'
+}
+inner func argsort(keys: int[]): int[] {
+    return 'algo:argsort'
+}
+inner func argsort(keys: f32[]): int[] {
+    return 'algo:argsort'
+}
+inner func argsort(keys: float[]): int[] {
+    return 'algo:argsort'
+}
+inner func argsort(keys: bool[]): int[] {
+    return 'algo:argsort'
+}
+inner func argsort(keys: string[]): int[] {
     return 'algo:argsort'
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,12 +82,15 @@ enum class TypeCode : uint32_t {
     Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00C),
     // 0x00D was `any`, removed (design principles 2.11, 2.12): no value has a type that is
     // undetermined after compilation.
-    Union    = makeTypeCode(TypeFlag::Composite | TypeFlag::Auxiliary, 0x00E),
+    Union = makeTypeCode(TypeFlag::Composite | TypeFlag::Auxiliary, 0x00E),
     // Compile-time only (camel/core/type/typevar.h): a type variable of a generic function
     // or of a parameterised type declaration, and a parameterised type declaration itself.
     // Neither is the type of a node of a graph.
     TypeVar  = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00F),
     TypeFunc = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x010),
+    // The argument of a pending enum instance that its value does not determine (`Option<_>`).
+    // Compile time only: no value has this type.
+    EnumHole = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x011),
     Other    = makeTypeCode(TypeFlag::OtherType, 0x000),
 };
 

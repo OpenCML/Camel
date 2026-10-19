@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -123,6 +123,8 @@ string typeCodeToString(TypeCode code) {
         return "typevar";
     case TypeCode::TypeFunc:
         return "typefunc";
+    case TypeCode::EnumHole:
+        return "_";
     default:
         return isOtherType(code) ? OtherTypeRegistry::getTypeName(code) : "unknown";
     }
@@ -157,6 +159,8 @@ std::string Type::mangle() const {
         return "s";
     case TypeCode::Ref:
         return "r";
+    case TypeCode::EnumHole:
+        return "H";
     default:
         ASSERT(false, "Unknown TypeCode");
         return "";

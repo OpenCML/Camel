@@ -72,8 +72,8 @@ class PassArgs {
     std::map<std::string, bool> written_;
 };
 
-using PassMaker = std::function<
-    std::unique_ptr<GraphIRPass>(const camel::core::context::context_ptr_t &, const PassArgs &)>;
+using PassMaker = std::function<std::unique_ptr<GraphIRPass>(
+    const camel::core::context::context_ptr_t &, const PassArgs &)>;
 
 /// What a pass declares about itself.
 struct PassDescriptor {

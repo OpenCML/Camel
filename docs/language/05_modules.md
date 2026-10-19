@@ -47,7 +47,7 @@ func main(): int sync {
 
 ### 5.2.1 随 Camel 提供的模块
 
-不需要导入就能用的名字（全局内建）：`print`、`println`、`input`、`format`、`join`、`len`、`range`、`zip`、`head`、`tail`、`slice`、`concat`、`append`、`extend`、`contains`、`map`、`filter`、`reduce`、`foreach`、`exit`、`sleep`、`error`、`parse_int`、`parse_float`、转换函数（`int`、`float`、`string` 等），以及映射与集合的操作（[3.5](03_data_model.md#35-映射与集合)）。
+不需要导入就能用的名字（全局内建）：`print`、`println`、`input`、`format`、`join`、`len`、`range`、`zip`、`head`、`tail`、`slice`、`concat`、`append`、`extend`、`contains`、`map`、`filter`、`reduce`、`foreach`、`exit`、`sleep`、`error`、`parse_int`、`parse_float`、转换函数（`int`、`float`、`string` 等），以及映射与集合的操作（[3.6](03_data_model.md#36-映射与集合)）。
 
 | 模块 | 内容 |
 |---|---|

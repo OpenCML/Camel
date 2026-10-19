@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,15 +36,15 @@
 
 #include <algorithm>
 #include <array>
-#include <functional>
-#include <memory>
-#include <mutex>
-#include <unordered_map>
 #include <cmath>
 #include <deque>
+#include <functional>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <type_traits>
+#include <unordered_map>
 
 namespace camel::passes::generic {
 namespace {
@@ -422,7 +422,7 @@ bool simplify(
 size_t algebraDraft(GraphDraft &draft, const sem::NumericPolicy &policy) {
     // Fixed-depth matching, and at most four times the original node count in visits. The queue
     // revisits affected users without repeatedly scanning the graph or expanding shared DAGs.
-    const size_t slots = draft.nodeSlotCount();
+    const size_t slots  = draft.nodeSlotCount();
     const auto families = Families::current();
     const WrittenSlots written(draft);
     size_t budget = slots * 4, changed = 0;

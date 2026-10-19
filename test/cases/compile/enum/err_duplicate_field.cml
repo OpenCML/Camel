@@ -1,0 +1,8 @@
+type Pair = enum {
+    Both { a: int, a: float },
+    None,
+}
+
+func main(): void sync {
+    println(Pair::None)
+}

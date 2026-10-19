@@ -85,10 +85,10 @@ enum class ValueKind : uint8_t { Unit, Flags, Int, Symbol, Graph, Tuple };
 /// A value, decoded.
 struct Value {
     ValueKind kind = ValueKind::Unit;
-    std::vector<uint64_t> words;     // Flags: bit i of the set is bit i % 64 of word i / 64
-    int64_t integer = 0;             // Int
-    std::string text;                // Symbol; Graph: the graph's stable id
-    std::vector<AttrValueId> items;  // Tuple
+    std::vector<uint64_t> words;    // Flags: bit i of the set is bit i % 64 of word i / 64
+    int64_t integer = 0;            // Int
+    std::string text;               // Symbol; Graph: the graph's stable id
+    std::vector<AttrValueId> items; // Tuple
 };
 
 AttrValueId unit();
@@ -152,8 +152,8 @@ std::optional<KeySpec> specOf(AttrKey key);
 // ---- Sets ----------------------------------------------------------------------------------
 
 struct Attr {
-    AttrKey key       = kNoKey;
-    AttrValueId value = kNoValue;
+    AttrKey key                         = kNoKey;
+    AttrValueId value                   = kNoValue;
     bool operator==(const Attr &) const = default;
 };
 

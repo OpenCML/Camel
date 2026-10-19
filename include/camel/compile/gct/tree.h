@@ -98,6 +98,11 @@ class Tree {
     node_ptr_t makeAccs(const std::string &key);
     node_ptr_t makeBrch(BranchKind kind = BranchKind::Cond);
     node_ptr_t makeCase(CaseType type, const std::string &binding = {});
+    /// A CASE of an enum variant: `label` the variant as written (`Shape::Rect`), `fields` and
+    /// `bindings` the entries of the pattern in the order written (see Node::EnumCase).
+    node_ptr_t makeEnumCase(
+        const std::string &label, const std::vector<std::string> &fields,
+        const std::vector<std::string> &bindings, bool structShape);
     node_ptr_t makeCast(Type *targetType, bool annotation = false);
     node_ptr_t makeAnno();
     node_ptr_t makeExit(ExitType type = ExitType::Return);

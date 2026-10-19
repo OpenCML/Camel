@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -181,12 +181,12 @@ GraphArenaLayout planGraphArenaLayout(
                                                      alignof(gc_payload_word_t))
                                                : 0,
         // The attribute column, only when some node has attributes.
-        .attrBytes = payload.attrs ? camel::core::mm::alignUp(
-                                         sizeof(uint32_t) * static_cast<size_t>(payload.nodeCount),
-                                         alignof(gc_payload_word_t))
-                                   : 0,
-        .payloadBytes    = bytesForArray<gc_payload_word_t>(payload.payloadWordCount),
-        .inputBytes      = camel::core::mm::alignUp(
+        .attrBytes    = payload.attrs ? camel::core::mm::alignUp(
+                                            sizeof(uint32_t) * static_cast<size_t>(payload.nodeCount),
+                                            alignof(gc_payload_word_t))
+                                      : 0,
+        .payloadBytes = bytesForArray<gc_payload_word_t>(payload.payloadWordCount),
+        .inputBytes   = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.edgeCount),
             alignof(gc_node_ref_t)),
         .normPortBytes = camel::core::mm::alignUp(
@@ -205,9 +205,8 @@ GraphArenaLayout planGraphArenaLayout(
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
         layout.nodeBytes + layout.originBytes + layout.permissionBytes + layout.attrBytes +
-        layout.payloadBytes +
-        layout.inputBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes +
-        layout.branchArmBytes;
+        layout.payloadBytes + layout.inputBytes + layout.normPortBytes + layout.withPortBytes +
+        layout.closureBytes + layout.branchArmBytes;
     // The frame layout comes last. The arrays before it may end at any 2-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
     if (frameSlots) {

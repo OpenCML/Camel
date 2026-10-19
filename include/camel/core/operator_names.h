@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,7 +49,8 @@ namespace camel::core {
 /// `+` with two, `__neg__` for `-` with one, `__idx__` for `[]` with two or more. nullopt when
 /// that operator cannot be overloaded with that many parameters (whyNotOverloadable and
 /// arityOf say why).
-std::optional<std::string_view> overloadableOperatorGroup(std::string_view symbol, size_t paramCount);
+std::optional<std::string_view>
+overloadableOperatorGroup(std::string_view symbol, size_t paramCount);
 
 /// The group a binary operator written `symbol` calls: `__add__` for `+`, `__assn_add__` for
 /// `+=`, `__assn__` for `=`, `__idx__` for `[]`. One table for the plain operators, the compound

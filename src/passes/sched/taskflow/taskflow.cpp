@@ -1652,7 +1652,8 @@ slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *grap
     }
 }
 
-std::optional<slot_t> TaskflowExecSchedPass::runMarkedOperator(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+std::optional<slot_t>
+TaskflowExecSchedPass::runMarkedOperator(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     // How the operator calls its function is its declaration's (OperatorSemantics::
     // elementCalls); the property that lets the calls run at once is `independent`, the
     // operator's name does not matter.

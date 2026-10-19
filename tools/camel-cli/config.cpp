@@ -307,11 +307,11 @@ bool timeitEnabled              = false;
 string dumpAfterEachPassDir     = "";
 vector<string> entryArgs        = {};
 
-bool profile      = false;
-bool noCache      = false;
+bool profile        = false;
+bool noCache        = false;
 bool noModulePasses = false;
-bool semanticOnly = false;
-int maxThreads    = -1; // -1 means use the maximum number of threads
+bool semanticOnly   = false;
+int maxThreads      = -1; // -1 means use the maximum number of threads
 
 string maxRecursionDepthOpt = ""; // raw --max-recursion-depth
 string maxMacroDepthOpt     = ""; // raw --max-macro-depth
@@ -627,7 +627,8 @@ bool parseArgs(int argc, char *argv[]) {
              "diagnostics format: text (source excerpts), short (one line each) or json",
          diagOps,
          (option("--passes") & value("pass1,pass2,...", passesOpt)) %
-             "pass list as comma-separated (e.g. --passes std::gir,other); a pass may take parameters, "
+             "pass list as comma-separated (e.g. --passes std::gir,other); a pass may take "
+             "parameters, "
              "`std::opt(safe_fp=true)`",
          (option("--timeit") & value("pass/iterations", timeitSpec)) %
              "measure one pass N times from a fresh graph (e.g. --timeit std::jit/10)",

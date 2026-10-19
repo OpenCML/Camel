@@ -81,7 +81,11 @@ enum class BranchKind : uint8_t { Cond, NullThen, ErrorThen, ErrorPass, LogicalA
 ///  - Bind: `case v` over a tagged scrutinee (design principles 2.9): the value taken out of
 ///    a `T?` / `T!` under the name binding(). One child, the body.
 ///  - Error: `case error e`: the error of a failed `T!` under that name. One child, the body.
-enum class CaseType : uint8_t { Value, True, Else, Bind, Error };
+///  - Enum: `case Shape::Rect { w, h }`: a variant of an enum. One child, the body; the
+///    variant and the fields the pattern binds are in the node's EnumCase (design principles
+///    2.13). Which variant that is, and what its fields are, the graph builder decides from
+///    the type of the value matched.
+enum class CaseType : uint8_t { Value, True, Else, Bind, Error, Enum };
 
 /// The reserved name under which the arm of `x ?-> f` finds the value taken out of `x`. It
 /// is not an identifier, so no program can write it.

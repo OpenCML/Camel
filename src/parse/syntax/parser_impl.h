@@ -203,6 +203,9 @@ class ParserImpl {
     void parsePairedParams(TK closer);
     void parseParentParams();
     void parseAngledParams();
+    void parseEnumType();
+    void parseEnumVariant();
+    void parseEnumField();
     /// Whether a function declaration follows after the modifiers at the current token.
     uint32_t afterModifiers() const;
     /// `{` at token offset `n` opens a struct literal: `{ name: ...` or `{ ...`.
@@ -213,6 +216,27 @@ class ParserImpl {
 
     // ---- Expressions (parser_expr.cpp) ----
     bool startsExpr(TK kind) const;
+    /// The last closed node is a `RefData` whose path has a `::`: the type of a variant
+    /// construction (`Shape::Rect { ... }`) or the constructor of a pattern (`case Shape::Rect …`).
+    bool lastRefIsPath() const {
+        if (stack_.empty()) {
+            return false;
+        }
+        const uint32_t word = stack_.back();
+        if ((word & Tree::kTokenBit) != 0) {
+            return false;
+        }
+        const NodeData &node = tree_.nodes_[word];
+        if (node.kind != NK::RefData) {
+            return false;
+        }
+        for (uint32_t token = node.firstToken; token <= node.lastToken; ++token) {
+            if (toks_[token].kind == TK::ColonColon) {
+                return true;
+            }
+        }
+        return false;
+    }
     void parseExpr();
     void parseAssign();
     void parseLogicalOr();
@@ -237,6 +261,8 @@ class ParserImpl {
     void parseIf();
     void parseMatch();
     void parseMatchCase();
+    void parseEnumTuplePattern();
+    void parseEnumStructPattern();
     void parsePattern();
     void parseTry();
     void parseLoop();
