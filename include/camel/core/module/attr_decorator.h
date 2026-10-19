@@ -18,20 +18,24 @@
  */
 
 /*
- * What a library writes to give programs a decorator that grants a node attribute (design
- * principles 2.17; camel/core/node_attrs.h, OperatorTable::declareGrant). For example, a
+ * What a library writes to give programs a decorator that grants a node attribute
+ * (camel/core/node_attrs.h, OperatorTable::declareGrant). For example, a
  * module that marks the functions it must compile as kernels:
  *
  *     // exported entities (the module's constructor)
  *     exportEntity("kernel", attrDecoratorGroup("kernel", "tiles:kernel", 0, "(fn: Function) => Function"));
  *     // load()
+ *     attr::registerKey("tiles.kernel", {.kind = attr::ValueKind::Unit,
+ *                                        .combine = attr::rules::inner(),
+ *                                        .merge = attr::rules::equalOnly()});
  *     OperatorTable::instance().set("tiles:kernel", attrDecoratorTraits());
  *     OperatorTable::instance().declareGrant("tiles:kernel", {.key = "tiles.kernel"});
  *     // its executor maps "kernel" to &attrDecoratorIdentity
  *
  * and the program writes `@kernel func f(...) { ... }` or `@kernel { ... }`. A decorator with
  * with-arguments (`@relax<x, y>`) checks their types in `acceptsWith` and turns the constants
- * written into the attribute's value in AttrGrant::value.
+ * written into the attribute's value (attr::flags, attr::integer, attr::tuple, ...) in
+ * AttrGrant::value.
  */
 
 #pragma once

@@ -140,7 +140,7 @@ class Node {
         return *payload_.name;
     }
 
-    /// FUNC: the function a decorated block is (`@d { ... }`, design principles 2.17): its body
+    /// FUNC: the function a decorated block is (`@d { ... }`, language reference 7.6): its body
     /// is the block, its ANNO children are the block's decorators, and the LINK that is its
     /// parent calls it where the block is written.
     bool decoratedBlock() const {

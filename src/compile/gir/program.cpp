@@ -382,7 +382,7 @@ void Builder::buildTopLevelValue(TopLevelDeclaration &declaration) {
     declaration.state = BuildState::Building;
     buildStack_.push_back(&declaration);
     UnitContext context(*this, *declaration.unit);
-    // A declaration of the top level: no decorator is around it (design principles 2.17).
+    // A declaration of the top level: no decorator is around it (language reference 7.6).
     AttrScope attrs(currentAttrs_, camel::core::attr::kNoAttrs);
     // Built in the namespace it is declared in, with the `using namespace` of its blocks.
     namespacePath_ = namespacesOf(declaration);

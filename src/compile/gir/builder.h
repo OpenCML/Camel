@@ -301,8 +301,8 @@ class Builder {
         }
         ~NumericPermissionScope() { current = outer; }
     };
-    // The node attributes in force where the builder is (camel/core/node_attrs.h, design
-    // principles 2.17): those decorators granted, as the program is built, to the functions
+    // The node attributes in force where the builder is (camel/core/node_attrs.h): those
+    // decorators granted, as the program is built, to the functions
     // and decorated blocks the builder is in, lexically: a function built from elsewhere (a
     // top-level function referred to before its turn, an instance of a generic function)
     // starts from what was in force where it is written. Stamped with the permissions

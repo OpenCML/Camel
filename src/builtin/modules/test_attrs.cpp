@@ -22,6 +22,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/data/primary.h"
 #include "camel/core/module/attr_decorator.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
 #include "camel/execute/executor.h"
 
@@ -53,6 +54,16 @@ TestAttrsBuiltinModule::TestAttrsBuiltinModule(context::context_ptr_t ctx)
                 return with[0]->code() == type::TypeCode::Int64;
             }));
     exportEntity(
+        "level",
+        attrDecoratorGroup(
+            "level",
+            "test_attrs:level",
+            1,
+            "<n: int>(fn: Function) => Function",
+            [](const type::type_vec_t &with) {
+                return with[0]->code() == type::TypeCode::Int64;
+            }));
+    exportEntity(
         "plain",
         attrDecoratorGroup("plain", "test_attrs:plain", 0, "(fn: Function) => Function"));
 }
@@ -71,23 +82,52 @@ bool TestAttrsBuiltinModule::load() {
             std::unordered_map<std::string, operator_t>{
                 {"mark", &attrDecoratorIdentity},
                 {"flags", &attrDecoratorIdentity},
+                {"level", &attrDecoratorIdentity},
                 {"plain", &attrDecoratorIdentity}});
     });
     auto &table = OperatorTable::instance();
-    for (const char *uri : {"test_attrs:mark", "test_attrs:flags", "test_attrs:plain"}) {
+    for (const char *uri :
+         {"test_attrs:mark", "test_attrs:flags", "test_attrs:level", "test_attrs:plain"}) {
         table.set(uri, attrDecoratorTraits());
     }
+    // The three kinds of key, each with its rules.
+    attr::registerKey(
+        "test.mark",
+        {.kind = attr::ValueKind::Unit, .combine = attr::rules::inner(), .merge = attr::rules::equalOnly()});
+    attr::registerKey(
+        "test.flags",
+        {.kind    = attr::ValueKind::Flags,
+         .combine = attr::rules::unionFlags(),
+         .merge   = attr::rules::intersectFlags()});
+    attr::registerKey(
+        "test.level",
+        {.kind = attr::ValueKind::Int, .combine = attr::rules::inner(), .merge = attr::rules::equalOnly()});
+    // The constant written, an int (a LongData).
+    const auto intArg = [](std::span<const data::data_ptr_t> with) -> std::optional<int64_t> {
+        const auto *n =
+            with.size() == 1 ? dynamic_cast<const data::LongData *>(with[0].get()) : nullptr;
+        return n ? std::optional<int64_t>(n->data()) : std::nullopt;
+    };
     table.declareGrant("test_attrs:mark", {.key = "test.mark"});
     table.declareGrant(
         "test_attrs:flags",
         {.key   = "test.flags",
-         .value = [](std::span<const data::data_ptr_t> with) -> std::optional<uint64_t> {
-             const auto *n = with.size() == 1 ? dynamic_cast<const data::LongData *>(with[0].get())
-                                              : nullptr;
-             if (n == nullptr || n->data() <= 0) {
+         .value = [intArg](std::span<const data::data_ptr_t> with)
+             -> std::optional<attr::AttrValueId> {
+             const auto n = intArg(with);
+             if (!n || *n < 0 || *n > 1000) {
                  return std::nullopt;
              }
-             return static_cast<uint64_t>(n->data());
+             const uint32_t bit = static_cast<uint32_t>(*n);
+             return attr::flags(std::span<const uint32_t>(&bit, 1));
+         }});
+    table.declareGrant(
+        "test_attrs:level",
+        {.key   = "test.level",
+         .value = [intArg](std::span<const data::data_ptr_t> with)
+             -> std::optional<attr::AttrValueId> {
+             const auto n = intArg(with);
+             return n ? std::optional<attr::AttrValueId>(attr::integer(*n)) : std::nullopt;
          }});
     return true;
 }

@@ -67,6 +67,7 @@
 #pragma once
 
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/symbol.h"
@@ -182,7 +183,7 @@ using TypeFolder = std::function<std::optional<slot_t>(
     std::span<type::Type *const> types, type::static_args_t statics, mm::IAllocator &allocator)>;
 
 /**
- * What an operator used as a decorator grants (design principles 2.17): an attribute
+ * What an operator used as a decorator grants (language reference 7.6): an attribute
  * (camel/core/node_attrs.h) on the nodes written in the function or block it decorates, the
  * arms, loop bodies and lambdas written there included, and on no function they call.
  *
@@ -193,16 +194,17 @@ using TypeFolder = std::function<std::optional<slot_t>(
  * the one written. Anywhere else (a decorator that names it through a variable, arguments known
  * only at run time, a call written as a call) the operator runs like any other; its function is
  * then the decorator's runtime form, which may return the function unchanged
- * (camel::runtime::grantAttrsIdentity): an attribute only allows a library to do something
- * else, so a node without it is always correct.
+ * (camel::core::module::attrDecoratorIdentity): an attribute only allows a library to do
+ * something else, so a node without it is always correct.
  */
 struct AttrGrant {
-    /// The attribute key's name (attr::key).
+    /// The attribute key's name; the library registers the key with its kind and rules
+    /// (attr::registerKey).
     std::string key;
     /// The value granted for the with-arguments of one use, given as the constants written
     /// (aligned with the with-parameters); nullopt when the constants do not give one, and the
-    /// decorator is then applied when it runs. Null: the value 1 whatever the arguments.
-    std::function<std::optional<uint64_t>(std::span<const data::data_ptr_t> with)> value;
+    /// decorator is then applied when it runs. Null: attr::unit() whatever the arguments.
+    std::function<std::optional<attr::AttrValueId>(std::span<const data::data_ptr_t> with)> value;
 };
 
 class OperatorTable {
@@ -291,7 +293,7 @@ class OperatorTable {
     /// The in-place form of the operator `uri`, or nullopt when it has none.
     std::optional<std::string> inPlaceForm(std::string_view uri) const;
 
-    // ---- Decorators that grant attributes (design principles 2.17) -------------------------
+    // ---- Decorators that grant attributes (language reference 7.6) -------------------------
 
     /// Declares that the operator `uri`, used as a decorator, grants an attribute (AttrGrant).
     /// Module load time; std::invalid_argument when the key is not a valid key name.

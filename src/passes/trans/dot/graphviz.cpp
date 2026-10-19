@@ -378,7 +378,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             (permissions == 0
                  ? ""
                  : std::format(", numeric=\"{}\"", camel::core::sem::permissionsText(permissions))) +
-            // The attributes libraries attached to the node (design principles 2.17), likewise.
+            // The attributes libraries attached to the node (language reference 7.6), likewise.
             (graph->nodeAttrs(nodeRef) == 0
                  ? ""
                  : std::format(

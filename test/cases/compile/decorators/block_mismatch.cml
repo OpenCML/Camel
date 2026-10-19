@@ -1,6 +1,6 @@
 /**
  * A decorator is called with the block's function, of no parameters: one that takes another
- * function type does not accept it, an ordinary error of the call (design principles 2.17).
+ * function type does not accept it, an ordinary error of the call (language reference 7.6).
  */
 module block_mismatch
 

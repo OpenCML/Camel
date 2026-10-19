@@ -40,7 +40,7 @@
  *    node has any, the numeric permissions the program granted with @numeric(...): one byte per
  *    node (nodePermissions; design principles 2.13, docs/design/op-semantics 6.3), and the
  *    attributes libraries attached to the nodes: one 32-bit interned set per node
- *    (nodeAttrs; camel/core/node_attrs.h, design principles 2.17).
+ *    (nodeAttrs; camel/core/node_attrs.h, language reference 7.6).
  * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
  *    FUNC node names its callee by an index into it (GCFuncRef), and the graphs the function
  *    constants of the static area point to, the graphs written inside this one and the graphs

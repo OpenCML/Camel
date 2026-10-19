@@ -29,6 +29,7 @@
 #include "../inline/engine.h"
 
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/struct.h"
@@ -797,9 +798,11 @@ size_t cseDraft(GraphDraft &draft) {
         std::vector<gc_node_ref_t>,
         std::vector<gc_node_ref_t>,
         std::vector<uint64_t>,
-        uint8_t,
-        uint32_t>; // ..., numeric permissions, attributes: nodes that differ in them stay apart
-    std::map<Key, gc_node_ref_t> seen;
+        uint8_t>;
+    // The node attributes are not part of the key: each attribute's key says whether two
+    // nodes that differ in it may become one and what the one keeps (attr::merge). The nodes
+    // of one key, each a candidate a later node may be merged into.
+    std::map<Key, std::vector<gc_node_ref_t>> seen;
     size_t merged = 0;
 
     // Equal scalar constants are one value: merge their DATA nodes first, so expressions over
@@ -854,12 +857,28 @@ size_t cseDraft(GraphDraft &draft) {
             std::vector<gc_node_ref_t>(norm.begin(), norm.end()),
             std::vector<gc_node_ref_t>(with.begin(), with.end()),
             regions[id],
-            draft.nodePermissions(id),
-            draft.nodeAttrs(id)};
-        auto [it, inserted] = seen.try_emplace(std::move(key), id);
-        if (!inserted && isReplaceable(draft, id) && !reaches(draft, id, it->second)) {
-            replaceNode(draft, id, it->second);
-            ++merged;
+            draft.nodePermissions(id)};
+        std::vector<gc_node_ref_t> &candidates = seen[std::move(key)];
+        bool replaced                          = false;
+        if (isReplaceable(draft, id)) {
+            for (gc_node_ref_t kept : candidates) {
+                if (reaches(draft, id, kept)) {
+                    continue;
+                }
+                const auto attrs =
+                    camel::core::attr::merge(draft.nodeAttrs(kept), draft.nodeAttrs(id));
+                if (!attrs.has_value()) {
+                    continue;
+                }
+                draft.setNodeAttrs(kept, *attrs);
+                replaceNode(draft, id, kept);
+                ++merged;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            candidates.push_back(id);
         }
     }
     return merged;

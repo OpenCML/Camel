@@ -2821,7 +2821,7 @@ The annotation '@{0}' is not accepted: {1}.
 **Help**
 
 ```text
-A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block (design principles 2.17); '@numeric(...)' grants numeric permissions to a function or a block (2.13).
+A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@numeric(...)' grants numeric permissions to a function or a block (design principles 2.13).
 ```
 
 **Example** (`test/cases/compile/numeric/invalid.cml`, run as `camel test/cases/compile/numeric/invalid.cml`)

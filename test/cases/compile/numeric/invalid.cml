@@ -1,7 +1,7 @@
 /**
  * Annotations that are not accepted: an unknown permission, an annotation other than
  * @numeric with names in parentheses, and an empty @numeric(). (A decorator on a block is
- * accepted since design principles 2.17: compile/attrs.)
+ * accepted since language reference 7.6: compile/decorators.)
  */
 module invalid
 

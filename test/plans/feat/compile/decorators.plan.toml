@@ -2,7 +2,7 @@ id = "compile.decorators"
 order = 215
 tier = "feat"
 tags = ["feat", "compile", "decorators", "attributes", "semantics"]
-desc = "Node attributes and the decorators that grant them; decorators on blocks (design principles 2.17). A library operator declared to grant an attribute (OperatorTable::declareGrant), named by a decorator with constant with-arguments, is applied as the graph is built: the nodes written in the function or block get the attribute, the arms, loop bodies and lambdas written there too, no function they call; nested grants unite. Rewrites keep the attributes and CSE does not merge nodes that differ in them. A decorated block is the block as a function of no parameters called where it is written, and behaves as the block without decorators. The decorators come from the test-only builtin module test_attrs (CAMEL_ENABLE_TEST_PASSES)."
+desc = "Node attributes and the decorators that grant them; decorators on blocks (language reference 7.6). A library operator declared to grant an attribute (OperatorTable::declareGrant), named by a decorator with constant with-arguments, is applied as the graph is built: the nodes written in the function or block get the attribute, the arms, loop bodies and lambdas written there too, no function they call. Each attribute key is registered by its library with the kind of its values (here a mark, flags of any width, an integer) and its rules: how nested grants combine and whether, and to what, two nodes that differ in it may be merged. Rewrites keep the attributes; CSE follows the merge rules. A decorated block is the block as a function of no parameters called where it is written, and behaves as the block without decorators. The decorators come from the test-only builtin module test_attrs (CAMEL_ENABLE_TEST_PASSES)."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -18,11 +18,11 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "7.0\n8.375\n-0.1428571428571429\n14\n4.0 5.0 6.0\n"
+expect_stdout_exact = "7.0\n8.375\n-0.1428571428571429\n14\n4.0 5.0 6.0\n15.0\n"
 
 [[tests]]
 name = "grants.graph"
-desc = "std::gir shows `attrs` on the nodes that have any: a decorated function's own nodes, its lambda, arms and loop body; a block's grant joins the function's (flags 2 | 4); two decorators on a block unite; a function they call, the code outside the block, an outer decorator applied as it runs and a value not given as the program is built grant nothing."
+desc = "std::gir shows `attrs` on the nodes that have any (spans are 0-based lines): a decorated function's own nodes, its lambda, arms and loop body; a block's flags unite with the function's (bits 1 and 70: no 64-bit cap); an integer takes the block's value (inner wins); two decorators on a block both apply; a function they call, the code outside the block, an outer decorator applied as it runs and a value not given as the program is built grant nothing."
 kind = "behavior"
 case = "../../../cases/compile/decorators/grants.cml"
 args = ["${case}", "std::gir"]
@@ -37,17 +37,19 @@ const all = (line, value) => {
   assert(found.length > 0, `no node at line ${line}`)
   for (const l of found) assert(attrs(l) === value, `line ${line}: attrs="${attrs(l)}", expected "${value}": ${l}`)
 }
-all(11, '')                          // plain: called from decorated code
-all(16, 'test.mark')                 // marked
-all(21, 'test.flags=0x2')            // the lambda in nested
-all(22, 'test.flags=0x2')            // the condition and the arms of the if
-all(25, 'test.flags=0x6')            // the block: its grant and the function's
-all(30, '')                          // blocky outside its block
-all(33, 'test.flags, test.mark')     // two decorators on the block
-all(39, 'test.mark')                 // the loop and its body
-all(45, 'test.mark')                 // the innermost decorator
-all(52, '')                          // under a decorator applied as it runs
-all(58, '')                          // a value not given as the program is built
+all(12, '')                          // plain: called from decorated code
+all(17, 'test.mark')                 // marked
+all(22, 'test.flags={1}')            // the lambda in nested
+all(23, 'test.flags={1}')            // the condition and the arms of the if
+all(26, 'test.flags={1, 70}')        // the block: its grant and the function's
+all(31, '')                          // blocky outside its block
+all(34, 'test.flags={3}, test.mark') // two decorators on the block
+all(40, 'test.mark')                 // the loop and its body
+all(46, 'test.mark')                 // the innermost decorator
+all(53, '')                          // under a decorator applied as it runs
+all(59, '')                          // a value not given as the program is built
+all(64, 'test.level=3')              // leveled
+all(67, 'test.level=5')              // its block: the inner value
 }
 """
 
@@ -62,24 +64,24 @@ verify_script = """
 ({ input, assert }) => {
 const opers = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
 const at = (line) => opers.filter((l) => l.includes(`span="${line}:`))
-assert(at(11).length > 0 && at(11).every((l) => !l.includes('attrs=')), 'inlined plain must have no attributes')
-assert(at(21).length > 0 && at(21).every((l) => l.includes('attrs="test.flags=0x2"')), 'the inlined lambda keeps its flags')
-assert(at(25).every((l) => l.includes('attrs="test.flags=0x6"')), 'the block keeps its attributes')
+assert(at(12).length > 0 && at(12).every((l) => !l.includes('attrs=')), 'inlined plain must have no attributes')
+assert(at(22).length > 0 && at(22).every((l) => l.includes('attrs="test.flags={1}"')), 'the inlined lambda keeps its flags')
+assert(at(26).every((l) => l.includes('attrs="test.flags={1, 70}"')), 'the block keeps its attributes')
 }
 """
 
 [[tests]]
 name = "grants.json"
-desc = "std::jgir gives a node's attributes as an object of key names and values."
+desc = "std::jgir gives a node's attributes as an object of key names and values: true for a mark, the bit indices of flags."
 kind = "behavior"
 case = "../../../cases/compile/decorators/cse.cml"
 args = ["${case}", "std::jgir"]
 expect_exit = 0
-expect_stdout_contains = ["\"attrs\": {", "\"test.mark\": 1"]
+expect_stdout_contains = ["\"attrs\": {", "\"test.mark\": true", "\"test.flags\": ["]
 
 [[tests]]
 name = "cse"
-desc = "std::opt::cse merges `a * b` with `a * b` of the same attributes, and not across them: one product without attributes, one with test.mark."
+desc = "std::opt::cse asks each attribute's key: in `twice` a product with test.mark and one without stay two (a mark merges only with a mark); in `relaxed` the products with flags {1} and {1, 2} become one, with the intersection {1}."
 kind = "behavior"
 case = "../../../cases/compile/decorators/cse.cml"
 args = ["${case}", "std::opt::cse", "std::gir"]
@@ -87,9 +89,10 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const muls = input.normalized.stdout.split('\n').filter((l) => l.includes('label=":op/mul_d"'))
-assert(muls.length === 2, `expected 2 products after cse, got ${muls.length}`)
+assert(muls.length === 3, `expected 3 products after cse, got ${muls.length}`)
 assert(muls.filter((l) => l.includes('attrs="test.mark"')).length === 1, 'one product has test.mark')
 assert(muls.filter((l) => !l.includes('attrs=')).length === 1, 'one product has none')
+assert(muls.filter((l) => l.includes('attrs="test.flags={1}"')).length === 1, 'the merged product keeps the intersection')
 }
 """
 
@@ -100,7 +103,7 @@ kind = "behavior"
 case = "../../../cases/compile/decorators/cse.cml"
 args = ["${case}", "std::opt::cse", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "18.0\n"
+expect_stdout_exact = "18.0\n9.0\n"
 
 [[tests]]
 name = "blocks"

@@ -18,13 +18,15 @@
  */
 
 /*
- * `test_attrs`: decorators that grant node attributes, for the tests of the mechanism (design
- * principles 2.17; camel/core/module/attr_decorator.h). It exports them only when the
+ * `test_attrs`: decorators that grant node attributes, for the tests of the mechanism
+ * (camel/core/module/attr_decorator.h). It exports them only when the
  * environment variable CAMEL_ENABLE_TEST_PASSES is set, as the test passes are.
  *
- *     mark            grants `test.mark`
- *     flags<n: int>   grants `test.flags` with the value n (n > 0; otherwise it is applied as
- *                     it runs, which grants nothing)
+ *     mark            grants `test.mark` (a mark: inner wins, merges only with itself)
+ *     flags<n: int>   grants bit n of `test.flags` (flags of any width: union, intersection
+ *                     on merge); n from 0 to 1000, otherwise it is applied as it runs, which
+ *                     grants nothing
+ *     level<n: int>   grants `test.level` = n (an integer: inner wins, merges only when equal)
  *     plain           the same decorator not declared to grant anything (a decorator applied
  *                     as it runs, returning its function)
  */

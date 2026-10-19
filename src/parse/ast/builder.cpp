@@ -522,7 +522,7 @@ Value Builder::visitBlockStmt(cst::BlockStmt context) {
     }
     // `@numeric(...)` before a block grants its permissions to the block (design principles
     // 2.13). A decorator before a block decorates the block as a function of no parameters
-    // called where it is written (2.17): the decorators are the block's second child.
+    // called where it is written (language reference 7.6): the decorators are the block's second child.
     node_ptr_t decorators = nullptr;
     for (const auto &anno : context->all<cst::FuncAnno>()) {
         if (const auto permissions = numericAnnotationOf(anno)) {

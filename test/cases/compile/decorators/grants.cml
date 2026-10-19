@@ -1,11 +1,12 @@
 /**
- * Decorators that grant node attributes (design principles 2.17): the nodes written in the
+ * Decorators that grant node attributes (language reference 7.6): the nodes written in the
  * function or block they decorate get the attribute, the arms, loop bodies and lambdas written
- * there too, and no function they call. Nested grants unite. The program computes the same
- * with or without them.
+ * there too, and no function they call. Nested grants combine by the rule of the attribute's
+ * key: flags (of any width) unite, an integer takes the inner value. The program computes
+ * the same with or without them.
  */
 module grants
-import { mark, flags, plain as pass } from test_attrs
+import { mark, flags, level, plain as pass } from test_attrs
 
 /// No attributes: called from decorated code, it keeps none.
 func plain(a: float, b: float): float {
@@ -17,11 +18,11 @@ func marked(a: float, b: float): float {
     return a * b + plain(a, b)
 }
 
-@flags<2>
+@flags<1>
 func nested(k: float): float {
     let f = (v: float) => v * k + 0.5
     let z = if k > 0.0 then k * 2.0 else k / 2.0
-    @flags<4>
+    @flags<70>
     {
         return f(z) + plain(k, 3.0)
     }
@@ -29,7 +30,7 @@ func nested(k: float): float {
 
 func blocky(x: float): float {
     let y = x * 3.0
-    @mark @flags<1>
+    @mark @flags<3>
     {
         return y / 7.0 - 1.0
     }
@@ -54,9 +55,18 @@ func outer_mark(a: float): float {
 }
 
 /// A value not given as the program is built: applied as it runs, nothing granted.
-@flags<0>
+@flags<1001>
 func zero(a: float): float {
     return a * 6.0
+}
+
+@level<3>
+func leveled(a: float): float {
+    let b = a * 7.0
+    @level<5>
+    {
+        return b + a * 8.0
+    }
 }
 
 func main(): int sync {
@@ -65,5 +75,6 @@ func main(): int sync {
     println(blocky(2.0))
     println(looped(4))
     println(inner_mark(1.0), outer_mark(1.0), zero(1.0))
+    println(leveled(1.0))
     return 0
 }

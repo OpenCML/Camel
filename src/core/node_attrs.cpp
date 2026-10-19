@@ -20,7 +20,7 @@
 #include "camel/core/node_attrs.h"
 
 #include <algorithm>
-#include <charconv>
+#include <bit>
 #include <deque>
 #include <format>
 #include <limits>
@@ -28,21 +28,27 @@
 #include <mutex>
 #include <shared_mutex>
 #include <stdexcept>
-#include <system_error>
 #include <unordered_map>
+#include <utility>
 
 namespace camel::core::attr {
 
 namespace {
 
-/// The canonical form of a set: sorted by key id, one entry per key, no zero value.
-using Canonical = std::vector<std::pair<AttrKey, uint64_t>>;
+/// The canonical form of a set: sorted by key id, one entry per key, no absent value.
+using Canonical = std::vector<std::pair<AttrKey, AttrValueId>>;
 
 struct Registry {
     std::shared_mutex mutex;
-    std::deque<std::string> names{std::string()}; // a deque: views of its strings stay valid
+    // Keys. A deque: views of the names stay valid.
+    std::deque<std::string> names{std::string()};
+    std::deque<std::optional<KeySpec>> specs{std::nullopt};
     std::unordered_map<std::string, AttrKey> keys;
-    std::vector<Canonical> sets{Canonical{}};
+    // Values, interned by an encoding of their content (process-local: Tuple items are ids).
+    std::deque<Value> values{Value{}};
+    std::unordered_map<std::string, AttrValueId> valueIds;
+    // Sets.
+    std::deque<Canonical> sets{Canonical{}};
     std::map<Canonical, AttrSetId> setIds{{Canonical{}, kNoAttrs}};
 };
 
@@ -58,14 +64,58 @@ bool validName(std::string_view name) {
     });
 }
 
-Canonical canonical(std::span<const Attr> attrs) {
-    std::map<AttrKey, uint64_t> merged;
-    for (const Attr &a : attrs) {
-        if (a.key != kNoKey && a.value != 0) {
-            merged[a.key] |= a.value;
+std::string encode(const Value &v) {
+    std::string out(1, static_cast<char>(v.kind));
+    const auto put = [&](uint64_t x) { out.append(reinterpret_cast<const char *>(&x), sizeof x); };
+    switch (v.kind) {
+    case ValueKind::Unit:
+        break;
+    case ValueKind::Flags:
+        for (uint64_t w : v.words) {
+            put(w);
+        }
+        break;
+    case ValueKind::Int:
+        put(static_cast<uint64_t>(v.integer));
+        break;
+    case ValueKind::Symbol:
+    case ValueKind::Graph:
+        out += v.text;
+        break;
+    case ValueKind::Tuple:
+        for (AttrValueId item : v.items) {
+            put(item);
+        }
+        break;
+    }
+    return out;
+}
+
+AttrValueId internValue(Value v) {
+    if (v.kind == ValueKind::Flags) {
+        while (!v.words.empty() && v.words.back() == 0) {
+            v.words.pop_back();
+        }
+        if (v.words.empty()) {
+            return kNoValue;
         }
     }
-    return Canonical(merged.begin(), merged.end());
+    std::string code = encode(v);
+    Registry &r      = registry();
+    {
+        std::shared_lock lock(r.mutex);
+        if (auto it = r.valueIds.find(code); it != r.valueIds.end()) {
+            return it->second;
+        }
+    }
+    std::unique_lock lock(r.mutex);
+    if (auto it = r.valueIds.find(code); it != r.valueIds.end()) {
+        return it->second;
+    }
+    const auto id = static_cast<AttrValueId>(r.values.size());
+    r.values.push_back(std::move(v));
+    r.valueIds.emplace(std::move(code), id);
+    return id;
 }
 
 AttrSetId internCanonical(Canonical c) {
@@ -95,7 +145,165 @@ Canonical canonicalOf(AttrSetId set) {
     return set < r.sets.size() ? r.sets[set] : Canonical{};
 }
 
+AttrValueId combineBy(AttrKey key, AttrValueId outer, AttrValueId inner) {
+    const auto spec = specOf(key);
+    if (spec && spec->combine) {
+        return spec->combine(outer, inner);
+    }
+    return inner != kNoValue ? inner : outer;
+}
+
+std::optional<AttrValueId> mergeBy(AttrKey key, AttrValueId a, AttrValueId b) {
+    const auto spec = specOf(key);
+    if (spec && spec->merge) {
+        return spec->merge(a, b);
+    }
+    return a == b ? std::optional<AttrValueId>(a) : std::nullopt;
+}
+
 } // namespace
+
+// ---- Values ------------------------------------------------------------------------------
+
+AttrValueId unit() { return internValue(Value{.kind = ValueKind::Unit}); }
+
+AttrValueId flags(std::span<const uint32_t> bits) {
+    std::vector<uint64_t> words;
+    for (uint32_t bit : bits) {
+        if (words.size() <= bit / 64) {
+            words.resize(bit / 64 + 1, 0);
+        }
+        words[bit / 64] |= uint64_t{1} << (bit % 64);
+    }
+    return flagWords(std::move(words));
+}
+
+AttrValueId flagWords(std::vector<uint64_t> words) {
+    return internValue(Value{.kind = ValueKind::Flags, .words = std::move(words)});
+}
+
+AttrValueId integer(int64_t v) { return internValue(Value{.kind = ValueKind::Int, .integer = v}); }
+
+AttrValueId symbol(std::string_view text) {
+    return internValue(Value{.kind = ValueKind::Symbol, .text = std::string(text)});
+}
+
+AttrValueId graphRef(std::string_view stableId) {
+    return internValue(Value{.kind = ValueKind::Graph, .text = std::string(stableId)});
+}
+
+AttrValueId tuple(std::span<const AttrValueId> items) {
+    return internValue(
+        Value{.kind = ValueKind::Tuple, .items = std::vector<AttrValueId>(items.begin(), items.end())});
+}
+
+Value value(AttrValueId id) {
+    Registry &r = registry();
+    std::shared_lock lock(r.mutex);
+    return id < r.values.size() ? r.values[id] : Value{};
+}
+
+std::string valueText(AttrValueId id) {
+    if (id == kNoValue) {
+        return {};
+    }
+    const Value v = value(id);
+    switch (v.kind) {
+    case ValueKind::Unit:
+        return "()";
+    case ValueKind::Flags: {
+        std::string out = "{";
+        bool first      = true;
+        for (size_t w = 0; w < v.words.size(); ++w) {
+            for (uint64_t bits = v.words[w]; bits != 0; bits &= bits - 1) {
+                out += (first ? "" : ", ") + std::to_string(w * 64 + std::countr_zero(bits));
+                first = false;
+            }
+        }
+        return out + "}";
+    }
+    case ValueKind::Int:
+        return std::to_string(v.integer);
+    case ValueKind::Symbol:
+        return "\"" + v.text + "\"";
+    case ValueKind::Graph:
+        return "@" + v.text;
+    case ValueKind::Tuple: {
+        std::string out = "(";
+        for (size_t i = 0; i < v.items.size(); ++i) {
+            out += (i == 0 ? "" : ", ") + valueText(v.items[i]);
+        }
+        return out + ")";
+    }
+    }
+    return {};
+}
+
+// ---- Rules -------------------------------------------------------------------------------
+
+namespace rules {
+
+namespace {
+std::vector<uint64_t> wordsOf(AttrValueId id) {
+    return id == kNoValue ? std::vector<uint64_t>{} : value(id).words;
+}
+} // namespace
+
+CombineRule unionFlags() {
+    return [](AttrValueId outer, AttrValueId inner) {
+        std::vector<uint64_t> a = wordsOf(outer);
+        const std::vector<uint64_t> b = wordsOf(inner);
+        a.resize(std::max(a.size(), b.size()), 0);
+        for (size_t i = 0; i < b.size(); ++i) {
+            a[i] |= b[i];
+        }
+        return flagWords(std::move(a));
+    };
+}
+
+MergeRule intersectFlags() {
+    return [](AttrValueId x, AttrValueId y) -> std::optional<AttrValueId> {
+        std::vector<uint64_t> a       = wordsOf(x);
+        const std::vector<uint64_t> b = wordsOf(y);
+        a.resize(std::min(a.size(), b.size()));
+        for (size_t i = 0; i < a.size(); ++i) {
+            a[i] &= b[i];
+        }
+        return flagWords(std::move(a));
+    };
+}
+
+CombineRule inner() {
+    return [](AttrValueId outer, AttrValueId in) { return in != kNoValue ? in : outer; };
+}
+
+MergeRule equalOnly() {
+    return [](AttrValueId a, AttrValueId b) -> std::optional<AttrValueId> {
+        return a == b ? std::optional<AttrValueId>(a) : std::nullopt;
+    };
+}
+
+CombineRule chain() {
+    return [](AttrValueId outer, AttrValueId in) {
+        if (outer == kNoValue || in == kNoValue) {
+            return in != kNoValue ? in : outer;
+        }
+        std::vector<AttrValueId> items;
+        for (AttrValueId part : {outer, in}) {
+            const Value v = value(part);
+            if (v.kind == ValueKind::Tuple) {
+                items.insert(items.end(), v.items.begin(), v.items.end());
+            } else {
+                items.push_back(part);
+            }
+        }
+        return tuple(items);
+    };
+}
+
+} // namespace rules
+
+// ---- Keys --------------------------------------------------------------------------------
 
 AttrKey key(std::string_view name) {
     if (!validName(name)) {
@@ -117,7 +325,16 @@ AttrKey key(std::string_view name) {
     }
     const auto id = static_cast<AttrKey>(r.names.size());
     r.names.emplace_back(name);
+    r.specs.emplace_back(std::nullopt);
     r.keys.emplace(std::string(name), id);
+    return id;
+}
+
+AttrKey registerKey(std::string_view name, KeySpec spec) {
+    const AttrKey id = key(name);
+    Registry &r      = registry();
+    std::unique_lock lock(r.mutex);
+    r.specs[id] = std::move(spec);
     return id;
 }
 
@@ -136,9 +353,41 @@ std::string_view keyName(AttrKey key) {
     return key < r.names.size() ? std::string_view(r.names[key]) : std::string_view();
 }
 
-AttrSetId intern(std::span<const Attr> attrs) { return internCanonical(canonical(attrs)); }
+std::optional<KeySpec> specOf(AttrKey key) {
+    Registry &r = registry();
+    std::shared_lock lock(r.mutex);
+    return key < r.specs.size() ? r.specs[key] : std::nullopt;
+}
 
-AttrSetId single(AttrKey key, uint64_t value) {
+// ---- Sets --------------------------------------------------------------------------------
+
+AttrSetId intern(std::span<const Attr> attrs) {
+    std::map<AttrKey, AttrValueId> merged;
+    for (const Attr &a : attrs) {
+        if (a.key == kNoKey || a.value == kNoValue) {
+            continue;
+        }
+        if (const auto spec = specOf(a.key); spec && value(a.value).kind != spec->kind) {
+            throw std::invalid_argument(std::format(
+                "attribute '{}': the value {} is not of the key's kind",
+                keyName(a.key),
+                valueText(a.value)));
+        }
+        auto [it, inserted] = merged.emplace(a.key, a.value);
+        if (!inserted) {
+            it->second = combineBy(a.key, it->second, a.value);
+        }
+    }
+    Canonical c;
+    for (const auto &[k, v] : merged) {
+        if (v != kNoValue) {
+            c.emplace_back(k, v);
+        }
+    }
+    return internCanonical(std::move(c));
+}
+
+AttrSetId single(AttrKey key, AttrValueId value) {
     const Attr a{key, value};
     return intern(std::span<const Attr>(&a, 1));
 }
@@ -157,49 +406,52 @@ std::vector<Attr> entries(AttrSetId set) {
     return result;
 }
 
-uint64_t valueOf(AttrSetId set, AttrKey key) {
+AttrValueId valueOf(AttrSetId set, AttrKey key) {
     for (const auto &[k, v] : canonicalOf(set)) {
         if (k == key) {
             return v;
         }
     }
-    return 0;
+    return kNoValue;
 }
 
-AttrSetId unite(AttrSetId a, AttrSetId b) {
-    if (a == kNoAttrs || a == b) {
-        return b;
+AttrSetId unite(AttrSetId outer, AttrSetId inner) {
+    if (outer == kNoAttrs) {
+        return inner;
     }
-    if (b == kNoAttrs) {
-        return a;
+    if (inner == kNoAttrs) {
+        return outer;
     }
     std::vector<Attr> all;
-    for (const auto &[k, v] : canonicalOf(a)) {
+    for (const auto &[k, v] : canonicalOf(outer)) {
         all.push_back({k, v});
     }
-    for (const auto &[k, v] : canonicalOf(b)) {
+    for (const auto &[k, v] : canonicalOf(inner)) {
         all.push_back({k, v});
     }
     return intern(all);
 }
 
-AttrSetId intersect(AttrSetId a, AttrSetId b) {
+std::optional<AttrSetId> merge(AttrSetId a, AttrSetId b) {
     if (a == b) {
         return a;
     }
-    if (a == kNoAttrs || b == kNoAttrs) {
-        return kNoAttrs;
-    }
-    std::vector<Attr> both;
-    const Canonical cb = canonicalOf(b);
+    std::map<AttrKey, std::pair<AttrValueId, AttrValueId>> both;
     for (const auto &[k, v] : canonicalOf(a)) {
-        for (const auto &[kb, vb] : cb) {
-            if (kb == k) {
-                both.push_back({k, v & vb});
-            }
-        }
+        both[k].first = v;
     }
-    return intern(both);
+    for (const auto &[k, v] : canonicalOf(b)) {
+        both[k].second = v;
+    }
+    std::vector<Attr> kept;
+    for (const auto &[k, values] : both) {
+        const auto merged = mergeBy(k, values.first, values.second);
+        if (!merged.has_value()) {
+            return std::nullopt;
+        }
+        kept.push_back({k, *merged});
+    }
+    return intern(kept);
 }
 
 std::string text(AttrSetId set) {
@@ -209,48 +461,11 @@ std::string text(AttrSetId set) {
             out += ", ";
         }
         out += keyName(a.key);
-        if (a.value != 1) {
-            out += std::format("={:#x}", a.value);
+        if (value(a.value).kind != ValueKind::Unit) {
+            out += "=" + valueText(a.value);
         }
     }
     return out;
-}
-
-std::optional<AttrSetId> parse(std::string_view text) {
-    std::vector<Attr> attrs;
-    while (!text.empty()) {
-        const size_t comma  = text.find(',');
-        std::string_view it = text.substr(0, comma);
-        text                = comma == std::string_view::npos ? std::string_view{}
-                                                              : text.substr(comma + 1);
-        while (!it.empty() && it.front() == ' ') {
-            it.remove_prefix(1);
-        }
-        while (!it.empty() && it.back() == ' ') {
-            it.remove_suffix(1);
-        }
-        uint64_t value         = 1;
-        const size_t eq        = it.find('=');
-        std::string_view name  = it.substr(0, eq);
-        if (eq != std::string_view::npos) {
-            std::string_view digits = it.substr(eq + 1);
-            int base                = 10;
-            if (digits.starts_with("0x")) {
-                digits.remove_prefix(2);
-                base = 16;
-            }
-            const auto [end, ec] =
-                std::from_chars(digits.data(), digits.data() + digits.size(), value, base);
-            if (digits.empty() || ec != std::errc() || end != digits.data() + digits.size()) {
-                return std::nullopt;
-            }
-        }
-        if (!validName(name)) {
-            return std::nullopt;
-        }
-        attrs.push_back({key(name), value});
-    }
-    return intern(attrs);
 }
 
 } // namespace camel::core::attr

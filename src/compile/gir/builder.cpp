@@ -1038,8 +1038,8 @@ void Builder::buildFuncBody(
     NumericPermissionScope permissions(
         numericPermissions_,
         body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0);
-    // The attributes its decorators grant join those in force where it is written (design
-    // principles 2.17), for everything written in it.
+    // The attributes its decorators grant join those in force where it is written (each key's
+    // combine rule, camel/core/node_attrs.h), for everything written in it.
     AttrScope attrs(currentAttrs_, camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first));
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
@@ -5015,7 +5015,7 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
     return decoratedGraph;
 }
 
-// ---- Decorators that grant attributes, decorated blocks (design principles 2.17) ------------
+// ---- Decorators that grant attributes, decorated blocks (language reference 7.6) ------------
 
 std::optional<camel::core::attr::AttrSetId> Builder::staticGrantOf(const GCT::node_ptr_t &anno) {
     if (auto it = staticGrants_.find(anno); it != staticGrants_.end()) {
@@ -5089,8 +5089,9 @@ std::optional<camel::core::attr::AttrSetId> Builder::staticGrantOf(const GCT::no
             }
             values.push_back(value->value());
         }
-        const std::optional<uint64_t> granted =
-            grant->value ? grant->value(values) : std::optional<uint64_t>(1);
+        const std::optional<camel::core::attr::AttrValueId> granted =
+            grant->value ? grant->value(values)
+                         : std::optional<camel::core::attr::AttrValueId>(camel::core::attr::unit());
         if (!granted.has_value()) {
             return std::nullopt;
         }
@@ -5143,7 +5144,7 @@ std::vector<GCT::node_ptr_t> Builder::appliedDecoratorsOf(const GCT::node_ptr_t 
 node_handle_t Builder::visitDecoratedBlock(const GCT::node_ptr_t &link, bool unused) {
     ENTER("DECORATED_BLOCK");
     // `@d { ... }` is the block as a function of no parameters, passed to the decorators and
-    // called right where it is written (design principles 2.17). The block is lowered as a
+    // called right where it is written (language reference 7.6). The block is lowered as a
     // plain block would be (its scope, its exits, its value); the function's value is the
     // block's, and is dropped when nothing takes the block's value.
     const GCT::node_ptr_t func = link->at(0);

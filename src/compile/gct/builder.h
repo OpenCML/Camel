@@ -227,7 +227,7 @@ class Builder {
     /// A block; one written with decorators is lowered by visitDecoratedBlock unless
     /// `decorators` is false (it lowers the block itself).
     node_ptr_t visitStmtBlock(const AST::node_ptr_t &ast, bool decorators = true);
-    /// `@d { ... }` (design principles 2.17): LINK(0)[FUNC (decorated block)[TYPE, EXEC,
+    /// `@d { ... }` (language reference 7.6): LINK(0)[FUNC (decorated block)[TYPE, EXEC,
     /// ANNO...]], the block as a function of no parameters called where it is written. The
     /// EXEC is the block lowered as without decorators (its scope, its exits, its value).
     node_ptr_t visitDecoratedBlock(const AST::node_ptr_t &ast);

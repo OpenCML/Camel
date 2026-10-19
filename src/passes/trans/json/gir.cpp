@@ -31,6 +31,46 @@
 #include <nlohmann/json.hpp>
 #include <unordered_map>
 using nlohmann::json;
+
+namespace {
+
+/// A node attribute's value (camel/core/node_attrs.h): true for a mark, the bit indices of
+/// flags, a number, a string, {"graph": stable id} for a graph, an array for a tuple.
+json attrValueJson(camel::core::attr::AttrValueId id) {
+    namespace attr     = camel::core::attr;
+    const attr::Value v = attr::value(id);
+    switch (v.kind) {
+    case attr::ValueKind::Unit:
+        return true;
+    case attr::ValueKind::Flags: {
+        json bits = json::array();
+        for (size_t w = 0; w < v.words.size(); ++w) {
+            for (size_t b = 0; b < 64; ++b) {
+                if ((v.words[w] >> b) & 1) {
+                    bits.push_back(w * 64 + b);
+                }
+            }
+        }
+        return bits;
+    }
+    case attr::ValueKind::Int:
+        return v.integer;
+    case attr::ValueKind::Symbol:
+        return v.text;
+    case attr::ValueKind::Graph:
+        return json{{"graph", v.text}};
+    case attr::ValueKind::Tuple: {
+        json items = json::array();
+        for (attr::AttrValueId item : v.items) {
+            items.push_back(attrValueJson(item));
+        }
+        return items;
+    }
+    }
+    return nullptr;
+}
+
+} // namespace
 using namespace camel::runtime;
 using namespace camel::passes::gir;
 
@@ -136,7 +176,8 @@ std::string dumpJsonRuntimeGraph(GCGraph *root, const camel::core::context::cont
             if (const auto attrs = g->nodeAttrs(ref)) {
                 value["attrs"] = json::object();
                 for (const auto &a : camel::core::attr::entries(attrs))
-                    value["attrs"][std::string(camel::core::attr::keyName(a.key))] = a.value;
+                    value["attrs"][std::string(camel::core::attr::keyName(a.key))] =
+                        attrValueJson(a.value);
             }
             value["roles"] = json::array();
             for (const auto &role : NodeRoleRegistry::instance().classify(*g, ref))
