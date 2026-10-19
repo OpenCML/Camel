@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 02, 2026
- * Updated: May. 03, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,7 +32,6 @@
 
 #include "camel/utils/windows_parser_guard.h"
 #include "nlohmann/json.hpp"
-
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
@@ -253,9 +252,9 @@ RunInvocation makeRunInvocation(const std::string &inputPath) {
     auto searchPaths    = buildSearchPathsForEntry(invocation.entryDir);
     invocation.ctx      = Context::create(
         EntryConfig{
-            .entryDir    = invocation.entryDir,
-            .entryFile   = inputPath,
-            .searchPaths = std::move(searchPaths),
+            .entryDir          = invocation.entryDir,
+            .entryFile         = inputPath,
+            .searchPaths       = std::move(searchPaths),
             .maxRecursionDepth = Run::maxRecursionDepth,
             .maxMacroDepth     = Run::maxMacroDepth,
             .maxMacroRounds    = Run::maxMacroRounds,
@@ -458,10 +457,8 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                 // The list is run in three parts; all names are checked before the first.
                 requireKnownPasses(Run::resolvedPassList, invocation->ctx);
                 // The values given for the parameters of `main` (--arg), as in a plain run.
-                graph = camel::execute::bindEntryArgumentSpecs(
-                    invocation->ctx,
-                    graph,
-                    Run::entryArgs);
+                graph =
+                    camel::execute::bindEntryArgumentSpecs(invocation->ctx, graph, Run::entryArgs);
                 if (graph == nullptr) {
                     if (stdoutFdRedirect)
                         stdoutFdRedirect->restore();

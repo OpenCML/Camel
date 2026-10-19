@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,11 +27,11 @@
 #include "camel/core/process_exit.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
-#include "pass_spec.h"
 #include "camel/passes/test/control.h"
 #include "camel/passes/trans/json/gir.h"
 #include "camel/runtime/capacity.h"
 #include "macro/macro.h"
+#include "pass_spec.h"
 #include "passes/opt/devirtualize/devirtualize.h"
 #include "passes/opt/generic/generic.h"
 #include "passes/opt/inline/inline.h"
@@ -64,9 +64,9 @@
 #include <format>
 #include <iostream>
 #include <map>
-#include <set>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -387,16 +387,17 @@ PassParam statsParameter() {
 
 PassDescriptor fastVmDescriptor(bool jit) {
     PassDescriptor d;
-    d.doc    = jit ? "the bytecode interpreter with on-demand native code"
-                   : "the bytecode interpreter";
+    d.doc =
+        jit ? "the bytecode interpreter with on-demand native code" : "the bytecode interpreter";
     d.params = {nativeLoopParameter(), statsParameter()};
     if (jit) {
-        d.params.push_back(PassParam{
-            "hot_threshold",
-            PassParamType::Int,
-            int64_t{1},
-            "calls from one call site before a graph is compiled; 0 compiles at the first call "
-            "(short test programs then run as compiled code too)"});
+        d.params.push_back(
+            PassParam{
+                "hot_threshold",
+                PassParamType::Int,
+                int64_t{1},
+                "calls from one call site before a graph is compiled; 0 compiles at the first call "
+                "(short test programs then run as compiled code too)"});
     }
     d.make = [jit](const context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config = jit ? makeDefaultFastVmJitConfig() : FastVMConfig{};
@@ -629,16 +630,6 @@ ModuleAliasRegistry &moduleAliases() {
     return registry;
 }
 
-struct DefaultPassRegistry {
-    std::mutex mutex;
-    std::set<std::pair<int, std::string>> entries; // (priority, spec): the run order
-};
-
-DefaultPassRegistry &defaultPasses() {
-    static DefaultPassRegistry registry;
-    return registry;
-}
-
 std::optional<PassDescriptor> findModulePass(const std::string &path) {
     auto &registry = modulePasses();
     std::lock_guard lock(registry.mutex);
@@ -812,12 +803,6 @@ void registerPassAlias(const std::string &alias, const std::string &target) {
     registry.aliases.insert_or_assign(alias, target);
 }
 
-void registerDefaultPipelinePass(const std::string &spec, int priority) {
-    auto &registry = defaultPasses();
-    std::lock_guard lock(registry.mutex);
-    registry.entries.insert({priority, spec});
-}
-
 namespace {
 
 std::string resolveAlias(const std::string &name) {
@@ -833,11 +818,11 @@ std::string resolveAlias(const std::string &name) {
 /// Test-only passes, off unless the environment enables them (CAMEL_ENABLE_TEST_PASSES is a
 /// gate on what exists, not a setting of a pass).
 const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
-#define TEST_PASS(K, T)                                                                           \
-    {                                                                                             \
-        K, [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {                         \
-            return std::make_unique<T>(ctx);                                                      \
-        }                                                                                         \
+#define TEST_PASS(K, T)                                                                            \
+    {                                                                                              \
+        K, [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {                          \
+            return std::make_unique<T>(ctx);                                                       \
+        }                                                                                          \
     }
     static const std::vector<std::pair<std::string, PassFactory>> table = {
         TEST_PASS(kNativeCallbackTestPass, NativeCallbackTestPass),
@@ -1001,35 +986,37 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     return resolved.factory;
 }
 
+/// Resolves `spec`, importing the module that contributes a `<module>::<pass>` name when the
+/// program has not imported it yet: a pass list may name a pass of a module the program does
+/// not import, and loading the module registers the pass. A name that stays unknown resolves
+/// to no factory, and a bad parameter list keeps its problem.
+ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t &ctx) {
+    ResolvedPass resolved = resolvePass(spec);
+    if (resolved.problem || resolved.factory || !ctx) {
+        return resolved;
+    }
+    const std::string name = resolveAlias(specName(spec));
+    const size_t sep       = name.find("::");
+    if (sep == std::string::npos || sep == 0 || name.substr(0, sep) == "std") {
+        return resolved;
+    }
+    try {
+        (void)ctx->importModule(name.substr(0, sep));
+    } catch (const Diagnostic &) {
+        // No such module: the name stays unknown and is reported by the caller.
+    } catch (const std::exception &) {
+    }
+    return resolvePass(spec);
+}
+
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {
-        auto resolved = resolvePass(name);
+        auto resolved = resolvePassWithModule(name, ctx);
         if (resolved.problem) {
             throw invalidParameterDiagnostic(name, *resolved.problem);
         }
         if (resolved.factory) {
             continue;
-        }
-        // `<module>::<pass>`: the pass is contributed by a module the program did not import.
-        // Loading the module registers it.
-        if (ctx) {
-            const std::string resolvedName = resolveAlias(specName(name));
-            const size_t sep               = resolvedName.find("::");
-            if (sep != std::string::npos && sep > 0 && resolvedName.substr(0, sep) != "std") {
-                try {
-                    (void)ctx->importModule(resolvedName.substr(0, sep));
-                } catch (const Diagnostic &) {
-                    // No such module: the name stays unknown and is reported below.
-                } catch (const std::exception &) {
-                }
-                resolved = resolvePass(name);
-                if (resolved.problem) {
-                    throw invalidParameterDiagnostic(name, *resolved.problem);
-                }
-                if (resolved.factory) {
-                    continue;
-                }
-            }
         }
         listAvailablePasses(name);
         setPipelineStage("pass:" + specName(name));
@@ -1043,7 +1030,7 @@ void requireKnownPasses(const std::vector<std::string> &passes, const context_pt
 std::optional<size_t>
 firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (size_t i = 0; i < passes.size(); ++i) {
-        auto factory = resolvePass(passes[i]).factory;
+        auto factory = resolvePassWithModule(passes[i], ctx).factory;
         if (!factory) {
             continue;
         }
@@ -1056,46 +1043,23 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
     return std::nullopt;
 }
 
-std::vector<std::string> withDefaultPipelinePasses(
-    const std::vector<std::string> &pipeline, const context_ptr_t &ctx, bool enabled) {
-    std::set<std::pair<int, std::string>> entries;
-    {
-        auto &registry = defaultPasses();
-        std::lock_guard lock(registry.mutex);
-        entries = registry.entries;
-    }
-    if (!enabled || entries.empty()) {
-        return pipeline;
-    }
-    // The name a specification is known by, aliases resolved: `tiles` and `tiles::compile`
-    // are one pass.
-    const auto canonical = [](const std::string &spec) {
-        const std::string name = resolveAlias(specName(spec));
-        if (name.find("::") == std::string::npos &&
-            lookupInScope(passScope, splitPath("std::" + name))) {
-            return "std::" + name;
+bool passListTranslatesProgram(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+    for (const auto &name : passes) {
+        auto factory = resolvePassWithModule(name, ctx).factory;
+        if (!factory) {
+            continue;
         }
-        return name;
-    };
-    std::set<std::string> written;
-    for (const auto &spec : pipeline) {
-        written.insert(canonical(spec));
-    }
-    std::vector<std::string> inserted;
-    for (const auto &[priority, spec] : entries) {
-        (void)priority;
-        if (written.insert(canonical(spec)).second) {
-            inserted.push_back(spec);
+        const auto pass = factory(ctx);
+        // The first pass that consumes the graph decides what the list does. Before it, rewrite
+        // passes only transform the program; after it, the graph is gone.
+        if (dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr) {
+            return true;
+        }
+        if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
+            return false;
         }
     }
-    if (inserted.empty()) {
-        return pipeline;
-    }
-    const size_t at = firstConsumingPass(pipeline, ctx).value_or(pipeline.size());
-    std::vector<std::string> result(pipeline.begin(), pipeline.begin() + at);
-    result.insert(result.end(), inserted.begin(), inserted.end());
-    result.insert(result.end(), pipeline.begin() + at, pipeline.end());
-    return result;
+    return false;
 }
 
 std::optional<Diagnostic>

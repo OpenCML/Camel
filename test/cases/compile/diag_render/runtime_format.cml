@@ -1,7 +1,14 @@
 module runtime_format
 
+// The format string is computed, so the compiler cannot compare its fields with the
+// arguments (a constant format string is checked when the program is compiled, design
+// principles 2.7); the call fails when it runs.
+func pattern(): string {
+    return '{} and {}'
+}
+
 func main(): int sync {
     let a = 1
-    println(format<a>('{} and {}'))
+    println(format<a>(pattern()))
     return 0
 }

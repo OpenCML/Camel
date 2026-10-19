@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Apr. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,9 +25,9 @@
 #include "camel/utils/type.h"
 
 #include "float_format.h"
-#include "text_format.h"
 #include "fmt/args.h"
 #include "fmt/core.h"
+#include "text_format.h"
 
 #include <sstream>
 
@@ -104,10 +104,7 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
         String *resultObj     = String::from(resultStr, mm::autoSpace());
         return rtdata::toSlot(resultObj);
     } catch (const fmt::format_error &e) {
-        throwRuntimeFault(
-            RuntimeDiag::FormatFailed,
-            std::string(fmtStr),
-            std::string(e.what()));
+        throwRuntimeFault(RuntimeDiag::FormatFailed, std::string(fmtStr), std::string(e.what()));
     }
 }
 

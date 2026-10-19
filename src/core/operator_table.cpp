@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 13, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -155,7 +155,8 @@ namespace {
 /// The resource declaration against the `var` parameters of the signature (design principles
 /// 2.17); an empty string when they agree or the signature does not say.
 std::string checkVarAgainstResources(
-    std::string_view uri, const sem::ResourceSpec &resources, const type::FuncTypeResolver *resolver) {
+    std::string_view uri, const sem::ResourceSpec &resources,
+    const type::FuncTypeResolver *resolver) {
     std::vector<bool> with, norm;
     if (resolver == nullptr || !resolver->varParameters(with, norm)) {
         return {};
@@ -163,7 +164,9 @@ std::string checkVarAgainstResources(
     if (auto problem = sem::checkVarParameters(resources, with, norm)) {
         return std::format(
             "The resources declared for the operator '{}' disagree with its signature {}: {}.",
-            uri, resolver->signature(), *problem);
+            uri,
+            resolver->signature(),
+            *problem);
     }
     return {};
 }
@@ -175,7 +178,8 @@ void OperatorTable::setResolver(std::string_view uri, type::resolver_ptr_t resol
     Entry &entry = entries_[internLocked(uri)];
     if (const sem::OperatorSemantics *declared = entry.semantics.load(std::memory_order_relaxed);
         declared != nullptr && declared->resources) {
-        const std::string problem = checkVarAgainstResources(uri, *declared->resources, resolver.get());
+        const std::string problem =
+            checkVarAgainstResources(uri, *declared->resources, resolver.get());
         if (!problem.empty()) {
             throw std::invalid_argument(problem);
         }
@@ -199,7 +203,8 @@ bool OperatorTable::writesOperand(OperId id, bool isWith, size_t index) const {
 
 bool OperatorTable::touchesClass(OperId id, sem::ResourceClass cls, bool writesOnly) const {
     const sem::OperatorSemantics *declared = semantics(id);
-    return declared && declared->resources && sem::touchesClass(*declared->resources, cls, writesOnly);
+    return declared && declared->resources &&
+           sem::touchesClass(*declared->resources, cls, writesOnly);
 }
 
 type::resolver_ptr_t OperatorTable::resolver(OperId id) const {
@@ -214,7 +219,7 @@ type::resolver_ptr_t OperatorTable::resolver(std::string_view uri) const {
 
 void OperatorTable::setInPlaceForm(std::string_view uri, std::string_view inPlaceUri) {
     std::unique_lock lock(mutex_);
-    const OperId form = internLocked(inPlaceUri);
+    const OperId form                   = internLocked(inPlaceUri);
     entries_[internLocked(uri)].inPlace = entries_[form].uri;
 }
 
@@ -399,8 +404,8 @@ std::string checkSemantics(
 
 void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantics semantics) {
     std::unique_lock lock(mutex_);
-    const OperId id = internLocked(uri);
-    Entry &entry    = entries_[id];
+    const OperId id    = internLocked(uri);
+    Entry &entry       = entries_[id];
     const uint8_t bits = entry.traits.load(std::memory_order_relaxed);
     const std::optional<OperatorTraits> traits =
         (bits & kDeclared) != 0 ? std::optional(decode(bits)) : std::nullopt;
@@ -425,7 +430,10 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
     }
     if (!problem.empty()) {
         throw std::invalid_argument(
-            std::format("The semantics declared for the operator '{}' are rejected: {}.", uri, problem));
+            std::format(
+                "The semantics declared for the operator '{}' are rejected: {}.",
+                uri,
+                problem));
     }
     declarations_.push_back(std::make_unique<const sem::OperatorSemantics>(std::move(semantics)));
     entry.semantics.store(declarations_.back().get(), std::memory_order_release);
@@ -484,7 +492,8 @@ std::optional<OperId> OperatorTable::bind(const sem::OperatorKey &key) const {
     }
     const sem::OperatorSemantics *declared = semantics(*id);
     // A result recorded against key.minor may use facts added in that minor version.
-    if (declared == nullptr || declared->key.major != key.major || declared->key.minor < key.minor) {
+    if (declared == nullptr || declared->key.major != key.major ||
+        declared->key.minor < key.minor) {
         return std::nullopt;
     }
     return id;

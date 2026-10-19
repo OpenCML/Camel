@@ -30,7 +30,7 @@ let c = a + b
 - `//` to the end of the line is a line comment.
 - **A line that starts with `///` is a documentation comment**: the consecutive `///` lines right above a declaration (`func`, `let`/`var`, `type`, with the annotations, `with` and `export` before it), without an empty line in between, are the documentation of that declaration. An editor shows it on hover, `camel inspect --ast` lists it on the declaration, and the formatter keeps it in place. A line that starts with `////` is an ordinary comment.
 - `/* ... */` is a block comment; it may span lines and cannot be nested.
-- `#` to the end of the line is also ignored, so the first line of a script can be `#!/usr/bin/env camel`.
+- `#!` on the first line of the file, to the end of that line, is also ignored, so the first line of a script can be `#!/usr/bin/env camel`. Elsewhere `#` is not a comment: it opens a tag (design principles 2.20, see [8.1](08_top_level_and_grammar.md)).
 
 ## 2.3 Identifiers
 
@@ -46,9 +46,9 @@ The following words are reserved and cannot be used as names (using one gives `S
 |---|---|
 | Declarations | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
 | Control | `if` `then` `else` `match` `case` `return` `throw` `wait` `sync` `macro` `loop` `while` `do` `for` `in` |
-| Types and conversion | `as` `typeas` `const` |
+| Types and conversion | `as` `typeas` `const` `enum` |
 | Literals | `null` `true` `false` |
-| Reserved, not implemented | `is` `enum` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
+| Reserved, not implemented | `is` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
 
 For the status of each word in the last row see [8.6](08_top_level_and_grammar.md#86-constructs-reserved-but-not-implemented).
 

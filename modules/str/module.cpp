@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 12, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,16 +52,16 @@ group(const char *name, const param_list_t &with, const param_list_t &norm, Type
 }
 
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    Type *const S         = Type::String();
-    Type *const I         = Type::Int64();
-    Type *const B         = Type::Bool();
-    Type *const strings   = ArrayType::create(S);
-    Type *const ints      = ArrayType::create(I);
-    const param_list_t s  = {{S, false}};
-    const param_list_t i  = {{I, false}};
-    const param_list_t ii = {{I, false}, {I, false}};
-    const param_list_t ss = {{S, false}, {S, false}};
-    const param_list_t xs = {{ints, false}};
+    Type *const S                                     = Type::String();
+    Type *const I                                     = Type::Int64();
+    Type *const B                                     = Type::Bool();
+    Type *const strings                               = ArrayType::create(S);
+    Type *const ints                                  = ArrayType::create(I);
+    const param_list_t s                              = {{S, false}};
+    const param_list_t i                              = {{I, false}};
+    const param_list_t ii                             = {{I, false}, {I, false}};
+    const param_list_t ss                             = {{S, false}, {S, false}};
+    const param_list_t xs                             = {{ints, false}};
     static const std::vector<oper_group_ptr_t> groups = {
         group("split", s, s, strings),
         group("trim", {}, s, S),

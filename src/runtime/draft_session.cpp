@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -629,7 +629,11 @@ bool sameStaticValue(slot_t before, slot_t after, Type *type, const GraphMap &re
             return ca == cb;
         }
         for (size_t i = 0; i < a->tupleType()->size(); ++i) {
-            if (!sameStaticValue(ca->get<slot_t>(i), cb->get<slot_t>(i), a->tupleType()->typeAt(i), rewritten)) {
+            if (!sameStaticValue(
+                    ca->get<slot_t>(i),
+                    cb->get<slot_t>(i),
+                    a->tupleType()->typeAt(i),
+                    rewritten)) {
                 return false;
             }
         }
@@ -640,7 +644,11 @@ bool sameStaticValue(slot_t before, slot_t after, Type *type, const GraphMap &re
         auto *a         = fromSlot<::Tuple *>(before);
         auto *b         = fromSlot<::Tuple *>(after);
         for (size_t i = 0; i < tupleType->size(); ++i) {
-            if (!sameStaticValue(a->get<slot_t>(i), b->get<slot_t>(i), tupleType->typeAt(i), rewritten)) {
+            if (!sameStaticValue(
+                    a->get<slot_t>(i),
+                    b->get<slot_t>(i),
+                    tupleType->typeAt(i),
+                    rewritten)) {
                 return false;
             }
         }
@@ -691,7 +699,8 @@ bool sameContent(const GCGraph &before, const GCGraph &after, const GraphMap &re
     // Payloads, node by node: an OPER's cached implementation pointer is not content.
     for (gc_node_ref_t ref = 0; ref < before.nodeCount(); ++ref) {
         if (before.node(ref)->kind == GCNodeKind::Oper) {
-            if (before.nodeBodyAs<GCOperBody>(ref)->oper != after.nodeBodyAs<GCOperBody>(ref)->oper) {
+            if (before.nodeBodyAs<GCOperBody>(ref)->oper !=
+                after.nodeBodyAs<GCOperBody>(ref)->oper) {
                 return false;
             }
             continue;

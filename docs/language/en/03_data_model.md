@@ -22,7 +22,8 @@ Every expression has a definite type at compile time; the graph contains only co
 | Function | `(x: T) => R` | See [6.9](06_expressions.md#69-lambdas-and-function-types) |
 | May be null | `T?` | See 3.4 |
 | May fail | `T!` | See 3.4 |
-| Map, set | `Map<K, V>`, `Set<T>` | See 3.5 |
+| Map, set | `Map<K, V>`, `Set<T>` | See 3.6 |
+| Enum | `Shape`, `Option<int>` | See 3.5 |
 | No value | `void` | Return type of a function that returns no value; its only value prints as `null` |
 | Module types | e.g. `Tensor`, `Tensor<f32, const [2, 3]>` | Introduced by modules; the arguments in angle brackets are interpreted by the type itself |
 
@@ -115,7 +116,7 @@ println(xs[0], len(xs), grid[0][1])
   | `zip(xs, ys)` | An array of `(x, y)` tuples; three or more arrays give tuples of that many elements (`zip(xs, ys, zs)`); the lengths must be equal |
   | `strs->join<sep>` | Joins a `string[]` into one string |
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
-  | `xs->append<v>`, `xs->extend<ys>` | A **new array** with `v` (or the elements of `ys`) at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.6) |
+  | `xs->append<v>`, `xs->extend<ys>` | A **new array** with `v` (or the elements of `ys`) at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.7) |
 
 - More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `any`, `all`, `count`, `sum`, `min`, `max`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
 
@@ -239,9 +240,56 @@ Rules:
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
 
-**Behaviour of the current implementation, not yet decided**: `?->` is defined for `T!` only; a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`. The relation between the earlier reserved notation `T ? U` and `T!` is undecided, and using it is a compile-time error (`SemanticDiag::FeatureNotSupported`).
+**Behaviour of the current implementation, not yet decided**: `?->` is defined for `T!` only; a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`.
 
-## 3.5 Maps and sets
+The earlier reserved notation `T ? U` is retired: `?` is only the nullable mark, the special reading of `T ?` followed by a type is gone, and writing it gives `SemanticDiag::ReservedTypeQuestionRetired`.
+
+## 3.5 Enums
+
+An `enum` is a **nominal type**: a value is exactly one of the variants the declaration lists, and a variant carries no data, a tuple or a struct. Two enums with the same shape are still different types.
+
+```cml
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+type Option<T> = enum { Some(T), None }
+type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
+```
+
+**Declaration.** `type Name = enum { variant, ... }`; a trailing comma is optional. A variant has one of three shapes: `Empty` (no data), `Circle(float)` (one or more positional fields), `Rect { w: float, h: float }` (named fields, separated by `,`). A variant name occurs once in its enum (`DuplicateEnumVariant`), and a field name occurs once in a struct variant (`DuplicateEnumField`). The type may take parameters (`Option<T>`), a field type may name the enum itself (`Tree<T>`) or another enum, and `enum` is a keyword, so it cannot be a name.
+
+**Construction.** A variant is written after the type name, qualified with `::`: `Shape::Circle(1.0)`, `Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`. A struct variant takes every field it declares, in any order; a tuple variant takes its fields by position. A variant without data is the value itself, with no parentheses. The value has type `Shape`; the arguments of a generic instance are inferred from the field arguments (`Option::Some(42)` is `Option<int>`), or, when they cannot be (`Option::None`), from the type the position expects (`let x: Option<int> = Option::None`, an argument position, a return type), and failing both is a compile-time error (`EnumTypeArgumentNotInferred`). A field argument must have the declared type (`EnumFieldTypeMismatch`), and the number and names of the fields must agree with the declaration (`EnumVariantFieldCount`, `EnumConstructionMismatch`). Automatic wrapping into a field follows the usual rule: an `int` does not become a `float` by itself.
+
+**`match`.** An enum is taken apart by `match`; its fields are never read directly (`b.w` is `EnumFieldAccess`, and the diagnostic shows the `match`):
+
+```cml
+func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+        case Shape::Rect { w, h } => w * h
+        case Shape::Empty => 0.0
+    }
+}
+```
+
+- A tuple variant's pattern gives every position, with `_` for a field it does not need (`case Shape::Circle(_)`); a struct variant's pattern writes the fields it binds, ignores the others, may rename (`{ w: width }`) and may abbreviate (`{ w }` binds a variable of that name); a variant without data is just its name (`case Shape::Empty`); `case _` matches every remaining value.
+- **Exhaustiveness**: naming all variants means no `case _` is needed; a missing variant without `case _` is the compile-time error `EnumMatchNotExhaustive`, whose diagnostic lists the missing variants. A variant already covered by an earlier case is a warning (`EnumVariantCaseRepeated`), and a case after `case _` is never taken and warns (`MatchCaseAfterWildcard`).
+- A pattern names a variant of the type being matched: a wrong prefix (`Shape::`) or a wrong variant name is `EnumPatternMismatch`, which lists the variants of that type.
+- **The first version has no nested patterns**: a pattern in the position of a field, such as `case Shape::Circle(0.0)`, gives "not supported yet" (`ConstructNotSupported`) and asks for a name or `_` per field, matched inside the arm.
+- The subject may be any expression, including a call that returns an enum; the arms unify as in the existing `match` ([6.8.2](06_expressions.md#682-match)).
+
+**Equality and printing.** Two values of the same enum instance can be compared with `==` and `!=`: the variant first, then each field in declaration order; when a field type cannot be compared, the enum cannot either (a compile-time error). Printing writes the source form: `Shape::Circle(1.0)`, `Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`; a generic instance does not print its type arguments (`Option::Some(42)`, not `Option::Some<int>(42)`).
+
+**Generics.** `Option<int>` and `Option<float>` are different types with different values. A field type may use the parameters again: `type Pair<A, B> = enum { Both(A, B), Neither }`, and `Pair<int, string>`'s `Both` takes an `int` and a `string`.
+
+**On the graph.** No node kind is added: construction stores a tag and the data, `match` reads the tag, branches on it and takes the data out in the arm, as for `T?` and `T!`. Reading the tag and a field are ordinary internal operators (`__enum_tag__`, `__enum_field__`), and the schedulers do not special-case them by name. `std::nvm`, `std::fvm`, `std::jit`, `std::prl` and `std::macro` all support enums; `std::cpp`, ONNX export and autodiff refuse one with a located diagnostic for now.
+
+**Retired.** `A | B` in a type position is retired: a value has one type, and a value that is one of several possibilities is an enum (`SemanticDiag::UnionTypeRetired`; `|` remains the logical or). `T ? U` is retired as well (`SemanticDiag::ReservedTypeQuestionRetired`).
+
+## 3.6 Maps and sets
 
 `Map<K, V>` and `Set<T>` are built-in types and need no `import`. There is no dedicated literal; construct them from an array with `as`:
 
@@ -320,7 +368,7 @@ func main(): int sync {
 
 For the implementation and trade-offs see [technical document 31](../../technical/31_map_and_set.md).
 
-## 3.6 `let`, `var` and references
+## 3.7 `let`, `var` and references
 
 - `let` introduces an immutable name, `var` a mutable variable. The same name cannot be declared twice in the same scope (`SemanticDiag::Redeclaration`).
 - **Only a whole variable can be assigned to.** Fields and elements are not assignable: `p.x = 5` and `xs[0] = 5` are the compile-time error `SemanticDiag::AssignmentTargetNotVariable`. Give the variable a new value: `p = { x: 5, y: p.y }`.

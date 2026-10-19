@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 13, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -105,10 +105,10 @@ inline constexpr OperId kNoOper = 0;
 /// table interns their URIs (kWellKnownOperatorUris, same order) before anything else, so
 /// `body->oper == oper::VarGet` is the test that `body->uri() == ":var/get"` used to be.
 namespace oper {
-inline constexpr OperId VarNew              = 1;  // ":var/new"  `var v = e`
-inline constexpr OperId VarGet              = 2;  // ":var/get"  reading a variable
-inline constexpr OperId VarPeek             = 3;  // ":var/peek" a read whose value cannot be kept
-inline constexpr OperId kWellKnownCount     = 4;  // kNoOper included
+inline constexpr OperId VarNew          = 1; // ":var/new"  `var v = e`
+inline constexpr OperId VarGet          = 2; // ":var/get"  reading a variable
+inline constexpr OperId VarPeek         = 3; // ":var/peek" a read whose value cannot be kept
+inline constexpr OperId kWellKnownCount = 4; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -133,9 +133,9 @@ struct OperatorTraits {
     bool elementwise = false;
     /// Not pure, but without an effect outside the program's own variables: it creates, reads
     /// or changes a variable (`:var/new`, `:var/get`, `:var/take`); which of them is its
-    /// resource declaration's to say, the effect summaries read it there. Its result depends on when it runs, so it
-    /// is never folded, merged or moved across a write; it is not an effect a user can
-    /// observe, so it is not reported as one (effect trace).
+    /// resource declaration's to say, the effect summaries read it there. Its result depends on
+    /// when it runs, so it is never folded, merged or moved across a write; it is not an effect a
+    /// user can observe, so it is not reported as one (effect trace).
     bool stateOnly = false;
     /// The operator can raise a fault (design principles 2.9: division by zero, an index out
     /// of range, a conversion whose value does not fit). True unless the module declares

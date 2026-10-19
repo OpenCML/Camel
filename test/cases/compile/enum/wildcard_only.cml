@@ -1,0 +1,18 @@
+type Shape = enum {
+    Circle(float),
+    Empty,
+}
+
+func make(x: float): Shape {
+    return Shape::Circle(x)
+}
+
+func main(): void sync {
+    println(match make(2.0) {
+        case _ => 3
+    })
+    println(match make(2.0) {
+        case Shape::Circle(r) => r
+        case _ => 0.0
+    })
+}

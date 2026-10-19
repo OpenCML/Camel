@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,24 +45,12 @@ struct OverloadableForm {
 // The binary operators, the unary ones, and indexing (`m[i]`, `m[i, j]`: the indexed value and
 // the indices). `-` is both: one parameter is the negation, two the subtraction.
 constexpr std::array<OverloadableForm, 19> kForms = {{
-    {"+", 2, 2, "__add__"},
-    {"-", 2, 2, "__sub__"},
-    {"-", 1, 1, "__neg__"},
-    {"*", 2, 2, "__mul__"},
-    {"/", 2, 2, "__div__"},
-    {"%", 2, 2, "__mod__"},
-    {"^", 2, 2, "__pow__"},
-    {"@", 2, 2, "__mat__"},
-    {"==", 2, 2, "__eq__"},
-    {"!=", 2, 2, "__neq__"},
-    {"<", 2, 2, "__lt__"},
-    {"<=", 2, 2, "__le__"},
-    {">", 2, 2, "__gt__"},
-    {">=", 2, 2, "__ge__"},
-    {"&", 2, 2, "__and__"},
-    {"|", 2, 2, "__or__"},
-    {"!", 1, 1, "__not__"},
-    {"~", 1, 1, "__inv__"},
+    {"+", 2, 2, "__add__"},     {"-", 2, 2, "__sub__"}, {"-", 1, 1, "__neg__"},
+    {"*", 2, 2, "__mul__"},     {"/", 2, 2, "__div__"}, {"%", 2, 2, "__mod__"},
+    {"^", 2, 2, "__pow__"},     {"@", 2, 2, "__mat__"}, {"==", 2, 2, "__eq__"},
+    {"!=", 2, 2, "__neq__"},    {"<", 2, 2, "__lt__"},  {"<=", 2, 2, "__le__"},
+    {">", 2, 2, "__gt__"},      {">=", 2, 2, "__ge__"}, {"&", 2, 2, "__and__"},
+    {"|", 2, 2, "__or__"},      {"!", 1, 1, "__not__"}, {"~", 1, 1, "__inv__"},
     {"[]", 2, kAny, "__idx__"},
 }};
 
@@ -114,7 +102,8 @@ std::optional<std::string_view> plainGroupOfCompoundAssignment(std::string_view 
     return std::nullopt;
 }
 
-std::optional<std::string_view> overloadableOperatorGroup(std::string_view symbol, size_t paramCount) {
+std::optional<std::string_view>
+overloadableOperatorGroup(std::string_view symbol, size_t paramCount) {
     for (const OverloadableForm &form : kForms) {
         if (form.symbol == symbol && paramCount >= form.minParams && paramCount <= form.maxParams) {
             return form.group;
@@ -137,10 +126,12 @@ std::optional<std::string_view> whyNotOverloadable(std::string_view symbol) {
         }
     }
     static const std::unordered_map<std::string_view, std::string_view> reasons = {
-        {"&&", "it is a branch, 'a && b' is 'if a then b else false', whose right side is "
-               "evaluated only when needed"},
-        {"||", "it is a branch, 'a || b' is 'if a then true else b', whose right side is "
-               "evaluated only when needed"},
+        {"&&",
+         "it is a branch, 'a && b' is 'if a then b else false', whose right side is "
+         "evaluated only when needed"},
+        {"||",
+         "it is a branch, 'a || b' is 'if a then true else b', whose right side is "
+         "evaluated only when needed"},
         {"??", "it is a branch on whether the value on its left is null"},
         {"!!", "it is a branch on whether the value on its left is an error"},
         {"?->", "it is a branch on whether the value on its left is an error"},

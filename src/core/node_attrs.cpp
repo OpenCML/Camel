@@ -194,7 +194,9 @@ AttrValueId graphRef(std::string_view stableId) {
 
 AttrValueId tuple(std::span<const AttrValueId> items) {
     return internValue(
-        Value{.kind = ValueKind::Tuple, .items = std::vector<AttrValueId>(items.begin(), items.end())});
+        Value{
+            .kind  = ValueKind::Tuple,
+            .items = std::vector<AttrValueId>(items.begin(), items.end())});
 }
 
 Value value(AttrValueId id) {
@@ -251,7 +253,7 @@ std::vector<uint64_t> wordsOf(AttrValueId id) {
 
 CombineRule unionFlags() {
     return [](AttrValueId outer, AttrValueId inner) {
-        std::vector<uint64_t> a = wordsOf(outer);
+        std::vector<uint64_t> a       = wordsOf(outer);
         const std::vector<uint64_t> b = wordsOf(inner);
         a.resize(std::max(a.size(), b.size()), 0);
         for (size_t i = 0; i < b.size(); ++i) {
@@ -368,10 +370,11 @@ AttrSetId intern(std::span<const Attr> attrs) {
             continue;
         }
         if (const auto spec = specOf(a.key); spec && value(a.value).kind != spec->kind) {
-            throw std::invalid_argument(std::format(
-                "attribute '{}': the value {} is not of the key's kind",
-                keyName(a.key),
-                valueText(a.value)));
+            throw std::invalid_argument(
+                std::format(
+                    "attribute '{}': the value {} is not of the key's kind",
+                    keyName(a.key),
+                    valueText(a.value)));
         }
         auto [it, inserted] = merged.emplace(a.key, a.value);
         if (!inserted) {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -126,12 +126,13 @@ class Fault {
 
 /// Raises a fault at `site`; `values` are the texts the report's marks stand for.
 [[noreturn]] inline void fault(const Site &site, const std::vector<std::string> &values = {}) {
-    throw Fault(Fault::Texts{
-        withValues(site.text, values),
-        withValues(site.brief, values),
-        site.kind,
-        withValues(site.message, values),
-        site.location});
+    throw Fault(
+        Fault::Texts{
+            withValues(site.text, values),
+            withValues(site.brief, values),
+            site.kind,
+            withValues(site.message, values),
+            site.location});
 }
 
 /// `exit(n)`: the program ends with exit code `n` once the output is written. A C++ exception,

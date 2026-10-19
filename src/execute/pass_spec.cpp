@@ -87,9 +87,8 @@ bool PassArgs::given(const std::string &name) const {
 PassDescriptor passWithoutParameters(PassFactory factory) {
     PassDescriptor d;
     d.make = [factory = std::move(factory)](
-                 const camel::core::context::context_ptr_t &ctx, const PassArgs &) {
-        return factory(ctx);
-    };
+                 const camel::core::context::context_ptr_t &ctx,
+                 const PassArgs &) { return factory(ctx); };
     return d;
 }
 
@@ -227,7 +226,10 @@ PassParamValue evalBinary(ast::BinaryDataOp op, const PassParamValue &a, const P
     using Op       = ast::BinaryDataOp;
     const auto bad = [&]() -> EvalError {
         return EvalError{std::format(
-            "operator '{}' does not apply to {} and {}", ast::to_string(op), kindOf(a), kindOf(b))};
+            "operator '{}' does not apply to {} and {}",
+            ast::to_string(op),
+            kindOf(a),
+            kindOf(b))};
     };
     switch (op) {
     case Op::And:
@@ -272,10 +274,10 @@ PassParamValue evalBinary(ast::BinaryDataOp op, const PassParamValue &a, const P
         } else {
             throw bad();
         }
-        return op == Op::Less        ? cmp < 0
-               : op == Op::LessEq    ? cmp <= 0
-               : op == Op::Greater   ? cmp > 0
-                                     : cmp >= 0;
+        return op == Op::Less      ? cmp < 0
+               : op == Op::LessEq  ? cmp <= 0
+               : op == Op::Greater ? cmp > 0
+                                   : cmp >= 0;
     }
     case Op::Add:
     case Op::Sub:
@@ -291,8 +293,8 @@ PassParamValue evalBinary(ast::BinaryDataOp op, const PassParamValue &a, const P
             throw bad();
         if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b)) {
             const int64_t x = std::get<int64_t>(a), y = std::get<int64_t>(b);
-            int64_t r       = 0;
-            bool overflow   = false;
+            int64_t r     = 0;
+            bool overflow = false;
             switch (op) {
             case Op::Add:
                 overflow = __builtin_add_overflow(x, y, &r);
@@ -466,7 +468,10 @@ camel::execute::detail::parseSpec(const std::string &spec, ParsedSpec &out) {
                 param.value = evalNode(arg->at(1));
             } catch (const EvalError &e) {
                 return std::format(
-                    "column {}: parameter '{}': {}", param.column, param.key, e.message);
+                    "column {}: parameter '{}': {}",
+                    param.column,
+                    param.key,
+                    e.message);
             }
             out.params.push_back(std::move(param));
         }
@@ -505,8 +510,9 @@ std::optional<std::string> camel::execute::detail::bindArgs(
     }
     std::set<std::string> seen;
     for (const auto &w : parsed.params) {
-        const auto it = std::find_if(
-            declared.begin(), declared.end(), [&](const PassParam &p) { return p.name == w.key; });
+        const auto it = std::find_if(declared.begin(), declared.end(), [&](const PassParam &p) {
+            return p.name == w.key;
+        });
         if (it == declared.end()) {
             return std::format(
                 "column {}: '{}' has no parameter '{}' (it takes: {})",

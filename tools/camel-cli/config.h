@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -84,7 +84,6 @@ extern std::vector<std::string> entryArgs;
 
 extern bool profile;
 extern bool noCache;
-extern bool noModulePasses;
 extern bool semanticOnly;
 extern int maxThreads;
 /// --max-recursion-depth / --max-macro-depth: the limits given on the command line, 0 when the

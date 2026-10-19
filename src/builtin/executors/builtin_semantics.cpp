@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -88,10 +88,9 @@ std::optional<BinaryAlgebra> binaryLaws(const std::string &name, const NumericTy
     if (name == "add") {
         law.commutative      = true;
         law.exactAssociative = !t.isFloat;
-        law.neutralBits      = t.isFloat ? (t.type == TypeCode::Float32
-                                                ? std::bit_cast<uint32_t>(-0.0f)
-                                                : std::bit_cast<uint64_t>(-0.0))
-                                         : 0;
+        law.neutralBits = t.isFloat ? (t.type == TypeCode::Float32 ? std::bit_cast<uint32_t>(-0.0f)
+                                                                   : std::bit_cast<uint64_t>(-0.0))
+                                    : 0;
     } else if (name == "sub") {
         law.subtractionOf = sum;
         law.neutralBits   = bitsOf(t, 0);
@@ -256,18 +255,20 @@ void declareBuiltinOperatorSemantics() {
                 t,
                 exact(t, "a / b truncated toward zero; b = 0 is a fault"),
                 zeroDivisor);
-            declare(
-                "mod",
-                t,
-                exact(t, "the remainder of a / b; b = 0 is a fault"),
-                zeroDivisor);
+            declare("mod", t, exact(t, "the remainder of a / b; b = 0 is a fault"), zeroDivisor);
         }
-        declare("neg", t, exact(t, t.isFloat ? "-a: the sign flipped" : "-a, wrapping"), std::nullopt);
+        declare(
+            "neg",
+            t,
+            exact(t, t.isFloat ? "-a: the sign flipped" : "-a, wrapping"),
+            std::nullopt);
         for (const char *cmp : {"lt", "le", "gt", "ge"}) {
             declare(
                 cmp,
                 t,
-                exact(t, t.isFloat ? "IEEE comparison (false when either side is NaN)" : "comparison"),
+                exact(
+                    t,
+                    t.isFloat ? "IEEE comparison (false when either side is NaN)" : "comparison"),
                 none);
         }
     }
@@ -278,8 +279,10 @@ void declareBuiltinOperatorSemantics() {
 bool storesIntoCell(std::string_view name) { return name.starts_with("op/assn"); }
 
 void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
-    auto &table      = OperatorTable::instance();
-    const auto cell  = [](AccessMode mode) { return operandAccess(ResourceClass::Variable, 0, mode); };
+    auto &table     = OperatorTable::instance();
+    const auto cell = [](AccessMode mode) {
+        return operandAccess(ResourceClass::Variable, 0, mode);
+    };
     const auto alias = [](uint8_t operand) {
         return ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = operand};
     };
@@ -289,7 +292,9 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         ResourceSpec{.allocates = Resource{.cls = ResourceClass::Variable}});
     // Reading a variable reads its cell; the value read is (or shares) what the cell holds.
     for (const char *uri : {":var/get", ":var/peek"}) {
-        table.declareResources(uri, ResourceSpec{.accesses = {cell(AccessMode::Read)}, .result = alias(0)});
+        table.declareResources(
+            uri,
+            ResourceSpec{.accesses = {cell(AccessMode::Read)}, .result = alias(0)});
     }
     // `:var/take` hands an in-place form the cell's own array when nothing else holds it, so
     // the cell's content changes with what the form does (Builder::inPlaceRebindingOf).
@@ -303,13 +308,14 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         if (!storesIntoCell(name)) {
             continue;
         }
-        const std::string uri = ":" + std::string(name);
+        const std::string uri       = ":" + std::string(name);
         const std::string_view rest = name.substr(std::string_view("op/assn").size());
         ResourceSpec spec;
         if (rest.empty() || rest == "_owned" || (rest.size() == 2 && rest[0] == '_')) {
             spec = ResourceSpec{.accesses = {cell(AccessMode::Write)}, .result = alias(1)};
         } else if (rest == "_append") {
-            spec = ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)};
+            spec =
+                ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)};
         } else {
             spec = ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}};
         }
@@ -319,7 +325,9 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
     for (const char *uri : {":io/print", ":io/println"}) {
         table.declareResources(
             uri,
-            ResourceSpec{.accesses = {ambientAccess("io:stdout", AccessMode::Write)}, .externalEffect = true});
+            ResourceSpec{
+                .accesses       = {ambientAccess("io:stdout", AccessMode::Write)},
+                .externalEffect = true});
     }
     table.declareResources(
         ":io/input",

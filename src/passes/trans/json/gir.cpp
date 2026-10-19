@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,7 @@ namespace {
 /// A node attribute's value (camel/core/node_attrs.h): true for a mark, the bit indices of
 /// flags, a number, a string, {"graph": stable id} for a graph, an array for a tuple.
 json attrValueJson(camel::core::attr::AttrValueId id) {
-    namespace attr     = camel::core::attr;
+    namespace attr      = camel::core::attr;
     const attr::Value v = attr::value(id);
     switch (v.kind) {
     case attr::ValueKind::Unit:

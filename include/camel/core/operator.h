@@ -179,9 +179,11 @@ class OperatorGroup {
     /// (design principles 2.17). Only rules that declare a fixed signature can be compared.
     void rejectOverlappingRules() const {
         for (size_t i = 0; i < resolvers_.size(); ++i) {
-            const type::FunctionType *a = resolvers_[i].second ? resolvers_[i].second->fixedSignature() : nullptr;
+            const type::FunctionType *a =
+                resolvers_[i].second ? resolvers_[i].second->fixedSignature() : nullptr;
             for (size_t j = i + 1; a != nullptr && j < resolvers_.size(); ++j) {
-                const type::FunctionType *b = resolvers_[j].second ? resolvers_[j].second->fixedSignature() : nullptr;
+                const type::FunctionType *b =
+                    resolvers_[j].second ? resolvers_[j].second->fixedSignature() : nullptr;
                 if (b == nullptr || a->withTypesCount() != b->withTypesCount() ||
                     a->normTypesCount() != b->normTypesCount()) {
                     continue;

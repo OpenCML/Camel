@@ -1,3 +1,6 @@
+>#!/usr/bin/env camel
+#^^ meta.preprocessor.command.camel punctuation.definition.directive.camel
+#  ^^^^^^^^^^^^^^^^^^ meta.preprocessor.command.camel
 >/**
 #^^^ comment.block.documentation.camel punctuation.definition.comment.begin.camel
 > * Documentation block comment
@@ -54,16 +57,13 @@
 #        ^ string.quoted.double.camel punctuation.definition.string.begin.camel
 #         ^^^^^^^^^^^^^^^^^^^ string.quoted.double.camel
 #                            ^ string.quoted.double.camel punctuation.definition.string.end.camel
-># command line: to the end of the line, on its own channel
-#^ meta.preprocessor.command.camel punctuation.definition.directive.camel
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.preprocessor.command.camel
->let d = 4 # trailing command
+>let d = 4 // trailing comment; '#' now opens a tag, not a comment
 #^^^ meta.declaration.let.camel storage.type.let.camel
 #    ^ meta.declaration.let.camel variable.other.constant.camel
 #      ^ keyword.operator.assignment.camel
 #        ^ constant.numeric.integer.decimal.camel
-#          ^ meta.preprocessor.command.camel punctuation.definition.directive.camel
-#           ^^^^^^^^^^^^^^^^^ meta.preprocessor.command.camel
+#          ^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
 >/**/
 #^^ comment.block.camel punctuation.definition.comment.begin.camel
 #  ^^ comment.block.camel punctuation.definition.comment.end.camel

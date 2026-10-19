@@ -36,8 +36,8 @@ inline constexpr size_t npos = static_cast<size_t>(-1);
 
 /// Whether every byte of the text is below 0x80.
 inline bool isAscii(std::string_view s) noexcept {
-    const char *p      = s.data();
-    const char *end    = p + s.size();
+    const char *p           = s.data();
+    const char *end         = p + s.size();
     constexpr uint64_t high = 0x8080808080808080ull;
     while (end - p >= 8) {
         uint64_t word;
@@ -56,7 +56,7 @@ inline bool isAscii(std::string_view s) noexcept {
 /// The offset of the first byte that is not part of valid UTF-8, or `npos` when the whole text
 /// is valid.
 inline size_t invalidOffset(std::string_view s) noexcept {
-    size_t i = 0;
+    size_t i       = 0;
     const size_t n = s.size();
     while (i < n) {
         const auto first = static_cast<unsigned char>(s[i]);

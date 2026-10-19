@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -56,7 +56,7 @@ struct EffectWalk {
             const GCNode *node = graph->node(ref);
             switch (node->kind) {
             case GCNodeKind::Oper: {
-                const auto oper = graph->nodeBodyAs<GCOperBody>(ref)->oper;
+                const auto oper   = graph->nodeBodyAs<GCOperBody>(ref)->oper;
                 const auto traits = table.find(oper);
                 summary.external |= table.hasExternalEffect(oper);
                 // What an operator writes is its resource declaration's (design principles 2.17).

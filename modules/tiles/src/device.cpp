@@ -4,16 +4,16 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Interned device storage types preserve the host tensor's static refinements.
-#include "camel/core/type/tree.h"
 #include "tiles/device.h"
 #include "camel/core/mm.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/tree.h"
 #include "modules/tensor/type.h"
 #include <mutex>
 #include <unordered_map>

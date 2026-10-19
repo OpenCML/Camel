@@ -123,50 +123,10 @@ expect_exit = 1
 expect_output_contains = ["InvalidPassParameter", "parameter 'n' is a float, not an int"]
 
 [[tests]]
-name = "default_pipeline.joins"
-desc = "A pass the imported module registered for the default pipeline runs before the scheduler, also when the pipeline names only the scheduler."
-args = ["${case}", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=module-default"]
-expect_exit = 0
-expect_stdout_starts_with = "test_echo: n=1 ratio=0.5 label=default flag=false\ncamel-ran-marker\n"
-
-[[tests]]
-name = "default_pipeline.empty_pipeline"
-desc = "Also with no pass given (the fallback scheduler follows it)."
-args = ["${case}"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=module-default"]
-expect_exit = 0
-expect_stdout_starts_with = "test_echo: n=1 ratio=0.5 label=default flag=false\ncamel-ran-marker\n"
-
-[[tests]]
-name = "default_pipeline.before_first_consumer"
-desc = "It joins before the first consuming pass, after the passes that come earlier."
-args = ["${case}", "std::opt", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=module-default"]
-expect_exit = 0
-expect_stdout_starts_with = "test_echo: n=1 ratio=0.5 label=default flag=false\ncamel-ran-marker\n"
-
-[[tests]]
-name = "default_pipeline.written_explicitly"
-desc = "A pass the user wrote runs where it is written and not twice, also under its alias."
+name = "module_pass.written_explicitly"
+desc = "A pass a module contributes runs where the user writes it, not twice, also under its alias."
 args = ["${case}", "tensor::echo(label=\"mine\")", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=module-default"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 0
 expect_stdout_starts_with = "test_echo: n=1 ratio=0.5 label=mine flag=false\ncamel-ran-marker\n"
 
-[[tests]]
-name = "default_pipeline.excluded"
-desc = "--no-module-passes leaves the registered passes out."
-args = ["--no-module-passes", "${case}", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=module-default"]
-expect_exit = 0
-expect_stdout_starts_with = "camel-ran-marker\n"
-
-[[tests]]
-name = "default_pipeline.not_imported"
-desc = "A module the program does not import registers nothing."
-case = "../../../cases/opt/pass_params/no_import.cml"
-args = ["${case}", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=module-default"]
-expect_exit = 0
-expect_stdout_starts_with = "camel-ran-marker\n"

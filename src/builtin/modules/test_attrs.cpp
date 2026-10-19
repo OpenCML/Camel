@@ -42,7 +42,9 @@ TestAttrsBuiltinModule::TestAttrsBuiltinModule(context::context_ptr_t ctx)
     if (!enabled()) {
         return;
     }
-    exportEntity("mark", attrDecoratorGroup("mark", "test_attrs:mark", 0, "(fn: Function) => Function"));
+    exportEntity(
+        "mark",
+        attrDecoratorGroup("mark", "test_attrs:mark", 0, "(fn: Function) => Function"));
     exportEntity(
         "flags",
         attrDecoratorGroup(
@@ -50,9 +52,7 @@ TestAttrsBuiltinModule::TestAttrsBuiltinModule(context::context_ptr_t ctx)
             "test_attrs:flags",
             1,
             "<n: int>(fn: Function) => Function",
-            [](const type::type_vec_t &with) {
-                return with[0]->code() == type::TypeCode::Int64;
-            }));
+            [](const type::type_vec_t &with) { return with[0]->code() == type::TypeCode::Int64; }));
     exportEntity(
         "level",
         attrDecoratorGroup(
@@ -60,9 +60,7 @@ TestAttrsBuiltinModule::TestAttrsBuiltinModule(context::context_ptr_t ctx)
             "test_attrs:level",
             1,
             "<n: int>(fn: Function) => Function",
-            [](const type::type_vec_t &with) {
-                return with[0]->code() == type::TypeCode::Int64;
-            }));
+            [](const type::type_vec_t &with) { return with[0]->code() == type::TypeCode::Int64; }));
     exportEntity(
         "plain",
         attrDecoratorGroup("plain", "test_attrs:plain", 0, "(fn: Function) => Function"));
@@ -93,7 +91,9 @@ bool TestAttrsBuiltinModule::load() {
     // The three kinds of key, each with its rules.
     attr::registerKey(
         "test.mark",
-        {.kind = attr::ValueKind::Unit, .combine = attr::rules::inner(), .merge = attr::rules::equalOnly()});
+        {.kind    = attr::ValueKind::Unit,
+         .combine = attr::rules::inner(),
+         .merge   = attr::rules::equalOnly()});
     attr::registerKey(
         "test.flags",
         {.kind    = attr::ValueKind::Flags,
@@ -101,7 +101,9 @@ bool TestAttrsBuiltinModule::load() {
          .merge   = attr::rules::intersectFlags()});
     attr::registerKey(
         "test.level",
-        {.kind = attr::ValueKind::Int, .combine = attr::rules::inner(), .merge = attr::rules::equalOnly()});
+        {.kind    = attr::ValueKind::Int,
+         .combine = attr::rules::inner(),
+         .merge   = attr::rules::equalOnly()});
     // The constant written, an int (a LongData).
     const auto intArg = [](std::span<const data::data_ptr_t> with) -> std::optional<int64_t> {
         const auto *n =
@@ -111,9 +113,9 @@ bool TestAttrsBuiltinModule::load() {
     table.declareGrant("test_attrs:mark", {.key = "test.mark"});
     table.declareGrant(
         "test_attrs:flags",
-        {.key   = "test.flags",
-         .value = [intArg](std::span<const data::data_ptr_t> with)
-             -> std::optional<attr::AttrValueId> {
+        {.key = "test.flags",
+         .value =
+             [intArg](std::span<const data::data_ptr_t> with) -> std::optional<attr::AttrValueId> {
              const auto n = intArg(with);
              if (!n || *n < 0 || *n > 1000) {
                  return std::nullopt;
@@ -123,9 +125,9 @@ bool TestAttrsBuiltinModule::load() {
          }});
     table.declareGrant(
         "test_attrs:level",
-        {.key   = "test.level",
-         .value = [intArg](std::span<const data::data_ptr_t> with)
-             -> std::optional<attr::AttrValueId> {
+        {.key = "test.level",
+         .value =
+             [intArg](std::span<const data::data_ptr_t> with) -> std::optional<attr::AttrValueId> {
              const auto n = intArg(with);
              return n ? std::optional<attr::AttrValueId>(attr::integer(*n)) : std::nullopt;
          }});

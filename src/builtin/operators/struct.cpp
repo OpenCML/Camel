@@ -13,13 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 25, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include <format>
 #include "struct.h"
-#include "ops.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
@@ -27,6 +25,8 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/type.h"
 #include "camel/utils/utf8.h"
+#include "ops.h"
+#include <format>
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;
@@ -130,7 +130,10 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(
             RuntimeDiag::InvalidArgument,
             "range",
-            std::format("the step is 0 (from {} to {}); a range needs a step that moves", start, stop));
+            std::format(
+                "the step is 0 (from {} to {}); a range needs a step that moves",
+                start,
+                stop));
     }
 
     size_t count = 0;

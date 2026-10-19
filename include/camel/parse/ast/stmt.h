@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -133,7 +133,6 @@ class TypeDeclLoad : public StmtLoad {
     std::string uri_;
     std::vector<std::string> params_;
 };
-
 
 class UsingNamespaceLoad : public StmtLoad {
   public:

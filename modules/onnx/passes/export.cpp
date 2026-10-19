@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,8 +61,8 @@ using camel::runtime::GCNodeKind;
 
 namespace {
 
-constexpr const char *kPassName     = "onnx::export";
-constexpr const char *kRequestUri   = "onnx:export_model";
+constexpr const char *kPassName   = "onnx::export";
+constexpr const char *kRequestUri = "onnx:export_model";
 
 /// Why the pass does not translate, and the node it is about. A refusal that is about no
 /// particular node leaves `origin` invalid; apply() then reports it at the export_model call
@@ -727,7 +727,7 @@ void registerOnnxPasses() {
         std::string(),
         "the model file; overrides the path argument of onnx.export_model (then exactly one "
         "call is allowed) and names the file when the program makes no request"}};
-    descriptor.make = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
+    descriptor.make   = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<OnnxExportPass>(ctx, args.getString("out"));
     };
     registerModulePass(kPassName, std::move(descriptor));

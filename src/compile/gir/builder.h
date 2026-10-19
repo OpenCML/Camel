@@ -38,6 +38,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
 #include "camel/core/type/typevar.h"
 
@@ -945,6 +946,36 @@ class Builder {
     /// `match x { case null => ..  case v => .. }` and `case error e` over a tagged `x`.
     node_handle_t visitTaggedMatch(
         const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::TupleType *type);
+    // ---- The enum (design principles 2.13). A value is a tag and the data of its variant; a
+    // `match` reads the tag and takes the fields out in the arm of their variant. Nothing here
+    // adds a node kind: the builder inserts the ordinary operators of operators/enum.h. ----
+    /// The enum type a type name denotes: the declaration's own instance when the name is
+    /// written without arguments. nullptr when the name denotes no enum.
+    camel::core::type::EnumType *enumTypeOfName(const Reference &name);
+    /// The declaration, variant and tag that the written variant `Shape::Rect` names. False
+    /// when the name is not a qualified name at all; an enum name whose variant does not
+    /// exist is reported here.
+    bool enumVariantOfName(
+        const std::string &written, const GCT::node_ptr_t &origin,
+        camel::core::type::EnumType *&type, size_t &tag);
+    /// `Shape::Circle(1.0)`, `Shape::Rect { w: 1.0, h: 2.0 }`, `Shape::Empty`.
+    node_handle_t visitEnumConstruction(
+        const GCT::node_ptr_t &gct, camel::core::type::EnumType *type, size_t tag);
+    /// `match e { case Shape::Circle(r) => ... }`.
+    node_handle_t visitEnumMatch(
+        const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::EnumType *type);
+    /// A call of the compiler's own operator `op` over the given GCT operands (a DREF of the
+    /// operator and the operands), built like any call.
+    /// A call the graph makes itself (`__enum_make__` and its like): `typeArgument` is given as
+    /// `f::<T>`, for an operator whose result type is decided by a type the program does not
+    /// write. The operands are GCT nodes; the call is lowered as a written one would be.
+    node_handle_t applyInternalOperator(
+        const char *op, camel::core::type::Type *typeArgument,
+        const std::vector<GCT::node_ptr_t> &operands, const GCT::node_ptr_t &origin);
+    /// The type of a node whose value is of enum type: its result slot is of that type too
+    /// (the operator's placeholder type is not what the value is kept as; a slot of a type
+    /// the collector does not trace would hide the value's references from it).
+
     // ---- Conditions (design principles 2.11, 2.12). `&&` and `||` are branches; a `T?` can
     // be compared with `null`; and where such a comparison is the condition (or an operand
     // `&&` joins in it), the name is a `T` in the arm that excludes null. Each is the

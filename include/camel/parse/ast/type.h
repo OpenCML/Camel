@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,7 +26,7 @@
 
 namespace camel::parse::ast {
 
-enum class TypeType { Null, Expr, Array, Tuple, Struct, Func, Spec, Unit, Infer, Data, Ref };
+enum class TypeType { Null, Expr, Array, Tuple, Struct, Func, Spec, Unit, Infer, Data, Ref, Enum };
 
 enum class TypeOp {
     Union,
@@ -175,6 +175,33 @@ class RefTypeLoad : public TypeLoad {
 
   private:
     Reference ref_;
+};
+
+/// How a variant of an enum carries its data (design principles 2.13): nothing, a tuple of
+/// fields in the order written, or named fields.
+enum class EnumVariantShape { Unit, Tuple, Struct };
+
+/// One variant of an enum declaration, as written: its name, its shape and, for a struct
+/// variant, the names of its fields. The field types themselves are the child nodes of the
+/// declaration, one list per variant, in the same order.
+struct EnumVariantDecl {
+    std::string name;
+    EnumVariantShape shape = EnumVariantShape::Unit;
+    std::vector<std::string> fieldNames;
+};
+
+/// `enum { ... }`: the right-hand side of an enum type declaration.
+class EnumTypeLoad : public TypeLoad {
+  public:
+    EnumTypeLoad() : TypeLoad(TypeType::Enum) {}
+    const std::string toString() const override { return "EnumType"; }
+    const std::string geneCode() const override;
+
+    std::vector<EnumVariantDecl> &variants() { return variants_; }
+    const std::vector<EnumVariantDecl> &variants() const { return variants_; }
+
+  private:
+    std::vector<EnumVariantDecl> variants_;
 };
 
 } // namespace camel::parse::ast

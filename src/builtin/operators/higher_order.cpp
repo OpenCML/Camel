@@ -53,9 +53,9 @@ const ArrayType *resultArrayType(ArgsView &norm, Function *function) {
 } // namespace
 
 slot_t __map_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    const size_t n         = arrayOf(norm)->size();
-    const ArrayType *type  = resultArrayType(norm, functionOf(with));
-    Array *created         = Array::create(mm::autoSpace(), n);
+    const size_t n        = arrayOf(norm)->size();
+    const ArrayType *type = resultArrayType(norm, functionOf(with));
+    Array *created        = Array::create(mm::autoSpace(), n);
     for (size_t i = 0; i < n; ++i) {
         created->set<slot_t>(i, NullSlot);
     }
@@ -69,8 +69,8 @@ slot_t __map_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context
 }
 
 slot_t __filter_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    const size_t n        = arrayOf(norm)->size();
-    const auto *type      = static_cast<const ArrayType *>(norm.type(0));
+    const size_t n   = arrayOf(norm)->size();
+    const auto *type = static_cast<const ArrayType *>(norm.type(0));
     // Starts empty: Array::create(n) makes n null elements, and the kept ones are appended.
     mm::RootHandle kept(mm::autoSpace(), Array::create(mm::autoSpace(), 0), type, "filter result");
     for (size_t i = 0; i < n; ++i) {
@@ -88,8 +88,9 @@ slot_t __reduce_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Cont
     const size_t n = arrayOf(norm)->size();
     // The running value lives in a rooted cell: it may be an object, and every call is a
     // safepoint.
-    const ArrayType *cellType = ArrayType::create(functionOf(with)->graph()->funcType()->exitType());
-    Array *created            = Array::create(mm::autoSpace(), 1);
+    const ArrayType *cellType =
+        ArrayType::create(functionOf(with)->graph()->funcType()->exitType());
+    Array *created = Array::create(mm::autoSpace(), 1);
     created->set<slot_t>(0, with.slot(1), cellType);
     mm::RootHandle cell(mm::autoSpace(), created, cellType, "reduce accumulator");
     for (size_t i = 0; i < n; ++i) {

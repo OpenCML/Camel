@@ -38,7 +38,6 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 
 - `--input <file>`: Input file path (alternative to positional; use with `--passes` to avoid ambiguity)  
 - `--passes <list>`: Comma-separated pass list (e.g. `--passes std::gir,other`; commas inside a pass's parameters do not split it). If omitted, first positional is file, rest are passes. A pass may take parameters: `std::opt(safe_fp=true)` (see "Pass parameters")  
-- `--no-module-passes`: Do not add the passes that the program's imported modules register for the default pipeline (see "Passes of modules and the default pipeline")  
 - `--timeit <pass>/<N>`: Measure one pass `N` times from a fresh graph; text mode prints samples plus a compact summary table, while `--output-format json` emits structured benchmark data  
 - `--dump-after-each-pass <dir>`: Write the graph before the first pass (`00_input`) and after each pass that returns a graph (`NN_<pass>`, `::` written as `.`) into `<dir>`: a readable DOT (`.rgir.dot`, the `std::rgir` format with `origin`/`span`/`srcfile` per node) and the `std::stats` counters (`.stats.json`). Scheduling and translation passes consume the graph and leave no snapshot. Compare two snapshots with `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
 - `--time-phases`, `--time-phases=<file>`: Write the wall-clock time of each phase of the run (start-up, parse, GCT, GIR, each pass, teardown; one entry per module and per pass) as one JSON object to standard error, or to `<file>` (the file is joined to the option with `=`, so that the program after it is never taken for the file). With the counting allocator shim preloaded (`test/tools/allocshim`), each phase also carries its heap allocations. The environment variable `CAMEL_TIME_PHASES=<file>` does the same for every command. Off by default and free when off; the schema and the benchmark built on it are in `docs/technical/38_compile_pipeline_cost.md`  
@@ -151,11 +150,11 @@ Settings of a pass are parameters, no longer environment variables:
 
 What stays in the environment is the environment of the process, not of a pass: `CAMEL_HOME`, `CAMEL_STD_LIB`, `CAMEL_PACKAGES`, the logging and diagnostics-format variables, the resource limits and the collector (`CAMEL_GC*`, `CAMEL_*_SPACE_*`, `CAMEL_MAX_RECURSION_DEPTH`), the diagnostic traces and statistics (`CAMEL_EFFECT_TRACE`, `CAMEL_TYPE_STATS`, `CAMEL_STARTUP_PROFILE`), `CAMEL_ENABLE_TEST_PASSES` (it decides which passes exist, for the tests), and `CAMEL_OPT_GROWTH_BUDGET` (a budget of the rewrite engine that the ONNX exporter also uses internally; still to become a parameter of `std::opt`).
 
-### Passes of modules and the default pipeline
+### Passes of modules
 
 The `std::` prefix belongs to the passes of the core. A pass of a module is named by the module: `tiles::compile`, `tensor::fuse`, `onnx::export`. A module may register aliases for its passes (`registerPassAlias`); the core does not know the names of modules.
 
-A module may also register passes that join the pipeline when the program imports the module (`registerDefaultPipelinePass`; Tiles uses this so that `@gpu` takes effect without writing a pass). They run before the first pass that consumes the graph (a scheduling or a translation pass) of every pipeline, also when the pipeline is only `std::fvm`, ordered by an explicit priority and then by name. A pass the user lists himself runs where it is written and not twice. `--no-module-passes` leaves them out.
+A module may register passes of its own (`registerModulePass`, plus short aliases with `registerPassAlias`). They run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning.
 
 ### Common Passes
 
