@@ -306,3 +306,7 @@ Tiles 里按类型工作的三处已机械地改用它，行为变化只有两�
 - `graph_values.cpp:31/42/69`、`compiler.cpp:139/475/495/941`、`region_outline.cpp:45`、`module.cpp` 的 `acceptsInput` 与 126/199/239/459 行（按节点或按类型对位）。
 
 这些应改为调用 `tree::isInternal`/`arity`/`childType`，不要再自己写 `code() == Tuple || Struct`。
+
+### 11.1 补充（2026-10-19，设计原则 2.21）
+
+调度（分块、布局、放置、内存策略）原则上由执行时注入：`tiles::compile` 的遍参数或调度文件，格式与粒度由 Tiles 设计，到函数为止（更细的由用户提成子函数），内联后用节点上的内联来源找回函数；自动调优按计算的结构身份记录结果。源码中的 `@gpu` 保留。

@@ -549,6 +549,13 @@ Two mechanisms whose underpinnings differ greatly, so their syntax is clearly di
 - **Libraries check their own prerequisites**: when a pass they need is not in the pipeline, they give a diagnostic saying which pass to add (section 4). Modules cannot change the pipeline automatically.
 - **A generic function may omit its return type**, inferred from its body at each instantiation; ordinary functions must write it; editor hover shows the type inferred at each call.
 
+### 2.21 Schedules and the lifetime of tags (2026-10-19)
+
+- **A tendency (not a prohibition)**: Camel source expresses the intent of a computation without loss; what depends on the environment, where and how to compute (tiling, layout, placement, memory strategy), is in principle not written in the source but injected by the execution context (pass parameters, schedule files), in a format and granularity decided by the library that reads it. Existing practice such as `@gpu` stays.
+- **Schedules go down to functions**: for finer control, extract that part into a function and schedule it by function. After inlining, the inline origin recorded on the nodes still maps them back to the original function. Autotuning records results by the structural identity of a computation (operator, shapes, types, neighbourhood), not by names. The language provides no mechanism for naming individual steps of a computation.
+- **A tag is used up by the pass that reads it**: once a pass has applied a tag, the tag may cease to exist, and later passes (such as inlining) are not constrained by it. The order of passes is the user's to arrange (section 4).
+- **Inlining keeps the origin**: the inliner records the inlined function's identity and its declaration tags in the inline origin of the nodes; a pass reading a tag that finds it only on inlined nodes warns that the tag had no effect because the function was inlined before the pass, and says how to reorder.
+
 ## 3. `macro`
 
 - `macro` is a native marker provided by the language core to help with dynamic graph rewriting: a function marked `macro` can be evaluated early by the `std::macro` pass, which computes the static values and forms a new static graph.
