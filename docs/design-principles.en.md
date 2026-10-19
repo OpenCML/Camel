@@ -493,6 +493,25 @@ See [the training infrastructure design](design/training/README.cn.md).
 - **A byte type**: `Bytes` is added and `string` means text only; file interfaces come in a text and a binary set.
 - **Back ends may change the accumulation order by default** (in the spirit of 2.15): parallel reductions on a GPU, f32 matrix products through a library (such as cuBLAS, TF32 excluded) and the cross-device gradient sum of multi-GPU data parallelism may by default accumulate in an order other than the canonical algorithm's, without `@numeric(reassociate)`. The condition is reproducibility: two runs on the same device, the same number of devices and the same version are bit-identical, so methods whose result varies with scheduling (such as floating-point atomic adds) are not allowed. Lowering precision (such as computing an f32 matrix product in bf16 or TF32), approximate math, FMA contraction and assumptions about special values still need explicit permissions. Back ends provide a safe-mode parameter that turns this default off and computes bit-exactly by the canonical algorithm.
 
+### 2.17 Rulings after the review (2026-10-19)
+
+Based on [the design review of 2026-10-19](roadmap.cn.md). The first item is the language author's ruling; the others were decided by the review's recommendations under the author's delegation, and the author may change them at any time.
+
+- **Operations expanded by type are written with generics, not built into the compiler.** Operations like `tree_map`, whose shape follows a type and which expand at compile time, are eventually library functions written as Camel generics; generics must therefore be able to recurse over the fields of structs and tuples at compile time (design to be discussed). Until then no more such built-ins are added and no interim mechanism is made. Native kernels do not read a call's static type at run time; whatever varies by type is expanded at compile time.
+- **`string` is always valid UTF-8**, indexed and measured in code points; byte sequences use the built-in type `Bytes`, converted explicitly by encoding and decoding.
+- **Parameter-tree paths** are written `blocks.0.w`, the root being the empty path; names in a checkpoint equal the results of `tree_paths` exactly; `save_tree` and `load_tree` belong to the `tree` module.
+- **Explicit type arguments**: positionally, in the order in which the type variables first appear in the signature; or by name, `f::<T = int>`, independent of position.
+- **Optimizations do not change operator identity on the graph.** Fusion and switching to a library implementation (BLAS and the like) are implementation choices recorded in node attributes, the original operator staying on the graph; a new operator may appear only with its own semantic declaration and definition graph.
+- **The uploads, region executions and downloads of `std::tiles` are pure computations**, device memory being an unobservable allocation; identical region calls may be merged.
+- **The scope of 2.16**: a library f32 matmul on the CPU is allowed by default like the GPU one, under the conditions of 2.16 (reproducible, the canonical algorithm in safe mode); rounding the multiply and the add separately counts as a change of accumulation and falls under 2.16's default relaxation; BF16 computation needs only `change_precision`.
+- **`@gpu` is a compile-time annotation**: it records a device preference on the function's nodes, handled by `std::tiles`. A module may register passes that join the default pipeline when it is imported; Tiles uses this, so `@gpu` takes effect without writing `std::tiles`.
+- **The `std::` prefix is only for the core's own passes**; a module's passes use the module's own name, and the module registers their aliases.
+- **Pass parameters are general pipeline syntax**: `name(key=value, ...)` applies to every pass, scheduler and module pass, and values are Camel constant expressions; settings no longer live in environment variables.
+- **Node attributes are part of the public graph data model**; passes written in Camel can read and write them too.
+- **2.15's default relaxation applies to elementwise tensor operations** as to scalars.
+- **Parallelism of higher-order functions comes from a declared property** (elements independent of each other), not from a name; a user function declaring the same property can run in parallel too.
+- **Resource declarations are the truth about effects**; a `var` in a signature is checked against them, and a disagreement is a declaration error.
+
 ## 3. `macro`
 
 - `macro` is a native marker provided by the language core to help with dynamic graph rewriting: a function marked `macro` can be evaluated early by the `std::macro` pass, which computes the static values and forms a new static graph.
