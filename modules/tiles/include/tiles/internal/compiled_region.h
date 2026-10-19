@@ -4,13 +4,15 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Internal static-region artifact and fresh-input binding boundary.
 #pragma once
 #include "tiles/program.h"
+
+#include <vector>
 namespace camel::tiles {
 Program compileRegionTemplate(Function *function, runtime::fact::FactStore &facts);
 void bindRegionArguments(

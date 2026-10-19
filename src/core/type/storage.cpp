@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 13, 2026
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,7 +45,6 @@ constexpr std::array<const char *, kKindCount> kKindNames = {
     "tuple",
     "struct",
     "function",
-    "union",
     "collection",
     "enum",
     "typevar",

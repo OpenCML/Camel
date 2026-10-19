@@ -88,6 +88,46 @@ await withServer(async (ls) => {
     check((items.find((i) => i.label === 'sqrt') || {}).detail !== undefined,
         'with their signatures', items.find((i) => i.label === 'sqrt'))
 
+    // ---- completion: the variants of an enum after `Type::` ----
+    // A text that compiles first: a text being typed inherits the declaration types from it.
+    const ENUMS = `module enums
+
+export type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+`
+    ls.writeFile('enums.cml', ENUMS)
+    const withEnums = (body) => `module main
+
+import { norm2, scale } from shapes
+import { Shape } from enums
+
+type Local = enum { A(float), B { k: int }, C }
+
+func main() sync {
+    let a = Local::A(1.0)
+    let s = Shape::Circle(1.0)
+${body}
+    return 0
+}
+`
+    m = edit(withEnums(''))
+    await ls.diagnosticsFor(uri, version)
+    m = edit(withEnums('    let e = Local::/*c*/'))
+    items = await complete(m, 'c')
+    checkEq(items.map((i) => `${i.label}: ${i.detail}/${i.kind}`),
+        ['A: A(float)/5', 'B: B { k: int }/5', 'C: C/5'],
+        'the variants of an enum declared in this file, with how each is written')
+
+    // Imported from another module: the module that declares it says which variants there are.
+    m = edit(withEnums('    let e = Shape::/*c*/'))
+    items = await complete(m, 'c')
+    checkEq(items.map((i) => `${i.label}: ${i.detail}`),
+        ['Circle: Circle(float)', 'Rect: Rect { w: float, h: float }', 'Empty: Empty'],
+        'the variants of an imported enum')
+
     // ---- completion: nothing in comments and strings ----
     m = edit(MAIN.replace('/// Returns its argument.', '/// Returns its/*c*/ argument.'))
     checkEq(await complete(m, 'c'), [], 'no completion inside a comment')

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -431,6 +431,47 @@ Rules buildRules() {
             false,
         };
     }
+    // ---- Enums (:enum/make, :enum/tag, :enum/field; the type carries the construction) ----
+    // The tag of a construction and the tag and index of a field read are constants of the
+    // program, so the first and second are template arguments of the generated helpers.
+    r[":enum/make"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const Type *result = c.resultType();
+            if (result == nullptr || c.normCount() == 0) {
+                return std::nullopt;
+            }
+            const std::string type = c.cppType(result);
+            if (type.empty() || type == "void") {
+                return std::nullopt;
+            }
+            std::string fields;
+            for (size_t i = 1; i < c.normCount(); ++i) {
+                fields += (i > 1 ? ", " : "") + c.norm(i).text;
+            }
+            return std::format("{}::make<{}>({})", type, c.norm(0).text, fields);
+        },
+        true,
+    };
+    r[":enum/tag"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            return std::format("rt::enumTag({})", c.norm(0).text);
+        },
+        true,
+    };
+    r[":enum/field"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 3) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::enumField<{}, {}>({})",
+                c.norm(0).text,
+                c.norm(1).text,
+                c.norm(2).text);
+        },
+        true,
+    };
+
     return r;
 }
 

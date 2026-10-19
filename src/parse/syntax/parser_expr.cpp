@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -386,7 +386,9 @@ void ParserImpl::parseComp() {
 }
 
 /// annoExpr : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
-/// | memberAccess)* memberAccess : '.' (IDENTIFIER | INTEGER | REAL) Rule 1: an index, a call, an
+/// | memberAccess)*
+/// memberAccess : '.' (IDENTIFIER | INTEGER | REAL)
+/// Rule 1: an index, a call, an
 /// angle-bracket argument list and the postfix `!` touch the expression before them. For `<` the
 /// lexer has decided already (LAngle). `Shape::Rect { w: 2 }` is a struct variant construction:
 /// a struct literal follows a variant path, never a name that could be a value.

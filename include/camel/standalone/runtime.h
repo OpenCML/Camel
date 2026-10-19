@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 #include "camel/standalone/array.h"
 #include "camel/standalone/core.h"
 #include "camel/standalone/entry.h"
+#include "camel/standalone/enum.h"
 #include "camel/standalone/fn.h"
 #include "camel/standalone/format.h"
 #include "camel/standalone/hof.h"

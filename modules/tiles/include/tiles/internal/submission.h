@@ -4,13 +4,16 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Backend-native pending results. These never cross a Camel operator boundary.
 #pragma once
 #include "tiles/device.h"
+
+#include <memory>
+#include <vector>
 
 namespace camel::tiles {
 struct SubmittedProgram {

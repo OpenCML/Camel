@@ -1,12 +1,12 @@
 module failed_no_rule
 
 import { grad } from autodiff
-import { sqrt } from math
+import { sin } from math
 
-// math:sqrt has no derivative rule, so std::macro cannot expand `grad(f)`: a compile-time error
+// math:sin has no derivative rule, so std::macro cannot expand `grad(f)`: a compile-time error
 // at the grad call (line 14) that names the operator. The program does not run.
 func f(x: float): float {
-    return sqrt(x) * x
+    return sin(x) * x
 }
 
 func main(): int sync {

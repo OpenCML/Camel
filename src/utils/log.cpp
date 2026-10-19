@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 04, 2025
- * Updated: Apr. 01, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -118,7 +118,6 @@ static const std::vector<std::string> &extraScopePrefixes() {
         "GraphViz",
         "Profiler",
         "Type",
-        "UnionType",
         "TupleType",
         "StructType",
         "ArrayType",

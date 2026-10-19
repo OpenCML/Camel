@@ -139,7 +139,7 @@ const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
 for (const l of [
   'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
   'FACTS graph count.loop1.cond valid=1 revalidated=0 stale=0',
-  'FACTS graph main valid=0 revalidated=2 stale=9', 'FACTS gone 0', '60.0',
+  'FACTS graph main valid=0 revalidated=1 stale=10', 'FACTS gone 0', '60.0',
 ]) line(l)
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
 }

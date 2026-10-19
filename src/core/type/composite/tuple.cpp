@@ -13,21 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/core/mm.h"
+#include "camel/core/mm/alloc/allocator.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
-#include "camel/core/type/typevar.h"
-#include "camel/core/error/diagnostics.h"
-#include "camel/core/mm.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/storage.h"
-#include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
@@ -177,8 +177,7 @@ namespace {
 
 /// One object per payload type and form, as for cells.
 TupleType *internTagged(
-    std::vector<TupleType *> &known, Type *payloadType,
-    const std::function<TupleType *()> &make) {
+    std::vector<TupleType *> &known, Type *payloadType, const std::function<TupleType *()> &make) {
     // Occurrences of one type variable are equal whether or not they bind (`typeas T` and
     // `T`), so a type written with variables is never shared: sharing would drop the mark.
     if (containsTypeVar(payloadType)) {
@@ -287,10 +286,9 @@ string TupleType::toString() const {
         return "var " + typesPtr_[0]->toString();
     }
     if (isTagged()) {
-        // A function or union payload is parenthesised, as it must be when written.
-        const TypeCode payload = typesPtr_[0]->code();
-        const bool parens      = payload == TypeCode::Function || payload == TypeCode::Union;
-        const string inner     = typesPtr_[0]->toString();
+        // A function payload is parenthesised, as it must be when written.
+        const bool parens  = typesPtr_[0]->code() == TypeCode::Function;
+        const string inner = typesPtr_[0]->toString();
         return (parens ? "(" + inner + ")" : inner) + (isNullable() ? "?" : "!");
     }
     string result = "(";
@@ -381,7 +379,7 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
             // `throw`: sound only where the compiler knows the value has failed, so it is
             // not a conversion a program may write.
             return source->tag_ == tag_ && isFallible() ? CastSafety::Unsafe
-                                                         : CastSafety::Forbidden;
+                                                        : CastSafety::Forbidden;
         }
     }
     return CastSafety::Forbidden;
