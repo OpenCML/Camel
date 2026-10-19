@@ -133,7 +133,7 @@
 | H5 | 命名类型 | H1 已合并 | 等待前提 |
 | H6 | 地基遗留与声明标签 | 无 | 待开始 |
 | H7 | 资源与副作用 | 无 | 待开始（暂缓，见 H8 说明） |
-| H8 | 基础与清理工作 | 无 | **现在做这一项** |
+| H8 | 基础与清理工作 | 无 | 1、2、4、5、6、7 已完成（报告 `reports/H8.md`）；第 3 项待设计决定 |
 
 前提是否满足，看 `docs/roadmap.cn.md` 第 1 节：地基项标为"已合并"即满足。**正在进行的地基工作**会改动这些区域，H1、H4 期间尽量不要大改它们，必要时小改并在报告里说明：遍与流水线（`src/execute/pass.cpp`）、优化遍与调度器（`src/passes/opt/`、`src/passes/sched/`）、装饰器与标注的解析和建图（`src/parse` 中的 `funcAnno`、`src/compile/gir/builder.cpp` 的装饰器部分）、图存储的许可列、字符串与 `Bytes`、参数树（`src/compile/gir/tree.cpp`）。
 
