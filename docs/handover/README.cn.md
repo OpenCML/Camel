@@ -1,0 +1,255 @@
+# 交接任务书
+
+本文件写给接手开发的 AI。读完就开工，不必再问"要做什么"。每个任务完成后把结论写进约定的位置（第 3 节），由协调者（与语言作者讨论设计的 AI）检查代码；检查意见也写在约定的位置。
+
+**判断标准不是"能运行、测试通过"，而是"符合 Camel 的长期设计"。** 能跑但不优雅、绕开通用机制、按名字写特例的实现会被退回。第 2 节列出了退回最多的几类问题，提交前逐条自查。
+
+更新：2026-10-19。
+
+---
+
+## 0. 开工前必读（按顺序）
+
+1. `AGENTS.md`：构建、测试、日志、遍的用法。仓库根目录。
+2. `agents/test.md`、`agents/commit.md`、`agents/refactor.md`。`agents/branching.md` 讲的是维护者的发布流程，**你不做发布，不碰 `main`、`develop`**，分支规则以本文件第 1 节为准。
+3. **`docs/design-principles.cn.md`**：规范性文件，与代码、测试、其他文档冲突时以它为准。至少读第 1 节、第 2 节全部（2.1 至 2.17）、第 5 节（实际发生过的误读）、第 6 节（尚未决定的问题）。
+4. `docs/roadmap.cn.md`：当前顺序、谁在做什么。
+5. 本次任务相关的设计稿与审查报告（各任务里写明）。审查报告在 `docs/reviews/2026-10-19/`，每条有位置、现状引文和"优雅的形式"。
+
+不确定某个词、某条规则的意思时，先在设计原则里搜；搜不到再按第 4 节提问，不要猜。
+
+---
+
+## 1. 工作流程
+
+### 1.1 分支
+
+- 从最新的 `origin/fsh-dev` 开分支，名字是 `handover/<任务编号>`，如 `handover/H1-enum`。
+- **只推送你自己的 `handover/...` 分支**：`git push origin handover/H1-enum`。不推送、不修改 `fsh-dev`、`develop`、`main` 或别人的分支；不强制推送（`--force`）；不改写已推送的历史。
+- 需要同步时，把 `origin/fsh-dev` **合并**进你的分支（`git merge origin/fsh-dev`，合并提交），不要变基已推送的分支。
+- 一个任务一个分支。任务很大时可以分几次推送，每次都能编译、相关测试通过。
+- 协调者检查通过后，由协调者把你的分支合并进 `fsh-dev`。你不需要也不应该自己合并。
+
+### 1.2 构建与测试
+
+- 构建：`npm run build`（Windows PowerShell，命令之间用 `;`，不用 `&&`）。产物在 `out/latest/bin/`。
+- 测试：`node scripts/test.js <计划文件或目录>`；全套默认集合是 `npm run test`。
+- **先手动跑，再写测试**（`AGENTS.md`）：新功能先用 `camel x.cml` 在命令行运行，看清输出与诊断，再把确认过的行为写成测试。
+- 工作中只跑相关的测试计划；**任务结束前跑一次全套**，把失败的测试名与基线比较。
+- **基线**：2026-10-19 的 `fsh-dev`（5bc29823）全套 5646 项中有 19 项失败，名单如下。这些不是你造成的，不需要你修；但你的分支不能新增失败。
+
+  ```
+  grammar.reference_in_step  frontend.ast_snapshot  frontend.format_keeps_ast
+  frontend.fuzz_lossless_tree  catalog.doc_is_generated  graph.default
+  integrated.graph.false  integrated.graph.true  failed_no_rule.error
+  pass_export_refusal_var_param  pass_export_refusal_located.request_in_arm
+  pass_export_refusal_located.request_in_arm_json  poison:rewrite_opt
+  poison:failed_no_rule.error  registry.signatures_match  rewrite_opt
+  04_staticness  05_effect_order  portability.std_includes
+  ```
+
+  其中几项（AST 快照、诊断目录、签名一致性）会被正在进行的地基工作修掉；合并 `origin/fsh-dev` 后基线可能变短，以合并后的为准。
+- 改了语法或 `.cml` 测试文件：更新 AST 快照 `python3 test/tools/parsecheck/check.py snapshot --update`。
+- 改了诊断：`node scripts/diagnostics-catalog.mjs --write`。
+- 每次提交前：`node scripts/check-doc-links.mjs --all`、`node scripts/check-std-includes.mjs`。
+
+### 1.3 提交
+
+- 小步提交，每个提交说清楚它做了什么、为什么（`agents/commit.md`）。
+- 提交信息用英文，与仓库现有风格一致（`feat(...)`、`fix(...)`、`refactor(...)`、`docs: ...`）。
+
+### 1.4 文档
+
+改了用户可见的行为，就同步改文档：语言参考 `docs/language/`（中文与 `en/` 两份）、`docs/stdlib-reference.md`、相关设计稿。**不要改设计原则的内容**；发现设计原则与实现必须不同，按第 4 节提问。
+
+---
+
+## 2. 提交前的自查清单（退回最多的问题）
+
+这些都是 2026-10-19 审查中实际发现的问题，每一类都有真实例子。
+
+1. **核心按名字认具体的东西。** 编译器、核心、遍里出现 `if (name == "numeric")`、`uri == "tree:tree_map"`、写死的算子/模块/类型名单。反例：`@numeric(...)` 在构建语法树时比较字符串；参数树操作在建图器里按 URI 展开。**正确做法**：用已有的通用机制（算子表与它的特性、语义声明、资源声明、装饰器、模块注册的接口），按声明的性质判断，不按名字。
+2. **另造一套相似的机制。** 已有装饰器却另做一种 `@name(...)` 标注；已有原生子图调用服务，却在每个后端各写一遍高阶算子。**正确做法**：先找现有机制能否承载；不够就扩展它，不要平行再造。
+3. **同一事实写在多处。** 效应既看资源声明又看签名里的 `var` 又按 URI 前缀猜；"什么是叶子"写了七份且已不一致；算子签名写在三处。**正确做法**：一个事实只有一个来源，其余处读它或由它生成。
+4. **写死的上限与封闭的枚举。** 8 位的位掩码已经用满、写死的常量（应当可调的上限）。**正确做法**：可以增长的东西不用固定位宽；上限做成可配置。
+5. **临时裁定语义。** 设计原则没写的行为，凭感觉定一个。**正确做法**：按第 4 节提问。
+6. **为了让测试通过而改。** 改期望输出掩盖行为变化、跳过测试。**正确做法**：期望输出的每处变化都要能解释，并写进报告。
+7. **兼容层与过渡方案。** 语言作者明确不要"乱七八糟的兼容"。旧写法要退役就直接退役，给出清楚的诊断指向新写法，不保留两套。
+8. **只做一个后端。** Camel 有 `std::nvm`、`std::fvm`、`std::jit`、并行调度器 `std::prl`、宏求值器 `std::macro`、C++ 导出 `std::cpp`，还有 ONNX 导出与自动微分。新的值或节点要在每一处都能运行，或者在不支持的地方给出带位置的明确拒绝。测试要覆盖多个后端（看现有测试计划如何对多个调度器跑同一程序）。
+
+---
+
+## 3. 结论放在哪里
+
+- **你的报告**：在你的分支上写 `docs/handover/reports/<任务编号>.md`，随最后一次推送一起提交。模板：
+
+  ```markdown
+  # <任务编号> 报告
+  分支：handover/<任务编号>，最后提交：<hash>
+  ## 做了什么
+  （按提交列出，每条一两句）
+  ## 设计上的选择
+  （每个技术选择：选了什么、为什么、考虑过的其他做法）
+  ## 用户可见的变化
+  （每条配一个前后对比的例子；期望输出改了哪些、为什么）
+  ## 测试
+  全套：总数 / 通过 / 失败；新增失败（应为零）；新增测试列表；覆盖了哪些后端
+  ## 自查（第 2 节逐条）
+  ## 待决问题
+  （第 4 节格式）
+  ## 没做完的
+  ```
+
+- **协调者的检查意见**：写在 `fsh-dev` 上的 `docs/handover/reviews/<任务编号>.md`。开始下一步前先 `git fetch` 看有没有新的检查意见；有"退回"条目时先改完再继续。
+- 任务状态以本文件第 5 节的表为准，由协调者更新。
+
+---
+
+## 4. 遇到不确定的语义怎么办
+
+- **语义问题**（用户能看到的行为、语法、类型规则、错误的种类）不要自己定。写进报告的"待决问题"，格式：
+
+  ```markdown
+  ### Q<n>：一句话的问题
+  例子：（一段 Camel 代码，以及两三种可能的结果）
+  建议：（你倾向哪个、为什么）
+  影响：（不定下来会挡住什么）
+  ```
+
+  然后**跳过被挡住的那部分**，继续做不受影响的部分。
+- **技术选择**（数据结构、文件组织、算法）可以自己定，写进报告的"设计上的选择"。
+- 判断一件事是语义还是技术：如果换一种做法，用户写的同一个程序会得到不同的结果、不同的诊断或不同的语法，就是语义。
+
+---
+
+## 5. 任务
+
+| 编号 | 任务 | 前提 | 状态 |
+|---|---|---|---|
+| H1 | `enum` | 无，可以立即开始 | 待开始 |
+| H2 | 数值许可改为库装饰器 | H1 已合并；地基"装饰器通用机制"已合并 | 等待前提 |
+| H3 | 依赖节点属性的后续 | 地基"装饰器通用机制"已合并 | 等待前提 |
+| H4 | 已裁定未开工的小项 | 无（各小项另注） | 待开始 |
+
+前提是否满足，看 `docs/roadmap.cn.md` 第 1 节：地基项标为"已合并"即满足。**正在进行的地基工作**会改动这些区域，H1、H4 期间尽量不要大改它们，必要时小改并在报告里说明：遍与流水线（`src/execute/pass.cpp`）、优化遍与调度器（`src/passes/opt/`、`src/passes/sched/`）、装饰器与标注的解析和建图（`src/parse` 中的 `funcAnno`、`src/compile/gir/builder.cpp` 的装饰器部分）、图存储的许可列、字符串与 `Bytes`、参数树（`src/compile/gir/tree.cpp`）。
+
+---
+
+### H1：`enum`
+
+**依据**：设计原则 2.13"和类型按 Rust 的 `enum` 做"与"退掉预留的 `T ? U`"、2.9（不在运行时按类型判断）、2.17。读这几段原文。
+
+**已有的半成品**：`docs/handover/assets/enum.h.draft.txt` 是一份早期草稿头文件（从未编译、未接入），设计了 `EnumDecl`（一个声明，带参数名与变体）、`EnumType`（一个实例，按参数驻留）、`VariantShape { Unit, Tuple, Struct }`、泛型实例未定参数用的"洞"（`Option<_>`，与 `Option<int>` 统一）。可以采用，也可以改，改了在报告里说明原因。**基于最新的 `fsh-dev` 从头接入**，不要去找或合并旧分支。
+
+**要做的语言功能（语义已定）**：
+
+```camel
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+type Option<T> = enum { Some(T), None }
+type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
+
+let a = Shape::Circle(1.0)
+let b = Shape::Rect { w: 2.0, h: 3.0 }
+let c = Shape::Empty
+let area = match b {
+    case Shape::Circle(r)     => 3.14159 * r * r
+    case Shape::Rect { w, h } => w * h
+    case Shape::Empty         => 0.0
+}
+```
+
+1. **声明**：`type 名字 = enum { 变体, ... }`，可以带类型参数（`type Option<T> = enum {...}`），可以递归（变体的字段类型引用自身）。变体三种形状：无数据、元组（一个或多个位置字段）、结构体（具名字段）。同一个 `enum` 中变体名不能重复；结构体变体内字段名不能重复。末尾逗号可有可无。
+2. **构造**：`Shape::Circle(1.0)`、`Shape::Rect { w: 2.0, h: 3.0 }`、`Shape::Empty`。结构体变体构造必须给全字段，顺序不限。泛型实例的参数由实参推出；推不出时（如 `Option::None`）由期望类型推出（`let x: Option<int> = Option::None`），仍推不出是编译错误。
+3. **`match`**：
+   - 臂的写法 `case Shape::Circle(r)`、`case Shape::Rect { w, h }`、`case Shape::Empty`、`case _`。
+   - 元组变体的模式必须给出全部位置，不要的写 `_`。结构体变体的模式写出要绑定的字段，未写的字段忽略；可以改名 `{ w: width }`。
+   - **第一版不做嵌套模式**（如 `case Shape::Node(Tree::Leaf, x, _)`）；遇到时给出明确的"暂不支持"诊断，并在报告里记下。
+   - **穷尽**：列全了所有变体就不需要 `case _`；漏了变体且没有 `case _` 是编译错误，诊断要列出漏掉的变体名。多余的臂（变体已被覆盖）给警告。
+   - `match` 的值也可以是一个返回 `enum` 的表达式；各臂结果类型的统一规则与现有 `match` 相同。
+4. **值的其余操作**（协调者已定，按此实现）：
+   - **相等**：同一 `enum` 实例类型的两个值可以用 `==`、`!=` 比较，先比变体再逐字段比较；任一字段类型不支持 `==` 时，这个 `enum` 也不支持，编译错误。
+   - **打印**：`Shape::Rect { w: 2.0, h: 3.0 }`、`Shape::Circle(1.0)`、`Shape::Empty`，与源码写法一致；泛型实例不打印类型参数。
+   - **不能直接取字段**：`b.w` 是编译错误，诊断提示用 `match`。
+   - **不按值的类型区分变体**（2.9）：没有 `is`、`typeof` 之类的运行时判断。
+5. **图上不增加节点种类**（2.13 原文）：构造是"装入一个标签和数据"，`match` 是"取标签、分支、在臂里取出数据"，与现有的 `T?`、`T!` 相同。先读 `T?`、`T!` 在 GCT/GIR 中如何构造与匹配（`src/compile/gct/builder.cpp`、`src/compile/gir/builder.cpp`、运行时 `src/core/rtdata/tagged.cpp`），照同一模式实现。取标签、取字段如需新的内部算子，作为普通算子注册（带纯度、资源与语义声明），不要在调度器里按名字特判。
+6. **每个后端都要支持**：`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::macro`（编译期求值，`enum` 值可以是宏的结果并物化为常量）、`std::cpp`（C++ 导出）。ONNX 导出与自动微分遇到 `enum` 给出带位置的明确拒绝。垃圾回收要能追踪 `enum` 值中的引用（含递归的 `Tree`），在两种回收器下都测（看现有 GC 压力测试）。
+7. **工具**：调试器能显示 `enum` 值（同打印格式）；语言服务器的悬停显示类型、补全 `Shape::` 后的变体；格式化器保持写法；`std::gir`/`std::rgir` 打印正常；编辑器语法文件（`tools/` 下）识别 `enum`。
+8. **退役 `A | B`**（2.13）：类型位置上的 `A | B`（联合类型）删除，`|` 只留给逻辑或。涉及 `src/parse/syntax/parser_type.cpp`、`src/core/type/composite/union.cpp`、`include/camel/core/type/storage.h` 的 `Union`、`src/parse/ast/builder.cpp` 等。删除前先搜索所有用到联合类型的地方（标准库签名、测试、文档）：
+   - **注意**：`stdlib/signatures/json.cml` 的访问器写作 `get(j: Json | Json?)` 等。退役后改为接受 `Json?`，并按 2.14 同时接受 `Json!`（访问器接受 `Json!`，使解析失败也能链式取值）。`Json` 能否直接传给 `Json?` 形参取决于现有的可空转换规则——先手动验证；如果需要为此改类型规则，按第 4 节提问。
+   - 写 `A | B` 的旧代码给出诊断：说明联合类型已退役，建议改用 `enum`。
+9. **退役 `T ? U`**（2.13）：`?` 只是可空标记，`T ?` 后接类型的特殊读法去掉。搜索解析器中的这条读法与相关测试，删除并给诊断。
+10. **测试**：每条语义一个小程序，在多个后端上跑；穷尽检查的正反例；泛型与递归（用 `Tree<int>` 做一次插入与遍历）；`==` 与打印；宏求值；GC 压力；ONNX、自动微分的拒绝诊断；`A | B` 与 `T ? U` 的退役诊断。
+11. **文档**：语言参考新增 `enum` 一节（中英两份），写清以上全部规则与例子；删除联合类型与 `T ? U` 的描述；标准库参考更新 `json` 签名；`docs/roadmap.cn.md` 不用你改。
+
+**可能遇到的待决问题**（遇到就按第 4 节写，不要自己定）：变体可见性与模块导出（`enum` 跨模块导入时变体是否随类型一起导出——建议随类型导出）；`enum` 能否作为映射的键或集合的元素；`T?`、`T!` 是否改由 `enum` 实现（**本任务不改**，只在报告里写你的看法）。
+
+---
+
+### H2：数值许可改为库装饰器
+
+**前提**：H1 已合并；地基"装饰器通用机制"已合并（提供通用节点属性、装饰器修饰代码块、能改写函数图的装饰器）。开始前读那条地基的提交与报告，弄清这三样的接口。
+
+**依据**：设计原则 2.13（数值契约与许可规则）、2.17；`docs/design/op-semantics/README.cn.md` 中许可的部分；审查报告 `runtime.cn.md` 第 3 条。
+
+**现状**：`@numeric(reassociate, contract)` 是构建语法树时的硬编码分支（`src/parse/ast/builder.cpp` 比较字符串 `"numeric"`、写死名单），解析器为它有一种 `@name(...)` 写法（`src/parse/syntax/parser.cpp` 的 `parentIdents`），图上是一字节的许可列（`GCGraph::nodePermissions`，8 位已用满，0 同时表示"无许可"和"未指定"）。读许可的地方很多：`grep -rn "nodePermissions\|PermissionMask\|permissions" src include modules`。
+
+**目标**：
+
+```camel
+import { numeric, Reassociate, Contract } from numeric   // 导入方式按标准库惯例，见下
+
+@numeric<Reassociate, Contract>
+func dot(a: Tensor<f32>, b: Tensor<f32>): f32 { ... }
+
+func loss(x: Tensor<f32>): f32 {
+    let a = exact_part(x)
+    @numeric<Reassociate> {
+        let s = sum(a)
+        ...
+    }
+}
+```
+
+1. **许可是标准库 `numeric` 模块里的封闭 `enum`**：`Reassociate`、`Contract`、`ApproxMath`、`ChangePrecision`、`NoNans`、`NoInfs`、`NoSignedZeros`、`FlushSubnormals`，另有 `FiniteMath` 表示后四项之和（装饰器把它展开为四项）。其他模块不能往里加成员；需要自己的放宽时定义自己的 `enum` 与装饰器。
+2. **`numeric` 是标准库里的普通装饰器**，用地基提供的"改写函数图的装饰器"实现：把许可集合写进节点属性（键由 `numeric` 模块注册），作用于被修饰的函数或代码块自己的节点，以及其中在词法上定义的子图（分支臂、循环体、lambda），**不作用于它调用的其他函数**（2.13）。嵌套时取并集。必须在优化遍之前生效。
+3. **编译器前端不再有任何 `numeric` 专用代码**：删除 `builder.cpp` 中的分支与名单、解析器的 `@name(...)` 写法。旧写法 `@numeric(reassociate)` 给出诊断，指向 `@numeric<Reassociate>`。**不保留兼容**。
+4. **许可的含义仍由核心的数值契约定义**（2.13 是语言规范）：核心语义层（`operator_semantics`、`reorderFreedom`、2.15/2.16 的默认策略）通过节点属性读取许可；属性的键与 `enum` 成员到内部表示的对应关系只在一处定义。一字节的许可列删除，改为节点属性；所有读者（算式优化、`tensor::fuse`、`inspect --ops`、`std::jgir` 输出、Tiles）改为通过同一个核心辅助函数读取。Tiles 是另一个 AI 的模块：只改到能编译、行为不变为止，并在 `docs/design/tiles-route/README.cn.md` 第 11 节末尾加一句接口变化的说明。
+5. **行为不变**：现有许可相关的测试（`numeric_permissions` 计划、算式优化、融合、定义图、索引语义、算子语义、Tiles 计划）全部改为新写法后照样通过；`inspect` 输出中许可的显示可以改为成员名，报告里列出。
+6. **文档**：语言参考中 `@numeric(` 全部改为新写法；`docs/design/op-semantics/README.cn.md` 的相关段落；诊断目录。
+
+---
+
+### H3：依赖节点属性的后续
+
+**前提**：地基"装饰器通用机制"已合并。
+
+**H3a 优化不改变图上的算子身份**（设计原则 2.17 第五条；审查 `modules.cn.md` 第 4 条）。现在 `tensor::fuse` 会把 `matmul` 换成 `matmul_blas`，把 `matmul` 加偏置、激活换成 `matmul_add`、`matmul_add_relu` 等新算子，这些新算子没有语义声明与定义图。改为：
+- 图上保留原算子（`matmul`、`add`、`relu`……），融合与库实现的选择记在节点属性上（键由 `tensor` 模块注册，如"这几个节点作为一组用某实现执行"）；执行时按属性选内核。
+- 选择规则读核心的统一判定：2.16 与 2.17（CPU 上按库实现的 f32 矩阵乘默认可用，条件是结果可复现；安全模式下用规范算法；安全模式由遍参数给出——遍参数是地基工作的一部分，用它的接口）。现在 `matmul_blas` 要求 `reassociate` 与 `change_precision` 两项许可，按 2.17 改为默认可用。
+- 删除 `matmul_blas`、`matmul_add` 等作为图上算子的注册。ONNX 导出与 Tiles 看到的是原算子。
+- 测试：融合前后结果在安全模式下逐位相同；默认模式下两次运行逐位相同。
+
+**H3b 内联来源与调试器的帧**（设计原则 2.14："被内联的函数仍显示为它自己的帧"；审查 `runtime.cn.md` 第 8 条）。
+- 内联器与定义图展开在复制节点时写入"内联自哪个函数、哪次调用"的节点属性（可以嵌套：内联进来的函数里又内联了别的）。
+- 调试器据此在调用栈中显示被内联函数的帧（帧名、源码位置、它的局部变量），单步行为与未内联时一致；现在 `docs/debugging.cn.md` 写的"内联之后，被内联的函数没有栈帧"改为新行为。
+- 同时核实 2.14 的另一条："从分支的臂回到汇合处时，不再在同一行停第二次"——写一个测试确认，不符合就修。
+- 调试器的测试计划在 `test/plans/` 下（搜 `debugger`）。
+
+---
+
+### H4：已裁定、尚未开工的小项
+
+互相独立，可以分开提交，也可以分成 H4a、H4b…… 各开分支。
+
+- **H4a 张量命名维度 `constas`**（设计原则 2.13 原文有例子）：`Tensor<f32, const [constas n, 3]>` 在形参类型里第一次出现时绑定 `n`，之后直接写 `n`；只出现在返回类型里的名字是错误；维度可以做加法和乘以常数（线性式，判断相等），其余结果为未知；调用处实参维度未知时编译期放过，在调用处做运行时检查（与 `as` 相同）；不产生新的实例。前提：先读张量类型与形状推断的现有实现（`modules/tensor`、类型解析器），弄清"形状常量"如何表示。
+- **H4b `for` 遍历字符串、映射、张量**（设计原则 2.14 的循环条目）：字符串按码点（2.17：`string` 保证 UTF-8）；映射按什么顺序遍历**是语义问题**，按第 4 节提问（建议：插入顺序，如果映射实现保持插入顺序；否则提问）；张量沿第一维。**前提**：地基"前端清理"已合并（它改字符串）。
+- **H4c ONNX 导出 `ArgMax`**：按 2.14 的规则（有 NaN 时返回第一个 NaN 的位置；并列取第一个，+0 大于 -0）。ONNX 的 `ArgMax` 不保证这些，导出时要么组合出等价的子图，要么在无法证明输入没有 NaN 和 -0 时拒绝导出并给出带位置的诊断。用 ONNX Runtime 测试（看现有 `ort_` 开头的测试）。
+- **H4d 自动微分支持 `LOOP`**：现在遇到 `LOOP` 节点拒绝。读 `docs/design/loops` 与 `camel/runtime/loop.h` 的 `LoopView`。先写一份短设计（反向时如何保存每轮的状态、轮数未知时怎么办）放在报告里，**先不实现**，等协调者检查设计后再做。
+- **H4e 数学模块的数值声明**（审查 `modules.cn.md` 第 15 条）：`math` 模块的算子补上数值语义声明与 ulp 上界，照张量算子已有的声明写法。
+- **H4f ONNX 导出器的切片规则**（审查 `modules.cn.md` 第 14 条）：导出器不再自己重述切片越界的规则，改为读核心的索引语义声明。
+
+不在这里的审查条目，要么属于正在进行的地基工作，要么归 Tiles（见 `docs/design/tiles-route/README.cn.md` 第 11 节），不要做。
