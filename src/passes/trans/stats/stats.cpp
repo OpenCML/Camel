@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 30, 2026
- * Updated: Sep. 30, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,7 +36,7 @@ using camel::runtime::GCNodeKind;
 std::string GraphStats::toJson() const {
     return std::format(
         "{{\"graphs\":{},\"nodes\":{},\"edges\":{},\"opers\":{},\"direct_calls\":{},"
-        "\"indirect_calls\":{},\"closures\":{},\"branches\":{},\"loops\":{}}}",
+        "\"indirect_calls\":{},\"closures\":{},\"branches\":{},\"loops\":{},\"bytes\":{}}}",
         graphs,
         nodes,
         edges,
@@ -45,7 +45,8 @@ std::string GraphStats::toJson() const {
         indirectCalls,
         closures,
         branches,
-        loops);
+        loops,
+        bytes);
 }
 
 GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context, GCGraph *root) {
@@ -57,11 +58,15 @@ GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context,
     for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
         ++stats.graphs;
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            const auto ref = it.ref();
+            const auto ref   = it.ref();
             const auto *node = *it;
             ++stats.nodes;
-            stats.edges += graph->normInputsOf(ref).size() + graph->withInputsOf(ref).size() +
-                           graph->ctrlInputsOf(ref).size();
+            const size_t inputs = graph->normInputsOf(ref).size() +
+                                  graph->withInputsOf(ref).size() + graph->ctrlInputsOf(ref).size();
+            stats.edges += inputs;
+            stats.bytes += sizeof(camel::runtime::GCNode) +
+                           inputs * sizeof(camel::runtime::gc_node_ref_t) +
+                           graph->nodePayloadBytes(ref).size();
             switch (node->kind) {
             case GCNodeKind::Oper:
                 ++stats.opers;
