@@ -19,6 +19,7 @@
 
 // Export the materialized runtime graph: IDs and references are data, never parsed labels.
 #include "camel/passes/trans/json/gir.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/source/manager.h"
@@ -132,6 +133,11 @@ std::string dumpJsonRuntimeGraph(GCGraph *root, const camel::core::context::cont
             const auto permissions = g->nodePermissions(ref);
             if (permissions)
                 value["numeric"] = camel::core::sem::permissionsText(permissions);
+            if (const auto attrs = g->nodeAttrs(ref)) {
+                value["attrs"] = json::object();
+                for (const auto &a : camel::core::attr::entries(attrs))
+                    value["attrs"][std::string(camel::core::attr::keyName(a.key))] = a.value;
+            }
             value["roles"] = json::array();
             for (const auto &role : NodeRoleRegistry::instance().classify(*g, ref))
                 value["roles"].push_back(role.spec.name);

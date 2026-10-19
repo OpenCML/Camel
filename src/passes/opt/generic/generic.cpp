@@ -797,7 +797,8 @@ size_t cseDraft(GraphDraft &draft) {
         std::vector<gc_node_ref_t>,
         std::vector<gc_node_ref_t>,
         std::vector<uint64_t>,
-        uint8_t>;
+        uint8_t,
+        uint32_t>; // ..., numeric permissions, attributes: nodes that differ in them stay apart
     std::map<Key, gc_node_ref_t> seen;
     size_t merged = 0;
 
@@ -853,7 +854,8 @@ size_t cseDraft(GraphDraft &draft) {
             std::vector<gc_node_ref_t>(norm.begin(), norm.end()),
             std::vector<gc_node_ref_t>(with.begin(), with.end()),
             regions[id],
-            draft.nodePermissions(id)};
+            draft.nodePermissions(id),
+            draft.nodeAttrs(id)};
         auto [it, inserted] = seen.try_emplace(std::move(key), id);
         if (!inserted && isReplaceable(draft, id) && !reaches(draft, id, it->second)) {
             replaceNode(draft, id, it->second);

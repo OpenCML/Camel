@@ -108,17 +108,20 @@ std::optional<Match> findMatch(const GraphDraft &draft) {
         for (size_t k = 0; k < 2; ++k) {
             const gc_node_ref_t mm = ins[k];
             // The fused node stands for the whole pattern, so every node of it must have been
-            // granted the same numeric permissions (design principles 2.13), which it keeps.
+            // granted the same numeric permissions (design principles 2.13) and have the same
+            // attributes (2.17), which it keeps.
             if (operOf(draft, mm) != ops.matmul || draft.normInputsOf(mm).size() != 2 ||
                 !isPrivateIntermediate(draft, mm, id) ||
-                draft.nodePermissions(mm) != draft.nodePermissions(id)) {
+                draft.nodePermissions(mm) != draft.nodePermissions(id) ||
+                draft.nodeAttrs(mm) != draft.nodeAttrs(id)) {
                 continue;
             }
             Match m{.matmul = mm, .add = id, .relu = kInvalidNodeRef, .bias = ins[1 - k]};
             const auto users = draft.normUsersOf(id);
             if (users.size() == 1 && operOf(draft, users[0]) == ops.relu &&
                 isPrivateIntermediate(draft, id, users[0]) &&
-                draft.nodePermissions(users[0]) == draft.nodePermissions(id)) {
+                draft.nodePermissions(users[0]) == draft.nodePermissions(id) &&
+                draft.nodeAttrs(users[0]) == draft.nodeAttrs(id)) {
                 m.relu = users[0];
             }
             return m;
@@ -154,6 +157,7 @@ void fuse(GraphDraft &draft, const Match &m) {
     draft.setNormInputs(fused, inputs);
     draft.setCtrlInputs(fused, ctrl);
     draft.setNodePermissions(fused, draft.nodePermissions(m.add));
+    draft.setNodeAttrs(fused, draft.nodeAttrs(m.add));
 
     draft.replaceAllValueUses(root, fused);
     draft.replaceAllCtrlUses(root, fused);
@@ -198,6 +202,7 @@ size_t useLibraryGemm(GraphDraft &draft) {
         draft.setNormInputs(blas, in);
         draft.setCtrlInputs(blas, ctl);
         draft.setNodePermissions(blas, draft.nodePermissions(id));
+        draft.setNodeAttrs(blas, draft.nodeAttrs(id));
         draft.replaceAllValueUses(id, blas);
         draft.replaceAllCtrlUses(id, blas);
         draft.retargetBranchArmAnchors(id, blas, blas);

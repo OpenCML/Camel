@@ -148,7 +148,8 @@ Term<T> term(
     if (operIdOf(draft, node) == ops.mul && isPureOper(draft, node) && !written(node) &&
         exclusive(draft, node, consumer) && draft.withInputsOf(node).empty() &&
         draft.normInputsOf(node).size() == 2 &&
-        draft.nodePermissions(node) == draft.nodePermissions(consumer)) {
+        draft.nodePermissions(node) == draft.nodePermissions(consumer) &&
+        draft.nodeAttrs(node) == draft.nodeAttrs(consumer)) {
         const auto inputs = draft.normInputsOf(node);
         for (size_t i = 0; i < 2; ++i) {
             if (auto c = constant<T>(draft, inputs[i], ty, written); c && !written(inputs[1 - i])) {
