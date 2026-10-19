@@ -986,35 +986,37 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     return resolved.factory;
 }
 
+/// Resolves `spec`, importing the module that contributes a `<module>::<pass>` name when the
+/// program has not imported it yet: a pass list may name a pass of a module the program does
+/// not import, and loading the module registers the pass. A name that stays unknown resolves
+/// to no factory, and a bad parameter list keeps its problem.
+ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t &ctx) {
+    ResolvedPass resolved = resolvePass(spec);
+    if (resolved.problem || resolved.factory || !ctx) {
+        return resolved;
+    }
+    const std::string name = resolveAlias(specName(spec));
+    const size_t sep       = name.find("::");
+    if (sep == std::string::npos || sep == 0 || name.substr(0, sep) == "std") {
+        return resolved;
+    }
+    try {
+        (void)ctx->importModule(name.substr(0, sep));
+    } catch (const Diagnostic &) {
+        // No such module: the name stays unknown and is reported by the caller.
+    } catch (const std::exception &) {
+    }
+    return resolvePass(spec);
+}
+
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {
-        auto resolved = resolvePass(name);
+        auto resolved = resolvePassWithModule(name, ctx);
         if (resolved.problem) {
             throw invalidParameterDiagnostic(name, *resolved.problem);
         }
         if (resolved.factory) {
             continue;
-        }
-        // `<module>::<pass>`: the pass is contributed by a module the program did not import.
-        // Loading the module registers it.
-        if (ctx) {
-            const std::string resolvedName = resolveAlias(specName(name));
-            const size_t sep               = resolvedName.find("::");
-            if (sep != std::string::npos && sep > 0 && resolvedName.substr(0, sep) != "std") {
-                try {
-                    (void)ctx->importModule(resolvedName.substr(0, sep));
-                } catch (const Diagnostic &) {
-                    // No such module: the name stays unknown and is reported below.
-                } catch (const std::exception &) {
-                }
-                resolved = resolvePass(name);
-                if (resolved.problem) {
-                    throw invalidParameterDiagnostic(name, *resolved.problem);
-                }
-                if (resolved.factory) {
-                    continue;
-                }
-            }
         }
         listAvailablePasses(name);
         setPipelineStage("pass:" + specName(name));
@@ -1028,7 +1030,7 @@ void requireKnownPasses(const std::vector<std::string> &passes, const context_pt
 std::optional<size_t>
 firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (size_t i = 0; i < passes.size(); ++i) {
-        auto factory = resolvePass(passes[i]).factory;
+        auto factory = resolvePassWithModule(passes[i], ctx).factory;
         if (!factory) {
             continue;
         }
@@ -1043,7 +1045,7 @@ firstConsumingPass(const std::vector<std::string> &passes, const context_ptr_t &
 
 bool passListTranslatesProgram(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {
-        auto factory = resolvePass(name).factory;
+        auto factory = resolvePassWithModule(name, ctx).factory;
         if (!factory) {
             continue;
         }
