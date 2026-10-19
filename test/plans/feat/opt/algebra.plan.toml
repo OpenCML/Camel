@@ -659,3 +659,48 @@ verify_script = '''
  assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===18,'integrated algebra policy not applied');
 }
 '''
+
+[[tests]]
+name = "tensor.graph.default"
+desc = "The elementwise tensor operators declare the laws the algebra pass uses (OperatorSemantics::binary), so x * 3 + x * 5 becomes x * 8 under the default policy as the scalar case does; a chain of float products is not regrouped without the finite_math grant, as for scalars; coefficients the element type does not hold exactly are left alone."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra_tensor.cml"
+args = ["${case}","std::opt::fold","std::opt::algebra","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout), safe=false;
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label==='tensor:add').length,m=g(name).nodes.filter(n=>n.label==='tensor:multiply').length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
+ counts('merged',safe?1:0,safe?2:1);counts('merged_explicit',safe?1:0,safe?2:1);
+ counts('chain',0,2);counts('inexact',1,2);
+}
+'''
+
+[[tests]]
+name = "tensor.graph.safe"
+desc = "With safe_fp=true the tensor rewrite is strict as the scalar one is: nothing is regrouped, not even by a node that carries @numeric(reassociate)."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra_tensor.cml"
+args = ["${case}","std::opt::fold","std::opt::algebra(safe_fp=true)","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout), safe=true;
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label==='tensor:add').length,m=g(name).nodes.filter(n=>n.label==='tensor:multiply').length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
+ counts('merged',safe?1:0,safe?2:1);counts('merged_explicit',safe?1:0,safe?2:1);
+ counts('chain',0,2);counts('inexact',1,2);
+}
+'''
+
+[[tests]]
+name = "tensor.execution"
+desc = "The rewritten tensor program prints what the original prints, on every back end."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra_tensor.cml"
+args = ["${case}","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["8.,      16.,      24.", "6.,      12.,      18.", "0.3,     0.6,     0.9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

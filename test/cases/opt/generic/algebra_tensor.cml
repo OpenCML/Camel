@@ -1,0 +1,44 @@
+/**
+ * Local algebra on elementwise tensor operators (design principles 2.15, 2.17): the operators
+ * declare the laws it uses (OperatorSemantics::binary), so a tensor expression is rewritten as the
+ * scalar one is, under the same policy. Coefficients are scalar constants the element type holds
+ * exactly; the other operand has the type of the result.
+ */
+module algebra_tensor
+
+import { Tensor, reshape } from tensor
+
+type Vec = Tensor<f32, const [3]>
+
+func merged(x: Vec): Vec {
+    return x * 3.0 + x * 5.0
+}
+
+@numeric(reassociate)
+func merged_explicit(x: Vec): Vec {
+    return x * 3.0 + x * 5.0
+}
+
+func chain(x: Vec): Vec {
+    return (x * 3.0) * 2.0
+}
+
+func inexact(x: Vec): Vec {
+    return x * 0.1 + x * 0.2
+}
+
+func shared_product(x: Vec): Vec sync {
+    let t = x * 3.0
+    println(t)
+    return t + t
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    println(merged(x))
+    println(merged_explicit(x))
+    println(chain(x))
+    println(inexact(x))
+    println(shared_product(x))
+    return 0
+}

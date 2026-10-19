@@ -44,6 +44,7 @@
 
 #include "camel/core/operator_table.h"
 
+#include <bit>
 #include <string>
 #include <string_view>
 
@@ -66,6 +67,45 @@ constexpr NumericType kNumericTypes[] = {
     {"d", TypeCode::Float64, true},
 };
 
+/// The bit pattern of `value` in the type: what a neutral element is declared as.
+uint64_t bitsOf(const NumericType &t, int value) {
+    if (!t.isFloat) {
+        return static_cast<uint64_t>(value);
+    }
+    if (t.type == TypeCode::Float32) {
+        return std::bit_cast<uint32_t>(static_cast<float>(value));
+    }
+    return std::bit_cast<uint64_t>(static_cast<double>(value));
+}
+
+/// The laws of `+`, `-` and `*` over one numeric type (design section 7b): a sum is commutative
+/// and, on wrapping integers, exactly associative; a float sum has a neutral element of -0 for
+/// the sum and +0 for the difference; the product distributes over the sum; the difference is
+/// the sum of the negation.
+std::optional<BinaryAlgebra> binaryLaws(const std::string &name, const NumericType &t) {
+    const std::string sum = std::string(":op/add_") + t.suffix;
+    BinaryLaw law{.element = t.type};
+    if (name == "add") {
+        law.commutative      = true;
+        law.exactAssociative = !t.isFloat;
+        law.neutralBits      = t.isFloat ? (t.type == TypeCode::Float32
+                                                ? std::bit_cast<uint32_t>(-0.0f)
+                                                : std::bit_cast<uint64_t>(-0.0))
+                                         : 0;
+    } else if (name == "sub") {
+        law.subtractionOf = sum;
+        law.neutralBits   = bitsOf(t, 0);
+    } else if (name == "mul") {
+        law.commutative      = true;
+        law.exactAssociative = !t.isFloat;
+        law.neutralBits      = bitsOf(t, 1);
+        law.distributesOver  = sum;
+    } else {
+        return std::nullopt;
+    }
+    return BinaryAlgebra{.laws = {law}};
+}
+
 /// Declares `:op/<name>_<suffix>` with the given numeric semantics and faults.
 void declare(
     const std::string &name, const NumericType &t, NumericSemantics numeric,
@@ -76,6 +116,7 @@ void declare(
         OperatorSemantics{
             .key     = OperatorKey::of(uri),
             .numeric = std::move(numeric),
+            .binary  = binaryLaws(name, t),
             .faults  = std::move(faults),
         });
 }

@@ -700,6 +700,14 @@ granted = 节点的许可列 ∪ (law.order == Unordered ? {a} : ∅)
 
 "提高累加精度"（例如把 `sum_to` 的 f32 累加换成 f64）同样改变结果的位，五项许可里没有它（(d) 说的是降低）。本稿按字面：**不允许**，除非负责人把 (d) 定为"改变精度"（Q8）。
 
+### 7.4 二元代数律与数值策略（2026-10-19 审查后）
+
+归约律说的是"一串贡献怎样合并"；`+`、`-`、`*` 这类二元算子还有自己的代数事实，改写遍（`std::opt::algebra`）要用，却不该靠名字认。`OperatorSemantics::binary`（`sem::BinaryAlgebra`，`camel/core/operator_semantics.h`）按元素类型声明 `BinaryLaw`：是否可交换、是否在位上精确可结合（回绕的整数是，浮点不是）、中性元的位型、"对哪个算子分配"（乘对加）、"是哪个算子的减"（减是加的减）。`elementOf` 说明一个操作数或结果的类型对应哪个元素类型，`elementwise` 说明算子逐元素作用在聚合（张量）上，系数是标量常量。
+
+`std::opt::algebra` 在算子表里找"声明了对另一个算子分配、且二者都可交换"的算子对，把它们当作乘与加，再找声明了"是该加法的减"的算子；内建的 `:op/add_i/l/f/d` 与张量的 `tensor:add`、`subtract`、`multiply`（float32 元素）同样处理，核心里不再有算子 URI 清单。张量的规则多一条限制：被合并的两项必须与结果同类型（不做广播），系数是元素类型精确表示的标量常量。整数张量不在其内：内核对整数的契约没有声明为精确可结合。
+
+2.15 与 2.16 的"默认放宽"是**策略**，不是节点的许可：`sem::NumericPolicy`（`defaultGrants` 加上"节点自带的许可算不算"）有三个取值——`explicitOnly()`（只认节点写的）、`relaxed()`（默认，附带 `reassociate`）、`strict()`（`safe_fp=true`：默认什么都不给，节点的许可也不算）。改写遍问 `policy.permits(节点许可, 所需许可)`；`reorderFreedom(law, 节点许可, policy)` 与 `reorderFreedomOf(graph, node, policy)` 是同一个问题在归约上的形式，`core.reorder` 事实用 `explicitOnly()`。Tiles 的 `relaxed` 掩码（`cuda.cpp`、`schedule.cpp`）仍是它自己的一份，等它改读这里的策略。
+
 ---
 
 ## 8. 资源
