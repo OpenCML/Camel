@@ -49,6 +49,7 @@
 - `-t`, `--threads <num>`：最大线程数  
 - `--max-recursion-depth <n>`：可同时处于打开状态且不是尾调用的调用数上限（1 到 1000000；见“资源上限”）。也可用 `CAMEL_MAX_RECURSION_DEPTH=<n>`；选项优先  
 - `--max-macro-depth <n>`：`std::macro` 提前求值一次调用时嵌套调用的上限（默认 64；取值范围相同）。也可用 `CAMEL_MAX_MACRO_DEPTH=<n>`  
+- `--max-macro-rounds <n>`：`std::macro` 提前求值时一个循环至多运行的轮数（默认 1000000，取值 1 到 2^40）；超过则这次求值失败。也可用 `CAMEL_MAX_MACRO_ROUNDS=<n>`，选项优先  
 - `--gc <collector>`：运行时值的回收器：`generational`（默认；分代，年轻对象会被复制）或 `mark-sweep`（对象地址不变）。也可用 `CAMEL_GC=<collector>`；命令行选项优先。详见英文版 `docs/cli.md` 的 "The collector" 一节  
 - `-n`, `--no-cache`：不使用缓存模块  
 - `-I`, `--include <dir>`：添加模块搜索路径（可多次使用）  

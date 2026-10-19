@@ -90,6 +90,7 @@ extern int maxThreads;
 /// option is absent (camel/execute/limits.h; the environment variables are read there).
 extern size_t maxRecursionDepth;
 extern size_t maxMacroDepth;
+extern size_t maxMacroRounds; // --max-macro-rounds
 } // namespace Run
 
 namespace Check {
