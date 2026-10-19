@@ -7,6 +7,7 @@ test/cases/trans/cpp/exec
 test/cases/trans/cpp/exec_mod_scalar.cml
 
 # Values and their text.
+test/cases/trans/cpp/enums.cml
 test/cases/consistency/values/int_wrap.cml
 test/cases/consistency/values/int_min_div.cml
 test/cases/consistency/values/float_special.cml

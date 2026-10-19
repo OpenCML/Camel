@@ -296,21 +296,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "refuse_cpp"
-desc = "`std::cpp` translates no enum: the refusal is located and names the parameter it cannot translate."
-kind = "negative"
-case = "../../../cases/compile/enum/refuse_cpp.cml"
-args = ["-E", "short", "${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 16
-expect_diagnostic_column = 1
-expect_output_contains = ["Translation pass 'std::cpp' refused the graph: a parameter of function 'main' has type 'Shape'"]
-expect_output_not_contains = ["Segmentation fault", "dumped core", "UnknownInternalError"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 20000
-
-[[tests]]
 name = "refuse_grad"
 desc = "autodiff refuses a value that depends on the differentiated parameter and is put into an enum, where the value is built; it does not return a wrong zero."
 kind = "negative"
