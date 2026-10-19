@@ -61,49 +61,6 @@ const auto &arithmetic() {
     return ops;
 }
 
-/// Compute the written slots once. GATEs alias their forwarded scalar slot; unioning those
-/// aliases avoids per-match forward walks, especially exponential walks through a shared DAG.
-/// Algebra only rewrites unwritten pure nodes and never introduces writers or new aliases,
-/// so the conservative snapshot remains valid throughout this draft rewrite.
-class WrittenSlots {
-  public:
-    explicit WrittenSlots(const GraphDraft &draft) : written_(draft.nodeSlotCount(), false) {
-        std::vector<gc_node_ref_t> parent(written_.size());
-        for (gc_node_ref_t id = 0; id < parent.size(); ++id)
-            parent[id] = id;
-        const auto root = [&](gc_node_ref_t id) {
-            while (parent[id] != id) {
-                parent[id] = parent[parent[id]];
-                id         = parent[id];
-            }
-            return id;
-        };
-        for (gc_node_ref_t id = 0; id < parent.size(); ++id) {
-            const auto *h = draft.header(id);
-            if (h && h->kind == GCNodeKind::Gate && !draft.normInputsOf(id).empty()) {
-                parent[root(id)] = root(draft.normInputsOf(id).back());
-            }
-        }
-        for (gc_node_ref_t id = 0; id < parent.size(); ++id) {
-            if (!draft.header(id) || isPureOper(draft, id))
-                continue;
-            for (bool with : {false, true}) {
-                const auto inputs = with ? draft.withInputsOf(id) : draft.normInputsOf(id);
-                for (size_t i = 0; i < inputs.size(); ++i) {
-                    if (isVarArgument(draft, id, with, i))
-                        written_[root(inputs[i])] = true;
-                }
-            }
-        }
-        for (gc_node_ref_t id = 0; id < parent.size(); ++id)
-            written_[id] = written_[root(id)];
-    }
-    bool operator()(gc_node_ref_t id) const { return id < written_.size() && written_[id]; }
-
-  private:
-    std::vector<bool> written_;
-};
-
 /// Do not peel GATEs: their control dependencies are part of evaluating the constant.
 template <typename T>
 std::optional<T>

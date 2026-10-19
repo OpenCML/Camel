@@ -152,9 +152,56 @@ bool OperatorTable::hasExternalEffect(std::string_view uri) const {
     return !id || hasExternalEffect(*id);
 }
 
+namespace {
+
+/// The resource declaration against the `var` parameters of the signature (design principles
+/// 2.17); an empty string when they agree or the signature does not say.
+std::string checkVarAgainstResources(
+    std::string_view uri, const sem::ResourceSpec &resources, const type::FuncTypeResolver *resolver) {
+    std::vector<bool> with, norm;
+    if (resolver == nullptr || !resolver->varParameters(with, norm)) {
+        return {};
+    }
+    if (auto problem = sem::checkVarParameters(resources, with, norm)) {
+        return std::format(
+            "The resources declared for the operator '{}' disagree with its signature {}: {}.",
+            uri, resolver->signature(), *problem);
+    }
+    return {};
+}
+
+} // namespace
+
 void OperatorTable::setResolver(std::string_view uri, type::resolver_ptr_t resolver) {
     std::unique_lock lock(mutex_);
-    entries_[internLocked(uri)].resolver = std::move(resolver);
+    Entry &entry = entries_[internLocked(uri)];
+    if (const sem::OperatorSemantics *declared = entry.semantics.load(std::memory_order_relaxed);
+        declared != nullptr && declared->resources) {
+        const std::string problem = checkVarAgainstResources(uri, *declared->resources, resolver.get());
+        if (!problem.empty()) {
+            throw std::invalid_argument(problem);
+        }
+    }
+    entry.resolver = std::move(resolver);
+}
+
+bool OperatorTable::writesOperand(OperId id, bool isWith, size_t index) const {
+    if (const sem::OperatorSemantics *declared = semantics(id); declared && declared->resources) {
+        return sem::writesOperand(*declared->resources, isWith, index);
+    }
+    const auto traits = find(id);
+    if (!traits) {
+        return true;
+    }
+    // Not pure and undeclared: it may write every operand, except that the operands of one that
+    // runs or reads the graphs of function values (a higher-order operator, a macro operator, an
+    // exporter) are those functions, which are no resource; what a callee does is the callee's.
+    return !traits->pure && !traits->callsGraphs && !traits->inspectsGraphs;
+}
+
+bool OperatorTable::touchesClass(OperId id, sem::ResourceClass cls, bool writesOnly) const {
+    const sem::OperatorSemantics *declared = semantics(id);
+    return declared && declared->resources && sem::touchesClass(*declared->resources, cls, writesOnly);
 }
 
 type::resolver_ptr_t OperatorTable::resolver(OperId id) const {
@@ -326,6 +373,14 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
     const std::optional<OperatorTraits> traits =
         (bits & kDeclared) != 0 ? std::optional(decode(bits)) : std::nullopt;
     std::string problem = checkSemantics(uri, semantics, traits);
+    if (problem.empty() && semantics.resources) {
+        // Declared before or after its signature is registered: checked once both are there.
+        const std::string signature =
+            checkVarAgainstResources(uri, *semantics.resources, entry.resolver.get());
+        if (!signature.empty()) {
+            throw std::invalid_argument(signature);
+        }
+    }
     if (problem.empty()) {
         if (const sem::OperatorSemantics *old = entry.semantics.load(std::memory_order_relaxed);
             old != nullptr && std::tie(semantics.key.major, semantics.key.minor) <

@@ -199,6 +199,8 @@ void declareBuiltinOperatorSemantics() {
     declareUnorderedReduce();
 }
 
+bool storesIntoCell(std::string_view name) { return name.starts_with("op/assn"); }
+
 void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
     auto &table      = OperatorTable::instance();
     const auto cell  = [](AccessMode mode) { return operandAccess(ResourceClass::Variable, 0, mode); };
@@ -222,7 +224,7 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
     // reads the cell, combines and stores (and returns the new value, a number or a string);
     // `acc = acc->append<v>` may append to the cell's own array and returns it.
     for (std::string_view name : names) {
-        if (!name.starts_with("op/assn")) {
+        if (!storesIntoCell(name)) {
             continue;
         }
         const std::string uri = ":" + std::string(name);

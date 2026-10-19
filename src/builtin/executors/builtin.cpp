@@ -342,7 +342,7 @@ void registerBuiltinOperatorTraits() {
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
         // Every operator over Map and Set (coll/) returns a new value and changes nothing.
-        const bool pure = (key.starts_with("op/") && !key.starts_with("op/assn")) ||
+        const bool pure = (key.starts_with("op/") && !storesIntoCell(key)) ||
                           key.starts_with("coll/") || kPureHelpers.contains(key);
         // Declared either way: an operator without a declaration is treated the same as one
         // declared to have effects, but only a declaration says that somebody looked.

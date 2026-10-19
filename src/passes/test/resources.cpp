@@ -140,6 +140,40 @@ camel::runtime::GCGraph *ResourcesTestPass::apply(camel::runtime::GCGraph *graph
     table.declareSemantics("semtest:pure", OperatorSemantics{.key = OperatorKey::of("semtest:pure", 1, 4)});
     attempt(os, "pure_touches_none", "semtest:pure", ResourceSpec{});
     attempt(os, "same_again", "semtest:pure", ResourceSpec{});
+    // The declaration is the truth about effects; the `var` parameters of the signature are
+    // checked against it (design principles 2.17), whichever is registered first.
+    {
+        using camel::core::type::StaticFuncTypeResolver;
+        using camel::core::type::Type;
+        table.set("semtest:var_op", {.stateOnly = true});
+        table.setResolver(
+            "semtest:var_op",
+            StaticFuncTypeResolver::create({}, {{Type::Int64(), true}}, Type::Int64()));
+        attempt(os, "var_param_written", "semtest:var_op", ResourceSpec{.accesses = {cellWrite}});
+        attempt(
+            os, "var_param_not_written", "semtest:var_op",
+            ResourceSpec{.accesses = {operandAccess(ResourceClass::Variable, 0, AccessMode::Read)}});
+        table.set("semtest:plain_op", {.stateOnly = true});
+        table.setResolver(
+            "semtest:plain_op",
+            StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()));
+        attempt(os, "written_without_var", "semtest:plain_op", ResourceSpec{.accesses = {cellWrite}});
+        table.set("semtest:late_op", {.stateOnly = true});
+        attempt(
+            os, "late_declared", "semtest:late_op",
+            ResourceSpec{.accesses = {operandAccess(ResourceClass::Variable, 0, AccessMode::Read)}});
+        try {
+            table.setResolver(
+                "semtest:late_op",
+                StaticFuncTypeResolver::create({}, {{Type::Int64(), true}}, Type::Int64()));
+            os << "RESOURCES late_resolver accepted\n";
+        } catch (const std::invalid_argument &e) {
+            os << "RESOURCES late_resolver rejected: " << e.what() << "\n";
+        }
+        os << "RESOURCES writes var_op " << table.writesOperand(*table.lookup("semtest:var_op"), false, 0)
+           << " plain_op " << table.writesOperand(*table.lookup("semtest:plain_op"), false, 0)
+           << " late_op " << table.writesOperand(*table.lookup("semtest:late_op"), false, 0) << "\n";
+    }
     os << "RESOURCES version " << table.key(*table.lookup("semtest:pure"))->toString() << " "
        << table.key(*table.lookup("semtest:cell_write"))->toString() << "\n";
     os << "RESOURCES text " << toString(*table.semantics(*table.lookup("semtest:cell_write"))->resources)

@@ -142,8 +142,9 @@ struct OperatorTraits {
     bool pure = false;
     /// Output element i depends only on input elements i (after broadcasting).
     bool elementwise = false;
-    /// Not pure, but without an effect outside the program's own variables: it creates or
-    /// reads a variable (`:var/new`, `:var/get`). Its result depends on when it runs, so it
+    /// Not pure, but without an effect outside the program's own variables: it creates, reads
+    /// or changes a variable (`:var/new`, `:var/get`, `:var/take`); which of them is its
+    /// resource declaration's to say, the effect summaries read it there. Its result depends on when it runs, so it
     /// is never folded, merged or moved across a write; it is not an effect a user can
     /// observe, so it is not reported as one (effect trace).
     bool stateOnly = false;
@@ -341,6 +342,25 @@ class OperatorTable {
     /// stays valid until the process exits.
     const sem::OperatorSemantics *semantics(OperId id) const {
         return entries_[id].semantics.load(std::memory_order_acquire);
+    }
+
+    /// Whether running the operator writes the resource the ordinary (or with) operand `index`
+    /// names: from its resource declaration (design principles 2.17), the one source of what
+    /// an operator writes. An operator without a declaration is read conservatively: every
+    /// operand of a non-pure one, except that the operands of one that calls or reads the graphs
+    /// of the function values it receives are not written by the operator (what the callee does
+    /// to them is the callee's, reached through the function value).
+    bool writesOperand(OperId id, bool isWith, size_t index) const;
+
+    /// Whether the operator declares an access to a resource of class `cls` (`writesOnly`: a
+    /// write). An undeclared operator declares none.
+    bool touchesClass(OperId id, sem::ResourceClass cls, bool writesOnly = false) const;
+
+    /// Whether the operator declares a write to a cell or to an object changed in place: state
+    /// of the program itself (not ambient state, not a module's objects).
+    bool writesProgramState(OperId id) const {
+        return touchesClass(id, sem::ResourceClass::Variable, true) ||
+               touchesClass(id, sem::ResourceClass::Object, true);
     }
 
     /// The stable key of an operator that has semantics, nullopt otherwise.

@@ -767,6 +767,12 @@ struct ResourceSpec {
 
 图的效应摘要（四个位：出口依赖外部效应、写了捕获的变量、读了捕获的变量、可能故障）是由节点算出来的图级概括（图模型 3.10 的 I14）。资源声明让这个概括可以细化：一个只读捕获单元的算子不必按"写"处理；一次 `Mapped` 区域的写只与重叠的区域冲突。细化的结果是可推导的事实（第 10 节），不改变效应摘要本身的定义。
 
+### 8.4 声明是效应的唯一来源（2026-10-19 审查后，设计原则 2.17）
+
+优化遍问"这个节点写不写它的某个操作数"，答案只来自资源声明：`OperatorTable::writesOperand`（算子）、足迹（`footprintOf`，被调的图）、`touchesClass`（声明碰哪一类资源）。`draft_writes.h` 的 `isWrittenArgument`、`isWrittenInPlace`（现在对共享的 GATE 有访问集，不再指数地重走）与 `WrittenSlots`（一次算出整张草稿的答案，algebra 不再自带一份）都由它们推出；CSE 的"读变量"是"声明了对 `Variable` 类资源的访问"，`EffectSummary::writesVariables` 是"声明了对 `Variable` 或 `Object` 的写"，所以 `:var/take` 与就地形式也算写入，不再靠 `:op/assn` 前缀与固定的 `VarGet` id。没有声明的非纯算子按保守读法写它的每个操作数；例外是调用或读取函数值的图的算子（高阶算子、宏算子、导出器）：它们的操作数是函数，不是资源。
+
+签名里的 `var` 形参由声明检查（登记时，`setResolver` 与 `declareSemantics` 无论哪个后到都检查）：`var` 形参必须被声明写；写 `Variable` 或 `Object` 类资源的操作数必须是 `var` 形参；`Foreign` 类（模块包装的句柄）可以经普通操作数写。不一致是声明错误（`std::invalid_argument`）。纯度仍由模块逐个声明；内建的 `op/assn*` 家族只在 `storesIntoCell` 一处点名。
+
 ---
 
 ## 9. 定义图
