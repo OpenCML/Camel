@@ -45,6 +45,7 @@ const FOLDED = {
     waitExpr: 'parseExpr',
     ctrlExpr: 'parseExpr',
     loopExpr: 'parseLoop',
+    namedTypeArgument: 'parseTypeArguments',
     loopState: 'parseLoop',
     loopFor: 'parseLoop',
     loopWhile: 'parseLoop',

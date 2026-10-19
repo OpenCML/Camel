@@ -1955,6 +1955,14 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         res = tree_->makeTypeApplication();
         *res << visitData(lhsASTNode);
         for (const auto &argument : *ast->atAs<AST::RepeatedLoad>(1)) {
+            if (argument->type() == AST::LoadType::NamedType) {
+                // `A = int`: the name as a constant, then the type (design principles 2.17).
+                const auto &named = argument->loadAs<AST::NamedTypeLoad>();
+                *res << tree_->makeData(
+                    std::make_shared<StringData>(named->getRef().toString()));
+                *res << tree_->makeType(visitType(argument->at(0)), ImplMark::Graph);
+                continue;
+            }
             Type *type = visitType(argument);
             *res << tree_->makeType(type, ImplMark::Graph);
         }

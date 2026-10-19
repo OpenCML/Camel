@@ -2383,7 +2383,23 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             } else if (child.node().is(NK::TypeArguments)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Instantiate);
                 setNodeTokenRangeByContext(exprNode, cst::TypeArguments(child.node()));
-                *exprNode << lhsNode << any2node(visitTypeList(child.node().get<cst::TypeList>()));
+                // Positional (`typeList`) or named (`A = int`): a named argument is a
+                // NamedTypeLoad that holds its type.
+                node_ptr_t typeArgs;
+                if (child.node().get<cst::TypeList>()) {
+                    typeArgs = any2node(visitTypeList(child.node().get<cst::TypeList>()));
+                } else {
+                    typeArgs = createNodeAs<RepeatedLoad>("Type");
+                    setNodeTokenRangeByContext(typeArgs, cst::TypeArguments(child.node()));
+                    for (const auto named : child.node().all<cst::NamedTypeArgument>()) {
+                        node_ptr_t namedNode = createNodeAs<NamedTypeLoad>(
+                            Reference(named->tok(TK::Identifier)->text()));
+                        setNodeTokenRangeByContext(namedNode, named);
+                        *namedNode << any2node(visitType(named->type()));
+                        *typeArgs << namedNode;
+                    }
+                }
+                *exprNode << lhsNode << typeArgs;
                 registerAstSemanticBundle(
                     exprNode,
                     {
