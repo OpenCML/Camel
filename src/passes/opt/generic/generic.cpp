@@ -840,7 +840,8 @@ size_t cseDraft(GraphDraft &draft) {
                 if (isWrittenInPlace(draft, in) ||
                     (h && h->kind == GCNodeKind::Oper &&
                      camel::core::OperatorTable::instance().touchesClass(
-                         operIdOf(draft, in), camel::core::sem::ResourceClass::Variable))) {
+                         operIdOf(draft, in),
+                         camel::core::sem::ResourceClass::Variable))) {
                     return true;
                 }
             }

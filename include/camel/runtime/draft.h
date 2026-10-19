@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -328,8 +328,8 @@ class GraphDraft {
         gc_slot_idx_t dataIndex = 0);
     /// A LOOP node calling `body.condGraph` and `body.bodyGraph` (camel/runtime/loop.h); the
     /// caller links its inputs and keeps the two graphs among the draft's dependencies.
-    gc_node_ref_t addLoopNode(
-        const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t
+    addLoopNode(const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addOperNode(
         camel::core::type::Type *type, operator_t op, std::string_view uri,
         gc_slot_idx_t dataIndex = 0);
@@ -418,13 +418,13 @@ class GraphDraft {
         gc_node_ref_t newId, bool norm, bool with, bool ctrl);
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
 
-    camel::core::type::FunctionType *funcType_     = nullptr;
+    camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside
     // the graph's own block (TupleType::constructFrameLayout).
     std::vector<camel::core::type::Type *> runtimeSlotTypes_;
-    bool hasFrameLayout_ = false;
-    camel::core::type::TupleType *closureType_     = nullptr;
+    bool hasFrameLayout_                       = false;
+    camel::core::type::TupleType *closureType_ = nullptr;
     DraftNodePool pool_;
     std::vector<DraftNode *> nodesById_;
     std::vector<gc_node_ref_t> sourceRefsById_;

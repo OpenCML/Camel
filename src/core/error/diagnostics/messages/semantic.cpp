@@ -922,6 +922,138 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "away when they are fixed.",
             },
         },
+        {
+            SemanticDiag::DuplicateEnumVariant,
+            {
+                "DuplicateEnumVariant",
+                "The variant '{0}' is declared twice in enum '{1}'.",
+                "A variant is one of the values of its enum and is written by its name; each "
+                "name occurs once.",
+            },
+        },
+        {
+            SemanticDiag::DuplicateEnumField,
+            {
+                "DuplicateEnumField",
+                "The field '{0}' is declared twice in variant '{1}' of enum '{2}'.",
+                "A field of a struct variant is written by its name; each name occurs once.",
+            },
+        },
+        {
+            SemanticDiag::EnumVariantNeedsFields,
+            {
+                "EnumVariantNeedsFields",
+                "The variant '{0}' of enum '{1}' carries {2} field(s): write '{3}' to build one.",
+                "A variant without a field list is a single value; one with fields is built by "
+                "writing the fields after its name, 'Shape::Circle(1.0)' or "
+                "'Shape::Rect {{ w: 1.0, h: 2.0 }}'.",
+            },
+        },
+        {
+            SemanticDiag::EnumVariantFieldCount,
+            {
+                "EnumVariantFieldCount",
+                "The variant '{0}' of enum '{1}' takes {2} field(s), but {3} were given.",
+                "The fields of a variant are those its declaration writes: as many, and in the "
+                "same order for a variant written with '(...)'.",
+            },
+        },
+        {
+            SemanticDiag::EnumPatternMismatch,
+            {
+                "EnumPatternMismatch",
+                "The pattern '{0}' does not match a value of type '{1}': {2}.",
+                "A pattern names a variant of the enum it matches and, if that variant has "
+                "fields, binds each of them by its position ('Shape::Circle(r)') or by the name "
+                "its declaration gives ('Shape::Rect {{ w, h }}').",
+            },
+        },
+        {
+            SemanticDiag::EnumMatchNotExhaustive,
+            {
+                "EnumMatchNotExhaustive",
+                "The match over '{0}' has no case for {1}, and no 'case _'.",
+                "Every variant of an enum is a value of it, so a match that names variants must "
+                "name all of them or end with 'case _'. The compiler adds no arm the program does "
+                "not show.",
+            },
+        },
+        {
+            SemanticDiag::EnumFieldAccess,
+            {
+                "EnumFieldAccess",
+                "'{0}' is a value of enum '{1}': its fields are not read by name or index.",
+                "A field of a variant is taken out by matching the value and binding it in the "
+                "arm of that variant: 'match v {{ case {2} => ... }}'.",
+            },
+        },
+        {
+            SemanticDiag::UnionTypeRetired,
+            {
+                "UnionTypeRetired",
+                "The union type is retired: a value has one type, and no value enters "
+                "'A | B'.",
+                "When a value is one of several named cases, declare an enum: "
+                "'type T = enum {{ A(i32), B(string) }}'. '|' remains the logical or.",
+            },
+        },
+        {
+            SemanticDiag::ReservedTypeQuestionRetired,
+            {
+                "ReservedTypeQuestionRetired",
+                "The reserved form 'T ? U' is retired: '?' is only the nullable mark, as in "
+                "'T?'.",
+                "Write 'T?' for a value that may be null and 'T!' for one that may have "
+                "failed.",
+            },
+        },
+        {
+            SemanticDiag::EnumFieldTypeMismatch,
+            {
+                "EnumFieldTypeMismatch",
+                "Field {0} of variant '{1}' has type '{2}', but the value given has type "
+                "'{3}'.",
+                "The fields of a variant are those its declaration writes.",
+            },
+        },
+        {
+            SemanticDiag::EnumTypeArgumentNotInferred,
+            {
+                "EnumTypeArgumentNotInferred",
+                "Cannot infer the type argument '{0}' of enum '{1}' from the fields of "
+                "'{2}'.",
+                "The fields of the variant do not say what the argument is; where the value is "
+                "used the expected type does: 'let x: Option<int> = Option::None'.",
+            },
+        },
+        {
+            SemanticDiag::EnumConstructionMismatch,
+            {
+                "EnumConstructionMismatch",
+                "Variant '{0}' of enum '{1}' cannot be built from this value: {2}.",
+                "A variant written with '(...)' is built from its fields in order; one written "
+                "with '{{ }}' from a value that has a field of each name it declares; and one "
+                "without fields is the value itself.",
+            },
+        },
+        {
+            SemanticDiag::EnumVariantCaseRepeated,
+            {
+                "EnumVariantCaseRepeated",
+                "The variant '{0}' is matched more than once; the later case is never taken.",
+                "A branch takes the first case that matches. Remove the later case, or the "
+                "earlier one.",
+            },
+        },
+        {
+            SemanticDiag::MatchCaseAfterWildcard,
+            {
+                "MatchCaseAfterWildcard",
+                "This case follows 'case _': it is never taken.",
+                "'case _' matches every value, so nothing after it can. Remove it, or move it "
+                "before the wildcard.",
+            },
+        },
     };
 
     return infoMap;

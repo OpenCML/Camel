@@ -62,8 +62,8 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
     std::vector<std::string> given;
     for (size_t i = 1; i < gct->size(); ++i) {
         if (gct->at(i)->type() == GCT::NodeKind::DATA && i + 1 < gct->size()) {
-            given.push_back(std::static_pointer_cast<core::data::StringData>(gct->at(i)->data())
-                                ->data());
+            given.push_back(
+                std::static_pointer_cast<core::data::StringData>(gct->at(i)->data())->data());
             ++i;
         }
         types.push_back(boundType(gct->at(i)->dataType()));
@@ -88,7 +88,9 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                         .commit(
                             tmpl->name,
                             "explicit type arguments",
-                            problem + " (its type parameters: " + strutil::join(names, ", ", [](const std::string &n) { return n; }) + ")",
+                            problem + " (its type parameters: " +
+                                strutil::join(names, ", ", [](const std::string &n) { return n; }) +
+                                ")",
                             tmpl->funcType->toString());
                     throw BuildAbortException();
                 }

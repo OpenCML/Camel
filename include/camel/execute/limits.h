@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,10 +47,10 @@ namespace camel::execute {
 /// (kEntryCalls). So with a limit of L, `depth(L - 1)` called from `main` is the deepest that
 /// runs, for `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`: L calls of `depth` are
 /// open at the bottom.
-inline constexpr size_t kEntryCalls                     = 1;
-inline constexpr size_t kDefaultMaxRecursionDepth       = 1000;
-inline constexpr const char *kMaxRecursionDepthEnvVar   = "CAMEL_MAX_RECURSION_DEPTH";
-inline constexpr const char *kMaxRecursionDepthOption   = "--max-recursion-depth";
+inline constexpr size_t kEntryCalls                   = 1;
+inline constexpr size_t kDefaultMaxRecursionDepth     = 1000;
+inline constexpr const char *kMaxRecursionDepthEnvVar = "CAMEL_MAX_RECURSION_DEPTH";
+inline constexpr const char *kMaxRecursionDepthOption = "--max-recursion-depth";
 
 /// The limit on nested calls while std::macro evaluates a call ahead of time (its evaluator has
 /// no tail calls: every call counts). `--max-macro-depth <n>`, else CAMEL_MAX_MACRO_DEPTH.

@@ -72,8 +72,8 @@ class PassArgs {
     std::map<std::string, bool> written_;
 };
 
-using PassMaker = std::function<
-    std::unique_ptr<GraphIRPass>(const camel::core::context::context_ptr_t &, const PassArgs &)>;
+using PassMaker = std::function<std::unique_ptr<GraphIRPass>(
+    const camel::core::context::context_ptr_t &, const PassArgs &)>;
 
 /// What a pass declares about itself.
 struct PassDescriptor {
@@ -93,20 +93,6 @@ void registerModulePass(const std::string &path, PassDescriptor descriptor);
 /// "tiles::compile")`. A name of the core (`std::`) cannot be redefined; registering the same
 /// alias for the same target again is harmless, for another target it replaces the earlier one.
 void registerPassAlias(const std::string &alias, const std::string &target);
-
-/// Registers a pass that joins every pipeline once the module is loaded (the module registers
-/// it when the program imports it). `spec` is written as on the command line, parameters
-/// included. The passes run before the first pass that consumes the graph (a scheduling or
-/// a translation pass), ordered by `priority` (lower first), then by `spec`; one the user
-/// listed himself runs only where he wrote it. Registering the same spec again is harmless.
-void registerDefaultPipelinePass(const std::string &spec, int priority = 0);
-
-/// `pipeline` with the registered default-pipeline passes inserted before its first consuming
-/// pass (at the end when there is none, which the fallback scheduler then follows). Unchanged
-/// when `enabled` is false.
-std::vector<std::string> withDefaultPipelinePasses(
-    const std::vector<std::string> &pipeline, const camel::core::context::context_ptr_t &ctx,
-    bool enabled = true);
 
 /// Splits a comma-separated pass list (`--passes a,b(x=1,y=2),c`) at the commas outside
 /// parentheses and string literals. Entries are trimmed; empty ones are dropped.

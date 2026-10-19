@@ -309,7 +309,6 @@ vector<string> entryArgs        = {};
 
 bool profile      = false;
 bool noCache      = false;
-bool noModulePasses = false;
 bool semanticOnly = false;
 int maxThreads    = -1; // -1 means use the maximum number of threads
 
@@ -618,16 +617,14 @@ bool parseArgs(int argc, char *argv[]) {
              "collector of run-time values: generational (default; young objects are copied) or "
              "mark-sweep (objects keep their address); also CAMEL_GC",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
-         option("--no-module-passes").set(noModulePasses) %
-             "do not add the passes that imported modules register to the pipeline (tiles::compile "
-             "for @gpu, for example)",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
          (option("-E", "--error-format", "--output-format") & value("error format", errorFormat)) %
              "diagnostics format: text (source excerpts), short (one line each) or json",
          diagOps,
          (option("--passes") & value("pass1,pass2,...", passesOpt)) %
-             "pass list as comma-separated (e.g. --passes std::gir,other); a pass may take parameters, "
+             "pass list as comma-separated (e.g. --passes std::gir,other); a pass may take "
+             "parameters, "
              "`std::opt(safe_fp=true)`",
          (option("--timeit") & value("pass/iterations", timeitSpec)) %
              "measure one pass N times from a fresh graph (e.g. --timeit std::jit/10)",

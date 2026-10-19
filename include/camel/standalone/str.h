@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -149,12 +149,10 @@ inline Str charAt(const Str &s, int64_t index, const Site &site) {
     if (index < 0 || static_cast<std::size_t>(index) >= count) [[unlikely]] {
         fault(site, {std::to_string(index), "a string", std::to_string(count)});
     }
-    const std::size_t from =
-        ascii ? static_cast<std::size_t>(index)
-              : camel::utf8::offsetOf(text, static_cast<std::size_t>(index));
-    return Str(text.substr(
-        from,
-        camel::utf8::sequenceLength(static_cast<unsigned char>(text[from]))));
+    const std::size_t from = ascii ? static_cast<std::size_t>(index)
+                                   : camel::utf8::offsetOf(text, static_cast<std::size_t>(index));
+    return Str(
+        text.substr(from, camel::utf8::sequenceLength(static_cast<unsigned char>(text[from]))));
 }
 
 /// `s->contains<sub>` (:struct/contains_str): whether the bytes of `sub` occur in `s`.

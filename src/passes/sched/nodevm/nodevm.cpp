@@ -1040,9 +1040,7 @@ void NodeVMSchedPass::evalLoop(
                     return k == 1 ? currFrame.get<slot_t>(stateSlot)
                                   : currFrame.get<Tuple *>(stateSlot)->get<slot_t>(j);
                 },
-                [&](size_t c) {
-                    return currFrame.get<slot_t>(dataIndexOf(graph, captures[c]));
-                });
+                [&](size_t c) { return currFrame.get<slot_t>(dataIndexOf(graph, captures[c])); });
             return vm.call(target, frame);
         }
         Array *iterable() { return currFrame.get<Array *>(dataIndexOf(graph, *iterableNode)); }

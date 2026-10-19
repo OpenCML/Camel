@@ -292,7 +292,7 @@ void attachSemantics(std::vector<OpDef> &defs) {
     const auto &table = declarations();
     for (OpDef &def : defs) {
         if (auto it = table.find(def.name); it != table.end()) {
-            def.semantics = it->second;
+            def.semantics         = it->second;
             def.semantics->binary = binaryLaws(def.name);
             attachIndexing(def);
         }

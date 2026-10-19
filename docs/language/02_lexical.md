@@ -30,7 +30,7 @@ let c = a + b
 - `//` 到行末是行注释。
 - **`///` 开头的行是文档注释**：紧挨在一个声明（`func`、`let`/`var`、`type`，含它前面的标注、`with`、`export`）正上方、连续的 `///` 行是这个声明的文档，中间不能有空行。编辑器的悬停显示它，`camel inspect --ast` 把它列在声明上，格式化器保持它的位置。`////` 开头的是普通注释。
 - `/* ... */` 是块注释，可以跨行，不能嵌套。
-- `#` 到行末也被忽略，所以脚本第一行可以写 `#!/usr/bin/env camel`。
+- 文件第一行的 `#!` 到行末也被忽略，所以脚本第一行可以写 `#!/usr/bin/env camel`。除此之外 `#` 不是注释，它开始一个标签（[4.1 的设计原则](../design-principles.cn.md)，见 [8.1](08_top_level_and_grammar.md)）。
 
 ## 2.3 标识符
 
@@ -46,9 +46,9 @@ let c = a + b
 |---|---|
 | 声明 | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
 | 控制 | `if` `then` `else` `match` `case` `return` `throw` `wait` `sync` `macro` `loop` `while` `do` `for` `in` |
-| 类型与转换 | `as` `typeas` `const` |
+| 类型与转换 | `as` `typeas` `const` `enum` |
 | 字面量 | `null` `true` `false` |
-| 保留，尚未实现 | `is` `enum` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
+| 保留，尚未实现 | `is` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
 
 最后一行的词各自的状态见 [8.6](08_top_level_and_grammar.md#86-保留但尚未实现的写法)。
 

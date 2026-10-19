@@ -99,7 +99,7 @@ def equiv(out: Path) -> bool:
             raise SystemExit(f"{program}: pipeline failed:\n{proc.stdout}\n{proc.stderr}")
         # The pass consumes the graph: the program (its println) must not have run.
         lines = [l for l in proc.stdout.splitlines() if l.strip()]
-        executed = lines != [f"onnx::export: wrote {by_pass}"]
+        executed = lines != [f"onnx::export: wrote {by_pass.as_posix()}"]
         print(f"{program}: pipeline exit 0, program executed: {executed}")
         ok &= not executed
 

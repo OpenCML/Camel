@@ -1,0 +1,74 @@
+// Generic enums: an enum declares type parameters, and each variant's fields use them. The
+// arguments are inferred from the fields, or from what the position expects
+// (design principles 5.3).
+
+type Option<T> = enum {
+    Some(T),
+    None,
+}
+
+type Tree<T> = enum {
+    Leaf(T),
+    Node { left: Tree<T>, right: Tree<T> },
+}
+
+func unwrapOr(o: Option<int>, fallback: int): int {
+    return match o {
+        case Option::Some(v) => v
+        case Option::None => fallback
+    }
+}
+
+func sum(t: Tree<int>): int {
+    return match t {
+        case Tree::Leaf(v) => v
+        case Tree::Node { left, right } => sum(left) + sum(right)
+    }
+}
+
+func depth(t: Tree<int>): int {
+    return match t {
+        case Tree::Leaf(_) => 1
+        case Tree::Node { left, right } => {
+            let dl = depth(left)
+            let dr = depth(right)
+            if dl > dr then {
+                dl + 1
+            } else {
+                dr + 1
+            }
+        }
+    }
+}
+
+func firstOf(flag: bool): Option<int> {
+    return match flag {
+        case true => Option::Some(7)
+        case false => Option::None
+    }
+}
+
+func main(): void sync {
+    // Inferred from the field.
+    let some = Option::Some(42)
+    println(unwrapOr(some, 0))
+
+    // Inferred from the type the position expects.
+    let none: Option<int> = Option::None
+    println(unwrapOr(none, 9))
+    println(unwrapOr(Option::None, 11))
+
+    // A recursive enum: the field types name the enum again.
+    let tree: Tree<int> = Tree::Node {
+        left: Tree::Leaf(1),
+        right: Tree::Node { left: Tree::Leaf(2), right: Tree::Leaf(3) },
+    }
+    println(sum(tree))
+    println(depth(tree))
+    println(tree)
+
+    // The arguments of an instance are part of its type: Another<int> is not Another<float>.
+    let flag = firstOf(true)
+    println(flag)
+    println(unwrapOr(flag, 0) + unwrapOr(firstOf(false), 5))
+}

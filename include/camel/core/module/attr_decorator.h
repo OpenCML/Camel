@@ -23,7 +23,8 @@
  * module that marks the functions it must compile as kernels:
  *
  *     // exported entities (the module's constructor)
- *     exportEntity("kernel", attrDecoratorGroup("kernel", "tiles:kernel", 0, "(fn: Function) => Function"));
+ *     exportEntity("kernel", attrDecoratorGroup("kernel", "tiles:kernel", 0, "(fn: Function) =>
+ * Function"));
  *     // load()
  *     attr::registerKey("tiles.kernel", {.kind = attr::ValueKind::Unit,
  *                                        .combine = attr::rules::inner(),

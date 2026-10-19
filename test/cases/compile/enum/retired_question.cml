@@ -1,0 +1,9 @@
+// `T ? U` is retired: `?` only marks a nullable value, as in `T?` (design principles 3.9).
+
+func f(x: int ? float): int {
+    return 1
+}
+
+func main(): void sync {
+    println(f(1))
+}

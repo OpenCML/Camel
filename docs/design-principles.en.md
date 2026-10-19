@@ -78,7 +78,7 @@ Camel's most central characteristic is that it is graph-native. Its other proper
 
 ### 2.4 Capacity and defaults
 
-- **The capacity limit of a single graph (65,535) is not relaxed.** It concerns the underlying data structures and the efficiency of the executors. A function is a subgraph; if a graph cannot hold it, some pass has flattened subgraphs too much, and the pass should be made to work within the capacity instead of widening the addressing. (For its relation to the second version of the graph store, see section 15.)
+- **A single graph has no capacity limit.** Ids are always 32-bit (the language author confirmed the [graph store and graph API, second version](design/graph-store/README.cn.md) on 2026-10-19, which removes the former limit of 65,535).
 - The total limit of each of the three spaces for graph, types and metadata is 256 MB; expansion that does not stop is stopped by the exporter's own round budget.
 
 ### 2.5 Round trip between graph and source
@@ -466,7 +466,7 @@ Keywords are kept only for modifiers that change semantics (such as `sync`, `exp
 - **`macro` itself defines no stage and is not required.** When there is no `std::macro` pass in the pipeline, a macro function is just an ordinary function. `std::macro` is a stage of the pipeline, not compile time.
 - A value is either a compile-time constant or the return value of a macro; only these two can be processed by a macro.
 - When a macro function body has side effects, it is treated like any other normal function: the effects happen at the time of evaluation. This is expected behaviour and cannot be avoided from a practical viewpoint.
-- **Failure of macro evaluation**: treated as a run-time fault, like a fault during the run of any pass.
+- **Failure of macro evaluation**: treated as a run-time fault, like a fault during the run of any pass. (The implementation still reports a compile error; the change is pending, handover task H2 item 6.)
 - Loops in `std::macro` run at most 1 million rounds (adjustable, like the recursion limit).
 - The two kinds of early computation are kept apart (6.5).
 
@@ -498,6 +498,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 ### 9.4 The life cycle of tags
 
 - **A tag is handled up by the pass that reads it**: after a pass has used a tag, the tag may no longer exist, and later passes (such as inlining) are not bound by it. The order of passes is arranged by the user.
+- **A library's tags may be used up by the pass that reads them**; standard tags that affect results (such as numeric permissions, 7.5) stay on the node and do not disappear with the pass.
 - **A tag can declare the pass that reads it**; when this pass is not in the pipeline, the compiler warns "the tag has no effect", so that whether a tag takes effect is observable.
 - **Inlining keeps the origin**: the inliner records the identity of the inlined function and its declared tags on the inline origin of the nodes; if a pass that reads a tag finds that the tag appears only on nodes that have already been inlined, it gives the warning "the tag did not take effect because the function was inlined before this pass" and says what order should be adjusted.
 
@@ -697,7 +698,6 @@ When you meet any of the following, ask the language author:
 - How to handle a type function whose evaluation fails or does not terminate.
 - The behaviour when one mutable object is written through references in several places outside a synchronous block.
 - Whether a tag can be attached to a declaration elsewhere, apart from the declaration itself (whether scheduling is an exception).
-- The capacity limit of a single graph: the ruling in 2.4 (not relaxed) and the design of the second version of the graph store (32-bit numbering, no more capacity limit per graph) disagree, and which prevails is to be confirmed.
 - **After a parallel `map` faults, whether elements with a smaller index that have not yet started still execute** (`parallel-fault-lower-elements`):
   every element of `range(0, 64)->map<bad>` faults, and the worker threads happen to have run the 40th first. The current implementation: only those with an index greater than 40 are no longer started, 0 to 39 are still executed, so what is reported is always the 0th, the same as the linear back end and the same on every run.
   Candidate: after a fault, start no element at all; then "the smallest index" is taken only among the elements that happened to have started, and may differ from run to run.

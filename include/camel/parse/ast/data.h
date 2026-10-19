@@ -38,7 +38,8 @@ enum class DataType {
     Tuple,
     Struct,
     Func,
-    Ref
+    Ref,
+    EnumPattern
 };
 
 enum class UnaryDataOp { Not, Neg, Inv };
@@ -185,17 +186,10 @@ class IfExprLoad : public DataLoad {
 
 class MatchExprLoad : public DataLoad {
   public:
-    MatchExprLoad(const Reference &ref) : DataLoad(DataType::MatchExpr), ref_(ref) {}
+    MatchExprLoad() : DataLoad(DataType::MatchExpr) {}
 
-    const Reference &ref() const { return ref_; }
-
-    const std::string toString() const override {
-        return "MatchExpr: " + ref_.toString() + this->status();
-    }
+    const std::string toString() const override { return "MatchExpr" + this->status(); }
     const std::string geneCode() const override;
-
-  private:
-    Reference ref_;
 };
 
 class MatchCaseLoad : public DataLoad {
@@ -321,6 +315,38 @@ class RefDataLoad : public DataLoad {
 
   private:
     Reference ref_;
+};
+
+/// One field the pattern of an enum variant names. A tuple variant writes the bindings in
+/// order (no name); a struct variant names the field it takes. An empty binding is `_`: the
+/// value is matched but not bound.
+struct EnumPatternField {
+    std::string name;
+    std::string binding;
+};
+
+/// A pattern over an enum variant, `Shape::Circle(r)` or `Shape::Rect { w, h: height }`: the
+/// variant it names and what it binds out of the fields.
+class EnumPatternLoad : public DataLoad {
+  public:
+    EnumPatternLoad(const Reference &ref, bool structShape)
+        : DataLoad(DataType::EnumPattern), ref_(ref), structShape_(structShape) {}
+
+    const Reference &ref() const { return ref_; }
+    /// Whether the pattern was written with field names (`{ w, h }`) rather than in order.
+    bool structShape() const { return structShape_; }
+    std::vector<EnumPatternField> &fields() { return fields_; }
+    const std::vector<EnumPatternField> &fields() const { return fields_; }
+
+    const std::string toString() const override {
+        return "EnumPattern: " + ref_.toString() + this->status();
+    }
+    const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
+    bool structShape_ = false;
+    std::vector<EnumPatternField> fields_;
 };
 
 } // namespace camel::parse::ast

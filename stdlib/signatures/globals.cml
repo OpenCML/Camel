@@ -18,7 +18,19 @@
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program
 /// @example int(2.9)    // 2
-inner func int(x: i32 | int | f32 | float | string): int {
+inner func int(x: i32): int {
+    return ':op/*tol'
+}
+inner func int(x: int): int {
+    return ':op/*tol'
+}
+inner func int(x: f32): int {
+    return ':op/*tol'
+}
+inner func int(x: float): int {
+    return ':op/*tol'
+}
+inner func int(x: string): int {
     return ':op/*tol'
 }
 
@@ -26,7 +38,19 @@ inner func int(x: i32 | int | f32 | float | string): int {
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN
 /// @example i64('42')    // 42
-inner func i64(x: i32 | int | f32 | float | string): int {
+inner func i64(x: i32): int {
+    return ':op/*tol'
+}
+inner func i64(x: int): int {
+    return ':op/*tol'
+}
+inner func i64(x: f32): int {
+    return ':op/*tol'
+}
+inner func i64(x: float): int {
+    return ':op/*tol'
+}
+inner func i64(x: string): int {
     return ':op/*tol'
 }
 
@@ -34,7 +58,19 @@ inner func i64(x: i32 | int | f32 | float | string): int {
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN
 /// @example i32(7)    // 7
-inner func i32(x: i32 | int | f32 | float | string): i32 {
+inner func i32(x: i32): i32 {
+    return ':op/*toi'
+}
+inner func i32(x: int): i32 {
+    return ':op/*toi'
+}
+inner func i32(x: f32): i32 {
+    return ':op/*toi'
+}
+inner func i32(x: float): i32 {
+    return ':op/*toi'
+}
+inner func i32(x: string): i32 {
     return ':op/*toi'
 }
 
@@ -42,7 +78,19 @@ inner func i32(x: i32 | int | f32 | float | string): i32 {
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one number; use parse_float to handle that in the program
 /// @example float(3)    // 3
-inner func float(x: i32 | int | f32 | float | string): float {
+inner func float(x: i32): float {
+    return ':op/*tod'
+}
+inner func float(x: int): float {
+    return ':op/*tod'
+}
+inner func float(x: f32): float {
+    return ':op/*tod'
+}
+inner func float(x: float): float {
+    return ':op/*tod'
+}
+inner func float(x: string): float {
     return ':op/*tod'
 }
 
@@ -50,7 +98,19 @@ inner func float(x: i32 | int | f32 | float | string): float {
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not a number
 /// @example f64('2.5')    // 2.5
-inner func f64(x: i32 | int | f32 | float | string): float {
+inner func f64(x: i32): float {
+    return ':op/*tod'
+}
+inner func f64(x: int): float {
+    return ':op/*tod'
+}
+inner func f64(x: f32): float {
+    return ':op/*tod'
+}
+inner func f64(x: float): float {
+    return ':op/*tod'
+}
+inner func f64(x: string): float {
     return ':op/*tod'
 }
 
@@ -58,7 +118,19 @@ inner func f64(x: i32 | int | f32 | float | string): float {
 /// @pure
 /// @fails fault `InvalidNumberText` when x is a string that is not a number
 /// @example f32(0.5)    // 0.5
-inner func f32(x: i32 | int | f32 | float | string): f32 {
+inner func f32(x: i32): f32 {
+    return ':op/*tof'
+}
+inner func f32(x: int): f32 {
+    return ':op/*tof'
+}
+inner func f32(x: f32): f32 {
+    return ':op/*tof'
+}
+inner func f32(x: float): f32 {
+    return ':op/*tof'
+}
+inner func f32(x: string): f32 {
     return ':op/*tof'
 }
 
@@ -161,7 +233,10 @@ inner func join(xs: string[]): string {
 /// The number of bytes of a string, or of elements of an array.
 /// @pure
 /// @example len('h€')    // 4
-inner func len(x: string | T[]): int {
+inner func len(x: string): int {
+    return ':struct/len_*'
+}
+inner func len(x: T[]): int {
     return ':struct/len_*'
 }
 
@@ -325,7 +400,10 @@ inner func attempt(f: (...args: A) => T, ...args: A): T! {
 /// The number of entries of a map or of elements of a set.
 /// @pure
 /// @example len([('a', 1), ('b', 2)] as Map<string, int>)    // 2
-inner func len(c: Map<K, V> | Set<T>): int {
+inner func len(c: Map<K, V>): int {
+    return ':coll/len'
+}
+inner func len(c: Set<T>): int {
     return ':coll/len'
 }
 
@@ -357,7 +435,10 @@ inner func put(m: Map<K, V>): Map<K, V> {
 /// @pure
 /// @example ([('a', 1), ('b', 2)] as Map<string, int>)->remove<'a'>    // {b: 2}
 with <key: K>
-inner func remove(c: Map<K, V> | Set<K>): Map<K, V> | Set<K> {
+inner func remove(c: Map<K, V>): Map<K, V> {
+    return ':coll/remove'
+}
+inner func remove(c: Set<K>): Set<K> {
     return ':coll/remove'
 }
 
@@ -365,7 +446,10 @@ inner func remove(c: Map<K, V> | Set<K>): Map<K, V> | Set<K> {
 /// @pure
 /// @example ([('a', 1)] as Map<string, int>)->has<'a'>    // true
 with <key: K>
-inner func has(c: Map<K, V> | Set<K>): bool {
+inner func has(c: Map<K, V>): bool {
+    return ':coll/has'
+}
+inner func has(c: Set<K>): bool {
     return ':coll/has'
 }
 

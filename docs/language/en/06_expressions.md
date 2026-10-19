@@ -32,7 +32,7 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 | `p.x` | Struct field. A field that does not exist is the compile-time error `SemanticDiag::InvalidAccessIndex` |
 | `t.0` | Tuple member; the index is a literal, and out of range is a compile-time error |
 | `xs[i]` | Array element. Out of range (including negative) is the fault `RuntimeDiag::IndexOutOfRange` |
-| `m[k]` | Map lookup; the type is `V?` ([3.5](03_data_model.md#35-maps-and-sets)) |
+| `m[k]` | Map lookup; the type is `V?` ([3.6](03_data_model.md#36-maps-and-sets)) |
 | `mod::name` | Qualified name |
 
 - `.` cannot be used on an array (`xs.1` is `SemanticDiag::TypeNotIndexable`).
@@ -289,7 +289,7 @@ match name {
 }
 ```
 
-- What is matched must be a **name** (a variable or a parameter), not an arbitrary expression; bind it with `let` first.
+- What is matched may be any expression (`match f(x) { ... }`), not only a name.
 - A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **Each pattern must be a value the type of the matched value accepts** (design principles 3.7): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
 - The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`.
 
@@ -341,9 +341,11 @@ func main(): int sync {
 
 A missing case, an extra case or a literal case mixed in is `SemanticDiag::TaggedMatchCases`.
 
-**A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Two shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, and a `match` on a `T?` or `T!` with the fixed patterns above. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
+**Patterns on an `enum`.** When the matched value is an enum, a pattern names one of its variants ([3.5](03_data_model.md#35-enums)): `case Shape::Circle(r)`, `case Shape::Rect { w, h }`, `case Shape::Empty`, `case _`. A tuple variant gives every position; a struct variant writes the fields it binds (it may rename and abbreviate); a variant without data is its bare name. Naming every variant means no `case _` is needed; a missing variant without `case _` is `SemanticDiag::EnumMatchNotExhaustive`, whose diagnostic lists the missing variants; a variant written twice warns (`EnumVariantCaseRepeated`), and a case after `case _` warns (`MatchCaseAfterWildcard`). The first version has no nested patterns (a pattern in the position of a field) and says "not supported yet" (`ConstructNotSupported`).
 
-Tuple patterns, struct patterns, and identifier patterns on values of ordinary types (`case n => ...`) are reserved, not implemented (`SemanticDiag::ConstructNotSupported`); use an `if` chain, or take the members first and then match.
+**A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Three shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, a `match` on a `T?` or `T!` with the fixed patterns above, and a `match` on an enum that names every variant. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
+
+Tuple patterns, struct patterns, and identifier patterns on values of ordinary types (`case n => ...`) are reserved, not implemented (`SemanticDiag::ConstructNotSupported`); use an `if` chain, or take the members first and then match. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
 
 `try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph): writing it gives `SemanticDiag::TryCatchNotInLanguage`. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 
@@ -453,7 +455,7 @@ If the element function of `foreach` is to produce side effects, its body must b
 
 ## 6.11 Assignment and `wait`
 
-- `x = e`, `x += e` and so on are expressions whose value is the value assigned. The target must be a `var` variable or a `var` parameter itself ([3.6](03_data_model.md#36-let-var-and-references)).
+- `x = e`, `x += e` and so on are expressions whose value is the value assigned. The target must be a `var` variable or a `var` parameter itself ([3.7](03_data_model.md#37-let-var-and-references)).
 - Types for which compound assignment is available:
 
   | Operator | Types |

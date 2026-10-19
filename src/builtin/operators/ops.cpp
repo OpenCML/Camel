@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 01, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -106,10 +106,10 @@ slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // language leaves to the program (design principles 3.6) and which raced already when
 // `append` changed the array in place.
 slot_t __builtin__assn_append__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Tuple *cell         = variableOf(norm);
-    auto *cellType      = static_cast<TupleType *>(norm.type(0));
-    auto *arrType       = static_cast<ArrayType *>(cellType->typeAt(0));
-    const slot_t value  = norm.slot(1);
+    Tuple *cell        = variableOf(norm);
+    auto *cellType     = static_cast<TupleType *>(norm.type(0));
+    auto *arrType      = static_cast<ArrayType *>(cellType->typeAt(0));
+    const slot_t value = norm.slot(1);
     if (cell->holdsUnsharedArray()) {
         Array *arr = cell->get<Array *>(0);
         arr->append(value, arrType);
@@ -166,8 +166,8 @@ slot_t __builtin__assn_owned__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    Int32 lhs = cell->get<Int32>(0);
-    Int32 rhs = norm.get<Int32>(1);
+    Int32 lhs   = cell->get<Int32>(0);
+    Int32 rhs   = norm.get<Int32>(1);
     lhs += rhs;
     cell->set(0, lhs);
     return toSlot(lhs);
@@ -175,8 +175,8 @@ slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__assn_add_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    Int64 lhs = cell->get<Int64>(0);
-    Int64 rhs = norm.get<Int64>(1);
+    Int64 lhs   = cell->get<Int64>(0);
+    Int64 rhs   = norm.get<Int64>(1);
     lhs += rhs;
     cell->set(0, lhs);
     return toSlot(lhs);
@@ -209,8 +209,8 @@ slot_t __builtin__assn_add_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    Int32 lhs = cell->get<Int32>(0);
-    Int32 rhs = norm.get<Int32>(1);
+    Int32 lhs   = cell->get<Int32>(0);
+    Int32 rhs   = norm.get<Int32>(1);
     lhs -= rhs;
     cell->set(0, lhs);
     return toSlot(lhs);
@@ -218,8 +218,8 @@ slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__assn_sub_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    Int64 lhs = cell->get<Int64>(0);
-    Int64 rhs = norm.get<Int64>(1);
+    Int64 lhs   = cell->get<Int64>(0);
+    Int64 rhs   = norm.get<Int64>(1);
     lhs -= rhs;
     cell->set(0, lhs);
     return toSlot(lhs);
@@ -245,8 +245,8 @@ slot_t __builtin__assn_sub_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__assn_mul_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    Int32 lhs = cell->get<Int32>(0);
-    Int32 rhs = norm.get<Int32>(1);
+    Int32 lhs   = cell->get<Int32>(0);
+    Int32 rhs   = norm.get<Int32>(1);
     lhs *= rhs;
     cell->set(0, lhs);
     return toSlot(lhs);
@@ -254,8 +254,8 @@ slot_t __builtin__assn_mul_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__assn_mul_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    Int64 lhs = cell->get<Int64>(0);
-    Int64 rhs = norm.get<Int64>(1);
+    Int64 lhs   = cell->get<Int64>(0);
+    Int64 rhs   = norm.get<Int64>(1);
     lhs *= rhs;
     cell->set(0, lhs);
     return toSlot(lhs);
@@ -281,8 +281,8 @@ slot_t __builtin__assn_mul_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    Int32 lhs = cell->get<Int32>(0);
-    Int32 rhs = norm.get<Int32>(1);
+    Int32 lhs   = cell->get<Int32>(0);
+    Int32 rhs   = norm.get<Int32>(1);
 
     if (rhs == 0) {
         throwRuntimeFault(RuntimeDiag::DivisionByZero);
@@ -295,8 +295,8 @@ slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
-    Int64 lhs = cell->get<Int64>(0);
-    Int64 rhs = norm.get<Int64>(1);
+    Int64 lhs   = cell->get<Int64>(0);
+    Int64 rhs   = norm.get<Int64>(1);
 
     if (rhs == 0) {
         throwRuntimeFault(RuntimeDiag::DivisionByZero);
@@ -417,151 +417,6 @@ slot_t __builtin__and__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Bool rhs = norm.get<Bool>(1);
         return toSlot(rhs);
     }
-}
-
-bool isContentComparable(const Type *type) {
-    if (type == nullptr) {
-        return false;
-    }
-    switch (type->code()) {
-    case TypeCode::Int32:
-    case TypeCode::Int64:
-    case TypeCode::Float32:
-    case TypeCode::Float64:
-    case TypeCode::Bool:
-    case TypeCode::Byte:
-    case TypeCode::String:
-        return true;
-    case TypeCode::Array:
-        return isContentComparable(static_cast<const ArrayType *>(type)->elemType());
-    case TypeCode::Tuple: {
-        const auto *tuple = static_cast<const TupleType *>(type);
-        if (tuple->isCell()) {
-            return false;
-        }
-        if (tuple->isTagged()) {
-            return isContentComparable(tuple->payloadType());
-        }
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            if (!isContentComparable(tuple->typeAt(i))) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case TypeCode::Struct: {
-        const auto *st = static_cast<const StructType *>(type);
-        for (size_t i = 0; i < st->size(); ++i) {
-            if (!isContentComparable(st->typeAt(i))) {
-                return false;
-            }
-        }
-        return true;
-    }
-    default:
-        break;
-    }
-    if (const CollectionType *coll = asCollectionType(type)) {
-        // A key type is comparable by construction; the values of a map must be.
-        return !coll->isMap() || isContentComparable(coll->valueType());
-    }
-    return false;
-}
-
-bool valuesEqualByContent(slot_t a, slot_t b, const Type *type) {
-    switch (type->code()) {
-    case TypeCode::Float32:
-        return fromSlot<Float32>(a) == fromSlot<Float32>(b);
-    case TypeCode::Float64:
-        return fromSlot<Float64>(a) == fromSlot<Float64>(b);
-    case TypeCode::String: {
-        if (a == b) {
-            return true;
-        }
-        if (a == NullSlot || b == NullSlot) {
-            return false;
-        }
-        return fromSlot<const String *>(a)->view() == fromSlot<const String *>(b)->view();
-    }
-    case TypeCode::Array: {
-        if (a == NullSlot || b == NullSlot) {
-            return a == b;
-        }
-        const auto *lhs      = fromSlot<const Array *>(a);
-        const auto *rhs      = fromSlot<const Array *>(b);
-        const Type *elemType = static_cast<const ArrayType *>(type)->elemType();
-        if (lhs->size() != rhs->size()) {
-            return false;
-        }
-        // Not short-cut by identity: an array that holds a NaN does not equal itself.
-        for (size_t i = 0; i < lhs->size(); ++i) {
-            if (!valuesEqualByContent(lhs->get<slot_t>(i), rhs->get<slot_t>(i), elemType)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case TypeCode::Tuple: {
-        const auto *tuple = static_cast<const TupleType *>(type);
-        if (tuple->isNullable()) {
-            if (isNullValue(a) || isNullValue(b)) {
-                return isNullValue(a) && isNullValue(b);
-            }
-            return valuesEqualByContent(
-                nullablePayload(a),
-                nullablePayload(b),
-                tuple->payloadType());
-        }
-        if (tuple->isFallible()) {
-            const bool failedA = isErrorValue(a), failedB = isErrorValue(b);
-            if (failedA != failedB) {
-                return false;
-            }
-            if (failedA) {
-                return valuesEqualByContent(fallibleError(a), fallibleError(b), errorType());
-            }
-            return valuesEqualByContent(
-                falliblePayload(a),
-                falliblePayload(b),
-                tuple->payloadType());
-        }
-        if (a == NullSlot || b == NullSlot) {
-            return a == b;
-        }
-        const auto *lhs = fromSlot<const Tuple *>(a);
-        const auto *rhs = fromSlot<const Tuple *>(b);
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            if (!valuesEqualByContent(lhs->get<slot_t>(i), rhs->get<slot_t>(i), tuple->typeAt(i))) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case TypeCode::Struct: {
-        if (a == NullSlot || b == NullSlot) {
-            return a == b;
-        }
-        const auto *st  = static_cast<const StructType *>(type);
-        const auto *lhs = fromSlot<const Struct *>(a);
-        const auto *rhs = fromSlot<const Struct *>(b);
-        for (size_t i = 0; i < st->size(); ++i) {
-            if (!valuesEqualByContent(lhs->get<slot_t>(i), rhs->get<slot_t>(i), st->typeAt(i))) {
-                return false;
-            }
-        }
-        return true;
-    }
-    default:
-        break;
-    }
-    if (type->isGCTraced()) {
-        if (a == NullSlot || b == NullSlot) {
-            return a == b;
-        }
-        // Maps and sets (and anything else that is an object): the object's own deep equality.
-        return fromSlot<const Object *>(a)->equals(fromSlot<const Object *>(b), type, true);
-    }
-    return a == b;
 }
 
 // `==` and `!=`. Floats compare as numbers (IEEE: NaN equals nothing, itself included, and
@@ -844,9 +699,8 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
             if (raw < 0 || static_cast<size_t>(raw) >= count) {
                 throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "a string", count);
             }
-            const size_t from =
-                ascii ? static_cast<size_t>(raw)
-                      : camel::utf8::offsetOf(text, static_cast<size_t>(raw));
+            const size_t from = ascii ? static_cast<size_t>(raw)
+                                      : camel::utf8::offsetOf(text, static_cast<size_t>(raw));
             const size_t to =
                 from + camel::utf8::sequenceLength(static_cast<unsigned char>(text[from]));
             return toSlot(String::from(std::string(text.substr(from, to - from)), mm::autoSpace()));
@@ -877,9 +731,7 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         const std::string_view &key = keyObj->view();
         const Type *structType      = norm.type(0);
         if (!st->has(key, structType)) {
-            throwRuntimeFault(
-                RuntimeDiag::FieldNotFound,
-                std::string(key));
+            throwRuntimeFault(RuntimeDiag::FieldNotFound, std::string(key));
         }
         return st->get<slot_t>(key, structType);
     }

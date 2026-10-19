@@ -12,7 +12,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 01, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,8 +24,8 @@
 #include "camel/core/rtdata/bytes.h"
 
 #include "float_format.h"
-#include "text_format.h"
 #include "fmt/args.h"
+#include "text_format.h"
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;

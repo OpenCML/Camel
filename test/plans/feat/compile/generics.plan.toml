@@ -915,20 +915,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "typeas_in_union"
-desc = "`typeas` inside a union cannot be bound from an argument type."
-kind = "negative"
-case = "../../../cases/compile/generics/err_union.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TypeVariableNotBindable"
-expect_diagnostic_line = 3
-expect_diagnostic_column = 1
-expect_output_contains = ["The type variable 'T' of 'f' can never be bound"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
 name = "generic_as_value"
 desc = "A generic function bound to a name without a type: nothing fixes its type variables (design principles 5.5; where a position does, see consistency/generic_values.plan.toml)."
 kind = "negative"

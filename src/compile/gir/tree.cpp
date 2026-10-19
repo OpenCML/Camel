@@ -4,11 +4,12 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Tree boundaries come only from the first/reference type, never from callbacks.
+#include "camel/core/type/tree.h"
 #include "builder.h"
 #include "builder_support.h"
 #include "camel/core/data/primary.h"
@@ -16,7 +17,6 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/core/type/tree.h"
 #include <numeric>
 
 namespace camel::compile::gir {

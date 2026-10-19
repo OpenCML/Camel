@@ -32,7 +32,7 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 | `p.x` | 结构体字段。不存在的字段是编译期错误 `SemanticDiag::InvalidAccessIndex` |
 | `t.0` | 元组成员，下标是字面量，越界是编译期错误 |
 | `xs[i]` | 数组元素。越界（含负数）是故障 `RuntimeDiag::IndexOutOfRange` |
-| `m[k]` | 映射查找，类型是 `V?`（[3.5](03_data_model.md#35-映射与集合)） |
+| `m[k]` | 映射查找，类型是 `V?`（[3.6](03_data_model.md#36-映射与集合)） |
 | `mod::name` | 限定名 |
 
 - 对数组不能用 `.`（`xs.1` 是 `SemanticDiag::TypeNotIndexable`）。
@@ -289,7 +289,7 @@ match 名字 {
 }
 ```
 
-- 被匹配的必须是一个**名字**（变量或形参），不能是任意表达式；先用 `let` 绑定。
+- 被匹配的可以是任意表达式（`match f(x) { ... }`），不只是一个名字。
 - 模式是字面量（整数、浮点数、字符串、`true`/`false`）或通配 `_`。一个 `case` 可以用 `|` 列出多个模式，任一匹配即进入。**每个模式的值必须能被被匹配值的类型接受**（设计原则 3.7）：它用该类型的比较与被匹配的值比较，所以 `string` 上的 `case 1` 是 `SemanticDiag::MatchCaseTypeMismatch`。
 - 按书写顺序取第一个匹配的分支。各臂类型必须相同。臂里的 `return` 与 `if` 的臂一样，给出的是 `match` 的值。
 
@@ -341,9 +341,11 @@ func main(): int sync {
 
 缺分支、多分支或混入字面量分支是 `SemanticDiag::TaggedMatchCases`。
 
-**`match` 必须有默认分支。** 没有 `case _` 是编译期错误 `SemanticDiag::MatchWithoutDefault`，定位在 `match` 上。两种情形不必写：对 `bool` 写全了 `case true` 与 `case false`；对 `T?`、`T!` 用上面的固定模式。编译器不会追加程序里没有写的分支臂，所以图上的臂与源码里的 `case` 一一对应。
+**对 `enum` 的模式。** 被匹配的值是枚举时，模式写它的变体（[3.5](03_data_model.md#35-枚举-enum)）：`case Shape::Circle(r)`、`case Shape::Rect { w, h }`、`case Shape::Empty`、`case _`。元组变体要给全位置，结构体变体只写要绑定的字段（可改名、可简写），无数据的变体只写名字。列全所有变体就不必写 `case _`；漏了变体又没有 `case _` 是 `SemanticDiag::EnumMatchNotExhaustive`，诊断列出漏掉的变体名；同一个变体写两次给 `EnumVariantCaseRepeated` 警告，`case _` 之后的臂给 `MatchCaseAfterWildcard` 警告。第一版不支持嵌套模式（字段位置再写模式），给出"暂不支持"（`ConstructNotSupported`）。
 
-元组模式、结构体模式，以及对普通类型的值的标识符模式（`case n => ...`）保留，尚未实现（`SemanticDiag::ConstructNotSupported`）；用 `if` 链或先取成员再匹配。
+**`match` 必须有默认分支。** 没有 `case _` 是编译期错误 `SemanticDiag::MatchWithoutDefault`，定位在 `match` 上。三种情形不必写：对 `bool` 写全了 `case true` 与 `case false`；对 `T?`、`T!` 用上面的固定模式；对枚举列全了所有变体。编译器不会追加程序里没有写的分支臂，所以图上的臂与源码里的 `case` 一一对应。
+
+元组模式、结构体模式，以及对普通类型的值的标识符模式（`case n => ...`）保留，尚未实现（`SemanticDiag::ConstructNotSupported`）；用 `if` 链或先取成员再匹配。枚举变体的元组、结构体模式已经实现，但字段位置只能写名字或 `_`。
 
 `try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射）：写了得到 `SemanticDiag::TryCatchNotInLanguage`。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
 
@@ -487,7 +489,7 @@ DivisionByZero at main.cml:1:38
 
 ## 6.11 赋值与 `wait`
 
-- `x = e`、`x += e` 等是表达式，值是所赋的值。目标必须是 `var` 变量或 `var` 形参本身（[3.6](03_data_model.md#36-letvar-与引用)）。
+- `x = e`、`x += e` 等是表达式，值是所赋的值。目标必须是 `var` 变量或 `var` 形参本身（[3.7](03_data_model.md#37-letvar-与引用)）。
 - 复合赋值可用的类型：
 
   | 运算符 | 类型 |

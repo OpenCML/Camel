@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,7 +60,7 @@ class Formatter {
     /// A token as the formatter needs it. `channel` is 0 for a token of the program and 2, 3, 4
     /// for a `#` line, a `//` comment and a block comment; `line` is zero-based.
     struct FmtToken {
-        int channel = 0;
+        int channel       = 0;
         size_t lineNumber = 0;
         std::string content;
         size_t line() const { return lineNumber; }
@@ -436,8 +436,6 @@ class Formatter {
 
     std::any visitProgram(cst::Program context);
 
-
-
     std::any visitStmtList(cst::StmtList context);
 
     std::any visitModuleName(cst::ModuleName context);
@@ -464,18 +462,15 @@ class Formatter {
 
     std::any visitNamespaceDecl(cst::NamespaceDecl context);
 
-
     std::any visitParentIdents(cst::ParentIdents context);
 
     std::any visitBracedIdents(cst::BracedIdents context);
 
     std::any visitBracketIdents(cst::BracketIdents context);
 
-
     std::any visitDataDecl(cst::DataDecl context);
 
     std::any visitTypeDecl(cst::TypeDecl context);
-
 
     std::any visitRetStmt(cst::RetStmt context);
 
@@ -521,7 +516,6 @@ class Formatter {
 
     std::any visitCtrlExpr(syn::Node context);
 
-
     std::any visitWaitExpr(cst::WaitExpr context);
 
     std::any visitAssignExpr(cst::AssignExpr context);
@@ -557,7 +551,6 @@ class Formatter {
 
     std::any visitTupleData(cst::TupleData context);
 
-
     std::any visitLiteral(cst::Literal context);
 
     std::any visitTypeExpr(cst::TypeExpr context);
@@ -580,8 +573,17 @@ class Formatter {
 
     std::any visitSpecType(cst::SpecType context);
 
-
     std::any visitStructType(cst::StructType context);
+
+    std::any visitEnumType(cst::EnumType context);
+
+    std::any visitEnumVariant(cst::EnumVariant context);
+
+    std::any visitEnumField(cst::EnumField context);
+
+    std::any visitEnumTuplePattern(cst::EnumTuplePattern context);
+
+    std::any visitEnumStructPattern(cst::EnumStructPattern context);
 
     std::any visitTypeList(cst::TypeList context);
 

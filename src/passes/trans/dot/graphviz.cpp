@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -375,9 +375,10 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         const uint8_t permissions = graph->nodePermissions(nodeRef);
         const string valueAttr =
             (valueType.empty() ? "" : std::format(", value_type=\"{}\"", escape(valueType))) +
-            (permissions == 0
-                 ? ""
-                 : std::format(", numeric=\"{}\"", camel::core::sem::permissionsText(permissions))) +
+            (permissions == 0 ? ""
+                              : std::format(
+                                    ", numeric=\"{}\"",
+                                    camel::core::sem::permissionsText(permissions))) +
             // The attributes libraries attached to the node (language reference 7.6), likewise.
             (graph->nodeAttrs(nodeRef) == 0
                  ? ""

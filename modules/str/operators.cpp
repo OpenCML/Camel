@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -215,15 +215,15 @@ slot_t __str_substr__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return makeString(s.substr(static_cast<size_t>(start), static_cast<size_t>(length)));
     }
     const size_t from = camel::utf8::offsetOf(s, static_cast<size_t>(start));
-    const size_t to   = from + camel::utf8::offsetOf(
-                                   std::string_view(s).substr(from),
-                                   static_cast<size_t>(length));
+    const size_t to =
+        from + camel::utf8::offsetOf(std::string_view(s).substr(from), static_cast<size_t>(length));
     return makeString(s.substr(from, to - from));
 }
 
 slot_t __str_starts_with__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(
-        static_cast<Bool>(norm.get<String *>(0)->view().starts_with(with.get<String *>(0)->view())));
+        static_cast<Bool>(
+            norm.get<String *>(0)->view().starts_with(with.get<String *>(0)->view())));
 }
 
 slot_t __str_ends_with__(ArgsView &with, ArgsView &norm, Context &ctx) {

@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -127,8 +127,8 @@ enum Permission : uint8_t {
 /// A set of permissions: one byte, 0 when none is granted.
 using PermissionMask = uint8_t;
 
-inline constexpr PermissionMask kNoPermissions  = 0;
-inline constexpr PermissionMask kFiniteMath     = kNoNans | kNoInfs | kNoSignedZeros | kFlushSubnormals;
+inline constexpr PermissionMask kNoPermissions = 0;
+inline constexpr PermissionMask kFiniteMath = kNoNans | kNoInfs | kNoSignedZeros | kFlushSubnormals;
 inline constexpr PermissionMask kAllPermissions = 0xFF;
 
 /// The source name of a single permission bit ("reassociate", ..., "no_nans", ...).
@@ -275,7 +275,7 @@ enum class FaultKind : uint8_t {
 std::string_view faultKindName(FaultKind kind);
 
 struct FaultSpec {
-    FaultKind kind  = FaultKind::Other;
+    FaultKind kind = FaultKind::Other;
     /// The operand whose value triggers the fault (index among the ordinary operands), 0xFF
     /// when none in particular does.
     uint8_t operand = 0xFF;

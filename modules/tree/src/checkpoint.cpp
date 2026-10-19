@@ -132,7 +132,7 @@ NativeNode snapshot(Type *type, slot_t value, const std::string &path, Checkpoin
             const slot_t child = type->code() == TypeCode::Struct
                                      ? fromSlot<::Struct *>(value)->get<slot_t>(i)
                                      : fromSlot<::Tuple *>(value)->get<slot_t>(i);
-            auto nested        = snapshot(childType(type, i), child, childPath(path, type, i), files);
+            auto nested = snapshot(childType(type, i), child, childPath(path, type, i), files);
             node.spec["members"].push_back({{"name", name}, {"type", std::move(nested.spec)}});
         }
         return node;
@@ -343,8 +343,8 @@ std::optional<std::string> unsupportedLeaf(Type *tree) {
 }
 class SaveResolver final : public FuncTypeResolver {
   public:
-    std::optional<FunctionType *>
-    resolve(const type_vec_t &with, const type_vec_t &norm, const ModifierSet &mods) const override {
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm, const ModifierSet &mods) const override {
         if (!fits(with, norm) || unsupportedLeaf(norm[1]))
             return std::nullopt;
         param_vec_t args;

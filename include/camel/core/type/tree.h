@@ -72,8 +72,7 @@ inline std::string displayPath(const std::string &path) {
 }
 
 /// Calls `visit(path, leafType)` for every leaf of `type`, in the canonical order.
-template <class Visit>
-void forEachLeaf(Type *type, Visit &&visit, const std::string &path = "") {
+template <class Visit> void forEachLeaf(Type *type, Visit &&visit, const std::string &path = "") {
     if (!isInternal(type)) {
         visit(path, type);
         return;
@@ -95,7 +94,8 @@ std::optional<std::pair<std::string, Type *>> firstRejectedLeaf(Type *type, Acce
 
 /// The same tree shape with every leaf replaced by `mapLeaf(path, leafType)`; nullptr when
 /// `mapLeaf` returns nullptr for a leaf (it says why by itself).
-template <class MapLeaf> Type *mapLeaves(Type *type, MapLeaf &&mapLeaf, const std::string &path = "") {
+template <class MapLeaf>
+Type *mapLeaves(Type *type, MapLeaf &&mapLeaf, const std::string &path = "") {
     if (!isInternal(type))
         return mapLeaf(path, type);
     if (type->code() == TypeCode::Struct) {

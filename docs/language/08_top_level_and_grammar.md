@@ -72,16 +72,19 @@ pattern    : 字面量 | '_' | null | error 名字 | 名字
 ## 8.4 类型
 
 ```
-typeExpr : unionType ('?' | '!')*
-unionType: arrayType ('|' arrayType)*
-arrayType: specType ('[' ']')*
-specType : primaryType ('<' (类型 | const 数据), ... '>')?
+typeDecl  : 'type' 名字 ('<' 参数, ... '>')? '=' (类型 | enumBody)
+typeExpr  : arrayType ('?' | '!')*
+arrayType : specType ('[' ']')*
+specType  : primaryType ('<' (类型 | const 数据), ... '>')?
 primaryType : 名字 | '(' 类型 ')' | '(' 类型, ... ')' | '{' 名字: 类型, ... '}'
             | 修饰符* '(' 形参 ')' '=>' 类型 | typeas 名字
+enumBody  : 'enum' '{' 变体, ... '}'
+变体      : 名字 | 名字 '(' 类型, ... ')' | 名字 '{' 名字: 类型, ... '}'
 ```
 
 - `T?`、`T!`：[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。
 - `typeas T`：[7.5](07_statements.md#75-泛型函数)。
+- `enum`：[3.5](03_data_model.md#35-枚举-enum)。类型位置上的 `A | B` 已退役，写法给出 `SemanticDiag::UnionTypeRetired`。
 - 尖括号：类型函数的实参（[7.7](07_statements.md#77-类型声明)）或模块类型的实参。
 
 ## 8.5 完整文法
@@ -155,7 +158,7 @@ linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
-annoExpr           : accessExpr (indices | parentArgues | angledValues | typeArguments | '!' |
+annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
 primaryData        : identRef | literal | arrayData | structData | tupleData | funcData
 literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
@@ -177,8 +180,10 @@ structData         : '{' (pairedValues ','?)? '}'
 tupleData          : '(' dataList? ','? ')'
 funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
-pattern            : identRef identDef? | literal | '(' (dataList | identList)? ','? ')'
-                     | '{' (pairedValues | identList)? ','? '}' | '_'
+pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
+                     | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
+enumTuplePattern   : '(' (pattern (',' pattern)*)? ','? ')'
+enumStructPattern  : '{' (IDENTIFIER (':' pattern)? ','?)* '}'
 loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
@@ -194,13 +199,16 @@ typeUnit           : (identDef 'of')? arrayType
 arrayType          : specType ('[' ']')*
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 typeOrData         : typeExpr | 'const' dataExpr
-primaryType        : structType | identRef | '(' typeExpr ')' | tupleType | funcType
+primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
                      | 'typeof' dataExpr | 'typeas' identDef
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : identDef ':' typeExpr
 funcType           : modifiers? angledParams? parentParams '=>' typeExpr
 typeList           : typeExpr (',' typeExpr)*
+enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
+enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
+enumField          : identDef ':' typeExpr
 ```
 
 <!-- grammar:end -->

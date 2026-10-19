@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -251,6 +251,13 @@ int runCommand(int argc, char *argv[]) {
     }
 
     std::optional<phase::Scope> contextPhase(std::in_place, "context");
+    // The entry module must define `main` only when the command executes the program.
+    // `inspect` and `check` analyse a module (a library included) and never enter it; passes
+    // that translate the graph (std::gir, std::jgir, ...) do the same. Requiring `main` there
+    // would reject a valid library before its graphs can be dumped or checked. Deciding this
+    // for the pass list needs the context, because a pass may be contributed by a module.
+    const bool analyseOnly =
+        selectedCommand == Command::Inspect || selectedCommand == Command::Check;
     context_ptr_t ctx = Context::create(
         EntryConfig{
             .entryDir          = entryDir,
@@ -259,6 +266,7 @@ int runCommand(int argc, char *argv[]) {
             .maxThreads        = Run::maxThreads > 0 ? static_cast<size_t>(Run::maxThreads) : 0,
             .maxRecursionDepth = Run::maxRecursionDepth,
             .maxMacroDepth     = Run::maxMacroDepth,
+            .requireEntry      = !analyseOnly,
             .maxMacroRounds    = Run::maxMacroRounds,
         },
         compileDiagsConfig);
@@ -273,6 +281,11 @@ int runCommand(int argc, char *argv[]) {
     parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
     auto mainModule     = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
     ctx->setMainModule(mainModule);
+    // The pass list is resolved against a context that has the program's module. Doing it
+    // before the build leaves the entry requirement decided before anything is compiled.
+    if (selectedCommand == Command::Run && passListTranslatesProgram(Run::resolvedPassList, ctx)) {
+        ctx->setRequireEntry(false);
+    }
     contextPhase.reset();
     startupPhase.reset();
     // Declared after everything a run owns (the context, the parser, the entry module), so it
@@ -368,6 +381,16 @@ int runCommand(int argc, char *argv[]) {
             if (Inspect::dumpGCT && mainModule->gct()) {
                 mainModule->gct()->print(os);
             }
+            // A `-g`/`--tns`/... dump reads the program graph: a failed build has none. Report
+            // the diagnostics instead of materializing a half-built graph (the shape of an
+            // access violation: the dump used to walk it and die).
+            if ((Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpInstances ||
+                 Inspect::dumpFacts) &&
+                !mainModule->loaded()) {
+                ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+                compileSummary(false);
+                return 1;
+            }
             if (Inspect::dumpGIR) {
                 GraphVizDumpPass pass(ctx);
                 auto *root = ctx->runtimeRootGraph();
@@ -459,12 +482,6 @@ int runCommand(int argc, char *argv[]) {
                     // All pass names, the fallback's included, are checked before the first
                     // snapshot is written and before any pass runs: an unknown name anywhere
                     // on the command line leaves no effect and no artefact.
-                    // The passes the program's modules register join before the first pass
-                    // that consumes the graph (design principles 9.2).
-                    Run::resolvedPassList = withDefaultPipelinePasses(
-                        Run::resolvedPassList,
-                        ctx,
-                        !Run::noModulePasses);
                     requireKnownPasses(Run::resolvedPassList, ctx);
                     requireKnownPasses(Run::fallbackPasses, ctx);
                     auto *graph = ctx->runtimeRootGraph();

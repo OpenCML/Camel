@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -147,8 +147,8 @@ class Builder {
     Value visitAnnoExpr(syntax::cst::AnnoExpr context);
     Value visitAccessExpr(syntax::cst::AccessExpr context);
     /// `lhs.member` (a field or tuple element), located by `range`.
-    node_ptr_t makeMemberAccess(
-        node_ptr_t lhs, syntax::Child dot, syntax::Child member, syntax::Node range);
+    node_ptr_t
+    makeMemberAccess(node_ptr_t lhs, syntax::Child dot, syntax::Child member, syntax::Node range);
     Value visitStructData(syntax::cst::StructData context);
     Value visitArrayData(syntax::cst::ArrayData context);
     Value visitTupleData(syntax::cst::TupleData context);
@@ -169,6 +169,8 @@ class Builder {
     Value visitTypeOfType(syntax::cst::TypeOfType context);
     Value visitTypeAsType(syntax::cst::TypeAsType context);
     Value visitStructType(syntax::cst::StructType context);
+    Value visitEnumType(syntax::cst::EnumType context);
+    Value visitEnumPattern(syntax::cst::Pattern context, syntax::cst::IdentRef ref);
     Value visitTypeList(syntax::cst::TypeList context);
     Value visitTupleType(syntax::cst::TupleType context);
     Value visitFuncType(syntax::cst::FuncType context);

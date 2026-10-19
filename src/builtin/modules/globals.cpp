@@ -13,17 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "globals.h"
 #include "builtin/executors/builtin.h"
-#include "builtin/operators/derivative.h"
-#include "builtin/operators/ops.h"
 #include "builtin/operators/collection.h"
+#include "builtin/operators/derivative.h"
+#include "builtin/operators/enum.h"
+#include "builtin/operators/ops.h"
 #include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
+#include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
 
 #include "camel/utils/assert.h"
@@ -34,6 +36,7 @@
 using namespace std;
 using namespace camel::core::context;
 using namespace camel::core::module;
+using namespace camel::core::rtdata;
 using namespace camel::core::type;
 
 namespace {
@@ -703,13 +706,15 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             // an array, a tuple or a struct, every part of which is itself
                             // comparable (no function value, no tensor). Anything else has no
                             // overload, which is a located compile-time error.
-                            const TypeCode code = norm[0]->code();
-                            const bool composite =
-                                code == TypeCode::Array || code == TypeCode::Struct ||
-                                (code == TypeCode::Tuple &&
-                                 !tt::as_ptr<TupleType>(norm[0])->isCell() &&
-                                 !tt::as_ptr<TupleType>(norm[0])->isTagged());
-                            if (!composite || !norm[0]->equals(norm[1]) ||
+                            const TypeCode code  = norm[0]->code();
+                            const bool composite = code == TypeCode::Array ||
+                                                   code == TypeCode::Struct ||
+                                                   (code == TypeCode::Tuple &&
+                                                    !tt::as_ptr<TupleType>(norm[0])->isCell() &&
+                                                    !tt::as_ptr<TupleType>(norm[0])->isTagged());
+                            // An enum compares by its variant and then its fields.
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
+                            if (!comparable || !norm[0]->equals(norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
                             }
@@ -773,13 +778,15 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             // an array, a tuple or a struct, every part of which is itself
                             // comparable (no function value, no tensor). Anything else has no
                             // overload, which is a located compile-time error.
-                            const TypeCode code = norm[0]->code();
-                            const bool composite =
-                                code == TypeCode::Array || code == TypeCode::Struct ||
-                                (code == TypeCode::Tuple &&
-                                 !tt::as_ptr<TupleType>(norm[0])->isCell() &&
-                                 !tt::as_ptr<TupleType>(norm[0])->isTagged());
-                            if (!composite || !norm[0]->equals(norm[1]) ||
+                            const TypeCode code  = norm[0]->code();
+                            const bool composite = code == TypeCode::Array ||
+                                                   code == TypeCode::Struct ||
+                                                   (code == TypeCode::Tuple &&
+                                                    !tt::as_ptr<TupleType>(norm[0])->isCell() &&
+                                                    !tt::as_ptr<TupleType>(norm[0])->isTagged());
+                            // An enum compares by its variant and then its fields.
+                            const bool comparable = composite || asEnumType(norm[0]) != nullptr;
+                            if (!comparable || !norm[0]->equals(norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
                             }
@@ -1710,7 +1717,10 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
             continue;
         }
         auto resolvers = group->resolvers();
-        resolvers.insert(resolvers.end(), (*extra)->resolvers().begin(), (*extra)->resolvers().end());
+        resolvers.insert(
+            resolvers.end(),
+            (*extra)->resolvers().begin(),
+            (*extra)->resolvers().end());
         exportEntity(group->name(), OperatorGroup::create(group->name(), resolvers));
         collectionGroups.erase(extra);
     }
@@ -1719,6 +1729,10 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     }
     // The operators over T? and T! (design principles 3.8).
     for (const auto &group : getTaggedOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // The lowering targets of the enum (design principles 5.3).
+    for (const auto &group : getEnumOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }

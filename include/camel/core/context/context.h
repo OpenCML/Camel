@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -161,6 +161,9 @@ class Context : public std::enable_shared_from_this<Context> {
         const error::DiagsConfig &diagConf = error::DiagsConfig());
 
     bool requireEntry() const { return entryConfig_.requireEntry; }
+    /// The command that does not execute the program (an inspection or a translation pass)
+    /// lifts the entry requirement after the context is created, before the program is built.
+    void setRequireEntry(bool value) { entryConfig_.requireEntry = value; }
     std::optional<std::string> sourceOverride(const std::string &path) const {
         return entryConfig_.sourceOverride ? entryConfig_.sourceOverride(path) : std::nullopt;
     }

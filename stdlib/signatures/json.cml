@@ -43,7 +43,10 @@ inner func decode(text: string): Json! {
 /// @fails error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON
 /// @example decode_as<[] as Map<string, int>>('{"a": 1}')    // {a: 1}
 with <shape: T>
-inner func decode_as(text: string | Json): T! {
+inner func decode_as(text: string): T! {
+    return 'json:decode_as'
+}
+inner func decode_as(text: Json): T! {
     return 'json:decode_as'
 }
 
@@ -66,7 +69,10 @@ inner func is_null(j: Json): bool {
 /// @pure
 /// @example j->get<'a'>    // 1, a Json?, for j of '{"a": 1}'
 with <key: string>
-inner func get(j: Json | Json?): Json? {
+inner func get(j: Json): Json? {
+    return 'json:get'
+}
+inner func get(j: Json?): Json? {
     return 'json:get'
 }
 
@@ -75,48 +81,69 @@ inner func get(j: Json | Json?): Json? {
 /// @pure
 /// @example j->get<1>->as_int ?? 0    // 6, for j of '[5, 6]'
 with <index: int>
-inner func get(j: Json | Json?): Json? {
+inner func get(j: Json): Json? {
+    return 'json:get'
+}
+inner func get(j: Json?): Json? {
     return 'json:get'
 }
 
 /// The bool a Json holds; null for any other kind.
 /// @pure
 /// @example j->as_bool ?? false    // true, for j of 'true'
-inner func as_bool(j: Json | Json?): bool? {
+inner func as_bool(j: Json): bool? {
+    return 'json:as_bool'
+}
+inner func as_bool(j: Json?): bool? {
     return 'json:as_bool'
 }
 
 /// The integer a Json holds; null for any other kind (a number with a fraction is not an int).
 /// @pure
 /// @example j->as_int ?? 0    // 42, for j of '42'
-inner func as_int(j: Json | Json?): int? {
+inner func as_int(j: Json): int? {
+    return 'json:as_int'
+}
+inner func as_int(j: Json?): int? {
     return 'json:as_int'
 }
 
 /// The number a Json holds, an integer included; null for any other kind.
 /// @pure
 /// @example j->as_float ?? 0.0    // 2.0, for j of '2'
-inner func as_float(j: Json | Json?): float? {
+inner func as_float(j: Json): float? {
+    return 'json:as_float'
+}
+inner func as_float(j: Json?): float? {
     return 'json:as_float'
 }
 
 /// The string a Json holds; null for any other kind.
 /// @pure
 /// @example j->as_string ?? ''    // 'hi', for j of '"hi"'
-inner func as_string(j: Json | Json?): string? {
+inner func as_string(j: Json): string? {
+    return 'json:as_string'
+}
+inner func as_string(j: Json?): string? {
     return 'json:as_string'
 }
 
 /// The elements of a JSON array; null for any other kind.
 /// @pure
 /// @example len(j->as_array ?? [])    // 2, for j of '[1, "a"]'
-inner func as_array(j: Json | Json?): Json[]? {
+inner func as_array(j: Json): Json[]? {
+    return 'json:as_array'
+}
+inner func as_array(j: Json?): Json[]? {
     return 'json:as_array'
 }
 
 /// The members of a JSON object, by name; null for any other kind.
 /// @pure
 /// @example keys(j->as_object ?? ([] as Map<string, Json>))    // ['a', 'b'], for j of '{"b": 1, "a": 2}'
-inner func as_object(j: Json | Json?): Map<string, Json>? {
+inner func as_object(j: Json): Map<string, Json>? {
+    return 'json:as_object'
+}
+inner func as_object(j: Json?): Map<string, Json>? {
     return 'json:as_object'
 }

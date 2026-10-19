@@ -13,21 +13,21 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/equality.h"
 #include "camel/core/type.h"
 
 slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__var_peek__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __builtin__assn_append__(
-    ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_append__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__var_take__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_owned__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
@@ -58,15 +58,6 @@ slot_t __builtin__assn_pow_i__(ArgsView &with, ArgsView &norm, camel::core::cont
 slot_t __builtin__assn_pow_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_pow_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_pow_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-/// Equality of two values of one type by content (design principles 4.2): arrays, tuples and
-/// structs element by element, recursively; `T?` / `T!` by their tag and then their content;
-/// maps and sets by their entries; floats as numbers (a NaN equals nothing, itself included);
-/// strings by their bytes. `type` is the static type of both.
-bool valuesEqualByContent(slot_t a, slot_t b, const camel::core::type::Type *type);
-/// Whether `==` / `!=` are defined for two values of `type`: every part must itself be
-/// comparable. A function value, a tensor or another module type, `any` and a variable cell
-/// are not.
-bool isContentComparable(const camel::core::type::Type *type);
 
 slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -169,8 +169,19 @@ bool isKeywordToken(uint16_t type) {
 }
 
 const std::vector<std::string> &builtinTypeNames() {
-    static const std::vector<std::string> names =
-        {"int", "float", "bool", "string", "void", "i32", "i64", "f32", "f64", "Bytes", "Map", "Set"};
+    static const std::vector<std::string> names = {
+        "int",
+        "float",
+        "bool",
+        "string",
+        "void",
+        "i32",
+        "i64",
+        "f32",
+        "f64",
+        "Bytes",
+        "Map",
+        "Set"};
     return names;
 }
 

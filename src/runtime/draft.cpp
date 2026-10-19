@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -737,14 +737,14 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
         "Decode begin for graph '{}' with {} nodes.",
         graph->name(),
         graph->nodeCount());
-    auto draft              = std::make_unique<GraphDraft>();
-    draft->funcType_        = graph->funcType();
+    auto draft       = std::make_unique<GraphDraft>();
+    draft->funcType_ = graph->funcType();
     draft->captureNames_.assign(graph->captureNames().begin(), graph->captureNames().end());
     if (const auto *layout = graph->runtimeDataType()) {
         draft->setRuntimeSlotTypes(layout->types());
     }
-    draft->closureType_     = const_cast<camel::core::type::TupleType *>(graph->closureType());
-    draft->returnKind_      = graph->returnKind();
+    draft->closureType_ = const_cast<camel::core::type::TupleType *>(graph->closureType());
+    draft->returnKind_  = graph->returnKind();
     draft->staticSlots_.assign(graph->staticSlots().begin(), graph->staticSlots().end());
     if (const auto *staticType = graph->staticDataType()) {
         draft->staticSlotTypes_.assign(staticType->types().begin(), staticType->types().end());

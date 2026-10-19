@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,16 +59,16 @@ std::string typeText(const Type *type) { return type ? type->toString() : std::s
 
 LoopView::LoopView(const GCGraph &graph, gc_node_ref_t node) : graph_(&graph), node_(node) {
     const GCNode *record = graph.node(node);
-    ASSERT(record != nullptr && record->kind == GCNodeKind::Loop, "LoopView of a node that is not a LOOP node.");
+    ASSERT(
+        record != nullptr && record->kind == GCNodeKind::Loop,
+        "LoopView of a node that is not a LOOP node.");
     kind_       = graph.loopKindOf(node);
     cond_       = graph.loopCondGraphOf(node);
     body_       = graph.loopBodyGraphOf(node);
     stateCount_ = graph.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
 }
 
-Type *LoopView::stateType(size_t j) const {
-    return body_->node(bodyStateParam(j))->dataType();
-}
+Type *LoopView::stateType(size_t j) const { return body_->node(bodyStateParam(j))->dataType(); }
 
 std::optional<gc_node_ref_t> LoopView::iterable() const {
     if (!loopHasIterable(kind_)) {
@@ -131,7 +131,7 @@ std::optional<gc_node_ref_t> LoopView::nextStateComponent(size_t j) const {
 }
 
 EffectSummary LoopView::effects() const {
-    EffectSummary summary   = effectSummaryOf(cond_);
+    EffectSummary summary = effectSummaryOf(cond_);
     summary |= effectSummaryOf(body_);
     summary.mayFault        = true;
     summary.mayNotTerminate = true;
@@ -231,8 +231,9 @@ void validateRuntimeLoopInterface(const GCGraph *graph, gc_node_ref_t node) {
         }
     }
     Type *valueType = graph->node(node)->dataType();
-    Type *expected  = k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
-    Type *bodyExit  = body->funcType() ? body->funcType()->exitType() : nullptr;
+    Type *expected =
+        k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
+    Type *bodyExit = body->funcType() ? body->funcType()->exitType() : nullptr;
     if (bodyExit == nullptr || !expected->assignableFrom(bodyExit)) {
         loopFails(
             graph,

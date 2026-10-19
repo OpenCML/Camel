@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-150 diagnostics: 136 errors, 14 warnings.
+164 diagnostics: 148 errors, 16 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -122,6 +122,18 @@ prints one entry.
 | `0x03000122` | [SemanticDiag::LoopStateWithoutType](#loopstatewithouttype) | Error |
 | `0x03000123` | [SemanticDiag::LoopConditionNotBool](#loopconditionnotbool) | Error |
 | `0x03000124` | [SemanticDiag::LoopNameRepeated](#loopnamerepeated) | Error |
+| `0x03000130` | [SemanticDiag::DuplicateEnumVariant](#duplicateenumvariant) | Error |
+| `0x03000131` | [SemanticDiag::DuplicateEnumField](#duplicateenumfield) | Error |
+| `0x03000132` | [SemanticDiag::EnumVariantNeedsFields](#enumvariantneedsfields) | Error |
+| `0x03000133` | [SemanticDiag::EnumVariantFieldCount](#enumvariantfieldcount) | Error |
+| `0x03000134` | [SemanticDiag::EnumPatternMismatch](#enumpatternmismatch) | Error |
+| `0x03000135` | [SemanticDiag::EnumMatchNotExhaustive](#enummatchnotexhaustive) | Error |
+| `0x03000136` | [SemanticDiag::EnumFieldAccess](#enumfieldaccess) | Error |
+| `0x03000137` | [SemanticDiag::UnionTypeRetired](#uniontyperetired) | Error |
+| `0x03000138` | [SemanticDiag::ReservedTypeQuestionRetired](#reservedtypequestionretired) | Error |
+| `0x03000139` | [SemanticDiag::EnumTypeArgumentNotInferred](#enumtypeargumentnotinferred) | Error |
+| `0x0300013A` | [SemanticDiag::EnumFieldTypeMismatch](#enumfieldtypemismatch) | Error |
+| `0x0300013B` | [SemanticDiag::EnumConstructionMismatch](#enumconstructionmismatch) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -131,6 +143,8 @@ prints one entry.
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn |
 | `0x03100110` | [SemanticDiag::NullTestNeverNull](#nulltestnevernull) | Warn |
 | `0x03100111` | [SemanticDiag::KnownNotNull](#knownnotnull) | Warn |
+| `0x03100130` | [SemanticDiag::EnumVariantCaseRepeated](#enumvariantcaserepeated) | Warn |
+| `0x03100131` | [SemanticDiag::MatchCaseAfterWildcard](#matchcaseafterwildcard) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -1312,7 +1326,24 @@ Entry module '{0}' must define a resolvable 'main' on the module root (__root__)
 Add a top-level main function or ensure it is registered as a direct root subgraph.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/trans/library_module.cml`, run as `camel check -O short test/cases/trans/library_module.cml`)
+
+```camel
+// A library module: it defines no `main`. Translation passes (std::gir, std::jgir) and
+// `inspect -g` must still build and dump its graphs; only execution requires an entry.
+// The top-level value and the unexported helper make the root depend on more than one graph.
+let offset = 10
+
+func square(x: int): int { return x * x }
+
+export func shifted_square(x: int): int {
+    return square(x) + offset
+}
+
+export func classify(x: int): int {
+    return if x < 0 then -1 else 1
+}
+```
 
 ### ArgumentsRejected
 
@@ -1330,17 +1361,12 @@ Invalid call to '{0}' with argument types {1}: {2}.
 The argument kinds match the operator's signature, but their statically known properties (such as tensor shapes or dtypes) are incompatible. Fix the arguments or relax their static types.
 ```
 
-**Example** (`test/cases/linear/byref/var_function_to_operator.cml`, run as `camel test/cases/linear/byref/var_function_to_operator.cml`)
+**Example** (`test/cases/compile/format_string_checked.cml`, run as `camel test/cases/compile/format_string_checked.cml`)
 
 ```camel
-module var_function_to_operator
-
-sync func bump(var x: int) {
-    wait x += 1
-}
-
+module format_string_checked
 func main(): int sync {
-    [1, 2, 3]->foreach<bump>
+    println<'{} and {}'>(1)
     return 0
 }
 ```
@@ -1423,22 +1449,23 @@ func main(): int sync {
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/compile/not_supported/pattern_identifier.cml`, run as `camel test/cases/compile/not_supported/pattern_identifier.cml`)
+**Example** (`test/cases/compile/enum/err_nested_pattern.cml`, run as `camel -E short test/cases/compile/enum/err_nested_pattern.cml`)
 
 ```camel
-module pattern_identifier
+type Shape = enum {
+    Circle(float),
+    Empty,
+}
 
-func f(n: int): int {
-    return match n {
-        case other => 1
-        case _ => 0
+func f(s: Shape): float {
+    return match s {
+        case Shape::Circle(0.0) => 1.0
+        case Shape::Empty => 0.0
     }
 }
 
-func main(): int sync {
-    println('never printed')
-    println(f(1))
-    return 0
+func main(): void sync {
+    println(f(Shape::Empty))
 }
 ```
 
@@ -1700,17 +1727,18 @@ The type variable '{0}' of '{1}' can never be bound: {2}.
 A type variable must remain present in a parameter or result type. Its position must be reachable through arrays, tuples, structs and function types.
 ```
 
-**Example** (`test/cases/compile/generics/err_union.cml`, run as `camel test/cases/compile/generics/err_union.cml`)
+**Example** (`test/cases/compile/generics/err_tf_unused.cml`, run as `camel test/cases/compile/generics/err_tf_unused.cml`)
 
 ```camel
-module err_union
+module err_tf_unused
 
-func f(x: int | typeas T): int {
+type Tag<T> = int
+
+func f(p: Tag<typeas T>): int {
     return 1
 }
 
 func main(): int sync {
-    println(f(1))
     return 0
 }
 ```
@@ -1731,13 +1759,13 @@ The generic function '{0}' cannot be called with argument types {1}: {2}.
 A type variable takes the type of the argument found at its 'typeas' position, or, when that argument says nothing (a 'null', a generic function that is itself waiting for its types), at another occurrence; every parameter is then checked against its type with the variables replaced. Result-only variables take their types from the expected result or explicit f::<T> arguments. A value enters a 'T?' or 'T!' parameter by itself; nothing else is converted. Signature: {3}
 ```
 
-**Example** (`test/cases/compile/generic_explicit_arity_error.cml`, run as `camel test/cases/compile/generic_explicit_arity_error.cml`)
+**Example** (`test/cases/compile/generic_explicit_named_unknown.cml`, run as `camel test/cases/compile/generic_explicit_named_unknown.cml`)
 
 ```camel
-module generic_explicit_arity_error
-func id(x: typeas T): T { return x }
+module generic_explicit_named_unknown
+func second(x: typeas T): T { return x }
 func main(): int sync {
-    println(id::<int, string>(1))
+    println(second::<U = int>(1))
     return 0
 }
 ```
@@ -2974,6 +3002,348 @@ func main(): int sync {
 }
 ```
 
+### DuplicateEnumVariant
+
+`0x03000130` · Error · `SemanticDiag::DuplicateEnumVariant`
+
+**Message**
+
+```text
+The variant '{0}' is declared twice in enum '{1}'.
+```
+
+**Help**
+
+```text
+A variant is one of the values of its enum and is written by its name; each name occurs once.
+```
+
+**Example** (`test/cases/compile/enum/err_duplicate_variant.cml`, run as `camel -E short test/cases/compile/enum/err_duplicate_variant.cml`)
+
+```camel
+type Shape = enum {
+    Circle(float),
+    Circle(int),
+    Empty,
+}
+
+func main(): void sync {
+    println(Shape::Empty)
+}
+```
+
+### DuplicateEnumField
+
+`0x03000131` · Error · `SemanticDiag::DuplicateEnumField`
+
+**Message**
+
+```text
+The field '{0}' is declared twice in variant '{1}' of enum '{2}'.
+```
+
+**Help**
+
+```text
+A field of a struct variant is written by its name; each name occurs once.
+```
+
+**Example** (`test/cases/compile/enum/err_duplicate_field.cml`, run as `camel -E short test/cases/compile/enum/err_duplicate_field.cml`)
+
+```camel
+type Pair = enum {
+    Both { a: int, a: float },
+    None,
+}
+
+func main(): void sync {
+    println(Pair::None)
+}
+```
+
+### EnumVariantNeedsFields
+
+`0x03000132` · Error · `SemanticDiag::EnumVariantNeedsFields`
+
+**Message**
+
+```text
+The variant '{0}' of enum '{1}' carries {2} field(s): write '{3}' to build one.
+```
+
+**Help**
+
+```text
+A variant without a field list is a single value; one with fields is built by writing the fields after its name, 'Shape::Circle(1.0)' or 'Shape::Rect { w: 1.0, h: 2.0 }'.
+```
+
+*No example: no test small enough to show raises it.*
+
+### EnumVariantFieldCount
+
+`0x03000133` · Error · `SemanticDiag::EnumVariantFieldCount`
+
+**Message**
+
+```text
+The variant '{0}' of enum '{1}' takes {2} field(s), but {3} were given.
+```
+
+**Help**
+
+```text
+The fields of a variant are those its declaration writes: as many, and in the same order for a variant written with '(...)'.
+```
+
+**Example** (`test/cases/compile/enum/err_field_count.cml`, run as `camel -E short test/cases/compile/enum/err_field_count.cml`)
+
+```camel
+type Shape = enum {
+    Circle(float),
+    Empty,
+}
+
+func main(): void sync {
+    let s = Shape::Circle(1.0, 2.0)
+    println(s)
+}
+```
+
+### EnumPatternMismatch
+
+`0x03000134` · Error · `SemanticDiag::EnumPatternMismatch`
+
+**Message**
+
+```text
+The pattern '{0}' does not match a value of type '{1}': {2}.
+```
+
+**Help**
+
+```text
+A pattern names a variant of the enum it matches and, if that variant has fields, binds each of them by its position ('Shape::Circle(r)') or by the name its declaration gives ('Shape::Rect { w, h }').
+```
+
+**Example** (`test/cases/compile/enum/err_unknown_variant.cml`, run as `camel -E short test/cases/compile/enum/err_unknown_variant.cml`)
+
+```camel
+type Shape = enum {
+    Circle(float),
+    Empty,
+}
+
+func main(): void sync {
+    let s = Shape::Circl(1.0)
+    println(s)
+}
+```
+
+### EnumMatchNotExhaustive
+
+`0x03000135` · Error · `SemanticDiag::EnumMatchNotExhaustive`
+
+**Message**
+
+```text
+The match over '{0}' has no case for {1}, and no 'case _'.
+```
+
+**Help**
+
+```text
+Every variant of an enum is a value of it, so a match that names variants must name all of them or end with 'case _'. The compiler adds no arm the program does not show.
+```
+
+**Example** (`test/cases/compile/enum/err_not_exhaustive.cml`, run as `camel -E short test/cases/compile/enum/err_not_exhaustive.cml`)
+
+```camel
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => r
+        case Shape::Empty => 0.0
+    }
+}
+
+func main(): void sync {
+    println(area(Shape::Empty))
+}
+```
+
+### EnumFieldAccess
+
+`0x03000136` · Error · `SemanticDiag::EnumFieldAccess`
+
+**Message**
+
+```text
+'{0}' is a value of enum '{1}': its fields are not read by name or index.
+```
+
+**Help**
+
+```text
+A field of a variant is taken out by matching the value and binding it in the arm of that variant: 'match v { case {2} => ... }'.
+```
+
+**Example** (`test/cases/compile/enum/err_field_access.cml`, run as `camel -E short test/cases/compile/enum/err_field_access.cml`)
+
+```camel
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+func main(): void sync {
+    let s = Shape::Circle(1.0)
+    println(s.radius)
+}
+```
+
+### UnionTypeRetired
+
+`0x03000137` · Error · `SemanticDiag::UnionTypeRetired`
+
+**Message**
+
+```text
+The union type is retired: a value has one type, and no value enters 'A | B'.
+```
+
+**Help**
+
+```text
+When a value is one of several named cases, declare an enum: 'type T = enum { A(i32), B(string) }'. '|' remains the logical or.
+```
+
+**Example** (`test/cases/compile/enum/retired_union.cml`, run as `camel -E short test/cases/compile/enum/retired_union.cml`)
+
+```camel
+// `A | B` is retired: a value has one type (design principles 5.3). When a value is one of
+// several named cases, that is an enum.
+
+type IntOrFloat = int | float
+
+func main(): void sync {
+    println(1)
+}
+```
+
+### ReservedTypeQuestionRetired
+
+`0x03000138` · Error · `SemanticDiag::ReservedTypeQuestionRetired`
+
+**Message**
+
+```text
+The reserved form 'T ? U' is retired: '?' is only the nullable mark, as in 'T?'.
+```
+
+**Help**
+
+```text
+Write 'T?' for a value that may be null and 'T!' for one that may have failed.
+```
+
+**Example** (`test/cases/compile/enum/retired_question.cml`, run as `camel -E short test/cases/compile/enum/retired_question.cml`)
+
+```camel
+// `T ? U` is retired: `?` only marks a nullable value, as in `T?` (design principles 3.9).
+
+func f(x: int ? float): int {
+    return 1
+}
+
+func main(): void sync {
+    println(f(1))
+}
+```
+
+### EnumTypeArgumentNotInferred
+
+`0x03000139` · Error · `SemanticDiag::EnumTypeArgumentNotInferred`
+
+**Message**
+
+```text
+Cannot infer the type argument '{0}' of enum '{1}' from the fields of '{2}'.
+```
+
+**Help**
+
+```text
+The fields of the variant do not say what the argument is; where the value is used the expected type does: 'let x: Option<int> = Option::None'.
+```
+
+*No example: no test small enough to show raises it.*
+
+### EnumFieldTypeMismatch
+
+`0x0300013A` · Error · `SemanticDiag::EnumFieldTypeMismatch`
+
+**Message**
+
+```text
+Field {0} of variant '{1}' has type '{2}', but the value given has type '{3}'.
+```
+
+**Help**
+
+```text
+The fields of a variant are those its declaration writes.
+```
+
+**Example** (`test/cases/compile/enum/err_field_type.cml`, run as `camel -E short test/cases/compile/enum/err_field_type.cml`)
+
+```camel
+type Shape = enum {
+    Circle(int),
+    Empty,
+}
+
+func main(): void sync {
+    let s = Shape::Circle(1.5)
+    println(s)
+}
+```
+
+### EnumConstructionMismatch
+
+`0x0300013B` · Error · `SemanticDiag::EnumConstructionMismatch`
+
+**Message**
+
+```text
+Variant '{0}' of enum '{1}' cannot be built from this value: {2}.
+```
+
+**Help**
+
+```text
+A variant written with '(...)' is built from its fields in order; one written with '{ }' from a value that has a field of each name it declares; and one without fields is the value itself.
+```
+
+**Example** (`test/cases/compile/enum/err_struct_missing_field.cml`, run as `camel -E short test/cases/compile/enum/err_struct_missing_field.cml`)
+
+```camel
+type Shape = enum {
+    Rect { w: float, h: float },
+    Empty,
+}
+
+func main(): void sync {
+    let s = Shape::Rect { w: 1.0 }
+    println(s)
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -3263,6 +3633,80 @@ func main(): int sync {
     println(describe(null, true))
     println(describe(4, false))
     return 0
+}
+```
+
+### EnumVariantCaseRepeated
+
+`0x03100130` · Warn · `SemanticDiag::EnumVariantCaseRepeated`
+
+**Message**
+
+```text
+The variant '{0}' is matched more than once; the later case is never taken.
+```
+
+**Help**
+
+```text
+A branch takes the first case that matches. Remove the later case, or the earlier one.
+```
+
+**Example** (`test/cases/compile/enum/warn_duplicate_case.cml`, run as `camel -E short test/cases/compile/enum/warn_duplicate_case.cml`)
+
+```camel
+type Shape = enum {
+    Circle(float),
+    Empty,
+}
+
+func f(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => r
+        case Shape::Circle(r) => r * 2.0
+        case Shape::Empty => 0.0
+    }
+}
+
+func main(): void sync {
+    println(f(Shape::Circle(1.0)))
+}
+```
+
+### MatchCaseAfterWildcard
+
+`0x03100131` · Warn · `SemanticDiag::MatchCaseAfterWildcard`
+
+**Message**
+
+```text
+This case follows 'case _': it is never taken.
+```
+
+**Help**
+
+```text
+'case _' matches every value, so nothing after it can. Remove it, or move it before the wildcard.
+```
+
+**Example** (`test/cases/compile/enum/warn_after_wildcard.cml`, run as `camel -E short test/cases/compile/enum/warn_after_wildcard.cml`)
+
+```camel
+type Shape = enum {
+    Circle(float),
+    Empty,
+}
+
+func f(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => r
+        case _ => -1.0
+        case Shape::Empty => 0.0
+    }
+}
+
+func main(): void sync {
+    println(f(Shape::Circle(1.0)))
 }
 ```
 

@@ -249,6 +249,29 @@ node_ptr_t Tree::makeCase(CaseType type, const std::string &binding) {
     return node;
 }
 
+node_ptr_t Tree::makeEnumCase(
+    const std::string &label, const std::vector<std::string> &fields,
+    const std::vector<std::string> &bindings, bool structShape) {
+    ASSERT(
+        fields.empty() || fields.size() == bindings.size(),
+        "Every field of a struct pattern has a binding entry");
+    Node *node   = makeNode(NodeKind::CASE);
+    node->tag_   = static_cast<uint16_t>(CaseType::Enum);
+    node->flags_ = static_cast<uint8_t>(structShape ? Node::kFlagA : 0);
+    auto *data = static_cast<Node::EnumCase *>(allocate(Node::EnumCase::bytesFor(bindings.size())));
+    auto **names   = reinterpret_cast<const std::string **>(data + 1);
+    data->label    = intern(label);
+    data->count    = bindings.size();
+    data->fields   = names;
+    data->bindings = names + bindings.size();
+    for (size_t i = 0; i < bindings.size(); ++i) {
+        names[i]                   = fields.empty() ? intern("") : intern(fields[i]);
+        names[bindings.size() + i] = intern(bindings[i]);
+    }
+    node->payload_.enumCase = data;
+    return node;
+}
+
 node_ptr_t Tree::makeCast(Type *targetType, bool annotation) {
     Node *node          = makeNode(NodeKind::CAST);
     node->payload_.type = targetType;
@@ -315,8 +338,26 @@ node_ptr_t Tree::clone(const Node *node) {
     case NodeKind::FUNC:
     case NodeKind::NREF:
     case NodeKind::DREF:
-    case NodeKind::CASE:
         copy->payload_.name = intern(*node->payload_.name);
+        break;
+    case NodeKind::CASE:
+        if (node->caseType() == CaseType::Enum) {
+            const Node::EnumCase &from = node->enumCase();
+            auto *data =
+                static_cast<Node::EnumCase *>(allocate(Node::EnumCase::bytesFor(from.count)));
+            auto **names   = reinterpret_cast<const std::string **>(data + 1);
+            data->label    = intern(*from.label);
+            data->count    = from.count;
+            data->fields   = names;
+            data->bindings = names + from.count;
+            for (size_t i = 0; i < from.count; ++i) {
+                names[i]              = intern(*from.fields[i]);
+                names[from.count + i] = intern(*from.bindings[i]);
+            }
+            copy->payload_.enumCase = data;
+        } else {
+            copy->payload_.name = intern(*node->payload_.name);
+        }
         break;
     case NodeKind::ACCS:
         if (node->accessByIndex()) {
@@ -364,9 +405,9 @@ std::string Node::toString() const {
     case NodeKind::DECL:
         return "DECL: " + std::string(isFunc() ? "func " : "type ") + name();
     case NodeKind::FUNC:
-        return "FUNC: " + (name().empty() ? std::string(decoratedBlock() ? "(decorated block)"
-                                                                          : "(anonymous)")
-                                          : name());
+        return "FUNC: " + (name().empty()
+                               ? std::string(decoratedBlock() ? "(decorated block)" : "(anonymous)")
+                               : name());
     case NodeKind::NREF:
         return "NREF: " + name();
     case NodeKind::DREF:
@@ -404,6 +445,27 @@ std::string Node::toString() const {
             return "CASE: (else)";
         case CaseType::Bind:
             return "CASE: (bind " + binding() + ")";
+        case CaseType::Enum: {
+            const EnumCase &pattern = enumCase();
+            std::string text        = "CASE: (" + *pattern.label;
+            text += enumStructPattern() ? " { " : "(";
+            for (size_t i = 0; i < pattern.count; ++i) {
+                if (i > 0) {
+                    text += ", ";
+                }
+                if (enumStructPattern()) {
+                    text += *pattern.fields[i];
+                    if (!pattern.bindings[i]->empty() &&
+                        *pattern.bindings[i] != *pattern.fields[i]) {
+                        text += ": " + *pattern.bindings[i];
+                    }
+                } else {
+                    text += pattern.bindings[i]->empty() ? "_" : *pattern.bindings[i];
+                }
+            }
+            text += enumStructPattern() ? " }" : ")";
+            return text + ")";
+        }
         default:
             return "CASE: (error " + binding() + ")";
         }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -61,7 +61,7 @@ constexpr std::array<uint8_t, 256> makeCharClasses() {
         table[c] = kIllegal;
     }
     table[' '] = table['\t'] = table['\r'] = table['\f'] = kBlank;
-    table['\n']                                        = kNewline;
+    table['\n']                                          = kNewline;
     for (int c = 'a'; c <= 'z'; ++c) {
         table[c] = kIdentStart;
     }
@@ -451,13 +451,19 @@ TokenBuffer Lexer::tokenize(std::string source) {
             continue;
         }
         case kHash: {
-            // `#` to the end of the line (a form feed ends it too).
-            size_t j = i + 1;
-            while (j < n && s[j] != '\n' && s[j] != '\r' && s[j] != '\f') {
-                ++j;
+            // `#!` on the first line is an interpreter line and is ignored; elsewhere `#` opens
+            // a tag (design principles 4.1), so it is an ordinary token.
+            if (i == 0 && at(1) == '!') {
+                size_t j = i + 1;
+                while (j < n && s[j] != '\n' && s[j] != '\r' && s[j] != '\f') {
+                    ++j;
+                }
+                emitTrivia(TokenKind::Command, i, j, false);
+                i = j;
+                continue;
             }
-            emitTrivia(TokenKind::Command, i, j, false);
-            i = j;
+            emit(TokenKind::Hash, i, i + 1);
+            ++i;
             continue;
         }
         case kPunct: {
@@ -531,7 +537,7 @@ TokenBuffer Lexer::tokenize(std::string source) {
                     two(TokenKind::LtEq);
                 } else {
                     one((pending == 0 && endsAngleHost(previous)) ? TokenKind::LAngle
-                                                                 : TokenKind::Lt);
+                                                                  : TokenKind::Lt);
                 }
                 break;
             case '>':

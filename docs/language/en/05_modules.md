@@ -47,7 +47,7 @@ func main(): int sync {
 
 ### 5.2.1 Modules provided with Camel
 
-Names that can be used without an import (global built-ins): `print`, `println`, `input`, `format`, `join`, `len`, `range`, `zip`, `head`, `tail`, `slice`, `concat`, `append`, `extend`, `contains`, `map`, `filter`, `reduce`, `foreach`, `exit`, `sleep`, `error`, `parse_int`, `parse_float`, the conversion functions (`int`, `float`, `string` and so on), and the operations on maps and sets ([3.5](03_data_model.md#35-maps-and-sets)).
+Names that can be used without an import (global built-ins): `print`, `println`, `input`, `format`, `join`, `len`, `range`, `zip`, `head`, `tail`, `slice`, `concat`, `append`, `extend`, `contains`, `map`, `filter`, `reduce`, `foreach`, `exit`, `sleep`, `error`, `parse_int`, `parse_float`, the conversion functions (`int`, `float`, `string` and so on), and the operations on maps and sets ([3.6](03_data_model.md#36-maps-and-sets)).
 
 | Module | Contents |
 |---|---|

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 06, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,9 +29,9 @@
 #include "runtime.h"
 
 #include "camel/core/effect_trace.h"
-#include "camel/core/operator_table.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/conv.h"
 #include "camel/core/rtdata/func.h"
@@ -80,7 +80,7 @@ std::string tooManyNestedCalls(size_t limit, std::string_view graphName) {
         camel::execute::kMaxMacroDepthOption,
         camel::execute::kMaxMacroDepthEnvVar);
 }
-constexpr size_t kMacroFramePoolSize     = 8 * mm::MB;
+constexpr size_t kMacroFramePoolSize = 8 * mm::MB;
 
 class MacroExecutionError : public std::runtime_error {
   public:
@@ -653,8 +653,10 @@ slot_t MacroEvaluator::callNativeOperator(
     if (camel::core::OperatorTable::instance().callsGraphs(oper)) {
         invoker = [this](
                       ::Function *function,
-                      std::span<const slot_t> withArgs,
-                      std::span<const slot_t> normArgs) {
+                      std::span<const slot_t>
+                          withArgs,
+                      std::span<const slot_t>
+                          normArgs) {
             return executeFunction(
                 function,
                 [&](Frame *calleeFrame, GCGraph *callee) {
@@ -1099,9 +1101,10 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             // Same arm range as the schedulers: from the arm's first executable node in the
             // linear order (nodes of an inlined arm can precede its recorded head) through
             // its tail; an arm with nothing to execute resumes at the JOIN.
-            size_t jumpIdx   = static_cast<size_t>(frame->get<Int32>(record->dataIndex));
-            const auto arms  = runtimeGraph->branchArmsOf(runtimeNodeIndex);
-            const auto *body = runtimeGraph->nodeBodyAs<camel::runtime::GCBrchBody>(runtimeNodeIndex);
+            size_t jumpIdx  = static_cast<size_t>(frame->get<Int32>(record->dataIndex));
+            const auto arms = runtimeGraph->branchArmsOf(runtimeNodeIndex);
+            const auto *body =
+                runtimeGraph->nodeBodyAs<camel::runtime::GCBrchBody>(runtimeNodeIndex);
             ASSERT(jumpIdx < arms.size(), "Macro BRCH arm index is out of range.");
             const auto entry = camel::execute::resolveRuntimeBranchArmEntry(
                 runtimeGraph,

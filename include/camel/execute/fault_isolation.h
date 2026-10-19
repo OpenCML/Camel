@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,9 +23,9 @@
  * On the graph it is one OPER node with the URI kFaultIsolationUri whose first input is a
  * function value and whose other inputs are the arguments: a marked call of the subgraph of
  * that function. A fault raised inside the call becomes, at the node, the failed form of the
- * node's `T!`. Every scheduler runs the node itself (it declares how it calls its function: ElementShape::Isolate);
- * this header holds what they share: the names, the type rule, and the conversion of a fault
- * that reached the boundary into an error value.
+ * node's `T!`. Every scheduler runs the node itself (it declares how it calls its function:
+ * ElementShape::Isolate); this header holds what they share: the names, the type rule, and the
+ * conversion of a fault that reached the boundary into an error value.
  */
 
 #pragma once

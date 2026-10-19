@@ -1,0 +1,341 @@
+id = "compile.enum"
+order = 327
+tier = "feat"
+tags = ["feat", "compile", "enum", "types", "match"]
+desc = "Nominal enums (design principles 5.3): `type E = enum { A(i32), B { x: f32 }, C }`, construction by a qualified variant, `match` over the variants with an exhaustiveness check, printing, equality, generics, all four schedulers, the translation passes that refuse an enum, and the retirement of `A | B` and `T ? U`."
+
+[[tests]]
+name = "shapes"
+desc = "Three variant shapes (a tuple, a struct, a unit), construction, an exhaustive `match` without a wildcard, one with `case _`, printing (`Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`), equality and inequality by content, an enum of an enum, and an array of enums. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/compile/enum/shapes.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3.14159",
+  "6.0",
+  "0.0",
+  "circle",
+  "rect",
+  "empty",
+  "Shape::Circle(1.0)",
+  "Shape::Rect { w: 2.0, h: 3.0 }",
+  "Shape::Empty",
+  "true",
+  "false",
+  "true",
+  "true",
+  "true",
+  "true",
+  "Slot::Full(Shape::Rect { w: 2.0, h: 3.0 })",
+  "true",
+  "false",
+  "9.14159",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "generic_tree"
+desc = "A generic enum: `Option<T>` (inferred from the field, from the declared type of the binding, and from an argument position) and a recursive `Tree<T>` (a field whose type names the enum again), with matching, sums, depth and printing. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/compile/enum/generic_tree.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "42",
+  "9",
+  "11",
+  "6",
+  "3",
+  "Tree::Node { left: Tree::Leaf(1), right: Tree::Node { left: Tree::Leaf(2), right: Tree::Leaf(3) } }",
+  "Option::Some(7)",
+  "12",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "macro_pipeline"
+desc = "`std::macro` evaluates what it can ahead of time and leaves an enum construction to run time: the program prints the same."
+kind = "behavior"
+case = "../../../cases/compile/enum/shapes.cml"
+args = ["-E", "short", "${case}", "std::macro"]
+expect_exit = 0
+expect_output_contains = ["Shape::Rect { w: 2.0, h: 3.0 }", "9.14159"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gc_generational"
+desc = "Enum values are run-time objects whose fields the collector traces: many values are built, dropped and read back under the generational collector."
+kind = "behavior"
+case = "../../../cases/compile/enum/gc_stress.cml"
+args = ["-E", "short", "--gc", "generational", "${case}"]
+expect_exit = 0
+expect_output_contains = ["596", "2001000", "Box::Two { left: Box::One(3), right: Box::One(4) }", "8"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_mark_sweep"
+desc = "The same program under the mark-sweep collector prints the same values."
+kind = "behavior"
+case = "../../../cases/compile/enum/gc_stress.cml"
+args = ["-E", "short", "--gc", "mark-sweep", "${case}"]
+expect_exit = 0
+expect_output_contains = ["596", "2001000", "Box::Two { left: Box::One(3), right: Box::One(4) }", "8"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 60000
+
+[[tests]]
+name = "wildcard_only"
+desc = "`match` over an enum with only `case _`: the subject is a call (so the wildcard has to stay a branch), and the other match names a variant before the wildcard."
+kind = "behavior"
+case = "../../../cases/compile/enum/wildcard_only.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_output_contains = ["3", "2.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 12000
+
+[[tests]]
+name = "err_not_exhaustive"
+desc = "A match that names variants must name all of them or end with `case _`: the error names the missing variant."
+kind = "negative"
+case = "../../../cases/compile/enum/err_not_exhaustive.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumMatchNotExhaustive"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 12
+expect_output_contains = ["The match over 'Shape' has no case for 'Rect', and no 'case _'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_unknown_variant"
+desc = "A qualified name of a variant the enum does not declare is a pattern mismatch that lists the variants it does declare."
+kind = "negative"
+case = "../../../cases/compile/enum/err_unknown_variant.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumPatternMismatch"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 13
+expect_output_contains = ["'Circl' is not one of its variants (Shape declares Circle, Empty)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_field_access"
+desc = "The fields of a variant are not read by name: the error shows the match that binds them."
+kind = "negative"
+case = "../../../cases/compile/enum/err_field_access.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumFieldAccess"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["'radius' is a value of enum 'Shape'", "match v { case Shape::Circle(...) => ... }"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_field_count"
+desc = "A tuple variant takes as many fields as it declares: too many is a field-count error."
+kind = "negative"
+case = "../../../cases/compile/enum/err_field_count.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumVariantFieldCount"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 26
+expect_output_contains = ["The variant 'Circle' of enum 'Shape' takes 1 field(s), but 2 were given"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_struct_missing_field"
+desc = "A struct variant is built from a value that has every field the variant declares: a missing field names the variant and the field."
+kind = "negative"
+case = "../../../cases/compile/enum/err_struct_missing_field.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumConstructionMismatch"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 25
+expect_output_contains = ["Variant 'Shape::Rect' of enum 'Shape' cannot be built from this value: the value has no field 'h'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_field_type"
+desc = "A field of a variant has the type the declaration gives it; another type is an error that names the field and the variant."
+kind = "negative"
+case = "../../../cases/compile/enum/err_field_type.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumFieldTypeMismatch"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 26
+expect_output_contains = ["Field 0 of variant 'Shape::Circle' has type 'int', but the value given has type 'float'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_duplicate_variant"
+desc = "A variant is written by its name in its enum, so the name occurs once."
+kind = "negative"
+case = "../../../cases/compile/enum/err_duplicate_variant.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DuplicateEnumVariant"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 5
+expect_output_contains = ["The variant 'Circle' is declared twice in enum 'Shape'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_duplicate_field"
+desc = "The field of a struct variant is written by its name, so the name occurs once in the variant."
+kind = "negative"
+case = "../../../cases/compile/enum/err_duplicate_field.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DuplicateEnumField"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 5
+expect_output_contains = ["The field 'a' is declared twice in variant 'Both' of enum 'Pair'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_nested_pattern"
+desc = "A pattern binds a field by a name or `_`; a nested pattern is refused rather than half-understood, and the error says to match inside the arm."
+kind = "negative"
+case = "../../../cases/compile/enum/err_nested_pattern.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 28
+expect_output_contains = ["a nested pattern is not supported; write a name or '_' for each field and match inside the arm"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn_duplicate_case"
+desc = "A variant matched twice warns at the later case; the program runs and prints the first arm's value."
+kind = "behavior"
+case = "../../../cases/compile/enum/warn_duplicate_case.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_output_contains = ["1.0"]
+expect_stderr_contains = ["[Warn]: The variant 'Circle' is matched more than once; the later case is never taken.", "name=SemanticDiag::EnumVariantCaseRepeated, code=0x03100130"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn_after_wildcard"
+desc = "A case after `case _` warns; `case _` matches everything, so the program prints the wildcard's value."
+kind = "behavior"
+case = "../../../cases/compile/enum/warn_after_wildcard.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_output_contains = ["1.0"]
+expect_stderr_contains = ["[Warn]: This case follows 'case _': it is never taken.", "name=SemanticDiag::MatchCaseAfterWildcard, code=0x03100131"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "retired_union"
+desc = "`A | B` is retired: a value has one type, and when it is one of several named cases that is an enum."
+kind = "negative"
+case = "../../../cases/compile/enum/retired_union.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnionTypeRetired"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 25
+expect_output_contains = ["The union type is retired: a value has one type, and no value enters 'A | B'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "retired_question"
+desc = "`T ? U` is retired: `?` only marks a nullable value, as in `T?`."
+kind = "negative"
+case = "../../../cases/compile/enum/retired_question.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReservedTypeQuestionRetired"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 17
+expect_output_contains = ["The reserved form 'T ? U' is retired"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "refuse_cpp"
+desc = "`std::cpp` translates no enum: the refusal is located and names the parameter it cannot translate."
+kind = "negative"
+case = "../../../cases/compile/enum/refuse_cpp.cml"
+args = ["-E", "short", "${case}", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 1
+expect_output_contains = ["Translation pass 'std::cpp' refused the graph: a parameter of function 'main' has type 'Shape'"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "refuse_grad"
+desc = "autodiff refuses a value that depends on the differentiated parameter and is put into an enum, where the value is built; it does not return a wrong zero."
+kind = "negative"
+case = "../../../cases/compile/enum/refuse_grad.cml"
+args = ["-E", "short", "${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
+expect_diagnostic_line = 24
+expect_diagnostic_column = 13
+expect_output_contains = ["a value that depends on a differentiated parameter is put into an enum 'Shape'", "Gradients do not flow through it"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "refuse_onnx"
+desc = "onnx::export refuses a model whose input is an enum: a model input is a tensor, a number, or a struct or tuple of those."
+kind = "negative"
+case = "../../../cases/compile/enum/refuse_onnx.cml"
+args = ["-E", "short", "${case}", "onnx::export(out=\"enum_never_written.onnx\")"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 1
+expect_output_contains = ["Translation pass 'onnx::export' refused the graph: parameter 's' of 'main' has type 'Shape'"]
+expect_output_not_contains = ["wrote", "Segmentation fault", "dumped core", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000

@@ -28,6 +28,7 @@
 #include "camel/core/operator_names.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
@@ -1120,7 +1121,11 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         ~InProgress() { context.leaveTypeDeclaration(); }
     } inProgress{*context_, module_.get(), typeLoad->ref().toString()};
     TypePositionGuard position(*this, TypePosition::TypeDeclaration);
-    if (typeLoad->params().empty()) {
+    if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
+        // The name is in scope before the variants are read, so that a variant field can hold
+        // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
+        type = declareEnumType(typeNode, typeLoad.get());
+    } else if (typeLoad->params().empty()) {
         type = visitType(typeNode);
     } else {
         // A type function (`type Pair<T> = (T, T)`): the right-hand side is an ordinary type
@@ -1133,23 +1138,7 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             ~TypeScopeGuard() { self.typeScope_ = outer; }
         } typeScopeGuard{*this, typeScope_};
         pushScope();
-        for (const string &param : typeLoad->params()) {
-            const Reference paramRef(param);
-            if (typeScope_->has(paramRef, false)) {
-                diags_->of(SemanticDiag::DuplicateParameter)
-                    .at(ast->load()->tokenRange())
-                    .commit(param);
-                throw BuildAbortException();
-            }
-            if (typeScope_->get(paramRef).has_value() ||
-                module_->getImportedType(paramRef).has_value()) {
-                diags_->of(SemanticDiag::TypeFunctionArguments)
-                    .at(ast->load()->tokenRange())
-                    .commit(typeName, "its parameter '" + param + "' already denotes a type here");
-                throw BuildAbortException();
-            }
-            typeScope_->insert(paramRef, TypeVarType::create(param, false));
-        }
+        bindTypeParameters(typeLoad.get(), ast, typeName);
         type = TypeFunctionType::create(typeName, typeLoad->params(), visitType(typeNode));
     }
     // A program's own `Map` or `Set` takes the place of the built-in collection type of that
@@ -1168,6 +1157,108 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     *declNode << tree_->makeType(type, typeLoad->implMark());
     LEAVE("TypeDecl");
     return declNode;
+}
+
+void Builder::bindTypeParameters(
+    const AST::TypeDeclLoad *decl, const AST::node_ptr_t &ast, const std::string &name) {
+    for (const string &param : decl->params()) {
+        const Reference paramRef(param);
+        if (typeScope_->has(paramRef, false)) {
+            diags_->of(SemanticDiag::DuplicateParameter)
+                .at(ast->load()->tokenRange())
+                .commit(param);
+            throw BuildAbortException();
+        }
+        if (typeScope_->get(paramRef).has_value() ||
+            module_->getImportedType(paramRef).has_value()) {
+            diags_->of(SemanticDiag::TypeFunctionArguments)
+                .at(ast->load()->tokenRange())
+                .commit(name, "its parameter '" + param + "' already denotes a type here");
+            throw BuildAbortException();
+        }
+        typeScope_->insert(paramRef, TypeVarType::create(param, false));
+    }
+}
+
+Type *Builder::declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl) {
+    const string name                    = decl->ref().toString();
+    const auto enumLoad                  = ast->loadAs<AST::EnumTypeLoad>();
+    EnumDecl *declaration                = EnumDecl::create(name, decl->params());
+    const bool generic                   = !decl->params().empty();
+    scope_ptr_t<Reference, Type *> outer = typeScope_;
+    if (generic) {
+        pushScope();
+        bindTypeParameters(decl, ast, name);
+    }
+    Type *result;
+    if (!generic) {
+        // Without parameters the declaration has one instance, which is the type itself; its
+        // name denotes it from here on.
+        EnumType *instance = declaration->prototype();
+        typeScope_->insert(decl->ref(), instance);
+        declaration->define(buildEnumVariants(ast, instance));
+        result = instance;
+    } else {
+        // The written field types are those of the instance whose arguments are the parameters
+        // themselves; a use `Name<int>` replaces them (as `type Pair<T> = (T, T)` does).
+        std::vector<Type *> parameters;
+        parameters.reserve(decl->params().size());
+        for (const string &param : decl->params()) {
+            parameters.push_back(TypeVarType::create(param, false));
+        }
+        EnumType *body = EnumType::get(declaration, parameters);
+        Type *function = TypeFunctionType::create(name, decl->params(), body);
+        typeScope_->insert(decl->ref(), function);
+        declaration->define(buildEnumVariants(ast, body));
+        result = function;
+    }
+    if (generic) {
+        typeScope_ = outer;
+    }
+    return result;
+}
+
+std::vector<EnumVariant>
+Builder::buildEnumVariants(const AST::node_ptr_t &ast, const EnumType *instance) {
+    const auto enumLoad = ast->loadAs<AST::EnumTypeLoad>();
+    ASSERT(
+        enumLoad->variants().size() == ast->size(),
+        "Every variant of an enum has one node with its field types");
+    std::vector<EnumVariant> variants;
+    variants.reserve(enumLoad->variants().size());
+    std::unordered_set<string> variantNames;
+    for (size_t i = 0; i < enumLoad->variants().size(); ++i) {
+        const AST::EnumVariantDecl &written = enumLoad->variants()[i];
+        EnumVariant variant;
+        variant.name  = written.name;
+        variant.shape = written.shape == AST::EnumVariantShape::Tuple    ? VariantShape::Tuple
+                        : written.shape == AST::EnumVariantShape::Struct ? VariantShape::Struct
+                                                                         : VariantShape::Unit;
+        const auto fieldTypes = ast->atAs<AST::RepeatedLoad>(i);
+        if (!variantNames.insert(variant.name).second) {
+            diags_->of(SemanticDiag::DuplicateEnumVariant)
+                .at(fieldTypes->load()->tokenRange())
+                .commit(variant.name, instance->decl()->name());
+            throw BuildAbortException();
+        }
+        variant.fieldNames = written.fieldNames;
+        std::unordered_set<string> fieldNames;
+        for (const auto &field : *fieldTypes) {
+            variant.fieldTypes.push_back(visitType(field));
+        }
+        if (variant.shape == VariantShape::Struct) {
+            for (const string &fieldName : variant.fieldNames) {
+                if (!fieldNames.insert(fieldName).second) {
+                    diags_->of(SemanticDiag::DuplicateEnumField)
+                        .at(fieldTypes->load()->tokenRange())
+                        .commit(fieldName, variant.name, instance->decl()->name());
+                    throw BuildAbortException();
+                }
+            }
+        }
+        variants.push_back(std::move(variant));
+    }
+    return variants;
 }
 
 /*
@@ -1913,8 +2004,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             if (argument->type() == AST::LoadType::NamedType) {
                 // `A = int`: the name as a constant, then the type (design principles 5.9).
                 const auto &named = argument->loadAs<AST::NamedTypeLoad>();
-                *res << tree_->makeData(
-                    std::make_shared<StringData>(named->getRef().toString()));
+                *res << tree_->makeData(std::make_shared<StringData>(named->getRef().toString()));
                 *res << tree_->makeType(visitType(argument->at(0)), ImplMark::Graph);
                 continue;
             }
@@ -2287,26 +2377,25 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Data)
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchExpr");
 
-    // Extract the match expression load and the reference for the condition
-    const auto &matchExprLoad = ast->loadAs<AST::MatchExprLoad>();
-    const Reference &matchRef = matchExprLoad->ref();
-
+    // The subject is any expression, evaluated once before the cases; a name among them is
+    // read here, once, and the arms read the value through the branch.
+    const auto &subjectAst = ast->atAs<AST::DataLoad>(0);
     const bool valueUnused = std::exchange(valueUse_.unusedCtrl, nullptr) == ast.get();
     const ValueUseScope valueUseScope(*this);
 
-    // Create a reference node for the condition and a branch node for the match expression
-    node_ptr_t dRefNode = tree_->makeDRef(matchRef); // condition node
-    node_ptr_t brchNode = tree_->makeBrch();
+    node_ptr_t subjectNode = visitData(subjectAst);
+    node_ptr_t brchNode    = tree_->makeBrch();
     setOriginFromOrigin(
         context_,
-        dRefNode,
+        subjectNode,
         findSemanticOrigin(
             astSemantic(context_, ast),
             camel::source::SemanticRole::BranchCondition),
         camel::source::OriginKind::GctNode,
         "gct.match.scrutinee");
     setOriginFromAst(context_, brchNode, ast, camel::source::OriginKind::GctNode, "gct.match");
-    *brchNode << dRefNode;
+    *brchNode << subjectNode;
+    const node_ptr_t dRefNode = subjectNode;
 
     std::vector<camel::source::SemanticPart> parts = {
         semanticPart(
@@ -2317,12 +2406,31 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     };
     std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(dRefNode)};
 
-    for (const auto &aCaseNode : *ast->atAs<AST::RepeatedLoad>(0)) {
+    for (const auto &aCaseNode : *ast->atAs<AST::RepeatedLoad>(1)) {
         // Handle a value case
         const auto &caseLoadType = aCaseNode->front()->type();
         node_ptr_t gCaseNode     = nullptr;
 
         if (caseLoadType == AST::LoadType::Data &&
+            aCaseNode->front()->loadAs<AST::DataLoad>()->dataType() == AST::DataType::EnumPattern) {
+            // `case Shape::Rect { w, h }`: the variant is written by its name and the fields
+            // the pattern binds; the graph builder resolves it against the enum matched.
+            const auto &pattern = aCaseNode->front()->loadAs<AST::EnumPatternLoad>();
+            std::vector<std::string> fields, bindings;
+            for (const AST::EnumPatternField &field : pattern->fields()) {
+                fields.push_back(field.name);
+                bindings.push_back(field.binding);
+            }
+            gCaseNode = tree_->makeEnumCase(
+                pattern->ref().toString(),
+                fields,
+                bindings,
+                pattern->structShape());
+            enterArmOf(ast, valueUnused);
+            node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
+            *gCaseNode << caseExprNode;
+        } else if (
+            caseLoadType == AST::LoadType::Data &&
             aCaseNode->front()->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Ref) {
             // `case v` / `case error e`: the fixed patterns over a `T?` / `T!` (design
             // principles 3.8). The graph builder, which knows the scrutinee's type, binds
@@ -2430,7 +2538,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
                 .commit("string (not valid UTF-8; use \\u{...} or the character itself)", str);
             throw BuildAbortException();
         }
-        data              = tt::as_shared<Data>(make_shared<StringData>(decoded));
+        data = tt::as_shared<Data>(make_shared<StringData>(decoded));
     } break;
     case LiteralType::FString: {
         // FString (formatted string) is not supported
@@ -2931,6 +3039,16 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Ref:
         res = visitRefType(ast);
         break;
+    case AST::TypeType::Enum:
+        // An enum is declared, not written where a value of it is expected: its variants are
+        // names of the module (`type Shape = enum {...}`), and a use is that name.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit(
+                "enum { ... }",
+                "an enum is declared in a type declaration, 'type Shape = enum { ... }', and "
+                "its type is written by the name it declares");
+        throw BuildAbortException();
     default:
         throw std::runtime_error("Unknown type type");
     }
@@ -3014,10 +3132,11 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     // Handle different type operations based on the TypeOp enumeration
     switch (op) {
     case AST::TypeOp::Union: {
-        // Handle union types (e.g., T | U)
-        const auto &lhsType = visitType(ast->atAs<AST::TypeLoad>(0));
-        const auto &rhsType = visitType(ast->atAs<AST::TypeLoad>(1));
-        res                 = UnionType::create(lhsType, rhsType);
+        // `A | B` is retired: a value has one type, and a value that is one of several named
+        // cases is an enum (design principles 5.3). The AST keeps the form so that the
+        // program is told so, instead of failing to parse.
+        diags_->of(SemanticDiag::UnionTypeRetired).at(ast->load()->tokenRange()).commit();
+        throw BuildAbortException();
     } break;
 
     case AST::TypeOp::Inter: {
@@ -3056,9 +3175,9 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::TypeOp::ErrorThen: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
+        diags_->of(SemanticDiag::ReservedTypeQuestionRetired)
             .at(ast->load()->tokenRange())
-            .commit("TypeOp::ErrorThen (a.k.a. T ? U)");
+            .commit();
         throw BuildAbortException();
     } break;
 

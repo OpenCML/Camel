@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -178,7 +178,8 @@ struct ResourceSpec {
 // ---- Builders for declarations --------------------------------------------------------------
 
 /// An access to the resource named by the ordinary operand `operand`, whole.
-ResourceAccess operandAccess(ResourceClass cls, uint8_t operand, AccessMode mode, std::string name = {});
+ResourceAccess
+operandAccess(ResourceClass cls, uint8_t operand, AccessMode mode, std::string name = {});
 /// An access to the ambient resource `name`.
 ResourceAccess ambientAccess(std::string name, AccessMode mode);
 /// The spec of an operator whose one touch is the ambient resource `name`, with an effect
@@ -190,7 +191,8 @@ ResourceSpec externalAmbient(std::string name, AccessMode mode);
  * a pure one; otherwise a read-modify-write of every operand, whole and of unknown class, a
  * result that may alias any operand, and the external effect the traits give.
  */
-ResourceSpec conservativeResources(size_t normCount, size_t withCount, bool pure, bool externalEffect);
+ResourceSpec
+conservativeResources(size_t normCount, size_t withCount, bool pure, bool externalEffect);
 
 /// The problem with a spec in words (design 4.4), nullopt when it is consistent in itself: a
 /// Foreign or Ambient resource has a name and the others have none; an ambient access is bound

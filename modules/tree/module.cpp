@@ -4,17 +4,17 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Public names for type-directed intrinsics; the compiler emits ordinary graph nodes.
+#include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
-#include "../tensor/ops/registry.h"
 #include "include/tree/checkpoint.h"
 
 namespace {

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -194,18 +194,19 @@ void FastVMSchedPass::statsWrite() {
     bool first      = true;
     for (const auto &record : stats_->graphs) {
         uint64_t executed = 0;
-        for (size_t p = record.pc; p < record.pc + record.length && p < stats_->counts.size(); ++p) {
+        for (size_t p = record.pc; p < record.pc + record.length && p < stats_->counts.size();
+             ++p) {
             executed += stats_->counts[p];
         }
-        const char *status = !jit                 ? "interpreter"
-                             : record.compiled    ? "compiled"
-                             : record.compilable  ? "compilable"
-                                                  : "rejected";
+        const char *status = !jit                ? "interpreter"
+                             : record.compiled   ? "compiled"
+                             : record.compilable ? "compilable"
+                                                 : "rejected";
         out += first ? "" : ", ";
-        first = false;
+        first            = false;
         const char *mode = !jit || !(record.compiled || record.compilable) ? ""
-                           : record.runtime.empty()                         ? "frameless"
-                                                                            : "framed";
+                           : record.runtime.empty()                        ? "frameless"
+                                                                           : "framed";
         out += std::format(
             "{{\"name\": {}, \"pc\": {}, \"ops\": {}, \"executed\": {}, \"status\": \"{}\", "
             "\"mode\": \"{}\", \"refSlots\": {}, \"reason\": {}, ",

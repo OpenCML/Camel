@@ -44,8 +44,8 @@ template <> struct fmt::formatter<camel::builtin::CodePointText> {
         auto it  = ctx.begin();
         auto end = ctx.end();
         const std::string_view spec(it, static_cast<size_t>(end - it));
-        size_t at       = 0;
-        const auto fail = [] { throw fmt::format_error("invalid format specifier"); };
+        size_t at          = 0;
+        const auto fail    = [] { throw fmt::format_error("invalid format specifier"); };
         const auto isAlign = [](char c) { return c == '<' || c == '>' || c == '^'; };
         // [[fill]align]: a fill is one code point followed by an alignment.
         if (!spec.empty() && spec[0] != '}') {

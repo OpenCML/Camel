@@ -77,6 +77,22 @@ expect_exit = 1
 expect_stdout_contains = ["UnresolvedReference"]
 
 [[tests]]
+name = "check.library_without_main"
+desc = "A library module has no entry to check: `check` analyses its graphs and exits 0 (entry is required only to run)."
+case = "../../../cases/trans/library_module.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_not_contains = ["EntryModuleMissingMain", "Error"]
+
+[[tests]]
+name = "check.program_with_main"
+desc = "A program with `main` keeps its check result: nothing is printed and nothing runs."
+case = "../../../cases/compile/check/clean.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_not_contains = ["not printed by check", "Error"]
+
+[[tests]]
 name = "check.run_syntax_error_module_name"
 desc = "Running a file that does not parse: the syntax diagnostic reads `(my_module)`, not `(main)`."
 case = "../../../cases/compile/check/syntax_error.cml"

@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,7 +54,8 @@ instanceOf(const GCGraph &graph, gc_node_ref_t node);
  */
 std::optional<camel::core::sem::ReorderFreedom> reorderFreedomOf(
     const GCGraph &graph, gc_node_ref_t node,
-    const camel::core::sem::NumericPolicy &policy = camel::core::sem::NumericPolicy::explicitOnly());
+    const camel::core::sem::NumericPolicy &policy =
+        camel::core::sem::NumericPolicy::explicitOnly());
 
 /**
  * `camel inspect --instances`: one line `INSTANCE {json}` per OPER node, of every graph

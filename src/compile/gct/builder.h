@@ -13,18 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <set>
-#include <unordered_set>
 #include <iostream>
 #include <memory>
 #include <regex>
+#include <set>
 #include <string>
+#include <unordered_set>
 
 #include "camel/common/scope.h"
 #include "camel/compile/gct.h"
@@ -32,6 +32,7 @@
 #include "camel/core/error/abort.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/module/module.h"
+#include "camel/core/type/enum.h"
 #include "camel/parse/ast.h"
 
 namespace camel::compile::gct {
@@ -133,8 +134,8 @@ class Builder {
     uint8_t numericPermissions_ = 0;
     node_ptr_t makeExec(bool synced = false, bool operands = false);
 
-    bool funcDeclPending_  = false;
-    bool declSignature_    = false;
+    bool funcDeclPending_ = false;
+    bool declSignature_   = false;
     // The function type visited next is the signature of a function being defined (a
     // FuncData): it is built open (camel/core/type/composite/func.h), so that the graph
     // builder can set the result type the body decides when none is written. Every other
@@ -221,6 +222,18 @@ class Builder {
     void checkOperatorDeclaration(
         const std::string &symbol, const AST::node_ptr_t &funcData, const AST::node_ptr_t &decl);
     node_ptr_t visitTypeDecl(const AST::node_ptr_t &ast);
+    /// The parameters of a type declaration, as type variables in the scope pushed around its
+    /// right-hand side. Reports a parameter that is repeated or that denotes a type already.
+    void bindTypeParameters(
+        const AST::TypeDeclLoad *decl, const AST::node_ptr_t &ast, const std::string &name);
+    /// `type Name<params> = enum { ... }`: the declaration is created and its name is in scope
+    /// before the variants are read, so that a field can hold the enum being declared.
+    camel::core::type::Type *
+    declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl);
+    /// The variants of the declaration, with the field types of `instance` (the written ones
+    /// for the declaration's own instance).
+    std::vector<camel::core::type::EnumVariant>
+    buildEnumVariants(const AST::node_ptr_t &ast, const camel::core::type::EnumType *instance);
     node_ptr_t visitUsingNamespaceDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitExprStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitExitStmt(const AST::node_ptr_t &ast);

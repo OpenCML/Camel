@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,7 +39,8 @@ using namespace camel::core::sem;
 namespace rt = camel::runtime;
 
 /// Declares `resources` for `uri` and prints whether the table accepted them.
-void attempt(std::ostream &os, std::string_view check, std::string_view uri, ResourceSpec resources) {
+void attempt(
+    std::ostream &os, std::string_view check, std::string_view uri, ResourceSpec resources) {
     try {
         OperatorTable::instance().declareResources(uri, std::move(resources));
         os << "RESOURCES " << check << " accepted\n";
@@ -51,11 +52,12 @@ void attempt(std::ostream &os, std::string_view check, std::string_view uri, Res
 /// A one-dimensional instance: d0 < n, the write at offset + d0 (a window of a resource).
 IndexedInstance window(int64_t offset, int64_t n) {
     IndexedInstance inst;
-    ExprPool &x         = inst.exprs;
-    inst.domain.params  = {Param{.name = "n", .source = ParamSource::Static, .operand = 0, .value = n}};
-    inst.domain.dims    = {{"d0", x.param(0), DimRole::Parallel}};
-    inst.output         = Write{.coords = {x.add(x.dim(0), x.constant(offset))}};
-    inst.norm           = {Access{.kind = AccessKind::Affine, .coords = {x.scale(2, x.dim(0))}}};
+    ExprPool &x        = inst.exprs;
+    inst.domain.params = {
+        Param{.name = "n", .source = ParamSource::Static, .operand = 0, .value = n}};
+    inst.domain.dims = {{"d0", x.param(0), DimRole::Parallel}};
+    inst.output      = Write{.coords = {x.add(x.dim(0), x.constant(offset))}};
+    inst.norm        = {Access{.kind = AccessKind::Affine, .coords = {x.scale(2, x.dim(0))}}};
     return inst;
 }
 
@@ -91,7 +93,8 @@ std::string label(const rt::GCGraph &graph, rt::gc_node_ref_t ref) {
 
 } // namespace
 
-camel::runtime::GCGraph *ResourcesTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+camel::runtime::GCGraph *
+ResourcesTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     OperatorTable &table = OperatorTable::instance();
 
     // ---- Registration (design 4.4, check 5): each declaration below breaks one rule. ----
@@ -101,43 +104,70 @@ camel::runtime::GCGraph *ResourcesTestPass::apply(camel::runtime::GCGraph *graph
     const ResourceAccess cellWrite = operandAccess(ResourceClass::Variable, 0, AccessMode::Write);
     attempt(os, "valid", "semtest:cell_write", ResourceSpec{.accesses = {cellWrite}});
     attempt(
-        os, "unknown_class", "semtest:cell_write",
+        os,
+        "unknown_class",
+        "semtest:cell_write",
         ResourceSpec{.accesses = {operandAccess(ResourceClass::Unknown, 0, AccessMode::Write)}});
     attempt(
-        os, "ambient_without_name", "semtest:io",
+        os,
+        "ambient_without_name",
+        "semtest:io",
         ResourceSpec{.accesses = {ambientAccess("", AccessMode::Read)}, .externalEffect = true});
     attempt(
-        os, "variable_with_name", "semtest:cell_write",
-        ResourceSpec{.accesses = {operandAccess(ResourceClass::Variable, 0, AccessMode::Write, "x")}});
+        os,
+        "variable_with_name",
+        "semtest:cell_write",
+        ResourceSpec{
+            .accesses = {operandAccess(ResourceClass::Variable, 0, AccessMode::Write, "x")}});
     {
         ResourceAccess bound = ambientAccess("fs", AccessMode::Read);
         bound.binding        = ResourceBinding{.kind = ResourceBinding::Kind::Norm, .index = 0};
-        attempt(os, "ambient_bound_to_operand", "semtest:io", ResourceSpec{.accesses = {bound}, .externalEffect = true});
+        attempt(
+            os,
+            "ambient_bound_to_operand",
+            "semtest:io",
+            ResourceSpec{.accesses = {bound}, .externalEffect = true});
         ResourceAccess unbound = cellWrite;
         unbound.binding        = ResourceBinding{.kind = ResourceBinding::Kind::Ambient};
         attempt(os, "variable_unbound", "semtest:cell_write", ResourceSpec{.accesses = {unbound}});
         ResourceAccess capture = cellWrite;
-        capture.binding        = ResourceBinding{.kind = ResourceBinding::Kind::Capture, .index = 0};
-        attempt(os, "operator_bound_to_capture", "semtest:cell_write", ResourceSpec{.accesses = {capture}});
+        capture.binding = ResourceBinding{.kind = ResourceBinding::Kind::Capture, .index = 0};
+        attempt(
+            os,
+            "operator_bound_to_capture",
+            "semtest:cell_write",
+            ResourceSpec{.accesses = {capture}});
     }
     attempt(
-        os, "same_without_operand", "semtest:cell_write",
-        ResourceSpec{.accesses = {cellWrite}, .result = ResultAlias{.kind = ResultAlias::Kind::Same}});
+        os,
+        "same_without_operand",
+        "semtest:cell_write",
+        ResourceSpec{
+            .accesses = {cellWrite},
+            .result   = ResultAlias{.kind = ResultAlias::Kind::Same}});
     attempt(os, "pure_touches", "semtest:pure", ResourceSpec{.accesses = {cellWrite}});
     attempt(os, "effectful_touches_nothing", "semtest:io", ResourceSpec{});
     attempt(
-        os, "external_against_state_only", "semtest:cell_write",
+        os,
+        "external_against_state_only",
+        "semtest:cell_write",
         ResourceSpec{.accesses = {cellWrite}, .externalEffect = true});
     // A refinement of the traits: an operator they count as external that declares no effect
     // outside the program (as the assignments do).
     table.set("semtest:assign", {.pure = false});
     attempt(os, "refines_external", "semtest:assign", ResourceSpec{.accesses = {cellWrite}});
     attempt(
-        os, "allocates_ambient", "semtest:cell_write",
-        ResourceSpec{.accesses = {cellWrite}, .allocates = Resource{.cls = ResourceClass::Ambient, .name = "x"}});
+        os,
+        "allocates_ambient",
+        "semtest:cell_write",
+        ResourceSpec{
+            .accesses  = {cellWrite},
+            .allocates = Resource{.cls = ResourceClass::Ambient, .name = "x"}});
     // A record that exists gets the resources one minor version up; the same resources again
     // keep the version.
-    table.declareSemantics("semtest:pure", OperatorSemantics{.key = OperatorKey::of("semtest:pure", 1, 4)});
+    table.declareSemantics(
+        "semtest:pure",
+        OperatorSemantics{.key = OperatorKey::of("semtest:pure", 1, 4)});
     attempt(os, "pure_touches_none", "semtest:pure", ResourceSpec{});
     attempt(os, "same_again", "semtest:pure", ResourceSpec{});
     // The declaration is the truth about effects; the `var` parameters of the signature are
@@ -151,17 +181,27 @@ camel::runtime::GCGraph *ResourcesTestPass::apply(camel::runtime::GCGraph *graph
             StaticFuncTypeResolver::create({}, {{Type::Int64(), true}}, Type::Int64()));
         attempt(os, "var_param_written", "semtest:var_op", ResourceSpec{.accesses = {cellWrite}});
         attempt(
-            os, "var_param_not_written", "semtest:var_op",
-            ResourceSpec{.accesses = {operandAccess(ResourceClass::Variable, 0, AccessMode::Read)}});
+            os,
+            "var_param_not_written",
+            "semtest:var_op",
+            ResourceSpec{
+                .accesses = {operandAccess(ResourceClass::Variable, 0, AccessMode::Read)}});
         table.set("semtest:plain_op", {.stateOnly = true});
         table.setResolver(
             "semtest:plain_op",
             StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()));
-        attempt(os, "written_without_var", "semtest:plain_op", ResourceSpec{.accesses = {cellWrite}});
+        attempt(
+            os,
+            "written_without_var",
+            "semtest:plain_op",
+            ResourceSpec{.accesses = {cellWrite}});
         table.set("semtest:late_op", {.stateOnly = true});
         attempt(
-            os, "late_declared", "semtest:late_op",
-            ResourceSpec{.accesses = {operandAccess(ResourceClass::Variable, 0, AccessMode::Read)}});
+            os,
+            "late_declared",
+            "semtest:late_op",
+            ResourceSpec{
+                .accesses = {operandAccess(ResourceClass::Variable, 0, AccessMode::Read)}});
         try {
             table.setResolver(
                 "semtest:late_op",
@@ -170,30 +210,37 @@ camel::runtime::GCGraph *ResourcesTestPass::apply(camel::runtime::GCGraph *graph
         } catch (const std::invalid_argument &e) {
             os << "RESOURCES late_resolver rejected: " << e.what() << "\n";
         }
-        os << "RESOURCES writes var_op " << table.writesOperand(*table.lookup("semtest:var_op"), false, 0)
-           << " plain_op " << table.writesOperand(*table.lookup("semtest:plain_op"), false, 0)
-           << " late_op " << table.writesOperand(*table.lookup("semtest:late_op"), false, 0) << "\n";
+        os << "RESOURCES writes var_op "
+           << table.writesOperand(*table.lookup("semtest:var_op"), false, 0) << " plain_op "
+           << table.writesOperand(*table.lookup("semtest:plain_op"), false, 0) << " late_op "
+           << table.writesOperand(*table.lookup("semtest:late_op"), false, 0) << "\n";
     }
     os << "RESOURCES version " << table.key(*table.lookup("semtest:pure"))->toString() << " "
        << table.key(*table.lookup("semtest:cell_write"))->toString() << "\n";
-    os << "RESOURCES text " << toString(*table.semantics(*table.lookup("semtest:cell_write"))->resources)
-       << "\n";
+    os << "RESOURCES text "
+       << toString(*table.semantics(*table.lookup("semtest:cell_write"))->resources) << "\n";
     os << "RESOURCES conservative " << toString(conservativeResources(2, 1, false, true)) << "\n";
-    os << "RESOURCES conservative_pure " << toString(conservativeResources(2, 1, true, false)) << "\n";
+    os << "RESOURCES conservative_pure " << toString(conservativeResources(2, 1, true, false))
+       << "\n";
 
     // ---- Mapped regions: windows of one resource. ----
-    const ResourceRegion write{.kind = ResourceRegion::Kind::Mapped, .map = ResourceRegion::Map::Write};
-    const ResourceRegion read{.kind = ResourceRegion::Kind::Mapped, .map = ResourceRegion::Map::Norm, .operand = 0};
-    const auto a = rt::regionBounds(window(2, 4), write);   // [2, 5]
-    const auto b = rt::regionBounds(window(6, 4), write);   // [6, 9]
-    const auto c = rt::regionBounds(window(5, 3), write);   // [5, 7]
-    const auto e = rt::regionBounds(window(0, 0), write);   // empty
-    const auto r = rt::regionBounds(window(0, 4), read);    // [0, 6] (2 * d0)
-    os << "RESOURCES bounds " << boundsText(a) << " " << boundsText(b) << " " << boundsText(c) << " "
-       << boundsText(e) << " " << boundsText(r) << " "
+    const ResourceRegion write{
+        .kind = ResourceRegion::Kind::Mapped,
+        .map  = ResourceRegion::Map::Write};
+    const ResourceRegion read{
+        .kind    = ResourceRegion::Kind::Mapped,
+        .map     = ResourceRegion::Map::Norm,
+        .operand = 0};
+    const auto a = rt::regionBounds(window(2, 4), write); // [2, 5]
+    const auto b = rt::regionBounds(window(6, 4), write); // [6, 9]
+    const auto c = rt::regionBounds(window(5, 3), write); // [5, 7]
+    const auto e = rt::regionBounds(window(0, 0), write); // empty
+    const auto r = rt::regionBounds(window(0, 4), read);  // [0, 6] (2 * d0)
+    os << "RESOURCES bounds " << boundsText(a) << " " << boundsText(b) << " " << boundsText(c)
+       << " " << boundsText(e) << " " << boundsText(r) << " "
        << boundsText(rt::regionBounds(window(0, 4), ResourceRegion{})) << "\n";
-    os << "RESOURCES overlap a-b " << rt::regionsMayOverlap(a, b) << " a-c " << rt::regionsMayOverlap(a, c)
-       << " a-empty " << rt::regionsMayOverlap(a, e) << " a-unknown "
+    os << "RESOURCES overlap a-b " << rt::regionsMayOverlap(a, b) << " a-c "
+       << rt::regionsMayOverlap(a, c) << " a-empty " << rt::regionsMayOverlap(a, e) << " a-unknown "
        << rt::regionsMayOverlap(a, std::nullopt) << "\n";
 
     // ---- The program. ----
@@ -209,7 +256,8 @@ camel::runtime::GCGraph *ResourcesTestPass::apply(camel::runtime::GCGraph *graph
                    << rt::toString(resources) << "\n";
             }
         }
-        os << "RESOURCES footprint " << g->name() << " " << rt::toString(rt::footprintOf(g)) << "\n";
+        os << "RESOURCES footprint " << g->name() << " " << rt::toString(rt::footprintOf(g))
+           << "\n";
         for (const rt::RequiredOrdering &o : rt::requiredOrderings(*g)) {
             os << "RESOURCES order " << g->name() << " " << o.first << " " << o.second << " "
                << rt::conflictKindName(o.why) << " " << (o.ordered ? "ordered" : "unordered");
