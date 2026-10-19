@@ -1,6 +1,6 @@
-// Enums through std::cpp: a variant is constructed, matched, printed and compared, and one
-// enum holds another. The C++ the pass writes declares a struct per enum type: a tag and a
-// std::variant payload, so nothing of the runtime's representation reaches the program.
+// Enums: a variant is constructed, matched, printed and compared, an enum holds another, and
+// the four back ends print it the same. std::cpp translates an enum into a struct of the
+// generated file (see test/plans/feat/trans/cpp.plan.toml, enum_types).
 
 type Shape = enum {
     Circle(float),

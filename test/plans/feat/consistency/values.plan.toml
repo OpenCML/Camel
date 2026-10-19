@@ -204,3 +204,9 @@ name = "value.number_fit"
 desc = "Number to number: a float inside the range truncates toward zero; NaN, an infinity, a float beyond the integer's range and an int beyond i32 are ConversionOutOfRange (seen through attempt); a float beyond f32 becomes an infinity."
 case = "../../../cases/consistency/values/number_fit.cml"
 golden = "golden/number_fit.txt"
+
+[[tests]]
+name = "value.enums"
+desc = "An enum value is constructed by its qualified variant, matched, printed as `Shape::Circle(1.0)` / `Shape::Rect { w: 2.0, h: 3.0 }` / `Shape::Empty`, compared by tag and payload, and one enum holds another."
+case = "../../../cases/consistency/values/enums.cml"
+golden = "golden/enums.txt"

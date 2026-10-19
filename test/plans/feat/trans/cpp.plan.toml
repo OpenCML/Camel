@@ -81,7 +81,7 @@ timeout_ms = 8000
 name = "enum_types"
 desc = "An enum is translated as a struct of its own: a tag and a std::variant payload struct per variant, with make<Tag>, get<Tag, Index> and an appendText that writes it as the interpreter does; :enum/tag and :enum/field become rt::enumTag and rt::enumField. The program itself is built and run by agree_with_fvm."
 kind = "behavior"
-case = "../../../cases/trans/cpp/enums.cml"
+case = "../../../cases/consistency/values/enums.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["struct Shape {", "std::variant<std::monostate, Circle, Rect, Empty> value;", "Shape::make<", "rt::enumField<", "out += \"Shape::Circle\";"]
