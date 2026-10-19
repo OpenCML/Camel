@@ -1,3 +1,4 @@
+#!/usr/bin/env camel
 /**
  * Documentation block comment
  * with 'quotes' and // slashes inside.
@@ -14,7 +15,6 @@ let b = /* inline */ 2
  */
 let s = '// not a comment'
 let t = "/* not a comment */"
-# command line: to the end of the line, on its own channel
-let d = 4 # trailing command
+let d = 4 // trailing comment; '#' now opens a tag, not a comment
 /**/
 let e = 5

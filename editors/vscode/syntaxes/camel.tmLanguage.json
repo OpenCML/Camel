@@ -58,9 +58,9 @@
       ]
     },
     "command": {
-      "comment": "COMMAND: '#' to the end of the line, on its own lexer channel.",
+      "comment": "COMMAND: '#!' on the first line only (an interpreter line); '#' elsewhere opens a tag.",
       "name": "meta.preprocessor.command.camel",
-      "match": "(#).*$",
+      "match": "^(#!).*$",
       "captures": { "1": { "name": "punctuation.definition.directive.camel" } }
     },
     "strings": {
@@ -600,7 +600,8 @@
         { "name": "punctuation.separator.colon.camel", "match": ":" },
         { "name": "punctuation.separator.comma.camel", "match": "," },
         { "name": "punctuation.terminator.statement.camel", "match": ";" },
-        { "name": "punctuation.accessor.camel", "match": "\\." }
+        { "name": "punctuation.accessor.camel", "match": "\\." },
+        { "name": "punctuation.definition.tag.camel", "match": "#" }
       ]
     }
   }

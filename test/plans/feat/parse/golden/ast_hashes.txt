@@ -1597,7 +1597,7 @@ e65335a2fe8dfdfb ok test/cases/tools/debugger/fixtures/names_other.cml
 9d9ea8b44d812925 ok test/cases/tools/debugger/fixtures/recursion.cml
 de2b4111ac30bce6 ok test/cases/tools/debugger/fixtures/unhandled.cml
 68fd33d4d67653d8 ok test/cases/tools/debugger/fixtures/values.cml
-05b30664084fc8d7 ok test/cases/tools/grammar/comments.cml
+9ea2e7cbbf1b10ce ok test/cases/tools/grammar/comments.cml
 6aad29dc1f920033 ok test/cases/tools/grammar/functions.cml
 d1b1fea632363f9c no test/cases/tools/grammar/keywords.cml
 3117b0f40090fe94 no test/cases/tools/grammar/literals.cml
