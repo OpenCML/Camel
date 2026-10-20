@@ -136,7 +136,7 @@ assert(JSON.stringify(byUri.get('tensor:matmul').semantics.laws) === '["fma_f32"
 
 [[tests]]
 name = "declared_math_numeric_semantics"
-desc = "Every operator the math module exports declares its numeric semantics, as `camel inspect --ops` shows them (design principles 7.1; docs/design/op-semantics 6.2; reviews/2026-10-19/modules.cn.md item 15): exact for the integer arithmetic, the bit operations, the sign and rounding operators, min, max, clamp and the tests; correctly rounded for sqrt; bounded for the transcendentals, exp and log within the standard library target of 2 ulp and the others within 4 ulp. pow and hypot declare that they do not always propagate a NaN. A declaration missing for any math operator fails the completeness check."
+desc = "Every operator the math module exports declares its numeric semantics, as `camel inspect --ops` shows them (design principles 7.1; docs/design/op-semantics 6.2; reviews/2026-10-19/modules.cn.md item 15): exact for the integer arithmetic, the bit operations, the sign and rounding operators, min, max, clamp, the tests and the complex accessors and conjugate; correctly rounded for sqrt; bounded for the transcendentals, exp and log within the standard library target of 2 ulp and the others within 4 ulp, complex abs and exp within the platform bound of 4 ulp. pow and hypot declare that they do not always propagate a NaN, as do complex abs and exp. A declaration missing for any math operator fails the completeness check."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/math_functions.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -169,6 +169,21 @@ for (const name of ['pow', 'hypot']) {
 // Exact float operators: no rounding; only the finite_math assumptions can change the result.
 for (const name of ['abs', 'round', 'ceil', 'floor', 'trunc', 'min', 'max', 'clamp', 'sign',
                     'is_nan', 'is_inf']) both(name, 'exact', FINITE)
+// Complex: re, im and conj are exact (a part read and a sign flip are not arithmetic); abs is
+// hypot and exp is the platform's std::exp(std::complex), bounded by the platform's accuracy of
+// the functions they are built from (4 ulp, not the 2 ulp target of the real exp alone).
+for (const name of ['re', 'im', 'conj']) {
+  add(`math:${name}_c`, 'exact', 'f32', FINITE)
+  add(`math:${name}_z`, 'exact', 'f64', FINITE)
+}
+for (const name of ['abs', 'exp']) {
+  add(`math:${name}_c`, 'bounded', 'f32', APPROX, 4)
+  add(`math:${name}_z`, 'bounded', 'f64', APPROX, 4)
+}
+// hypot(+inf, NaN) is +inf and cexp(-inf + i*NaN) is 0: NaN is not always propagated.
+for (const uri of ['math:abs_c', 'math:abs_z', 'math:exp_c', 'math:exp_z']) {
+  expected.get(uri).notIeee = ['nans']
+}
 // One correctly rounded square root in the width of the argument.
 add('math:sqrt', 'correctly_rounded', 'f32', APPROX)
 // Exact integer operators: no rounding and no permission can change the result.

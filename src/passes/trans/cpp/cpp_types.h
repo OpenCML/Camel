@@ -49,7 +49,7 @@ bool isVoid(const Type *type);
 
 /// What the refusals say std::cpp translates.
 inline constexpr const char *kTranslatedTypes =
-    "std::cpp translates numbers, bool, string, enums, arrays, tuples, structs, T?, T!, "
+    "std::cpp translates numbers (real and complex), bool, string, enums, arrays, tuples, structs, T?, T!, "
     "functions and var variables of these, and void";
 
 /// A C++ string literal of `bytes`: printable ASCII as it is, everything else as an octal
