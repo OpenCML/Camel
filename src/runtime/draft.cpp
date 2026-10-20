@@ -555,7 +555,7 @@ bool GraphDraft::isControlAnchor(const DraftNode *nodePtr) const {
 }
 
 bool GraphDraft::isBranchArmAnchor(gc_node_ref_t id) const {
-    for (gc_node_ref_t draftId = 0; draftId < nodeSlotCount(); ++draftId) {
+    for (gc_node_ref_t draftId : brchIds_) {
         const DraftNodeHeader *draftHeader = header(draftId);
         if (!draftHeader || draftHeader->kind != GCNodeKind::Brch) {
             continue;
@@ -774,6 +774,7 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
             draftId,
             static_cast<int>((*it)->kind));
         draft->nodesById_[draftId] = draft->createDecodedNode(graph, sourceRef, sourceToDraft);
+        draft->noteNodeKind(draftId, draft->nodesById_[draftId]->header.kind);
         draft->liveNodeCount_++;
     }
 
@@ -972,8 +973,10 @@ gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
         nodesById_.size() < std::numeric_limits<gc_node_ref_t>::max(),
         "A draft graph has no node id left (the last id is kInvalidNodeRef).");
     gc_node_ref_t id = static_cast<gc_node_ref_t>(nodesById_.size());
+    ++revision_;
     nodesById_.push_back(rebuildNode(id, init));
     sourceRefsById_.push_back(kInvalidNodeRef);
+    noteNodeKind(id, init.kind);
     liveNodeCount_++;
 
     for (gc_node_ref_t input : init.normInputs) {
@@ -986,6 +989,22 @@ gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
         appendUserRef(input, id, false, false, true);
     }
     return id;
+}
+
+void GraphDraft::noteNodeKind(gc_node_ref_t id, GCNodeKind kind) {
+    switch (kind) {
+    case GCNodeKind::Gate:
+        gateIds_.push_back(id);
+        break;
+    case GCNodeKind::Brch:
+        brchIds_.push_back(id);
+        break;
+    case GCNodeKind::Join:
+        joinIds_.push_back(id);
+        break;
+    default:
+        break;
+    }
 }
 
 void GraphDraft::eraseNode(gc_node_ref_t id) {
@@ -1054,6 +1073,7 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
         }
     }
 
+    ++revision_;
     nodesById_[id] = nullptr;
     liveNodeCount_--;
     std::erase(normPorts_, id);
@@ -1162,13 +1182,6 @@ void GraphDraft::replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t n
 
     replaceOne(output_);
     replaceOne(returnNode_);
-
-    for (gc_node_ref_t id = 0; id < nodeSlotCount(); ++id) {
-        DraftNode *draftNode = node(id);
-        if (!draftNode) {
-            continue;
-        }
-    }
 }
 
 void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId) {
@@ -1181,22 +1194,22 @@ void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t ne
     replaceOne(entry_);
     replaceOne(exit_);
 
-    for (gc_node_ref_t id = 0; id < nodeSlotCount(); ++id) {
+    for (gc_node_ref_t id : brchIds_) {
         DraftNode *draftNode = node(id);
-        if (!draftNode) {
+        if (!draftNode || draftNode->header.kind != GCNodeKind::Brch) {
             continue;
         }
-        if (draftNode->header.kind == GCNodeKind::Brch) {
-            auto *payload = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
-            replaceOne(payload->join);
-            replaceOne(payload->defaultArm);
+        auto *payload = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
+        replaceOne(payload->join);
+        replaceOne(payload->defaultArm);
+    }
+    for (gc_node_ref_t id : joinIds_) {
+        DraftNode *draftNode = node(id);
+        if (!draftNode || draftNode->header.kind != GCNodeKind::Join ||
+            draftNode->header.payloadBytes < sizeof(GCJoinBody)) {
             continue;
         }
-        if (draftNode->header.kind == GCNodeKind::Join &&
-            draftNode->header.payloadBytes >= sizeof(GCJoinBody)) {
-            auto *payload = DraftNodeView::payloadAs<GCJoinBody>(draftNode);
-            replaceOne(payload->brch);
-        }
+        replaceOne(DraftNodeView::payloadAs<GCJoinBody>(draftNode)->brch);
     }
 }
 
@@ -1225,7 +1238,7 @@ void GraphDraft::replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
 
 void GraphDraft::retargetBranchArmAnchors(
     gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId) {
-    for (gc_node_ref_t id = 0; id < nodeSlotCount(); ++id) {
+    for (gc_node_ref_t id : brchIds_) {
         DraftNode *draftNode = node(id);
         if (!draftNode || draftNode->header.kind != GCNodeKind::Brch) {
             continue;
@@ -1248,7 +1261,15 @@ size_t GraphDraft::dissolveUnorderedGates() {
     size_t removed = 0;
     for (bool changed = true; changed;) {
         changed = false;
-        for (gc_node_ref_t id = 0; id < nodeSlotCount(); ++id) {
+        // The ascending ids of the gates: the order a scan of every node would take.
+        std::erase_if(gateIds_, [&](gc_node_ref_t id) {
+            const DraftNodeHeader *h = header(id);
+            return !h || h->kind != GCNodeKind::Gate;
+        });
+        std::ranges::sort(gateIds_);
+        gateIds_.erase(std::ranges::unique(gateIds_).begin(), gateIds_.end());
+        const std::vector<gc_node_ref_t> gates = gateIds_;
+        for (gc_node_ref_t id : gates) {
             const DraftNodeHeader *h = header(id);
             if (!h || h->kind != GCNodeKind::Gate || !ctrlInputsOf(id).empty() ||
                 normInputsOf(id).empty() || isBranchArmAnchor(id)) {
@@ -1276,7 +1297,9 @@ size_t GraphDraft::dissolveUnorderedGates() {
     // only waited on its ports and on gated constants, placed as the tail of an arm). Such a
     // gate then waits on its BRCH, the shape of the bridge GATE inlining gives an arm whose
     // body has no control entry; a GATE without control input is not a valid graph.
-    for (gc_node_ref_t brch = 0; brch < nodeSlotCount(); ++brch) {
+    std::ranges::sort(brchIds_);
+    brchIds_.erase(std::ranges::unique(brchIds_).begin(), brchIds_.end());
+    for (gc_node_ref_t brch : brchIds_) {
         const DraftNodeHeader *h = header(brch);
         if (!h || h->kind != GCNodeKind::Brch) {
             continue;
@@ -1313,6 +1336,7 @@ size_t GraphDraft::appendStaticSlot(slot_t value, camel::core::type::Type *type)
         staticSlots_.push_back(NullSlot);
         staticSlotTypes_.push_back(camel::core::type::Type::Void());
     }
+    ++revision_;
     staticSlots_.push_back(value);
     staticSlotTypes_.push_back(type);
     return staticSlots_.size() - 1;
@@ -1335,10 +1359,12 @@ gc_node_ref_t GraphDraft::materializeStaticValue(
 
 void GraphDraft::setStaticSlot(size_t index, slot_t value) {
     ASSERT(index < staticSlots_.size(), "Draft static slot index is out of range.");
+    ++revision_;
     staticSlots_[index] = value;
 }
 
 void GraphDraft::addDependency(GCGraph *graph) {
+    ++revision_;
     if (graph &&
         std::find(dependencies_.begin(), dependencies_.end(), graph) == dependencies_.end()) {
         dependencies_.push_back(graph);
@@ -1346,6 +1372,7 @@ void GraphDraft::addDependency(GCGraph *graph) {
 }
 
 void GraphDraft::addSubGraph(GCGraph *graph) {
+    ++revision_;
     if (graph && std::find(subGraphs_.begin(), subGraphs_.end(), graph) == subGraphs_.end()) {
         subGraphs_.push_back(graph);
     }
@@ -1411,6 +1438,7 @@ void GraphDraft::setLoopGraphs(gc_node_ref_t id, GCGraph *cond, GCGraph *body) {
 }
 
 void GraphDraft::addStaticGraphRef(GCGraph *graph) {
+    ++revision_;
     if (graph && std::find(staticGraphRefs_.begin(), staticGraphRefs_.end(), graph) ==
                      staticGraphRefs_.end()) {
         staticGraphRefs_.push_back(graph);

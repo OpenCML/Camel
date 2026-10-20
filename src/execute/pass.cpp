@@ -409,10 +409,19 @@ GrowthBudget growthBudgetOf(const PassArgs &args, std::string passName) {
 PassDescriptor optimizeDescriptor() {
     PassDescriptor d;
     d.doc    = "the standard optimization pipeline";
-    d.params = {safeFpParameter(), growthBudgetParameter()};
-    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
+    d.params = {
+        safeFpParameter(),
+        growthBudgetParameter(),
+        PassParam{
+            "check_screens",
+            PassParamType::Bool,
+            false,
+            "test of the generic passes' screens: give the graphs they skip to the pass anyway "
+            "and fail if it rewrites one"}};
+    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
         OptimizeRewriteConfig config;
         config.safeFloatingPoint = args.getBool("safe_fp");
+        config.checkScreens      = args.getBool("check_screens");
         config.growthBudget      = growthBudgetOf(args, "std::opt");
         return std::make_unique<OptimizeRewritePass>(ctx, config);
     };
