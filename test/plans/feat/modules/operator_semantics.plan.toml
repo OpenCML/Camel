@@ -1,8 +1,8 @@
 id = "modules.operator_semantics"
 order = 363
 tier = "feat"
-tags = ["feat", "modules", "tensor", "semantics"]
-desc = "The registration and query interface of operator semantics (camel/core/operator_semantics.h, docs/design/op-semantics section 4): the checks a declaration must pass, the version rules of bind, the declaration epoch, and the numeric semantics declared for the built-in scalar arithmetic and the tensor operators, as `camel inspect --ops` shows them."
+tags = ["feat", "modules", "tensor", "math", "semantics"]
+desc = "The registration and query interface of operator semantics (camel/core/operator_semantics.h, docs/design/op-semantics section 4): the checks a declaration must pass, the version rules of bind, the declaration epoch, and the numeric semantics declared for the built-in scalar arithmetic, the tensor operators and the math module's operators, as `camel inspect --ops` shows them."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -131,5 +131,68 @@ assert(byUri.get('tensor:matmul').semantics.faults === undefined, 'tensor faults
 assert(byUri.get('tensor:softmax').semantics.numeric === 'opaque' && byUri.get('tensor:softmax').semantics.definition === 'tensor_definitions::softmax(norm 0, norm 1 = -1)', 'softmax declares only its definition (phase 4)')
 assert(JSON.stringify(byUri.get('tensor:sum_axis').semantics.laws) === '["sum_axis_f32","sum_axis_i64","sum_axis_bool"]', 'sum_axis declares a law per dtype')
 assert(JSON.stringify(byUri.get('tensor:matmul').semantics.laws) === '["fma_f32","mul_add_i64"]', 'matmul laws')
+}
+"""
+
+[[tests]]
+name = "declared_math_numeric_semantics"
+desc = "Every operator the math module exports declares its numeric semantics, as `camel inspect --ops` shows them (design principles 7.1; docs/design/op-semantics 6.2; reviews/2026-10-19/modules.cn.md item 15): exact for the integer arithmetic, the bit operations, the sign and rounding operators, min, max, clamp and the tests; correctly rounded for sqrt; bounded for the transcendentals, exp and log within the standard library target of 2 ulp and the others within 4 ulp. pow and hypot declare that they do not always propagate a NaN. A declaration missing for any math operator fails the completeness check."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/math_functions.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
+const mathOps = ops.filter((o) => o.module === 'math')
+assert(mathOps.length > 0, 'no math operators are listed')
+const APPROX = ['approx_math', 'change_precision', 'finite_math']
+const FINITE = ['finite_math']
+const NONE = []
+const expected = new Map()
+const add = (uri, cls, compute, sensitive, ulp, notIeee) => expected.set(uri, { cls, compute, sensitive, ulp, notIeee })
+const both = (name, cls, sensitive, ulp) => {
+  add(`math:${name}_f`, cls, 'f32', sensitive, ulp)
+  add(`math:${name}_d`, cls, 'f64', sensitive, ulp)
+}
+// Bounded: the standard library target is 2 ulp for exp and log; the other transcendentals
+// declare the conservative 4 ulp (the source of each bound is in modules/math/semantics.cpp).
+for (const name of ['exp', 'log']) both(name, 'bounded', APPROX, 2)
+for (const name of ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
+                    'log2', 'log10', 'log1p', 'expm1']) both(name, 'bounded', APPROX, 4)
+for (const name of ['atan2', 'pow', 'hypot']) both(name, 'bounded', APPROX, 4)
+// pow(1, NaN) is 1 and hypot(+inf, NaN) is +inf by the C standard: NaN is not propagated.
+for (const name of ['pow', 'hypot']) {
+  expected.get(`math:${name}_f`).notIeee = ['nans']
+  expected.get(`math:${name}_d`).notIeee = ['nans']
+}
+// Exact float operators: no rounding; only the finite_math assumptions can change the result.
+for (const name of ['abs', 'round', 'ceil', 'floor', 'trunc', 'min', 'max', 'clamp', 'sign',
+                    'is_nan', 'is_inf']) both(name, 'exact', FINITE)
+// One correctly rounded square root in the width of the argument.
+add('math:sqrt', 'correctly_rounded', 'f32', APPROX)
+// Exact integer operators: no rounding and no permission can change the result.
+for (const name of ['abs', 'min', 'max', 'clamp', 'sign', 'gcd', 'lcm', 'bit_and', 'bit_or',
+                    'bit_xor', 'bit_not', 'bin', 'oct', 'hex']) {
+  for (const suffix of ['_i', '_l']) add(`math:${name}${suffix}`, 'exact', undefined, NONE)
+}
+for (const name of ['shl', 'shr']) add(`math:${name}`, 'exact', undefined, NONE)
+
+for (const op of mathOps) {
+  const uri = op.uri
+  const e = expected.get(uri)
+  assert(e, `math operator ${uri} is not covered by the expected declarations: update this test`)
+  const s = op.semantics
+  assert(s, `${uri} has no numeric declaration`)
+  assert(s.key === `${uri}@1.0`, `${uri}: key ${s.key}`)
+  assert(s.numeric === e.cls, `${uri}: numeric ${s.numeric}, expected ${e.cls}`)
+  assert(s.compute === e.compute, `${uri}: compute ${s.compute}, expected ${e.compute}`)
+  assert(JSON.stringify(s.sensitive_to) === JSON.stringify(e.sensitive), `${uri}: sensitive_to ${JSON.stringify(s.sensitive_to)}`)
+  assert(s.ulp === e.ulp, `${uri}: ulp ${s.ulp}, expected ${e.ulp}`)
+  assert(JSON.stringify(s.not_ieee) === JSON.stringify(e.notIeee), `${uri}: not_ieee ${JSON.stringify(s.not_ieee)}`)
+  assert(typeof s.algorithm === 'string' && s.algorithm.length > 0, `${uri}: no algorithm`)
+}
+assert(mathOps.length === expected.size, `${mathOps.length} math operators listed, ${expected.size} expected`)
+assert(!mathOps.some((o) => o.semantics.indexing), 'no math operator declares index semantics')
 }
 """

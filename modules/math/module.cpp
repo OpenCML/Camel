@@ -28,6 +28,7 @@
 #include "executor.h"
 #include "numeric.h"
 #include "operators.h"
+#include "semantics.h"
 
 #include <array>
 #include <limits>
@@ -184,6 +185,9 @@ bool MathModule::load() {
             "math:" + name,
             {.pure = true, .elementwise = false});
     }
+    // Their numeric semantics (design principles 7.1): after the traits, which the table checks
+    // a declaration against.
+    declareMathOperatorSemantics();
     camel::core::DerivativeRegistry::instance().setRule("math:sqrt", &sqrtVjp);
     loaded_ = true;
     return true;
