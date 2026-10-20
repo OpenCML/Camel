@@ -3159,13 +3159,11 @@ Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
 /*
 TypeExpr(TypeOp op) := Type lhs, Type rhs ;
 enum TypeOp {
-    Union,
     Inter,
     Diff,
     KeyUnion,
     KeyInter,
     KeyDiff,
-    ErrorThen,
     Specialize, // Type type, (Type | Data)* args
     TypeOf,
     TypeAs
@@ -3182,14 +3180,6 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
 
     // Handle different type operations based on the TypeOp enumeration
     switch (op) {
-    case AST::TypeOp::Union: {
-        // `A | B` is retired: a value has one type, and a value that is one of several named
-        // cases is an enum (design principles 5.3). The AST keeps the form so that the
-        // program is told so, instead of failing to parse.
-        diags_->of(SemanticDiag::UnionTypeRetired).at(ast->load()->tokenRange()).commit();
-        throw BuildAbortException();
-    } break;
-
     case AST::TypeOp::Inter: {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
@@ -3222,13 +3212,6 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
             .commit("TypeOp::KeyDiff");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::ErrorThen: {
-        diags_->of(SemanticDiag::ReservedTypeQuestionRetired)
-            .at(ast->load()->tokenRange())
-            .commit();
         throw BuildAbortException();
     } break;
 

@@ -3028,49 +3028,21 @@ Value Builder::visitEnumType(cst::EnumType context) {
 
 /*
 typeExpr
-    : unionType ('?' unionType?)?
+    : interType ('?' | '!')*
     ;
 */
 Value Builder::visitTypeExpr(cst::TypeExpr context) {
     ENTER("TypeExpr");
     node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    if (context->childCount() > 1) {
-        if (context->types().size() > 1) {
-            node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::ErrorThen);
-            setNodeTokenRangeByContext(typeExprNode, context->type(1));
-            *typeExprNode << any2node(visitType(context->type(1)));
-            lhsNode = typeExprNode;
-        } else {
-            // `T?` and `T!`, innermost mark first: `T?!` is a fallible nullable.
-            for (size_t i = 1; i < context->childCount(); ++i) {
-                node_ptr_t markedTypeNode =
-                    createNodeAs<NullableTypeLoad>(context->child(i)->text() == "!");
-                setNodeTokenRangeByContext(markedTypeNode, context);
-                *markedTypeNode << lhsNode;
-                lhsNode = markedTypeNode;
-            }
-        }
+    // `T?` and `T!`, innermost mark first: `T?!` is a fallible nullable.
+    for (size_t i = 1; i < context->childCount(); ++i) {
+        node_ptr_t markedTypeNode =
+            createNodeAs<NullableTypeLoad>(context->child(i)->text() == "!");
+        setNodeTokenRangeByContext(markedTypeNode, context);
+        *markedTypeNode << lhsNode;
+        lhsNode = markedTypeNode;
     }
     LEAVE("TypeExpr");
-    return lhsNode;
-}
-
-/*
-unionType
-    : interType ('|' interType)*
-    ;
-*/
-Value Builder::visitUnionType(cst::UnionType context) {
-    ENTER("UnionType");
-    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    for (size_t i = 1; i < context->types().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
-        node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Union);
-        setNodeTokenRangeByContext(typeExprNode, context->type(i));
-        *typeExprNode << lhsNode << rhsNode;
-        lhsNode = typeExprNode;
-    }
-    LEAVE("UnionType");
     return lhsNode;
 }
 
@@ -3501,8 +3473,6 @@ Value Builder::visitType(syn::Node context) {
     switch (context.kind()) {
     case NK::TypeExpr:
         return visitTypeExpr(cst::TypeExpr(context));
-    case NK::UnionType:
-        return visitUnionType(cst::UnionType(context));
     case NK::InterType:
         return visitInterType(cst::InterType(context));
     case NK::DiffType:

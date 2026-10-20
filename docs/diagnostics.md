@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-171 diagnostics: 154 errors, 17 warnings.
+169 diagnostics: 152 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -129,8 +129,6 @@ prints one entry.
 | `0x03000134` | [SemanticDiag::EnumPatternMismatch](#enumpatternmismatch) | Error |
 | `0x03000135` | [SemanticDiag::EnumMatchNotExhaustive](#enummatchnotexhaustive) | Error |
 | `0x03000136` | [SemanticDiag::EnumFieldAccess](#enumfieldaccess) | Error |
-| `0x03000137` | [SemanticDiag::UnionTypeRetired](#uniontyperetired) | Error |
-| `0x03000138` | [SemanticDiag::ReservedTypeQuestionRetired](#reservedtypequestionretired) | Error |
 | `0x03000139` | [SemanticDiag::EnumTypeArgumentNotInferred](#enumtypeargumentnotinferred) | Error |
 | `0x0300013A` | [SemanticDiag::EnumFieldTypeMismatch](#enumfieldtypemismatch) | Error |
 | `0x0300013B` | [SemanticDiag::EnumConstructionMismatch](#enumconstructionmismatch) | Error |
@@ -3220,65 +3218,6 @@ type Shape = enum {
 func main(): void sync {
     let s = Shape::Circle(1.0)
     println(s.radius)
-}
-```
-
-### UnionTypeRetired
-
-`0x03000137` · Error · `SemanticDiag::UnionTypeRetired`
-
-**Message**
-
-```text
-The union type is retired: a value has one type, and no value enters 'A | B'.
-```
-
-**Help**
-
-```text
-When a value is one of several named cases, declare an enum: 'type T = enum { A(i32), B(string) }'. '|' remains the logical or.
-```
-
-**Example** (`test/cases/compile/enum/retired_union.cml`, run as `camel -E short test/cases/compile/enum/retired_union.cml`)
-
-```camel
-// `A | B` is retired: a value has one type (design principles 5.3). When a value is one of
-// several named cases, that is an enum.
-
-type IntOrFloat = int | float
-
-func main(): void sync {
-    println(1)
-}
-```
-
-### ReservedTypeQuestionRetired
-
-`0x03000138` · Error · `SemanticDiag::ReservedTypeQuestionRetired`
-
-**Message**
-
-```text
-The reserved form 'T ? U' is retired: '?' is only the nullable mark, as in 'T?'.
-```
-
-**Help**
-
-```text
-Write 'T?' for a value that may be null and 'T!' for one that may have failed.
-```
-
-**Example** (`test/cases/compile/enum/retired_question.cml`, run as `camel -E short test/cases/compile/enum/retired_question.cml`)
-
-```camel
-// `T ? U` is retired: `?` only marks a nullable value, as in `T?` (design principles 3.9).
-
-func f(x: int ? float): int {
-    return 1
-}
-
-func main(): void sync {
-    println(f(1))
 }
 ```
 

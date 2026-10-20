@@ -64,12 +64,10 @@ class ParserImpl {
     // Layout context (see Scope). `nl_`: a line break before a token that could also start a
     // statement ends the expression. `angle_`: the `<` of the angle-bracket list the parser is
     // directly inside (not inside a bracket or a block nested in it), or kNone.
-    bool nl_              = true;
-    uint32_t angle_       = kNone;
-    bool typeBeforeBlock_ = false; // the type being parsed is followed by a block
-    bool castType_        = false; // the type being parsed is that of `e as T` / `e is T`
-    bool constData_       = false; // the expression being parsed is a `const` type argument
-    uint32_t spacedGt_    = kNone; // a `>` after a space read as a comparison inside angle_
+    bool nl_           = true;
+    uint32_t angle_    = kNone;
+    bool constData_    = false; // the expression being parsed is a `const` type argument
+    uint32_t spacedGt_ = kNone; // a `>` after a space read as a comparison inside angle_
 
     bool panic_     = false; // an error was reported and the parser has not resynchronized
     uint32_t depth_ = 0;     // nesting of expressions, types and blocks
@@ -80,25 +78,17 @@ class ParserImpl {
         ParserImpl &p;
         bool nl;
         uint32_t angle;
-        bool typeBeforeBlock;
-        bool castType;
         uint32_t spacedGt;
         Scope(ParserImpl &parser, bool newNl, uint32_t newAngle = kNone)
-            : p(parser), nl(parser.nl_), angle(parser.angle_),
-              typeBeforeBlock(parser.typeBeforeBlock_), castType(parser.castType_),
-              spacedGt(parser.spacedGt_) {
-            p.nl_              = newNl;
-            p.angle_           = newAngle;
-            p.typeBeforeBlock_ = false;
-            p.castType_        = false;
-            p.spacedGt_        = kNone;
+            : p(parser), nl(parser.nl_), angle(parser.angle_), spacedGt(parser.spacedGt_) {
+            p.nl_       = newNl;
+            p.angle_    = newAngle;
+            p.spacedGt_ = kNone;
         }
         ~Scope() {
-            p.nl_              = nl;
-            p.angle_           = angle;
-            p.typeBeforeBlock_ = typeBeforeBlock;
-            p.castType_        = castType;
-            p.spacedGt_        = spacedGt;
+            p.nl_       = nl;
+            p.angle_    = angle;
+            p.spacedGt_ = spacedGt;
         }
     };
     /// Sets `constData_` for the expression of a `const` type argument, where `constas` may
@@ -308,7 +298,6 @@ class ParserImpl {
     // ---- Types (parser_type.cpp) ----
     bool typeStartsAt(uint32_t n) const;
     void parseType();
-    void parseUnionType();
     void parseInterType();
     void parseDiffType();
     void parseKeyUnionDiffType();

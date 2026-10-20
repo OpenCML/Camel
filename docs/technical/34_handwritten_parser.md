@@ -186,7 +186,6 @@ read (`peek`), never a whole bracket:
 | `import x …` | 2 tokens | `x from`: the imported name; else a module path |
 | arguments: positional or named | 2 tokens | `name :` starts the named ones; a `...` before that is positional |
 | `[e for …]` | after the first element | `for` makes it a comprehension |
-| `T ?` | the token after `?` | `T ? U` (reserved) iff a type starts there on the same line, and not `{` before a block |
 | `T + U`, `T - U`, `T ^ U` after a type in an expression | 1 token | the type keeps the operator iff a type can start after it |
 
 The worst case of any decision is the number of modifiers in a row plus a constant.
@@ -431,8 +430,7 @@ Kept as ANTLR read them, though a reader may expect otherwise (for the language 
 
 - `x as T + U`, `x as T - U`, `x as T ^ U`: the operator belongs to the type when a type can
   follow it.
-- `x as T? y`: the `?` is the nullable mark and `y` the next statement; inside brackets it is
-  the reserved `T ? U`.
+- `x as T? y`: the `?` is the nullable mark and `y` the next statement.
 - `{}` as a statement is an empty struct literal, as a branch arm or lambda body an empty block.
 - `xs[]` is `xs` and then the empty array `[]`, two statements.
 - `f(a, ...b, k: 1, ...c)`: `...b` is a positional spread, `...c` a named one.

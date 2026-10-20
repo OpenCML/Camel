@@ -54,8 +54,6 @@ std::string to_string(TypeType type) {
 
 std::string to_string(TypeOp op) {
     switch (op) {
-    case TypeOp::Union:
-        return "|";
     case TypeOp::Inter:
         return "&";
     case TypeOp::Diff:
@@ -66,8 +64,6 @@ std::string to_string(TypeOp op) {
         return "KEY_INTER";
     case TypeOp::KeyDiff:
         return "KEY_DIFF";
-    case TypeOp::ErrorThen:
-        return "?";
     case TypeOp::Specialize:
         return "SPEC";
     case TypeOp::TypeOf:

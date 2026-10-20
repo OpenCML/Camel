@@ -159,7 +159,6 @@ class Builder {
     Value visitFStringData(syntax::cst::Literal context);
     Value visitLiteral(syntax::cst::Literal context);
     Value visitTypeExpr(syntax::cst::TypeExpr context);
-    Value visitUnionType(syntax::cst::UnionType context);
     Value visitInterType(syntax::cst::InterType context);
     Value visitDiffType(syntax::cst::DiffType context);
     Value visitKeyUnionDiffType(syntax::cst::KeyUnionDiffType context);

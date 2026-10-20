@@ -715,21 +715,6 @@ bool parseArgs(int argc, char *argv[]) {
     argv                     = args.data();
     startupMark("warnings");
 
-    // A retired spelling is refused by name: otherwise the greedy input parameter takes it for
-    // a file name and the user is told the file does not exist. The pipeline is explicit now,
-    // so there is nothing for this option to leave out (design principles 9.2).
-    for (int i = 1; i < argc; ++i) {
-        if (std::string_view(argv[i]) == "--no-module-passes") {
-            std::cerr
-                << "Error: --no-module-passes was retired: importing a module no longer adds a "
-                   "pass to the pipeline, so there is nothing to leave out (design principles "
-                   "9.2). Write the passes to run on the command line."
-                << std::endl;
-            exitCode = 1;
-            return false;
-        }
-    }
-
     const parsing_result parsed = parse(argc, argv, cli);
     if (!parsed) {
         // Name what did not parse (an unknown option, a missing value, a conflict) before the

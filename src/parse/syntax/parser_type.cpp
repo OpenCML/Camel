@@ -20,8 +20,7 @@
 /*
  * The parser: type expressions.
  *
- *   typeExpr          T?  T!  (marks, any number)        T ? U (reserved)
- *   unionType         |
+ *   typeExpr          T?  T!  (marks, any number)
  *   interType         &
  *   diffType          \
  *   keyUnionDiffType  +  -
@@ -41,8 +40,7 @@
 namespace camel::parse::syntax {
 
 /// Whether a type can start at the `n`-th token from the current one. A modifier starts one
-/// only as the head of a function type (`sync (x: int) => int`): `sync {` after a return type
-/// is the function's body.
+/// only as the head of a function type (`sync (x: int) => int`).
 bool ParserImpl::typeStartsAt(uint32_t n) const {
     TK kind = peek(n);
     while (isModifier(kind)) {
@@ -65,11 +63,9 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
     }
 }
 
-/// typeExpr : unionType (('?' | '!')+ | '?' unionType)?
-/// `T?` may be null, `T!` may have failed; the marks combine. `T ? U` is the reserved form: the
-/// `?` is followed, on the same line, by something a type starts with. Before a block (the
-/// return type of a function declaration) a `{` after `?` is the block; in a cast that is not
-/// inside brackets (`x as T? y`) what follows is the next statement, as it always was.
+/// typeExpr : interType ('?' | '!')*
+/// `T?` may be null, `T!` may have failed; the marks combine. A `?` is only the nullable mark:
+/// `T ? U` is no type at all, and what follows the mark is read as the next statement.
 void ParserImpl::parseType() {
     Depth depth(*this);
     if (depth.tooDeep()) {
@@ -77,36 +73,14 @@ void ParserImpl::parseType() {
         return;
     }
     const size_t m = mark();
-    parseUnionType();
+    parseInterType();
     if ((cur_ != TK::Question && cur_ != TK::Bang) || lineBreak() || panic_) {
         return;
     }
-    if (cur_ == TK::Question && typeStartsAt(1) &&
-        !(nl_ && toks_[tree_.tokens_.nextSignificant(pos_ + 1)].newlineBefore()) &&
-        !(typeBeforeBlock_ && peek(1) == TK::LBrace) && !(castType_ && nl_)) {
+    while ((cur_ == TK::Question || cur_ == TK::Bang) && !lineBreak()) {
         bump();
-        parseUnionType();
-    } else {
-        while ((cur_ == TK::Question || cur_ == TK::Bang) && !lineBreak()) {
-            bump();
-        }
     }
     close(m, NK::TypeExpr);
-}
-
-/// unionType : interType ('|' interType)*
-void ParserImpl::parseUnionType() {
-    const size_t m = mark();
-    parseInterType();
-    bool any = false;
-    while (cur_ == TK::Pipe && !panic_) {
-        bump();
-        parseInterType();
-        any = true;
-    }
-    if (any) {
-        close(m, NK::UnionType);
-    }
 }
 
 /// interType : diffType ('&' diffType)*

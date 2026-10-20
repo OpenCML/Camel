@@ -54,10 +54,6 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 
 `onnx::export` 与 autodiff 拒绝：ONNX 是翻译目标还没有枚举的表示，autodiff 是"把依赖微分参数的值放进枚举"没有导数规则。两者都给出带位置的 `RuntimeDiag::TranslationRefused` / `MacroEvaluationFailed`，而不是返回 0 或崩溃。`std::cpp` 已经支持枚举（H8）：每个枚举生成一个带 `tag` 与 `std::variant` 载荷的 `struct`，构造与读取由声明生成的 `make<Tag>` / `get<Tag, Index>` 完成，打印与解释器逐字一致；实现见 `include/camel/standalone/enum.h`、`cpp_types.cpp` 与 `operator_rules.cpp`，测试见 `trans/cpp.plan.toml` 的 `enum_types` 与 `test/tools/cppexec/expect.txt`。
 
-## 已退役的联合类型
-
-语言层不再有联合类型：`A | B` 在 GCT 的 `visitTypeExpr` 里给出 `UnionTypeRetired`，`T ? U` 给出 `ReservedTypeQuestionRetired`。解析器仍认识这两条产生式，只为把诊断定位在源码上；`UnionType` 类型类已删除（H8）：`union.h/.cpp`、`TypeStorageKind::Union`、`TypeCode` 的编号（按退役的 `any` 的先例留注释）与 `typevar.cpp`/`tuple.cpp` 的分支都去掉了，语言入口只剩退役诊断。`stdlib/signatures/*.cml` 里原先用联合写的签名已按接受类型展开成多条声明（例如 `sqrt` 的四条），`json` 的访问器写成 `Json` 与 `Json?` 两条。
-
 ## 留给语言作者的问题
 
 见 `docs/handover/reports/H1.md` 的"待决问题"：变体跨模块的可见性、枚举作为 `Map` 键与 `Set` 元素、`T?`/`T!` 是否改由 `enum` 实现、泛型实参的推断范围、`json` 访问器是否接受 `Json!`。
