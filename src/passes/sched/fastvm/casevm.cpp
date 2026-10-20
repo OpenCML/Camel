@@ -404,6 +404,14 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                         *context_,
                         fault,
                         makePcExecutionSite(context_->sourceContext(), currFrame, pc));
+                } catch (const camel::core::mm::MemoryExhausted &e) {
+                    // The allocator names the space and the size; the instruction names the
+                    // place the program asked for it.
+                    throw e.during(
+                        std::string(),
+                        context_->sourceContext()
+                            ? context_->sourceContext()->debugMap().pcOrigin(pc)
+                            : camel::source::kInvalidOriginId);
                 }
                 currFrame->set(bc.result, result);
             } break;
@@ -412,10 +420,18 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 const data_arr_t nargs = bc.nargs();
                 const data_arr_t wargs = bc.wargs();
                 auto mark              = bc.extra()->mark;
-                if (isLoopMark(mark)) {
-                    evalLoop(bc, *currFrame);
-                } else {
-                    evalMarkedOperator(mark, bc.result, nargs, wargs, *currFrame);
+                try {
+                    if (isLoopMark(mark)) {
+                        evalLoop(bc, *currFrame);
+                    } else {
+                        evalMarkedOperator(mark, bc.result, nargs, wargs, *currFrame);
+                    }
+                } catch (const camel::core::mm::MemoryExhausted &e) {
+                    throw e.during(
+                        std::string(),
+                        context_->sourceContext()
+                            ? context_->sourceContext()->debugMap().pcOrigin(pc)
+                            : camel::source::kInvalidOriginId);
                 }
             } break;
 

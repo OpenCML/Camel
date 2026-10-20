@@ -1,0 +1,18 @@
+// `for` over a map takes its (key, value) pairs in key order (design principles 11.3), not in
+// insertion order: the literal below is written out of order and the keys still come out
+// ascending. String keys, an empty map, a tuple state that carries the last key, and a
+// `for ... while` that stops after two pairs.
+func main(): int sync {
+    let m = [(3, 'c'), (1, 'a'), (2, 'b')] as Map<int, string>
+    let seen = loop acc = '', last = -1, ordered = 1 for kv in m do (
+        acc + kv.1,
+        kv.0,
+        if kv.0 > last then ordered else 0)
+    let total = loop s = 0 for kv in m do s + kv.0
+    let sk    = loop acc = '' for kv in ([(2, 'b'), (1, 'a')] as Map<int, string>) do acc + kv.1
+    let empty = loop n = 9 for kv in ([] as Map<int, int>) do n + kv.0
+    let count = loop c = 0 for kv in m do c + 1
+    let two   = loop n = 0, acc = '' for kv in m while n < 2 do (n + 1, acc + kv.1)
+    println(seen.0, seen.1, seen.2, total, sk, empty, count, two.1)
+    return 0
+}

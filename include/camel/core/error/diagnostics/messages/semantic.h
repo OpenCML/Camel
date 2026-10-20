@@ -131,11 +131,11 @@ enum class SemanticDiag : uint32_t {
     ModuleTypeCycle      = 0x000111,
     InvalidAnnotation    = 0x000112,
     // The structured loop (design principles 3.10): 0x120 and up.
-    LoopSequenceNotArray = 0x000120,
-    LoopBodyTypeMismatch = 0x000121,
-    LoopStateWithoutType = 0x000122,
-    LoopConditionNotBool = 0x000123,
-    LoopNameRepeated     = 0x000124,
+    LoopSequenceNotIterable = 0x000120,
+    LoopBodyTypeMismatch    = 0x000121,
+    LoopStateWithoutType    = 0x000122,
+    LoopConditionNotBool    = 0x000123,
+    LoopNameRepeated        = 0x000124,
     // Rulings of 2026-10-19 (design principles log 2.13): the nominal enum, 0x130 and up.
     DuplicateEnumVariant        = 0x000130,
     DuplicateEnumField          = 0x000131,
@@ -149,6 +149,12 @@ enum class SemanticDiag : uint32_t {
     EnumTypeArgumentNotInferred = 0x000139,
     EnumFieldTypeMismatch       = 0x00013A,
     EnumConstructionMismatch    = 0x00013B,
+    // Named dimensions of type extents (design principles 5.4): 0x140 and up.
+    ConstasNotAllowed         = 0x000140,
+    DimensionNameNotBound     = 0x000141,
+    DimensionNameAlreadyBound = 0x000142,
+    DimensionMismatch         = 0x000143,
+    InvalidExtentExpression   = 0x000144,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

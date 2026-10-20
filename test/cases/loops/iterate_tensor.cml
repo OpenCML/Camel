@@ -1,0 +1,25 @@
+// `for` over a tensor takes its elements along the first dimension: a rank-2 tensor gives
+// the rank-1 sub-tensor of each row (a view of the same data), a rank-1 tensor gives rank-0
+// sub-tensors, and a tensor whose first extent is 0 has no round. `len(shape(row))` is the
+// rank of the element the body sees.
+module tensor_iterate
+
+import { Tensor, new, sum, shape, zeros } from tensor
+
+// The rank is unknown here (`Tensor`), so the element type is `Tensor` as well.
+func countRows(t: Tensor): int {
+    return loop c = 0 for row in t do c + 1
+}
+
+func main(): int sync {
+    let m      = new([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+    let rows   = loop s = 0 for row in m do s + int(sum(row))
+    let ranks  = loop c = 0 for row in m do c + (if len(shape(row)) == 1 then 1 else 0)
+    let v      = new([1.0, 2.0, 3.0])
+    let scalar = loop c = 0 for x in v do c + (if len(shape(x)) == 0 then 1 else 0)
+    let vecsum = loop s = 0 for x in v do s + int(sum(x))
+    let empty  = loop c = 7 for row in zeros([0, 2]) do c + 1
+    let nested = loop s = 0 for row in m do s + (loop t = 0 for x in row do t + int(sum(x)))
+    println(rows, ranks, scalar, vecsum, empty, nested, countRows(m))
+    return 0
+}

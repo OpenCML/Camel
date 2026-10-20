@@ -1347,6 +1347,28 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
+        // The elements a `for` takes from a string (design principles 11.1): its code points,
+        // each a one-character string. The loop builder converts a string to that array once,
+        // before the first round; a program does not write `__iter__` itself. A map adds its
+        // own overload (collection.cpp), and the tensor module adds one for tensors.
+        OperatorGroup::create(
+            "__iter__",
+            {
+                {
+                    ":struct/iter_str",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "<> (s: string) => string[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (!with.empty() || norm.size() != 1 ||
+                                norm[0]->code() != TypeCode::String) {
+                                return nullopt;
+                            }
+                            return ArrayType::create(Type::String());
+                        }),
+                },
+            }),
         OperatorGroup::create(
             "zip",
             {

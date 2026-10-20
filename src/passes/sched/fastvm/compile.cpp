@@ -572,7 +572,8 @@ static bytecode_vec_t compileRuntimeGraph(
         case camel::runtime::GCNodeKind::Loop: {
             // One instruction: the interpreter runs the rounds (FastVMSchedPass::evalLoop),
             // calling the condition and the body graph as a higher-order operator calls its
-            // function. Three extra words: the two graphs, then the mark (bytecode.h).
+            // function. Three extra words: the two graphs, then the mark and the number of
+            // collection slots (bytecode.h).
             const auto kind       = graph->loopKindOf(runtimeNodeIndex);
             const MarkOpCode mark = kind == camel::core::LoopKind::While ? MarkOpCode::LoopWhile
                                     : kind == camel::core::LoopKind::For ? MarkOpCode::LoopFor
@@ -591,8 +592,9 @@ static bytecode_vec_t compileRuntimeGraph(
             words[0]    = reinterpret_cast<uint64_t>(graph->loopCondGraphOf(runtimeNodeIndex));
             words[1]    = reinterpret_cast<uint64_t>(graph->loopBodyGraphOf(runtimeNodeIndex));
             BytecodeExtra extra{};
-            extra.raw  = 0;
-            extra.mark = mark;
+            extra.raw                  = 0;
+            extra.loop.mark            = mark;
+            extra.loop.collectionCount = graph->loopCollectionCountOf(runtimeNodeIndex);
             std::memcpy(&words[2], &extra, sizeof(extra));
             break;
         }

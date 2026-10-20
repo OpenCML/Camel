@@ -1,0 +1,16 @@
+// `for` over a string takes its code points, each a one-character string, as `s[i]` gives
+// them (design principles 11.1): an ASCII text and a text of multi-byte characters have one
+// round per code point, the characters are the same values `s[i]` gives, an empty string has
+// no round, a loop inside the body reads the character as a string of its own, and a
+// `for ... while` stops after as many characters as its condition allows.
+func main(): int sync {
+    let ascii  = loop n = 0 for c in 'abc' do n + 1
+    let wide   = loop n = 0 for c in '中文🙂' do n + 1
+    let first  = loop s = '' for c in '中文' do s + c
+    let same   = loop ok = 0, i = 0 for c in 'aé' do (ok + (if c == 'aé'[i] then 1 else 0), i + 1)
+    let empty  = loop n = 7 for c in '' do n + 1
+    let nested = loop n = 0 for c in 'ab' do n + (loop m = 0 for d in c do m + 1)
+    let three  = loop n = 0 for c in 'abcdef' while n < 3 do n + 1
+    println(ascii, wide, first, same.0, empty, nested, three)
+    return 0
+}

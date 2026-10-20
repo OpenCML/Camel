@@ -836,9 +836,10 @@ void emitDraftPayload(
                 payload.payload,
                 header,
                 GCLoopRef{
-                    .kind    = body.kind,
-                    .condRef = indexOf(body.condGraph),
-                    .bodyRef = indexOf(body.bodyGraph),
+                    .kind            = body.kind,
+                    .condRef         = indexOf(body.condGraph),
+                    .bodyRef         = indexOf(body.bodyGraph),
+                    .collectionCount = body.collectionCount,
                 });
         } break;
         case GCNodeKind::Call:

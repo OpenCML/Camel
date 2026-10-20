@@ -994,40 +994,38 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
 void NodeVMSchedPass::evalLoop(
     camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
     const camel::runtime::LoopView loop(*graph, nodeRef);
-    const size_t k        = loop.stateCount();
-    const auto stateSlot  = dataIndexOf(graph, nodeRef);
-    const auto captures   = loop.captures();
-    const auto iterable   = loop.iterable();
-    GCGraph *const cond   = loop.condGraph();
-    GCGraph *const body   = loop.bodyGraph();
-    auto *const tupleType = k > 1 ? static_cast<TupleType *>(loop.valueType()) : nullptr;
-
-    // The state: the value itself (k = 1) or a tuple of the k values, in the node's slot.
-    if (k == 1) {
-        currFrame.set(stateSlot, currFrame.get<slot_t>(dataIndexOf(graph, loop.initialState(0))));
-    } else {
-        Tuple *state = Tuple::create(k, mm::autoSpace());
-        for (size_t j = 0; j < k; ++j) {
-            state->set(
-                j,
-                currFrame.get<slot_t>(dataIndexOf(graph, loop.initialState(j))),
-                tupleType);
-        }
-        currFrame.set(stateSlot, state);
-    }
-    // The rounds are the loop's (camel/execute/loop_driver.h); this interpreter supplies a frame
-    // and a call for each.
+    const size_t k           = loop.stateCount();
+    const size_t collections = loop.collectionCount();
+    const auto stateSlot     = dataIndexOf(graph, nodeRef);
+    const auto captures      = loop.captures();
+    const auto iterable      = loop.iterable();
+    GCGraph *const cond      = loop.condGraph();
+    GCGraph *const body      = loop.bodyGraph();
+    // The value is a tuple when k > 1 or the loop collects; its components are the k state
+    // values and, when it collects, the arrays (LoopView::valueType).
+    const bool wraps = k > 1 || collections != 0;
+    const auto *const valueType =
+        wraps ? static_cast<const TupleType *>(loop.valueType()) : nullptr;
+    // The rounds and the state are the loop's (camel/execute/loop_driver.h); this interpreter
+    // supplies a frame and a call for each.
     struct Host {
         NodeVMSchedPass &vm;
         GCGraph *graph;
         Frame &currFrame;
+        camel::runtime::LoopView loop;
         camel::runtime::gc_data_idx_t stateSlot;
         size_t k;
         std::span<const gc_node_ref_t> captures;
         std::optional<gc_node_ref_t> iterableNode;
 
         void beforeRound(size_t) {}
-        slot_t callRound(GCGraph *target, const slot_t *element) {
+        slot_t initialState(size_t j) {
+            return currFrame.get<slot_t>(dataIndexOf(graph, loop.initialState(j)));
+        }
+        slot_t stateValue() { return currFrame.get<slot_t>(stateSlot); }
+        void setStateValue(slot_t value) { currFrame.set(stateSlot, value); }
+        slot_t
+        callRound(const camel::execute::LoopShape &shape, GCGraph *target, const slot_t *element) {
             vm.requireRecursionRoom(graph);
             Frame *frame = vm.framePool_.acquire(target);
             camel::execute::bindLoopRound(
@@ -1037,17 +1035,23 @@ void NodeVMSchedPass::evalLoop(
                 element,
                 captures.size(),
                 [&](size_t j) {
-                    return k == 1 ? currFrame.get<slot_t>(stateSlot)
-                                  : currFrame.get<Tuple *>(stateSlot)->get<slot_t>(j);
+                    return camel::execute::loopStateComponent(shape, stateValue(), j);
                 },
                 [&](size_t c) { return currFrame.get<slot_t>(dataIndexOf(graph, captures[c])); });
             return vm.call(target, frame);
         }
         Array *iterable() { return currFrame.get<Array *>(dataIndexOf(graph, *iterableNode)); }
-        void advance(slot_t next) { currFrame.set(stateSlot, next); }
-    } host{*this, graph, currFrame, stateSlot, k, captures, iterable};
+    } host{*this, graph, currFrame, loop, stateSlot, k, captures, iterable};
     camel::execute::driveLoopRounds(
-        camel::execute::LoopShape{cond, body, iterable.has_value(), k},
+        camel::execute::LoopShape{
+            .cond            = cond,
+            .body            = body,
+            .iterates        = iterable.has_value(),
+            .stateCount      = k,
+            .collectionCount = collections,
+            .valueType       = valueType,
+            .origin          = graph->nodeOrigin(nodeRef),
+        },
         host);
 }
 

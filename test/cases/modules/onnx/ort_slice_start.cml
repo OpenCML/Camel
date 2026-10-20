@@ -1,0 +1,50 @@
+/**
+ * A slice whose start depends on the model input: Camel normalizes a negative start from the
+ * end of the axis and faults when the start leaves [-n, n] (design principles 3.9), where the
+ * ONNX Slice would clamp it. The exporter reads the interval from the operator's index
+ * semantics declaration and guards it, so MODE=start must fail on ONNX Runtime exactly where
+ * Camel faults, including both edges (-n and n) and both sides just outside them. MODE=constant
+ * exports a slice with constant bounds on a known extent: the declaration proves them in range
+ * and the raw bounds go to the ONNX Slice, which normalizes the negative one itself.
+ * MODE=dynamic exports a slice with constant bounds on an axis whose extent is only known at run
+ * time (a reshape to a data-dependent shape): the declaration states the bounds' legal interval
+ * and the exporter guards the constants, so a run where the axis is shorter fails as Camel does.
+ *
+ * Checked by ort_slice_start.py.
+ */
+module ort_slice_start
+import { Tensor, reshape, shape, slice, sum } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func head(x: Tensor): Tensor {
+    return slice(x, 0, int(sum(x)), 3)
+}
+
+func constants(x: Tensor): Tensor {
+    return slice(x, 0, -2, 3)
+}
+
+/// The axis extent is int(sum(x)), known only when the program runs; 12 divides by construction
+/// on the inputs the checker gives, and the slice has constant bounds [1 : 3] on that axis.
+func dynamic(x: Tensor): Tensor {
+    return slice(reshape(x, [int(12.0 / sum(x)), int(sum(x))]), 1, 1, 3)
+}
+
+func main(): int sync {
+    if get_env('MODE') == 'constant' then {
+        let x = reshape([1.0, 2.0, 3.0], [3])
+        export_model((x: Tensor): Tensor => constants(x), x, get_env('ONNX_OUT'))
+    } else if get_env('MODE') == 'dynamic' then {
+        let x = reshape(
+            [12.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [1, 12]
+        )
+        export_model((x: Tensor): Tensor => dynamic(x), x, get_env('ONNX_OUT'))
+    } else {
+        let x = reshape([1.0, 2.0, 3.0], [3])
+        export_model((x: Tensor): Tensor => head(x), x, get_env('ONNX_OUT'))
+    }
+    println('exported')
+    return 0
+}
