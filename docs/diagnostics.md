@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-167 diagnostics: 150 errors, 17 warnings.
+166 diagnostics: 149 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -111,7 +111,7 @@ prints one entry.
 | `0x030000F1` | [SemanticDiag::OperatorNotOverloadable](#operatornotoverloadable) | Error |
 | `0x030000F2` | [SemanticDiag::OperatorOverloadInvalid](#operatoroverloadinvalid) | Error |
 | `0x030000F3` | [SemanticDiag::OperatorOverloadConflict](#operatoroverloadconflict) | Error |
-| `0x030000F4` | [SemanticDiag::AmbiguousOperatorCall](#ambiguousoperatorcall) | Error |
+| `0x030000F4` | [SemanticDiag::AmbiguousCall](#ambiguouscall) | Error |
 | `0x03000110` | [SemanticDiag::DeclaredTypeMismatch](#declaredtypemismatch) | Error |
 | `0x03000111` | [SemanticDiag::ModuleTypeCycle](#moduletypecycle) | Error |
 | `0x03000112` | [SemanticDiag::InvalidAnnotation](#invalidannotation) | Error |
@@ -165,7 +165,6 @@ prints one entry.
 | `0x04000010` | [RuntimeDiag::EntryArgumentMissing](#entryargumentmissing) | Error |
 | `0x04000011` | [RuntimeDiag::EntryArgumentInvalid](#entryargumentinvalid) | Error |
 | `0x04000012` | [RuntimeDiag::EntryResultNotWritten](#entryresultnotwritten) | Error |
-| `0x04000013` | [RuntimeDiag::GraphTooLarge](#graphtoolarge) | Error |
 | `0x04000014` | [RuntimeDiag::MemoryExhausted](#memoryexhausted) | Error |
 | `0x04000030` | [RuntimeDiag::InvalidNumberText](#invalidnumbertext) | Error |
 | `0x04000031` | [RuntimeDiag::FormatFailed](#formatfailed) | Error |
@@ -2709,32 +2708,38 @@ func operator +(a: int, b: int): int { return 99 }
 func main(): int { return 0 }
 ```
 
-### AmbiguousOperatorCall
+### AmbiguousCall
 
-`0x030000F4` · Error · `SemanticDiag::AmbiguousOperatorCall`
+`0x030000F4` · Error · `SemanticDiag::AmbiguousCall`
 
 **Message**
 
 ```text
-Operator '{0}' applies to ({1}) in more than one way.
+The call to '{0}' with ({1}) fits more than one overload.
 ```
 
 **Help**
 
 ```text
-More than one overload of the operator takes these arguments; make the parameter types of one of them narrower, or convert an argument with 'as'. The overloads that take them: {2}
+More than one function takes these arguments; make the choice explicit: annotate the literal with its type (for example '2 as f32') or convert an argument with 'as'. The overloads that take them: {2}
 ```
 
-**Example** (`test/cases/consistency/operator_overloads/ambiguous_generic.cml`, run as `camel test/cases/consistency/operator_overloads/ambiguous_generic.cml`)
+**Example** (`test/cases/compile/overloads/ambiguous_literal.cml`, run as `camel test/cases/compile/overloads/ambiguous_literal.cml`)
 
 ```camel
-module ambiguous_generic
+module ambiguous_literal
 
-func operator +(a: (typeas T)[], b: T[]): T[] { return a->extend<b> }
-func operator +(a: (typeas T)[], b: (typeas U)[]): T[] { return a }
+func scale(x: f32): f32 {
+    return x * 2.0
+}
+
+func scale(x: float): float {
+    return x * 2.0
+}
 
 func main(): int sync {
-    println(['x'] + ['y'])
+    println(scale(2))
+    println('never printed')
     return 0
 }
 ```
@@ -4306,41 +4311,6 @@ module undeclared_println
 
 func main() sync {
     println('a')
-}
-```
-
-### GraphTooLarge
-
-`0x04000013` · Error · `RuntimeDiag::GraphTooLarge`
-
-**Message**
-
-```text
-Pass '{0}' cannot build graph '{1}': it needs {2} {3}, and one graph holds at most {4}.
-```
-
-**Help**
-
-```text
-A graph addresses its nodes and its edges with 16 bits. The function is not too large as written: the pass inlined or unrolled more code into this one graph than fits (a recursion unrolled over many steps, a function inlined at many call sites). Keep part of the computation out of the graph (a smaller constant depth, fewer unrolled steps), or run the pipeline without this pass.
-```
-
-**Example** (`test/cases/opt/generic/broken_graph.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/opt/generic/broken_graph.cml test::overgrow_graph std::fvm`)
-
-```camel
-module broken_graph
-
-// Used with the test-only pass test::drop_call_argument, which removes the argument of the call
-// below and commits the broken program. Structural validation at commit must reject it before
-// anything runs.
-func twice(x: int): int {
-    return x + x
-}
-
-func main(): int sync {
-    println('main start')
-    println(twice(21))
-    return 0
 }
 ```
 

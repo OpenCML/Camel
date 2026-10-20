@@ -18,6 +18,7 @@ CAMEL_TOKEN(BlockComment, "<comment>")   // `/* ... */`
 CAMEL_TOKEN(Identifier, "a name")
 CAMEL_TOKEN(Integer, "a number")
 CAMEL_TOKEN(Real, "a number")
+CAMEL_TOKEN(Imaginary, "a number")       // `4i`, `4.5i`: a number immediately followed by `i`
 CAMEL_TOKEN(String, "a string")          // '...' or "..."
 CAMEL_TOKEN(MultiStr, "a string")        // '''...''' or """..."""
 CAMEL_TOKEN(FString, "a string")         // `...`

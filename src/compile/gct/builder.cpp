@@ -274,6 +274,8 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("f32"), Type::Float32());
     typeScope_->insert(Reference("f64"), Type::Float64());
     typeScope_->insert(Reference("float"), Type::Float64());
+    typeScope_->insert(Reference("c64"), Type::Complex64());
+    typeScope_->insert(Reference("c128"), Type::Complex128());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
     // The type of binary data (design principles 11.1), a built-in name like `string`.
@@ -298,9 +300,12 @@ static bool isIntegerPrimitive(Type *type) {
 // of a narrower numeric type (`let b: i32 = 3000000000`), a decimal literal in an integer type
 // (`let x: int = 1.9`), text that is not a number, or a value of another type. One diagnostic
 // says which literal, which type, and why (handover H24).
+// `written` is the element's text as it is in the source, when the caller can read it (design
+// principles 5.1: the message quotes the source's spelling); empty falls back to the value.
 template <typename Diags, typename Range>
-static void
-reportLiteralCastFailure(Diags &diags, const Range &range, const data_ptr_t &data, Type *type) {
+static void reportLiteralCastFailure(
+    Diags &diags, const Range &range, const data_ptr_t &data, Type *type,
+    const std::string &written = {}) {
     std::string reason;
     if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
         reason = "out of range (" + limits + ")";
@@ -314,7 +319,7 @@ reportLiteralCastFailure(Diags &diags, const Range &range, const data_ptr_t &dat
     }
     diags->of(SemanticDiag::LiteralNotRepresentable)
         .at(range)
-        .commit(literalValueText(data), type->toString(), reason);
+        .commit(written.empty() ? literalValueText(data) : written, type->toString(), reason);
 }
 
 node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
@@ -2640,6 +2645,18 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         }
         exactValue = literal::Value::fromRealText(str);
     } break;
+    case LiteralType::Imaginary: {
+        // `4i`: the value is imaginary, the type is the default c128 until the context says
+        // otherwise (design principles 5.1).
+        exactValue = literal::Value::fromImaginaryText(str);
+        if (!exactValue.has_value()) {
+            diags_->of(SemanticDiag::InvalidLiteral)
+                .at(ast->load()->tokenRange())
+                .commit("imaginary number", str);
+            throw BuildAbortException();
+        }
+        data = *exactValue->toData(Type::Complex128());
+    } break;
     case LiteralType::Boolean: {
         // Handle boolean literals ("true" or "false")
         if (str == "true") {
@@ -2694,19 +2711,30 @@ static std::optional<literal::Kind> writtenNumberKind(const AST::node_ptr_t &ite
         return literal::Kind::Integer;
     case LiteralType::Real:
         return literal::Kind::Float;
+    case LiteralType::Imaginary:
+        return literal::Kind::Imaginary;
     default:
         return std::nullopt;
     }
 }
 
-/// The exact value a literal element was written as, when the node is one (design principles
-/// 5.1). A nested composite, a name and a computed element have none of their own.
-static std::optional<literal::Value> writtenLiteralValue(const node_ptr_t &node) {
-    if (node == nullptr || node->type() != NodeKind::DATA) {
-        return std::nullopt;
+/// An element of a composite literal as it was written: the value it was written as, when it
+/// is a numeric literal (design principles 5.1), and the position it was written at, which is
+/// where the element is reported when the type of its position cannot hold it. A nested
+/// composite, a name and a computed element have no value of their own, but they have a
+/// position, and so do the elements inside them.
+static Tree::LiteralElement writtenElement(const node_ptr_t &node) {
+    Tree::LiteralElement element;
+    if (node == nullptr) {
+        return element;
     }
-    const literal::Value *exact = Tree::of(node)->literalValueOf(node);
-    return exact != nullptr ? std::optional<literal::Value>(*exact) : std::nullopt;
+    element.origin = node->origin();
+    if (node->type() == NodeKind::DATA) {
+        if (const literal::Value *exact = Tree::of(node)->literalValueOf(node)) {
+            element.value = *exact;
+        }
+    }
+    return element;
 }
 
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
@@ -2737,28 +2765,34 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
 
     // With no context to say which type they have, the number literals of one array take the
     // widest kind among them (design principles 5.1; as in Go): `[1, 2.0]` is a `float[]`.
-    // The order of the kinds is integer < decimal (< imaginary, once complex literals exist).
-    bool hasInteger = false, hasReal = false;
+    // The order of the kinds is integer < decimal < imaginary: a complex element widens every
+    // other number to c128, the default complex type.
+    bool hasInteger = false, hasReal = false, hasImaginary = false;
     for (const auto &item : *items) {
         if (const std::optional<literal::Kind> kind = writtenNumberKind(item);
             kind.has_value()) {
             hasInteger |= *kind == literal::Kind::Integer;
             hasReal |= *kind == literal::Kind::Float;
+            hasImaginary |= *kind == literal::Kind::Imaginary;
         }
     }
-    const bool widenToFloat = hasInteger && hasReal;
-    // The values the elements were written as, in the order the data holds them: the elements
-    // keep their exact values until GIR decides the type of the array (design principles 5.1).
-    std::vector<std::optional<literal::Value>> literalElements;
+    const bool widenToFloat = hasInteger && hasReal && !hasImaginary;
+    // The values the elements were written as and their positions, in the order the data holds
+    // them: the elements keep their exact values and their places until GIR decides the type
+    // of the array (design principles 5.1).
+    std::vector<Tree::LiteralElement> literalElements;
     literalElements.reserve(items->size());
 
     for (const auto &item : *items) {
         node_ptr_t dataNode = visitData(item);
-        if (widenToFloat && writtenNumberKind(item) == literal::Kind::Integer) {
+        if (hasImaginary && writtenNumberKind(item) != literal::Kind::Imaginary) {
+            // An integer or decimal literal beside an imaginary one is a complex value.
+            dataNode = literalNodeInType(dataNode, Type::Complex128(), item);
+        } else if (widenToFloat && writtenNumberKind(item) == literal::Kind::Integer) {
             // An integer literal beside a decimal one is a value of the float type, exactly.
             dataNode = literalNodeInType(dataNode, Type::Float(), item);
         }
-        literalElements.push_back(writtenLiteralValue(dataNode));
+        literalElements.push_back(writtenElement(dataNode));
         if (allComputed) {
             auto [refNode, refData] = makeRefData(dataNode);
             *execNode << refNode;
@@ -2899,11 +2933,29 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
         // 0.1` is the f32 nearest to one tenth, not the same double rounded twice, and `let x:
         // float = 1` is 1.0 (an integer literal takes the float type its context asks for).
         if (const literal::Value *exact = Tree::of(value)->literalValueOf(value);
-            exact != nullptr && type->isPrimitive() &&
+            exact != nullptr &&
+            (type->isPrimitive() || camel::core::type::isComplex(type->code())) &&
             (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64 ||
-             type->code() == TypeCode::Float32 || type->code() == TypeCode::Float64)) {
+             type->code() == TypeCode::Float32 || type->code() == TypeCode::Float64 ||
+             camel::core::type::isComplex(type->code()))) {
             if (auto converted = exact->toData(type); converted.has_value()) {
                 return tree_->makeData(*converted);
+            }
+            if (exact->hasImaginaryPart() && !camel::core::type::isComplex(type->code())) {
+                // A complex literal where a real type is declared: no implicit conversion
+                // (design principles 5.1). `re(z)` and `im(z)` are the explicit operations.
+                const camel::source::source_context_ptr_t sourceContext =
+                    context_ != nullptr ? context_->sourceContext() : nullptr;
+                std::string written = sourceTextAt(sourceContext, value->origin());
+                if (written.empty()) {
+                    written = exact->toString();
+                }
+                diags_->of(SemanticDiag::LiteralNotRepresentable)
+                    .at(ast->load()->tokenRange())
+                    .commit(
+                        written, type->toString(),
+                        "a complex value does not become a real one; use re() or im()");
+                throw BuildAbortException();
             }
             if (exact->kind() == literal::Kind::Float && isIntegerPrimitive(type)) {
                 // A float literal where an integer is asked for: not a range problem, but a
@@ -3033,9 +3085,14 @@ node_ptr_t Builder::literalNodeInType(
     if (exact == nullptr || !type->isPrimitive()) {
         return node;
     }
+    // The element is quoted as it is written (`1e40`, not the canonical `1e+40`), as a literal
+    // in any other position with an expected type is (design principles 5.1).
+    const std::string written = sourceTextAt(
+        context_ != nullptr ? context_->sourceContext() : nullptr,
+        at->load()->origin());
     if (!literal::kindEnters(*exact, type)) {
         // A decimal literal where an integer is asked for: the fraction would be lost.
-        reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type);
+        reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type, written);
         throw BuildAbortException();
     }
     if (auto converted = exact->toData(type); converted.has_value()) {
@@ -3046,7 +3103,7 @@ node_ptr_t Builder::literalNodeInType(
         setOriginFromAst(context_, res, at, camel::source::OriginKind::GctNode, "gct.data");
         return res;
     }
-    reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type);
+    reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type, written);
     throw BuildAbortException();
 }
 
@@ -3165,9 +3222,9 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
     std::unordered_set<string> fieldNames;
-    // The value each field was written as, in the order the data holds them (design
-    // principles 5.1; see visitArrayData).
-    std::vector<std::optional<literal::Value>> literalElements;
+    // The value each field was written as and its position, in the order the data holds them
+    // (design principles 5.1; see visitArrayData).
+    std::vector<Tree::LiteralElement> literalElements;
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
@@ -3178,7 +3235,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
-        literalElements.push_back(writtenLiteralValue(dataNode));
+        literalElements.push_back(writtenElement(dataNode));
         auto [data, _] = extractData(dataNode, execNode, dangling);
         factory.add(name, data);
     }

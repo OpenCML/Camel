@@ -44,13 +44,13 @@ std::string lowerAscii(std::string value) {
 
 std::string envString(const char *name) {
 #ifdef _WIN32
-    char *buffer = nullptr;
+    char *envValue = nullptr;
     size_t size  = 0;
-    if (_dupenv_s(&buffer, &size, name) != 0 || buffer == nullptr) {
+    if (_dupenv_s(&envValue, &size, name) != 0 || envValue == nullptr) {
         return {};
     }
-    std::string value(buffer, size > 0 ? size - 1 : 0);
-    std::free(buffer);
+    std::string value(envValue, size > 0 ? size - 1 : 0);
+    std::free(envValue);
     return value;
 #else
     const char *value = std::getenv(name);
@@ -346,19 +346,19 @@ GrowableFreeListAllocator &graphSpace() {
     return *allocator;
 }
 
-// Numeric array buffers: a free-list space, so a buffer is released as soon as its last array
+// Data blocks: a free-list space, so a block is released as soon as its last owner
 // value is gone. It is not the collected heap: data does not move and a pointer handed out
 // stays valid. Freeing reads the size from the block header, so the space keeps no per-block
-// table: buffers are freed in bulk under memory pressure and the table would only grow.
-GrowableFreeListAllocator &bufferSpace() {
+// table: blocks are freed in bulk under memory pressure and the table would only grow.
+GrowableFreeListAllocator &blockSpace() {
     static auto *allocator = new GrowableFreeListAllocator(([] {
-        // The buffer space holds data, not program text: one run that builds several models in one
+        // The block space holds data, not program text: one run that builds several models in one
         // process legitimately needs hundreds of megabytes, and the space gives memory back as soon
-        // as the last array goes, so its limit only has to catch a runaway allocation. Its default
+        // as the last owner goes, so its limit only has to catch a runaway allocation. Its default
         // is therefore of the same order as the collected heap, not the 256 MB of the program
         // spaces.
         GrowableSpaceConfig config =
-            spaceConfig("buffer", "numeric array buffers", 8 * MB, 2048 * MB, kBufferSpaceLimitEnv);
+            spaceConfig("block", "data blocks", 8 * MB, 2048 * MB, kBlockSpaceLimitEnv);
         config.sizesFromHeaders = true;
         return config;
     })());

@@ -59,30 +59,25 @@ from existing runtime graph data.
 ## 4. Node Identity Model
 
 Since graph model step 3 (2026-10-15; docs/design/graph-model, section 4.1) a
-node's identity is its **dense index**: nodes are fixed 16-byte records in one
+node's identity is its **dense index**: nodes are fixed 28-byte records in one
 array, and `gc_node_ref_t` is the index of the record, `0 .. nodeCount() - 1`.
-(Until then a node was a variable-length object in a blob of 8-byte blocks and
-its reference was its block offset; a node took five blocks or more, so a graph
-was full long before it had 65,535 nodes.)
 
 Random access by index and sequential traversal are the same operation, and
 any consumer can size a per-node array by `nodeCount()`.
 
 ## 5. Index Width
 
-Node indices, edge offsets, counts and payload offsets are 16-bit:
+Node indices, edge offsets, counts, payload offsets and frame slots are 32-bit:
 
 ```cpp
-using gc_node_ref_t = uint16_t;  // index of a node record
-using gc_slot_idx_t = int16_t;   // frame/static slot index
-using gc_off_t = uint16_t;       // offset into an array of the graph (inputs, payload words)
-using gc_cnt_t = uint16_t;       // count of a graph-local array
+using gc_node_ref_t = uint32_t;  // index of a node record
+using gc_slot_idx_t = int32_t;   // frame/static slot index
+using gc_off_t = uint32_t;       // offset into an array of the graph (inputs, payload words)
+using gc_cnt_t = uint32_t;       // count of a graph-local array
 ```
 
-A graph holds at most 65,534 nodes (the index `0xFFFF` is `kInvalidNodeRef`),
-65,535 edges and 65,534 payload words (`0xFFFF` is `kNoPayload`). A graph that
-needs more is `RuntimeDiag::GraphTooLarge` naming the quantity
-(`camel/runtime/capacity.h`).
+A graph has no size limit other than the index `0xFFFFFFFF`, which is `kInvalidNodeRef`
+and `kNoPayload`.
 
 ## 6. Edges: the Input Table
 
@@ -96,15 +91,15 @@ A node's inputs are one run of the table: its Norm inputs, then its With
 inputs, then its Ctrl inputs. The record keeps the start of each group; the
 Ctrl group ends where the next record's run begins, and a sentinel record after
 the last node closes the last run. Before step 3 every edge was stored twice
-(once as an input of the user and once as an output of the source), which
-halved the 16-bit capacity of the edge table.
+(once as an input of the user and once as an output of the source).
 
 ## 7. `GCNode`
 
 ```cpp
-struct GCNode {               // 16 bytes
+struct GCNode {               // 28 bytes
     GCNodeKind kind;
     uint8_t flags;            // constant / macro
+    uint16_t reserved;
     gc_slot_idx_t dataIndex;  // frame slot (> 0) or static slot (< 0) of the value
     TypeId typeId;            // type of the value (camel/core/type/intern.h); 0: none
     gc_off_t inBegin;         // first Norm input in the input table

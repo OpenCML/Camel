@@ -1,0 +1,23 @@
+module hof_block_alloc
+
+func main(): int sync {
+    let n  = 10000
+    let xs = range(0, n)->map<(i: int): (int, int) => (i, i + 1)>
+
+    let b0 = std::mem::blocks()
+    let mapped = xs->map<(p: (int, int)): int => p.0 + p.1>
+    let b1 = std::mem::blocks()
+
+    let kept = xs->filter<(p: (int, int)): bool => p.0 % 2 == 0>
+    let b2 = std::mem::blocks()
+
+    let total = xs->reduce<(acc: int, p: (int, int)): int => acc + p.0 + p.1, 0>
+    let b3 = std::mem::blocks()
+
+    xs->foreach<(p: (int, int)) => sync {}>
+    let b4 = std::mem::blocks()
+
+    println(len(mapped), b1.allocs - b0.allocs, len(kept), b2.allocs - b1.allocs)
+    println(total, b3.allocs - b2.allocs, b4.allocs - b3.allocs)
+    return 0
+}

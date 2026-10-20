@@ -209,7 +209,7 @@ template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Hos
             for (size_t c = 0; c < shape.collectionCount; ++c) {
                 const auto *arrayType = static_cast<const camel::core::type::ArrayType *>(
                     shape.valueType->typeAt(k + c));
-                auto *array = state->get<::Array *>(k + c);
+                auto *array = state->template get<::Array *>(k + c);
                 array->append(produced->get<slot_t>(k + c), arrayType);
             }
         }

@@ -53,22 +53,22 @@ inline runtime::DraftEdgeKind toDraftEdgeKind(LinkType type) {
 
 inline runtime::GCNodeKind nodeKindOf(node_handle_t node) {
     ASSERT(node != nullptr, "Draft node is null.");
-    return node->header.kind;
+    return node.draft->header(node.id)->kind;
 }
 
 inline camel::core::type::Type *nodeTypeOf(node_handle_t node) {
     ASSERT(node != nullptr, "Draft node is null.");
-    return node->header.dataType;
+    return node.draft->header(node.id)->dataType;
 }
 
 inline const runtime::DraftNodeHeader *nodeHeaderOf(node_handle_t node) {
     ASSERT(node != nullptr, "Draft node is null.");
-    return &node->header;
+    return node.draft->header(node.id);
 }
 
 inline runtime::GraphDraft *nodeDraftOf(node_handle_t node) {
     ASSERT(node != nullptr, "Draft node is null.");
-    return node->header.owner;
+    return node.draft;
 }
 
 inline DraftGraphBuilder *nodeGraphOf(node_handle_t node) {
@@ -79,35 +79,31 @@ inline DraftGraphBuilder *nodeGraphOf(node_handle_t node) {
 
 inline draft_node_ref_t nodeIdOf(node_handle_t node) {
     ASSERT(node != nullptr, "Draft node is null.");
-    return node->header.selfId;
+    return node.id;
 }
 
 inline std::span<const draft_node_ref_t> normInputsOf(node_handle_t node) {
-    return nodeDraftOf(node)->normInputsOf(node);
+    return nodeDraftOf(node)->normInputsOf(node.id);
 }
 
 inline std::span<const draft_node_ref_t> withInputsOf(node_handle_t node) {
-    return nodeDraftOf(node)->withInputsOf(node);
+    return nodeDraftOf(node)->withInputsOf(node.id);
 }
 
 inline std::span<const draft_node_ref_t> ctrlInputsOf(node_handle_t node) {
-    return nodeDraftOf(node)->ctrlInputsOf(node);
+    return nodeDraftOf(node)->ctrlInputsOf(node.id);
 }
 
 inline std::span<const draft_node_ref_t> normUsersOf(node_handle_t node) {
-    return nodeDraftOf(node)->normUsersOf(node);
+    return nodeDraftOf(node)->normUsersOf(node.id);
 }
 
 inline std::span<const draft_node_ref_t> withUsersOf(node_handle_t node) {
-    return nodeDraftOf(node)->withUsersOf(node);
+    return nodeDraftOf(node)->withUsersOf(node.id);
 }
 
 inline std::span<const draft_node_ref_t> ctrlUsersOf(node_handle_t node) {
-    return nodeDraftOf(node)->ctrlUsersOf(node);
-}
-
-inline std::string_view nodeDebugEntityIdOf(node_handle_t node) {
-    return node ? nodeGraphOf(node)->nodeDebugEntityId(node) : std::string_view{};
+    return nodeDraftOf(node)->ctrlUsersOf(node.id);
 }
 
 inline bool nodeIsKind(node_handle_t node, runtime::GCNodeKind kind) {

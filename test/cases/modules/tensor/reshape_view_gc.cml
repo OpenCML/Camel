@@ -1,5 +1,5 @@
 /**
- * reshape shares its input's buffer. The views here outlive every other
+ * reshape shares its input's block. The views here outlive every other
  * reference to their owners, and the loop runs collections (young-generation
  * copying and full marking) in between, so a view whose owner was freed or
  * moved without it would print different sums.

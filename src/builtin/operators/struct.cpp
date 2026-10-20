@@ -259,7 +259,7 @@ slot_t __copy_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // `xs->append<v>` on a value the compiler proved no one else can see (the loop-state rewrite,
 // Builder::markLoopStateInPlace): the same call, but the array may take the element in place
 // when it owns its storage (design principles 10.5). When it cannot - an array of references,
-// a view, a buffer someone else holds - it copies exactly like `append`, so the result is the
+// a view, a block someone else holds - it copies exactly like `append`, so the result is the
 // same either way.
 slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr        = norm.get<Array *>(0);

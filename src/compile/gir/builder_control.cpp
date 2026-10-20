@@ -65,6 +65,32 @@ Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &or
 
 namespace {
 
+/// The value a body hands on, read on the graph rather than by how the source spelled it.
+///
+/// A name is not a computation: `let r = (xs->append<7>, n + 1)` followed by `r` leaves the
+/// tuple's own FILL as the body's value, exactly as writing the tuple in place does, so a name
+/// needs no case of its own here. What a block can add around the value is an anchor: a GATE
+/// that orders the value after the block's effects forwards it unchanged (`sync { …; r }` ends
+/// in one), and the criterion is the value behind it. A CALL is not looked through: what a call
+/// returns is computed in another graph (a function's, or an arm graph of a branch), whose state
+/// this is not — a loop state is only written in place when the graph that returns it also
+/// builds it.
+node_handle_t loopStateValueOf(node_handle_t node) {
+    // A gate chain is at most the number of blocks the value passed through; a bound keeps a
+    // malformed cycle from looping forever.
+    for (size_t depth = 0; node != nullptr && depth < 16; ++depth) {
+        if (!nodeIsKind(node, runtime::GCNodeKind::Gate)) {
+            return node;
+        }
+        const auto inputs = normInputsOf(node);
+        if (inputs.size() != 1) {
+            return node; // a gate that waits on nothing has no value to forward
+        }
+        node = nodeDraftOf(node)->ref(inputs.front());
+    }
+    return node;
+}
+
 /// The exact value of a literal primitive datum: an integer or a real. A literal element
 /// (field) of a composite is converted from it, so that an integer is one rounding from the
 /// value written rather than the same double rounded again.
@@ -99,6 +125,19 @@ bool elementEntersIn(
     const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin,
     const literal::Value *written);
 
+/// The element `index` of the elements the GCT kept for a composite literal: its exact value
+/// (when it was a numeric literal) and where it was written. Null when none were kept.
+const GCT::Tree::LiteralElement *
+literalElementAt(const std::vector<GCT::Tree::LiteralElement> *written, size_t index) {
+    return written != nullptr && index < written->size() ? &(*written)[index] : nullptr;
+}
+
+/// The exact value an element was written as, or nullptr for a name, a computed element or a
+/// nested composite (which holds its own elements).
+const literal::Value *writtenValueOf(const GCT::Tree::LiteralElement *element) {
+    return element != nullptr && element->value.has_value() ? &*element->value : nullptr;
+}
+
 /// Whether the composite literal `data` can be given `type`: the walk of compositeDataInType,
 /// unchanged, for the positions a literal may enter (design principles 5.1). The two must agree;
 /// a literal this accepts is converted by compositeDataInType, which reports what does not fit.
@@ -122,11 +161,11 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
         const auto *written =
             origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
         for (size_t index = 0; index < array->raw().size(); ++index) {
-            const literal::Value *exact = nullptr;
-            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
-                exact = &*(*written)[index];
-            }
-            if (!elementEntersIn(array->raw()[index], elemType, origin, exact)) {
+            if (!elementEntersIn(
+                    array->raw()[index],
+                    elemType,
+                    origin,
+                    writtenValueOf(literalElementAt(written, index)))) {
                 return false;
             }
         }
@@ -147,12 +186,13 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
             if (!fieldIndex.has_value()) {
                 return false;
             }
-            const literal::Value *exact = nullptr;
-            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
-                exact = &*(*written)[index];
-            }
+            const GCT::Tree::LiteralElement *element = literalElementAt(written, index);
             ++index;
-            if (!elementEntersIn(value, structType->typeAt(*fieldIndex), origin, exact)) {
+            if (!elementEntersIn(
+                    value,
+                    structType->typeAt(*fieldIndex),
+                    origin,
+                    writtenValueOf(element))) {
                 return false;
             }
         }
@@ -231,7 +271,7 @@ node_handle_t Builder::compositeLiteralInType(
     // Only the constant the literal was lowered to: a value computed by the program is not a
     // literal, and takes no type from its position. A constant lives in a static slot, whose
     // index is negative (a runtime slot index is not).
-    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || node->header.dataIndex >= 0) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || nodeHeaderOf(node)->dataIndex >= 0) {
         return nullptr;
     }
     const data_ptr_t &data = origin->data();
@@ -265,7 +305,7 @@ bool Builder::compositeLiteralEntersIn(
     }
     // Only the constant the literal was lowered to, as in compositeLiteralInType: a value the
     // program computes is not a literal, and a runtime slot's value is not one either.
-    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || node->header.dataIndex >= 0) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || nodeHeaderOf(node)->dataIndex >= 0) {
         return false;
     }
     const data_ptr_t &data = origin->data();
@@ -306,12 +346,8 @@ data_ptr_t Builder::compositeDataInType(
         ArrayDataFactory factory;
         size_t index = 0;
         for (const auto &element : array->raw()) {
-            const literal::Value *exact = nullptr;
-            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
-                exact = &*(*written)[index];
-            }
-            ++index;
-            data_ptr_t converted = literalElementInType(element, elemType, origin, exact);
+            data_ptr_t converted =
+                literalElementInType(element, elemType, origin, literalElementAt(written, index++));
             if (converted == nullptr) {
                 return nullptr;
             }
@@ -335,13 +371,11 @@ data_ptr_t Builder::compositeDataInType(
             if (!fieldIndex.has_value()) {
                 return nullptr;
             }
-            const literal::Value *exact = nullptr;
-            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
-                exact = &*(*written)[index];
-            }
-            ++index;
-            data_ptr_t converted =
-                literalElementInType(value, structType->typeAt(*fieldIndex), origin, exact);
+            data_ptr_t converted = literalElementInType(
+                value,
+                structType->typeAt(*fieldIndex),
+                origin,
+                literalElementAt(written, index++));
             if (converted == nullptr) {
                 return nullptr;
             }
@@ -354,7 +388,7 @@ data_ptr_t Builder::compositeDataInType(
 
 data_ptr_t Builder::literalElementInType(
     const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin,
-    const literal::Value *written) {
+    const GCT::Tree::LiteralElement *written) {
     if (data == nullptr || type == nullptr || asTagged(type) != nullptr) {
         return nullptr;
     }
@@ -365,21 +399,29 @@ data_ptr_t Builder::literalElementInType(
         // A nested literal: an array in an array, a struct in an array, and so on.
         return compositeDataInType(data, type, origin);
     }
+    const literal::Value *exact = writtenValueOf(written);
     const std::optional<literal::Value> fallback =
-        written == nullptr ? exactValueOfData(data) : std::nullopt;
-    const literal::Value *value = written != nullptr ? written : fallback ? &*fallback : nullptr;
+        exact == nullptr ? exactValueOfData(data) : std::nullopt;
+    const literal::Value *value = exact != nullptr ? exact : fallback ? &*fallback : nullptr;
     if (value == nullptr || !isNumericType(type) || !isNumericType(data->type())) {
         // Not a numeric literal (a string, a bool): the type is not one it can be given by
         // taking the position's type, so the value is left as it is.
         return nullptr;
     }
+    // The element's own position and its source text, as in a declared position (design
+    // principles 5.1); the whole literal's position only when the GCT kept no element.
+    const bool ownPosition =
+        written != nullptr && written->origin != camel::source::kInvalidOriginId;
+    const camel::source::origin_id_t where = ownPosition ? written->origin : origin->origin();
+    const camel::source::origin_id_t writtenAt =
+        ownPosition ? written->origin : camel::source::kInvalidOriginId;
     if (!literal::kindEnters(*value, type)) {
-        rejectLiteralData(data, type, origin->origin());
+        rejectLiteralData(data, type, where, nullptr, writtenAt);
     }
     if (const auto converted = value->toData(type); converted.has_value()) {
         return *converted;
     }
-    rejectLiteralData(data, type, origin->origin());
+    rejectLiteralData(data, type, where, nullptr, writtenAt);
 }
 
 void Builder::coerceArmExit(
@@ -391,7 +433,7 @@ void Builder::coerceArmExit(
     // The nodes are added to the arm's own graph; no name is looked up, so the scopes of the
     // position the branch stands at do no harm.
     const compile_graph_ptr_t outer = std::exchange(currGraph_, arm);
-    node_handle_t output            = arm->draft().node(arm->draft().exitNode());
+    node_handle_t output            = arm->draft().ref(arm->draft().exitNode());
     node_handle_t coerced           = coerceTo(output, target, origin);
     ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
     if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
@@ -604,7 +646,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         node_handle_t result = visitBodyNode(exec);
         ASSERT(result != nullptr, "The call of '?->' produced no node.");
         if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-            result = nodeDraftOf(result)->node(normInputsOf(result).front());
+            result = nodeDraftOf(result)->ref(normInputsOf(result).front());
         }
         Type *type = valueTypeOf(nodeTypeOf(result));
         if (asFallible(type) != nullptr) {
@@ -1475,7 +1517,7 @@ void Builder::buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_p
     bodyStates_[graph.get()] = BodyState::Open;
     try {
         for (draft_node_ref_t portId : graph->draft().normPorts()) {
-            node_handle_t port = graph->draft().node(portId);
+            node_handle_t port = graph->draft().ref(portId);
             insertNode(graph->nodePortName(port), port);
             if (recorder_) {
                 recordDeclaration(graph->nodePortName(port), port, exec);
@@ -1842,7 +1884,7 @@ void Builder::markLoopStateInPlace(
         draft.returnNode() == runtime::kInvalidNodeRef) {
         return;
     }
-    node_handle_t returned = draft.node(draft.returnNode());
+    node_handle_t returned = loopStateValueOf(draft.ref(draft.returnNode()));
     if (returned == nullptr) {
         return;
     }
@@ -1879,7 +1921,7 @@ void Builder::markLoopStateInPlace(
         if (slots[i] >= stateCount) {
             return;
         }
-        next[slots[i]] = nodeDraftOf(returned)->node(withIns[i]);
+        next[slots[i]] = nodeDraftOf(returned)->ref(withIns[i]);
     }
     for (size_t j = 0; j < stateCount; ++j) {
         markLoopStateInPlaceOne(bodyGraph, loop, initial, j, next[j]);
@@ -1913,7 +1955,7 @@ void Builder::markLoopStateInPlaceOne(
     if (normIns.size() != 1) {
         return;
     }
-    node_handle_t port = nodeDraftOf(next)->node(normIns.front());
+    node_handle_t port = nodeDraftOf(next)->ref(normIns.front());
     if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(index)) {
         return;
     }
@@ -1925,7 +1967,7 @@ void Builder::markLoopStateInPlaceOne(
     if (withIns.size() != 1) {
         return;
     }
-    Type *valueType = nodeTypeOf(nodeDraftOf(next)->node(withIns.front()));
+    Type *valueType = nodeTypeOf(nodeDraftOf(next)->ref(withIns.front()));
     if (valueType == nullptr) {
         return;
     }
@@ -1972,7 +2014,7 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
     // GATE is the output anchor, the value it forwards is what the graph returns.
     node_handle_t value = result;
     if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-        value = nodeDraftOf(result)->node(normInputsOf(result).front());
+        value = nodeDraftOf(result)->ref(normInputsOf(result).front());
     }
     checkDeclaredReturn(graph, nodeTypeOf(value), 0);
     setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(value), nodeTypeOf(value));

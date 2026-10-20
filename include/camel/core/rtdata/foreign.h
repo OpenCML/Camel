@@ -159,7 +159,7 @@ void resetForeignResourceStatsForTests();
 /// Releases the resources of the wrappers the collector found dead. The collector only
 /// queues them (ForeignResourceObject::finalize runs inside the collection, with the allocator
 /// locked); the allocator runs the queue at the end of the safepoint, after it has unlocked, on
-/// the thread that reached the safepoint (mm/deferred.h; numeric array buffers use the same
+/// the thread that reached the safepoint (mm/deferred.h; data blocks use the same
 /// queue). A deleter therefore runs with no runtime lock held: it may take locks of its own
 /// (the Python GIL) without ordering them against the allocator's.
 

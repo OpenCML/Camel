@@ -249,7 +249,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
     case runtime::GCNodeKind::Call: {
         const auto callee = withInputsOf(node);
-        return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->node(callee[0])));
+        return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->ref(callee[0])));
     }
     case runtime::GCNodeKind::Loop: {
         // Each round calls the condition and the body graph.
@@ -259,7 +259,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
     case runtime::GCNodeKind::Join: {
         for (draft_node_ref_t arm : withInputsOf(node)) {
-            node_handle_t armNode = nodeDraftOf(node)->node(arm);
+            node_handle_t armNode = nodeDraftOf(node)->ref(arm);
             if (nodeIsKind(armNode, runtime::GCNodeKind::Func)) {
                 const auto callee = calleeOf(armNode);
                 if (callee != nullptr && effectfulGraphs_.contains(callee.get())) {
@@ -323,7 +323,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     }
     std::vector<draft_node_ref_t> dropped;
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!draft.alive(id) || !isEffectNode(graph.get(), draft.node(id))) {
+        if (!draft.alive(id) || !isEffectNode(graph.get(), draft.ref(id))) {
             continue;
         }
         if (needed.contains(id)) {
@@ -367,7 +367,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         if (feedsDroppedEffect(id)) {
             continue;
         }
-        node_handle_t node = draft.node(id);
+        node_handle_t node = draft.ref(id);
         std::string subject;
         switch (nodeKindOf(node)) {
         case runtime::GCNodeKind::Oper: {
@@ -388,7 +388,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             subject = "The call";
             break;
         }
-        camel::source::origin_id_t origin = node->header.origin;
+        camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
         if (origin == camel::source::kInvalidOriginId && sourceContext) {
             origin = sourceContext->debugMap().graphOrigin(graph->stableId());
         }
@@ -405,7 +405,7 @@ void Builder::reportUnusedFallibleValues() {
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
     const auto warn =
         [&](const compile_graph_ptr_t &graph, node_handle_t node, Type *type, const char *remark) {
-            camel::source::origin_id_t origin = node->header.origin;
+            camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
             if (origin == camel::source::kInvalidOriginId && sourceContext) {
                 origin = sourceContext->debugMap().graphOrigin(graph->stableId());
             }
@@ -445,7 +445,7 @@ void Builder::reportUnusedFallibleValues() {
             return id == draft.exitNode() || id == draft.outputNode() || id == draft.returnNode();
         };
         if (graph.get() == undeclaredMain && draft.returnNode() != runtime::kInvalidNodeRef) {
-            node_handle_t value = draft.node(draft.returnNode());
+            node_handle_t value = draft.ref(draft.returnNode());
             if (TupleType *type = fallibleTypeOf(graph, value);
                 type != nullptr && !discardedValues_.contains(value)) {
                 warn(
@@ -460,7 +460,7 @@ void Builder::reportUnusedFallibleValues() {
             if (!draft.alive(id)) {
                 continue;
             }
-            node_handle_t node = draft.node(id);
+            node_handle_t node = draft.ref(id);
             switch (nodeKindOf(node)) {
             case runtime::GCNodeKind::Oper:
             case runtime::GCNodeKind::Func:
@@ -476,7 +476,7 @@ void Builder::reportUnusedFallibleValues() {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
                 // dropped where the arm ends.
                 for (draft_node_ref_t armId : draft.withInputsOf(id)) {
-                    node_handle_t arm   = draft.node(armId);
+                    node_handle_t arm   = draft.ref(armId);
                     const auto armGraph = nodeIsKind(arm, runtime::GCNodeKind::Func)
                                               ? graph->funcTarget(arm)
                                               : nullptr;
@@ -484,7 +484,7 @@ void Builder::reportUnusedFallibleValues() {
                         armGraph->draft().returnNode() == runtime::kInvalidNodeRef) {
                         continue;
                     }
-                    node_handle_t value = armGraph->draft().node(armGraph->draft().returnNode());
+                    node_handle_t value = armGraph->draft().ref(armGraph->draft().returnNode());
                     if (TupleType *type = fallibleTypeOf(armGraph, value);
                         type != nullptr && !discardedValues_.contains(value)) {
                         warn(armGraph, value, type, "");
@@ -600,7 +600,7 @@ void Builder::markNonRetainingReads() {
         bool found = false;
         for (draft_node_ref_t id = 0; !found && id < draft->nodeSlotCount(); ++id) {
             if (draft->alive(id)) {
-                node_handle_t node = draft->node(id);
+                node_handle_t node = draft->ref(id);
                 found              = mayWrite(node) && !chainedNodes_.contains(node);
             }
         }
@@ -624,7 +624,7 @@ void Builder::markNonRetainingReads() {
         size_t users              = 0;
         for (auto inputs : {normUsersOf(read), withUsersOf(read)}) {
             for (draft_node_ref_t userId : inputs) {
-                node_handle_t user = draft->node(userId);
+                node_handle_t user = draft->ref(userId);
                 ++users;
                 lastUser = std::max(lastUser, userId);
                 if (!nodeIsKind(user, runtime::GCNodeKind::Oper) || !chainedNodes_.contains(user) ||
@@ -638,12 +638,12 @@ void Builder::markNonRetainingReads() {
             continue;
         }
         for (draft_node_ref_t between = id + 1; !keeps && between < lastUser; ++between) {
-            keeps = draft->alive(between) && mayWrite(draft->node(between)); // condition 4
+            keeps = draft->alive(between) && mayWrite(draft->ref(between)); // condition 4
         }
         if (keeps || hasUnchainedWriter(draft)) {
             continue;
         }
-        node_handle_t cell = draft->node(normInputsOf(read).front());
+        node_handle_t cell = draft->ref(normInputsOf(read).front());
         const auto peek =
             peekGroup->operGroup()->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
         ASSERT(peek.has_value(), "__var_peek__ rejected a variable.");
@@ -713,7 +713,7 @@ void Builder::rejectLiteralConversion(
     const std::string &group, FunctionType *funcType, const std::vector<Argument> &operands,
     const GCT::node_ptr_t &call) {
     static const std::unordered_set<std::string> kConversions =
-        {"int", "i64", "i32", "float", "f64", "f32"};
+        {"int", "i64", "i32", "float", "f64", "f32", "c64", "c128"};
     if (!kConversions.contains(group) || operands.size() != 1 || funcType == nullptr ||
         !funcType->hasExitType() || operands[0].expr->type() != GCT::NodeKind::DATA) {
         return;
@@ -766,6 +766,36 @@ void Builder::rejectLiteralConversion(
         operands.empty() ? nullptr : operands[0].expr);
 }
 
+void Builder::rejectAmbiguousCall(
+    const std::string &name, const std::string &argumentTypes,
+    const std::vector<std::string> &candidates, const GCT::node_ptr_t &origin) {
+    // The one report for several candidates in the pass a call is making (design principles
+    // 5.1, H27e): an ordinary call, an operator call and a partial application used as a
+    // value all come here. Listing the candidates in declaration order lets a reader see
+    // both the one written here and the one that makes the choice ambiguous; the help says
+    // how to choose (annotate the literal, add a cast).
+    ASSERT(!candidates.empty(), "An ambiguity has candidates.");
+    diags_->of(SemanticDiag::AmbiguousCall)
+        .atOrigin(origin->origin())
+        .commit(
+            name,
+            argumentTypes,
+            strutil::join(candidates, "; ", [](const std::string &s) { return s; }));
+    throw BuildAbortException();
+}
+
+void Builder::rejectAmbiguousCall(
+    const std::string &name, const std::string &argumentTypes,
+    const std::vector<FunctionType *> &candidates, const GCT::node_ptr_t &origin) {
+    std::vector<std::string> signatures;
+    signatures.reserve(candidates.size());
+    for (FunctionType *candidate : candidates) {
+        ASSERT(candidate != nullptr, "An ambiguity lists function types.");
+        signatures.push_back(candidate->toString());
+    }
+    rejectAmbiguousCall(name, argumentTypes, signatures, origin);
+}
+
 void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin) {
     const auto boundIt = boundWithArgs_.find(node);
     if (boundIt == boundWithArgs_.end()) {
@@ -778,6 +808,17 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     if (const auto callee = boundWithCallee_.find(node);
         callee != boundWithCallee_.end() && callee->second->type() == GCT::NodeKind::DREF) {
         name = callee->second->name();
+    }
+    // Several candidates in the pass the binding could use: the same ambiguity an ordinary
+    // call reports, with the same candidate list (H27e). No position chose one (`expected`),
+    // which is why the binding is being refused now.
+    if (const auto ambiguous = ambiguousBindings_.find(node);
+        ambiguous != ambiguousBindings_.end()) {
+        std::vector<FunctionType *> candidates = std::move(ambiguous->second);
+        ambiguousBindings_.erase(ambiguous);
+        boundWithArgs_.erase(node);
+        boundWithCallee_.erase(node);
+        rejectAmbiguousCall(name, given, candidates, origin);
     }
     std::string why;
     if (genericDrefs_.contains(node)) {
@@ -907,6 +948,29 @@ bool isIntegerType(Type *type) {
            (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64);
 }
 
+/// The source text the origin covers (`1e40`), when it is short and on one line; empty
+/// otherwise. An element of a composite literal is quoted as it was written, not as the value
+/// it was lowered to (design principles 5.1).
+std::string textAtOrigin(
+    const camel::source::source_context_ptr_t &sourceContext, camel::source::origin_id_t origin) {
+    const auto *record = sourceContext != nullptr && origin != camel::source::kInvalidOriginId
+                             ? sourceContext->origin(origin)
+                             : nullptr;
+    const auto *span   = record != nullptr ? sourceContext->span(record->primarySpan) : nullptr;
+    const auto *file =
+        span != nullptr && span->valid() ? sourceContext->sourceFile(span->fileId) : nullptr;
+    if (file == nullptr || span->endOffset < span->startOffset ||
+        span->endOffset > file->content.size()) {
+        return {};
+    }
+    std::string text = file->content.substr(span->startOffset, span->endOffset - span->startOffset);
+    if (text.empty() || text.size() > 60 || text.find('\n') != std::string::npos ||
+        text.find('\r') != std::string::npos) {
+        return {};
+    }
+    return text;
+}
+
 /// Whether a numeric literal datum is a whole number (`1.0` is, `1.9` is not): put into an
 /// integer type it either fits or is out of range; a fraction would be truncated.
 bool isWholeNumber(const data_ptr_t &data) {
@@ -951,7 +1015,7 @@ void Builder::rejectLiteralValue(
 
 void Builder::rejectLiteralData(
     const data_ptr_t &data, Type *type, camel::source::origin_id_t where,
-    const GCT::node_ptr_t &written) {
+    const GCT::node_ptr_t &written, camel::source::origin_id_t writtenAt) {
     std::string reason;
     if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
         reason = "out of range (" + limits + ")";
@@ -965,8 +1029,12 @@ void Builder::rejectLiteralData(
     } else {
         reason = "the value cannot become that type";
     }
-    // The literal as it is written, when the expression it came from is at hand.
+    // The literal as it is written, when the expression it came from is at hand; an element
+    // of a composite literal is quoted from its own position.
     std::string text = sourceTextOf(written);
+    if (text.empty() && writtenAt != camel::source::kInvalidOriginId) {
+        text = textAtOrigin(context_ != nullptr ? context_->sourceContext() : nullptr, writtenAt);
+    }
     if (text.empty()) {
         text = literalValueText(data);
     }

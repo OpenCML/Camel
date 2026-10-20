@@ -27,8 +27,4 @@ namespace debugger {
 std::pair<std::string, std::string>
 getGirJsonFromCompileGraph(const void *rootGraph, const std::string &graphId);
 
-std::string getDebugNodeIdFromCompileNode(const void *node);
-
-std::string getDebugGraphIdFromCompileNode(const void *node);
-
 } // namespace debugger

@@ -668,6 +668,9 @@ struct Value::Rep {
     /// A zero written with a minus (`-0.0`): the value is zero, and it stays a negative zero
     /// when it becomes a float, so that `1.0 / -0.0` is -infinity as it reads.
     bool negativeZero = false;
+    /// The imaginary part (zero for an Integer or Float value).
+    Rational imaginary{Rational{}};
+    bool imaginaryNegativeZero = false;
 };
 
 Value::Value() : kind_(Kind::Integer), rep_(std::make_shared<const Rep>(Rep{Rational{}})) {}
@@ -711,6 +714,32 @@ Value Value::fromDouble(double value) {
     return Value(
         Kind::Float,
         std::make_shared<const Rep>(Rep{std::move(rational), negative && value == 0.0}));
+}
+
+std::optional<Value> Value::fromImaginaryText(std::string_view text) {
+    bool negative = false;
+    if (!text.empty() && (text.front() == '+' || text.front() == '-')) {
+        negative = text.front() == '-';
+        text.remove_prefix(1);
+    }
+    if (text.empty() || text.back() != 'i') {
+        return std::nullopt;
+    }
+    text.remove_suffix(1);
+    std::optional<Value> body = fromRealText(negative ? "-" + std::string(text) : text);
+    if (!body.has_value()) {
+        return std::nullopt;
+    }
+    Rep rep{
+        Rational{},
+        false,
+        body->rep_->rational,
+        body->rep_->negativeZero || (negative && body->rep_->rational.num.isZero())};
+    return Value(Kind::Imaginary, std::make_shared<const Rep>(std::move(rep)));
+}
+
+bool Value::hasImaginaryPart() const {
+    return kind_ == Kind::Imaginary || kind_ == Kind::Complex;
 }
 
 std::optional<Value> Value::fromIntegerText(std::string_view text) {
@@ -828,6 +857,9 @@ bool Value::isZero() const { return rep_->rational.num.isZero(); }
 bool Value::isNegative() const { return rep_->rational.num.isNegative(); }
 
 std::string Value::toFloatText() const {
+    if (hasImaginaryPart()) {
+        return toString();
+    }
     if (rep_->rational.num.isZero() && rep_->negativeZero) {
         return "-0";
     }
@@ -837,20 +869,42 @@ std::string Value::toFloatText() const {
     return approximateDecimal(rep_->rational, 50);
 }
 
-std::string Value::toString() const {
-    if (rep_->rational.num.isZero() && rep_->negativeZero) {
+namespace {
+
+/// The text of one part of an exact value (a complex number writes two).
+std::string rationalText(const Rational &value, bool negativeZero) {
+    if (value.num.isZero() && negativeZero) {
         return "-0";
     }
     std::string text;
-    if (const auto exact = exactDecimal(rep_->rational); exact.has_value()) {
+    if (const auto exact = exactDecimal(value); exact.has_value()) {
         text = *exact;
     } else {
-        text = approximateDecimal(rep_->rational, 17);
+        text = approximateDecimal(value, 17);
     }
     if (text.size() > 40 && text.find('/') == std::string::npos) {
         return scientific(text);
     }
     return text;
+}
+
+} // namespace
+
+std::string Value::toString() const {
+    if (hasImaginaryPart()) {
+        // Design principles 5.1 writes a complex literal as `3+4i`: both parts, the sign of
+        // the imaginary one, its magnitude, then `i`.
+        const bool imaginaryNegative =
+            rep_->imaginary.num.isNegative() ||
+            (rep_->imaginary.num.isZero() && rep_->imaginaryNegativeZero);
+        Rational magnitude = rep_->imaginary;
+        if (imaginaryNegative) {
+            magnitude.num = magnitude.num.negated();
+        }
+        return rationalText(rep_->rational, rep_->negativeZero) +
+               (imaginaryNegative ? "-" : "+") + rationalText(magnitude, false) + "i";
+    }
+    return rationalText(rep_->rational, rep_->negativeZero);
 }
 
 std::optional<std::int64_t> Value::asInt64() const {
@@ -904,6 +958,28 @@ std::optional<camel::core::data::data_ptr_t> Value::toData(camel::core::type::Ty
     if (type == nullptr) {
         return std::nullopt;
     }
+    if (camel::core::type::isComplex(type->code())) {
+        const bool single = type->code() == TypeCode::Complex64;
+        if (single) {
+            const auto real      = toFloating<float>(rep_->rational, rep_->negativeZero);
+            const auto imaginary = toFloating<float>(rep_->imaginary, rep_->imaginaryNegativeZero);
+            if (!real.has_value() || !imaginary.has_value()) {
+                return std::nullopt;
+            }
+            return std::make_shared<camel::core::data::ComplexData>(
+                static_cast<double>(*real), static_cast<double>(*imaginary), type);
+        }
+        const auto real      = toFloating<double>(rep_->rational, rep_->negativeZero);
+        const auto imaginary = toFloating<double>(rep_->imaginary, rep_->imaginaryNegativeZero);
+        if (!real.has_value() || !imaginary.has_value()) {
+            return std::nullopt;
+        }
+        return std::make_shared<camel::core::data::ComplexData>(*real, *imaginary, type);
+    }
+    if (hasImaginaryPart()) {
+        // A complex value does not become a real one by itself.
+        return std::nullopt;
+    }
     switch (type->code()) {
     case TypeCode::Int32: {
         const auto value = asInt64();
@@ -939,52 +1015,108 @@ std::optional<camel::core::data::data_ptr_t> Value::toData(camel::core::type::Ty
     }
 }
 
+namespace {
+
+bool hasImaginary(const Value &value) { return value.hasImaginaryPart(); }
+
+/// The kind of a folded operation: complex when either operand has an imaginary part,
+/// otherwise integer only when both operands are integers.
+Kind foldedKind(const Value &left, const Value &right, bool complex) {
+    if (complex) {
+        return Kind::Complex;
+    }
+    return left.kind() == Kind::Integer && right.kind() == Kind::Integer ? Kind::Integer
+                                                                        : Kind::Float;
+}
+
+std::shared_ptr<const Value::Rep> complexRep(Rational real, Rational imaginary) {
+    return std::make_shared<const Value::Rep>(
+        Value::Rep{std::move(real), false, std::move(imaginary), false});
+}
+
+} // namespace
+
 std::optional<Value> Value::add(const Value &left, const Value &right) {
-    const Kind kind =
-        left.kind_ == Kind::Integer && right.kind_ == Kind::Integer ? Kind::Integer : Kind::Float;
-    return Value(
-        kind,
-        std::make_shared<const Rep>(Rep{rationalAdd(left.rep_->rational, right.rep_->rational)}));
+    const bool complex = hasImaginary(left) || hasImaginary(right);
+    Rational real = rationalAdd(left.rep_->rational, right.rep_->rational);
+    Rational imaginary = rationalAdd(left.rep_->imaginary, right.rep_->imaginary);
+    if (!complex) {
+        return Value(foldedKind(left, right, false), std::make_shared<const Rep>(Rep{real}));
+    }
+    return Value(Kind::Complex, complexRep(std::move(real), std::move(imaginary)));
 }
 
 std::optional<Value> Value::sub(const Value &left, const Value &right) {
-    const Kind kind =
-        left.kind_ == Kind::Integer && right.kind_ == Kind::Integer ? Kind::Integer : Kind::Float;
-    return Value(
-        kind,
-        std::make_shared<const Rep>(Rep{rationalSub(left.rep_->rational, right.rep_->rational)}));
+    const bool complex = hasImaginary(left) || hasImaginary(right);
+    Rational real = rationalSub(left.rep_->rational, right.rep_->rational);
+    Rational imaginary = rationalSub(left.rep_->imaginary, right.rep_->imaginary);
+    if (!complex) {
+        return Value(foldedKind(left, right, false), std::make_shared<const Rep>(Rep{real}));
+    }
+    return Value(Kind::Complex, complexRep(std::move(real), std::move(imaginary)));
 }
 
 std::optional<Value> Value::mul(const Value &left, const Value &right) {
     const Rational &a = left.rep_->rational;
     const Rational &b = right.rep_->rational;
-    if (a.num.bits() + b.num.bits() > kMaxBits) {
+    const Rational &c = left.rep_->imaginary;
+    const Rational &d = right.rep_->imaginary;
+    if (a.num.bits() + b.num.bits() > kMaxBits || c.num.bits() + d.num.bits() > kMaxBits) {
         return std::nullopt;
     }
-    const Kind kind =
-        left.kind_ == Kind::Integer && right.kind_ == Kind::Integer ? Kind::Integer : Kind::Float;
-    return Value(kind, std::make_shared<const Rep>(Rep{rationalMul(a, b)}));
+    const bool complex = hasImaginary(left) || hasImaginary(right);
+    if (!complex) {
+        return Value(
+            foldedKind(left, right, false),
+            std::make_shared<const Rep>(Rep{rationalMul(a, b)}));
+    }
+    // (a + ci)(b + di) = (ab - cd) + (ad + cb)i, where a, b are the real parts and c, d the
+    // imaginary parts.
+    Rational real      = rationalSub(rationalMul(a, b), rationalMul(c, d));
+    Rational imaginary = rationalAdd(rationalMul(a, d), rationalMul(c, b));
+    return Value(Kind::Complex, complexRep(std::move(real), std::move(imaginary)));
 }
 
 std::optional<Value> Value::div(const Value &left, const Value &right) {
     const Rational &a = left.rep_->rational;
     const Rational &b = right.rep_->rational;
-    if (b.num.isZero()) {
+    const Rational &c = left.rep_->imaginary;
+    const Rational &d = right.rep_->imaginary;
+    const bool complex = hasImaginary(left) || hasImaginary(right);
+    if (!complex) {
+        if (b.num.isZero()) {
+            return std::nullopt;
+        }
+        if (left.kind_ == Kind::Integer && right.kind_ == Kind::Integer) {
+            return Value(
+                Kind::Integer,
+                std::make_shared<const Rep>(Rep{a.num.divMod(b.num).first, BigInt(1)}));
+        }
+        const auto quotient = rationalDiv(a, b);
+        if (!quotient.has_value()) {
+            return std::nullopt;
+        }
+        return Value(Kind::Float, std::make_shared<const Rep>(Rep{*quotient}));
+    }
+    // (a + ci) / (b + di) = ((ab + cd) + (cb - ad)i) / (b^2 + d^2)
+    const Rational denominator = rationalAdd(rationalMul(b, b), rationalMul(d, d));
+    if (denominator.num.isZero()) {
         return std::nullopt;
     }
-    if (left.kind_ == Kind::Integer && right.kind_ == Kind::Integer) {
-        return Value(
-            Kind::Integer,
-            std::make_shared<const Rep>(Rep{a.num.divMod(b.num).first, BigInt(1)}));
-    }
-    const auto quotient = rationalDiv(a, b);
-    if (!quotient.has_value()) {
+    const auto real =
+        rationalDiv(rationalAdd(rationalMul(a, b), rationalMul(c, d)), denominator);
+    const auto imaginary =
+        rationalDiv(rationalSub(rationalMul(c, b), rationalMul(a, d)), denominator);
+    if (!real.has_value() || !imaginary.has_value()) {
         return std::nullopt;
     }
-    return Value(Kind::Float, std::make_shared<const Rep>(Rep{*quotient}));
+    return Value(Kind::Complex, complexRep(std::move(*real), std::move(*imaginary)));
 }
 
 std::optional<Value> Value::mod(const Value &left, const Value &right) {
+    if (left.hasImaginaryPart() || right.hasImaginaryPart()) {
+        return std::nullopt;
+    }
     if (left.kind_ != Kind::Integer || right.kind_ != Kind::Integer) {
         return std::nullopt;
     }
@@ -1014,6 +1146,11 @@ std::optional<std::uint64_t> integerExponent(const Rational &value) {
 } // namespace
 
 std::optional<Value> Value::pow(const Value &base, const Value &exponent) {
+    if (base.hasImaginaryPart() || exponent.hasImaginaryPart()) {
+        // A complex power is not folded here: it is a math-module operation, not a literal
+        // operator (the language has no complex `**`).
+        return std::nullopt;
+    }
     const Rational &b = base.rep_->rational;
     const Rational &e = exponent.rep_->rational;
     const auto power  = integerExponent(e);
@@ -1037,6 +1174,26 @@ std::optional<Value> Value::pow(const Value &base, const Value &exponent) {
 }
 
 std::optional<Value> Value::negate(const Value &value) {
+    if (value.hasImaginaryPart()) {
+        Rational real = value.rep_->rational;
+        Rational imaginary = value.rep_->imaginary;
+        bool imaginaryNegativeZero = value.rep_->imaginaryNegativeZero;
+        if (imaginary.num.isZero()) {
+            imaginaryNegativeZero = !imaginaryNegativeZero;
+        } else {
+            imaginary.num = imaginary.num.negated();
+        }
+        bool realNegativeZero = value.rep_->negativeZero;
+        if (real.num.isZero()) {
+            realNegativeZero = !realNegativeZero;
+        } else {
+            real.num = real.num.negated();
+        }
+        return Value(
+            value.kind_,
+            std::make_shared<const Rep>(Rep{
+                std::move(real), realNegativeZero, std::move(imaginary), imaginaryNegativeZero}));
+    }
     Rational result = value.rep_->rational;
     if (result.num.isZero()) {
         // `-0.0` keeps the sign it was written with (the parser folds the minus into the
@@ -1048,12 +1205,31 @@ std::optional<Value> Value::negate(const Value &value) {
 }
 
 int Value::compare(const Value &other) const {
+    if (hasImaginaryPart() || other.hasImaginaryPart()) {
+        // Equality is the only comparison a complex number has; the lexicographic order here
+        // exists so that `==` and `!=` fold. `foldedComparison` does not fold `<` and friends
+        // on an imaginary value.
+        const int real = rationalCompare(rep_->rational, other.rep_->rational);
+        if (real != 0) {
+            return real;
+        }
+        return rationalCompare(rep_->imaginary, other.rep_->imaginary);
+    }
     return rationalCompare(rep_->rational, other.rep_->rational);
 }
 
 bool kindEnters(const Value &value, camel::core::type::Type *type) {
     using camel::core::type::TypeCode;
-    if (type == nullptr || !type->isPrimitive()) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (camel::core::type::isComplex(type->code())) {
+        return true;
+    }
+    if (value.hasImaginaryPart()) {
+        return false;
+    }
+    if (!type->isPrimitive()) {
         return false;
     }
     switch (type->code()) {
@@ -1084,6 +1260,10 @@ std::string rangeText(camel::core::type::Type *type) {
         return "at most about 3.4e38 in magnitude";
     case TypeCode::Float64:
         return "at most about 1.8e308 in magnitude";
+    case TypeCode::Complex64:
+        return "each part at most about 3.4e38 in magnitude";
+    case TypeCode::Complex128:
+        return "each part at most about 1.8e308 in magnitude";
     default:
         return {};
     }

@@ -49,7 +49,7 @@ using Type         = camel::core::type::Type;
 using FunctionType = camel::core::type::FunctionType;
 
 using compile_graph_ptr_t   = std::shared_ptr<DraftGraphBuilder>;
-using node_handle_t         = draft_node_t *;
+using node_handle_t         = camel::runtime::DraftNodeRef;
 using node_scope_t          = Scope<std::string, node_handle_t>;
 using node_scope_ptr_t      = std::shared_ptr<node_scope_t>;
 using graph_set_t           = std::vector<compile_graph_ptr_t>;
@@ -458,6 +458,12 @@ class Builder {
     // The callee expression of such a binding, for the binding used as a value
     // (partialApplicationOf builds the call from it).
     std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithCallee_;
+    // The candidates of such a binding when the pass being used has several and the position
+    // has not chosen one (H27e). The ambiguity is reported when the binding is refused for
+    // good (rejectUnappliedBinding): visiting a value first must not preempt the position
+    // that may still say which function is meant (`apply(scale<2>, 1.5)`).
+    std::unordered_map<node_handle_t, std::vector<camel::core::type::FunctionType *>>
+        ambiguousBindings_;
     // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
     // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
     // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`
@@ -490,10 +496,13 @@ class Builder {
         const GCT::node_ptr_t &expr);
     // The same, for a literal whose value is the data `data` (a written literal the GCT
     // converted or kept): reported at `where` and aborted. `written` is the expression the
-    // literal was written as, when it is at hand (its source text is quoted).
+    // literal was written as, when it is at hand (its source text is quoted); `writtenAt` is
+    // the element's own position, for an element of a composite literal whose GCT entry kept
+    // it (the text quoted is then the element as written).
     [[noreturn]] void rejectLiteralData(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
-        camel::source::origin_id_t where, const GCT::node_ptr_t &written = nullptr);
+        camel::source::origin_id_t where, const GCT::node_ptr_t &written = nullptr,
+        camel::source::origin_id_t writtenAt = camel::source::kInvalidOriginId);
 
     // ---- The value of a body (design principles 5.1: a return position) ----
     // The last statement of a body is the value the body hands on, so it is a position with an
@@ -732,9 +741,8 @@ class Builder {
                         os << "<invalid>";
                         return;
                     }
-                    auto *graph = DraftGraphBuilder::fromDraft(value->header.owner);
-                    os << (graph ? graph->name() : std::string{"<detached>"}) << "#"
-                       << value->header.selfId;
+                    auto *graph = DraftGraphBuilder::fromDraft(value.draft);
+                    os << (graph ? graph->name() : std::string{"<detached>"}) << "#" << value.id;
                 });
             CAMEL_LOG_DEBUG_S("GIR Builder", "Accessing node '{}' from scope {}", name, ss.str());
         });
@@ -853,6 +861,22 @@ class Builder {
     /// application could be made of (PartialApplicationRefused): the binding is never
     /// dropped without a word.
     void rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin);
+    /// An error at `origin` when a call has several candidates in the pass it is making:
+    /// the exact matches when there are any, otherwise the functions a literal enters
+    /// (design principles 5.1, H27e). An ordinary call, an operator call and a partial
+    /// application used as a value all report through this one, so they cannot drift.
+    /// Declaration order never settles the choice; the candidates are listed and the help
+    /// says how to choose one. Throws BuildAbortException.
+    void rejectAmbiguousCall(
+        const std::string &name, const std::string &argumentTypes,
+        const std::vector<std::string> &candidates, const GCT::node_ptr_t &origin);
+    /// The same for candidates that are function types: their signatures are listed in the
+    /// order they were written, which is all an ordinary call and a partial application
+    /// have to show.
+    void rejectAmbiguousCall(
+        const std::string &name, const std::string &argumentTypes,
+        const std::vector<camel::core::type::FunctionType *> &candidates,
+        const GCT::node_ptr_t &origin);
     // The functions named `name` when `decorated` is one of several of that name (the set a
     // call chooses from); null when the decorated function is the only one.
     graph_set_ptr_t
@@ -1109,7 +1133,7 @@ class Builder {
     /// The program's overload a call of an operator takes (an instance for a generic one), or
     /// nullptr when the call is the built-in group's to resolve (no overload of the program
     /// accepts the arguments; then the group reports what does not fit). Reports
-    /// AmbiguousOperatorCall when more than one overload, built-in ones included, accepts them.
+    /// AmbiguousCall when more than one overload, built-in ones included, accepts them.
     compile_graph_ptr_t chooseOperatorOverload(
         const OperatorOverloads &set, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
@@ -1244,13 +1268,14 @@ class Builder {
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
         const GCT::node_ptr_t &origin);
     /// One element (field) of a composite literal as a value of `type`: the value itself when
-    /// the type accepts it, the exact conversion when it is a literal (`written` is the value
-    /// it was written as, when known), nullptr for a type a literal cannot be given this way
-    /// (`T?` / `T!`, a shape that does not match).
+    /// the type accepts it, the exact conversion when it is a literal (`written` is the
+    /// element as it was written, when the GCT kept it: its value and its position), nullptr
+    /// for a type a literal cannot be given this way (`T?` / `T!`, a shape that does not
+    /// match). A value the type cannot hold is reported at the element's own position,
+    /// quoting it as written.
     camel::core::data::data_ptr_t literalElementInType(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
-        const GCT::node_ptr_t &origin,
-        const camel::compile::literal::Value *written = nullptr);
+        const GCT::node_ptr_t &origin, const GCT::Tree::LiteralElement *written = nullptr);
     // ---- Literals: the value as written, until the context gives it a type (5.1) ----
     /// The exact value of the expression `expr` when it is a literal: a numeric literal
     /// written in the program, or an expression of literals only that folds to one. A name

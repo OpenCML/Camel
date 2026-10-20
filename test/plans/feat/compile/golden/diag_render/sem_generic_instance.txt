@@ -26,6 +26,8 @@ help: Check the number and types of arguments to ensure they match one of the av
           <:op/add_f>: (f32, f32) => f32
           <:op/add_d>: (float, float) => float
           <:op/add_s>: (string, string) => string
+          <:op/add_c>: (c64, c64) => c64
+          <:op/add_z>: (c128, c128) => c128
 
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (bool, bool); operator '+' is not defined for these operand types.
    --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:5:16
@@ -43,5 +45,7 @@ help: Check the number and types of arguments to ensure they match one of the av
           <:op/add_f>: (f32, f32) => f32
           <:op/add_d>: (float, float) => float
           <:op/add_s>: (string, string) => string
+          <:op/add_c>: (c64, c64) => c64
+          <:op/add_z>: (c128, c128) => c128
 
 camel: 3 errors

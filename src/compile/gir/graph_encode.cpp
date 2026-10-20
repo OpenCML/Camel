@@ -42,7 +42,6 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
-#include "camel/runtime/capacity.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
@@ -133,15 +132,6 @@ template <typename Body> std::vector<std::byte> toPayloadBytes(const Body &body)
     std::vector<std::byte> bytes(sizeof(Body));
     std::memcpy(bytes.data(), &body, sizeof(Body));
     return bytes;
-}
-
-std::vector<std::byte> toOperPayloadBytes(const oper_idx_ptr_t &oper) {
-    GCOperBody body{
-        .op       = nullptr,
-        .oper     = camel::core::OperatorTable::instance().intern(oper->uri()),
-        .reserved = 0,
-    };
-    return toPayloadBytes(body);
 }
 
 void collectCompileStaticGraphRefsRecursive(
@@ -478,9 +468,6 @@ class EncodeSession {
                     toPayloadBytes(*reinterpret_cast<const camel::runtime::GCLoopBody *>(
                         graph->draft().payloadOf(sourceId).data()));
             } break;
-            case GCNodeKind::Oper:
-                payloadStorage = toOperPayloadBytes(graph->operTarget(sourceId));
-                break;
             case GCNodeKind::Call:
                 payloadStorage.assign(
                     graph->draft().payloadOf(sourceId).begin(),
@@ -619,11 +606,7 @@ class EncodeSession {
         // Later statements may make an earlier control edge redundant. Clean up once before
         // freezing, with a smaller work cap than the explicit optimization stage.
         camel::runtime::reduceControlDependencies(*prepared.draft, 8192);
-        try {
-            prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
-        } catch (const camel::runtime::GraphCapacityError &e) {
-            throw e.inGraph(graph->name(), prepared.draft->firstNodeOrigin());
-        }
+        prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepared compile graph '{}' with {} draft nodes.",

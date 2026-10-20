@@ -44,37 +44,6 @@ DropCallArgumentTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) 
     return graph;
 }
 
-camel::runtime::GCGraph *
-OvergrowGraphTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
-    camel::runtime::RuntimeGraphDraftSession session(context_, graph);
-    for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
-        if (owner->name() != "main") {
-            continue;
-        }
-        camel::runtime::GraphDraft &draft = session.edit(owner);
-        camel::core::type::Type *type     = nullptr;
-        camel::runtime::gc_node_ref_t source = camel::runtime::kInvalidNodeRef;
-        for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount() && !type; ++id) {
-            if (const auto *header = draft.header(id); header && header->dataType) {
-                type   = header->dataType;
-                source = id;
-            }
-        }
-        // A chain of copies, each reading the one before and waiting for it: two edges each,
-        // so 34000 of them need more than the 65535 edges a graph has (and fewer than the
-        // 65535 nodes). A chain keeps every node's user list short.
-        camel::runtime::gc_node_ref_t previous = source;
-        for (size_t i = 0; i < 34000; ++i) {
-            const auto copy = draft.addCopyNode(type);
-            draft.appendInput(camel::runtime::DraftEdgeKind::Norm, copy, previous);
-            draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, copy, previous);
-            previous = copy;
-        }
-        return session.commit();
-    }
-    return graph;
-}
-
 namespace {
 
 /// Runs `breakBranch(draft, brch, join)` on the first branch of `main` and commits.

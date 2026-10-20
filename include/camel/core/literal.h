@@ -26,6 +26,8 @@ enum class LiteralType {
     FString,
     Integer,
     Real,
+    /// A number with an `i` suffix (`4i`, `-4.5i`): the literal's text keeps the suffix.
+    Imaginary,
     Boolean,
     Null,
 };

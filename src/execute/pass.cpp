@@ -19,19 +19,20 @@
 
 #include "camel/execute/pass.h"
 #include "camel/common/scope.h"
+#include "camel/core/array/block_selftest.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
-#include "camel/core/array/buffer.h"
+#include "camel/core/mm/block.h"
 #include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
 #include "camel/core/process_exit.h"
+#include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/trans/json/gir.h"
-#include "camel/runtime/capacity.h"
 #include "macro/macro.h"
 #include "pass_spec.h"
 #include "passes/opt/devirtualize/devirtualize.h"
@@ -221,18 +222,18 @@ class GcSummaryPass final : public GraphIRPass {
     }
 };
 
-class GcBuffersPass final : public GraphIRPass {
+class GcBlocksPass final : public GraphIRPass {
   public:
-    explicit GcBuffersPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+    explicit GcBlocksPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
     GCGraph *apply(GCGraph *graph, std::ostream &os) override {
-        camel::core::array::debugRunBufferSelfTest();
+        camel::core::array::debugRunBlockSelfTest();
         os << std::format(
-            "BUFFER_SELFTEST ok live={} peak={} count={} creations={}\n",
-            camel::core::array::bufferBytesLive(),
-            camel::core::array::bufferBytesPeak(),
-            camel::core::array::bufferLiveCount(),
-            camel::core::array::bufferCreations());
+            "BLOCK_SELFTEST ok live={} peak={} count={} creations={}\n",
+            camel::core::mm::blockBytesLive(),
+            camel::core::mm::blockBytesPeak(),
+            camel::core::mm::blockLiveCount(),
+            camel::core::mm::blockCreations());
         return graph;
     }
 };
@@ -266,6 +267,16 @@ class GcForeignResourcePass final : public GraphIRPass {
     GCGraph *apply(GCGraph *graph, std::ostream &os) override {
         camel::core::mm::debugRunForeignResourceSelfTest(camel::core::mm::autoSpace());
         os << "{\"ok\":true,\"kind\":\"gc.foreign_resource\"}\n";
+        return graph;
+    }
+};
+
+class GcViewsPass final : public GraphIRPass {
+  public:
+    explicit GcViewsPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        os << camel::core::rtdata::debugRunViewSelfTest() << '\n';
         return graph;
     }
 };
@@ -582,7 +593,8 @@ PassScopePtr initPassScope() {
                          {"major", def(PASS(GcMajorPass))},
                          {"config", def(PASS(GcConfigPass))},
                          {"summary", def(PASS(GcSummaryPass))},
-                          {"buffers", def(PASS(GcBuffersPass))},
+                          {"blocks", def(PASS(GcBlocksPass))},
+                         {"views", def(PASS(GcViewsPass))},
                          {"remembered_set", def(PASS(GcRememberedSetPass))},
                          {"foreign_resource", def(PASS(GcForeignResourcePass))},
                          {"poison", def(PASS(GcPoisonPass))},
@@ -673,7 +685,8 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gcmajor", "std::gc::major"},
     {"std::gcconfig", "std::gc::config"},
     {"std::gcsummary", "std::gc::summary"},
-        {"std::gcbuffers", "std::gc::buffers"},
+        {"std::gcblocks", "std::gc::blocks"},
+    {"std::gcviews", "std::gc::views"},
     {"std::gcremembered", "std::gc::remembered_set"},
     {"std::gcforeign", "std::gc::foreign_resource"},
     {"std::gcpoison", "std::gc::poison"},
@@ -903,7 +916,6 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
     static const std::vector<std::pair<std::string, PassFactory>> table = {
         TEST_PASS(kNativeCallbackTestPass, NativeCallbackTestPass),
         TEST_PASS(kDropCallArgumentPass, DropCallArgumentTestPass),
-        TEST_PASS(kOvergrowGraphPass, OvergrowGraphTestPass),
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
         TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
@@ -1226,28 +1238,9 @@ PassApplyResult applyPassesDetailed(
                 ctx->setProcessExitCode(exit.code);
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> exit({})", p, exit.code);
                 return {nullptr, PassApplyStatus::Consumed};
-            } catch (const camel::runtime::GraphCapacityError &e) {
-                // The pass built a graph larger than a graph can be. That is a limit of the
-                // representation the program ran into, not a broken graph: it is reported with
-                // the graph, the quantity, the size reached and the limit, at the function the
-                // graph was compiled from (or at one of its nodes).
-                setPipelineStage("pass:" + specName(p));
-                auto diag = ctx->rtmDiags()->of(RuntimeDiag::GraphTooLarge);
-                if (e.origin() != camel::source::kInvalidOriginId) {
-                    diag.atOrigin(e.origin());
-                }
-                diag.commit(
-                    p,
-                    e.graph().empty() ? std::string("(unnamed)") : e.graph(),
-                    e.size(),
-                    e.quantity(),
-                    e.limit());
-                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (graph too large)", p);
-                return {nullptr, PassApplyStatus::Failed};
             } catch (const camel::core::mm::MemoryExhausted &e) {
-                // A memory space is at its limit, or the host has no memory left. Like a graph
-                // that is too large this is a limit the program (or what the pass made of it)
-                // ran into: it is reported with the space, the usage, the limit and the
+                // A memory space is at its limit, or the host has no memory left. This is a
+                // limit the program (or what the pass made of it) ran into: it is reported with the space, the usage, the limit and the
                 // setting that raises it, at the graph that was being built when one is known.
                 setPipelineStage("pass:" + specName(p));
                 auto diag = ctx->rtmDiags()->of(RuntimeDiag::MemoryExhausted);

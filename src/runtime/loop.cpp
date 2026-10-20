@@ -490,4 +490,25 @@ void validateRuntimeLoopInterface(const GCGraph *graph, gc_node_ref_t node) {
     }
 }
 
+size_t fallBackToCopyingAppend(GraphDraft &body) {
+    size_t retargeted = 0;
+    for (size_t id = 0; id < body.nodeSlotCount(); ++id) {
+        const auto ref     = static_cast<gc_node_ref_t>(id);
+        const DraftNode *n = body.node(ref);
+        if (n == nullptr || n->header.kind != GCNodeKind::Oper) {
+            continue;
+        }
+        const auto payload = body.payloadOf(n);
+        if (payload.size() < sizeof(GCOperBody)) {
+            continue;
+        }
+        if (reinterpret_cast<const GCOperBody *>(payload.data())->uri() != ":struct/append_arr_owned") {
+            continue;
+        }
+        body.retargetOperNode(ref, ":struct/append_arr");
+        ++retargeted;
+    }
+    return retargeted;
+}
+
 } // namespace camel::runtime

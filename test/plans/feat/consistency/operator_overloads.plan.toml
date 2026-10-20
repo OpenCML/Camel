@@ -217,7 +217,7 @@ kind = "negative"
 case = "../../../cases/consistency/operator_overloads/ambiguous_generic.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AmbiguousOperatorCall"
+expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 19
 expect_output_contains = ["(a: typeas T[], b: T[]) => T[] (this module)", "(a: typeas T[], b: typeas U[]) => T[] (this module)"]
@@ -229,7 +229,7 @@ kind = "negative"
 case = "../../../cases/consistency/operator_overloads/mods/ambiguous_modules.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AmbiguousOperatorCall"
+expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 20
 expect_output_contains = ["(module 'plus_a')", "(module 'plus_b')"]

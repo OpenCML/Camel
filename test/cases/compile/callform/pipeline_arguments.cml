@@ -1,0 +1,40 @@
+/**
+ * Handover H27c: `x->f(a, b)` is `f(x, a, b)` (design principles 4.4). The receiver is the
+ * first ordinary argument of the call written on the right, for an ordinary function
+ * (`1->add(2)`), a function with a `with` argument (`1->bump<10>(2)`), a generic function
+ * (`1->pick(2)`), and through `?->`; `1->inc()` is `inc(1)`, and the receiver enters the
+ * first call of a chain (`1->add(2)->add(3)`).
+ */
+module pipeline_arguments
+
+func add(a: int, b: int): int { return a + b }
+func inc(a: int): int { return a + 1 }
+
+with <k: int>
+func bump(a: int, b: int): int { return a + b + k }
+
+func pick(a: typeas T, b: T): T { return b }
+
+func safe_div(a: int, b: int): int! {
+    if b == 0 then {
+        throw error('DivByZero', 'the divisor is zero')
+    } else {
+        return a / b
+    }
+}
+
+func main(): int sync {
+    // an ordinary function with an extra argument
+    println(1->add(2))
+    // a function with a `with` argument, its ordinary argument written after the arrow
+    println(1->bump<10>(2))
+    // a generic function
+    println(1->pick(2))
+    // no extra argument: `inc(1)`, not `inc()(1)`
+    println(1->inc())
+    // the receiver enters the first call of a chain
+    println(1->add(2)->add(3))
+    // `?->` hands the value taken out of the fallible result on as the first argument
+    println((safe_div(8, 2) ?-> add(1)) !! -1)
+    return 0
+}

@@ -21,12 +21,15 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
+#include "camel/core/mm/block.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/base.h"
+#include "camel/core/type/bytes.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -114,8 +117,19 @@ PythonObjectHolder *unwrapPyObject(slot_t s, camel::core::context::Context &ctx)
     return unwrapPyObjectWrapper(s, ctx)->resourceAs<PythonObjectHolder>();
 }
 
+/// Releases a block that borrows a Python bytes object's buffer: dropping the holder drops the
+/// reference (and restores the GIL, like every other Python resource release).
+void releasePythonBytes(void *context) noexcept {
+    deletePythonObjectHolder(context);
+}
+
 // 递归：按类型与 slot 将 Camel 值转为 Python 对象（支持复合类型与嵌套）
 py::object camelToPy(camel::core::type::Type *t, slot_t s, camel::core::context::Context &ctx) {
+    if (isBytesType(t)) {
+        // Python bytes is immutable, so this is the one copy; the value stays a block in Camel.
+        auto *bytes = fromSlot<BytesObject *>(s);
+        return py::bytes(bytes->view().data(), bytes->size());
+    }
     switch (t->code()) {
     case TypeCode::Int32:
         return py::cast(static_cast<int64_t>(fromSlot<Int32>(s)));
@@ -548,6 +562,30 @@ slot_t __python_wrap__(ArgsView &with, ArgsView &norm, camel::core::context::Con
 static std::optional<slot_t>
 pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) {
     try {
+        if (isBytesType(targetType)) {
+            if (!py::isinstance<py::bytes>(obj)) {
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    "python.unwrap: Bytes target requires Python bytes");
+            }
+            char *data    = nullptr;
+            Py_ssize_t n  = 0;
+            if (PyBytes_AsStringAndSize(obj.ptr(), &data, &n) != 0) {
+                throw py::error_already_set();
+            }
+            auto *holder = new PythonObjectHolder{obj};
+            mm::Block *block = nullptr;
+            try {
+                block = mm::Block::adoptExternal(
+                    data, static_cast<size_t>(n), mm::BlockRelease{&releasePythonBytes, holder});
+            } catch (...) {
+                deletePythonObjectHolder(holder);
+                throw;
+            }
+            // The value adopts the block without copying; the holder keeps the Python bytes
+            // object alive until the block's last reference is gone.
+            return toSlot(BytesObject::adopt(block, static_cast<size_t>(n), mm::autoSpace()));
+        }
         switch (targetType->code()) {
         case TypeCode::Int32:
             return toSlot(py::cast<Int32>(obj));

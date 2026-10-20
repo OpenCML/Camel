@@ -1,0 +1,39 @@
+/**
+ * Handover H27d: a context argument chooses its overload exactly as an ordinary call does
+ * (design principles 4.4, 5.1) -- exact match first, and only when no exact match exists may
+ * the literal enter a parameter type. With `with <k: int>` and `with <k: f32>` both
+ * declared, `scale<2>` is the `int` one, and `s(3)` is 6 (the f32 overload would print
+ * 6.0). With `with <xs: float[]>` and `with <xs: f32[]>` both declared, `at<[7.0, 8.0]>` is
+ * the `float[]` one (a decimal literal is a float), and `a(1)` is 16.0, not 8.0. With only
+ * `with <k: f32>` declared, `half<3>` still takes the literal as an f32. A name still never
+ * converts (`err_context_argument_name`).
+ */
+module partial_application_overload_choice
+
+with <k: int>
+func scale(x: int): int { return x * k }
+
+with <k: f32>
+func scale(x: f32): f32 { return x * k }
+
+with <xs: float[]>
+func at(i: int): float { return xs[i] * 2.0 }
+
+with <xs: f32[]>
+func at(i: int): f32 { return xs[i] }
+
+with <k: f32>
+func half(x: f32): f32 { return x * k }
+
+func main(): int sync {
+    // exact: the int overload, not the f32 one
+    let s = scale<2>
+    println(s(3))
+    // exact: the float[] overload, not the f32[] one
+    let a = at<[7.0, 8.0]>
+    println(a(1))
+    // no exact match: the only fitting parameter takes the literal
+    let h = half<3>
+    println(h(1.5))
+    return 0
+}

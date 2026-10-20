@@ -24,31 +24,38 @@
  * docs/design/arrays-memory/README.cn.md 3.1, 3.2):
  *
  * - Slots: one 8-byte slot per element, able to hold a reference. This is the representation
- *   every array had before native arrays; it stays for non-numeric element types.
- * - Compact: a contiguous row-major run of numbers. It is a Buffer (core/array/buffer.h) when
- *   it is larger than kInlineArrayBytes or when a view or an export needs a stable address;
- *   otherwise its bytes are inline in the GC object and move with it (no buffer, no atomic
- *   count, no finalizer: small logic programs do not pay for the new memory management).
+ *   for element types that are not pure data (strings, nested arrays, closures, tagged forms).
+ * - Compact: a contiguous row-major run of pure data (type/pure.h): numbers, booleans, complex
+ *   numbers, and structs and tuples made only of them. Each element occupies the bytes of its
+ *   aggregate layout, so an array of structs has no per-element Struct object. The run is a
+ *   Block (core/mm/block.h) when it is larger than mm::kInlineBlockBytes or when a view or an
+ *   export needs a stable address; otherwise its bytes are inline in the GC object and move
+ *   with it (no block, no atomic count, no finalizer: small logic programs do not pay for the
+ *   new memory management).
  *
- * The decision is made once, by type::arrayStorageFor: a numeric element type is compact and
- * anything else is slots. "A compact buffer holds numbers only" is the leaf rule that makes
- * reference counting safe and zero-copy exchange possible.
+ * The decision is made once, by type::arrayStorageFor: a pure-data element type is compact and
+ * anything else is slots. "A compact block holds pure data only" is the leaf rule that makes
+ * reference counting safe and zero-copy exchange possible. DLPack exports only arrays whose
+ * element type is a numeric scalar; arrays of structs are left to the Arrow item.
  *
- * An inline array is promoted to a Buffer when a view is made of it or when it is exported
+ * An inline array is promoted to a Block when a view is made of it or when it is exported
  * (DLPack): both hand a pointer to code that may outlive the array, and the GC object may
  * move. Promotion copies once, after which the data address is stable.
  *
  * Arrays are immutable values (design principles 5.4): "modifying" an operation returns a new
  * value, except that an operation may update in place when nothing else can see the old value
- * (design principles 10.5). `reusableBuffer` is the hook for that: it gives the operation the
- * array's own buffer when the count is 1 and the shape matches, and a fresh one otherwise.
+ * (design principles 10.5). `reusableBlock` is the hook for that: it gives the operation the
+ * array's own block when the count is 1 and the shape matches, and a fresh one otherwise.
  */
 
 #pragma once
 
 #include "base.h"
-#include "camel/core/array/buffer.h"
+#include "camel/core/mm/block.h"
+#include "camel/core/rtdata/aggregate.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/rtdata/view.h"
+#include "camel/core/type/pure.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -58,7 +65,12 @@
 #include <ostream>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <vector>
+
+namespace camel::core::type {
+struct DataLayout;
+}
 
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
@@ -254,7 +266,7 @@ class FixedArray : public rtdata::Object {
 
 class Array : public rtdata::Object {
   public:
-    using Buffer = camel::core::array::Buffer;
+    using Block = camel::core::mm::Block;
     /// The storage class of this value (type::arrayStorageFor decides it at creation).
     enum class Storage : uint8_t { Slots, Compact };
 
@@ -279,16 +291,16 @@ class Array : public rtdata::Object {
         bool zeroInit = false);
 
     /// A view of `source`'s compact data: `extents` elements starting at `elementOffset`.
-    /// The view shares the buffer; an inline source is promoted (copied once) first. Only
+    /// The view shares the block; an inline source is promoted (copied once) first. Only
     /// compact arrays can be viewed.
     static Array *
     view(Array *source, std::span<const int64_t> extents, uint64_t elementOffset = 0);
 
-    /// An array over `buffer`'s bytes (DLPack import, external memory). The array retains the
-    /// buffer; `byteOffset` is in bytes and `view` marks the storage as not owned for growth.
+    /// An array over `block`'s bytes (DLPack import, external memory). The array retains the
+    /// block; `byteOffset` is in bytes and `view` marks the storage as not owned for growth.
     static Array *wrap(
         camel::core::mm::IAllocator &allocator, const type::ArrayType *arrayType,
-        std::span<const int64_t> extents, Buffer *buffer, size_t byteOffset = 0,
+        std::span<const int64_t> extents, Block *block, size_t byteOffset = 0,
         bool view = false);
 
     // ---- Shape ----------------------------------------------------------------------------
@@ -296,12 +308,12 @@ class Array : public rtdata::Object {
     Storage storage() const { return storage_; }
     bool isCompact() const { return storage_ == Storage::Compact; }
     bool isSlots() const { return storage_ == Storage::Slots; }
-    /// True when this value reads another array's buffer rather than owning the storage.
+    /// True when this value reads another array's block rather than owning the storage.
     bool isView() const { return view_; }
 
     /// Whether this array may be changed in place: an inline compact array is its own storage,
-    /// a buffer-backed one needs the only reference to a Camel-owned buffer at offset 0 and
-    /// must not be a view. An imported (external) buffer is never writable (design principles
+    /// a block-backed one needs the only reference to a Camel-owned block at offset 0 and
+    /// must not be a view. An imported (external) block is never writable (design principles
     /// 11.3: another framework must not see the change).
     bool canWriteInPlace() const;
 
@@ -326,22 +338,45 @@ class Array : public rtdata::Object {
     /// Bytes of element data (not the header, not the extent table).
     size_t byteSize() const { return static_cast<size_t>(numel_ * elementSize_); }
 
+    /// The element type this value stores, or null when the array was created without one
+    /// (an array literal before its type is known). Interned types live for the process, so
+    /// the pointer stays valid.
+    const camel::core::type::Type *elemType() const { return elemType_; }
     /// The element type code this value stores (Void for a slot array created without one).
     camel::core::type::TypeCode elemTypeCode() const { return elemTypeCode_; }
     /// The name `tensor` uses for the element type.
     camel::core::type::TypeCode dtype() const { return elemTypeCode_; }
     size_t elementSize() const { return elementSize_; }
+    /// True when the element is a struct or tuple stored by its layout rather than by a slot
+    /// that points at a Struct/Tuple object.
+    bool isAggregateElement() const {
+        return elemType_ != nullptr &&
+               (elemType_->code() == camel::core::type::TypeCode::Struct ||
+                elemType_->code() == camel::core::type::TypeCode::Tuple);
+    }
+    /// True when one element is exactly the bytes of one slot (i64, f64): the type-level test
+    /// that the slot fast paths may use. c64 is 8 bytes but is not slot-resident, so it must
+    /// not be read as a slot.
+    bool isSlotResidentElement() const {
+        const camel::core::type::DataLayout *layout =
+            elemType_ != nullptr ? camel::core::type::pureDataLayout(elemType_) : nullptr;
+        return layout != nullptr && layout->slotResident;
+    }
 
     // ---- Storage access ------------------------------------------------------------------
 
-    /// Slot data. Only a slot array and an 8-byte compact element type have this layout; use
-    /// dataAs<T>() or the get/set accessors otherwise.
+    /// Slot data. Only a slot array and an 8-byte scalar compact element type have this layout;
+    /// use dataAs<T>() or the get/set accessors otherwise.
     slot_t *data() {
-        ASSERT(isSlots() || elementSize_ == sizeof(slot_t), "Use dataAs<T>() for this element type");
+        ASSERT(
+            isSlots() || isSlotResidentElement(),
+            "Use dataAs<T>() for this element type");
         return reinterpret_cast<slot_t *>(dataPtr_);
     }
     const slot_t *data() const {
-        ASSERT(isSlots() || elementSize_ == sizeof(slot_t), "Use dataAs<T>() for this element type");
+        ASSERT(
+            isSlots() || isSlotResidentElement(),
+            "Use dataAs<T>() for this element type");
         return reinterpret_cast<const slot_t *>(dataPtr_);
     }
     std::byte *rawData() { return dataPtr_; }
@@ -366,11 +401,146 @@ class Array : public rtdata::Object {
 
     /// One element as a slot. For a compact array the slot carries the element's own bytes
     /// (an f32 in the low 4 bytes, a bool in the low byte), which is what toSlot/fromSlot give.
-    slot_t getSlot(uint64_t flatIndex) const;
+    slot_t getSlot(uint64_t flatIndex) const {
+        ASSERT(flatIndex < numel_, "Array flat index out of range");
+        if (isSlots()) {
+            return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
+        }
+        if (!isAggregateElement() && isSlotResidentElement() &&
+            elementSize_ == sizeof(slot_t)) {
+            return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
+        }
+        return getSlotSlow(flatIndex);
+    }
+    /// One element for an array consumer. For a compact pure-data struct/tuple this is a view
+    /// into the array's block (no allocation, no materialised Struct/Tuple); every other
+    /// element is getSlot. The array must be block-backed first: call ensureBlock() on it
+    /// before iterating, so the bytes do not move at a callback's safepoint. A view must not
+    /// be stored; the store paths materialise it (rtdata/view.h).
+    slot_t getElementView(
+        uint64_t flatIndex, const camel::core::type::DataLayout *layout = nullptr) const {
+        ASSERT(flatIndex < numel_, "Array flat index out of range");
+        if (isCompact() && isAggregateElement() && block_ != nullptr) {
+            if (layout == nullptr) {
+                layout = camel::core::type::pureDataLayout(elemType_);
+            }
+            return camel::core::rtdata::pureViewOf(
+                elementPtr(flatIndex), elemType_, layout, elementSize_);
+        }
+        return getSlot(flatIndex);
+    }
+    slot_t getSlotSlow(uint64_t flatIndex) const;
     /// Stores one element from a slot. `arrayType` supplies the element type for the reference
     /// write barrier (slot arrays only; a compact write never needs one) and may be null for a
     /// compact array, whose own element type is enough.
-    void setSlot(uint64_t flatIndex, slot_t value, const type::ArrayType *arrayType = nullptr);
+    void setSlot(uint64_t flatIndex, slot_t value, const camel::core::type::ArrayType *arrayType = nullptr) {
+        if (isCompact() && slotShaped_ && value != NullSlot &&
+            !camel::core::rtdata::isViewSlot(value, elemType_)) {
+            ASSERT(flatIndex < numel_, "Array flat index out of range");
+            std::memcpy(
+                dataPtr_ + flatIndex * elementSize_,
+                camel::core::rtdata::aggregateSlots(value), elementSize_);
+            return;
+        }
+        if (isCompact() && isSlotResidentElement() && elementSize_ == sizeof(slot_t)) {
+            ASSERT(flatIndex < numel_, "Array flat index out of range");
+            reinterpret_cast<slot_t *>(dataPtr_)[flatIndex] = value;
+            return;
+        }
+        setSlotSlow(flatIndex, value, arrayType);
+    }
+    void setSlotSlow(
+        uint64_t flatIndex, slot_t value,
+        const camel::core::type::ArrayType *arrayType = nullptr);
+
+    // ---- Element loops --------------------------------------------------------------------
+    //
+    // getSlot/setSlot decide the storage class and the element width at every element. That is
+    // right for a single access and wrong for a loop: map/filter/reduce/foreach over n elements
+    // asked the same two questions n times. A loop asks once (elementRead/elementWrite) and
+    // reads and writes through readElement/writeElement, which are compiled per class.
+    //
+    // What a loop may hoist is the class decision, never a pointer: the element callback is a
+    // safepoint, so the array object (and, for an inline compact array, its bytes) can move
+    // between two elements. Every loop therefore re-reads its arrays on every round and passes
+    // them to these functions.
+
+    /// How a loop reads this array's elements, decided once for the call.
+    enum class ElementRead : uint8_t {
+        Direct, // a slot array, or a compact element of exactly one slot: the slot_t layout
+        View,   // a compact pure-data aggregate: a view into the block, never materialised
+        Slow,   // any other compact element: taken out of its bytes by getSlotSlow
+    };
+    /// How a loop writes them. Writing needs one distinction reading does not: a slot array may
+    /// hold a reference, so its store goes through the write barrier.
+    enum class ElementWrite : uint8_t {
+        Direct,    // a compact element of exactly one slot: a plain store
+        Aggregate, // a compact pure-data aggregate: its bytes
+        Slow,      // a slot array (the barrier) or an element of any width but one slot
+    };
+
+    ElementRead elementRead() const {
+        if (isSlots() || (!isAggregateElement() && elementSize_ == sizeof(slot_t))) {
+            return ElementRead::Direct;
+        }
+        return isAggregateElement() ? ElementRead::View : ElementRead::Slow;
+    }
+    ElementWrite elementWrite() const {
+        if (isSlots()) {
+            return ElementWrite::Slow;
+        }
+        if (isAggregateElement()) {
+            return ElementWrite::Aggregate;
+        }
+        return elementSize_ == sizeof(slot_t) ? ElementWrite::Direct : ElementWrite::Slow;
+    }
+
+    /// One element, with the class already decided by elementRead. A View read needs the array
+    /// block-backed (ensureBlock) and the element `layout`, which the loop takes once for all
+    /// elements; it returns a view into the block, as getElementView does.
+    template <ElementRead R>
+    slot_t readElement(
+        uint64_t flatIndex,
+        const camel::core::type::DataLayout *layout = nullptr) const {
+        ASSERT(flatIndex < numel_, "Array flat index out of range");
+        if constexpr (R == ElementRead::Direct) {
+            return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
+        } else if constexpr (R == ElementRead::View) {
+            ASSERT(
+                block_ != nullptr,
+                "A view read needs a block-backed array; call ensureBlock() before the loop.");
+            return camel::core::rtdata::pureViewOf(
+                dataPtr_ + flatIndex * elementSize_, elemType_,
+                layout != nullptr ? layout : camel::core::type::pureDataLayout(elemType_),
+                elementSize_);
+        } else {
+            return getSlotSlow(flatIndex);
+        }
+    }
+    /// Stores one element, with the class already decided by elementWrite.
+    template <ElementWrite W>
+    void writeElement(
+        uint64_t flatIndex, slot_t value,
+        const camel::core::type::ArrayType *arrayType = nullptr) {
+        if constexpr (W == ElementWrite::Direct) {
+            ASSERT(flatIndex < numel_, "Array flat index out of range");
+            reinterpret_cast<slot_t *>(dataPtr_)[flatIndex] = value;
+        } else if constexpr (W == ElementWrite::Aggregate) {
+            // setSlot's fast path for a slot-shaped aggregate, with the storage-class tests
+            // already folded into the class.
+            if (slotShaped_ && value != NullSlot &&
+                !camel::core::rtdata::isViewSlot(value, elemType_)) {
+                ASSERT(flatIndex < numel_, "Array flat index out of range");
+                std::memcpy(
+                    dataPtr_ + flatIndex * elementSize_,
+                    camel::core::rtdata::aggregateSlots(value), elementSize_);
+            } else {
+                setSlotSlow(flatIndex, value, arrayType);
+            }
+        } else {
+            setSlotSlow(flatIndex, value, arrayType);
+        }
+    }
 
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
@@ -396,7 +566,7 @@ class Array : public rtdata::Object {
     void setFromInt64(uint64_t flatIndex, int64_t value);
     void setFromBool(uint64_t flatIndex, bool value);
 
-    // ---- Size and growth (slot arrays, and compact arrays whose buffer can grow) ----------
+    // ---- Size and growth (slot arrays, and compact arrays whose block can grow) ----------
 
     size_t capacity() const { return static_cast<size_t>(capacity_); }
     void reserve(size_t newCapacity);
@@ -434,20 +604,20 @@ class Array : public rtdata::Object {
 
     // ---- In-place hook -------------------------------------------------------------------
 
-    /// A buffer the caller may write and adopt as this array's storage: this array's own
-    /// buffer when it is compact, unique, and already the right size; a fresh buffer (copied
+    /// A block the caller may write and adopt as this array's storage: this array's own
+    /// block when it is compact, unique, and already the right size; a fresh block (copied
     /// from this array) otherwise. This is the hook for the in-place guarantee (design
     /// principles 10.5): an operation that returns "a new array" writes into the returned
-    /// buffer. `newBytes` is the required data length.
-    Buffer *reusableBuffer(size_t newBytes);
-    /// Makes this array buffer-backed and (re)points its data at `buffer`, releasing the old
-    /// one. Used by in-place operations after a reusableBuffer() call.
-    void adoptBuffer(Buffer *buffer, size_t newBytes);
-    /// The array's current buffer, or null for a slot array / an inline compact array.
-    Buffer *buffer() const { return buffer_; }
-    /// Copies inline data into a buffer if it is not buffer-backed yet. Called before a pointer
+    /// block. `newBytes` is the required data length.
+    Block *reusableBlock(size_t newBytes);
+    /// Makes this array block-backed and (re)points its data at `block`, releasing the old
+    /// one. Used by in-place operations after a reusableBlock() call.
+    void adoptBlock(Block *block, size_t newBytes);
+    /// The array's current block, or null for a slot array / an inline compact array.
+    Block *block() const { return block_; }
+    /// Copies inline data into a block if it is not block-backed yet. Called before a pointer
     /// is handed to code that may outlive the array (a view, DLPack export).
-    void ensureBuffer();
+    void ensureBlock();
 
     // ---- Object protocol -----------------------------------------------------------------
 
@@ -472,18 +642,18 @@ class Array : public rtdata::Object {
     static Array *createSlotsRank(
         camel::core::mm::IAllocator &allocator, std::span<const int64_t> extents,
         size_t capacity);
-    /// Builds a compact array; `buffer` may be null, in which case the data is inline when it
-    /// fits and a fresh buffer otherwise.
+    /// Builds a compact array; `block` may be null, in which case the data is inline when it
+    /// fits and a fresh block otherwise.
     static Array *createCompact(
-        camel::core::mm::IAllocator &allocator, camel::core::type::TypeCode elemType,
-        std::span<const int64_t> extents, Buffer *buffer, size_t byteOffset, bool zeroInit,
+        camel::core::mm::IAllocator &allocator, const camel::core::type::Type *elemType,
+        std::span<const int64_t> extents, Block *block, size_t byteOffset, bool zeroInit,
         bool view);
 
     void initLayout(std::span<const int64_t> extents);
     void noteFinalizable();
     void reallocateSlots(size_t newCapacity, const type::ArrayType *arrayType);
     void growCompact(uint64_t newCapacity);
-    void releaseBuffer() noexcept;
+    void releaseBlock() noexcept;
     void recomputePointers();
 
     bool compactEqualsElements(const Array *other, bool deep) const;
@@ -496,7 +666,7 @@ class Array : public rtdata::Object {
     std::string formatTensorElement(uint64_t flatIndex) const;
 
     camel::core::mm::IAllocator *allocator_ = nullptr;
-    Buffer *buffer_                         = nullptr;
+    Block *block_                         = nullptr;
     FixedArray *fixedArray_                 = nullptr; // Slots that did not fit inline
     slot_t inlineData_[kInlineSlots]        = {};
     std::byte *dataPtr_                     = nullptr; // Active element data
@@ -506,11 +676,89 @@ class Array : public rtdata::Object {
     uint64_t size_     = 0; // Extent of dimension 0
     uint64_t numel_    = 0; // Product of the extents
     uint64_t capacity_ = 0; // Slots: elements; compact: element capacity of the storage
-    size_t offset_     = 0; // Byte offset into the buffer
+    size_t offset_     = 0; // Byte offset into the block
 
     camel::core::type::TypeCode elemTypeCode_ = camel::core::type::TypeCode::Void;
+    /// The interned element type, kept for the layout of aggregate elements and for the
+    /// runtime paths that need more than the code. Null when the array was created without a
+    /// type (a slot array).
+    const camel::core::type::Type *elemType_ = nullptr;
     uint32_t rank_      = 1;
-    uint8_t elementSize_ = sizeof(slot_t);
+    uint32_t elementSize_ = sizeof(slot_t);
     Storage storage_    = Storage::Slots;
     bool view_          = false;
+    /// The compact element is a slot-shaped aggregate (see DataLayout): a real Struct/Tuple can
+    /// be copied into its bytes without a field loop.
+    bool slotShaped_    = false;
 };
+
+// The one place that must stay in step with Array's element classes: a loop dispatches through
+// these instead of writing the switch itself, so adding a class is a change here and nowhere
+// else. `body` receives the class as an integral_constant, which is what makes the loop body
+// compile per class.
+template <typename Body>
+void dispatchElementAccess(
+    Array::ElementRead read, Array::ElementWrite write, Body &&body) {
+    using R = Array::ElementRead;
+    using W = Array::ElementWrite;
+    switch (read) {
+    case R::Direct:
+        switch (write) {
+        case W::Direct:
+            body(std::integral_constant<R, R::Direct>{}, std::integral_constant<W, W::Direct>{});
+            return;
+        case W::Aggregate:
+            body(
+                std::integral_constant<R, R::Direct>{},
+                std::integral_constant<W, W::Aggregate>{});
+            return;
+        case W::Slow:
+            body(std::integral_constant<R, R::Direct>{}, std::integral_constant<W, W::Slow>{});
+            return;
+        }
+        return;
+    case R::View:
+        switch (write) {
+        case W::Direct:
+            body(std::integral_constant<R, R::View>{}, std::integral_constant<W, W::Direct>{});
+            return;
+        case W::Aggregate:
+            body(std::integral_constant<R, R::View>{}, std::integral_constant<W, W::Aggregate>{});
+            return;
+        case W::Slow:
+            body(std::integral_constant<R, R::View>{}, std::integral_constant<W, W::Slow>{});
+            return;
+        }
+        return;
+    case R::Slow:
+        switch (write) {
+        case W::Direct:
+            body(std::integral_constant<R, R::Slow>{}, std::integral_constant<W, W::Direct>{});
+            return;
+        case W::Aggregate:
+            body(std::integral_constant<R, R::Slow>{}, std::integral_constant<W, W::Aggregate>{});
+            return;
+        case W::Slow:
+            body(std::integral_constant<R, R::Slow>{}, std::integral_constant<W, W::Slow>{});
+            return;
+        }
+        return;
+    }
+}
+
+/// dispatchElementAccess for a loop that only reads (filter, reduce, foreach, and the source of
+/// a map whose result is built another way).
+template <typename Body> void dispatchElementRead(Array::ElementRead read, Body &&body) {
+    using R = Array::ElementRead;
+    switch (read) {
+    case R::Direct:
+        body(std::integral_constant<R, R::Direct>{});
+        return;
+    case R::View:
+        body(std::integral_constant<R, R::View>{});
+        return;
+    case R::Slow:
+        body(std::integral_constant<R, R::Slow>{});
+        return;
+    }
+}

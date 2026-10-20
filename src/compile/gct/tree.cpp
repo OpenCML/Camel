@@ -102,15 +102,13 @@ const literal::Value *Tree::literalValueOf(const Node *node) const {
     return it == literalValues_.end() ? nullptr : &it->second;
 }
 
-void Tree::setLiteralElements(
-    const data_ptr_t &data, std::vector<std::optional<literal::Value>> elements) {
+void Tree::setLiteralElements(const data_ptr_t &data, std::vector<LiteralElement> elements) {
     if (data != nullptr) {
         literalElements_[data.get()] = std::move(elements);
     }
 }
 
-const std::vector<std::optional<literal::Value>> *Tree::literalElementsOf(
-    const data_ptr_t &data) const {
+const std::vector<Tree::LiteralElement> *Tree::literalElementsOf(const data_ptr_t &data) const {
     if (data == nullptr) {
         return nullptr;
     }

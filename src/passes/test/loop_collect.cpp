@@ -108,19 +108,11 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         const size_t k        = view.stateCount();
         // A tape holds one value per round. A loop whose state the compiler writes in place
         // (Builder::markLoopStateInPlace) has a single array that every round appends to, so
-        // every tape entry would show the final array: refuse rather than record rounds that
-        // never existed as values.
-        const GCGraph *bodyGraph = view.bodyGraph();
-        for (size_t node = 0; node < bodyGraph->nodeCount(); ++node) {
-            const auto *header = bodyGraph->node(node);
-            if (header != nullptr && header->kind == camel::runtime::GCNodeKind::Oper &&
-                bodyGraph->nodeBodyAs<camel::runtime::GCOperBody>(node)->uri() ==
-                    ":struct/append_arr_owned") {
-                throw std::runtime_error(
-                    "test::loop_collect cannot collect a loop whose state is written in place: "
-                    "every tape entry would be the same final array");
-            }
-        }
+        // every tape entry would show the final array: the tape needs the copying form, and the
+        // body falls back to it. The program is legal either way, so this is a fallback and not
+        // a refusal (design principles: an optimization never makes a legal program fail).
+        GraphDraft &body = session.edit(view.bodyGraph());
+        camel::runtime::fallBackToCopyingAppend(body);
         std::vector<Type *> stateTypes;
         for (size_t j = 0; j < k; ++j) {
             stateTypes.push_back(view.stateType(j));
@@ -129,7 +121,6 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         const bool increments = elem != nullptr && elem->equals(Type::Int64());
 
         // The body: return (state_0 … state_{k-1}, next_state_0, next_state_0 + 1).
-        GraphDraft &body             = session.edit(view.bodyGraph());
         const gc_node_ref_t produced = body.draftIdOfSourceRef(view.nextState());
         ASSERT(produced != kInvalidNodeRef, "A LOOP body's result is not in its draft.");
         std::vector<gc_node_ref_t> values;

@@ -1,7 +1,8 @@
 /**
  * Functions of one name with different parameter types are overloads: one graph each, and a
- * call takes the first, in declaration order, whose parameters take the arguments. The body of
- * the second used to be built into the graph of the first, and its calls then found no match.
+ * call is chosen by the argument types (exact matches first, design principles 5.1). The body
+ * of the second used to be built into the graph of the first, and its calls then found no
+ * match.
  */
 module overloads
 

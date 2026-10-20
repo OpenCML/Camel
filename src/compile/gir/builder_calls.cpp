@@ -213,7 +213,7 @@ node_handle_t Builder::createFuncDataNode(
     const auto slotIndex = currGraph_->addStaticSlot(
         camel::core::rtdata::toSlot<StaticFunction *>(staticFunc),
         graph->funcType());
-    auto dataNode = currGraph_->draft().node(currGraph_->draft().addDataNode(
+    auto dataNode = currGraph_->draft().ref(currGraph_->draft().addDataNode(
         graph->funcType(),
         slotIndex,
         static_cast<uint8_t>(runtime::kGCNodeFlagConstant)));
@@ -270,14 +270,48 @@ node_handle_t Builder::partialApplicationOf(
     }
     // The one function the callee stands for with these `with` arguments (and, when the
     // position says which function it wants, with the parameters that are left).
-    const auto fits = [&](FunctionType *type) {
+    //
+    // A context argument chooses its overload exactly as an ordinary call does (design
+    // principles 4.4, 5.1; H27d): a function whose `with` parameters take the bound values
+    // exactly is tried first, and only when no function takes them exactly may a literal
+    // enter a parameter type. With `with <k: int>` and `with <k: f32>` both declared,
+    // `scale<2>` is the `int` one; `half<2>` with only `with <k: f32>` still binds the
+    // literal as an f32. A name never converts, so a name no parameter takes exactly leaves
+    // the binding refused.
+    const auto fits = [&](FunctionType *type, bool entering) {
         if (type == nullptr || !type->hasExitType() || type->withTypesCount() < bound.size()) {
             return false;
         }
         for (size_t i = 0; i < bound.size(); ++i) {
-            if (!entersImplicitly(type->withTypeAt(i), boundTypes[i])) {
+            Type *param = type->withTypeAt(i);
+            if (param == nullptr) {
                 return false;
             }
+            // Exactly: the bound value already has the parameter's type. This is the first
+            // pass an ordinary call makes, with the argument types as they are, before any
+            // literal takes a context type (enteringTypes, builder_operators.cpp).
+            if (param->assignableFrom(boundTypes[i])) {
+                continue;
+            }
+            if (!entering) {
+                return false;
+            }
+            // A `with` parameter is a position with an expected type, like an ordinary
+            // parameter (design principles 4.4, 5.1): `scale<2>` with `with <k: f32>` and
+            // `at<[7.0, 8.0]>` with `with <xs: f32[]>` bind, and the values are converted
+            // below.
+            if (entersImplicitly(param, boundTypes[i])) {
+                continue;
+            }
+            if (const std::optional<literal::Value> value = literalValueOfExpr(bound[i].expr);
+                value.has_value() && literal::kindEnters(*value, param)) {
+                continue;
+            }
+            // An element the type cannot hold still enters here: the conversion reports it.
+            if (compositeLiteralEntersIn(bound[i].node, param, bound[i].expr)) {
+                continue;
+            }
+            return false;
         }
         if (expected == nullptr) {
             return true;
@@ -298,16 +332,15 @@ node_handle_t Builder::partialApplicationOf(
         }
         return true;
     };
-    FunctionType *calleeType = nullptr;
+    // The functions the name stands for, in declaration order.
+    std::vector<FunctionType *> candidates;
     if (nodeIsKind(target, runtime::GCNodeKind::Dref)) {
         const auto &drefTarget = nodeGraphOf(target)->drefTarget(target);
-        size_t candidates      = 0;
         if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
             if (auto graphs = asCompileGraphVec(drefTarget)) {
                 for (const auto &g : *graphs) {
-                    if (!decoratedOf_.contains(g.get()) && fits(g->funcType())) {
-                        calleeType = g->funcType();
-                        ++candidates;
+                    if (!decoratedOf_.contains(g.get())) {
+                        candidates.push_back(g->funcType());
                     }
                 }
             }
@@ -317,22 +350,42 @@ node_handle_t Builder::partialApplicationOf(
             // called, so its binding cannot stand alone.
             for (const auto &[uri, resolver] :
                  std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
-                FunctionType *fixed = resolver->fixedSignature();
-                if (fixed && fits(fixed)) {
-                    calleeType = fixed;
-                    ++candidates;
+                if (FunctionType *fixed = resolver->fixedSignature()) {
+                    candidates.push_back(fixed);
                 }
             }
         }
-        if (candidates != 1) {
+    } else if (
+        Type *type = valueTypeOf(nodeTypeOf(target));
+        type != nullptr && type->code() == TypeCode::Function) {
+        candidates.push_back(tt::as_ptr<FunctionType>(type));
+    }
+    // Exact matches first; a literal enters a parameter type only when there is none. Several
+    // candidates in the pass that is used are an ambiguity (design principles 5.1, H27e): it
+    // is recorded here and reported when the binding is refused for good, because the position
+    // may still say which function is meant (a parameter of function type, overloadValueFor,
+    // or the type of the call this value is passed to). Declaration order never chooses, and
+    // `expected` settles the choice before either pass.
+    ambiguousBindings_.erase(target);
+    FunctionType *calleeType = nullptr;
+    for (const bool entering : {false, true}) {
+        std::vector<FunctionType *> fitted;
+        for (FunctionType *candidate : candidates) {
+            if (fits(candidate, entering)) {
+                fitted.push_back(candidate);
+            }
+        }
+        if (fitted.empty()) {
+            continue;
+        }
+        if (fitted.size() > 1) {
+            ambiguousBindings_[target] = std::move(fitted);
             return nullptr;
         }
-    } else if (
-        Type *type = valueTypeOf(nodeTypeOf(target)); type != nullptr &&
-                                                      type->code() == TypeCode::Function &&
-                                                      fits(tt::as_ptr<FunctionType>(type))) {
-        calleeType = tt::as_ptr<FunctionType>(type);
-    } else {
+        calleeType = fitted.front();
+        break;
+    }
+    if (calleeType == nullptr) {
         return nullptr;
     }
     for (size_t i = 0; i < calleeType->withTypesCount(); ++i) {
@@ -350,6 +403,21 @@ node_handle_t Builder::partialApplicationOf(
                         calleeType->toString() + "'. Call it with its arguments in place");
             throw BuildAbortException();
         }
+    }
+
+    // A literal bound as a context argument takes the type of its `with` parameter here, now
+    // that the callee is known, exactly as a literal argument does at a call (design principles
+    // 5.1): the captured value is of the parameter's type, so the call the partial application
+    // makes receives it as it is. A value the type cannot hold is reported by coerceTo — for a
+    // composite literal, at the element. A name still does not convert.
+    for (size_t i = 0; i < bound.size(); ++i) {
+        Type *param = calleeType->withTypeAt(i);
+        if (param == nullptr || entersImplicitly(param, boundTypes[i])) {
+            continue;
+        }
+        node_handle_t entered = coerceTo(bound[i].node, param, bound[i].expr);
+        ASSERT(entered != nullptr, "An argument the binding accepted is converted.");
+        bound[i].node = entered;
     }
 
     // The bound values and, unless it is named, the callee: bound to names no program can
@@ -415,7 +483,7 @@ node_handle_t Builder::partialApplicationOf(
         size_t index = 0;
         for (draft_node_ref_t port : graph->draft().withPorts()) {
             const std::string name = "$with" + std::to_string(index++);
-            nodeScope_->insert(name, graph->draft().node(port));
+            nodeScope_->insert(name, graph->draft().ref(port));
             *with << nameNode(name);
         }
         GCT::node_ptr_t call = make(tree_->makeLink(calleeType->normTypesCount()));
@@ -423,7 +491,7 @@ node_handle_t Builder::partialApplicationOf(
         index = 0;
         for (draft_node_ref_t port : graph->draft().normPorts()) {
             const std::string name = "$norm" + std::to_string(index++);
-            nodeScope_->insert(name, graph->draft().node(port));
+            nodeScope_->insert(name, graph->draft().ref(port));
             *call << nameNode(name);
         }
         // The call is the value of the function, so it runs whenever the function is called.
@@ -485,10 +553,10 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
             setNodeMacro(call, true);
         }
         for (draft_node_ref_t port : graph->draft().withPorts()) {
-            linkNodes(LinkType::With, graph->draft().node(port), call);
+            linkNodes(LinkType::With, graph->draft().ref(port), call);
         }
         for (draft_node_ref_t port : graph->draft().normPorts()) {
-            linkNodes(LinkType::Norm, graph->draft().node(port), call);
+            linkNodes(LinkType::Norm, graph->draft().ref(port), call);
         }
         addCaptureSite(call, target);
         bindGraphScopedFuncNodeDebug(sourceContext, targetOrigin, target, call);

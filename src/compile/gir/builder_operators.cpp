@@ -362,13 +362,11 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
                 }
             }
             // At the operator: the origin of a binary call is its right operand.
-            diags_->of(SemanticDiag::AmbiguousOperatorCall)
-                .atOrigin(call->at(0)->origin())
-                .commit(
-                    symbol,
-                    strutil::join(normTypes, ", ", [](Type *t) { return t->toString(); }),
-                    strutil::join(overloads, "; ", [](const std::string &o) { return o; }));
-            throw BuildAbortException();
+            rejectAmbiguousCall(
+                symbol,
+                strutil::join(normTypes, ", ", [](Type *t) { return t->toString(); }),
+                overloads,
+                call->at(0));
         }
         if (useBuiltin) {
             return nullptr;
@@ -549,10 +547,10 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
         }
         registerNodeOrigin(context_, call, origin, "gir.link.oper");
         for (draft_node_ref_t port : graph->draft().withPorts()) {
-            linkNodes(LinkType::With, graph->draft().node(port), call);
+            linkNodes(LinkType::With, graph->draft().ref(port), call);
         }
         for (draft_node_ref_t port : graph->draft().normPorts()) {
-            linkNodes(LinkType::Norm, graph->draft().node(port), call);
+            linkNodes(LinkType::Norm, graph->draft().ref(port), call);
         }
         setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), opType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
@@ -1577,7 +1575,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
             auto graphs = asCompileGraphVec(drefTarget);
-            // The first overload, in declaration order, whose parameters take the arguments.
+            // Overloads are tried in two passes (design principles 5.1): first with the
+            // argument types as they are -- a literal has not entered any parameter type yet
+            // -- and then with every literal entering the type of the parameter it is given
+            // to. Several candidates in the pass that is used is an ambiguity, never settled
+            // by declaration order (H27e); the same report is made for `f<w>` used as a value
+            // (partialApplicationOf).
             // Only the chosen one has to be complete: an overload the call does not mean may
             // still be waiting for its return type.
             // A decorated overload is what its decorators return: it is chosen by that
@@ -1589,10 +1592,22 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
                 return g->funcType();
             };
+            // The arguments as written, for the ambiguity report: the context arguments
+            // first, then the ordinary ones.
+            std::vector<std::string> argumentTypeTexts;
+            for (Type *type : withInputTypes) {
+                argumentTypeTexts.push_back(type->toString());
+            }
+            for (Type *type : normInputTypes) {
+                argumentTypeTexts.push_back(type->toString());
+            }
+            const std::string argumentTypes =
+                strutil::join(argumentTypeTexts, ", ", [](const std::string &s) { return s; });
             for (const bool entering : {false, true}) {
                 if (targetGraph || chosenDecorated) {
                     break;
                 }
+                std::vector<compile_graph_ptr_t> fitted;
                 for (const auto &g : *graphs) {
                     FunctionType *funcType = signatureOf(g);
                     if (!accepts(funcType, entering)) {
@@ -1602,23 +1617,40 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     // may come from its body, its decorated form exists once it is built (step
                     // two of loading builds on demand).
                     ensureFunctionBuilt(g);
-                    if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
-                        chosenDecorated = it->second;
-                        break;
+                    fitted.push_back(g);
+                }
+                if (fitted.empty()) {
+                    continue;
+                }
+                if (fitted.size() > 1) {
+                    // Both (or more) take the arguments in this pass: no declaration order
+                    // chooses between them. The signatures shown are the ones the call would
+                    // be made with, decorated forms included.
+                    std::vector<FunctionType *> candidates;
+                    candidates.reserve(fitted.size());
+                    for (const auto &g : fitted) {
+                        candidates.push_back(signatureOf(g));
                     }
-                    if (!funcType->hasExitType()) {
-                        if (failedBodies_.contains(g.get())) {
-                            // Its body is in error, which was reported there.
-                            throw BuildAbortException();
-                        }
-                        diags_->of(SemanticDiag::CallingIncompleteFunction)
-                            .atOrigin(gct->origin())
-                            .commit(g->name(), funcType->toString());
-                        throw BuildAbortException();
-                    }
-                    targetGraph = g;
+                    rejectAmbiguousCall(
+                        graphs->front()->name(), argumentTypes, candidates, gct);
+                }
+                const compile_graph_ptr_t &g = fitted.front();
+                FunctionType *funcType       = signatureOf(g);
+                if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
+                    chosenDecorated = it->second;
                     break;
                 }
+                if (!funcType->hasExitType()) {
+                    if (failedBodies_.contains(g.get())) {
+                        // Its body is in error, which was reported there.
+                        throw BuildAbortException();
+                    }
+                    diags_->of(SemanticDiag::CallingIncompleteFunction)
+                        .atOrigin(gct->origin())
+                        .commit(g->name(), funcType->toString());
+                    throw BuildAbortException();
+                }
+                targetGraph = g;
             }
             if (!targetGraph && !chosenDecorated) {
                 std::vector<std::pair<std::string, FunctionType *>> candidates;
@@ -2038,9 +2070,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         linkNodes(LinkType::With, targetNode, invokeNode);
         std::vector<camel::source::origin_id_t> callInputs;
         if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
-            auto calleeOrigin = sourceContext->resolveGirNodeOrigin(
-                draftDebugKey(targetNode),
-                std::string(nodeDebugEntityIdOf(targetNode)));
+            auto calleeOrigin = sourceContext->resolveGirNodeOrigin(draftDebugKey(targetNode));
             if (calleeOrigin != camel::source::kInvalidOriginId) {
                 callInputs.push_back(calleeOrigin);
             }
@@ -2073,8 +2103,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // the argument list alone (the GCT call node's own span). A call through a function value
     // made earlier is a CALL node made by createFuncDataNode; either stands for this call.
     if (targetGraph && targetNode &&
-        (targetNode->header.kind == camel::runtime::GCNodeKind::Func ||
-         targetNode->header.kind == camel::runtime::GCNodeKind::Call)) {
+        (nodeKindOf(targetNode) == camel::runtime::GCNodeKind::Func ||
+         nodeKindOf(targetNode) == camel::runtime::GCNodeKind::Call)) {
         registerCallExpressionOrigin(context_, targetNode, gct, "gir.link.func");
     }
 

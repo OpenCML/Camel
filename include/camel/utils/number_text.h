@@ -228,6 +228,35 @@ template <std::floating_point T> std::string floatText(T value) {
     return text;
 }
 
+/// The text of one part of a complex number: a whole part is written as an integer (`3`, so
+/// that `3+4i` is the text of the value, as design principles 5.1 writes it), every other part
+/// by floatText. `-0` is written `0` as a part: the sign of a zero part is not shown.
+template <std::floating_point T> std::string complexPartText(T value) {
+    if (std::isfinite(value) && value == std::trunc(value) && std::abs(value) < T(1e16)) {
+        char buffer[32];
+        const auto [end, ec] = std::to_chars(buffer, buffer + sizeof(buffer), static_cast<long long>(value));
+        if (ec == std::errc()) {
+            return std::string(buffer, static_cast<size_t>(end - buffer));
+        }
+    }
+    if (value == 0) {
+        return "0";
+    }
+    return floatText(value);
+}
+
+/// The text of a complex number: the real part, the sign of the imaginary one, its magnitude
+/// and `i` (`3+4i`, `3-4i`, `0+1i`). Both parts are always written, so a real-looking complex
+/// value still reads as a complex one.
+template <std::floating_point T> std::string complexText(T real, T imaginary) {
+    std::string text = complexPartText(real);
+    const bool negative = !std::isnan(imaginary) && std::signbit(imaginary);
+    text += negative ? '-' : '+';
+    text += complexPartText(negative ? -imaginary : imaginary);
+    text += 'i';
+    return text;
+}
+
 /// Whether `value`, truncated toward zero, is a value of the signed integer type T. False for
 /// a NaN and for the infinities.
 template <std::signed_integral T, std::floating_point F> bool truncatesInto(F value) {
