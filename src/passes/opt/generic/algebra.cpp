@@ -483,6 +483,102 @@ size_t algebraDraft(GraphDraft &draft, bool safeFp) {
         draft,
         safeFp ? sem::NumericPolicy::strict() : sem::NumericPolicy::relaxed());
 }
+
+bool mayAlgebra(const camel::runtime::GCGraph &graph) {
+    if (!graph.hasNodePayload()) {
+        return true;
+    }
+    const auto families = Families::current();
+    const auto &table   = OperatorTable::instance();
+    // A DATA constant (of any type: aggregates take coefficients of other types).
+    const auto isConstant = [&](gc_node_ref_t ref) {
+        const GCNode *node = graph.node(ref);
+        return node && node->kind == GCNodeKind::Data && node->dataIndex < 0 &&
+               graph.normInputsOf(ref).empty() && graph.withInputsOf(ref).empty() &&
+               graph.ctrlInputsOf(ref).empty();
+    };
+    // Whether the constant `ref` may be the neutral element `neutral` of `ops` (an integer law).
+    const auto mayBeNeutral = [&](gc_node_ref_t ref, const Arithmetic &ops,
+                                  const std::optional<uint64_t> &neutral) {
+        if (!neutral || !isConstant(ref)) {
+            return false;
+        }
+        const GCNode *node = graph.node(ref);
+        const auto index   = static_cast<size_t>(-node->dataIndex);
+        if (index >= graph.staticSlots().size() || !node->dataType() ||
+            node->dataType()->code() != ops.element) {
+            return true; // not read the same way here
+        }
+        const slot_t slot = graph.staticSlots()[index];
+        switch (ops.element) {
+        case type::TypeCode::Int32:
+            return fromSlot<uint32_t>(slot) == static_cast<uint32_t>(*neutral);
+        case type::TypeCode::Int64:
+            return fromSlot<uint64_t>(slot) == *neutral;
+        default:
+            return false;
+        }
+    };
+    // `ref` is a product of the family with a constant factor: its other factor, else none.
+    const auto scaledBase = [&](gc_node_ref_t ref, const Arithmetic &ops) -> gc_node_ref_t {
+        const GCNode *node = graph.node(ref);
+        if (!node || node->kind != GCNodeKind::Oper || !node->hasPayload() ||
+            graph.nodeBodyAs<GCOperBody>(ref)->oper != ops.mul ||
+            !table.isPure(ops.mul) || graph.normInputsOf(ref).size() != 2 ||
+            !graph.withInputsOf(ref).empty()) {
+            return kInvalidNodeRef;
+        }
+        const auto inputs = graph.normInputsOf(ref);
+        if (isConstant(inputs[0])) {
+            return inputs[1];
+        }
+        return isConstant(inputs[1]) ? inputs[0] : kInvalidNodeRef;
+    };
+    for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
+        const GCNode *node = *it;
+        if (node->kind != GCNodeKind::Oper || !node->hasPayload() || !node->dataType()) {
+            continue;
+        }
+        const gc_node_ref_t ref = it.ref();
+        const OperId op         = graph.nodeBodyAs<GCOperBody>(ref)->oper;
+        if (!table.isPure(op)) {
+            continue;
+        }
+        const Arithmetic *ops = families->match(op, node->dataType());
+        if (ops == nullptr || graph.normInputsOf(ref).size() != 2 ||
+            !graph.withInputsOf(ref).empty()) {
+            continue;
+        }
+        const gc_node_ref_t a = graph.normInputsOf(ref)[0], b = graph.normInputsOf(ref)[1];
+        const bool integer = ops->element == type::TypeCode::Int32 ||
+                             ops->element == type::TypeCode::Int64;
+        // x + 0, x - 0, x * 1 (and 0 + x, 1 * x).
+        if (integer &&
+            ((op == ops->add && (mayBeNeutral(b, *ops, ops->addNeutral) ||
+                                 mayBeNeutral(a, *ops, ops->addNeutral))) ||
+             (op == ops->sub && mayBeNeutral(b, *ops, ops->subNeutral)) ||
+             (op == ops->mul && (mayBeNeutral(b, *ops, ops->mulNeutral) ||
+                                 mayBeNeutral(a, *ops, ops->mulNeutral))))) {
+            return true;
+        }
+        // c1 * x + c2 * x, x + x
+        if (op == ops->add) {
+            const gc_node_ref_t baseA = scaledBase(a, *ops), baseB = scaledBase(b, *ops);
+            const gc_node_ref_t termA = baseA != kInvalidNodeRef ? baseA : a;
+            const gc_node_ref_t termB = baseB != kInvalidNodeRef ? baseB : b;
+            if (termA == termB && (baseA != kInvalidNodeRef || baseB != kInvalidNodeRef || a == b)) {
+                return true;
+            }
+        }
+        // (x * c1) * c2
+        if (op == ops->mul &&
+            ((scaledBase(a, *ops) != kInvalidNodeRef && isConstant(b)) ||
+             (scaledBase(b, *ops) != kInvalidNodeRef && isConstant(a)))) {
+            return true;
+        }
+    }
+    return false;
+}
 } // namespace camel::passes::generic
 
 camel::runtime::GCGraph *AlgebraPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
@@ -492,5 +588,8 @@ camel::runtime::GCGraph *AlgebraPass::apply(camel::runtime::GCGraph *graph, std:
         "std::opt::algebra",
         [&](camel::runtime::GraphDraft &draft) {
             return camel::passes::generic::algebraDraft(draft, safeFp_);
-        });
+        },
+        nullptr,
+        nullptr,
+        camel::passes::generic::mayAlgebra);
 }

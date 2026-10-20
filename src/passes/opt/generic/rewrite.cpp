@@ -30,6 +30,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 
 namespace camel::passes::generic {
@@ -226,13 +227,92 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     draft.eraseNode(id);
 }
 
+namespace {
+
+/// A hash of what a draft decoded from `graph` holds: the node records and their columns, the
+/// payloads, the ports, the constants and the types. The graphs it refers to are not part of it.
+uint64_t contentHash(const GCGraph &graph) {
+    const auto *native = graph.nodePayload();
+    if (native == nullptr || native->empty()) {
+        return 0;
+    }
+    uint64_t hash = 0x243F6A8885A308D3ull;
+    const auto mix = [&](uint64_t word) {
+        hash = (hash ^ word) * 0x9E3779B97F4A7C15ull;
+        hash ^= hash >> 29;
+    };
+    const auto bytes = [&](const void *data, size_t size) {
+        mix(size);
+        if (data == nullptr) {
+            return;
+        }
+        const auto *at = static_cast<const unsigned char *>(data);
+        for (; size >= 8; size -= 8, at += 8) {
+            uint64_t word;
+            std::memcpy(&word, at, 8);
+            mix(word);
+        }
+        uint64_t tail = 0;
+        std::memcpy(&tail, at, size);
+        mix(tail);
+    };
+    const size_t nodes = native->nodeCount;
+    bytes(native->nodes, (nodes + 1) * sizeof(*native->nodes));
+    bytes(native->origins, nodes * sizeof(*native->origins));
+    bytes(native->permissions, native->permissions ? nodes : 0);
+    bytes(native->attrs, native->attrs ? nodes * sizeof(*native->attrs) : 0);
+    bytes(native->inputs, native->edgeCount * sizeof(*native->inputs));
+    bytes(native->payload, native->payloadWordCount * sizeof(*native->payload));
+    bytes(native->normPorts, native->normPortCount * sizeof(*native->normPorts));
+    bytes(native->withPorts, native->withPortCount * sizeof(*native->withPorts));
+    bytes(native->closure, native->closureCount * sizeof(*native->closure));
+    bytes(native->branchArms, native->branchArmCount * sizeof(*native->branchArms));
+    for (uint64_t scalar :
+         {uint64_t{native->entryNode},
+          uint64_t{native->exitNode},
+          uint64_t{native->outputNode},
+          uint64_t{native->returnNode},
+          static_cast<uint64_t>(native->returnKind),
+          reinterpret_cast<uint64_t>(graph.funcType()),
+          reinterpret_cast<uint64_t>(graph.runtimeDataType()),
+          reinterpret_cast<uint64_t>(graph.staticDataType()),
+          reinterpret_cast<uint64_t>(graph.closureType())}) {
+        mix(scalar);
+    }
+    const auto statics = graph.staticSlots();
+    bytes(statics.data(), statics.size_bytes());
+    return hash;
+}
+
+} // namespace
+
+bool RewriteMemo::leftAlone(std::string_view passName, const GCGraph *graph) const {
+    const auto it = contentsByPass_.find(std::string(passName));
+    const uint64_t hash = contentHash(*graph);
+    return hash != 0 && it != contentsByPass_.end() && it->second.contains(hash);
+}
+
+void RewriteMemo::remember(std::string_view passName, const GCGraph *graph) {
+    if (const uint64_t hash = contentHash(*graph)) {
+        contentsByPass_[std::string(passName)].insert(hash);
+    }
+}
+
 GCGraph *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, GCGraph *graph, std::string_view passName,
-    const std::function<size_t(GraphDraft &)> &rewrite, size_t *rewrites) {
+    const std::function<size_t(GraphDraft &)> &rewrite, size_t *rewrites, RewriteMemo *memo,
+    bool (*mayRewrite)(const GCGraph &)) {
     camel::runtime::RuntimeGraphDraftSession session(context, graph);
     size_t total = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
-        total += rewrite(session.edit(g));
+        if ((mayRewrite && !mayRewrite(*g)) || (memo && memo->leftAlone(passName, g))) {
+            continue;
+        }
+        const size_t made = rewrite(session.edit(g));
+        total += made;
+        if (memo && made == 0) {
+            memo->remember(passName, g);
+        }
     }
     CAMEL_LOG_INFO_S("Opt", "{}: {} rewrite(s)", passName, total);
     if (rewrites) {
