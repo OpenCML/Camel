@@ -44,11 +44,10 @@ enum class RuntimeDiag : uint32_t {
     EntryArgumentMissing      = 0x000010,
     EntryArgumentInvalid      = 0x000011,
     EntryResultNotWritten     = 0x000012,
-    GraphTooLarge             = 0x000013,
     MemoryExhausted           = 0x000014,
     // Faults of the built-in operators and of the general-purpose modules, each with the
     // values that caused it. They took the place of RuntimeError at those sites; the numbers
-    // start at 0x30 to stay clear of the codes other work adds after GraphTooLarge.
+    // start at 0x30 to stay clear of the codes other work adds after MemoryExhausted.
     InvalidNumberText      = 0x000030,
     FormatFailed           = 0x000031,
     OperandTypeUnsupported = 0x000032,

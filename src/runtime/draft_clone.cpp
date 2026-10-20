@@ -304,7 +304,7 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
                 ASSERT(
                     ownerStaticIndex <=
                         static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
-                    "Runtime draft clone static-slot remap exceeds 16-bit data-index capacity.");
+                    "Runtime draft clone static-slot remap exceeds the data-index range.");
                 it->second = static_cast<gc_slot_idx_t>(-static_cast<int32_t>(ownerStaticIndex));
             }
             mappedDataIndex = it->second;
@@ -447,7 +447,7 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDra
                 ASSERT(
                     ownerStaticIndex <=
                         static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
-                    "Draft graph clone static-slot remap exceeds 16-bit data-index capacity.");
+                    "Draft graph clone static-slot remap exceeds the data-index range.");
                 it->second = static_cast<gc_slot_idx_t>(-static_cast<int32_t>(ownerStaticIndex));
             }
             mappedDataIndex = it->second;

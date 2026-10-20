@@ -1386,7 +1386,6 @@ ecc2e2f433981665 ok test/cases/modules/onnx/refusals/bad_output.cml
 d43015f57a9ea7f7 ok test/cases/modules/onnx/refusals/bad_target.cml
 2179cd1655ad8207 ok test/cases/modules/onnx/refusals/example_mismatch.cml
 e0c0f0b220a84bcd ok test/cases/modules/onnx/refusals/function_branch.cml
-ecbfbbfbe40201cd ok test/cases/modules/onnx/refusals/graph_too_large.cml
 2a8ef24aea1e20c4 ok test/cases/modules/onnx/refusals/growth_budget.cml
 a8fa3e15cf5ea732 ok test/cases/modules/onnx/refusals/main_reaches_loop.cml
 85d036a6ff79405b ok test/cases/modules/onnx/refusals/no_request.cml

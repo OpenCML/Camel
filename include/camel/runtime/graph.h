@@ -25,7 +25,7 @@
  * graph objects. Runtime execution then consumes GCGraph directly.
  *
  * The frozen layout (docs/design/graph-model, section 4.1; migration step 3):
- * 1. A node is a fixed 16-byte record (GCNode) in one array; its NodeId (gc_node_ref_t) is its
+ * 1. A node is a fixed 28-byte record (GCNode) in one array; its NodeId (gc_node_ref_t) is its
  *    index in that array, from 0 to nodeCount() - 1. A sentinel record follows the last node.
  * 2. Each edge is stored once, as an entry of the input table: a node's inputs are one run of
  *    it, its Norm inputs, then its With inputs, then its Ctrl inputs; the record keeps the
@@ -79,11 +79,11 @@ class Graph;
 
 namespace camel::runtime {
 
-using gc_node_ref_t = uint16_t;
-using gc_slot_idx_t = int16_t;
+using gc_node_ref_t = uint32_t;
+using gc_slot_idx_t = int32_t;
 using gc_data_idx_t = gc_slot_idx_t;
-using gc_off_t      = uint16_t;
-using gc_cnt_t      = uint16_t;
+using gc_off_t      = uint32_t;
+using gc_cnt_t      = uint32_t;
 
 constexpr gc_node_ref_t kInvalidNodeRef = static_cast<gc_node_ref_t>(-1);
 constexpr gc_off_t kInvalidOffset       = static_cast<gc_off_t>(-1);
@@ -168,11 +168,12 @@ inline constexpr std::string_view kGraphOriginalUri = ":graph/original";
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
 inline constexpr gc_off_t kNoPayload = static_cast<gc_off_t>(-1);
 
-/// One node of a frozen graph: a fixed 16-byte record (docs/design/graph-model, 4.1). Its inputs
+/// One node of a frozen graph: a fixed 28-byte record (docs/design/graph-model, 4.1). Its inputs
 /// and its payload are found through the graph (GCGraph::normInputsOf, nodeBodyAs).
 struct GCNode {
     GCNodeKind kind         = GCNodeKind::Data;
     uint8_t flags           = 0;
+    uint16_t reserved       = 0;
     gc_slot_idx_t dataIndex = 0;
     /// The type of the node's value (camel/core/type/intern.h); kNoTypeId when it has none.
     camel::core::type::TypeId typeId = camel::core::type::kNoTypeId;
@@ -196,7 +197,7 @@ struct GCNode {
     constexpr bool isConstant() const { return hasFlag(kGCNodeFlagConstant); }
     constexpr bool hasPayload() const { return payload != kNoPayload; }
 };
-static_assert(sizeof(GCNode) == 16, "A frozen node record is 16 bytes (graph model, 4.1).");
+static_assert(sizeof(GCNode) == 28, "A frozen node record is 28 bytes.");
 static_assert(std::is_trivially_copyable_v<GCNode>);
 
 /// The unit the payload area is addressed in. Payload bodies hold pointers (the callee of a
@@ -286,8 +287,8 @@ static_assert(std::is_trivially_copyable_v<GCAccsBody>);
 struct GCFillBody {
     GCFillKind fillKind = GCFillKind::Tuple;
     uint8_t reserved0   = 0;
-    uint16_t slotCount  = 0;
-    uint32_t reserved2  = 0;
+    uint16_t reserved1  = 0;
+    uint32_t slotCount  = 0;
 
     std::span<const gc_slot_idx_t> slots() const {
         const auto *data = reinterpret_cast<const gc_slot_idx_t *>(
@@ -301,8 +302,8 @@ inline std::vector<std::byte> makeFillPayload(GCFillKind kind, std::span<const s
     GCFillBody body{
         .fillKind  = kind,
         .reserved0 = 0,
-        .slotCount = static_cast<uint16_t>(slots.size()),
-        .reserved2 = 0,
+        .reserved1 = 0,
+        .slotCount = static_cast<uint32_t>(slots.size()),
     };
     std::vector<std::byte> bytes(sizeof(GCFillBody) + sizeof(gc_slot_idx_t) * slots.size());
     std::memcpy(bytes.data(), &body, sizeof(body));
@@ -324,7 +325,6 @@ static_assert(std::is_trivially_copyable_v<GCBrchBody>);
 struct GCJoinBody {
     gc_node_ref_t brch = kInvalidNodeRef;
     gc_cnt_t armCount  = 0;
-    uint32_t reserved  = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCJoinBody>);
 

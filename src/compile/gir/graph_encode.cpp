@@ -42,7 +42,6 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
-#include "camel/runtime/capacity.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
@@ -619,11 +618,7 @@ class EncodeSession {
         // Later statements may make an earlier control edge redundant. Clean up once before
         // freezing, with a smaller work cap than the explicit optimization stage.
         camel::runtime::reduceControlDependencies(*prepared.draft, 8192);
-        try {
-            prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
-        } catch (const camel::runtime::GraphCapacityError &e) {
-            throw e.inGraph(graph->name(), prepared.draft->firstNodeOrigin());
-        }
+        prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepared compile graph '{}' with {} draft nodes.",
