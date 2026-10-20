@@ -88,3 +88,15 @@ expect_stdout_contains = ["struct Shape {", "std::variant<std::monostate, Circle
 expect_output_not_contains = ["camel/core/", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "recursive_enum_types"
+desc = "A recursive enum is translated: the field that contains the enum is held through std::shared_ptr, not refused; make boxes it, get and appendText dereference it, and a generated destructor and operator== walk it on explicit stacks (camel/standalone/recursive.h). The million-node chain itself is built and run by agree_with_fvm, which checks the text and the equality result against std::fvm."
+kind = "behavior"
+case = "../../../cases/consistency/values/deep_enum_chain.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["struct Chain {", "std::shared_ptr<Chain>", "rt::box<Chain>", "rt::beginDestroy()", "std::vector<std::pair<const Chain *, const Chain *>> pending"]
+expect_output_not_contains = ["camel/core/", "libcamel", "TranslationRefused"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
