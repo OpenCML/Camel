@@ -21,9 +21,11 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/complex.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/type.h"
 
+#include "complex_format.h"
 #include "float_format.h"
 #include "fmt/args.h"
 #include "fmt/core.h"
@@ -53,6 +55,12 @@ std::optional<std::string> checkFormatPattern(
             break;
         case TypeCode::Float64:
             store.push_back(camel::builtin::LanguageFloat<Float64>{0});
+            break;
+        case TypeCode::Complex64:
+            store.push_back(camel::builtin::LanguageComplex<Float32>{0, 0});
+            break;
+        case TypeCode::Complex128:
+            store.push_back(camel::builtin::LanguageComplex<Float64>{0, 0});
             break;
         default:
             store.push_back(camel::builtin::CodePointText{""});
@@ -90,6 +98,20 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
         case TypeCode::Float64:
             store.push_back(camel::builtin::LanguageFloat<Float64>{with.get<Float64>(i)});
             break;
+        case TypeCode::Complex64: {
+            const Complex *value = with.get<Complex *>(i);
+            store.push_back(camel::builtin::LanguageComplex<Float32>{
+                value != nullptr ? value->realF() : Float32{0},
+                value != nullptr ? value->imaginaryF() : Float32{0}});
+            break;
+        }
+        case TypeCode::Complex128: {
+            const Complex *value = with.get<Complex *>(i);
+            store.push_back(camel::builtin::LanguageComplex<Float64>{
+                value != nullptr ? value->real() : Float64{0},
+                value != nullptr ? value->imaginary() : Float64{0}});
+            break;
+        }
         default:
             // fallback to string
             std::ostringstream oss;
