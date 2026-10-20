@@ -233,6 +233,45 @@ void forwardingGateConsumers() {
     draft.setOutputNode(output);
     check(!bypassValueGate(draft, output, budget), "output anchor lost its identity");
 }
+/// A node with many readers: the readers are added and erased in an order unlike the order they
+/// were added in, as dead code is after inlining. Each step costs the reader, not the readers
+/// so far; the plan's time limit is what fails a quadratic implementation.
+void manyReaders() {
+    GraphDraft draft;
+    const auto producer = node(draft);
+    constexpr size_t kReaders = 200000;
+    std::vector<gc_node_ref_t> readers;
+    readers.reserve(kReaders);
+    for (size_t i = 0; i < kReaders; ++i) {
+        const auto reader = node(draft);
+        draft.appendInput(DraftEdgeKind::Norm, reader, producer);
+        // Reading it twice does not make it two readers.
+        if (i % 3 == 0) {
+            draft.appendInput(DraftEdgeKind::Norm, reader, producer);
+        }
+        readers.push_back(reader);
+    }
+    check(draft.normUsersOf(producer).size() == kReaders, "a reader was lost or counted twice");
+    uint64_t state = 0x9E3779B97F4A7C15ull;
+    for (size_t i = readers.size(); i > 1; --i) {
+        state = state * 6364136223846793005ull + 1442695040888963407ull;
+        std::swap(readers[i - 1], readers[(state >> 33) % i]);
+    }
+    for (size_t i = 0; i < readers.size(); ++i) {
+        if (i % 2 == 0) {
+            draft.eraseNode(readers[i]);
+        } else {
+            while (draft.unlinkInput(DraftEdgeKind::Norm, readers[i], producer)) {
+            }
+        }
+        if (i % 50000 == 0) {
+            check(
+                draft.normUsersOf(producer).size() == kReaders - i - 1,
+                "the readers do not add up");
+        }
+    }
+    check(draft.normUsersOf(producer).empty(), "a reader was left behind");
+}
 } // namespace
 
 const camel::runtime::Program *
@@ -245,6 +284,7 @@ ControlTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     denseChain();
     denseDataChain();
     forwardingGateConsumers();
+    manyReaders();
     os << "CONTROL topology, budgets, branches, dense chain: PASS\n";
     return program;
 }

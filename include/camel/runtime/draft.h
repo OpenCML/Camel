@@ -190,19 +190,39 @@ class DraftNodePool {
     std::vector<void *> oversizeBlocks_;
 };
 
-/// The nodes that read a node, by edge group, in the order they were linked. A user appears once
-/// per group however often it reads the node. Kept apart from the node's storage so that adding
-/// a user costs the user alone.
+/// The nodes that read a node, by edge group. A user appears once per group however often it
+/// reads the node. Kept apart from the node's storage so that adding a user costs the user alone.
+///
+/// Order: users are listed in the order they were linked. A list that has grown past
+/// kIndexedUsers also has an index from user to place, so that a user is found, added and
+/// removed at constant cost; there, removing a user moves the last one into its place. The
+/// order is a function of the sequence of edits alone, so equal edits give equal lists.
 struct DraftUserLists {
+    static constexpr size_t kIndexedUsers = 32;
+
     std::vector<gc_node_ref_t> norm;
     std::vector<gc_node_ref_t> with;
     std::vector<gc_node_ref_t> ctrl;
+    std::unique_ptr<std::unordered_map<gc_node_ref_t, uint32_t>> places[3];
 
     std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) {
         return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
     }
     const std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) const {
         return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+    }
+    /// The index of the `kind` list, built when the list is long enough to want one.
+    std::unordered_map<gc_node_ref_t, uint32_t> *index(DraftEdgeKind kind) {
+        auto &items = of(kind);
+        auto &place = places[static_cast<size_t>(kind)];
+        if (!place && items.size() >= kIndexedUsers) {
+            place = std::make_unique<std::unordered_map<gc_node_ref_t, uint32_t>>();
+            place->reserve(items.size() * 2);
+            for (uint32_t i = 0; i < items.size(); ++i) {
+                place->emplace(items[i], i);
+            }
+        }
+        return place.get();
     }
 };
 
