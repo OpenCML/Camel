@@ -1533,7 +1533,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // `xs->append<v>` where the compiler proved the old array invisible: the loop body of a
         // loop whose state is the array, with the state bound only to this call and the first
         // value a fresh literal (Builder::markLoopStateInPlace). The append may then write into
-        // the state's own buffer (Array::canWriteInPlace) instead of copying the array; when it
+        // the state's own Block (Array::canWriteInPlace) instead of copying the array; when it
         // cannot, it behaves exactly as `append`. Not a name a program can reach for on its own.
         OperatorGroup::create(
             "__append_owned__",
@@ -1739,12 +1739,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         // ======= Diagnostics =======
-        // `std::mem::buffers()`: the buffer counters as a struct, readable between two
+        // `std::mem::blocks()`: the block counters as a struct, readable between two
         // operations (docs/design-principles 10.5; the allocation-count assertions). Declared
         // with effects below: the counters are not a function of the arguments.
         OperatorGroup::create(
-            "std::mem::buffers",
-            {{":op/mem_buffers", StaticFuncTypeResolver::create({}, {}, memBuffersStructType())}}),
+            "std::mem::blocks",
+            {{":op/mem_blocks", StaticFuncTypeResolver::create({}, {}, memBlocksStructType())}}),
         // ======= Macros =======
         OperatorGroup::create(
             "__cmp__",

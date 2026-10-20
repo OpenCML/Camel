@@ -11,6 +11,8 @@
 // Explicit binary/text boundaries. Invalid UTF-8 is a value-level decoding error.
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm/block.h"
+#include "camel/core/mm/root_handle.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/array.h"
@@ -21,6 +23,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
+#include <cstring>
 #include <limits>
 
 namespace {
@@ -32,8 +35,19 @@ using namespace camel::core::error;
 namespace mm = camel::core::mm;
 slot_t encodeKernel(ArgsView &, ArgsView &norm, Context &) {
     // A string is always valid UTF-8 (design principles 11.1), so encoding cannot fail.
-    const std::string text(norm.get<::String *>(0)->view());
-    return toSlot(BytesObject::from(text, mm::autoSpace()));
+    auto *text          = norm.get<::String *>(0);
+    const std::string_view textView = text->view();
+    if (textView.size() < mm::kInlineBlockBytes) {
+        return toSlot(BytesObject::from(textView, mm::autoSpace()));
+    }
+    // Large text: copy it once, straight from the language string into a data block. The
+    // string may move when the block allocation collects, so root it and re-read after.
+    mm::RootHandle root(mm::autoSpace(), text, Type::String(), "bytes.encode");
+    mm::Block *block = mm::Block::create(textView.size());
+    const std::string_view current = root.getAs<::String>()->view();
+    std::memcpy(block->data(), current.data(), current.size());
+    block->setBytes(current.size());
+    return toSlot(BytesObject::adopt(block, current.size(), mm::autoSpace()));
 }
 slot_t decodeKernel(ArgsView &, ArgsView &norm, Context &) {
     const std::string bytes(norm.get<BytesObject *>(0)->view());

@@ -1,4 +1,0 @@
-// The buffer self-test runs from the pass `std::gc::buffers`; the program itself does nothing.
-func main(): int sync {
-    return 0
-}

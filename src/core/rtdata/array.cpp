@@ -25,12 +25,18 @@
 #include "camel/core/rtdata/array.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/struct.h"
+#include "camel/core/mm/root_handle.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/pure.h"
 #include "camel/core/type/text.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/number_text.h"
 
 #include <cmath>
 #include <cstdio>
+#include <functional>
+#include <memory>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -93,18 +99,18 @@ Array *Array::create(
     camel::core::mm::IAllocator &allocator, const type::ArrayType *arrayType,
     std::span<const int64_t> extents, bool zeroInit) {
     const uint64_t numel = checkedNumel(extents);
-    const TypeCode elemCode =
-        arrayType != nullptr ? arrayType->elemTypeCode() : TypeCode::Void;
-    const type::ArrayStorage storage =
-        type::arrayStorageFor(arrayType != nullptr ? arrayType->elemType() : nullptr);
+    const type::Type *elemType = arrayType != nullptr ? arrayType->elemType() : nullptr;
+    const TypeCode elemCode    = elemType != nullptr ? elemType->code() : TypeCode::Void;
+    const type::ArrayStorage storage = type::arrayStorageFor(elemType);
 
     if (storage == type::ArrayStorage::Slots) {
         Array *array = createSlotsRank(allocator, extents, static_cast<size_t>(numel));
         array->elemTypeCode_ = elemCode;
+        array->elemType_     = elemType;
         return array;
     }
 
-    return createCompact(allocator, elemCode, extents, nullptr, 0, zeroInit, false);
+    return createCompact(allocator, elemType, extents, nullptr, 0, zeroInit, false);
 }
 
 Array *Array::create(
@@ -117,31 +123,31 @@ Array *Array::create(
 Array *
 Array::view(Array *source, std::span<const int64_t> extents, uint64_t elementOffset) {
     ASSERT(source != nullptr, "A view needs a source array");
-    ASSERT(source->isCompact(), "Only a compact numeric array can be viewed");
+    ASSERT(source->isCompact(), "Only a compact pure-data array can be viewed");
     const uint64_t elements = checkedNumel(extents);
     if (elementOffset > source->numel_ || elements > source->numel_ - elementOffset) {
         throw std::invalid_argument("Array view must stay within its source");
     }
-    source->ensureBuffer();
-    Buffer *buffer = source->buffer_;
+    source->ensureBlock();
+    Block *block = source->block_;
     const size_t byteOffset =
         source->offset_ + static_cast<size_t>(elementOffset) * source->elementSize_;
     Array *view =
-        createCompact(*source->allocator_, source->elemTypeCode_, extents, buffer, byteOffset,
+        createCompact(*source->allocator_, source->elemType_, extents, block, byteOffset,
                       false, true);
     return view;
 }
 
 Array *Array::wrap(
     camel::core::mm::IAllocator &allocator, const type::ArrayType *arrayType,
-    std::span<const int64_t> extents, Buffer *buffer, size_t byteOffset, bool view) {
-    ASSERT(buffer != nullptr, "An array wrap needs a buffer");
+    std::span<const int64_t> extents, Block *block, size_t byteOffset, bool view) {
+    ASSERT(block != nullptr, "An array wrap needs a block");
     ASSERT(arrayType != nullptr, "An array wrap needs its element type");
     ASSERT(
         type::arrayStorageFor(arrayType->elemType()) == type::ArrayStorage::Compact,
-        "Only a numeric array can wrap an external buffer");
+        "Only a pure-data array can wrap an external block");
     return createCompact(
-        allocator, arrayType->elemTypeCode(), extents, buffer, byteOffset, false, view);
+        allocator, arrayType->elemType(), extents, block, byteOffset, false, view);
 }
 
 Array *Array::createSlots(
@@ -189,13 +195,21 @@ Array *Array::createSlotsRank(
 }
 
 Array *Array::createCompact(
-    camel::core::mm::IAllocator &allocator, TypeCode elemType, std::span<const int64_t> extents,
-    Buffer *buffer, size_t byteOffset, bool zeroInit, bool view) {
-    const uint64_t numel = checkedNumel(extents);
-    const size_t elemSize = type::arrayElementSize(elemType);
+    camel::core::mm::IAllocator &allocator, const type::Type *elemType,
+    std::span<const int64_t> extents, Block *block, size_t byteOffset, bool zeroInit, bool view) {
+    ASSERT(elemType != nullptr, "A compact array needs its element type");
+    const type::DataLayout *layout = type::pureDataLayout(elemType);
+    ASSERT(layout != nullptr, "A compact array's element type is pure data");
+    // Inline bytes start right after the extent table, which is 8-byte aligned; a layout that
+    // needs stricter alignment (a complex number later) must not go inline.
+    ASSERT(
+        layout->alignment <= alignof(slot_t),
+        "An inline compact element must not need more than slot alignment");
+    const uint64_t numel  = checkedNumel(extents);
+    const size_t elemSize = layout->size;
     const size_t bytes    = static_cast<size_t>(numel) * elemSize;
     const size_t rank     = extents.size();
-    const bool inlineData = buffer == nullptr && bytes <= camel::core::array::kInlineArrayBytes;
+    const bool inlineData = block == nullptr && bytes <= camel::core::mm::kInlineBlockBytes;
 
     size_t total = sizeof(Array) + rank * 2 * sizeof(int64_t);
     if (inlineData) {
@@ -205,40 +219,42 @@ Array *Array::createCompact(
     if (!memory) {
         throw std::bad_alloc();
     }
-    Array *array        = new (memory) Array();
-    array->allocator_   = &allocator;
-    array->storage_     = Storage::Compact;
-    array->elemTypeCode_ = elemType;
-    array->elementSize_ = elemSize;
-    array->rank_        = static_cast<uint32_t>(rank);
-    array->numel_       = numel;
-    array->size_        = extents.empty() ? 0 : static_cast<uint64_t>(extents[0]);
-    array->view_        = view;
-    array->extents_     = reinterpret_cast<int64_t *>(array + 1);
-    array->strides_     = array->extents_ + rank;
+    Array *array         = new (memory) Array();
+    array->allocator_    = &allocator;
+    array->storage_      = Storage::Compact;
+    array->elemTypeCode_ = elemType->code();
+    array->elemType_     = elemType;
+    array->elementSize_  = static_cast<uint32_t>(elemSize);
+    array->rank_         = static_cast<uint32_t>(rank);
+    array->numel_        = numel;
+    array->size_         = extents.empty() ? 0 : static_cast<uint64_t>(extents[0]);
+    array->view_         = view;
+    array->slotShaped_   = layout != nullptr && layout->slotShaped;
+    array->extents_      = reinterpret_cast<int64_t *>(array + 1);
+    array->strides_      = array->extents_ + rank;
     for (size_t i = 0; i < rank; ++i) {
         array->extents_[i] = extents[i];
     }
     fillStrides(extents, array->strides_);
 
-    if (buffer != nullptr) {
-        array->buffer_ = buffer;
-        buffer->retain();
+    if (block != nullptr) {
+        array->block_ = block;
+        block->retain();
         array->offset_ = byteOffset;
         // A view never grows into the source's storage: any append copies first.
-        array->capacity_ = view ? numel : (elemSize == 0 ? 0 : buffer->bytes() / elemSize);
-        array->dataPtr_  = buffer->data() + byteOffset;
+        array->capacity_ = view ? numel : (elemSize == 0 ? 0 : block->bytes() / elemSize);
+        array->dataPtr_  = block->data() + byteOffset;
         array->noteFinalizable();
     } else if (inlineData) {
-        array->buffer_    = nullptr;
+        array->block_    = nullptr;
         array->capacity_  = numel;
         array->dataPtr_   = reinterpret_cast<std::byte *>(array->strides_ + rank);
         if (zeroInit && bytes > 0) {
             std::memset(array->dataPtr_, 0, bytes);
         }
     } else {
-        Buffer *created = camel::core::array::Buffer::create(bytes);
-        array->buffer_  = created;
+        Block *created = camel::core::mm::Block::create(bytes);
+        array->block_  = created;
         array->offset_  = 0;
         array->capacity_ = numel;
         array->dataPtr_  = created->data();
@@ -251,7 +267,7 @@ Array *Array::createCompact(
 }
 
 void Array::noteFinalizable() {
-    if (buffer_ != nullptr && allocator_ != nullptr) {
+    if (block_ != nullptr && allocator_ != nullptr) {
         allocator_->noteFinalizable(this);
     }
 }
@@ -264,8 +280,8 @@ void Array::recomputePointers() {
                                           : reinterpret_cast<std::byte *>(inlineData_);
         return;
     }
-    if (buffer_ != nullptr) {
-        dataPtr_ = buffer_->data() + offset_;
+    if (block_ != nullptr) {
+        dataPtr_ = block_->data() + offset_;
     } else {
         dataPtr_ = reinterpret_cast<std::byte *>(strides_ + rank_);
     }
@@ -285,18 +301,234 @@ bool Array::sameShape(const Array *other) const {
     return true;
 }
 
-slot_t Array::getSlot(uint64_t flatIndex) const {
+namespace {
+
+using camel::core::type::TypeCode;
+
+/// Reads one pure-data leaf from its compact bytes. The slot carries the same low bytes that
+/// rtdata::toSlot gives the value, so this is the inverse of writeLeaf.
+slot_t readLeaf(const std::byte *at, TypeCode code) {
+    switch (code) {
+    case TypeCode::Int32: {
+        int32_t value = 0;
+        std::memcpy(&value, at, sizeof(value));
+        return rtdata::toSlot(value);
+    }
+    case TypeCode::Int64: {
+        int64_t value = 0;
+        std::memcpy(&value, at, sizeof(value));
+        return rtdata::toSlot(value);
+    }
+    case TypeCode::Float32: {
+        float value = 0.0f;
+        std::memcpy(&value, at, sizeof(value));
+        return rtdata::toSlot(value);
+    }
+    case TypeCode::Float64: {
+        double value = 0.0;
+        std::memcpy(&value, at, sizeof(value));
+        return rtdata::toSlot(value);
+    }
+    case TypeCode::Bool:
+    case TypeCode::Byte: {
+        const uint8_t value = *reinterpret_cast<const uint8_t *>(at);
+        return rtdata::toSlot(value);
+    }
+    default:
+        ASSERT(false, "Not a pure-data leaf type");
+        return NullSlot;
+    }
+}
+
+/// Writes one pure-data leaf into its compact bytes. A Bool is normalized to 0/1 so that two
+/// equal values have equal bytes.
+void writeLeaf(std::byte *at, TypeCode code, slot_t slot) {
+    switch (code) {
+    case TypeCode::Int32: {
+        const int32_t value = rtdata::fromSlot<int32_t>(slot);
+        std::memcpy(at, &value, sizeof(value));
+        break;
+    }
+    case TypeCode::Int64: {
+        const int64_t value = rtdata::fromSlot<int64_t>(slot);
+        std::memcpy(at, &value, sizeof(value));
+        break;
+    }
+    case TypeCode::Float32: {
+        const float value = rtdata::fromSlot<float>(slot);
+        std::memcpy(at, &value, sizeof(value));
+        break;
+    }
+    case TypeCode::Float64: {
+        const double value = rtdata::fromSlot<double>(slot);
+        std::memcpy(at, &value, sizeof(value));
+        break;
+    }
+    case TypeCode::Bool: {
+        const uint8_t value = rtdata::fromSlot<uint8_t>(slot) != 0 ? 1 : 0;
+        std::memcpy(at, &value, sizeof(value));
+        break;
+    }
+    case TypeCode::Byte: {
+        const uint8_t value = rtdata::fromSlot<uint8_t>(slot);
+        std::memcpy(at, &value, sizeof(value));
+        break;
+    }
+    default:
+        ASSERT(false, "Not a pure-data leaf type");
+        break;
+    }
+}
+
+/// Stores a materialized Struct/Tuple into the bytes of its compact element. Same field order
+/// and layout as materializeAggregate, so an element round-trips. The source may itself be a
+/// view (a map callback returning its element); reading it through get() needs no materialise.
+void storeAggregate(std::byte *bytes, const type::Type *type, slot_t value) {
+    if (value == NullSlot) {
+        return; // all-zero bytes describe the zero value
+    }
+    const type::DataLayout *layout = type::pureDataLayout(type);
+    ASSERT(layout != nullptr && layout->aggregate, "storeAggregate expects an aggregate type");
+    const auto fieldType = [type](size_t i) -> const type::Type * {
+        return type->code() == TypeCode::Struct
+                   ? static_cast<const type::StructType *>(type)->typeAt(i)
+                   : static_cast<const type::TupleType *>(type)->typeAt(i);
+    };
+    // A slot-shaped aggregate (every field an 8-byte leaf, no padding) is byte-identical to a
+    // real Struct/Tuple's slot data, so a map that builds tuples can be copied in one go.
+    if (layout->slotShaped) {
+        if (type->code() == TypeCode::Struct) {
+            auto *source = rtdata::fromSlot<::Struct *>(value);
+            if (!source->isView()) {
+                std::memcpy(bytes, source->data(), layout->size);
+                return;
+            }
+        } else {
+            auto *source = rtdata::fromSlot<::Tuple *>(value);
+            if (!source->isView()) {
+                std::memcpy(bytes, source->data(), layout->size);
+                return;
+            }
+        }
+    }
+    const auto fieldValue = [type, value](size_t i) -> slot_t {
+        if (type->code() == TypeCode::Struct) {
+            auto *source = rtdata::fromSlot<::Struct *>(value);
+            return source->isView() ? source->get<slot_t>(i) : source->data()[i];
+        }
+        auto *source = rtdata::fromSlot<::Tuple *>(value);
+        return source->isView() ? source->get<slot_t>(i) : source->data()[i];
+    };
+    for (size_t i = 0; i < layout->fieldCount; ++i) {
+        const type::Type *field      = fieldType(i);
+        const type::DataLayout *fieldLayout = type::pureDataLayout(field);
+        ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
+        std::byte *fieldBytes = bytes + layout->fieldOffsets[i];
+        if (fieldLayout->aggregate) {
+            storeAggregate(fieldBytes, field, fieldValue(i));
+        } else {
+            writeLeaf(fieldBytes, fieldLayout->scalar, fieldValue(i));
+        }
+    }
+}
+
+
+
+} // namespace
+
+namespace camel::core::rtdata {
+
+rtdata::Object *
+materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core::mm::IAllocator &allocator) {
+    const type::DataLayout *layout = type::pureDataLayout(type);
+    ASSERT(layout != nullptr && layout->aggregate, "materializeAggregate expects an aggregate");
+    const auto fieldType = [type](size_t i) -> const type::Type * {
+        return type->code() == TypeCode::Struct
+                   ? static_cast<const type::StructType *>(type)->typeAt(i)
+                   : static_cast<const type::TupleType *>(type)->typeAt(i);
+    };
+    bool hasNested = false;
+    for (size_t i = 0; i < layout->fieldCount; ++i) {
+        const type::DataLayout *fieldLayout = type::pureDataLayout(fieldType(i));
+        ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
+        hasNested = hasNested || fieldLayout->aggregate;
+    }
+
+    // A nested field is materialized by an allocation after the parent exists. Root the parent
+    // across that allocation: the collector may move it, and the raw pointer would go stale.
+    camel::core::mm::GenerationalAllocatorWithGC *gc =
+        hasNested ? dynamic_cast<camel::core::mm::GenerationalAllocatorWithGC *>(&allocator)
+                  : nullptr;
+    std::unique_ptr<camel::core::mm::RootHandle> root;
+
+    if (type->code() == TypeCode::Struct) {
+        auto *object = ::Struct::create(layout->fieldCount, allocator);
+        if (gc) {
+            root = std::make_unique<camel::core::mm::RootHandle>(
+                *gc, object, type, "materializeAggregate");
+        }
+        for (size_t i = 0; i < layout->fieldCount; ++i) {
+            const type::Type *field             = fieldType(i);
+            const type::DataLayout *fieldLayout = type::pureDataLayout(field);
+            ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
+            const std::byte *fieldBytes = bytes + layout->fieldOffsets[i];
+            const slot_t value = fieldLayout->aggregate
+                                     ? rtdata::toSlot(static_cast<rtdata::Object *>(
+                                           rtdata::materializeAggregate(fieldBytes, field, allocator)))
+                                     : readLeaf(fieldBytes, fieldLayout->scalar);
+            if (root) {
+                object = root->getAs<::Struct>();
+            }
+            object->set<slot_t>(i, value);
+        }
+        return object;
+    }
+
+    auto *object = ::Tuple::create(layout->fieldCount, allocator);
+    if (gc) {
+        root = std::make_unique<camel::core::mm::RootHandle>(
+            *gc, object, type, "materializeAggregate");
+    }
+    for (size_t i = 0; i < layout->fieldCount; ++i) {
+        const type::Type *field             = fieldType(i);
+        const type::DataLayout *fieldLayout = type::pureDataLayout(field);
+        ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
+        const std::byte *fieldBytes = bytes + layout->fieldOffsets[i];
+        const slot_t value          = fieldLayout->aggregate
+                                          ? rtdata::toSlot(static_cast<rtdata::Object *>(
+                                                rtdata::materializeAggregate(fieldBytes, field, allocator)))
+                                          : readLeaf(fieldBytes, fieldLayout->scalar);
+        if (root) {
+            object = root->getAs<::Tuple>();
+        }
+        object->set<slot_t>(i, value);
+    }
+    return object;
+}
+
+} // namespace camel::core::rtdata
+
+
+slot_t Array::getSlotSlow(uint64_t flatIndex) const {
     ASSERT(flatIndex < numel_, "Array flat index out of range");
     if (isSlots()) {
         return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
     }
     const std::byte *at = dataPtr_ + flatIndex * elementSize_;
-    switch (elementSize_) {
-    case 8: {
-        slot_t value = 0;
-        std::memcpy(&value, at, sizeof(value));
-        return value;
+    if (isAggregateElement()) {
+        // Copy the element out before allocating: materializing a Struct/Tuple allocates, and
+        // that may move this array (and its data) if it lives in the young generation.
+        std::vector<std::byte> copy(elementSize_);
+        if (elementSize_ > 0) {
+            std::memcpy(copy.data(), at, elementSize_);
+        }
+        return rtdata::toSlot(
+            static_cast<rtdata::Object *>(rtdata::materializeAggregate(copy.data(), elemType_, *allocator_)));
     }
+    if (elementSize_ == sizeof(slot_t)) {
+        return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
+    }
+    switch (elementSize_) {
     case 4: {
         uint32_t value = 0;
         std::memcpy(&value, at, sizeof(value));
@@ -315,7 +547,7 @@ slot_t Array::getSlot(uint64_t flatIndex) const {
     }
 }
 
-void Array::setSlot(uint64_t flatIndex, slot_t value, const type::ArrayType *arrayType) {
+void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType *arrayType) {
     ASSERT(flatIndex < numel_, "Array flat index out of range");
     if (isSlots()) {
         rtdata::Object *owner =
@@ -328,10 +560,36 @@ void Array::setSlot(uint64_t flatIndex, slot_t value, const type::ArrayType *arr
         return;
     }
     std::byte *at = dataPtr_ + flatIndex * elementSize_;
+    if (isAggregateElement()) {
+        if (slotShaped_ && value != NullSlot) {
+            const slot_t *slots = nullptr;
+            if (elemType_->code() == TypeCode::Struct) {
+                auto *source = rtdata::fromSlot<::Struct *>(value);
+                if (!source->isView()) {
+                    slots = source->data();
+                }
+            } else {
+                auto *source = rtdata::fromSlot<::Tuple *>(value);
+                if (!source->isView()) {
+                    slots = source->data();
+                }
+            }
+            if (slots != nullptr) {
+                std::memcpy(at, slots, elementSize_);
+                return;
+            }
+        }
+        if (elementSize_ > 0) {
+            std::memset(at, 0, elementSize_);
+        }
+        storeAggregate(at, elemType_, value);
+        return;
+    }
+    if (elementSize_ == sizeof(slot_t)) {
+        reinterpret_cast<slot_t *>(dataPtr_)[flatIndex] = value;
+        return;
+    }
     switch (elementSize_) {
-    case 8:
-        std::memcpy(at, &value, sizeof(value));
-        break;
     case 4: {
         const uint32_t low = static_cast<uint32_t>(value);
         std::memcpy(at, &low, sizeof(low));
@@ -569,37 +827,37 @@ void Array::reallocateSlots(size_t newCapacity, const type::ArrayType *arrayType
 void Array::growCompact(uint64_t newCapacity) {
     ASSERT(isCompact(), "Only a compact array grows this way");
     const size_t newBytes = static_cast<size_t>(newCapacity) * elementSize_;
-    if (buffer_ == nullptr) {
-        // Inline data: move it into a buffer, which is what makes the array growable and gives
+    if (block_ == nullptr) {
+        // Inline data: move it into a block, which is what makes the array growable and gives
         // views a stable address.
-        Buffer *buffer = camel::core::array::Buffer::create(newBytes);
+        Block *block = camel::core::mm::Block::create(newBytes);
         const size_t used = byteSize();
         if (used > 0) {
-            std::memcpy(buffer->data(), dataPtr_, used);
+            std::memcpy(block->data(), dataPtr_, used);
         }
-        buffer_   = buffer;
-        dataPtr_  = buffer->data();
+        block_   = block;
+        dataPtr_  = block->data();
         offset_   = 0;
         capacity_ = newCapacity;
         noteFinalizable();
         return;
     }
-    if (buffer_->unique() && offset_ == 0 && !view_) {
-        buffer_->grow(newBytes);
-        dataPtr_  = buffer_->data();
+    if (block_->unique() && offset_ == 0 && !view_) {
+        block_->grow(newBytes);
+        dataPtr_  = block_->data();
         capacity_ = newCapacity;
         return;
     }
-    // Shared (a view, or another array): copy to a new buffer and leave the old one to its
+    // Shared (a view, or another array): copy to a new block and leave the old one to its
     // other holders.
-    Buffer *buffer = camel::core::array::Buffer::create(newBytes);
+    Block *block = camel::core::mm::Block::create(newBytes);
     const size_t used = byteSize();
     if (used > 0) {
-        std::memcpy(buffer->data(), dataPtr_, used);
+        std::memcpy(block->data(), dataPtr_, used);
     }
-    Buffer *old = buffer_;
-    buffer_     = buffer;
-    dataPtr_    = buffer->data();
+    Block *old = block_;
+    block_     = block;
+    dataPtr_    = block->data();
     offset_     = 0;
     capacity_   = newCapacity;
     view_       = false;
@@ -648,27 +906,27 @@ void Array::shrinkToFit(const type::ArrayType *arrayType) {
     // growth through append, which amortizes the next append.
 }
 
-Array::Buffer *Array::reusableBuffer(size_t newBytes) {
-    if (isCompact() && buffer_ != nullptr && buffer_->unique() && offset_ == 0 && !view_ &&
-        buffer_->bytes() >= newBytes) {
-        return buffer_;
+Array::Block *Array::reusableBlock(size_t newBytes) {
+    if (isCompact() && block_ != nullptr && block_->unique() && offset_ == 0 && !view_ &&
+        block_->bytes() >= newBytes) {
+        return block_;
     }
-    Buffer *buffer = camel::core::array::Buffer::create(newBytes);
+    Block *block = camel::core::mm::Block::create(newBytes);
     const size_t used = std::min(byteSize(), newBytes);
     if (used > 0 && dataPtr_ != nullptr) {
-        std::memcpy(buffer->data(), dataPtr_, used);
+        std::memcpy(block->data(), dataPtr_, used);
     }
-    return buffer;
+    return block;
 }
 
-void Array::adoptBuffer(Buffer *buffer, size_t newBytes) {
-    if (buffer == nullptr || buffer == buffer_) {
+void Array::adoptBlock(Block *block, size_t newBytes) {
+    if (block == nullptr || block == block_) {
         return;
     }
-    ASSERT(isCompact(), "Only a compact array adopts a buffer");
-    Buffer *old = buffer_;
-    buffer_     = buffer;
-    dataPtr_    = buffer->data();
+    ASSERT(isCompact(), "Only a compact array adopts a block");
+    Block *old = block_;
+    block_     = block;
+    dataPtr_    = block->data();
     offset_     = 0;
     capacity_   = elementSize_ == 0 ? 0 : newBytes / elementSize_;
     view_       = false;
@@ -682,41 +940,41 @@ bool Array::canWriteInPlace() const {
     if (!isCompact()) {
         return false;
     }
-    if (buffer_ == nullptr) {
+    if (block_ == nullptr) {
         return true; // inline: this array object is the storage, so nothing else can see it
     }
-    return buffer_->unique() && buffer_->camelOwned() && offset_ == 0 && !view_;
+    return block_->unique() && block_->camelOwned() && offset_ == 0 && !view_;
 }
 
-void Array::ensureBuffer() {
-    if (!isCompact() || buffer_ != nullptr) {
+void Array::ensureBlock() {
+    if (!isCompact() || block_ != nullptr) {
         return;
     }
     const size_t bytes = byteSize();
-    Buffer *buffer     = camel::core::array::Buffer::create(bytes);
+    Block *block     = camel::core::mm::Block::create(bytes);
     if (bytes > 0) {
-        std::memcpy(buffer->data(), dataPtr_, bytes);
+        std::memcpy(block->data(), dataPtr_, bytes);
     }
-    buffer_   = buffer;
-    dataPtr_  = buffer->data();
+    block_   = block;
+    dataPtr_  = block->data();
     offset_   = 0;
     capacity_ = numel_;
     noteFinalizable();
 }
 
-void Array::releaseBuffer() noexcept {
-    if (buffer_ != nullptr) {
-        Buffer *buffer = buffer_;
-        buffer_        = nullptr;
-        buffer->release();
+void Array::releaseBlock() noexcept {
+    if (block_ != nullptr) {
+        Block *block = block_;
+        block_        = nullptr;
+        block->release();
     }
 }
 
 void Array::finalize() noexcept {
-    if (buffer_ != nullptr) {
-        Buffer *buffer = buffer_;
-        buffer_        = nullptr;
-        buffer->releaseFromFinalizer();
+    if (block_ != nullptr) {
+        Block *block = block_;
+        block_        = nullptr;
+        block->releaseFromFinalizer();
     }
 }
 
@@ -804,9 +1062,26 @@ bool Array::equals(
 rtdata::Object *Array::clone(
     camel::core::mm::IAllocator &allocator, const type::Type *typeInfo, bool deep) const {
     if (isCompact()) {
+        // A compact aggregate is copied through a snapshot: creating the destination can move
+        // this array (and its data) at a safepoint, and the raw data pointer would go stale.
+        if (isAggregateElement()) {
+            const size_t byteCount = byteSize();
+            std::vector<std::byte> bytes(byteCount);
+            if (byteCount > 0) {
+                std::memcpy(bytes.data(), dataPtr_, byteCount);
+            }
+            std::vector<int64_t> extents(extents_, extents_ + rank_);
+            Array *copy = createCompact(
+                allocator, elemType_, std::span<const int64_t>(extents.data(), extents.size()), nullptr, 0, false,
+                false);
+            if (byteCount > 0) {
+                std::memcpy(copy->dataPtr_, bytes.data(), byteCount);
+            }
+            return copy;
+        }
         Array *copy = createCompact(
-            allocator, elemTypeCode_, std::span<const int64_t>(extents_, rank_), nullptr, 0,
-            false, false);
+            allocator, elemType_, std::span<const int64_t>(extents_, rank_), nullptr, 0, false,
+            false);
         if (byteSize() > 0) {
             std::memcpy(copy->dataPtr_, dataPtr_, byteSize());
         }
@@ -818,6 +1093,7 @@ rtdata::Object *Array::clone(
     const type::TypeCode elemTypeCode = arrayType->elemTypeCode();
     Array *copy = createSlots(allocator, size_, capacity_);
     copy->elemTypeCode_ = elemTypeCode;
+    copy->elemType_     = arrayType->elemType();
     const rtdata::Object *const *srcArr =
         reinterpret_cast<const rtdata::Object *const *>(dataPtr_);
 
@@ -857,6 +1133,41 @@ rtdata::Object *Array::clone(
 
 void Array::print(std::ostream &os, const type::Type *typeInfo) const {
     if (typeInfo != nullptr && typeInfo->code() == TypeCode::Array) {
+        // A compact aggregate stores its elements as bytes, and printing one materializes a
+        // Struct/Tuple, which allocates and may move this array. Copy the bytes and the shape
+        // first, then print only from the copy.
+        if (isCompact() && isAggregateElement()) {
+            std::vector<std::byte> bytes(byteSize());
+            if (byteSize() > 0) {
+                std::memcpy(bytes.data(), dataPtr_, byteSize());
+            }
+            std::vector<int64_t> extents(extents_, extents_ + rank_);
+            const size_t elementSize = elementSize_;
+            const size_t rank        = rank_;
+            const type::Type *elemType = elemType_;
+            camel::core::mm::IAllocator *allocator = allocator_;
+            uint64_t flatIndex       = 0;
+            const std::function<void(size_t)> printDim = [&](size_t dim) {
+                os << "[";
+                for (int64_t i = 0; i < extents[dim]; ++i) {
+                    if (i > 0) {
+                        os << ", ";
+                    }
+                    if (dim + 1 == rank) {
+                        const slot_t value = rtdata::toSlot(static_cast<rtdata::Object *>(
+                            rtdata::materializeAggregate(
+                                bytes.data() + flatIndex++ * elementSize, elemType,
+                                *allocator)));
+                        rtdata::printSlot(os, value, const_cast<type::Type *>(elemType));
+                    } else {
+                        printDim(dim + 1);
+                    }
+                }
+                os << "]";
+            };
+            printDim(0);
+            return;
+        }
         uint64_t flatIndex = 0;
         printArray(os, static_cast<const type::ArrayType *>(typeInfo), 0, flatIndex, "");
     } else {
@@ -961,7 +1272,7 @@ void Array::printTensor(std::ostream &os) const {
 void Array::updateRefs(
     const rtdata::Object::RefRelocator &relocate, const type::Type *typeInfo) {
     if (isCompact()) {
-        // A compact buffer holds numbers only: no reference to relocate.
+        // A compact block holds pure data only: no reference to relocate.
         return;
     }
     if (typeInfo == nullptr || typeInfo->code() != TypeCode::Array) {

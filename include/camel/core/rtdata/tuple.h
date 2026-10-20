@@ -1,8 +1,6 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
+ * Camel is licensed under the MIT license:
  * [https://opensource.org/license/mit]
  *
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
@@ -13,16 +11,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 12, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
+#include "camel/core/mm.h"
+#include "camel/core/rtdata/view.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/pure.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <new>
 
 namespace rtdata = camel::core::rtdata;
@@ -39,6 +41,16 @@ class Tuple : public rtdata::Object {
     Tuple(const Tuple &)            = delete;
     Tuple &operator=(const Tuple &) = delete;
 
+    /// What a compact element view carries; see Struct::ViewData.
+    struct ViewData {
+        const std::byte *bytes         = nullptr;
+        const type::DataLayout *layout = nullptr;
+        const type::Type *type         = nullptr;
+        size_t stride                  = 0;
+    };
+
+    static constexpr uint32_t kViewFlag = 0x80000000u;
+
     /// Create a Tuple instance.
     static Tuple *create(size_t slotCount, camel::core::mm::IAllocator &allocator) {
         size_t headerSize = sizeof(Tuple);
@@ -54,28 +66,68 @@ class Tuple : public rtdata::Object {
         return t;
     }
 
-    size_t size() const { return size_; }
+
+    bool isView() const { return (size_ & kViewFlag) != 0; }
+    const ViewData *viewData() const {
+        return reinterpret_cast<const ViewData *>(
+            reinterpret_cast<const std::byte *>(this) - sizeof(ViewData));
+    }
+
+    size_t size() const { return size_ & ~kViewFlag; }
 
     template <typename T> T get(size_t index) const {
-        ASSERT(index < size_, "Index out of range");
+        ASSERT(index < size(), "Index out of range");
+        if (isView()) {
+            const ViewData *view = viewData();
+            if (view->layout->slotShaped) {
+                // Every field is an 8-byte leaf: the bytes are slot data, so get is one load.
+                return rtdata::fromSlot<T>(reinterpret_cast<const slot_t *>(view->bytes)[index]);
+            }
+            const auto *tupleType = static_cast<const type::TupleType *>(view->type);
+            ASSERT(index < tupleType->size(), "Index out of range");
+            const type::Type *fieldType = tupleType->typeAt(index);
+            const std::byte *at = view->bytes + view->layout->fieldOffsets[index];
+            if (fieldType->code() == type::TypeCode::Struct ||
+                fieldType->code() == type::TypeCode::Tuple) {
+                const type::DataLayout *layout = type::pureDataLayout(fieldType);
+                ASSERT(layout != nullptr, "A compact field has a layout");
+                return rtdata::fromSlot<T>(
+                    rtdata::pureViewOf(at, fieldType, layout, layout->size));
+            }
+            return rtdata::fromSlot<T>(
+                rtdata::readPureScalar(at, fieldType->code()));
+        }
         return rtdata::fromSlot<T>(data_[index]);
     }
 
     template <typename T> void set(size_t index, T value) {
-        ASSERT(index < size_, "Index out of range");
+        ASSERT(index < size(), "Index out of range");
         data_[index] = rtdata::toSlot(value);
     }
 
     template <typename T> void set(size_t index, T value, const type::TupleType *tupleType) {
-        ASSERT(index < size_, "Index out of range");
+        ASSERT(index < size(), "Index out of range");
         ASSERT(tupleType != nullptr && index < tupleType->size(), "TupleType is invalid.");
-        const slot_t slot = rtdata::toSlot(value);
-        camel::core::mm::writeBarrier(this, tupleType, slot, tupleType->typeAt(index));
+        // A view is not a value: materialise it at the store boundary (see Struct::set). Only
+        // an aggregate field can hold one, so the common scalar write pays no call.
+        const type::Type *fieldType = tupleType->typeAt(index);
+        slot_t slot                 = rtdata::toSlot(value);
+        if (fieldType->code() == type::TypeCode::Struct ||
+            fieldType->code() == type::TypeCode::Tuple) {
+            slot = rtdata::materializeIfView(slot, fieldType);
+        }
+        camel::core::mm::writeBarrier(this, tupleType, slot, fieldType);
         data_[index] = slot;
     }
 
-    slot_t *data() { return data_; }
-    const slot_t *data() const { return data_; }
+    slot_t *data() {
+        ASSERT(!isView(), "A compact element view has no slot array");
+        return data_;
+    }
+    const slot_t *data() const {
+        ASSERT(!isView(), "A compact element view has no slot array");
+        return data_;
+    }
 
     /// For a variable cell (TupleType::cell) only: whether the array in its slot is referred
     /// to by this cell and by nothing else, so that the variable may grow it in place (the
@@ -95,8 +147,21 @@ class Tuple : public rtdata::Object {
 
         const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
         const Tuple *otherTuple          = reinterpret_cast<const Tuple *>(other);
-        if (size_ != otherTuple->size_ || size_ != tupleType->size())
+        if (size() != otherTuple->size() || size() != tupleType->size())
             return false;
+
+        if (isView() || otherTuple->isView()) {
+            rtdata::Object *left =
+                isView() ? rtdata::materializeAggregate(
+                               viewData()->bytes, type, camel::core::mm::autoSpace())
+                         : const_cast<Tuple *>(this);
+            rtdata::Object *right =
+                otherTuple->isView()
+                    ? rtdata::materializeAggregate(
+                          otherTuple->viewData()->bytes, type, camel::core::mm::autoSpace())
+                    : const_cast<Tuple *>(otherTuple);
+            return left->equals(right, type, true);
+        }
 
         auto codes          = tupleType->codes();
         const slot_t *dataA = data_;
@@ -104,7 +169,7 @@ class Tuple : public rtdata::Object {
 
         if (deep) {
             // Deep compare: recurse for reference types; compare values directly for plain types.
-            for (size_t i = 0; i < size_; ++i) {
+            for (size_t i = 0; i < size(); ++i) {
                 if (type::isGCTraced(codes[i])) {
                     const rtdata::Object *refA =
                         reinterpret_cast<const rtdata::Object *const *>(dataA)[i];
@@ -126,7 +191,7 @@ class Tuple : public rtdata::Object {
         } else {
             // Shallow compare: compare slots as-is (for references, compare pointer addresses
             // only).
-            return std::memcmp(dataA, dataB, size_ * sizeof(slot_t)) == 0;
+            return std::memcmp(dataA, dataB, size() * sizeof(slot_t)) == 0;
         }
     }
 
@@ -134,14 +199,17 @@ class Tuple : public rtdata::Object {
         camel::core::mm::IAllocator &allocator, const type::Type *type,
         bool deep = false) const override {
         ASSERT(type && type->code() == type::TypeCode::Tuple, "Type must be TupleType");
+        if (isView()) {
+            return rtdata::materializeAggregate(viewData()->bytes, type, allocator);
+        }
         const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
         auto codes                       = tupleType->codes();
 
-        Tuple *newTuple   = Tuple::create(size_, allocator);
+        Tuple *newTuple   = Tuple::create(size(), allocator);
         const slot_t *src = data_;
         slot_t *dst       = newTuple->data_;
 
-        for (size_t i = 0; i < size_; ++i) {
+        for (size_t i = 0; i < size(); ++i) {
             if (type::isGCTraced(codes[i])) {
                 const rtdata::Object *oriRef =
                     reinterpret_cast<const rtdata::Object *const *>(src)[i];
@@ -172,18 +240,17 @@ class Tuple : public rtdata::Object {
         const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
         if (tupleType->isTagged()) {
             // `T?` / `T!`: the value or the error, not the box (rtdata/tagged.h).
+            ASSERT(!isView(), "A tagged tuple is not compact pure data");
             rtdata::printTaggedSlots(os, data_, tupleType);
             return;
         }
 
         os << "(";
 
-        const slot_t *dataPtr = data_;
-
-        for (size_t i = 0; i < size_; ++i) {
+        for (size_t i = 0; i < size(); ++i) {
             if (i > 0)
                 os << ", ";
-            rtdata::printSlot(os, dataPtr[i], tupleType->typeAt(i));
+            rtdata::printSlot(os, get<slot_t>(i), tupleType->typeAt(i));
         }
 
         os << ")";
@@ -193,13 +260,16 @@ class Tuple : public rtdata::Object {
 
     virtual void
     updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
+        if (isView()) {
+            return; // pure data has no references
+        }
         if (!type || type->code() != type::TypeCode::Tuple)
             return;
         const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
         auto codes                       = tupleType->codes();
         rtdata::Object **refArr          = reinterpret_cast<rtdata::Object **>(data_);
 
-        for (size_t i = 0; i < size_; ++i) {
+        for (size_t i = 0; i < size(); ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
                     const type::Type *slotType = tupleType->typeAt(i);
@@ -219,9 +289,11 @@ class Tuple : public rtdata::Object {
         }
     }
 
-  private:
-    explicit Tuple(size_t slotCount) : size_(static_cast<uint32_t>(slotCount)) {}
+    /// Only the view ring (rtdata/view.cpp) passes flags; ordinary code uses create().
+    explicit Tuple(size_t slotCount, uint32_t flags = 0)
+        : size_(static_cast<uint32_t>(slotCount) | flags) {}
 
+  private:
     uint32_t size_;
     // See holdsUnsharedArray(). It takes the four bytes of padding between size_ and data_,
     // so a tuple has the same layout and size as before it was added.
