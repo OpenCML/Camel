@@ -1531,6 +1531,34 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
 [[tests]]
+name = "ort_argmax"
+desc = "argmax over axis 1, over axis 1 with keepdims and over axis 0, exported from a float input and from an int64 input: on ONNX Runtime the results follow design principles 7.7 on the cases that separate the rule from what ONNX ArgMax guarantees (a NaN first, all NaN, ties, +0 above -0, negative values, another axis) and on random inputs with NaNs and signed zeros. The exporter composes the rule (the first NaN, then the first maximum with +0 above -0) because ONNX ArgMax orders -0 and +0 the same and does not state its NaN behavior."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_argmax.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort argmax: 0 failing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
+name = "ort_slice_start"
+desc = "A slice whose start depends on the model input (x[int(sum(x)) : 3]) exported to ONNX: the start is normalized from the end when negative, the accepted values are exactly [-n, n], and an end at or before the start is the empty range. On ONNX Runtime every value at and just outside both edges gives the NumPy slice or fails where Camel faults, which separates the exporter's guard from an off-by-one interval or a clamp; a slice with constant bounds (x[-2 : 3]) exports as a plain ONNX Slice because the operator's index semantics declaration proves the bounds in range; and constant bounds on an axis whose extent is data-dependent (a reshape to a runtime shape) are guarded from the same declared interval, so runs with an axis too short for [1 : 3] fail where Camel faults."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_slice_start.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort slice start: 0 failing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
 name = "ort_linear_recursion"
 desc = "Three hand-written linear recursions whose depth depends on the model input (the call's result added to; a right fold that post-processes the result with a counter, a changing state and an unchanged argument; one with the arms swapped and a branch in the post-processing) export as paired ONNX Loops and match the recursions written in NumPy on ONNX Runtime for depths 0, 1 and more."
 kind = "behavior"

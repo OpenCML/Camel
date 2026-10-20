@@ -67,6 +67,26 @@ ExprId IndexBuilder::constant(
     return x().param(static_cast<uint32_t>(params.size() - 1));
 }
 
+ExprId IndexBuilder::runtime(std::string name, size_t operand) {
+    auto &params = instance.domain.params;
+    params.push_back(Param{
+        .name    = std::move(name),
+        .source  = ParamSource::Runtime,
+        .operand = static_cast<uint8_t>(operand),
+    });
+    return x().param(static_cast<uint32_t>(params.size() - 1));
+}
+
+void IndexBuilder::check(size_t operand, ExprId param, ExprId lower, ExprId upper) {
+    const Expr &e = instance.exprs[param];
+    instance.checks.push_back(OperandCheck{
+        .operand = static_cast<uint8_t>(operand),
+        .param   = e.op == ExprOp::Param ? static_cast<uint8_t>(e.value) : uint8_t{0xFF},
+        .lower   = lower,
+        .upper   = upper,
+    });
+}
+
 ExprId IndexBuilder::derived(std::string name, std::optional<int64_t> value, ExprId definition) {
     auto &params = instance.domain.params;
     params.push_back(Param{

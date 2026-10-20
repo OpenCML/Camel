@@ -1211,6 +1211,9 @@ void queries(std::ostream &os) {
     query(os, "permute_not_constant", "tensor:permute", {T(StaticShape{2, 3}), ints}, {});
     query(os, "slice_unknown_extent", "tensor:slice", {T(StaticShape{-1, 3}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(2)});
+    query(os, "slice_unknown_extent_negative", "tensor:slice",
+          {T(StaticShape{-1, 3}), integer, integer, integer},
+          {std::nullopt, Arg::integerArg(0), Arg::integerArg(-1), Arg::integerArg(2)});
     query(os, "show_slice", "tensor:slice", {T(StaticShape{-1, 7}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(1), Arg::integerArg(1), Arg::integerArg(-1), Arg::integerArg(2)});
     query(os, "slice_out_of_range", "tensor:slice", {T(StaticShape{5}), integer, integer, integer},
