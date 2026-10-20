@@ -42,7 +42,7 @@ digraph GraphIR {
         N0C [label="sys:get_env", type="OPER", role="effect", origin=176, span="18:17-18:24", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
         N0D [label="true", type="DATA", origin=177, span="18:36-18:42", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
         N0E [label=":op/eq_s", type="OPER", origin=178, span="18:33-18:35", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="bool"];
-        N0F [label="pick", type="FUNC", origin=179, span="18:16-18:43", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
+        N0F [label="pick", type="FUNC", origin=179, span="18:12-18:43", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
         N10 [label="tensor:matmul", type="OPER", origin=180, span="18:44-18:45", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
         N11 [label=":io/println", type="OPER", role="effect", origin=181, span="18:4-18:11", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor"];
         N12 [label="0", type="DATA", origin=182, span="19:11-19:12", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];

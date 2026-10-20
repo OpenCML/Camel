@@ -136,7 +136,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_line = 39
-expect_diagnostic_column = 49
+expect_diagnostic_column = 44
 expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
