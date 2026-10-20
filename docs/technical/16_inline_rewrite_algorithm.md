@@ -113,7 +113,7 @@ GATE/臂访问预算，不递归展开嵌套 JOIN。已知结果不等于可删�
 运行时图序列（根图在首位）。对每张图，后继按下面的方式取得：
 
 - 该图在会话中还没有 draft：取运行时图上登记的 `dependencies()`、`subGraphs()` 与
-  `staticGraphRefs()`（`GCGraph::traceGraphs`）；
+  `staticGraphRefs()`（`GraphId`，经会话的工作 `Program` 取得图，`Program::traceGraphs`）；
 - 该图已有 draft：取 draft 上登记的同名三张表，加上 draft 中每个 `FUNC` 节点的被调图，
   以及静态槽位中的值（如函数值）所引用的图。
 
@@ -138,14 +138,16 @@ GATE/臂访问预算，不递归展开嵌套 JOIN。已知结果不等于可删�
 
 ### 4.1 图的身份
 
-draft 中所有指向其他图的引用都是运行时图指针（`GCGraph *`）：
+draft 中所有指向其他图的引用都是图的编号（`GraphId`）：
 
-- `FUNC` 节点负载中的 `GCFuncBody::calleeGraph`；
-- 静态槽位中的函数值所持有的图；
+- `FUNC` 节点负载中的 `GCFuncBody::calleeGraph`（`LOOP` 的 `condGraph` / `bodyGraph` 同）；
+- 静态槽位中的函数值所持有的图（函数值是 `Function(Program, GraphId)`）；
 - draft 上登记的 `dependencies()`、`subGraphs()`、`staticGraphRefs()`。
 
-一张图被 `session.edit` 之后，别的图对它的引用不变，仍然是原来的 `GCGraph` 指针；会话用这个指针
-找到它的 draft。所以会话进行期间一张图只有一个身份，编辑某张图不需要改写其他图里的引用。
+编号经会话的工作 `Program`（`session.work()`）取得图：它是会话所改写的程序的副本，会话期间遇到的
+别的程序里的函数值、特化出的新图都被登记进去（`adoptProgram`、`adoptGraph`）。一张图被
+`session.edit` 之后，别的图对它的引用不变，仍然是同一个编号；提交时才为闭包里的每张图编出新版本，
+并绑定进新的 `Program`。所以会话进行期间一张图只有一个身份，编辑某张图不需要改写其他图里的引用。
 
 ### 4.2 读取被调图
 
