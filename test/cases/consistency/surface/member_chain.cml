@@ -17,7 +17,9 @@ func main(): int sync {
     println(make(10).0.1, make(10).1.1.1)
     let ts = [t, make(20)]
     println(ts[1].0.1, ts[0].1.1.0)
-    // A real number is still a real number.
+    // A real number is still a real number. `0.1 + 1.1` is an expression of literals only,
+    // computed exactly (design principles 5.1): it is the double nearest to 1.2, printed 1.2,
+    // where summing the two doubles gives 1.2000000000000002.
     println(0.1 + 1.1, float(t.0.1) + 0.5)
     return 0
 }

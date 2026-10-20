@@ -5,6 +5,12 @@
  * 0.77470000000000017 in a build with fused multiply-add, and 0.6906 as 0.6906000000000001
  * in every build.
  * Each line is the literal with 17 significant digits, which identifies the double.
+ *
+ * The two comparisons at the end come from the literal-type rule (design principles 5.1): an
+ * expression of literals only is computed exactly and rounded once, when it takes its type, so
+ * `0.1 + 0.2` is the double nearest to three tenths — the same double as `0.3` — and not the
+ * sum of the two doubles (which lands on 0.30000000000000004). Hence `0.1 + 0.2 == 0.3` is
+ * true and `0.1 + 0.2 == 0.30000000000000004` is false; they were the other way round before.
  */
 module real_literals
 

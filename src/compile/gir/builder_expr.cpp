@@ -659,7 +659,25 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             !isComposite(data->type()->code()) || tt::as_shared<CompositeData>(data)->resolved();
         if (literal) {
             data_ptr_t converted;
-            if (gct->annotation() || targetType->castSafetyFrom(data->type()) == CastSafety::Safe) {
+            // A numeric literal takes the type the instantiation gives it, exactly (`let
+            // zero: T = 0` with `T = float` is 0.0), including into a float from an integer
+            // (design principles 5.1).
+            const literal::Value *exact = literalValueOfGct(operand);
+            if (exact != nullptr && targetType != nullptr &&
+                literal::kindEnters(*exact, targetType)) {
+                const auto data = exact->toData(targetType);
+                if (!data.has_value()) {
+                    diags_->of(SemanticDiag::LiteralOutOfRange)
+                        .atOrigin(gct->origin())
+                        .commit(
+                            exact->toString(),
+                            targetType->toString(),
+                            literal::rangeText(targetType));
+                    throw BuildAbortException();
+                }
+                converted = *data;
+            } else if (
+                gct->annotation() || targetType->castSafetyFrom(data->type()) == CastSafety::Safe) {
                 converted = data->convertTo(targetType);
             }
             if (!converted) {

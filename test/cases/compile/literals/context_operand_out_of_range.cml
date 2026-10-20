@@ -1,0 +1,9 @@
+/**
+ * The other operand of a binary operator gives a literal its type (design principles 5.1):
+ * `t` is an `i32`, so 3000000000 is one too, and it does not fit one.
+ */
+func main(): int sync {
+    let t: i32 = 1
+    println(t + 3000000000)
+    return 0
+}

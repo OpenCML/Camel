@@ -257,7 +257,15 @@ CHECK_RANGE = range(1, 26)
 # With generate.VERSION 3 (the features comprehension, nullable, partial and ifnoelse) every
 # seed of the range passes; the seed left out under VERSION 1 (5, finding F18) is another
 # program now.
-CHECK_EXCLUDED = {}
+# Seed 16 (handover H15, literals take their type from the context): `e23` declares `float` and
+# one arm of a `match` expression in it ends in `return 5 - 10`. An expression of literals now
+# has the type of the position it is returned in, `float`, so that arm's value is a `float`
+# while the other arms of the match are `int` and the arm join reports
+# BranchReturnTypeMismatch. The program was accepted before only because an `int` returned
+# under a declared `float` was neither converted nor reported (the same hole that made
+# `return sub5(5, 10)` run); the generator's reference evaluator types the arm `int`. See
+# test/cases/opt/progen/README.md, J5.
+CHECK_EXCLUDED = {16: "an arm of a float function returns a float now, so its int arms no longer join (H15)"}
 CHECK_MATRIX = "cross"
 
 

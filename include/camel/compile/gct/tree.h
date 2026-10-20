@@ -64,6 +64,7 @@
 
 #include "camel/common/ref.h"
 #include "camel/compile/gct/node.h"
+#include "camel/compile/literal.h"
 
 namespace camel::compile::gct {
 
@@ -135,6 +136,12 @@ class Tree {
     void setNamespaceOf(const Node *node, const std::vector<std::string> &path);
     const std::vector<std::string> *namespaceOf(const Node *node) const;
 
+    /// The exact value of a numeric literal node, as written (design principles 5.1). It is
+    /// kept beside the node, not in it: the type and the value the literal takes are decided
+    /// later, from its context, and until then `0.1` must not become the nearest double.
+    void setLiteralValue(const Node *node, literal::Value value);
+    const literal::Value *literalValueOf(const Node *node) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -186,6 +193,7 @@ class Tree {
     std::deque<data_ptr_t> constants_;
     std::unordered_map<const Node *, std::vector<Reference>> usings_;
     std::unordered_map<const Node *, std::vector<std::string>> namespaces_;
+    std::unordered_map<const Node *, literal::Value> literalValues_;
 };
 
 } // namespace camel::compile::gct

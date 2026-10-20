@@ -1,11 +1,15 @@
 /**
  * Verifies sync lowering does not add a redundant ctrl edge when the next
  * statement already consumes the previous result through a data dependency.
+ * The add is written with a variable operand on purpose: `40 + 2` is an
+ * expression of literals only, which the front end computes (design
+ * principles 5.1), and the add node this checks would not be in the graph.
  */
 module compile_sync_ctrl_dedup
 
 func main(): int sync {
-    let total = 40 + 2
+    let a: int = 40
+    let total = a + 2
     total->println
     return total
 }

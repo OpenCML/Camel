@@ -542,3 +542,20 @@ now discards a program whose skipped operand would fault (one program of 1200, s
 7001-7600 and 8001-8600; it was the only disagreement of the run without passes), so no
 finding depends on this.
 
+**J5. Which type should a `return` inside a branch arm have?** Not a judgement program (the
+program is seed 16 of the batch, left out in `CHECK_EXCLUDED`): `func e23(...): float` contains
+`let v = match a { case 'm' => { return 5 - 10 } case 'yz' => 0 case _ => 100 }`. `return` in an
+arm gives the value of that arm, not of the function (language reference 7.3), so the arm's value
+used to be an `int` and joined the `int` arms; under the literal rule (design principles 5.1) the
+position of the returned expression is the declared `float`, so the arm is a `float` and the join
+reports `BranchReturnTypeMismatch`.
+- Reading A (as implemented): the declared return type is the expected type of every `return`,
+  including one in an arm, so the arm's value is a `float` and the match's other arms must be
+  `float` too. The seed's program is then ill-typed, and it compiled before only because an
+  `int` under a declared `float` was neither converted nor reported.
+- Reading B: the value of an arm-local `return` is the arm's value, so its expected type is the
+  arm's (here `int`, from the other arms), and the declared `float` is only checked, with a
+  located diagnostic when it does not fit. Then the arm stays `int` and the seed keeps passing.
+The generator's reference evaluator types the arm `int` (reading B's value), and the program used
+to run; the batch leaves it out until this is decided.
+

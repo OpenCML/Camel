@@ -1,0 +1,10 @@
+/**
+ * A value of one numeric type does not enter another by itself (design principles 5.1): the
+ * expected type moves a *literal*, never a variable. `n` is an `int` and `y` is a `float`.
+ */
+func main(): int sync {
+    let n: int = 1
+    let y: float = n
+    println(y)
+    return 0
+}

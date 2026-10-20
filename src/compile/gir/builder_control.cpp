@@ -68,6 +68,14 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
     if (target->assignableFrom(source)) {
         return node;
     }
+    // A literal takes the type of its context (design principles 5.1): `let x: float = 1`,
+    // `f(2)` with `f(x: f32)`, `return 2` under `f32`. A value that does not fit the target
+    // type is reported here — never cut to size. What already has a type is not converted:
+    // `let x: float = n` with `n: int` is still an error.
+    if (const std::optional<literal::Value> value = literalValueOfExpr(origin);
+        value.has_value() && target->isPrimitive() && literal::kindEnters(*value, target)) {
+        return literalInType(*value, target, origin, true);
+    }
     if (!entersImplicitly(target, source)) {
         return nullptr;
     }

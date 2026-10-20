@@ -1148,9 +1148,48 @@ class Builder {
     /// `node` where a value of type `target` is expected (design principles 5.5): `node`
     /// itself when its type is assignable; otherwise the value put into `T?` / `T!` (one
     /// CAST per level), `null` as a `T?`, or the empty literal `[]` given the element type of
-    /// `target`. nullptr when the value does not enter (camel::core::type::entersImplicitly).
+    /// `target`. A literal whose value the target type can hold takes the target type (design
+    /// principles 5.1: `let x: float = 1`, `return 2` under `f32`). nullptr when the value
+    /// does not enter (camel::core::type::entersImplicitly).
     node_handle_t
     coerceTo(node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    // ---- Literals: the value as written, until the context gives it a type (5.1) ----
+    /// The exact value of the expression `expr` when it is a literal: a numeric literal
+    /// written in the program, or an expression of literals only that folds to one. A name
+    /// bound to a constant is NOT one: a variable keeps the type it has.
+    std::optional<camel::compile::literal::Value>
+    literalValueOfExpr(const GCT::node_ptr_t &expr);
+    /// The exact value of `gct`, a literal of the construction tree, when it has one.
+    static const camel::compile::literal::Value *literalValueOfGct(const GCT::node_ptr_t &gct);
+    /// The value as a constant of `type`. Reports SemanticDiag::LiteralOutOfRange at `origin`
+    /// and aborts when the type cannot hold it (a literal that does not fit its context is an
+    /// error, not a value cut to size).
+    node_handle_t makeLiteralNode(
+        const camel::compile::literal::Value &value, camel::core::type::Type *type,
+        const GCT::node_ptr_t &origin);
+    /// The value as a constant of `type`, or nullptr when it does not fit (nothing reported).
+    node_handle_t literalInType(
+        const camel::compile::literal::Value &value, camel::core::type::Type *type,
+        const GCT::node_ptr_t &origin, bool report);
+    /// The type a literal of this kind has when its context does not say: `int` for an
+    /// integer, `float` for a decimal or exponent form (design principles 5.1).
+    static camel::core::type::Type *defaultTypeOf(const camel::compile::literal::Value &value);
+    /// The value of a literal-only operator expression, computed exactly; nothing when `gct`
+    /// is not one (a name, a call of a function, an operator the program overloads, a
+    /// division by zero, a string). Used to fold an expression and to know what an operand is
+    /// worth before the operator picks its types.
+    std::optional<camel::compile::literal::Value> foldedLiteralValue(const GCT::node_ptr_t &gct);
+    /// The constant a literal-only operator expression computes to, or nullptr when `gct` is
+    /// not one. The value takes the expected type when it is numeric, and otherwise the
+    /// default type of its kind (design principles 5.1). A value the type cannot hold is
+    /// reported at `gct` and aborts.
+    node_handle_t foldLiteralCall(const GCT::node_ptr_t &gct, camel::core::type::Type *expected);
+    /// The design principles 5.1 resolution order for the operands of an operator: a literal
+    /// operand takes the type of the other operand when that one is numeric, and then the
+    /// value is converted exactly (an operand that does not fit is reported).
+    void adaptLiteralOperands(
+        const std::string &group, std::vector<Argument> &inputs,
+        camel::core::type::type_vec_t &types, const GCT::node_ptr_t &call);
     /// The same at the exit of a branch arm already built: what `arm` gives enters `target`.
     void coerceArmExit(
         const compile_graph_ptr_t &arm, camel::core::type::Type *target,

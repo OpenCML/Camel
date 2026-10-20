@@ -93,6 +93,15 @@ const std::vector<Reference> *Tree::usingsOf(const Node *node) const {
     return it == usings_.end() ? nullptr : &it->second;
 }
 
+void Tree::setLiteralValue(const Node *node, literal::Value value) {
+    literalValues_[node] = std::move(value);
+}
+
+const literal::Value *Tree::literalValueOf(const Node *node) const {
+    const auto it = literalValues_.find(node);
+    return it == literalValues_.end() ? nullptr : &it->second;
+}
+
 Tree *Tree::of(const Node *node) {
     const auto address = reinterpret_cast<uintptr_t>(node);
     return reinterpret_cast<const Chunk *>(address & ~(static_cast<uintptr_t>(kChunkBytes) - 1))
@@ -333,6 +342,10 @@ node_ptr_t Tree::clone(const Node *node) {
     switch (node->kind_) {
     case NodeKind::DATA:
         copy->payload_.data = &constants_.emplace_back(*node->payload_.data);
+        // A literal keeps its exact value through a copy: the copy is the same literal.
+        if (const literal::Value *exact = Tree::of(node)->literalValueOf(node)) {
+            literalValues_[copy] = *exact;
+        }
         break;
     case NodeKind::DECL:
     case NodeKind::FUNC:
