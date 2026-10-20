@@ -2100,7 +2100,7 @@ assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pa
 assert(d.message.includes('growth budget was exhausted: the budget is 0 nodes (set by the growth_budget parameter of std::opt)'), `unexpected message: ${d.message}`)
 assert(d.message.includes('raise the budget by writing a larger growth_budget on std::opt (for example std::opt(growth_budget=8192))'), `the way to raise it is missing: ${d.message}`)
 assert(d.range.start.line === 15 && d.range.start.character === 0, `unexpected range ${JSON.stringify(d.range)}`)
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/refusal_growth_budget_json.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'refusal_growth_budget.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 8000
@@ -2108,11 +2108,14 @@ timeout_ms = 8000
 [[tests]]
 name = "pass_export_refusal_located.growth_budget_default_exports"
 desc = "The same program under the default growth_budget (the parameter is not written): `main` is inlined, the request is visible and the model is written (the refusal above is about the budget, not about the program)."
+# The program's own path is the fixed `tmp/test/onnx/...`; this is the one refusal case that
+# actually writes a model, so the pass's out parameter names it in this test's scratch
+# directory and two runs cannot write (or check the absence of) the same file.
 kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/growth_budget.cml"
-args = ["${case}", "std::macro", "std::opt", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/refusal_growth_budget.onnx")']
 expect_exit = 0
-expect_output_contains = ["onnx::export: wrote tmp/test/onnx/refusal_growth_budget.onnx"]
+expect_output_contains = ["onnx::export: wrote ${test_tmp}/refusal_growth_budget.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -2190,7 +2193,7 @@ const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.message.includes('is made in an arm of this branch') && d.message.includes('is not known at compile time'), `unexpected message: ${d.message}`)
 assert(d.range.start.line === 18 && d.range.start.character === 11 && d.range.end.line === 22, `unexpected range ${JSON.stringify(d.range)}`)
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/refusal_request_in_arm.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'refusal_request_in_arm.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 8000
@@ -2230,7 +2233,7 @@ assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pa
 const m = /graph 'f13' needs (\d+) edges .* holds at most (\d+) /.exec(d.message)
 assert(m && Number(m[2]) === 65535 && Number(m[1]) > 65535, `graph, size and limit are missing: ${d.message}`)
 assert(d.range.start.line === 71 && d.range.start.character === 4, `unexpected range ${JSON.stringify(d.range)}`)
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/refusal_graph_too_large.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'refusal_graph_too_large.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 30000

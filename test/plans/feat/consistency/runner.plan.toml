@@ -14,6 +14,6 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["runner self-test ok"]
 timeout_ms = 60000
-# The self-test starts the runner itself, which clears tmp/test before and after its run: it
-# must not do that while another test of this run keeps its scratch directory there.
-parallel = false
+# No `parallel = false`: this test starts the runner itself, and it used to be serial because
+# the inner run cleared tmp/test, deleting the outer run's scratch. Every run now owns
+# tmp/test/run-<pid> and removes only that root, so the inner run cannot touch this one.

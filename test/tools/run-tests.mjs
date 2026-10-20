@@ -37,17 +37,21 @@ const COLORS = {
     reset: '\x1b[0m',
 }
 
-// Test scratch. Every test gets its own directory, `<run>/<test name>` under tmp/test/run,
-// exposed as `${test_tmp}` and as CAMEL_TEST_TMPDIR in the child environment. A test that writes
-// a file writes there, so a file left by another test, or by an earlier run, cannot be read as
-// this run's output (the failure that motivated this: a stale model at the path a refused export
-// names made "a refused export must not write a model" fail). The directory is removed after the
-// test. tmp/test and test/tmp are cleared before and after a run as well: that covers a program
-// that still names a fixed path under them (the path is fresh, so its assertion means what it
-// says) and a run that was stopped before its own cleanup.
+// Test scratch. Every run gets its own root, tmp/test/run-<pid>, and every test gets a
+// directory under it (`<run>/<plan>/<test>`), exposed as `${test_tmp}` and as
+// CAMEL_TEST_TMPDIR in the child environment. A test that writes a file writes there, so a
+// file left by another test, or by an earlier run, cannot be read as this run's output (the
+// failure that motivated this: a stale model at the path a refused export names made "a
+// refused export must not write a model" fail). A program that still names its own output path
+// takes it from CAMEL_TEST_TMPDIR, so the file lands under the per-test directory; only a path
+// that a refusal test names without ever writing it stays literal, and the pass's `out`
+// parameter isolates the one refusal case that does write.
+//
+// The per-test directory is removed after the test. The run removes its own root when the run
+// succeeded and keeps it (and prints the path) when a test failed, so the files are there to
+// read. It never removes another run's root: two runners can run at the same time.
 const TEST_SCRATCH_ROOT = path.join(REPO_ROOT, 'tmp', 'test')
-const LEGACY_TEST_SCRATCH = path.join(TEST_ROOT, 'tmp')
-const TEST_SCRATCH_RUN = path.join(TEST_SCRATCH_ROOT, 'run', `${timestamp()}_${process.pid}`)
+const TEST_SCRATCH_RUN = path.join(TEST_SCRATCH_ROOT, `run-${process.pid}`)
 
 function timestamp() {
     const now = new Date()
@@ -510,15 +514,18 @@ function printRunSummary(summary) {
  * output as the reason; the test is then neither passed nor failed. Use it only for conditions
  * outside the code under test, such as network access for a dataset download.
  */
-async function checkPrecondition(test, sharedVars) {
+async function checkPrecondition(test, sharedVars, scratch, scratchRelative) {
     if (!test.skip_unless || test.skip_unless.length === 0) {
         return null
     }
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
-    const [cmd, ...args] = expandArgs(test.skip_unless, { ...sharedVars, case: casePath })
+    const scope = { ...sharedVars, case: casePath, test_tmp: scratchRelative }
+    const [cmd, ...args] = expandArgs(test.skip_unless, scope)
     const proc = await runProcess(cmd, args, {
         cwd: REPO_ROOT,
-        env: process.env,
+        // The precondition writes where the test would: a dataset downloaded for it lands in
+        // its own scratch directory, so two tests (or two runs) cannot corrupt one cache.
+        env: { ...process.env, CAMEL_TEST_TMPDIR: scratch },
         timeoutMs: test.skip_unless_timeout_ms || 120000,
     })
     if (proc.status === 0) {
@@ -547,17 +554,6 @@ function createTestScratchDir(test) {
     }
     ensureDir(dir)
     return dir
-}
-
-/**
- * Clear what tests write under a fixed scratch path: tmp/test is the test scratch tree and
- * test/tmp the older one. Called before the first test (a run stopped earlier, or a plan that
- * still names a fixed path, leaves files there) and after the last one (nothing accumulates).
- */
-function clearTestScratch() {
-    for (const dir of [TEST_SCRATCH_ROOT, LEGACY_TEST_SCRATCH]) {
-        fs.rmSync(dir, { recursive: true, force: true })
-    }
 }
 
 function snapshotCompare(actual, expected, mode) {
@@ -920,17 +916,16 @@ async function validateTest(test, result, context) {
     return failures
 }
 
-async function runOneTest(test, sharedVars, logContext) {
+async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative) {
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
     const toolName = test.tool || 'camel'
     const toolExe = toolName === 'python' ? pythonExecutable() : TOOL_EXES[toolName]
     if (!toolExe) {
         throw new Error(`unknown test tool: ${toolName}`)
     }
-    // This test's own scratch directory: `${test_tmp}` in args, env values and expectations, the
-    // absolute path in CAMEL_TEST_TMPDIR, and both in the verification payload.
-    const scratch = createTestScratchDir(test)
-    const scratchRelative = path.relative(REPO_ROOT, scratch).split(path.sep).join('/')
+    // The scratch directory is created (and removed) by executePlans, before the precondition
+    // runs: the precondition writes into it too. `${test_tmp}` in args, env values and
+    // expectations is its repository-relative path; CAMEL_TEST_TMPDIR is the absolute one.
     const scope = {
         ...sharedVars,
         case: casePath,
@@ -999,13 +994,9 @@ async function runOneTest(test, sharedVars, logContext) {
         result.benchmark = benchmarkFromJson(raw.stdout)
     }
 
-    // The verification reads this test's output: it must run before the scratch directory goes.
-    let failures
-    try {
-        failures = await validateTest(test, result, { ...logContext, scope })
-    } finally {
-        fs.rmSync(scratch, { recursive: true, force: true })
-    }
+    // The verification reads this test's output: executePlans removes the scratch directory
+    // only after this returns.
+    const failures = await validateTest(test, result, { ...logContext, scope })
     const status = failures.length === 0 ? 'pass' : 'fail'
     return { ...result, failures, status, casePath }
 }
@@ -1131,18 +1122,27 @@ function expandSweeps(doc, planPath) {
         const rename = (name) => `${sweep.name}:${name}`
         // `fast_sample = N` keeps N tests per source plan in the fast layer and puts the rest in
         // the slow one: the default developer run still checks the property against every plan,
-        // and the full sweep (every eligible test) is one `--tier slow`/`--tier all` away. The
+        // and the full sweep (every eligible test) is `--tier all` away. The
         // sample prefers a test that runs the program to completion, since that is the one that
         // exercises the most of the collector; a plan of negative tests still contributes one.
+        //
+        // The sample is risk-based: a source plan whose `tags` contain one of `risk_tags` keeps
+        // `risk_sample` tests (collections, closures and iterators move objects across
+        // safepoints in more ways, so one sample is thin there), the rest keep `fast_sample`.
         const fastSample = Number.isInteger(sweep.fast_sample) && sweep.fast_sample > 0 ? sweep.fast_sample : 0
+        const riskTags = new Set((sweep.risk_tags || []).map((tag) => String(tag)))
+        const riskSample = Number.isInteger(sweep.risk_sample) && sweep.risk_sample > 0 ? sweep.risk_sample : 0
         const sources = sweep.plans
             .flatMap((entry) => walkPlans(path.resolve(path.dirname(planPath), entry)))
             .filter((source) => source !== planPath)
             .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item)))
             .sort()
         for (const source of sources) {
+            const { doc: sourceDoc, tests: sourceTests } = loadPlanTests(source)
+            const risky = (sourceDoc.tags || []).some((tag) => riskTags.has(String(tag)))
+            const sampleCount = fastSample > 0 && risky && riskSample > fastSample ? riskSample : fastSample
             const eligible = []
-            for (const test of loadPlanTests(source).tests) {
+            for (const test of sourceTests) {
                 if (test.kind !== 'behavior' && test.kind !== 'snapshot') continue
                 if (test.sweep === false || test.__knownFail) continue
                 if ((test.tool || 'camel') !== 'camel') continue
@@ -1151,12 +1151,12 @@ function expandSweeps(doc, planPath) {
                 eligible.push(test)
             }
             const sampled = new Set()
-            if (fastSample > 0) {
+            if (sampleCount > 0) {
                 const preferred = eligible.filter(
                     (test) => (test.expect_exit === undefined || test.expect_exit === 0) && test.tier !== 'slow'
                 )
                 for (const test of [...preferred, ...eligible]) {
-                    if (sampled.size >= fastSample) break
+                    if (sampled.size >= sampleCount) break
                     sampled.add(test)
                 }
             }
@@ -1170,7 +1170,7 @@ function expandSweeps(doc, planPath) {
                     verify_timeout_ms: (test.verify_timeout_ms || 5000) * scale,
                     __backendReference: test.__backendReference ? rename(test.__backendReference) : null,
                     __sweep: sweep.name,
-                    ...(fastSample > 0 ? { tier: sampled.has(test) ? 'fast' : 'slow' } : {}),
+                    ...(sampleCount > 0 ? { tier: sampled.has(test) ? 'fast' : 'slow' } : {}),
                 })
             }
         }
@@ -1199,7 +1199,7 @@ function testTier(plan, test) {
  * when its own layer is the other one: a fast run must not fail because it left out the
  * reference a selected test compares against.
  */
-function selectTier(plans, tier) {
+function selectTier(plans, tier, namedPlans = new Set()) {
     if (tier === 'all') return plans
     const order = []
     for (const plan of plans) {
@@ -1213,7 +1213,12 @@ function selectTier(plans, tier) {
     })
     const selected = new Set()
     order.forEach((entry, index) => {
-        if (testTier(entry.plan, entry.test) === tier) selected.add(index)
+        // A plan file named as a target runs in full: naming the plan is the intent, and a plan
+        // whose tests are mostly slow would otherwise run almost nothing. A directory target
+        // still selects the layer, so the whole-tree `--tier` stays meaningful.
+        if (namedPlans.has(entry.plan.__planPath) || testTier(entry.plan, entry.test) === tier) {
+            selected.add(index)
+        }
     })
     const pending = [...selected]
     while (pending.length > 0) {
@@ -1245,7 +1250,16 @@ function selectTier(plans, tier) {
 }
 
 function loadPlans(targets, tier) {
-    const discovered = targets.length > 0 ? targets.flatMap((target) => walkPlans(target)) : walkPlans(PLANS_ROOT)
+    // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
+    // plans a directory reaches follow the layer. The same plan reached both ways is named.
+    const namedPlans = new Set()
+    const discovered = []
+    for (const target of targets) {
+        const resolved = path.resolve(target)
+        if (fs.statSync(resolved).isFile()) namedPlans.add(resolved)
+        discovered.push(...walkPlans(target))
+    }
+    if (targets.length === 0) discovered.push(...walkPlans(PLANS_ROOT))
     // `--all` names the plans root and a plan may also be named explicitly; the same plan must
     // not run twice.
     const planPaths = [...new Set(discovered.map((planPath) => path.resolve(planPath)))]
@@ -1261,7 +1275,7 @@ function loadPlans(targets, tier) {
             if (lhsOrder !== rhsOrder) return lhsOrder - rhsOrder
             return lhs.__planPath.localeCompare(rhs.__planPath)
         })
-    return selectTier(plans, tier)
+    return selectTier(plans, tier, namedPlans)
 }
 
 /** The result of a test the runner itself could not run: its failure is reported like any other. */
@@ -1369,15 +1383,24 @@ async function executePlans(plans, options, sharedVars, logDir) {
             // its reference instead of behind every test of the run, which would also delay the
             // in-order printer until the end.
             await slots.acquire(tokens, entry.dependencies.length > 0)
+            let scratch = null
             try {
-                const skipReason = await checkPrecondition(entry.test, sharedVars)
+                scratch = createTestScratchDir(entry.test)
+                const scratchRelative = path.relative(REPO_ROOT, scratch).split(path.sep).join('/')
+                const skipReason = await checkPrecondition(entry.test, sharedVars, scratch, scratchRelative)
                 if (skipReason) {
                     entry.outcome = { status: 'skip', reason: skipReason }
                     return
                 }
                 let result
                 try {
-                    result = await runOneTest(entry.test, sharedVars, { options, completed, planId: entry.plan.id })
+                    result = await runOneTest(
+                        entry.test,
+                        sharedVars,
+                        { options, completed, planId: entry.plan.id },
+                        scratch,
+                        scratchRelative
+                    )
                 } catch (error) {
                     const casePath = path.resolve(path.dirname(entry.test.__planPath), entry.test.case)
                     result = runnerErrorResult(casePath, error && error.message ? error.message : String(error))
@@ -1403,6 +1426,11 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     failures: result.failures,
                 }
             } finally {
+                // The test's own directory is not this run's evidence: it goes whether the
+                // test passed or failed. The run root stays on failure (main prints it).
+                if (scratch) {
+                    fs.rmSync(scratch, { recursive: true, force: true })
+                }
                 slots.release(tokens)
             }
         })()
@@ -1434,6 +1462,13 @@ async function main() {
         options.jobs = 1
     }
     const sharedVars = loadVars()
+    const namedPlans = options.targets.filter((target) => {
+        try {
+            return fs.statSync(target).isFile()
+        } catch {
+            return false
+        }
+    })
     const plans = loadPlans(options.targets, options.tier)
     ensureDir(LOG_ROOT)
     // The pid keeps two runs started in the same second (the self-test does this) out of one
@@ -1447,21 +1482,30 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
     )
+    if (namedPlans.length > 0 && options.tier !== 'all') {
+        // Naming a plan is the user's intent: it runs in full, whatever `--tier` says. A
+        // directory target still selects the layer (see loadPlans).
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} named plan target(s) run in full: ${namedPlans.length} (the tier filter leaves a named plan alone)`
+        )
+    }
     if (testCount === 0 && options.tier !== 'all') {
         console.log(
             `${COLORS.cyan}[INFO]${COLORS.reset} this selection has no ${options.tier} tests: --tier all runs both layers`
         )
     }
 
-    // Files under a fixed scratch path are not this run's output.
-    clearTestScratch()
-    let outcome
-    try {
-        outcome = await executePlans(plans, options, sharedVars, logDir)
-    } finally {
-        // The per-test directories are already gone; this removes what a program wrote under a
-        // fixed path of tmp/test or test/tmp, so repeated runs do not accumulate anything.
-        clearTestScratch()
+    // The run owns tmp/test/run-<pid>: a root left by an earlier process with this pid (the pid
+    // was reused) must not be read as this run's files.
+    fs.rmSync(TEST_SCRATCH_RUN, { recursive: true, force: true })
+    const outcome = await executePlans(plans, options, sharedVars, logDir)
+    const testRootKept = outcome.summary.fail > 0
+    if (testRootKept) {
+        // The per-test directories are gone, but what a program wrote outside them (and the
+        // root itself) is evidence: say where it is instead of removing it.
+        console.log(`${COLORS.cyan}[INFO]${COLORS.reset} test scratch kept: ${TEST_SCRATCH_RUN}`)
+    } else {
+        fs.rmSync(TEST_SCRATCH_RUN, { recursive: true, force: true })
     }
 
     fs.writeFileSync(
@@ -1474,6 +1518,8 @@ async function main() {
                 tier: options.tier,
                 jobs: options.jobs,
                 wall_ms: outcome.wallMs,
+                test_root: TEST_SCRATCH_RUN,
+                test_root_kept: testRootKept,
                 summary: outcome.summary,
             },
             null,
@@ -1492,5 +1538,8 @@ async function main() {
 
 main().catch((error) => {
     console.error(error && error.stack ? error.stack : String(error))
+    if (fs.existsSync(TEST_SCRATCH_RUN)) {
+        console.error(`${COLORS.cyan}[INFO]${COLORS.reset} test scratch kept: ${TEST_SCRATCH_RUN}`)
+    }
     process.exit(1)
 })

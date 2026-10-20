@@ -10,6 +10,7 @@ import {
 } from tensor
 import { py_import, py_call, py_wrap, py_unwrap, py_exec, py_attr, PyObject } from python
 import { round } from math
+import { get_env } from sys
 
 let num_classes = 10
 
@@ -74,7 +75,11 @@ func main(): int sync {
     println('Loading MNIST via Python...')
     let mnist_mod = py_import("mnist_loader")
     let load_fn = py_attr(mnist_mod, "load_mnist")
-    let data_py = py_call(load_fn, py_wrap(256), py_wrap(true), py_wrap("tmp"))
+    // The runner's per-test scratch directory, which the precondition also downloads into; a
+    // direct run keeps the older shared tmp/ cache.
+    let root = get_env('CAMEL_TEST_TMPDIR')
+    let data_dir = if root == '' then 'tmp' else root + '/mnist'
+    let data_py = py_call(load_fn, py_wrap(256), py_wrap(true), py_wrap(data_dir))
     let data = py_unwrap(data_py as PyObject<{ images: float[], labels: int[], shape: int[] }>)
 
     let labels_arr = data.labels
