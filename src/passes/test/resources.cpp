@@ -76,12 +76,12 @@ std::string boundsText(const std::optional<rt::RegionBounds> &bounds) {
 }
 
 /// A short label of node `ref`: its operator's URI, the graph a FUNC calls, or its kind.
-std::string label(const rt::GCGraph &graph, rt::gc_node_ref_t ref) {
+std::string label(const rt::Program &program, const rt::GCGraph &graph, rt::gc_node_ref_t ref) {
     switch (graph.node(ref)->kind) {
     case rt::GCNodeKind::Oper:
         return std::string(graph.nodeBodyAs<rt::GCOperBody>(ref)->uri());
     case rt::GCNodeKind::Func:
-        return "FUNC " + graph.directCalleeGraphOf(ref)->name();
+        return "FUNC " + program.calleeOf(graph, ref)->name();
     case rt::GCNodeKind::Call:
         return "CALL";
     case rt::GCNodeKind::Loop:
@@ -245,21 +245,21 @@ ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &o
        << rt::regionsMayOverlap(a, std::nullopt) << "\n";
 
     // ---- The program. ----
-    std::vector<rt::GCGraph *> graphs = rt::collectReachableGraphs(graph);
+    std::vector<rt::GCGraph *> graphs = rt::collectReachableGraphs(*program, graph);
     std::sort(graphs.begin(), graphs.end(), [](const rt::GCGraph *x, const rt::GCGraph *y) {
         return x->name() < y->name();
     });
     for (const rt::GCGraph *g : graphs) {
         for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
-            const rt::NodeResources resources = rt::resourcesOf(*g, ref);
+            const rt::NodeResources resources = rt::resourcesOf(*program, *g, ref);
             if (!resources.none()) {
-                os << "RESOURCES node " << g->name() << " " << ref << " " << label(*g, ref) << ": "
-                   << rt::toString(resources) << "\n";
+                os << "RESOURCES node " << g->name() << " " << ref << " "
+                   << label(*program, *g, ref) << ": " << rt::toString(resources) << "\n";
             }
         }
-        os << "RESOURCES footprint " << g->name() << " " << rt::toString(rt::footprintOf(g))
-           << "\n";
-        for (const rt::RequiredOrdering &o : rt::requiredOrderings(*g)) {
+        os << "RESOURCES footprint " << g->name() << " "
+           << rt::toString(rt::footprintOf(*program, g)) << "\n";
+        for (const rt::RequiredOrdering &o : rt::requiredOrderings(*program, *g)) {
             os << "RESOURCES order " << g->name() << " " << o.first << " " << o.second << " "
                << rt::conflictKindName(o.why) << " " << (o.ordered ? "ordered" : "unordered");
             if (o.ordered) {

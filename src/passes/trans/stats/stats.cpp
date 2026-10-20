@@ -50,12 +50,17 @@ std::string GraphStats::toJson() const {
 }
 
 GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context, GCGraph *root) {
-    (void)context;
+    const camel::runtime::Program *program =
+        root && context ? context->programOfRuntimeGraph(root) : nullptr;
+    return program ? collectGraphStats(*program, root) : GraphStats{};
+}
+
+GraphStats collectGraphStats(const camel::runtime::Program &program, GCGraph *root) {
     GraphStats stats;
     if (!root) {
         return stats;
     }
-    for (GCGraph *graph : camel::runtime::collectReachableGraphs(root)) {
+    for (GCGraph *graph : camel::runtime::collectReachableGraphs(program, root)) {
         ++stats.graphs;
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const auto ref   = it.ref();
@@ -98,6 +103,6 @@ GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context,
 
 const camel::runtime::Program *
 GraphStatsPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    os << "GRAPH_STATS " << collectGraphStats(context_, program->root()).toJson() << std::endl;
+    os << "GRAPH_STATS " << collectGraphStats(*program, program->root()).toJson() << std::endl;
     return program;
 }

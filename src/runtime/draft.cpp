@@ -392,6 +392,7 @@ const DraftNode *GraphDraft::node(gc_node_ref_t id) const {
 }
 
 DraftNode *GraphDraft::node(gc_node_ref_t id) {
+    ++mutations_;
     if (id >= nodesById_.size()) {
         return nullptr;
     }
@@ -436,6 +437,7 @@ std::span<const gc_node_ref_t> GraphDraft::usersOf(gc_node_ref_t id, DraftEdgeKi
 }
 
 std::vector<gc_node_ref_t> &GraphDraft::userListOf(gc_node_ref_t id, DraftEdgeKind kind) {
+    ++mutations_;
     if (users_.size() <= id) {
         users_.resize(nodesById_.size());
     }
@@ -473,6 +475,7 @@ std::span<const gc_node_ref_t> GraphDraft::ctrlUsersOf(const DraftNode *nodePtr)
 }
 
 std::span<gc_node_ref_t> GraphDraft::mutableInputs(DraftNode *node, DraftEdgeKind kind) {
+    ++mutations_;
     return kind == DraftEdgeKind::Norm   ? DraftNodeView::normInputs(node)
            : kind == DraftEdgeKind::With ? DraftNodeView::withInputs(node)
                                          : DraftNodeView::ctrlInputs(node);
@@ -579,6 +582,7 @@ size_t GraphDraft::payloadBytesForSourceNode(const GCGraph *graph, gc_node_ref_t
 DraftNode *GraphDraft::createDecodedNode(
     const GCGraph *graph, gc_node_ref_t sourceRef,
     const std::vector<gc_node_ref_t> &sourceToDraft) {
+    ++mutations_;
     const GCNode *sourceNode = graph->node(sourceRef);
     ASSERT(sourceNode != nullptr, "Draft decode encountered a null source node.");
 
@@ -646,7 +650,7 @@ DraftNode *GraphDraft::createDecodedNode(
     return draftNode;
 }
 
-std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
+std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph draft decode requires a non-null graph.");
     CAMEL_LOG_INFO_S(
         "GraphDraft",
@@ -655,6 +659,8 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
         graph->nodeCount());
     auto draft       = std::make_unique<GraphDraft>();
     draft->id_       = graph->id();
+    draft->outerGraphId_           = graph->outerGraphId();
+    draft->program_                = &program;
     draft->typeSpecializationRoot_ = graph->typeSpecializationRoot();
     draft->flags_                  = graph->flags();
     draft->funcType_ = graph->funcType();
@@ -740,10 +746,12 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     draft->output_     = translateNodeRef(graph->outputNodeRef(), sourceToDraft);
     draft->returnNode_ = translateNodeRef(graph->returnNodeRef(), sourceToDraft);
     CAMEL_LOG_INFO_S("GraphDraft", "Decode finished for graph '{}'.", graph->name());
+    draft->mutations_ = 0;
     return draft;
 }
 
 DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) {
+    ++mutations_;
     const size_t tailBytes =
         init.payload.size_bytes() + adjacencyBytes(
                                         static_cast<gc_cnt_t>(init.normInputs.size()),
@@ -803,6 +811,7 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
 }
 
 void GraphDraft::replaceNodeStorage(gc_node_ref_t id, DraftNode *nodePtr) {
+    ++mutations_;
     ASSERT(id < nodesById_.size(), "Draft node storage replacement id is out of range.");
     ASSERT(nodePtr != nullptr, "Draft node storage replacement requires a non-null node.");
     nodePtr->header.owner  = this;
@@ -812,6 +821,7 @@ void GraphDraft::replaceNodeStorage(gc_node_ref_t id, DraftNode *nodePtr) {
 
 void GraphDraft::removeUserRef(
     gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl) {
+    ++mutations_;
     if (node(id) == nullptr || id >= users_.size() || !users_[id]) {
         return;
     }
@@ -832,6 +842,7 @@ void GraphDraft::removeUserRef(
 
 void GraphDraft::appendUserRef(
     gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl) {
+    ++mutations_;
     if (node(id) == nullptr) {
         return;
     }
@@ -886,6 +897,7 @@ uint8_t GraphDraft::nodePermissions(gc_node_ref_t id) const {
 }
 
 void GraphDraft::setNodePermissions(gc_node_ref_t id, uint8_t permissions) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set the permissions of a missing draft node.");
     draftNode->header.permissions = permissions;
@@ -897,23 +909,26 @@ uint32_t GraphDraft::nodeAttrs(gc_node_ref_t id) const {
 }
 
 void GraphDraft::setNodeAttrs(gc_node_ref_t id, uint32_t attrs) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set the attributes of a missing draft node.");
     draftNode->header.attrs = attrs;
 }
 
 void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set the origin of a missing draft node.");
     draftNode->header.origin = origin;
 }
 
 gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
+    ++mutations_;
     ASSERT(
         nodesById_.size() < std::numeric_limits<gc_node_ref_t>::max(),
         "A draft graph has no node id left (the last id is kInvalidNodeRef).");
     gc_node_ref_t id = static_cast<gc_node_ref_t>(nodesById_.size());
-    ++revision_;
+    touchRefs();
     nodesById_.push_back(rebuildNode(id, init));
     sourceRefsById_.push_back(kInvalidNodeRef);
     noteNodeKind(id, init.kind);
@@ -932,6 +947,7 @@ gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
 }
 
 void GraphDraft::noteNodeKind(gc_node_ref_t id, GCNodeKind kind) {
+    ++mutations_;
     switch (kind) {
     case GCNodeKind::Gate:
         gateIds_.push_back(id);
@@ -948,6 +964,7 @@ void GraphDraft::noteNodeKind(gc_node_ref_t id, GCNodeKind kind) {
 }
 
 void GraphDraft::appendInputEntry(gc_node_ref_t userId, DraftEdgeKind kind, gc_node_ref_t inputId) {
+    ++mutations_;
     DraftNode *draftNode = node(userId);
     DraftNodeHeader &h   = draftNode->header;
     if (h.usedBytes() + sizeof(gc_node_ref_t) > h.capacityBytes) {
@@ -979,6 +996,7 @@ void GraphDraft::appendInputEntry(gc_node_ref_t userId, DraftEdgeKind kind, gc_n
 }
 
 void GraphDraft::eraseNode(gc_node_ref_t id) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot erase a missing draft node.");
 
@@ -1018,7 +1036,7 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
         users_[id].reset();
     }
 
-    ++revision_;
+    touchRefs();
     nodesById_[id] = nullptr;
     liveNodeCount_--;
     std::erase(normPorts_, id);
@@ -1037,6 +1055,7 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
 }
 
 void GraphDraft::setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set norm inputs for a missing draft node.");
     for (gc_node_ref_t oldInput : DraftNodeView::normInputs(draftNode)) {
@@ -1053,6 +1072,7 @@ void GraphDraft::setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
 }
 
 void GraphDraft::setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set with inputs for a missing draft node.");
     for (gc_node_ref_t oldInput : DraftNodeView::withInputs(draftNode)) {
@@ -1069,6 +1089,7 @@ void GraphDraft::setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
 }
 
 void GraphDraft::setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set ctrl inputs for a missing draft node.");
     for (gc_node_ref_t oldInput : DraftNodeView::ctrlInputs(draftNode)) {
@@ -1087,6 +1108,7 @@ void GraphDraft::setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
 void GraphDraft::replaceUsesInList(
     gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
     gc_node_ref_t newId, bool norm, bool with, bool ctrl) {
+    ++mutations_;
     for (gc_node_ref_t userId : users) {
         DraftNode *userNode = node(userId);
         if (userNode == nullptr) {
@@ -1119,6 +1141,7 @@ void GraphDraft::replaceUsesInList(
 }
 
 void GraphDraft::replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    ++mutations_;
     auto replaceOne = [&](gc_node_ref_t &ref) {
         if (ref == oldId) {
             ref = newId;
@@ -1130,6 +1153,7 @@ void GraphDraft::replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t n
 }
 
 void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    ++mutations_;
     auto replaceOne = [&](gc_node_ref_t &ref) {
         if (ref == oldId) {
             ref = newId;
@@ -1159,30 +1183,35 @@ void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t ne
 }
 
 void GraphDraft::replaceAllNormUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    ++mutations_;
     std::vector<gc_node_ref_t> users(normUsersOf(oldId).begin(), normUsersOf(oldId).end());
     replaceUsesInList(oldId, users, oldId, newId, true, false, false);
     replaceValueStructuralRefs(oldId, newId);
 }
 
 void GraphDraft::replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    ++mutations_;
     std::vector<gc_node_ref_t> users(withUsersOf(oldId).begin(), withUsersOf(oldId).end());
     replaceUsesInList(oldId, users, oldId, newId, false, true, false);
     replaceValueStructuralRefs(oldId, newId);
 }
 
 void GraphDraft::replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    ++mutations_;
     std::vector<gc_node_ref_t> users(ctrlUsersOf(oldId).begin(), ctrlUsersOf(oldId).end());
     replaceUsesInList(oldId, users, oldId, newId, false, false, true);
     replaceCtrlStructuralRefs(oldId, newId);
 }
 
 void GraphDraft::replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    ++mutations_;
     replaceAllNormUses(oldId, newId);
     replaceAllWithUses(oldId, newId);
 }
 
 void GraphDraft::retargetBranchArmAnchors(
     gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId) {
+    ++mutations_;
     for (gc_node_ref_t id : brchIds_) {
         DraftNode *draftNode = node(id);
         if (!draftNode || draftNode->header.kind != GCNodeKind::Brch) {
@@ -1263,6 +1292,7 @@ size_t GraphDraft::dissolveUnorderedGates() {
 }
 
 gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
+    ++mutations_;
     ASSERT(type != nullptr, "Draft runtime slot allocation requires a non-null type.");
     if (runtimeSlotTypes_.empty()) {
         runtimeSlotTypes_.push_back(camel::core::type::Type::Void()); // slot 0 is reserved
@@ -1277,11 +1307,12 @@ gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
 }
 
 size_t GraphDraft::appendStaticSlot(slot_t value, camel::core::type::Type *type) {
+    ++mutations_;
     if (staticSlots_.empty()) {
         staticSlots_.push_back(NullSlot);
         staticSlotTypes_.push_back(camel::core::type::Type::Void());
     }
-    ++revision_;
+    touchRefs();
     staticSlots_.push_back(value);
     staticSlotTypes_.push_back(type);
     return staticSlots_.size() - 1;
@@ -1289,6 +1320,7 @@ size_t GraphDraft::appendStaticSlot(slot_t value, camel::core::type::Type *type)
 
 gc_node_ref_t GraphDraft::materializeStaticValue(
     slot_t value, camel::core::type::Type *type, uint8_t runtimeFlags) {
+    ++mutations_;
     const size_t slotIndex = appendStaticSlot(value, type);
     ASSERT(
         slotIndex <= static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
@@ -1303,32 +1335,47 @@ gc_node_ref_t GraphDraft::materializeStaticValue(
 }
 
 void GraphDraft::setStaticSlot(size_t index, slot_t value) {
+    ++mutations_;
     ASSERT(index < staticSlots_.size(), "Draft static slot index is out of range.");
-    ++revision_;
+    touchRefs();
     staticSlots_[index] = value;
 }
 
-void GraphDraft::addDependency(GCGraph *graph) {
-    ++revision_;
-    if (graph &&
+void GraphDraft::addDependency(GraphId graph) {
+    ++mutations_;
+    touchRefs();
+    if (isValid(graph) &&
         std::find(dependencies_.begin(), dependencies_.end(), graph) == dependencies_.end()) {
         dependencies_.push_back(graph);
     }
 }
 
-void GraphDraft::addSubGraph(GCGraph *graph) {
-    ++revision_;
-    if (graph && std::find(subGraphs_.begin(), subGraphs_.end(), graph) == subGraphs_.end()) {
+void GraphDraft::addSubGraph(GraphId graph) {
+    ++mutations_;
+    touchRefs();
+    if (isValid(graph) &&
+        std::find(subGraphs_.begin(), subGraphs_.end(), graph) == subGraphs_.end()) {
         subGraphs_.push_back(graph);
     }
 }
 
 void GraphDraft::addCaptureName(std::string_view name) {
+    ++mutations_;
     captureNames_.push_back(camel::core::internSymbol(name));
 }
 
-uint32_t GraphDraft::payloadGraphIndexOf(GCGraph *graph) {
-    if (graph == nullptr) {
+void GraphDraft::addStaticGraphRef(GraphId graph) {
+    ++mutations_;
+    touchRefs();
+    if (isValid(graph) && std::find(staticGraphRefs_.begin(), staticGraphRefs_.end(), graph) ==
+                              staticGraphRefs_.end()) {
+        staticGraphRefs_.push_back(graph);
+    }
+}
+
+uint32_t GraphDraft::payloadGraphIndexOf(GraphId graph) {
+    ++mutations_;
+    if (!isValid(graph)) {
         return kNoLoopGraph;
     }
     const auto [it, added] =
@@ -1339,26 +1386,36 @@ uint32_t GraphDraft::payloadGraphIndexOf(GCGraph *graph) {
     return it->second;
 }
 
-GCGraph *GraphDraft::payloadGraphAt(uint32_t index) const {
+GraphId GraphDraft::payloadGraphAt(uint32_t index) const {
     if (index == kNoLoopGraph) {
-        return nullptr;
+        return kInvalidGraphId;
     }
     if (index >= payloadGraphs_.size()) {
         throw std::runtime_error(
-            std::format("A payload names graph {} of {} in the reference table.", index, payloadGraphs_.size()));
+            std::format(
+                "A payload names graph {} of {} in the reference table.",
+                index,
+                payloadGraphs_.size()));
     }
     return payloadGraphs_[index];
 }
 
-GCGraph *GraphDraft::calleeGraphOf(gc_node_ref_t id) const {
+GraphId GraphDraft::calleeIdOf(gc_node_ref_t id) const {
     const DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
     return payloadGraphAt(DraftNodeView::payloadAs<GCFuncRef>(draftNode)->ref);
 }
 
-void GraphDraft::setCalleeGraph(gc_node_ref_t id, GCGraph *callee) {
+GCGraph *GraphDraft::calleeGraphOf(gc_node_ref_t id) const {
+    const GraphId callee = calleeIdOf(id);
+    return program_ != nullptr && isValid(callee) ? program_->graph(callee) : nullptr;
+}
+
+void GraphDraft::setCalleeGraph(gc_node_ref_t id, GraphId callee) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
+    touchRefs();
     DraftNodeView::payloadAs<GCFuncRef>(draftNode)->ref = payloadGraphIndexOf(callee);
 }
 
@@ -1374,20 +1431,14 @@ GCLoopBody GraphDraft::loopGraphsOf(gc_node_ref_t id) const {
     };
 }
 
-void GraphDraft::setLoopGraphs(gc_node_ref_t id, GCGraph *cond, GCGraph *body) {
+void GraphDraft::setLoopGraphs(gc_node_ref_t id, GraphId cond, GraphId body) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop, "Not a LOOP node.");
+    touchRefs();
     auto *ref    = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
     ref->condRef = payloadGraphIndexOf(cond);
     ref->bodyRef = payloadGraphIndexOf(body);
-}
-
-void GraphDraft::addStaticGraphRef(GCGraph *graph) {
-    ++revision_;
-    if (graph && std::find(staticGraphRefs_.begin(), staticGraphRefs_.end(), graph) ==
-                     staticGraphRefs_.end()) {
-        staticGraphRefs_.push_back(graph);
-    }
 }
 
 GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &name) const {
@@ -1408,7 +1459,7 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
         frameSlotTypes(),
         staticDataType,
         closureType_,
-        nullptr,
+        outerGraphId_,
         dependencies_,
         subGraphs_,
         staticGraphRefs_,

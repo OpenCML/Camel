@@ -55,7 +55,7 @@
 namespace camel::runtime {
 
 /// True when a LOOP node is reachable from `root`.
-bool programHasLoops(GCGraph *root);
+bool programHasLoops(const Program &program, GCGraph *root);
 
 /// `program` with every LOOP node replaced by a call of a tail-recursive graph (see the file
 /// comment): a detached copy, or `program` itself when it has no loop.

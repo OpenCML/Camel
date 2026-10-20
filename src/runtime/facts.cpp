@@ -94,13 +94,23 @@ std::vector<const GCGraph *> graphsOf(std::span<const Anchor> anchors) {
     return graphs;
 }
 
+/// The closure revision of `graph`, read in the program of the first anchor on it.
+uint64_t closureRevisionOf(std::span<const Anchor> anchors, const GCGraph *graph) {
+    for (const Anchor &anchor : anchors) {
+        if (anchor.graph == graph) {
+            return closureRevision(*anchor.program, const_cast<GCGraph *>(graph));
+        }
+    }
+    return 0;
+}
+
 /// The anchors fit the kind's scope and name nodes of their graphs.
 void checkAnchors(const KindInfo &kind, std::span<const Anchor> anchors) {
     if (anchors.empty()) {
         reject(kind.key, "a fact needs at least one anchor");
     }
     for (const Anchor &anchor : anchors) {
-        if (anchor.graph == nullptr) {
+        if (anchor.graph == nullptr || anchor.program == nullptr) {
             reject(kind.key, "an anchor without a graph");
         }
         if (anchor.node != kInvalidNodeRef && !anchor.graph->containsNodeRef(anchor.node)) {
@@ -135,17 +145,18 @@ void checkAnchors(const KindInfo &kind, std::span<const Anchor> anchors) {
 }
 
 /// Where a kind has facts in `graph` (KindInfo::anchorsIn, or its scope's default).
-std::vector<std::vector<Anchor>> anchorsOf(const KindInfo &kind, const GCGraph &graph) {
+std::vector<std::vector<Anchor>>
+anchorsOf(const KindInfo &kind, const Program &program, const GCGraph &graph) {
     if (kind.anchorsIn) {
-        return kind.anchorsIn(graph);
+        return kind.anchorsIn(program, graph);
     }
     std::vector<std::vector<Anchor>> all;
     if (kind.scope == Scope::Node) {
         for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
-            all.push_back({Anchor{&graph, ref}});
+            all.push_back({Anchor{&program, &graph, ref}});
         }
     } else if (kind.scope == Scope::Graph) {
-        all.push_back({Anchor{&graph, kInvalidNodeRef}});
+        all.push_back({Anchor{&program, &graph, kInvalidNodeRef}});
     }
     return all;
 }
@@ -211,7 +222,7 @@ std::string factJson(
             "{}{{\"graph\":{},\"revision\":{}}}",
             i ? "," : "",
             jsonString(graphs[i]->name()),
-            closureRevision(const_cast<GCGraph *>(graphs[i])));
+            closureRevisionOf(anchors, graphs[i]));
     }
     out += std::format("],\"epoch\":{},\"target\":{}", stamp->declarationEpoch, stamp->targetHash);
     if (kind.dependency == Dependency::Cone) {
@@ -313,7 +324,7 @@ void FactStore::checkType(KindId kind, const std::type_info &type) {
 Stamp FactStore::stampNow(const KindInfo &kind, std::span<const Anchor> anchors, uint64_t targetHash) {
     Stamp stamp;
     for (const GCGraph *graph : graphsOf(anchors)) {
-        stamp.graphs.emplace_back(graph->id(), closureRevision(const_cast<GCGraph *>(graph)));
+        stamp.graphs.emplace_back(graph->id(), closureRevisionOf(anchors, graph));
     }
     stamp.declarationEpoch =
         kind.readsDeclarations ? camel::core::OperatorTable::instance().declarationEpoch() : 0;
@@ -341,9 +352,9 @@ FactStore::find(KindId kind, std::span<const Anchor> anchors, uint64_t targetHas
     const std::vector<const GCGraph *> graphs = graphsOf(anchors);
     bool revisions = graphs.size() == it->stamp.graphs.size();
     for (size_t i = 0; revisions && i < graphs.size(); ++i) {
-        revisions = it->stamp.graphs[i] ==
-                    std::pair<GraphId, uint64_t>(
-                        graphs[i]->id(), closureRevision(const_cast<GCGraph *>(graphs[i])));
+        revisions =
+            it->stamp.graphs[i] ==
+            std::pair<GraphId, uint64_t>(graphs[i]->id(), closureRevisionOf(anchors, graphs[i]));
     }
     const bool epoch =
         !info.readsDeclarations ||
@@ -541,23 +552,23 @@ void FactStore::resetCounts() {
 
 // ---- Bulk computation and the dump -----------------------------------------------------------
 
-void computeFacts(FactStore &store, GCGraph *root) {
-    const std::vector<GCGraph *> graphs = collectReachableGraphs(root);
+void computeFacts(FactStore &store, const Program &program) {
+    const std::vector<GCGraph *> graphs = collectReachableGraphs(program);
     for (KindId kind : registeredKinds()) {
         const KindInfo &info = kindInfo(kind);
         if (!info.compute || info.cls == FactClass::GraphContent) {
             continue;
         }
         for (const GCGraph *graph : graphs) {
-            for (const std::vector<Anchor> &anchors : anchorsOf(info, *graph)) {
+            for (const std::vector<Anchor> &anchors : anchorsOf(info, program, *graph)) {
                 (void)store.obtainValue(kind, anchors);
             }
         }
     }
 }
 
-void dumpFacts(FactStore &store, GCGraph *root, std::ostream &os) {
-    const std::vector<GCGraph *> graphs = collectReachableGraphs(root);
+void dumpFacts(FactStore &store, const Program &program, std::ostream &os) {
+    const std::vector<GCGraph *> graphs = collectReachableGraphs(program);
     std::unordered_map<GraphId, const GCGraph *> byId;
     for (const GCGraph *graph : graphs) {
         byId.emplace(graph->id(), graph);
@@ -574,7 +585,7 @@ void dumpFacts(FactStore &store, GCGraph *root, std::ostream &os) {
             if (it == byId.end()) {
                 break;
             }
-            anchors.push_back(Anchor{it->second, node});
+            anchors.push_back(Anchor{&program, it->second, node});
         }
         if (anchors.size() != fact.anchors.size()) {
             continue; // about a graph this program does not have
@@ -593,7 +604,7 @@ void dumpFacts(FactStore &store, GCGraph *root, std::ostream &os) {
             continue;
         }
         for (const GCGraph *graph : graphs) {
-            for (const std::vector<Anchor> &anchors : anchorsOf(info, *graph)) {
+            for (const std::vector<Anchor> &anchors : anchorsOf(info, program, *graph)) {
                 if (Value value = info.compute(anchors)) {
                     os << "FACT " << factJson(info, anchors, value.get(), nullptr) << "\n";
                 }

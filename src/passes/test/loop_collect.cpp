@@ -96,7 +96,7 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
 
     size_t changed = 0;
     for (gc_node_ref_t id : loops) {
-        const LoopView view(*owner, id);
+        const LoopView view(session.work(), *owner, id);
         if (view.collectionCount() != 0) {
             continue; // already a collecting loop (the pass ran before)
         }

@@ -146,7 +146,8 @@ const std::unordered_map<camel::core::OperId, OpCode> &getSupportedInlineOperato
 }
 
 static bytecode_vec_t compileRuntimeGraph(
-    const context_ptr_t &ctx, camel::runtime::GCGraph *graph, const CompileStrategy &opt,
+    const context_ptr_t &ctx, const camel::runtime::Program &program,
+    camel::runtime::GCGraph *graph, const CompileStrategy &opt,
     std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
     ASSERT(graph != nullptr, "FastVM compile requires a non-null runtime graph.");
     ASSERT(
@@ -467,7 +468,7 @@ static bytecode_vec_t compileRuntimeGraph(
 
         case camel::runtime::GCNodeKind::Func: {
             bool isTail = runtimeNodeIndex == tailValueNode && hasOnlyTrivialSuffixAfter(i);
-            auto *targetRuntimeGraph = graph->directCalleeGraphOf(runtimeNodeIndex);
+            auto *targetRuntimeGraph = program.calleeOf(*graph, runtimeNodeIndex);
             ASSERT(
                 targetRuntimeGraph != nullptr,
                 std::format(
@@ -589,8 +590,8 @@ static bytecode_vec_t compileRuntimeGraph(
                 {.mark = mark},
                 3);
             auto *words = reinterpret_cast<uint64_t *>(bc + bc->opsize) - 3;
-            words[0]    = reinterpret_cast<uint64_t>(graph->loopCondGraphOf(runtimeNodeIndex));
-            words[1]    = reinterpret_cast<uint64_t>(graph->loopBodyGraphOf(runtimeNodeIndex));
+            words[0]    = reinterpret_cast<uint64_t>(program.loopCondOf(*graph, runtimeNodeIndex));
+            words[1]    = reinterpret_cast<uint64_t>(program.loopBodyOf(*graph, runtimeNodeIndex));
             BytecodeExtra extra{};
             extra.raw                  = 0;
             extra.loop.mark            = mark;
@@ -677,15 +678,18 @@ static bytecode_vec_t compileRuntimeGraph(
 }
 
 bytecode_vec_t compile(
-    const context_ptr_t &ctx, camel::runtime::GCGraph *graph, const CompileStrategy &opt,
+    const context_ptr_t &ctx, const camel::runtime::Program &program,
+    camel::runtime::GCGraph *graph, const CompileStrategy &opt,
     std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
-    return compileRuntimeGraph(ctx, graph, opt, localPcOrigins);
+    return compileRuntimeGraph(ctx, program, graph, opt, localPcOrigins);
 }
 
-LinkedBytecodeResult
-compileAndLink(context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt) {
+LinkedBytecodeResult compileAndLink(
+    context_ptr_t ctx, const camel::runtime::Program &program, camel::runtime::GCGraph *entry,
+    const CompileStrategy &opt) {
     return compileAndLinkFrom(
         std::move(ctx),
+        program,
         entry,
         opt,
         [](camel::runtime::GCGraph *) { return std::optional<size_t>{}; },
@@ -693,17 +697,18 @@ compileAndLink(context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileS
 }
 
 LinkedBytecodeResult compileAndLinkFrom(
-    context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt,
-    const KnownEntryPc &known, size_t baseOffset) {
+    context_ptr_t ctx, const camel::runtime::Program &program, camel::runtime::GCGraph *entry,
+    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset) {
     std::vector<camel::runtime::GCGraph *> uniqueGraphs =
-        camel::runtime::collectReachableGraphs(entry);
+        camel::runtime::collectReachableGraphs(program, entry);
     reverse(uniqueGraphs.begin(), uniqueGraphs.end());
-    return compileAndLinkGraphs(std::move(ctx), uniqueGraphs, opt, known, baseOffset);
+    return compileAndLinkGraphs(std::move(ctx), program, uniqueGraphs, opt, known, baseOffset);
 }
 
 LinkedBytecodeResult compileAndLinkGraphs(
-    context_ptr_t ctx, std::span<camel::runtime::GCGraph *const> uniqueGraphs,
-    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset) {
+    context_ptr_t ctx, const camel::runtime::Program &program,
+    std::span<camel::runtime::GCGraph *const> uniqueGraphs, const CompileStrategy &opt,
+    const KnownEntryPc &known, size_t baseOffset) {
     bytecode_vec_t linked;
     std::vector<BytecodeIndex> graphs;
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
@@ -713,12 +718,12 @@ LinkedBytecodeResult compileAndLinkGraphs(
         if (known(runtimeGraph)) {
             continue;
         }
-        camel::runtime::validateRuntimeGraphPayload(runtimeGraph);
+        camel::runtime::validateRuntimeGraphPayload(program, runtimeGraph);
         size_t start = baseOffset + linked.size();
         std::unordered_map<size_t, camel::source::origin_id_t> localPcOrigins;
         bytecode_vec_t codes;
         try {
-            codes = compile(ctx, runtimeGraph, opt, &localPcOrigins);
+            codes = compile(ctx, program, runtimeGraph, opt, &localPcOrigins);
         } catch (const std::bad_alloc &) {
             throw std::runtime_error(
                 std::format(

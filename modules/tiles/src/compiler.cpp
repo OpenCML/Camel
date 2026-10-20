@@ -57,6 +57,7 @@ struct Value {
     std::vector<Value> fields;
     // Borrowed function graph and captured values, used only while reading the graph.
     rt::GCGraph *function = nullptr;
+    const rt::Program *functionProgram = nullptr; // the program `function` is a graph of
     bool loopElement = false; // Exact i64 body port, materialized only by an explicit conversion.
 };
 struct Frame {
@@ -69,7 +70,10 @@ class Compiler {
   public:
     Program program;
     rt::fact::FactStore &facts;
-    explicit Compiler(rt::fact::FactStore &store) : facts(store) {}
+    /// The program the graphs being compiled are of; null for a compiler that reads no graph.
+    const rt::Program *runtimeProgram;
+    Compiler(rt::fact::FactStore &store, const rt::Program *graphs)
+        : facts(store), runtimeProgram(graphs) {}
     std::unordered_set<rt::GCGraph *> active;
     std::unordered_set<::Function *> loadingFunctions;
     std::unordered_map<core::OperId, size_t> contracts;
@@ -112,7 +116,7 @@ class Compiler {
                 ::Function *function;
                 ~CaptureScope() { active.erase(function); }
             } captureScope{loadingFunctions, fn};
-            Value value{.type = type, .function = fn->graph()};
+            Value value{.type = type, .function = fn->graph(), .functionProgram = fn->program()};
             if (auto *captures = fn->tuple()) {
                 for (size_t i = 0; i < captures->size(); ++i) {
                     auto *fieldType  = fn->tupleType()->typeAt(i);
@@ -218,7 +222,15 @@ class Compiler {
 
     Value call(
         rt::GCGraph *g, const std::vector<Value> &with, const std::vector<Value> &norm,
-        const std::vector<Value> &captures = {}) {
+        const std::vector<Value> &captures = {}, const rt::Program *home = nullptr) {
+        // The graphs `g` calls are named in the program it is of.
+        struct HomeScope {
+            const rt::Program *&current;
+            const rt::Program *saved;
+            ~HomeScope() { current = saved; }
+        } homeScope{runtimeProgram, runtimeProgram};
+        if (home)
+            runtimeProgram = home;
         if (!g || active.contains(g) || active.size() >= 64)
             throw UnsupportedComputation(
                 "recursive or excessively deep calls are not supported by tiles yet");
@@ -273,12 +285,14 @@ class Compiler {
         throw UnsupportedComputation("loop state/capture must be a tensor or f64 value");
     }
     Value loop(Frame &frame, rt::gc_node_ref_t id) {
-        const rt::LoopView view(*frame.graph, id);
+        const rt::LoopView view(*runtimeProgram, *frame.graph, id);
         if (view.kind() != core::LoopKind::For || view.stateCount() == 0 ||
             !view.bodyEffects().pure())
             throw UnsupportedComputation("tiles requires a pure static For loop");
         auto *body = view.bodyGraph();
-        const rt::fact::Anchor anchors[]{{frame.graph, id}, {body, *view.bodyElementParam()}};
+        const rt::fact::Anchor anchors[]{
+            {runtimeProgram, frame.graph, id},
+            {runtimeProgram, body, *view.bodyElementParam()}};
         const auto domain =
             facts.obtain<rt::fact::LoopDomain>(rt::fact::coreKinds().loopDomain, anchors);
         if (!domain || !domain->extent || *domain->extent < 0 ||
@@ -291,7 +305,7 @@ class Compiler {
         region->domain = std::get<std::vector<int64_t>>(*iterable.constant);
         if (region->domain.size() != static_cast<size_t>(*domain->extent))
             throw std::runtime_error("core loop domain disagrees with static array");
-        Compiler nested(facts);
+        Compiler nested(facts, runtimeProgram);
         nested.active = active;
         std::vector<Value> initials, states, captures;
         std::vector<size_t> inputs;
@@ -455,7 +469,7 @@ class Compiler {
                     with.push_back(eval(f, in));
                 for (auto in : ins)
                     norm.push_back(eval(f, in));
-                out = call(g->directCalleeGraphOf(id), with, norm);
+                out = call(runtimeProgram->calleeOf(*g, id), with, norm);
                 break;
             }
             case rt::GCNodeKind::Call: {
@@ -471,7 +485,7 @@ class Compiler {
                     with.push_back(eval(f, context[i]));
                 for (auto input : ins)
                     norm.push_back(eval(f, input));
-                out = call(fn.function, with, norm, fn.fields);
+                out = call(fn.function, with, norm, fn.fields, fn.functionProgram);
                 break;
             }
             case rt::GCNodeKind::Fill: {
@@ -534,8 +548,9 @@ class Compiler {
                         fn.function,
                         {},
                         fn.function->normPorts().size() == 1 ? std::vector<Value>{args}
-                                                             : args.fields,
-                        fn.fields);
+                                                                   : args.fields,
+                        fn.fields,
+                        fn.functionProgram);
                     break;
                 }
                 std::vector<Value> args;
@@ -553,7 +568,7 @@ class Compiler {
                 for (size_t i = 0; sameTypes && i < args.size(); ++i)
                     sameTypes = g->node(inputRefs[i])->dataType() == args[i].type;
                 if (sameTypes) {
-                    const rt::fact::Anchor anchor{g, id};
+                    const rt::fact::Anchor anchor{runtimeProgram, g, id};
                     const auto shape = facts.obtain<rt::fact::TensorShape>(
                         rt::fact::coreKinds().shape,
                         {&anchor, 1});
@@ -602,7 +617,7 @@ class Compiler {
         for (size_t i = 0; sameTypes && i < args.size(); ++i)
             sameTypes = graph.node(inputs[i])->dataType() == args[i].type;
         if (sameTypes) {
-            const rt::fact::Anchor anchor{&graph, node};
+            const rt::fact::Anchor anchor{runtimeProgram, &graph, node};
             const auto fact =
                 facts.obtain<rt::fact::NodeInstance>(rt::fact::coreKinds().instance, {&anchor, 1});
             if (fact && fact->instance &&
@@ -862,12 +877,13 @@ class Compiler {
 
 // Read-only capability probing uses the very same recurrence compiler with deferred
 // boundary inputs. It creates no graph, function, CUDA context, or retained GC reference.
-std::string
-loopEligibility(const rt::GCGraph &graph, rt::gc_node_ref_t id, rt::fact::FactStore &facts) {
+std::string loopEligibility(
+    const rt::Program &program, const rt::GCGraph &graph, rt::gc_node_ref_t id,
+    rt::fact::FactStore &facts) {
     try {
-        Compiler compiler(facts);
+        Compiler compiler(facts, &program);
         Frame frame{.graph = const_cast<rt::GCGraph *>(&graph)};
-        const rt::LoopView view(graph, id);
+        const rt::LoopView view(program, graph, id);
         if (view.kind() != core::LoopKind::For || view.stateCount() == 0)
             return "unsupported_loop_form";
         for (size_t i = 0; i < view.stateCount(); ++i) {
@@ -889,7 +905,7 @@ static Program compileInputs(
     if (!function || !function->graph())
         throw std::runtime_error("expected a function graph");
     ++extractions;
-    Compiler c(facts);
+    Compiler c(facts, function->program());
     std::vector<Value> with, norm;
     if (auto *closure = function->tuple()) {
         const auto *types = function->tupleType();
@@ -969,7 +985,7 @@ void bindRegionArguments(
         throw std::runtime_error("compiled region argument count changed");
     // Reuse the ordinary input snapshot implementation; no graph node, operator
     // instantiation, inference, scheduling or source generation is visited here.
-    Compiler bindings(facts);
+    Compiler bindings(facts, nullptr);
     for (size_t i = 0; i < arguments.size(); ++i) {
         const auto &argument = arguments[i];
         const auto value     = bindings.host(argument.value, argument.type, true);

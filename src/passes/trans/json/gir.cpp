@@ -77,7 +77,15 @@ using namespace camel::passes::gir;
 std::string dumpJsonRuntimeGraph(GCGraph *root, const camel::core::context::context_ptr_t &ctx) {
     if (!root || !root->hasNodePayload())
         return {};
-    const auto graphs = collectReachableGraphs(root);
+    const Program *program = ctx ? ctx->programOfRuntimeGraph(root) : nullptr;
+    return program ? dumpJsonRuntimeGraph(*program, root, ctx) : std::string{};
+}
+
+std::string dumpJsonRuntimeGraph(
+    const Program &program, GCGraph *root, const camel::core::context::context_ptr_t &ctx) {
+    if (!root || !root->hasNodePayload())
+        return {};
+    const auto graphs = collectReachableGraphs(program, root);
     std::unordered_map<const GCGraph *, std::string> ids;
     for (size_t i = 0; i < graphs.size(); ++i)
         ids[graphs[i]] = std::format("g{}", i);
@@ -105,7 +113,7 @@ std::string dumpJsonRuntimeGraph(GCGraph *root, const camel::core::context::cont
             {"contextPorts", json::array()},
             {"capturePorts", json::array()},
             {"exit", nodeId(g, g->exitNodeRef())}};
-        g->traceGraphs([&](GCGraph *dep) {
+        program.traceGraphs(*g, [&](GCGraph *dep) {
             if (ids.contains(dep))
                 graph["dependencies"].push_back(ids.at(dep));
         });
@@ -124,7 +132,7 @@ std::string dumpJsonRuntimeGraph(GCGraph *root, const camel::core::context::cont
             json value{
                 {"id", nodeId(g, ref)},
                 {"kind", kind},
-                {"label", recordLabel(g, ref, *node)},
+                {"label", recordLabel(program, g, ref, *node)},
                 {"outputType", nullptr}};
             if (const auto *type = nodeStaticSlotType(g, *node))
                 value["outputType"] = camel::core::type::sourceTypeSpelling(type->toString());
@@ -136,7 +144,7 @@ std::string dumpJsonRuntimeGraph(GCGraph *root, const camel::core::context::cont
                     {"index", port.index}};
             }
             if (node->kind == GCNodeKind::Func)
-                value["callee"] = graphId(g->directCalleeGraphOf(ref));
+                value["callee"] = graphId(program.calleeOf(*g, ref));
             if (node->kind == GCNodeKind::Data && node->dataIndex < 0) {
                 auto *type      = nodeStaticSlotType(g, *node);
                 const auto slot = static_cast<size_t>(-node->dataIndex);
@@ -151,8 +159,8 @@ std::string dumpJsonRuntimeGraph(GCGraph *root, const camel::core::context::cont
             if (node->kind == GCNodeKind::Loop) {
                 value["loop"] = {
                     {"kind", camel::core::loopKindName(g->loopKindOf(ref))},
-                    {"condition", graphId(g->loopCondGraphOf(ref))},
-                    {"body", graphId(g->loopBodyGraphOf(ref))}};
+                    {"condition", graphId(program.loopCondOf(*g, ref))},
+                    {"body", graphId(program.loopBodyOf(*g, ref))}};
             }
             const auto origin = g->nodeOrigin(ref);
             if (origin) {
@@ -220,6 +228,6 @@ std::string dumpJsonRuntimeGraph(GCGraph *root, const camel::core::context::cont
 const camel::runtime::Program *
 JsonGirDumpPass::apply(const camel::runtime::Program *program, std::ostream &out) {
     camel::runtime::GCGraph *graph = program->root();
-    out << dumpJsonRuntimeGraph(graph, context_) << '\n';
+    out << dumpJsonRuntimeGraph(*program, graph, context_) << '\n';
     return nullptr;
 }

@@ -67,13 +67,14 @@ const std::unordered_map<core::OperId, std::string> &operations() {
     }();
     return result;
 }
-std::string
-eligibility(const rt::GCGraph &graph, rt::gc_node_ref_t id, rt::fact::FactStore &facts) {
+std::string eligibility(
+    const rt::Program &graphs, const rt::GCGraph &graph, rt::gc_node_ref_t id,
+    rt::fact::FactStore &facts) {
     const auto *node = graph.node(id);
     if (node->kind == rt::GCNodeKind::Loop) {
         if (!graph.ctrlInputsOf(id).empty() || !graph.ctrlOutputsOf(id).empty())
             return "control_edge";
-        return loopEligibility(graph, id, facts);
+        return loopEligibility(graphs, graph, id, facts);
     }
     if (node->kind != rt::GCNodeKind::Oper)
         return "node_kind";
@@ -94,7 +95,7 @@ eligibility(const rt::GCGraph &graph, rt::gc_node_ref_t id, rt::fact::FactStore 
     const auto output = shape(node->dataType());
     if (!output)
         return "unresolved_type";
-    const rt::fact::Anchor anchor{&graph, id};
+    const rt::fact::Anchor anchor{&graphs, &graph, id};
     const auto fact =
         facts.obtain<rt::fact::NodeInstance>(rt::fact::coreKinds().instance, {&anchor, 1});
     if (!fact || !fact->instance || !fact->instance->extents())
@@ -173,11 +174,12 @@ void ids(std::ostream &out, const std::vector<size_t> &values) {
     out << ']';
 }
 } // namespace
-RegionAnalysis analyzeRegions(const rt::GCGraph &graph, rt::fact::FactStore &facts) {
+RegionAnalysis
+analyzeRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts) {
     std::vector<RegionNode> nodes(graph.nodeCount());
     std::vector<std::string> reasons(nodes.size());
     for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
-        reasons[id]        = eligibility(graph, id, facts);
+        reasons[id]        = eligibility(graphs, graph, id, facts);
         nodes[id].eligible = reasons[id].empty();
         nodes[id].embedded =
             graph.node(id)->kind == rt::GCNodeKind::Data && graph.node(id)->dataIndex < 0;
@@ -216,8 +218,9 @@ RegionAnalysis analyzeRegions(const rt::GCGraph &graph, rt::fact::FactStore &fac
     auto transfers = planRegionTransfers(nodes, regions);
     return {std::move(regions), std::move(reasons), std::move(transfers)};
 }
-std::string inspectRegions(const rt::GCGraph &graph, rt::fact::FactStore &facts) {
-    const auto analysis = analyzeRegions(graph, facts);
+std::string
+inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts) {
+    const auto analysis = analyzeRegions(graphs, graph, facts);
     const auto &regions = analysis.regions;
     const auto &reasons = analysis.exclusions;
     std::ostringstream out;

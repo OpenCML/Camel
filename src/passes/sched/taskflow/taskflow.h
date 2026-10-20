@@ -310,7 +310,8 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
-    void buildAndDump(camel::runtime::GCGraph *graph, std::ostream &os);
+    void buildAndDump(
+        const camel::runtime::Program *program, camel::runtime::GCGraph *graph, std::ostream &os);
 
     tf::Taskflow mainFlow_;
     ctx::TaskflowFramePool framePool_{1 * camel::core::mm::MB};
@@ -464,8 +465,9 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // lowered copies; this run only remembers their immutable graph identities.
     std::mutex loweringMutex_;
     std::unordered_map<camel::runtime::GCGraph *, camel::runtime::GCGraph *> executionGraphs_;
-    /// The program the run started from (before its loops were lowered).
-    const camel::runtime::Program *program_ = nullptr;
+    /// The programs whose graphs the run executes: the loop-lowered copy of the program it
+    /// started from, and those of the function values and lowerings it meets.
+    camel::execute::RunPrograms programs_;
     camel::runtime::GCGraph *executionGraph(camel::runtime::GCGraph *graph);
     // The fault domain of everything outside a fault-isolation boundary. A failure in it ends
     // the run.

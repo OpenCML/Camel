@@ -235,10 +235,11 @@ node.)
 ### 11.3 `FUNC`
 
 `FUNC` stores the index of its callee in the graph's reference table (section
-11.8); `GCGraph::directCalleeGraphOf(ref)` resolves it. A draft has the same
-payload and a table of the same kind (`GraphDraft::payloadGraphs()`, which starts
-as the `refs()` of the graph it was decoded from); `GraphDraft::calleeGraphOf` and
-`setCalleeGraph` read and write it.
+11.8); `GCGraph::calleeIdOf(ref)` gives its `GraphId` and `Program::calleeOf(graph, ref)`
+the graph the program holds under it. A draft has the same payload and a table of the
+same kind (`GraphDraft::payloadGraphs()`, `GraphId`s, which starts as the `refs()` of
+the graph it was decoded from); `GraphDraft::calleeIdOf`, `calleeGraphOf` (resolved in
+the draft's program) and `setCalleeGraph` read and write it.
 
 ```cpp
 struct GCFuncRef {
@@ -294,12 +295,27 @@ once and carries the roles it has (`GCGraphRefRole`): called by a `FUNC` node
 (`kGraphRefCallee`), written inside this graph (`kGraphRefNested`), the graph of
 a function constant of the static area (`kGraphRefStatic`).
 `dependencies()`, `subGraphs()` and `staticGraphRefs()` are views of the table by
-role; `traceGraphs` walks the table. The encoder writes a `FUNC` callee as its
+role; `Program::traceGraphs` walks the table. The encoder writes a `FUNC` callee as its
 index and refuses a callee that is not in the table; validation checks that
 every `FUNC` index names a callee entry and that every graph a function constant
-points to is in the table. The entries are graph pointers of this frozen
-graph: the program-wide `GraphId` that stays the same across a rewrite comes
-with snapshots and partial commits (graph model step 5).
+points to is in the table.
+
+The entries are `GraphId`s, not pointers (since 2026-10-20): a frozen graph says
+which graphs it refers to and no more. The graph an id names is what the `Program`
+the graph is read in holds under it (`Program::graph(id)`; the accessors
+`calleeOf`, `loopCondOf`, `loopBodyOf`, `outerOf`, `dependencies`, `subGraphs`,
+`staticGraphRefs`). A caller that executes, compiles or rewrites a graph
+therefore has a `Program` in hand: a pass has the one it is given, an activation
+the program of the function value it was called through (`Function::program()`),
+a draft the one it was decoded against (`GraphDraft::program()`). A graph does not
+keep other graphs alive either: a program does (a `Program` is rooted as a whole,
+`GCGraphManager`), and a graph a transformation makes outside every commit is
+kept by `Context::retainRuntimeGraphs`.
+
+The payload of a draft `FUNC` and `LOOP` node is the same index (`GCFuncRef`,
+`GCLoopRef`) into the draft's own table `GraphDraft::payloadGraphs()`, whose entries are
+`GraphId`s. The encoder builds the frozen table from the graphs the nodes and the static
+values name and rewrites each index through the graph id.
 
 ## 12. Branch Arm Arena
 

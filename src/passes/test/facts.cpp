@@ -187,8 +187,8 @@ void registration(std::ostream &os) {
     });
 }
 
-GCGraph *named(GCGraph *root, std::string_view name) {
-    for (GCGraph *graph : collectReachableGraphs(root)) {
+GCGraph *named(const Program &program, GCGraph *root, std::string_view name) {
+    for (GCGraph *graph : collectReachableGraphs(program, root)) {
         if (graph->name() == name) {
             return graph;
         }
@@ -212,48 +212,73 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     registration(os);
 
     GCGraph *root = graph;
-    GCGraph *main = named(root, "main");
-    GCGraph *f    = named(root, "f");
+    GCGraph *main = named(*program, root, "main");
+    GCGraph *f    = named(*program, root, "f");
 
     // ---- Storing and reading --------------------------------------------------------------
-    store.put<int>(k.kind, Anchor{main, 0}, 11);
-    os << "FACTS get " << *store.get<int>(k.kind, Anchor{main, 0}) << "\n";
-    attempt(os, "get_as_another_type", [&] { (void)store.get<double>(k.kind, Anchor{main, 0}); });
-    attempt(os, "node_fact_on_a_graph", [&] { store.put<int>(k.kind, Anchor{main}, 1); });
-    attempt(os, "node_out_of_range", [&] { store.put<int>(k.kind, Anchor{main, 60000}, 1); });
-    attempt(os, "store_graph_content", [&] { store.put<int>(k.content, Anchor{main}, 1); });
-    os << "FACTS content " << (*store.get<int>(k.content, Anchor{main}) == main->nodeCount() ? "is the graph's" : "differs") << "\n";
-    attempt(os, "target_without_hash", [&] { store.put<int>(k.target, Anchor{main, 0}, 1); });
-    store.put<int>(k.target, Anchor{main, 0}, 5, /*targetHash=*/7);
-    probe(os, store, "target_same", k.target, {Anchor{main, 0}}, 7);
-    probe(os, store, "target_other", k.target, {Anchor{main, 0}}, 8);
-    store.put<std::string>(k.pair, std::vector<Anchor>{Anchor{main, 0}, Anchor{f}}, "main.0 ~ f");
-    probe(os, store, "cross_graph", k.pair, {Anchor{main, 0}, Anchor{f}});
-    probe(os, store, "cross_graph_other_anchors", k.pair, {Anchor{main, 1}, Anchor{f}});
+    store.put<int>(k.kind, Anchor{program, main, 0}, 11);
+    os << "FACTS get " << *store.get<int>(k.kind, Anchor{program, main, 0}) << "\n";
+    attempt(os, "get_as_another_type", [&] {
+        (void)store.get<double>(k.kind, Anchor{program, main, 0});
+    });
+    attempt(os, "node_fact_on_a_graph", [&] { store.put<int>(k.kind, Anchor{program, main}, 1); });
+    attempt(os, "node_out_of_range", [&] {
+        store.put<int>(k.kind, Anchor{program, main, 60000}, 1);
+    });
+    attempt(os, "store_graph_content", [&] {
+        store.put<int>(k.content, Anchor{program, main}, 1);
+    });
+    os << "FACTS content "
+       << (*store.get<int>(k.content, Anchor{program, main}) == main->nodeCount() ? "is the graph's"
+                                                                                  : "differs")
+       << "\n";
+    attempt(os, "target_without_hash", [&] {
+        store.put<int>(k.target, Anchor{program, main, 0}, 1);
+    });
+    store.put<int>(k.target, Anchor{program, main, 0}, 5, /*targetHash=*/7);
+    probe(os, store, "target_same", k.target, {Anchor{program, main, 0}}, 7);
+    probe(os, store, "target_other", k.target, {Anchor{program, main, 0}}, 8);
+    store.put<std::string>(
+        k.pair,
+        std::vector<Anchor>{Anchor{program, main, 0}, Anchor{program, f}},
+        "main.0 ~ f");
+    probe(os, store, "cross_graph", k.pair, {Anchor{program, main, 0}, Anchor{program, f}});
+    probe(
+        os,
+        store,
+        "cross_graph_other_anchors",
+        k.pair,
+        {Anchor{program, main, 1}, Anchor{program, f}});
 
     // The validator recomputes and compares.
-    store.put<int>(k.kind, Anchor{main, 1}, 999);
-    const auto wrong = store.verify(k.kind, std::vector<Anchor>{Anchor{main, 1}});
+    store.put<int>(k.kind, Anchor{program, main, 1}, 999);
+    const auto wrong = store.verify(k.kind, std::vector<Anchor>{Anchor{program, main, 1}});
     os << "FACTS verify_wrong " << (wrong ? (*wrong ? "equal" : "differs") : "none") << "\n";
-    (void)store.obtain<int>(k.kind, Anchor{main, 2});
-    const auto right = store.verify(k.kind, std::vector<Anchor>{Anchor{main, 2}});
+    (void)store.obtain<int>(k.kind, Anchor{program, main, 2});
+    const auto right = store.verify(k.kind, std::vector<Anchor>{Anchor{program, main, 2}});
     os << "FACTS verify_right " << (right ? (*right ? "equal" : "differs") : "none") << "\n";
 
     // ---- A commit that asks to edit main and changes nothing ------------------------------
-    store.put<int>(k.kind, Anchor{root, 0}, 1);
-    (void)store.obtain<int>(k.kind, Anchor{f, 0});
-    (void)store.obtain<int>(k.cone, Anchor{main, 0});
+    store.put<int>(k.kind, Anchor{program, root, 0}, 1);
+    (void)store.obtain<int>(k.kind, Anchor{program, f, 0});
+    (void)store.obtain<int>(k.cone, Anchor{program, main, 0});
     {
         RuntimeGraphDraftSession session(context_, program);
         (void)session.edit(main);
         program       = session.commit();
         GCGraph *same = program->root();
         os << "FACTS unchanged_revision_main "
-           << (named(same, "main")->revision() == main->revision() ? "kept" : "new") << "\n";
-        probe(os, store, "unchanged_main", k.kind, {Anchor{named(same, "main"), 0}});
+           << (named(*program, same, "main")->revision() == main->revision() ? "kept" : "new")
+           << "\n";
+        probe(
+            os,
+            store,
+            "unchanged_main",
+            k.kind,
+            {Anchor{program, named(*program, same, "main"), 0}});
         root = same;
-        main = named(root, "main");
-        f    = named(root, "f");
+        main = named(*program, root, "main");
+        f    = named(*program, root, "f");
     }
 
     // ---- A commit that changes main only (one unused constant more) -----------------------
@@ -262,8 +287,8 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         camel::core::rtdata::toSlot<int64_t>(7), camel::core::type::Type::Int64());
     const camel::runtime::Program *program2 = session.commit();
     GCGraph *root2                          = program2->root();
-    GCGraph *main2 = named(root2, "main");
-    GCGraph *f2    = named(root2, "f");
+    GCGraph *main2                          = named(*program2, root2, "main");
+    GCGraph *f2                             = named(*program2, root2, "f");
     os << "FACTS id_main " << (main2->id() == main->id() ? "kept" : "new") << "\n";
     os << "FACTS id_f " << (f2->id() == f->id() ? "kept" : "new") << "\n";
     os << "FACTS id_root " << (root2->id() == root->id() ? "kept" : "new") << "\n";
@@ -272,14 +297,19 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     os << "FACTS revision_f " << (f2->revision() == f->revision() ? "kept" : "new") << "\n";
     os << "FACTS revision_root " << (root2->revision() == root->revision() ? "kept" : "new")
        << "\n";
-    probe(os, store, "after_commit_main", k.kind, {Anchor{main2, 0}});
-    probe(os, store, "after_commit_root", k.kind, {Anchor{root2, 0}});
-    probe(os, store, "after_commit_f", k.kind, {Anchor{f2, 0}});
-    probe(os, store, "after_commit_cross_graph", k.pair, {Anchor{main2, 0}, Anchor{f2}});
-    probe(os, store, "after_commit_cone", k.cone, {Anchor{main2, 0}});
+    probe(os, store, "after_commit_main", k.kind, {Anchor{program2, main2, 0}});
+    probe(os, store, "after_commit_root", k.kind, {Anchor{program2, root2, 0}});
+    probe(os, store, "after_commit_f", k.kind, {Anchor{program2, f2, 0}});
+    probe(
+        os,
+        store,
+        "after_commit_cross_graph",
+        k.pair,
+        {Anchor{program2, main2, 0}, Anchor{program2, f2}});
+    probe(os, store, "after_commit_cone", k.cone, {Anchor{program2, main2, 0}});
 
     // ---- A new operator declaration -------------------------------------------------------
-    (void)store.obtain<int>(k.nodecl, Anchor{f2, 0});
+    (void)store.obtain<int>(k.nodecl, Anchor{program2, f2, 0});
     namespace sem = camel::core::sem;
     camel::core::OperatorTable::instance().declareSemantics(
         "facttest:op",
@@ -293,16 +323,16 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
                     .algorithm   = "a test operator",
                 },
         });
-    probe(os, store, "after_declaration_reads_declarations", k.kind, {Anchor{f2, 0}});
-    probe(os, store, "after_declaration_reads_none", k.nodecl, {Anchor{f2, 0}});
+    probe(os, store, "after_declaration_reads_declarations", k.kind, {Anchor{program2, f2, 0}});
+    probe(os, store, "after_declaration_reads_none", k.nodecl, {Anchor{program2, f2, 0}});
 
     // ---- Dropping ---------------------------------------------------------------------------
-    (void)store.obtain<int>(k.kind, Anchor{f2, 1});
-    store.invalidate(k.kind, std::vector<Anchor>{Anchor{f2, 1}});
-    probe(os, store, "invalidated", k.kind, {Anchor{f2, 1}});
-    (void)store.obtain<int>(k.kind, Anchor{f2, 1});
+    (void)store.obtain<int>(k.kind, Anchor{program2, f2, 1});
+    store.invalidate(k.kind, std::vector<Anchor>{Anchor{program2, f2, 1}});
+    probe(os, store, "invalidated", k.kind, {Anchor{program2, f2, 1}});
+    (void)store.obtain<int>(k.kind, Anchor{program2, f2, 1});
     store.invalidateGraph(f2);
-    probe(os, store, "invalidated_graph", k.kind, {Anchor{f2, 1}});
+    probe(os, store, "invalidated_graph", k.kind, {Anchor{program2, f2, 1}});
 
     const Counts c = store.counts();
     os << std::format(
@@ -316,9 +346,9 @@ FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &o
 namespace {
 
 /// The graphs of the program of `root`, by GraphId.
-std::unordered_map<GraphId, GCGraph *> graphsById(GCGraph *root) {
+std::unordered_map<GraphId, GCGraph *> graphsById(const Program &program, GCGraph *root) {
     std::unordered_map<GraphId, GCGraph *> byId;
-    for (GCGraph *graph : collectReachableGraphs(root)) {
+    for (GCGraph *graph : collectReachableGraphs(program, root)) {
         byId.emplace(graph->id(), graph);
     }
     return byId;
@@ -327,10 +357,12 @@ std::unordered_map<GraphId, GCGraph *> graphsById(GCGraph *root) {
 /// Reads every stored fact against the program of `root`, prints the tallies per graph (lines
 /// `FACTS <prefix> <graph> valid=.. revalidated=.. stale=..`) and returns how many facts are
 /// about graphs the program does not have.
-size_t tally(std::ostream &os, FactStore &store, GCGraph *root, std::string_view prefix) {
-    const auto byId = graphsById(root);
+size_t tally(
+    std::ostream &os, FactStore &store, const Program &program, GCGraph *root,
+    std::string_view prefix) {
+    const auto byId = graphsById(program, root);
     // Two graphs of one program never share a GraphId (a commit copies each graph once).
-    for (GCGraph *graph : collectReachableGraphs(root)) {
+    for (GCGraph *graph : collectReachableGraphs(program, root)) {
         if (byId.at(graph->id()) != graph) {
             os << "FACTS " << prefix << " shared id " << graph->name() << " "
                << byId.at(graph->id())->name() << "\n";
@@ -347,7 +379,7 @@ size_t tally(std::ostream &os, FactStore &store, GCGraph *root, std::string_view
         std::vector<Anchor> anchors;
         for (const auto &[id, node] : fact.anchors) {
             if (auto it = byId.find(id); it != byId.end()) {
-                anchors.push_back(Anchor{it->second, node});
+                anchors.push_back(Anchor{&program, it->second, node});
             }
         }
         if (anchors.size() != fact.anchors.size()) {
@@ -380,7 +412,7 @@ const camel::runtime::Program *
 FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     camel::runtime::GCGraph *graph = program->root();
     FactStore &store = context_->facts();
-    computeFacts(store, graph);
+    computeFacts(store, *program);
     std::map<std::string, size_t> perKind;
     store.forEach([&](const StoredFact &fact) { ++perKind[kindInfo(fact.kind).key]; });
     for (const auto &[kind, n] : perKind) {
@@ -393,14 +425,14 @@ const camel::runtime::Program *
 FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     camel::runtime::GCGraph *graph = program->root();
     FactStore &store = context_->facts();
-    const size_t gone = tally(os, store, graph, "graph");
+    const size_t gone              = tally(os, store, *program, graph, "graph");
     os << "FACTS gone " << gone << "\n";
 
     // What was stale is computed again; then every stored fact must equal a fresh computation.
     const Counts before = store.counts();
-    computeFacts(store, graph);
+    computeFacts(store, *program);
     os << "FACTS recomputed " << store.counts().computed - before.computed << "\n";
-    const auto byId = graphsById(graph);
+    const auto byId = graphsById(*program, graph);
     size_t equal = 0, differ = 0;
     std::vector<StoredFact> stored;
     store.forEach([&](const StoredFact &fact) { stored.push_back(fact); });
@@ -408,7 +440,7 @@ FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         std::vector<Anchor> anchors;
         for (const auto &[id, node] : fact.anchors) {
             if (auto it = byId.find(id); it != byId.end()) {
-                anchors.push_back(Anchor{it->second, node});
+                anchors.push_back(Anchor{program, it->second, node});
             }
         }
         if (anchors.size() == fact.anchors.size()) {
@@ -420,9 +452,10 @@ FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     os << std::format("FACTS verify equal={} differ={}\n", equal, differ);
 
     // A back end's private lowering: a copy of every graph, new only where a loop was.
-    if (programHasLoops(graph)) {
-        GCGraph *lowered = lowerLoopsToTailRecursion(context_, program)->root();
-        (void)tally(os, store, lowered, "lowered");
+    if (programHasLoops(*program, graph)) {
+        const Program *loweredProgram = lowerLoopsToTailRecursion(context_, program);
+        GCGraph *lowered              = loweredProgram->root();
+        (void)tally(os, store, *loweredProgram, lowered, "lowered");
     }
     return program;
 }
@@ -433,8 +466,8 @@ const camel::runtime::Program *
 FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     camel::runtime::GCGraph *graph = program->root();
     FactStore &store = context_->facts();
-    computeFacts(store, graph);
-    const std::vector<PortableFact> facts = exportFacts(store, graph);
+    computeFacts(store, *program);
+    const std::vector<PortableFact> facts = exportFacts(store, *program);
     std::map<std::string, size_t> perKind;
     size_t textRoundTrips = 0;
     for (const PortableFact &fact : facts) {
@@ -451,19 +484,19 @@ FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream 
     store.clear();
     std::map<std::string, size_t> results;
     for (const PortableFact &fact : facts) {
-        ++results[std::string(importResultName(importFact(store, graph, fact)))];
+        ++results[std::string(importResultName(importFact(store, *program, fact)))];
     }
     for (const auto &[result, n] : results) {
         os << "FACTS imported " << result << " " << n << "\n";
     }
     size_t equal = 0, verified = 0;
-    const auto byId = graphsById(graph);
+    const auto byId = graphsById(*program, graph);
     std::vector<StoredFact> stored;
     store.forEach([&](const StoredFact &fact) { stored.push_back(fact); });
     for (const StoredFact &fact : stored) {
         std::vector<Anchor> anchors;
         for (const auto &[id, node] : fact.anchors) {
-            anchors.push_back(Anchor{byId.at(id), node});
+            anchors.push_back(Anchor{program, byId.at(id), node});
         }
         if (const auto same = store.verify(fact.kind, anchors)) {
             ++verified;
@@ -474,7 +507,7 @@ FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream 
 
     // Change main (an unused constant more), then load again.
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &main = session.edit(named(graph, "main"));
+    GraphDraft &main = session.edit(named(*program, graph, "main"));
     (void)main.materializeStaticValue(
         camel::core::rtdata::toSlot<int64_t>(7), camel::core::type::Type::Int64());
     const camel::runtime::Program *changedProgram = session.commit();
@@ -482,7 +515,7 @@ FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream 
     store.clear();
     std::map<std::string, std::map<std::string, size_t>> perGraph;
     for (const PortableFact &fact : facts) {
-        const ImportResult result = importFact(store, changed, fact);
+        const ImportResult result = importFact(store, *changedProgram, fact);
         ++perGraph[fact.anchors[0].first][std::string(importResultName(result))];
     }
     for (const auto &[name, counts] : perGraph) {

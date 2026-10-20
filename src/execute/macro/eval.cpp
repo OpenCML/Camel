@@ -345,14 +345,15 @@ namespace {
 
 /// What the candidate calls, for messages: the callee graph, the function constant, or the
 /// operator.
-std::string calleeNameOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
+std::string
+calleeNameOf(const camel::runtime::Program &program, const GCGraph *graph, gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
     if (!node) {
         return "(unknown)";
     }
     switch (node->kind) {
     case GCNodeKind::Func:
-        if (const GCGraph *callee = graph->directCalleeGraphOf(nodeRef)) {
+        if (const GCGraph *callee = program.calleeOf(*graph, nodeRef)) {
             return callee->name();
         }
         break;
@@ -406,12 +407,11 @@ void MacroEvaluator::noteFailure(
             range.start.line + 1,
             range.start.character + 1);
     }
-    failures_.push_back(
-        Failure{
-            .origin = elsewhere ? origin : callOrigin,
-            .callee = calleeNameOf(candidate.runtimeGraph, candidate.nodeRef),
-            .reason = std::move(reason),
-        });
+    failures_.push_back(Failure{
+        .origin = elsewhere ? origin : callOrigin,
+        .callee = calleeNameOf(*program_, candidate.runtimeGraph, candidate.nodeRef),
+        .reason = std::move(reason),
+    });
 }
 
 void MacroEvaluator::reportFailures() {
@@ -499,7 +499,7 @@ MacroEvaluator::tryExecuteDirectFunc(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
     if (!node || node->kind != GCNodeKind::Func || !node->isMacro()) {
         return std::nullopt;
     }
-    auto *calleeGraph = ownerGraph->directCalleeGraphOf(nodeRef);
+    auto *calleeGraph = program_->calleeOf(*ownerGraph, nodeRef);
     if (!areStaticRuntimeDataInputs(ownerGraph, ownerGraph->withInputsOf(nodeRef)) ||
         !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->normInputsOf(nodeRef))) {
         noteNotStatic(
@@ -746,7 +746,7 @@ slot_t MacroEvaluator::executeFunction(
 }
 
 slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t node) {
-    const camel::runtime::LoopView loop(*graph, node);
+    const camel::runtime::LoopView loop(*program_, *graph, node);
     const size_t k           = loop.stateCount();
     const size_t collections = loop.collectionCount();
     const bool wraps         = k > 1 || collections != 0;
@@ -1018,7 +1018,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
         } break;
 
         case GCNodeKind::Func: {
-            auto *calleeRuntimeGraph = runtimeGraph->directCalleeGraphOf(runtimeNodeIndex);
+            auto *calleeRuntimeGraph = program_->calleeOf(*runtimeGraph, runtimeNodeIndex);
             ASSERT(
                 calleeRuntimeGraph != nullptr,
                 "Runtime FUNC node must have a direct runtime callee graph.");
