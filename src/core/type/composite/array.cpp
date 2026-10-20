@@ -22,6 +22,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/storage.h"
+#include "camel/core/type/text.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
@@ -91,29 +92,16 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
 
 bool ArrayType::resolved() const { return elemType_->code() != TypeCode::Ref; }
 
-string ArrayType::toString() const { return elemType_->toString() + "[]"; }
+string ArrayType::toString() const { return typeToString(this); }
 
-std::string ArrayType::mangle() const {
-    std::string result = "A";
-    result += elemType_->mangle();
-    return result;
-}
+std::string ArrayType::mangle() const { return typeMangle(this); }
 
 Type *ArrayType::clone(bool deep /* = false */) const {
     // Interned: a shallow clone is this very object, which is what an immutable type allows.
     return create(deep ? elemType_->clone(true) : elemType_);
 }
 
-bool ArrayType::equals(Type *other) const {
-    if (this == other) {
-        return true;
-    }
-    if (!other || other->code() != TypeCode::Array) {
-        return false;
-    }
-    const ArrayType &otherArr = static_cast<const ArrayType &>(*other);
-    return elemType_->equals(otherArr.elemType_);
-}
+bool ArrayType::equals(Type *other) const { return typeEquals(this, other); }
 
 // Converting a value to its own type is legal and does nothing (design principles 5.1): the
 // rule compares structure, so `xs as int[]` passes for `xs: int[]` however each was written.
