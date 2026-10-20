@@ -105,7 +105,9 @@ void TaskflowExecSchedPass::buildAndDump(camel::runtime::GCGraph *graph, std::os
     os << "}\n";
 }
 
-camel::runtime::GCGraph *TfDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+TfDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     TaskflowExecSchedPass tfPass(context_, 32);
     tfPass.buildAndDump(graph, os);
     return nullptr;

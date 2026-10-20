@@ -475,9 +475,10 @@ void FastVMSchedPass::observeFault(const camel::core::error::RuntimeFault &fault
     }
 }
 
-camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     (void)os;
-    ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");
+    ASSERT(program->root() != nullptr, "FastVM requires a non-null runtime root graph.");
 
     // Loops. By default they run as the tail recursion they mean, on a private copy of the
     // program (camel/runtime/loop_lowering.h): today that is faster here than the native
@@ -498,9 +499,9 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
         : native ? "native_loop=true"
                  : "the default");
     if (!native) {
-        graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
+        program = camel::runtime::lowerLoopsToTailRecursion(context_, program);
     }
-    camel::runtime::GCGraph *runtimeRoot = graph;
+    camel::runtime::GCGraph *runtimeRoot = program->root();
     precompile(runtimeRoot);
 
     stackDepth_  = 0;

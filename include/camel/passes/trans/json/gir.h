@@ -27,5 +27,5 @@ class JsonGirDumpPass : public RuntimeGraphTranslatePass {
   public:
     explicit JsonGirDumpPass(const camel::core::context::context_ptr_t &ctx)
         : RuntimeGraphTranslatePass(ctx) {}
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *, std::ostream &) override;
+    const camel::runtime::Program *apply(const camel::runtime::Program *, std::ostream &) override;
 };

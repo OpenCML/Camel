@@ -165,9 +165,17 @@ slot_t gradFunction(ArgsView &norm, Context &ctx, bool withValue) {
     if (function == nullptr || function->graph() == nullptr) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "autodiff: grad needs a function value");
     }
-    auto *graph = buildGradientGraph(ctx.shared_from_this(), function->graph(), withValue);
+    const auto gradient = buildGradientGraph(
+        ctx.shared_from_this(),
+        function->program(),
+        function->graph(),
+        withValue);
     // The gradient graph keeps f's closure: it reads the same captured values.
-    auto *result = ::Function::create(graph, function->tupleType(), mm::autoSpace());
+    auto *result = ::Function::create(
+        gradient.program,
+        gradient.graph->id(),
+        function->tupleType(),
+        mm::autoSpace());
     if (::Tuple *closure = function->tuple()) {
         for (size_t i = 0; i < closure->size(); ++i) {
             result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), function->tupleType());

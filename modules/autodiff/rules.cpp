@@ -27,6 +27,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/program.h"
 
 #include <string_view>
 #include <vector>
@@ -63,7 +64,11 @@ constexpr std::string_view kRulePrefix = "autodiff.vjp/";
         std::string(kRulePrefix) + source->stableId(),
         std::string(kRulePrefix) + source->mangledName(),
         source->name());
-    auto *result = ::Function::create(graph, withRule, camel::core::mm::autoSpace());
+    auto *result = ::Function::create(
+        rt::makeProgram(*context, std::span(&graph, 1)),
+        graph->id(),
+        withRule,
+        camel::core::mm::autoSpace());
     for (size_t i = 0; i < closureType->size(); ++i) {
         result->tuple()->set<slot_t>(i, function->tuple()->get<slot_t>(i), withRule);
     }

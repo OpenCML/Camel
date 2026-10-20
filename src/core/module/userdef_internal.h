@@ -27,12 +27,18 @@
 
 #include "camel/core/module/userdef.h"
 
+namespace camel::runtime {
+class Program;
+}
+
 namespace camel::core::module::detail {
 
 class UserDefinedModuleAccess {
   public:
     static const void *compileGraphOpaque(const UserDefinedModule &module);
-    static camel::runtime::GCGraph *encodeRuntimeGraph(const UserDefinedModule &module);
+    /// Encodes the module's graphs into `program` (see camel/compile/gir/encode.h).
+    static void
+    encodeRuntimeProgram(const UserDefinedModule &module, camel::runtime::Program &program);
 };
 
 } // namespace camel::core::module::detail

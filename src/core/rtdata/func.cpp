@@ -19,22 +19,29 @@
 
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
-void Function::setRuntimeGraph(camel::runtime::GCGraph *graph) {
-    ASSERT(graph != nullptr, "Runtime Function graph cannot be null.");
-    runtimeGraph_ = graph;
+camel::runtime::GCGraph *Function::graph() const {
+    return program_ != nullptr ? program_->graph(graphId_) : nullptr;
+}
+
+void Function::rebind(const camel::runtime::Program *program, camel::runtime::GraphId graph) {
+    ASSERT(program != nullptr, "Runtime Function program cannot be null.");
+    ASSERT(program->graph(graph) != nullptr, "Runtime Function graph must be in its program.");
+    program_ = program;
+    graphId_ = graph;
 }
 
 void Function::updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) {
     (void)type;
-    if (runtimeGraph_) {
+    if (camel::runtime::GCGraph *runtimeGraph = graph()) {
         // A runtime-created graph (e.g. an autodiff gradient graph built while the program
         // runs) is no graph-carrier root: it is only reachable through this Function. Trace it
         // so its static constants live exactly as long as the Function does. Program graphs
         // are carrier roots already; re-tracing them is a no-op via their mark bit. Graph
         // carriers live in graphSpace and never move, so the assignment is stable.
-        runtimeGraph_ = static_cast<camel::runtime::GCGraph *>(relocate(
-            static_cast<rtdata::Object *>(runtimeGraph_),
+        runtimeGraph = static_cast<camel::runtime::GCGraph *>(relocate(
+            static_cast<rtdata::Object *>(runtimeGraph),
             nullptr,
             rtdata::RefTraceInfo{
                 .owner     = this,
@@ -62,14 +69,15 @@ void Function::updateRefs(const rtdata::Object::RefRelocator &relocate, const ty
 }
 
 const type::TupleType *Function::tupleType() const {
-    ASSERT(runtimeGraph_ != nullptr, "Runtime Function graph cannot be null.");
+    ASSERT(graph() != nullptr, "Runtime Function graph cannot be null.");
     return tupleType_;
 }
 
 Function *Function::create(
-    camel::runtime::GCGraph *graph, const type::Type *tupleType,
-    camel::core::mm::IAllocator &allocator) {
-    ASSERT(graph != nullptr, "Runtime Function graph cannot be null.");
+    const camel::runtime::Program *program, camel::runtime::GraphId graph,
+    const type::Type *tupleType, camel::core::mm::IAllocator &allocator) {
+    ASSERT(program != nullptr, "Runtime Function program cannot be null.");
+    ASSERT(camel::runtime::isValid(graph), "Runtime Function graph cannot be null.");
     ASSERT(tupleType && tupleType->code() == type::TypeCode::Tuple, "Type must be TupleType");
     const type::TupleType *tt = static_cast<const type::TupleType *>(tupleType);
 
@@ -77,7 +85,7 @@ Function *Function::create(
     if (!mem)
         throw std::bad_alloc();
 
-    auto *fn     = new (mem) Function(graph, tt);
+    auto *fn     = new (mem) Function(program, graph, tt);
     fn->closure_ = Tuple::create(tt->size(), allocator);
     camel::core::mm::writeBarrier(fn, nullptr, fn->closure_, tt);
     return fn;
@@ -85,8 +93,9 @@ Function *Function::create(
 
 void Function::print(std::ostream &os, const type::Type *type) const {
     (void)type;
-    ASSERT(runtimeGraph_ != nullptr, "Function print requires graph identity.");
-    os << "Function(graph=" << runtimeGraph_->name() << ", tupleSlots=";
+    const camel::runtime::GCGraph *runtimeGraph = graph();
+    ASSERT(runtimeGraph != nullptr, "Function print requires graph identity.");
+    os << "Function(graph=" << runtimeGraph->name() << ", tupleSlots=";
     os << (closure_ ? std::to_string(closure_->size()) : "null");
     os << ")";
 }

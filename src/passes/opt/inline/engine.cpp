@@ -559,15 +559,15 @@ struct DeclinedCall {
     size_t callSites;
 };
 
-/// The rewritten root, or nullptr when nothing changed. `growthSpent` counts the nodes copied
+/// The rewritten program, or nullptr when nothing changed. `growthSpent` counts the nodes copied
 /// so far against `growthBudget` (see OptimizeRewriteConfig::growthBudget). `declinedOut`
 /// receives the direct calls the last round examined and did not inline, with the reason: the
 /// last round of a session that changes nothing examines every call that is left.
-GCGraph *applyRuntimeOptimizeRewrite(
-    const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot,
+const camel::runtime::Program *applyRuntimeOptimizeRewrite(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent,
     std::vector<InlineDeclined> &declinedOut) {
-    camel::runtime::RuntimeGraphDraftSession session(context, runtimeRoot);
+    camel::runtime::RuntimeGraphDraftSession session(context, program);
     bool changed              = false;
     size_t appliedInlineCount = 0;
     std::vector<DeclinedCall> declined;
@@ -1030,16 +1030,16 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
 
 } // namespace camel::passes::opt
 
-camel::runtime::GCGraph *applyOptimizeRewritePass(
-    const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
+const camel::runtime::Program *applyOptimizeRewritePass(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut) {
     (void)os;
 
-    if (!graph) {
+    if (!program) {
         return nullptr;
     }
     if (!hasAnyRewritePhaseEnabled(config)) {
-        return graph;
+        return program;
     }
     const size_t growthBudget = config.growthBudget.nodes;
     size_t ownGrowthSpent     = 0;
@@ -1052,9 +1052,9 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     bool changed                  = false;
     std::vector<InlineDeclined> declined;
     for (size_t i = 0; i < kMaxSessions; ++i) {
-        GCGraph *rewritten = applyRuntimeOptimizeRewrite(
+        const camel::runtime::Program *rewritten = applyRuntimeOptimizeRewrite(
             context,
-            graph,
+            program,
             config,
             growthBudget,
             growthSpent,
@@ -1063,7 +1063,7 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
             break;
         }
         changed = true;
-        graph   = rewritten;
+        program = rewritten;
     }
     if (config.enableInlining && context) {
         // For a later pass that has to explain a call this one left (see InlineReport).
@@ -1092,5 +1092,5 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     if (changedOut) {
         *changedOut = changed;
     }
-    return graph;
+    return program;
 }

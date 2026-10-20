@@ -74,11 +74,14 @@ struct RegionDeviceOps {
                 downloadUri = "tiles:download";
 };
 void registerRegionPass(RegionDeviceOps preferred);
-// Rewrites a reachable graph set; null executor produces ordinary CPU CALL nodes.
-// Non-null executors use the supplied stable operator URI and packed arguments.
-runtime::GCGraph *outlineRegions(
-    core::context::Context &context, runtime::GCGraph *root, operator_t executor,
-    const std::string &uri, size_t &count, const RegionDeviceOps *device = nullptr);
+// Rewrites the graphs reachable from `root`, a graph of `program`, and returns the program of
+// the rewritten graphs (`program` itself when no region was outlined, `count` is 0 then); null
+// executor produces ordinary CPU CALL nodes. Non-null executors use the supplied stable
+// operator URI and packed arguments.
+const runtime::Program *outlineRegions(
+    core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
+    operator_t executor, const std::string &uri, size_t &count,
+    const RegionDeviceOps *device = nullptr);
 // Register semantic-equivalence checks only when CAMEL_ENABLE_TEST_PASSES is enabled.
 void registerRegionTestPasses(
     operator_t run, RegionDeviceOps device, RegionDeviceOps host, RegionDeviceOps preferred);

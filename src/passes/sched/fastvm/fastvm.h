@@ -293,8 +293,8 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     }
     virtual ~FastVMSchedPass();
 
-    virtual camel::runtime::GCGraph *
-    apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    virtual const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 
     CallResult callBorrowed(size_t pc, ctx::Frame *rootFrame);
 #if ENABLE_FASTVM_COMPUTED_GOTO

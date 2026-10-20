@@ -204,7 +204,9 @@ void probe(std::ostream &os, FactStore &store, std::string_view check, KindId ki
 
 } // namespace
 
-GCGraph *FactStoreTestPass::apply(GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+FactStoreTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     const TestKinds &k = testKinds();
     FactStore &store   = context_->facts();
     registration(os);
@@ -242,9 +244,10 @@ GCGraph *FactStoreTestPass::apply(GCGraph *graph, std::ostream &os) {
     (void)store.obtain<int>(k.kind, Anchor{f, 0});
     (void)store.obtain<int>(k.cone, Anchor{main, 0});
     {
-        RuntimeGraphDraftSession session(context_, root);
+        RuntimeGraphDraftSession session(context_, program);
         (void)session.edit(main);
-        GCGraph *same = session.commit();
+        program       = session.commit();
+        GCGraph *same = program->root();
         os << "FACTS unchanged_serial_main "
            << (named(same, "main")->serial() == main->serial() ? "kept" : "new") << "\n";
         probe(os, store, "unchanged_main", k.kind, {Anchor{named(same, "main"), 0}});
@@ -254,10 +257,11 @@ GCGraph *FactStoreTestPass::apply(GCGraph *graph, std::ostream &os) {
     }
 
     // ---- A commit that changes main only (one unused constant more) -----------------------
-    RuntimeGraphDraftSession session(context_, root);
+    RuntimeGraphDraftSession session(context_, program);
     (void)session.edit(main).materializeStaticValue(
         camel::core::rtdata::toSlot<int64_t>(7), camel::core::type::Type::Int64());
-    GCGraph *root2 = session.commit();
+    const camel::runtime::Program *program2 = session.commit();
+    GCGraph *root2                          = program2->root();
     GCGraph *main2 = named(root2, "main");
     GCGraph *f2    = named(root2, "f");
     os << "FACTS lineage_main " << (main2->lineage() == main->lineage() ? "kept" : "new") << "\n";
@@ -300,7 +304,7 @@ GCGraph *FactStoreTestPass::apply(GCGraph *graph, std::ostream &os) {
     os << std::format(
         "FACTS counts puts={} hits={} misses={} stale={} revalidated={} computed={}\n",
         c.puts, c.hits, c.misses, c.stale, c.revalidated, c.computed);
-    return root2;
+    return program2;
 }
 
 // ---- Seed and check: facts across other passes ----------------------------------------------
@@ -368,7 +372,9 @@ size_t tally(std::ostream &os, FactStore &store, GCGraph *root, std::string_view
 
 } // namespace
 
-GCGraph *FactSeedTestPass::apply(GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     FactStore &store = context_->facts();
     computeFacts(store, graph);
     std::map<std::string, size_t> perKind;
@@ -376,10 +382,12 @@ GCGraph *FactSeedTestPass::apply(GCGraph *graph, std::ostream &os) {
     for (const auto &[kind, n] : perKind) {
         os << "FACTS seeded " << kind << " " << n << "\n";
     }
-    return graph;
+    return program;
 }
 
-GCGraph *FactCheckTestPass::apply(GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     FactStore &store = context_->facts();
     const size_t gone = tally(os, store, graph, "graph");
     os << "FACTS gone " << gone << "\n";
@@ -409,15 +417,17 @@ GCGraph *FactCheckTestPass::apply(GCGraph *graph, std::ostream &os) {
 
     // A back end's private lowering: a copy of every graph, new only where a loop was.
     if (programHasLoops(graph)) {
-        GCGraph *lowered = lowerLoopsToTailRecursion(context_, graph);
+        GCGraph *lowered = lowerLoopsToTailRecursion(context_, program)->root();
         (void)tally(os, store, lowered, "lowered");
     }
-    return graph;
+    return program;
 }
 
 // ---- Persistence ------------------------------------------------------------------------------
 
-GCGraph *FactPersistTestPass::apply(GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     FactStore &store = context_->facts();
     computeFacts(store, graph);
     const std::vector<PortableFact> facts = exportFacts(store, graph);
@@ -459,11 +469,12 @@ GCGraph *FactPersistTestPass::apply(GCGraph *graph, std::ostream &os) {
     os << std::format("FACTS loaded equal to a fresh computation {}/{}\n", equal, verified);
 
     // Change main (an unused constant more), then load again.
-    RuntimeGraphDraftSession session(context_, graph);
+    RuntimeGraphDraftSession session(context_, program);
     GraphDraft &main = session.edit(named(graph, "main"));
     (void)main.materializeStaticValue(
         camel::core::rtdata::toSlot<int64_t>(7), camel::core::type::Type::Int64());
-    GCGraph *changed = session.commit();
+    const camel::runtime::Program *changedProgram = session.commit();
+    GCGraph *changed                              = changedProgram->root();
     store.clear();
     std::unordered_map<std::string, std::string> nameOf; // stable id -> name
     for (GCGraph *g : collectReachableGraphs(changed)) {
@@ -479,5 +490,5 @@ GCGraph *FactPersistTestPass::apply(GCGraph *graph, std::ostream &os) {
             os << "FACTS reloaded " << name << " " << result << " " << n << "\n";
         }
     }
-    return changed;
+    return changedProgram;
 }

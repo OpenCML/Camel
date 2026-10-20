@@ -92,7 +92,7 @@ GCGraph *resolveRuntimeGraphCarrier(
     const camel::core::context::context_ptr_t &context, const ::Function *func) {
     ASSERT(func != nullptr, "Runtime Function carrier resolution received a null function.");
     (void)context;
-    GCGraph *runtimeGraph = func->runtimeGraph();
+    GCGraph *runtimeGraph = func->graph();
     ASSERT(
         runtimeGraph != nullptr,
         "Runtime rewrite encountered a Function without a GCGraph carrier.");
@@ -196,9 +196,12 @@ void visitGraphsInStaticSlot(
     }
 }
 
+// The copy of the static value `slot` for the graphs of `program`: a function value names its
+// graph by id there, a graph that `rewritten` maps to itself (one outside the rewrite) stays in
+// the program it is in.
 slot_t cloneStaticSlot(
     const camel::core::context::context_ptr_t &context, slot_t slot, Type *type,
-    const GraphMap &rewritten, ObjectCache &objectCache) {
+    const GraphMap &rewritten, const Program *program, ObjectCache &objectCache) {
     if (!shouldTraverseStaticSlotType(type) || slot == NullSlot) {
         return slot;
     }
@@ -220,7 +223,11 @@ slot_t cloneStaticSlot(
             graphIt != rewritten.end(),
             "Runtime static Function references a graph outside the rewrite closure.");
 
-        auto *cloned = ::Function::create(graphIt->second, func->tupleType(), mm::autoSpace());
+        auto *cloned = ::Function::create(
+            graphIt->second == oldGraph ? func->program() : program,
+            func->graphId(),
+            func->tupleType(),
+            mm::autoSpace());
         objectCache.emplace(object, cloned);
 
         if (::Tuple *closure = func->tuple()) {
@@ -235,6 +242,7 @@ slot_t cloneStaticSlot(
                               closure->get<slot_t>(i),
                               closureType->typeAt(i),
                               rewritten,
+                              program,
                               objectCache)
                         : closure->get<slot_t>(i),
                     closureType);
@@ -255,6 +263,7 @@ slot_t cloneStaticSlot(
                                                                          tuple->get<slot_t>(i),
                                                                          tupleType->typeAt(i),
                                                                          rewritten,
+                                                                         program,
                                                                          objectCache)
                                                                    : tuple->get<slot_t>(i),
                 tupleType);
@@ -274,6 +283,7 @@ slot_t cloneStaticSlot(
                                                                           array->get<slot_t>(i),
                                                                           arrayType->elemType(),
                                                                           rewritten,
+                                                                          program,
                                                                           objectCache)
                                                                     : array->get<slot_t>(i),
                 arrayType);
@@ -293,6 +303,7 @@ slot_t cloneStaticSlot(
                                                                           st->get<slot_t>(i),
                                                                           structType->typeAt(i),
                                                                           rewritten,
+                                                                          program,
                                                                           objectCache)
                                                                     : st->get<slot_t>(i),
                 structType);
@@ -309,9 +320,14 @@ slot_t cloneStaticSlot(
                 coll,
                 mm::autoSpace(),
                 [&](slot_t inner, Type *innerType) {
-                    return shouldTraverseStaticSlotType(innerType)
-                               ? cloneStaticSlot(context, inner, innerType, rewritten, objectCache)
-                               : inner;
+                    return shouldTraverseStaticSlotType(innerType) ? cloneStaticSlot(
+                                                                         context,
+                                                                         inner,
+                                                                         innerType,
+                                                                         rewritten,
+                                                                         program,
+                                                                         objectCache)
+                                                                     : inner;
                 });
             objectCache.emplace(object, cloned);
             return toSlot<Object *>(cloned);
@@ -474,7 +490,8 @@ std::vector<GCGraph *> collectDraftStaticGraphRefs(
 // `rewritten`, which must cover all graphs the draft refers to.
 GCGraph *encodeDraftGraph(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
-    const GraphDraft &draft, const GraphMap &rewritten, GCGraph *target, size_t bytes) {
+    const GraphDraft &draft, const GraphMap &rewritten, const Program *program, GCGraph *target,
+    size_t bytes) {
     auto remapGraph = [&](GCGraph *graph) -> GCGraph * {
         if (!graph) {
             return nullptr;
@@ -514,6 +531,7 @@ GCGraph *encodeDraftGraph(
                 staticSlots[i],
                 tupleType->typeAt(i),
                 rewritten,
+                program,
                 objectCache);
         }
     }
@@ -763,9 +781,15 @@ size_t RuntimeSpecializationKeyHasher::operator()(const RuntimeSpecializationKey
 }
 
 RuntimeGraphDraftSession::RuntimeGraphDraftSession(
-    const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot)
-    : context_(context), runtimeRoot_(runtimeRoot) {
+    const camel::core::context::context_ptr_t &context, const Program *program)
+    : RuntimeGraphDraftSession(context, program, program ? program->root() : nullptr) {}
+
+RuntimeGraphDraftSession::RuntimeGraphDraftSession(
+    const camel::core::context::context_ptr_t &context, const Program *program,
+    GCGraph *runtimeRoot)
+    : context_(context), program_(program), runtimeRoot_(runtimeRoot) {
     ASSERT(context_ != nullptr, "Runtime graph draft session requires a valid context.");
+    ASSERT(program_ != nullptr, "Runtime graph draft session requires a program.");
     ASSERT(runtimeRoot_ != nullptr, "Runtime graph draft session requires a runtime root graph.");
 }
 
@@ -932,7 +956,7 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectReachableRuntimeGraphs()
     return collectCommitClosure();
 }
 
-GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
+const Program *RuntimeGraphDraftSession::commit(bool detached) {
     if (!runtimeRoot_) {
         return nullptr;
     }
@@ -948,6 +972,7 @@ GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
 
     GCGraph *oldRuntimeRoot = runtimeRoot_;
 
+    Program *committed = context_->reserveProgram();
     GraphMap rewritten;
     rewritten.reserve(closure.size());
     std::unordered_map<GCGraph *, size_t> allocatedBytes;
@@ -957,7 +982,9 @@ GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
         const size_t bytes = namedDraftGraphBytes(context_, entry.identity, *entry.draft, graph);
         rewritten.emplace(graph, allocateGraph(context_, entry.identity, *entry.draft, bytes));
         allocatedBytes.emplace(graph, bytes);
+        committed->bind(entry.draft->id(), rewritten.at(graph));
     }
+    committed->setRoot(rewritten.at(oldRuntimeRoot));
     for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
         GCGraph *graph   = *it;
         rewritten[graph] = encodeDraftGraph(
@@ -965,6 +992,7 @@ GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
             drafts_.at(graph)->identity,
             *drafts_.at(graph)->draft,
             rewritten,
+            committed,
             rewritten.at(graph),
             allocatedBytes.at(graph));
         validateRuntimeGraphPayload(rewritten[graph]);
@@ -986,33 +1014,26 @@ GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
     // program is left as it is.
-    if (!detached && context_->currentRuntimeRoot() == oldRuntimeRoot) {
-        runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
+    if (!detached && context_->currentRuntimeProgram() == program_ &&
+        program_->root() == oldRuntimeRoot) {
+        program_ = context_->installRuntimeProgram(committed);
     } else {
-        runtimeRoot_ = rewritten.at(oldRuntimeRoot);
-        // A private copy of a program: each copy of a graph the program had (not of one the
-        // rewrite made) remembers that graph, for the operators that read graphs
-        // (GCGraph::originalGraph).
-        const std::vector<GCGraph *> programGraphs = collectReachableGraphs(oldRuntimeRoot);
-        const std::unordered_set<GCGraph *> fromProgram(programGraphs.begin(), programGraphs.end());
-        std::vector<GCGraph *> graphs;
-        graphs.reserve(rewritten.size());
-        for (const auto &[source, graph] : rewritten) {
-            if (fromProgram.contains(source)) {
-                GCGraphBuildAccess::setOriginal(graph, source);
-            }
-            graphs.push_back(graph);
-        }
-        context_->trackDetachedRuntimeGraphs(graphs);
+        // A private copy of a program: it remembers the program it was made from, for the
+        // operators that read graphs (Program::original).
+        committed->setOriginal(program_->original() ? program_->original() : program_);
+        program_ = committed;
+        context_->trackDetachedRuntimeProgram(committed);
     }
+    runtimeRoot_ = rewritten.at(oldRuntimeRoot);
     drafts_.clear();
     edited_.clear();
-    return runtimeRoot_;
+    return program_;
 }
 
 GraphDraftGroup::GraphDraftGroup(const camel::core::context::context_ptr_t &context)
     : context_(context) {
     ASSERT(context_ != nullptr, "Graph draft group requires a valid context.");
+    program_ = context_->reserveProgram();
 }
 
 GraphDraftGroup::~GraphDraftGroup() = default;
@@ -1022,6 +1043,8 @@ GCGraph *GraphDraftGroup::reserve(std::string stableId, std::string mangledName,
     member->draft    = std::make_unique<GraphDraft>();
     member->id       = context_->graphIds().allocate();
     GCGraph *key     = reinterpret_cast<GCGraph *>(&member->keyStorage);
+    // Until the member is encoded, its graph in the program is its key.
+    program_->bind(member->id, key);
     member->identity = RuntimeDraftIdentity{
         .sourceGraph = nullptr,
         .stableId    = std::move(stableId),
@@ -1050,6 +1073,14 @@ void GraphDraftGroup::encode() {
         bytes.emplace(key, namedDraftGraphBytes(context_, m.identity, *m.draft, nullptr));
         rewritten.emplace(key, allocateGraph(context_, m.identity, *m.draft, bytes.at(key)));
     }
+    // The members form a program of their own; the graphs outside the group keep the program
+    // they are in.
+    for (GCGraph *key : order_) {
+        program_->bind(member(key).id, rewritten.at(key));
+    }
+    if (!order_.empty()) {
+        program_->setRoot(rewritten.at(order_.front()));
+    }
     // Graphs outside the group keep their identity.
     for (GCGraph *key : order_) {
         visitDraftGraphs(context_, *member(key).draft, [&](GCGraph *graph) {
@@ -1065,6 +1096,7 @@ void GraphDraftGroup::encode() {
             m.identity,
             *m.draft,
             rewritten,
+            program_,
             rewritten.at(key),
             bytes.at(key));
         validateRuntimeGraphPayload(graph);

@@ -21,6 +21,7 @@
 
 #include "camel/core/context/context.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 #include <functional>
 #include <memory>
@@ -37,8 +38,11 @@ class GraphIRPass {
     virtual ~GraphIRPass() = default;
 
     // Compile finishes before pass execution starts. The post-compile pipeline
-    // therefore carries runtime GCGraph objects exclusively.
-    virtual camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) = 0;
+    // therefore carries runtime programs (camel/runtime/program.h) exclusively: a pass gets
+    // the program the previous one left and returns the program for the next, the one it was
+    // given when it did not rewrite, nullptr when it consumed the program.
+    virtual const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) = 0;
 };
 
 class NullGraphIRPass : public GraphIRPass {
@@ -46,7 +50,8 @@ class NullGraphIRPass : public GraphIRPass {
     NullGraphIRPass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
     virtual ~NullGraphIRPass() = default;
 
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
 using PassFactory =
@@ -68,7 +73,7 @@ enum class PassApplyStatus {
 };
 
 struct PassApplyResult {
-    camel::runtime::GCGraph *graph = nullptr;
+    const camel::runtime::Program *program = nullptr;
     PassApplyStatus status{PassApplyStatus::Transformed};
 
     bool failed() const { return status == PassApplyStatus::Failed; }
@@ -129,10 +134,10 @@ std::optional<camel::core::error::Diagnostic> passesNeverRunWarning(
  * - non-null graph: pass transformed the graph and left it for later passes
  */
 PassApplyResult applyPassesDetailed(
-    camel::runtime::GCGraph *graph, const std::vector<std::string> &passes,
+    const camel::runtime::Program *program, const std::vector<std::string> &passes,
     const camel::core::context::context_ptr_t &ctx, std::ostream &os);
 
-/** Backward-compatible wrapper: only returns the graph payload, without status. */
-camel::runtime::GCGraph *applyPasses(
-    camel::runtime::GCGraph *graph, const std::vector<std::string> &passes,
+/** Backward-compatible wrapper: only returns the program, without status. */
+const camel::runtime::Program *applyPasses(
+    const camel::runtime::Program *program, const std::vector<std::string> &passes,
     const camel::core::context::context_ptr_t &ctx, std::ostream &os);

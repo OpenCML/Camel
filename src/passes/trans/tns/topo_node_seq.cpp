@@ -76,7 +76,9 @@ string TopoNodeSeqDumpPass::getPtrRepr(const string &prefix, uintptr_t ptrVal, b
     return ss.str();
 }
 
-GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     ASSERT(graph != nullptr, "Topo dump requires a non-null runtime root graph.");
 
     auto sortedGraphs = camel::runtime::collectReachableGraphs(graph);

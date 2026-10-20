@@ -22,7 +22,9 @@
 #include "camel/runtime/reachable.h"
 #include "compile.h"
 
-camel::runtime::GCGraph *BytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+BytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     std::vector<camel::runtime::GCGraph *> allGraphs =
         camel::runtime::collectReachableGraphs(graph);
 
@@ -53,8 +55,9 @@ camel::runtime::GCGraph *BytecodeDumpPass::apply(camel::runtime::GCGraph *graph,
     return nullptr;
 }
 
-camel::runtime::GCGraph *
-LinkedBytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+LinkedBytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     auto linked = compileAndLink(
         context_,
         graph,

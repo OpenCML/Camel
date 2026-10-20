@@ -30,8 +30,8 @@ class InlineRewritePass : public RuntimeGraphRewritePass {
         : RuntimeGraphRewritePass(ctx), config_(config), growthBudget_(growthBudget) {};
     virtual ~InlineRewritePass() = default;
 
-    virtual camel::runtime::GCGraph *
-    apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    virtual const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
     InlineRewriteConfig config_{};

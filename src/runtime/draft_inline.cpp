@@ -701,10 +701,10 @@ namespace {
 
 GCGraph *specializeClosureBoundGraph(
     RuntimeGraphDraftSession &session, const Function *function, size_t nonce) {
-    if (!function || !function->runtimeGraph()) {
+    if (!function || !function->graph()) {
         return nullptr;
     }
-    GCGraph *targetGraph = function->runtimeGraph();
+    GCGraph *targetGraph = function->graph();
     const Tuple *closure = function->tuple();
     if (!closure) {
         return targetGraph;
@@ -1082,7 +1082,7 @@ bool devirtualizeClosureCallInDraft(
         return false;
     }
     ::Function *function = camel::core::rtdata::fromSlot<::Function *>(source.value);
-    GCGraph *base        = function ? function->runtimeGraph() : nullptr;
+    GCGraph *base        = function ? function->graph() : nullptr;
     if (!base) {
         return false;
     }
@@ -1190,7 +1190,7 @@ bool devirtualizeStaticCallInDraft(
     }
 
     ::Function *function = camel::core::rtdata::fromSlot<::Function *>(calleeStatic.value);
-    if (!function || !function->runtimeGraph()) {
+    if (!function || !function->graph()) {
         CAMEL_LOG_INFO_S(
             "DraftOpt",
             "Devirtualize CALL node {} skipped: Function carrier has no runtime graph.",
@@ -1287,7 +1287,7 @@ GCGraph *resolveBranchedArmCalleeGraph(const GraphDraft &draft, gc_node_ref_t el
         return nullptr;
     }
     ::Function *function = camel::core::rtdata::fromSlot<::Function *>(fn.value);
-    GCGraph *base        = function ? function->runtimeGraph() : nullptr;
+    GCGraph *base        = function ? function->graph() : nullptr;
     if (!base) {
         return nullptr;
     }

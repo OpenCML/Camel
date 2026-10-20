@@ -1241,7 +1241,8 @@ void queries(std::ostream &os) {
 
 } // namespace
 
-camel::runtime::GCGraph *IndexEvalTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+IndexEvalTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     queries(os);
     struct Entry {
         std::string_view uri;
@@ -1293,7 +1294,7 @@ camel::runtime::GCGraph *IndexEvalTestPass::apply(camel::runtime::GCGraph *graph
         "undeclared={}\n",
         entries.size(), total.cases, total.agree, total.faults, total.points, total.unsound,
         total.mismatches, total.missing);
-    return graph;
+    return program;
 }
 
 } // namespace camel::tensor::passes

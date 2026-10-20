@@ -504,7 +504,7 @@ std::vector<gc_node_ref_t> throughOriginals(
  * (OperatorTraits::inspectsGraphs: Tiles compiling a function, an export) must see the program
  * as it was written, not this private lowering (op-semantics 11.4). Every operand of function
  * type of such an operator is passed through `:graph/original`, which takes a function value
- * of the copy back to the program's graph it was copied from (GCGraph::originalGraph; the
+ * of the copy back to the program's graph it was copied from (Program::original; the
  * commit records it). The new node takes the operator's origin.
  */
 void handOriginalsToGraphReaders(RuntimeGraphDraftSession &session) {
@@ -565,12 +565,17 @@ bool programHasLoops(GCGraph *root) {
     return found;
 }
 
-GCGraph *
-lowerLoopsToTailRecursion(const camel::core::context::context_ptr_t &context, GCGraph *root) {
-    if (root == nullptr || !programHasLoops(root)) {
-        return root;
+const Program *lowerLoopsToTailRecursion(
+    const camel::core::context::context_ptr_t &context, const Program *program) {
+    return lowerLoopsToTailRecursion(context, program, program ? program->root() : nullptr);
+}
+
+const Program *lowerLoopsToTailRecursion(
+    const camel::core::context::context_ptr_t &context, const Program *program, GCGraph *root) {
+    if (program == nullptr || root == nullptr || !programHasLoops(root)) {
+        return program;
     }
-    RuntimeGraphDraftSession session(context, root);
+    RuntimeGraphDraftSession session(context, program, root);
     std::vector<LoopShape> loops;
     for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
         for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {

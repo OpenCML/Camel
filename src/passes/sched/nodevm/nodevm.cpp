@@ -358,7 +358,7 @@ Frame *NodeVMSchedPass::tailCallFrame(
     // Existing live frame for the target: self recursion or an alternating
     // partner (branch arms). rootFrame qualifies too; it is reused, never released.
     for (Frame *candidate : {source, tailHigh, tailLow, rootFrame}) {
-        if (candidate != nullptr && candidate->runtimeGraph() == target) {
+        if (candidate != nullptr && candidate->graph() == target) {
             bindDirectCallFrameSlots(source, candidate, layout, argSlots, callArgScratch_);
             return candidate;
         }
@@ -839,7 +839,9 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
     }
 }
 
-camel::runtime::GCGraph *NodeVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     (void)os;
     ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
     graphCaches_.clear();

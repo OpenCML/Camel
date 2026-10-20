@@ -70,7 +70,8 @@ class GraphVizDumpPass : public RuntimeGraphTranslatePass {
     /// camel-db; pass instances are normally used via apply() instead.
     std::string dumpDot(camel::runtime::GCGraph *graph);
 
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
 /// Reusable entry point for tooling (e.g. camel-db): dumps a runtime graph as gir-style

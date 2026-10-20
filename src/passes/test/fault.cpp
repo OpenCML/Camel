@@ -21,11 +21,11 @@
 
 #include "camel/runtime/draft_session.h"
 
-camel::runtime::GCGraph *
-DropCallArgumentTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
+const camel::runtime::Program *
+DropCallArgumentTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
     using camel::runtime::GCFuncBody;
     using camel::runtime::GCNodeKind;
-    camel::runtime::RuntimeGraphDraftSession session(context_, graph);
+    camel::runtime::RuntimeGraphDraftSession session(context_, program);
     for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
         camel::runtime::GraphDraft &draft = session.edit(owner);
         for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
@@ -41,12 +41,12 @@ DropCallArgumentTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) 
             return session.commit();
         }
     }
-    return graph;
+    return program;
 }
 
-camel::runtime::GCGraph *
-OvergrowGraphTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
-    camel::runtime::RuntimeGraphDraftSession session(context_, graph);
+const camel::runtime::Program *
+OvergrowGraphTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
+    camel::runtime::RuntimeGraphDraftSession session(context_, program);
     for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
         if (owner->name() != "main") {
             continue;
@@ -72,18 +72,18 @@ OvergrowGraphTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
         }
         return session.commit();
     }
-    return graph;
+    return program;
 }
 
 namespace {
 
 /// Runs `breakBranch(draft, brch, join)` on the first branch of `main` and commits.
 template <typename Fn>
-camel::runtime::GCGraph *breakFirstBranchOfMain(
-    const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
+const camel::runtime::Program *breakFirstBranchOfMain(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     Fn breakBranch) {
     using camel::runtime::GCNodeKind;
-    camel::runtime::RuntimeGraphDraftSession session(context, graph);
+    camel::runtime::RuntimeGraphDraftSession session(context, program);
     for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
         if (owner->name() != "main") {
             continue;
@@ -101,17 +101,18 @@ camel::runtime::GCGraph *breakFirstBranchOfMain(
             return session.commit();
         }
     }
-    return graph;
+    return program;
 }
 
 } // namespace
 
-camel::runtime::GCGraph *
-LeakBranchArmTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
+const camel::runtime::Program *
+LeakBranchArmTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
     return breakFirstBranchOfMain(
         context_,
-        graph,
-        [](camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t brch,
+        program,
+        [](camel::runtime::GraphDraft &draft,
+           camel::runtime::gc_node_ref_t brch,
            camel::runtime::gc_node_ref_t join) {
             // A node that runs because of the BRCH and that no arm's result depends on.
             const auto stray = draft.addSyncNode();
@@ -120,12 +121,13 @@ LeakBranchArmTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
         });
 }
 
-camel::runtime::GCGraph *
-ShareBranchArmTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
+const camel::runtime::Program *
+ShareBranchArmTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
     return breakFirstBranchOfMain(
         context_,
-        graph,
-        [](camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t,
+        program,
+        [](camel::runtime::GraphDraft &draft,
+           camel::runtime::gc_node_ref_t,
            camel::runtime::gc_node_ref_t join) {
             // The second arm's result now depends on the first arm's.
             const auto tails = draft.withInputsOf(join);

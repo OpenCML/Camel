@@ -58,20 +58,23 @@
 class ConstantFoldPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
 class CommonSubexpressionPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
 class AlgebraPass : public RuntimeGraphRewritePass {
   public:
     explicit AlgebraPass(const camel::core::context::context_ptr_t &ctx, bool safeFp = false)
         : RuntimeGraphRewritePass(ctx), safeFp_(safeFp) {}
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
     bool safeFp_;
@@ -80,13 +83,15 @@ class AlgebraPass : public RuntimeGraphRewritePass {
 class DeadCodePass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
 class ControlReductionPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
 /**
@@ -102,11 +107,11 @@ class ControlReductionPass : public RuntimeGraphRewritePass {
 struct OptimizeRewriteConfig;
 
 /**
- * The std::opt fixpoint on the program rooted at `root`, with `config` for its call-rewrite
- * rounds. `root` may be detached from the running program (a function being exported); then the
- * program is left as it is. Stops after `maxRounds` rounds (each unrolls about one more level of
- * a recursion of static depth). Returns the rewritten root.
+ * The std::opt fixpoint on `program`, with `config` for its call-rewrite rounds. `program` may
+ * be detached from the running program (a function being exported); then the program is left as
+ * it is. Stops after `maxRounds` rounds (each unrolls about one more level of a recursion of
+ * static depth). Returns the rewritten program.
  */
-camel::runtime::GCGraph *simplifyGraph(
-    const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *root,
+const camel::runtime::Program *simplifyGraph(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     const OptimizeRewriteConfig &config, std::ostream &os, size_t maxRounds = 16);

@@ -73,9 +73,9 @@ runtime::gc_node_ref_t transferAggregate(
 }
 } // namespace
 
-runtime::GCGraph *outlineRegions(
-    core::context::Context &context, runtime::GCGraph *root, operator_t run, const std::string &uri,
-    size_t &count, const RegionDeviceOps *device) {
+const runtime::Program *outlineRegions(
+    core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
+    operator_t run, const std::string &uri, size_t &count, const RegionDeviceOps *device) {
     namespace rt = runtime;
     if (device &&
         (!device->upload || !device->execute || !device->download || run != device->execute))
@@ -88,7 +88,7 @@ runtime::GCGraph *outlineRegions(
     static std::mutex rewriteMutex;
     std::lock_guard rewriteLock(rewriteMutex);
     core::mm::NoCollectionScope noCollection;
-    rt::RuntimeGraphDraftSession session(context.shared_from_this(), root);
+    rt::RuntimeGraphDraftSession session(context.shared_from_this(), program, root);
     count             = 0;
     const auto graphs = session.collectReachableRuntimeGraphs();
     std::unordered_map<rt::GCGraph *, RegionAnalysis> analyses;
@@ -131,8 +131,9 @@ runtime::GCGraph *outlineRegions(
             const auto name = graph->stableId() + "/tiles.region/" + std::to_string(count++);
             extracted.graph->setId(context.graphIds().allocate());
             auto *callee = extracted.graph->encode(name, name, name);
-            auto *fn        = ::Function::create(
-                callee,
+            auto *fn     = ::Function::create(
+                rt::makeProgram(context, std::span(&callee, 1)),
+                callee->id(),
                 core::type::TupleType::create(std::vector<core::type::Type *>{}),
                 core::mm::autoSpace());
             if (run) {
@@ -226,6 +227,6 @@ runtime::GCGraph *outlineRegions(
             for (auto it = region.members.rbegin(); it != region.members.rend(); ++it)
                 draft.eraseNode(static_cast<rt::gc_node_ref_t>(*it));
     }
-    return count ? session.commit() : root;
+    return count ? session.commit() : program;
 }
 } // namespace camel::tiles

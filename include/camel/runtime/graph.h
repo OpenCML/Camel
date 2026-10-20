@@ -62,6 +62,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <span>
 #include <string_view>
@@ -71,6 +72,7 @@
 namespace camel::runtime {
 
 class GraphDraft;
+class Program;
 
 } // namespace camel::runtime
 
@@ -161,7 +163,7 @@ struct GCBranchArm {
 };
 
 /// The operator a back end's private copy of the program applies to a function value before an
-/// operator that reads graphs gets it (GCGraph::originalGraph, OperatorTraits::inspectsGraphs):
+/// operator that reads graphs gets it (Program::original, OperatorTraits::inspectsGraphs):
 /// the same function over the program's own graph. Implemented by the built-in executor
 /// (src/builtin/operators/graph.h); a program cannot name it.
 inline constexpr std::string_view kGraphOriginalUri = ":graph/original";
@@ -435,14 +437,6 @@ class GCGraph : public camel::core::rtdata::Object {
     size_t frameSize() const;
     bool isMacro() const;
     GCGraph *outerGraph() const;
-    /// The graph of the program this graph is a private copy of, nullptr when it is not one.
-    /// A back end that runs a rewritten copy of the program (lowerLoopsToTailRecursion, which
-    /// commits its session detached) gets a copy of every graph; each copy names the graph it
-    /// was made from, followed back to the first graph that is not a copy. Operators that read
-    /// the graphs of function values (OperatorTraits::inspectsGraphs) are handed these, so that
-    /// they see the program as it was written (op-semantics 11.4). Traced: the copy keeps it
-    /// alive.
-    GCGraph *originalGraph() const { return originalGraph_; }
     /// The graph's identity across rewrites, standing in for the design's GraphId until
     /// graph-model step 5 (graph facts, camel/runtime/facts.h): a commit gives the copy it
     /// encodes of a graph that graph's lineage; any other new graph gets a new one.
@@ -625,7 +619,6 @@ class GCGraph : public camel::core::rtdata::Object {
     camel::core::type::TupleType *staticDataType_  = nullptr;
     camel::core::type::TupleType *closureType_     = nullptr;
     GCGraph *outerGraph_                           = nullptr;
-    GCGraph *originalGraph_                        = nullptr; // see originalGraph()
     uint64_t lineage_                              = 0;       // see lineage()
     uint64_t serial_                               = 0;       // see serial()
     GCGraph **refs_                                = nullptr;
@@ -652,46 +645,56 @@ inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
     };
 }
 
+/// Owns the Programs of a context and keeps the graphs they name alive (program.cpp).
 class GCGraphManager {
   public:
     GCGraphManager() = default;
     ~GCGraphManager();
 
-    void adoptRoot(GCGraph *rootGraph);
-    void replaceRoot(GCGraph *rootGraph);
-    GCGraph *root() const;
+    /// A new, empty Program, owned by the manager for its lifetime; the caller binds its graphs
+    /// (Program::bind) while it builds them.
+    Program *reserve();
+    /// Installs `program` as the program of the context, the first one or a replacement: the
+    /// graphs of the previous program that `program` does not hold are freed.
+    void adoptRoot(const Program *program);
+    void replaceRoot(const Program *program);
+    /// The installed program, nullptr when there is none.
+    const Program *root() const;
     // The collector reads this stable vector only when collections are allowed.
     // Runtime publishers hold NoCollectionScope while changing it.
     std::vector<camel::core::rtdata::Object *> &gcRoots() { return gcRoots_; }
     const std::vector<camel::core::rtdata::Object *> &gcRoots() const { return gcRoots_; }
 
-    std::vector<GCGraph *> roots() const;
-    std::vector<GCGraph *> reachableFromRoots() const;
     void clear();
 
-    /// Keeps graphs that rewrites of a detached root produced (a function being exported, see
-    /// RuntimeGraphDraftSession::commit) alive and traced until releaseDetached().
-    void trackDetached(std::span<GCGraph *const> graphs);
-    /// Frees the tracked detached graphs that the program does not reach.
+    /// Keeps a program that a rewrite of a detached root produced (a function being exported,
+    /// see RuntimeGraphDraftSession::commit), and its graphs, alive and traced until
+    /// releaseDetached().
+    void trackDetached(const Program *program);
+    /// Frees the graphs of the tracked detached programs that the program does not hold.
     void releaseDetached();
-    /// Keeps graphs that belong to no program alive and traced for as long as the manager:
-    /// the definition graphs of operators (camel/runtime/definitions.h). Neither clear() nor
-    /// releaseDetached() frees them; a rewrite that uses one encodes a copy into the program.
-    void pin(std::span<GCGraph *const> graphs);
+    /// Keeps a program that belongs to no context program alive and traced for as long as the
+    /// manager: the definition graphs of operators (camel/runtime/definitions.h). Neither
+    /// clear() nor releaseDetached() frees it; a rewrite that uses one encodes a copy into the
+    /// program.
+    void pin(const Program *program);
 
   private:
     void rebuildGcRoots();
+    static void freeGraph(GCGraph *graph);
 
     // Publishing a detached graph can happen on different execution workers.
     // Recursive because the lifecycle operations below compose (adopt/replace,
     // destruction/release/clear); the lock is never held through graph execution.
     mutable std::recursive_mutex mutex_;
-    std::vector<GCGraph *> graphs_;
-    std::vector<GCGraph *> detached_;
-    std::vector<GCGraph *> pinned_;
-    std::vector<GCGraphDebugRecord *> debugRecords_;
+    std::vector<std::unique_ptr<Program>> programs_;
+    const Program *current_ = nullptr;
+    /// The graphs the manager frees when the program is replaced: those of the installed
+    /// program and of the programs its detached copies were made from.
+    std::vector<GCGraph *> owned_;
+    std::vector<const Program *> detached_;
+    std::vector<const Program *> pinned_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
-    GCGraph *root_ = nullptr;
 };
 
 } // namespace camel::runtime

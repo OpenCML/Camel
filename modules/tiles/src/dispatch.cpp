@@ -13,6 +13,7 @@
 #include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/program.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
 #include <stdexcept>
@@ -38,8 +39,9 @@ Function *gpuFunction(
     // Partition once when decorating. A detached rewrite leaves the original callable
     // intact; its captured values remain traced by the new Function's closure tuple.
     size_t regions = 0;
-    auto *regional = outlineRegions(
+    const auto *regional = outlineRegions(
         context,
+        source->program(),
         source->graph(),
         preferred.execute,
         preferred.executeUri,
@@ -48,7 +50,7 @@ Function *gpuFunction(
     if (regions) {
         auto *result =
             static_cast<Function *>(source->clone(core::mm::autoSpace(), signature, false));
-        result->setRuntimeGraph(regional);
+        result->rebind(regional, regional->root()->id());
         return result;
     }
     rt::GraphDraft draft;
@@ -85,7 +87,11 @@ Function *gpuFunction(
         "tiles.gpu/" + source->graph()->stableId(),
         "tiles.gpu/" + source->graph()->mangledName(),
         source->graph()->name());
-    auto *result = ::Function::create(graph, closureType, core::mm::autoSpace());
+    auto *result = ::Function::create(
+        rt::makeProgram(context, std::span(&graph, 1)),
+        graph->id(),
+        closureType,
+        core::mm::autoSpace());
     result->tuple()->set<slot_t>(0, td::toSlot(source), closureType);
     return result;
 }

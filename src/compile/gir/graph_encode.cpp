@@ -44,6 +44,7 @@
 #include "camel/core/type/composite/composite.h"
 #include "camel/runtime/capacity.h"
 #include "camel/runtime/control.h"
+#include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 #include "runtime/graph_build.h"
@@ -323,9 +324,12 @@ remapNodeRef(draft_node_ref_t sourceRef, const std::vector<draft_node_ref_t> &ma
 
 class EncodeSession {
   public:
-    explicit EncodeSession(graph_ptr_t rootGraph) : rootGraph_(std::move(rootGraph)) {}
+    EncodeSession(
+        graph_ptr_t rootGraph, camel::runtime::Program &program,
+        camel::runtime::GraphIdAllocator *freshIds)
+        : rootGraph_(std::move(rootGraph)), program_(program), freshIds_(freshIds) {}
 
-    GCGraph *run() {
+    void run() {
         ASSERT(rootGraph_ != nullptr, "Cannot encode a null compile graph.");
         const auto reachable = collectReachableGraphs(rootGraph_);
         CAMEL_LOG_INFO_S("GIREncode", "Encoding {} reachable compile graphs.", reachable.size());
@@ -341,6 +345,10 @@ class EncodeSession {
         }
         preallocateRuntimeGraphs();
         for (auto &prepared : prepared_) {
+            program_.bind(prepared.draft->id(), prepared.runtime);
+        }
+        program_.setRoot(resolvePreparedGraph(rootGraph_)->runtime);
+        for (auto &prepared : prepared_) {
             patchPreparedFuncPayloads(prepared);
         }
         for (auto &prepared : prepared_) {
@@ -350,8 +358,6 @@ class EncodeSession {
         for (auto &prepared : prepared_) {
             camel::runtime::validateRuntimeGraphCalls(prepared.runtime);
         }
-
-        return resolvePreparedGraph(rootGraph_)->runtime;
     }
 
   private:
@@ -405,7 +411,7 @@ class EncodeSession {
         prepared.source = graph;
         prepared.draft  = std::make_unique<GraphDraft>();
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
-        prepared.draft->setId(graph->graphId());
+        prepared.draft->setId(freshIds_ ? freshIds_->allocate() : graph->graphId());
         prepared.draft->setFuncType(graph->funcType());
         prepared.draft->setCaptureNames(graph->draft().captureNames());
         // Every compiled graph has a frame layout, one without slots included.
@@ -716,7 +722,8 @@ class EncodeSession {
             auto *funcObj = fromSlot<StaticFunction *>(slot);
             ASSERT(funcObj != nullptr, "Compile static function slot payload is null.");
             auto *runtimeFunc = ::Function::create(
-                resolvePreparedGraph(funcObj->graph())->runtime,
+                &program_,
+                resolvePreparedGraph(funcObj->graph())->draft->id(),
                 funcObj->tupleType(),
                 camel::core::mm::autoSpace());
             objectCache.emplace(object, runtimeFunc);
@@ -1038,6 +1045,8 @@ class EncodeSession {
     }
 
     graph_ptr_t rootGraph_;
+    camel::runtime::Program &program_;
+    camel::runtime::GraphIdAllocator *freshIds_;
     std::vector<PreparedGraph> prepared_;
     std::unordered_map<DraftGraphBuilder *, PreparedGraph *> preparedBySource_;
     std::unordered_map<std::string, PreparedGraph *> preparedByStableId_;
@@ -1045,15 +1054,15 @@ class EncodeSession {
 
 } // namespace
 
-camel::runtime::GCGraph *encodeToRuntimeGraph(const graph_ptr_t &rootGraph) {
-    auto *runtimeRoot = EncodeSession(rootGraph).run();
-    auto reachable    = camel::runtime::collectReachableGraphs(runtimeRoot);
+void encodeToRuntimeProgram(
+    const graph_ptr_t &rootGraph, camel::runtime::Program &program,
+    camel::runtime::GraphIdAllocator *freshIds) {
+    EncodeSession(rootGraph, program, freshIds).run();
     CAMEL_LOG_INFO_S(
         "GIREncode",
-        "Encoded runtime root '{}' with {} reachable runtime graphs.",
-        runtimeRoot ? runtimeRoot->name() : std::string{"<null>"},
-        reachable.size());
-    return runtimeRoot;
+        "Encoded runtime root '{}' with {} runtime graphs.",
+        program.root() ? program.root()->name() : std::string{"<null>"},
+        program.size());
 }
 
 } // namespace camel::compile::gir

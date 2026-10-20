@@ -1707,7 +1707,6 @@ camel::core::rtdata::Object *GCGraph::clone(
         refCount_,
         nativePayload_,
         staticArea_);
-    graph->originalGraph_ = originalGraph_;
     graph->lineage_       = lineage_; // the same content: the same graph and revision
     graph->serial_        = serial_;
     for (size_t i = 0; i < kExtraSlotCount; ++i) {
@@ -1751,163 +1750,6 @@ void GCGraph::updateRefs(
     for (gc_cnt_t i = 0; i < refCount_; ++i) {
         traceEdge(refs_[i]);
     }
-    traceEdge(originalGraph_);
-}
-
-void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
-    std::lock_guard lock(mutex_);
-    std::vector<GCGraph *> newGraphs =
-        rootGraph ? collectReachableGraphs(rootGraph) : std::vector<GCGraph *>{};
-    std::unordered_set<GCGraph *> keep(newGraphs.begin(), newGraphs.end());
-    // A private copy still tracked (a back end's lowered program) names the program graph it was
-    // copied from (GCGraph::originalGraph): that graph and what it refers to stay, owned as part
-    // of the program, until a later replacement finds no copy pointing at them.
-    for (GCGraph *copy : detached_) {
-        GCGraph *original = copy ? copy->originalGraph_ : nullptr;
-        if (original && !keep.contains(original)) {
-            for (GCGraph *graph : collectReachableGraphs(original)) {
-                if (keep.insert(graph).second) {
-                    newGraphs.push_back(graph);
-                }
-            }
-        }
-    }
-
-    for (GCGraph *graph : graphs_) {
-        if (!graph || keep.contains(graph)) {
-            continue;
-        }
-        delete graph->debug_;
-        graph->~GCGraph();
-        mm::graphSpace().free(graph);
-    }
-
-    root_   = rootGraph;
-    graphs_ = std::move(newGraphs);
-    rebuildGcRoots();
-}
-
-void GCGraphManager::rebuildGcRoots() {
-    gcRoots_.clear();
-    debugRecords_.clear();
-    gcRoots_.reserve(graphs_.size() + detached_.size());
-    for (GCGraph *graph : graphs_) {
-        if (!graph) {
-            continue;
-        }
-        gcRoots_.push_back(graph);
-        if (graph->debug_) {
-            debugRecords_.push_back(graph->debug_);
-        }
-    }
-    for (GCGraph *graph : detached_) {
-        gcRoots_.push_back(graph);
-    }
-    for (GCGraph *graph : pinned_) {
-        gcRoots_.push_back(graph);
-    }
-}
-
-void GCGraphManager::pin(std::span<GCGraph *const> graphs) {
-    mm::NoCollectionScope noCollection;
-    std::lock_guard lock(mutex_);
-    for (GCGraph *graph : graphs) {
-        if (graph && std::find(pinned_.begin(), pinned_.end(), graph) == pinned_.end()) {
-            pinned_.push_back(graph);
-            gcRoots_.push_back(graph);
-        }
-    }
-}
-
-void GCGraphManager::trackDetached(std::span<GCGraph *const> graphs) {
-    mm::NoCollectionScope noCollection;
-    std::lock_guard lock(mutex_);
-    for (GCGraph *graph : graphs) {
-        if (graph && std::find(detached_.begin(), detached_.end(), graph) == detached_.end()) {
-            detached_.push_back(graph);
-            gcRoots_.push_back(graph);
-        }
-    }
-}
-
-void GCGraphManager::releaseDetached() {
-    std::lock_guard lock(mutex_);
-    const std::unordered_set<GCGraph *> owned(graphs_.begin(), graphs_.end());
-    for (GCGraph *graph : detached_) {
-        if (owned.contains(graph)) {
-            continue; // installed as part of the program since
-        }
-        delete graph->debug_;
-        graph->~GCGraph();
-        mm::graphSpace().free(graph);
-    }
-    detached_.clear();
-    rebuildGcRoots();
-}
-
-void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
-    std::lock_guard lock(mutex_);
-    if (root_ || !graphs_.empty()) {
-        replaceRoot(rootGraph);
-        return;
-    }
-
-    root_ = rootGraph;
-    if (!root_) {
-        return;
-    }
-
-    graphs_ = collectReachableGraphs(root_);
-    rebuildGcRoots();
-}
-
-GCGraphManager::~GCGraphManager() {
-    std::lock_guard lock(mutex_);
-    releaseDetached();
-    clear();
-    for (GCGraph *graph : pinned_) {
-        delete graph->debug_;
-        graph->~GCGraph();
-        mm::graphSpace().free(graph);
-    }
-    pinned_.clear();
-    gcRoots_.clear();
-}
-
-std::vector<GCGraph *> GCGraphManager::roots() const {
-    std::lock_guard lock(mutex_);
-    if (!root_) {
-        return {};
-    }
-    return {root_};
-}
-
-std::vector<GCGraph *> GCGraphManager::reachableFromRoots() const {
-    std::lock_guard lock(mutex_);
-    return collectReachableGraphs(root_);
-}
-
-void GCGraphManager::clear() {
-    std::lock_guard lock(mutex_);
-    for (GCGraph *graph : graphs_) {
-        if (!graph) {
-            continue;
-        }
-        delete graph->debug_;
-        graph->~GCGraph();
-        mm::graphSpace().free(graph);
-    }
-    gcRoots_.clear();
-    debugRecords_.clear();
-    graphs_.clear();
-    root_ = nullptr;
-    // The pinned graphs belong to no program: they stay, and stay traced.
-    gcRoots_.insert(gcRoots_.end(), pinned_.begin(), pinned_.end());
-}
-
-GCGraph *GCGraphManager::root() const {
-    std::lock_guard lock(mutex_);
-    return root_;
 }
 
 void collectStaticGraphRefsRecursive(
@@ -1928,7 +1770,7 @@ void collectStaticGraphRefsRecursive(
         if (!funcObj) {
             return;
         }
-        GCGraph *runtimeGraph = funcObj->runtimeGraph();
+        GCGraph *runtimeGraph = funcObj->graph();
         ASSERT(
             runtimeGraph != nullptr,
             "Runtime static graph references must already point to GCGraph carriers.");

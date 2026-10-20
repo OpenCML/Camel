@@ -76,8 +76,8 @@ using namespace camel::core::error;
 using namespace camel::core::context;
 using camel::runtime::GCGraph;
 
-GCGraph *NullGraphIRPass::apply(GCGraph *graph, std::ostream &os) {
-    (void)graph;
+const camel::runtime::Program *
+NullGraphIRPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     (void)os;
     return nullptr;
 }
@@ -145,8 +145,8 @@ class GcSnapshotPass final : public GraphIRPass {
   public:
     explicit GcSnapshotPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
-        (void)graph;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         os << camel::core::mm::profiler::snapshotToJson() << '\n';
         return nullptr;
     }
@@ -156,7 +156,8 @@ class GcVerifyPass final : public GraphIRPass {
   public:
     explicit GcVerifyPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         auto issues = camel::core::mm::autoSpace().verifyHeap();
         if (!issues.empty()) {
             constexpr size_t maxIssues = 10;
@@ -175,7 +176,7 @@ class GcVerifyPass final : public GraphIRPass {
                     details.str()));
         }
         os << "{\"ok\":true,\"kind\":\"gc.verify\"}\n";
-        return graph;
+        return program;
     }
 };
 
@@ -183,10 +184,11 @@ class GcMinorPass final : public GraphIRPass {
   public:
     explicit GcMinorPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         camel::core::mm::autoSpace().minorGC();
         os << "{\"ok\":true,\"kind\":\"gc.minor\"}\n";
-        return graph;
+        return program;
     }
 };
 
@@ -194,10 +196,11 @@ class GcMajorPass final : public GraphIRPass {
   public:
     explicit GcMajorPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         camel::core::mm::autoSpace().majorGC();
         os << "{\"ok\":true,\"kind\":\"gc.major\"}\n";
-        return graph;
+        return program;
     }
 };
 
@@ -205,9 +208,10 @@ class GcConfigPass final : public GraphIRPass {
   public:
     explicit GcConfigPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         os << camel::core::mm::profiler::configToJson() << '\n';
-        return graph;
+        return program;
     }
 };
 
@@ -215,9 +219,10 @@ class GcSummaryPass final : public GraphIRPass {
   public:
     explicit GcSummaryPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         os << camel::core::mm::profiler::summaryToText();
-        return graph;
+        return program;
     }
 };
 
@@ -225,7 +230,8 @@ class GcBuffersPass final : public GraphIRPass {
   public:
     explicit GcBuffersPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         camel::core::array::debugRunBufferSelfTest();
         os << std::format(
             "BUFFER_SELFTEST ok live={} peak={} count={} creations={}\n",
@@ -233,7 +239,7 @@ class GcBuffersPass final : public GraphIRPass {
             camel::core::array::bufferBytesPeak(),
             camel::core::array::bufferLiveCount(),
             camel::core::array::bufferCreations());
-        return graph;
+        return program;
     }
 };
 
@@ -241,10 +247,11 @@ class GcRememberedSetPass final : public GraphIRPass {
   public:
     explicit GcRememberedSetPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         camel::core::mm::autoSpace().debugRunRememberedSetSelfTest();
         os << "{\"ok\":true,\"kind\":\"gc.remembered_set\"}\n";
-        return graph;
+        return program;
     }
 };
 
@@ -252,10 +259,11 @@ class GcPoisonPass final : public GraphIRPass {
   public:
     explicit GcPoisonPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         camel::core::mm::autoSpace().debugRunPoisonSelfTest();
         os << "{\"ok\":true,\"kind\":\"gc.poison\"}\n";
-        return graph;
+        return program;
     }
 };
 
@@ -263,10 +271,11 @@ class GcForeignResourcePass final : public GraphIRPass {
   public:
     explicit GcForeignResourcePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         camel::core::mm::debugRunForeignResourceSelfTest(camel::core::mm::autoSpace());
         os << "{\"ok\":true,\"kind\":\"gc.foreign_resource\"}\n";
-        return graph;
+        return program;
     }
 };
 
@@ -1157,8 +1166,8 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
 }
 
 PassApplyResult applyPassesDetailed(
-    GCGraph *graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
-    std::ostream &os) {
+    const camel::runtime::Program *program, const std::vector<std::string> &passes,
+    const context_ptr_t &ctx, std::ostream &os) {
     if (!passes.empty() && Logger::ShouldEmit(LogLevel::Info, "Pass")) {
         std::ostringstream seq;
         for (size_t i = 0; i < passes.size(); ++i) {
@@ -1176,14 +1185,14 @@ PassApplyResult applyPassesDetailed(
     requireKnownPasses(passes, ctx);
     size_t passOutputIndex = 0;
     for (const auto &p : passes) {
-        if (graph == nullptr) {
+        if (program == nullptr) {
             return {nullptr, PassApplyStatus::Consumed};
         }
 
         auto factory = findPassFactory(p, os);
         if (factory) {
             camel::core::mm::autoSpace().safepoint(std::format("before pass {}", p));
-            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph); });
+            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), program->root()); });
             camel::utils::phase::Scope phaseScope("pass", p);
             auto pass = factory(ctx);
             // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling
@@ -1198,7 +1207,7 @@ PassApplyResult applyPassesDetailed(
             // left open are fine for rewriting and translation (they are the inputs of what
             // is translated); nothing may execute with a slot nobody filled.
             if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
-                const auto open = camel::execute::unboundEntryParameters(graph);
+                const auto open = camel::execute::unboundEntryParameters(program->root());
                 if (!open.empty()) {
                     std::string names;
                     for (size_t i = 0; i < open.size(); ++i) {
@@ -1217,7 +1226,7 @@ PassApplyResult applyPassesDetailed(
                 }
             }
             try {
-                graph = pass->apply(graph, os);
+                program = pass->apply(program, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {
                 throw; // diagnostics already recorded; the caller dumps them
             } catch (const camel::core::ProcessExit &exit) {
@@ -1287,7 +1296,7 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
                 return {nullptr, PassApplyStatus::Failed};
             }
-            if (!graph) {
+            if (!program) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> consumed", p);
                 return {nullptr, PassApplyStatus::Consumed};
             }
@@ -1296,10 +1305,14 @@ PassApplyResult applyPassesDetailed(
                 snapshotHandler(
                     p.c_str(),
                     ++passOutputIndex,
-                    graph,
+                    program->root(),
                     passSnapshotUserDataSlot().load(std::memory_order_acquire));
             }
-            CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> next graph '{}'", p, graph->name());
+            CAMEL_LOG_INFO_S(
+                "Pass",
+                "run | passes | OK {} -> next graph '{}'",
+                p,
+                program->root()->name());
         } else {
             setPipelineStage("pass:" + specName(p));
             auto unknown = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(p);
@@ -1308,12 +1321,12 @@ PassApplyResult applyPassesDetailed(
         }
     }
 
-    EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", graph); });
-    return {graph, PassApplyStatus::Transformed};
+    EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", program ? program->root() : nullptr); });
+    return {program, PassApplyStatus::Transformed};
 }
 
-GCGraph *applyPasses(
-    GCGraph *graph, const std::vector<std::string> &passes, const context_ptr_t &ctx,
-    std::ostream &os) {
-    return applyPassesDetailed(graph, passes, ctx, os).graph;
+const camel::runtime::Program *applyPasses(
+    const camel::runtime::Program *program, const std::vector<std::string> &passes,
+    const context_ptr_t &ctx, std::ostream &os) {
+    return applyPassesDetailed(program, passes, ctx, os).program;
 }

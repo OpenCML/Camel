@@ -22,11 +22,12 @@ class RegionPass final : public RuntimeGraphRewritePass {
   public:
     RegionPass(const core::context::context_ptr_t &context, RegionDeviceOps preferred)
         : RuntimeGraphRewritePass(context), preferred_(std::move(preferred)) {}
-    runtime::GCGraph *apply(runtime::GCGraph *root, std::ostream &) override {
+    const runtime::Program *apply(const runtime::Program *program, std::ostream &) override {
         size_t count = 0;
         return outlineRegions(
             *context_,
-            root,
+            program,
+            program->root(),
             preferred_.execute,
             preferred_.executeUri,
             count,

@@ -245,28 +245,29 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
     return changed;
 }
 
-camel::runtime::GCGraph *
-applyCollect(const camel::core::context::context_ptr_t &context, GCGraph *graph, bool summary) {
-    if (graph == nullptr) {
-        return graph;
+const camel::runtime::Program *applyCollect(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    bool summary) {
+    if (program == nullptr) {
+        return program;
     }
-    RuntimeGraphDraftSession session(context, graph);
+    RuntimeGraphDraftSession session(context, program);
     const std::vector<GCGraph *> graphs = session.collectReachableRuntimeGraphs();
     size_t rewrites                     = 0;
     for (GCGraph *owner : graphs) {
         rewrites += rewriteGraph(session, owner, summary);
     }
-    return rewrites == 0 ? graph : session.commit();
+    return rewrites == 0 ? program : session.commit();
 }
 
 } // namespace
 
-camel::runtime::GCGraph *
-LoopCollectTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
-    return applyCollect(context_, graph, false);
+const camel::runtime::Program *
+LoopCollectTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
+    return applyCollect(context_, program, false);
 }
 
-camel::runtime::GCGraph *
-LoopCollectSummaryTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
-    return applyCollect(context_, graph, true);
+const camel::runtime::Program *
+LoopCollectSummaryTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
+    return applyCollect(context_, program, true);
 }
