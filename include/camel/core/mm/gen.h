@@ -317,11 +317,11 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void *alloc(size_t payloadSize, size_t align = alignof(slot_t)) override;
 
-    /// Accounts for `bytes` a core buffer is about to take from the buffer space. The bytes are
+    /// Accounts for `bytes` a core Block is about to take from the Block space. The bytes are
     /// live values (the review of the H17 plan requires them to pace the collector and to
     /// count against CAMEL_GC_HEAP_LIMIT_MB), but they are allocated outside this allocator, so
     /// the array layer calls this before taking them.
-    void checkBufferBytes(size_t bytes);
+    void checkBlockBytes(size_t bytes);
 
     void free(void *ptr) override;
 
@@ -414,8 +414,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // Old-space bytes in use: elder blocks plus large objects.
     size_t oldBytesHeldUnlocked() const;
 
-    // Buffer bytes allocated since the end of the last collection (see bufferBytesAtCollection_).
-    size_t bufferBytesGrowthUnlocked() const;
+    // Block bytes allocated since the end of the last collection (see blockBytesAtCollection_).
+    size_t blockBytesGrowthUnlocked() const;
 
     // Enforces heapLimitBytes for an old-space allocation of `requestBytes` (see definition).
     void checkHeapLimitUnlocked(size_t requestBytes);
@@ -500,13 +500,13 @@ class GenerationalAllocatorWithGC : public IAllocator {
     size_t heapLimitBytes_;           // 0: none
     bool heapLimitExceeded_ = false;  // Set by an allocation; resolved at the next safepoint
     size_t heapLimitRequest_ = 0;     // ...the allocation that crossed the limit
-    // Live numeric-buffer bytes at the end of the last collection (core/array/buffer.h). The
-    // buffers are outside the collected heap, so their growth since then is added to the young,
-    // elder and large-object pacing: without it a program that keeps making large arrays that
-    // turn into garbage would never fill the small collected heap and would never release the
-    // buffers. The live volume itself is not added, or a program holding one large array would
+    // Live data-block bytes at the end of the last collection (core/mm/block.h). The blocks
+    // are outside the collected heap, so their growth since then is added to the young, elder
+    // and large-object pacing: without it a program that keeps making large values that turn
+    // into garbage would never fill the small collected heap and would never release the
+    // blocks. The live volume itself is not added, or a program holding one large array would
     // ask for a collection on every allocation.
-    size_t bufferBytesAtCollection_ = 0;
+    size_t blockBytesAtCollection_ = 0;
     bool enableYoungGenCopying_;      // Young objects are copied (and so move) when set.
 
     // ============================================================================

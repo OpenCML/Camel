@@ -19,7 +19,7 @@
 
 #include "mem.h"
 
-#include "camel/core/array/buffer.h"
+#include "camel/core/mm/block.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/type/composite/struct.h"
@@ -27,7 +27,7 @@
 
 using namespace camel::core::type;
 
-StructType *memBuffersStructType() {
+StructType *memBlocksStructType() {
     // Built once: the resolver's result type and the value the operator constructs must be the
     // same StructType object (the run-time struct writes its fields through it).
     static StructType *type = [] {
@@ -41,21 +41,21 @@ StructType *memBuffersStructType() {
     return type;
 }
 
-slot_t __builtin__mem_buffers__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+slot_t __builtin__mem_blocks__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     (void)with;
     (void)ctx;
     const auto *structType = dynamic_cast<const StructType *>(norm.resultType());
     ASSERT(
         structType != nullptr && structType->size() == 4,
-        "std::mem::buffers() must have its four-field struct as its result type");
+        "std::mem::blocks() must have its four-field struct as its result type");
     Struct *result = Struct::create(structType->size(), camel::core::mm::autoSpace());
     result->set<rtdata::Int64>(
-        0, static_cast<rtdata::Int64>(camel::core::array::bufferCreations()), structType);
+        0, static_cast<rtdata::Int64>(camel::core::mm::blockCreations()), structType);
     result->set<rtdata::Int64>(
-        1, static_cast<rtdata::Int64>(camel::core::array::bufferFrees()), structType);
+        1, static_cast<rtdata::Int64>(camel::core::mm::blockFrees()), structType);
     result->set<rtdata::Int64>(
-        2, static_cast<rtdata::Int64>(camel::core::array::bufferLiveCount()), structType);
+        2, static_cast<rtdata::Int64>(camel::core::mm::blockLiveCount()), structType);
     result->set<rtdata::Int64>(
-        3, static_cast<rtdata::Int64>(camel::core::array::bufferBytesLive()), structType);
+        3, static_cast<rtdata::Int64>(camel::core::mm::blockBytesLive()), structType);
     return rtdata::toSlot(result);
 }

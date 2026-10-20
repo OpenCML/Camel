@@ -33,21 +33,25 @@ class ArrayType;
  * This is the single source of the decision: the runtime array representation reads it, and no
  * call site chooses a layout by hand.
  *
- * - Compact: a contiguous buffer of numbers. Only a numeric element type may use it (the leaf
- *   rule: a compact buffer never holds a reference, so buffers cannot form cycles and can be
- *   handed out without a copy). Elements are one of the fixed-width numeric types in
- *   arrayElementSize().
- * - Slots: one slot per element, able to hold a reference; the pre-existing representation.
+ * - Compact: a contiguous run of pure data (type/pure.h). Only a pure-data element type may
+ *   use it (the leaf rule: a data block never holds a reference, so blocks cannot form cycles
+ *   and can be handed out without a copy). A scalar element is one of the fixed-width numeric
+ *   types in arrayElementSize(); a struct or tuple element is laid out field by field by
+ *   pureDataLayout(). Elements of a struct array have no per-element Struct object.
+ * - Slots: one slot per element, able to hold a reference; the representation for every
+ *   element type that is not pure data.
  */
 enum class ArrayStorage : uint8_t { Slots, Compact };
 
 /// The storage class of an array with `elementType` (`nullptr` means "not known yet": slots).
 ArrayStorage arrayStorageFor(const Type *elementType);
 
-/// Bytes per element of a compact numeric element type. Precondition: isCompactElementType.
+/// Bytes per element of a compact numeric scalar element type. Precondition:
+/// isCompactElementType. An aggregate element uses pureDataLayout()->size instead.
 size_t arrayElementSize(TypeCode code);
 
-/// True for the numeric type codes that use a compact buffer (ints, floats, bool, byte).
+/// True for the numeric scalar type codes that compact arrays and DLPack call a number
+/// (ints, floats, bool, byte).
 bool isCompactElementType(TypeCode code);
 
 // Factory for constructing ArrayType (may use STL containers).

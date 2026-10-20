@@ -89,7 +89,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/atos", __atos__},
 
         // diagnostics
-        {"op/mem_buffers", __builtin__mem_buffers__},
+        {"op/mem_blocks", __builtin__mem_blocks__},
         // `xs->append<v>` written by the loop-state rewrite; not a group a program can name.
         {"struct/append_arr_owned", __append_owned_arr__},
         // The private copy of an array a rewritten loop starts from; likewise internal.
@@ -420,9 +420,9 @@ void registerBuiltinOperatorTraits() {
         std::string(camel::execute::kFaultIsolationUri),
         {.pure = false, .callsGraphs = true});
     registry.declare("os", {{"exit", false}, {"sleep", false}});
-    // The buffer counters are ambient state: two calls with the same arguments can return
+    // The block counters are ambient state: two calls with the same arguments can return
     // different structs, so the call must not be folded, merged or dropped as a pure one.
-    registry.set(":op/mem_buffers", {.pure = false});
+    registry.set(":op/mem_blocks", {.pure = false});
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});

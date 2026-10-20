@@ -102,7 +102,7 @@ std::optional<Type *> indexInfer(const InferContext &ctx) {
 }
 /// `for x in t`: the elements of a tensor along its first dimension, in order. A tensor of
 /// rank n >= 2 gives, for each i, the sub-tensor of shape shape[1:] that starts at row i (a
-/// view of the same buffer); a rank-1 tensor gives, for each i, the rank-0 sub-tensor at i.
+/// view of the same block); a rank-1 tensor gives, for each i, the rank-0 sub-tensor at i.
 /// A rank-0 tensor has no first dimension: it is not iterable, which is an error when the
 /// shape is known and a fault otherwise.
 std::optional<Type *> iterInfer(const InferContext &ctx) {

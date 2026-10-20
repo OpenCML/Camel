@@ -31,7 +31,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
-| [built-in](#built-in-functions) | none | C++ | 47 |
+| [built-in](#built-in-functions) | none | C++ | 48 |
 | [str](#str) | `import { ... } from str` | C++ | 16 |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
 | [tree](#tree) | `import { ... } from tree` | C++ | 7 |
@@ -57,6 +57,23 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 The operators behind the language's own operators (`+`, `==`, `[]`, `??`, assignment, ...) are
 registered under reserved names (`__add__`, ...) and are not listed here.
+
+### Memory
+
+Data blocks (design principles 10.5): the process-wide counters, read between two operations.
+
+#### `std::mem::blocks`
+
+```camel
+std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
+```
+
+The data-block counters: blocks allocated so far, freed so far, live now, and the bytes the
+live blocks hold. The call is not pure: it reports process state, so the optimizer must not
+fold, merge or drop it.
+
+- With effects: reads the process-wide data-block counters.
+- Example: `std::mem::blocks().live` gives `0 when no block is alive`
 
 ### Conversions
 
