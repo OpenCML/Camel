@@ -1,0 +1,121 @@
+// C6 -- a small variational autoencoder on 2-D data.
+//
+// The encoder maps a point to (mu, log variance); the reparameterization `mu + exp(logvar/2)*eps`
+// turns it into a sample; the decoder maps the sample back.  The loss is reconstruction plus the
+// closed-form KL term.  The epsilons come from `make_data.py`, so the run is deterministic and
+// the PyTorch counterpart can use exactly the same samples (keyed random numbers, H20-3, will
+// replace that file when they land).
+//
+// Run:
+//   camel train.cml --arg data=artifacts/small --arg steps=200 --arg batch=32 \
+//         --arg lr=0.005 --arg log_every=20 --arg threads=1 std::macro std::nvm
+module c6_vae
+
+// == imports ==
+import { Tensor, exp, load_npy, mean, numel, relu, set_num_threads, shape, slice, sum } from tensor
+import { value_and_grad } from autodiff
+import { adam, adam_state } from nn
+import { now } from time
+
+// == model ==
+// Ten tensors: the encoder trunk, two heads (mu and log-variance) and the decoder.
+type Vae = {
+    ew1: Tensor, eb1: Tensor,
+    ewm: Tensor, ebm: Tensor,
+    ewv: Tensor, ebv: Tensor,
+    dw1: Tensor, db1: Tensor,
+    dw2: Tensor, db2: Tensor
+}
+
+with <m: Vae>
+func encode(x: Tensor): (Tensor, Tensor) {
+    let hidden = relu(x @ m.ew1 + m.eb1)
+    return (hidden @ m.ewm + m.ebm, hidden @ m.ewv + m.ebv)
+}
+
+with <m: Vae>
+func decode(z: Tensor): Tensor {
+    let hidden = relu(z @ m.dw1 + m.db1)
+    return hidden @ m.dw2 + m.db2
+}
+
+// == loss ==
+// Reconstruction is mean squared error per input dimension; KL is the standard Gaussian prior
+// term.  `eps` is one standard-normal sample per row.
+with <m: Vae>
+func loss(x: Tensor, eps: Tensor): float {
+    let (mu, logvar) = encode<m>(x)
+    let z = mu + exp(0.5 * logvar) * eps
+    let errors = decode<m>(z) - x
+    let reconstruction = mean(sum(errors * errors, 1))
+    let kl = -0.5 * mean(sum(1.0 + logvar - mu * mu - exp(logvar), 1))
+    return reconstruction + kl
+}
+
+// == data ==
+func load_model(data: string): Vae {
+    let init = data + '/init'
+    return {
+        ew1: load_npy(init + '/ew1.npy'), eb1: load_npy(init + '/eb1.npy'),
+        ewm: load_npy(init + '/ewm.npy'), ebm: load_npy(init + '/ebm.npy'),
+        ewv: load_npy(init + '/ewv.npy'), ebv: load_npy(init + '/ebv.npy'),
+        dw1: load_npy(init + '/dw1.npy'), db1: load_npy(init + '/db1.npy'),
+        dw2: load_npy(init + '/dw2.npy'), db2: load_npy(init + '/db2.npy')
+    }
+}
+
+// == evaluate ==
+// Validation uses the posterior mean (no sampling), so the number does not depend on a fresh
+// epsilon draw.  Returns (reconstruction, KL, total).
+func evaluate(m: Vae, x: Tensor): (float, float, float) {
+    let (mu, logvar) = encode<m>(x)
+    let errors = decode<m>(mu) - x
+    let reconstruction = mean(sum(errors * errors, 1))
+    let kl = -0.5 * mean(sum(1.0 + logvar - mu * mu - exp(logvar), 1))
+    return (reconstruction, kl, reconstruction + kl)
+}
+
+func count_params(m: Vae): int {
+    return numel(m.ew1) + numel(m.eb1) + numel(m.ewm) + numel(m.ebm) +
+        numel(m.ewv) + numel(m.ebv) + numel(m.dw1) + numel(m.db1) +
+        numel(m.dw2) + numel(m.db2)
+}
+
+// == entry ==
+func main(data: string, steps: int, batch: int, lr: float, log_every: int, threads: int): int sync {
+    set_num_threads(threads)
+
+    // == data ==
+    let train_x = load_npy(data + '/train_x.npy')
+    let val_x = load_npy(data + '/val_x.npy')
+    let noise = load_npy(data + '/noise.npy')
+    let initial = load_model(data)
+    let batches = shape(train_x)[0] / batch
+    let before = evaluate(initial, val_x)
+    `c6 config steps=${steps} batch=${batch} lr=${lr} threads=${threads} params=${count_params(initial)} batches=${batches}`->println
+    `c6 init val_loss=${before.2:.9f} recon=${before.0:.9f} kl=${before.1:.9f}`->println
+
+    // == train ==
+    // The optimizer state is part of the loop state, as in C2.  The noise row for a step is a
+    // contiguous slice, so no sampling happens inside the loop.
+    let started = now()
+    let (trained, optimizer) = loop m = initial, opt = adam_state(initial), step = 0
+        while step < steps
+        do sync {
+            let start = (step % batches) * batch
+            let x = slice(train_x, 0, start, start + batch)
+            let eps = slice(noise, 0, step * batch, step * batch + batch)
+            let (value, gradient) = value_and_grad(loss)<m>(x, eps)
+            if step % log_every == 0 then {
+                `c6 step=${step} loss=${value:.9f}`->println
+            }
+            let next = adam(m, gradient, opt, lr)
+            return (next.0, next.1, step + 1)
+        }
+    let elapsed = now() - started
+
+    // == evaluate ==
+    let after = evaluate(trained, val_x)
+    `c6 trained steps=${steps} seconds=${elapsed:.6f} val_loss=${after.2:.9f} recon=${after.0:.9f} kl=${after.1:.9f}`->println
+    return 0
+}
