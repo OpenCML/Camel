@@ -99,6 +99,19 @@ bool elementEntersIn(
     const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin,
     const literal::Value *written);
 
+/// The element `index` of the elements the GCT kept for a composite literal: its exact value
+/// (when it was a numeric literal) and where it was written. Null when none were kept.
+const GCT::Tree::LiteralElement *
+literalElementAt(const std::vector<GCT::Tree::LiteralElement> *written, size_t index) {
+    return written != nullptr && index < written->size() ? &(*written)[index] : nullptr;
+}
+
+/// The exact value an element was written as, or nullptr for a name, a computed element or a
+/// nested composite (which holds its own elements).
+const literal::Value *writtenValueOf(const GCT::Tree::LiteralElement *element) {
+    return element != nullptr && element->value.has_value() ? &*element->value : nullptr;
+}
+
 /// Whether the composite literal `data` can be given `type`: the walk of compositeDataInType,
 /// unchanged, for the positions a literal may enter (design principles 5.1). The two must agree;
 /// a literal this accepts is converted by compositeDataInType, which reports what does not fit.
@@ -122,11 +135,11 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
         const auto *written =
             origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
         for (size_t index = 0; index < array->raw().size(); ++index) {
-            const literal::Value *exact = nullptr;
-            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
-                exact = &*(*written)[index];
-            }
-            if (!elementEntersIn(array->raw()[index], elemType, origin, exact)) {
+            if (!elementEntersIn(
+                    array->raw()[index],
+                    elemType,
+                    origin,
+                    writtenValueOf(literalElementAt(written, index)))) {
                 return false;
             }
         }
@@ -147,12 +160,13 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
             if (!fieldIndex.has_value()) {
                 return false;
             }
-            const literal::Value *exact = nullptr;
-            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
-                exact = &*(*written)[index];
-            }
+            const GCT::Tree::LiteralElement *element = literalElementAt(written, index);
             ++index;
-            if (!elementEntersIn(value, structType->typeAt(*fieldIndex), origin, exact)) {
+            if (!elementEntersIn(
+                    value,
+                    structType->typeAt(*fieldIndex),
+                    origin,
+                    writtenValueOf(element))) {
                 return false;
             }
         }
@@ -306,12 +320,8 @@ data_ptr_t Builder::compositeDataInType(
         ArrayDataFactory factory;
         size_t index = 0;
         for (const auto &element : array->raw()) {
-            const literal::Value *exact = nullptr;
-            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
-                exact = &*(*written)[index];
-            }
-            ++index;
-            data_ptr_t converted = literalElementInType(element, elemType, origin, exact);
+            data_ptr_t converted =
+                literalElementInType(element, elemType, origin, literalElementAt(written, index++));
             if (converted == nullptr) {
                 return nullptr;
             }
@@ -335,13 +345,11 @@ data_ptr_t Builder::compositeDataInType(
             if (!fieldIndex.has_value()) {
                 return nullptr;
             }
-            const literal::Value *exact = nullptr;
-            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
-                exact = &*(*written)[index];
-            }
-            ++index;
-            data_ptr_t converted =
-                literalElementInType(value, structType->typeAt(*fieldIndex), origin, exact);
+            data_ptr_t converted = literalElementInType(
+                value,
+                structType->typeAt(*fieldIndex),
+                origin,
+                literalElementAt(written, index++));
             if (converted == nullptr) {
                 return nullptr;
             }
@@ -354,7 +362,7 @@ data_ptr_t Builder::compositeDataInType(
 
 data_ptr_t Builder::literalElementInType(
     const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin,
-    const literal::Value *written) {
+    const GCT::Tree::LiteralElement *written) {
     if (data == nullptr || type == nullptr || asTagged(type) != nullptr) {
         return nullptr;
     }
@@ -365,21 +373,29 @@ data_ptr_t Builder::literalElementInType(
         // A nested literal: an array in an array, a struct in an array, and so on.
         return compositeDataInType(data, type, origin);
     }
+    const literal::Value *exact = writtenValueOf(written);
     const std::optional<literal::Value> fallback =
-        written == nullptr ? exactValueOfData(data) : std::nullopt;
-    const literal::Value *value = written != nullptr ? written : fallback ? &*fallback : nullptr;
+        exact == nullptr ? exactValueOfData(data) : std::nullopt;
+    const literal::Value *value = exact != nullptr ? exact : fallback ? &*fallback : nullptr;
     if (value == nullptr || !isNumericType(type) || !isNumericType(data->type())) {
         // Not a numeric literal (a string, a bool): the type is not one it can be given by
         // taking the position's type, so the value is left as it is.
         return nullptr;
     }
+    // The element's own position and its source text, as in a declared position (design
+    // principles 5.1); the whole literal's position only when the GCT kept no element.
+    const bool ownPosition =
+        written != nullptr && written->origin != camel::source::kInvalidOriginId;
+    const camel::source::origin_id_t where = ownPosition ? written->origin : origin->origin();
+    const camel::source::origin_id_t writtenAt =
+        ownPosition ? written->origin : camel::source::kInvalidOriginId;
     if (!literal::kindEnters(*value, type)) {
-        rejectLiteralData(data, type, origin->origin());
+        rejectLiteralData(data, type, where, nullptr, writtenAt);
     }
     if (const auto converted = value->toData(type); converted.has_value()) {
         return *converted;
     }
-    rejectLiteralData(data, type, origin->origin());
+    rejectLiteralData(data, type, where, nullptr, writtenAt);
 }
 
 void Builder::coerceArmExit(

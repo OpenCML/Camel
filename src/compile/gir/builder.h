@@ -490,10 +490,13 @@ class Builder {
         const GCT::node_ptr_t &expr);
     // The same, for a literal whose value is the data `data` (a written literal the GCT
     // converted or kept): reported at `where` and aborted. `written` is the expression the
-    // literal was written as, when it is at hand (its source text is quoted).
+    // literal was written as, when it is at hand (its source text is quoted); `writtenAt` is
+    // the element's own position, for an element of a composite literal whose GCT entry kept
+    // it (the text quoted is then the element as written).
     [[noreturn]] void rejectLiteralData(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
-        camel::source::origin_id_t where, const GCT::node_ptr_t &written = nullptr);
+        camel::source::origin_id_t where, const GCT::node_ptr_t &written = nullptr,
+        camel::source::origin_id_t writtenAt = camel::source::kInvalidOriginId);
 
     // ---- The value of a body (design principles 5.1: a return position) ----
     // The last statement of a body is the value the body hands on, so it is a position with an
@@ -1244,13 +1247,14 @@ class Builder {
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
         const GCT::node_ptr_t &origin);
     /// One element (field) of a composite literal as a value of `type`: the value itself when
-    /// the type accepts it, the exact conversion when it is a literal (`written` is the value
-    /// it was written as, when known), nullptr for a type a literal cannot be given this way
-    /// (`T?` / `T!`, a shape that does not match).
+    /// the type accepts it, the exact conversion when it is a literal (`written` is the
+    /// element as it was written, when the GCT kept it: its value and its position), nullptr
+    /// for a type a literal cannot be given this way (`T?` / `T!`, a shape that does not
+    /// match). A value the type cannot hold is reported at the element's own position,
+    /// quoting it as written.
     camel::core::data::data_ptr_t literalElementInType(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
-        const GCT::node_ptr_t &origin,
-        const camel::compile::literal::Value *written = nullptr);
+        const GCT::node_ptr_t &origin, const GCT::Tree::LiteralElement *written = nullptr);
     // ---- Literals: the value as written, until the context gives it a type (5.1) ----
     /// The exact value of the expression `expr` when it is a literal: a numeric literal
     /// written in the program, or an expression of literals only that folds to one. A name

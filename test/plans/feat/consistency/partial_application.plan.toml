@@ -127,3 +127,50 @@ backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_ambiguous.cml:12:"]
+
+[[tests]]
+name = "partial_application.context_arguments"
+desc = "The context arguments are positions with an expected type, as ordinary arguments are (design principles 4.4, 5.1): `scale<2>` binds an int literal to `with <k: f32>`, `at<[7.0, 8.0]>` an array literal to `with <xs: f32[]>`, `offset<{ x: 1, y: 2 }>` a struct literal to a struct-typed parameter. The four back ends agree."
+kind = "behavior"
+case = "../../../cases/consistency/partial_application/context_arguments.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === "6.0 8.0 1.5", `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "partial_application.err_context_argument_name"
+desc = "A name bound as a context argument is a value of its own type and does not convert: `scale<n>` with `n: int` and `with <k: f32>` is still a refused partial application (design principles 5.1)."
+kind = "negative"
+case = "../../../cases/consistency/partial_application/err_context_argument_name.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_context_argument_name.cml:13:"]
+
+[[tests]]
+name = "partial_application.err_context_argument_out_of_range"
+desc = "An element of a composite literal bound as a context argument is reported at the element, quoting it as written (`1e40`): `at<[1.0, 1e40]>` with `with <xs: f32[]>` is `LiteralNotRepresentable`, not `NoMatchingFunction` and not the whole literal."
+kind = "negative"
+case = "../../../cases/consistency/partial_application/err_context_argument_out_of_range.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 22
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+expect_output_contains = ["'1e40'", "type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

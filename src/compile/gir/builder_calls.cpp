@@ -275,9 +275,26 @@ node_handle_t Builder::partialApplicationOf(
             return false;
         }
         for (size_t i = 0; i < bound.size(); ++i) {
-            if (!entersImplicitly(type->withTypeAt(i), boundTypes[i])) {
+            Type *param = type->withTypeAt(i);
+            if (param == nullptr) {
                 return false;
             }
+            // A `with` parameter is a position with an expected type, like an ordinary
+            // parameter (design principles 4.4, 5.1): `scale<2>` with `with <k: f32>` and
+            // `at<[7.0, 8.0]>` with `with <xs: f32[]>` bind, and the values are converted
+            // below. A name still does not convert.
+            if (param->assignableFrom(boundTypes[i]) || entersImplicitly(param, boundTypes[i])) {
+                continue;
+            }
+            if (const std::optional<literal::Value> value = literalValueOfExpr(bound[i].expr);
+                value.has_value() && literal::kindEnters(*value, param)) {
+                continue;
+            }
+            // An element the type cannot hold still enters here: the conversion reports it.
+            if (compositeLiteralEntersIn(bound[i].node, param, bound[i].expr)) {
+                continue;
+            }
+            return false;
         }
         if (expected == nullptr) {
             return true;
@@ -350,6 +367,21 @@ node_handle_t Builder::partialApplicationOf(
                         calleeType->toString() + "'. Call it with its arguments in place");
             throw BuildAbortException();
         }
+    }
+
+    // A literal bound as a context argument takes the type of its `with` parameter here, now
+    // that the callee is known, exactly as a literal argument does at a call (design principles
+    // 5.1): the captured value is of the parameter's type, so the call the partial application
+    // makes receives it as it is. A value the type cannot hold is reported by coerceTo — for a
+    // composite literal, at the element. A name still does not convert.
+    for (size_t i = 0; i < bound.size(); ++i) {
+        Type *param = calleeType->withTypeAt(i);
+        if (param == nullptr || entersImplicitly(param, boundTypes[i])) {
+            continue;
+        }
+        node_handle_t entered = coerceTo(bound[i].node, param, bound[i].expr);
+        ASSERT(entered != nullptr, "An argument the binding accepted is converted.");
+        bound[i].node = entered;
     }
 
     // The bound values and, unless it is named, the callee: bound to names no program can

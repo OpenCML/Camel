@@ -1,0 +1,16 @@
+/**
+ * Handover H27c: a literal context argument takes the type of its `with` parameter, but a
+ * name is a value of its own type and does not convert (design principles 5.1): `scale<n>`
+ * with `n` an int and `with <k: f32>` stays a refused partial application.
+ */
+module partial_application_context_argument_name
+
+with <k: f32>
+func scale(x: f32): f32 { return x * k }
+
+func main(): int sync {
+    let n = 2
+    let s = scale<n>
+    println(s(3.0))
+    return 0
+}

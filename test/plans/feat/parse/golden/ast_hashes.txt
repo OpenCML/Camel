@@ -368,6 +368,7 @@ e39cd2161b4fdf8d ok test/cases/compile/callform/err_slice_ordinary.cml
 3bf225bdc6517cfc ok test/cases/compile/callform/err_take_ordinary.cml
 9e969d0b581033d1 ok test/cases/compile/callform/err_unrelated.cml
 3461b6ce186bc4cd ok test/cases/compile/callform/kept_forms.cml
+77251ce7afbfd3be ok test/cases/compile/callform/pipeline_arguments.cml
 3d5d2ae56a1ca409 ok test/cases/compile/casts/same_type.cml
 3c92822e6687b76a ok test/cases/compile/check/clean.cml
 015fbe435e54a521 no test/cases/compile/check/lexical_error.cml
@@ -544,6 +545,7 @@ bf47c6018ccceea4 ok test/cases/compile/literals/context_argument_name.cml
 d3be0d7fca3ed697 ok test/cases/compile/literals/context_argument_out_of_range.cml
 1d2605a0fe7c420f ok test/cases/compile/literals/context_arm_exit.cml
 f11cad6f44dba18e ok test/cases/compile/literals/context_arm_value.cml
+1c51fb33272d886f ok test/cases/compile/literals/context_array_argument_element_text.cml
 742648c8fd0f5945 ok test/cases/compile/literals/context_array_argument_out_of_range.cml
 765b61012a832ef5 ok test/cases/compile/literals/context_array_element_out_of_range.cml
 4af40959dc39fde6 ok test/cases/compile/literals/context_composite_argument.cml
@@ -987,9 +989,12 @@ e111d3e56526babc ok test/cases/consistency/operator_overloads/mods/use_namespace
 7dfbc53345cc2879 ok test/cases/consistency/operator_overloads/specific/ns/geo.cml
 2ae271767ffa51c3 ok test/cases/consistency/operator_overloads/specific/ns/in_module.cml
 efc05fc7d514913b ok test/cases/consistency/operator_overloads/specific/ns/use_geo.cml
+cc3f438335451aa9 ok test/cases/consistency/partial_application/context_arguments.cml
 60a14c02f689fe6f ok test/cases/consistency/partial_application/err_ambiguous.cml
 80752f2bf55bf446 ok test/cases/consistency/partial_application/err_argument_type.cml
 6a974542e71f4455 ok test/cases/consistency/partial_application/err_configured_twice.cml
+81845b33a8cc8dde ok test/cases/consistency/partial_application/err_context_argument_name.cml
+d129e3a5a5d4c38a ok test/cases/consistency/partial_application/err_context_argument_out_of_range.cml
 dc66f9a3b30af3d6 ok test/cases/consistency/partial_application/err_var_parameter.cml
 5c3024f8d11e6cec ok test/cases/consistency/partial_application/graph.cml
 444e6ddc322d7a4a ok test/cases/consistency/partial_application/values.cml
