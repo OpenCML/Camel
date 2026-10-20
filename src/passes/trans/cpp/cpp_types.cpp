@@ -21,6 +21,7 @@
 
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
@@ -364,6 +365,11 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         return "double";
     case TypeCode::Bool:
         return "bool";
+    // A complex number is std::complex of its parts' width (include/camel/standalone/complex.h).
+    case TypeCode::Complex64:
+        return "std::complex<float>";
+    case TypeCode::Complex128:
+        return "std::complex<double>";
     case TypeCode::String:
         return "rt::Str";
     case TypeCode::Void:
@@ -844,6 +850,22 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
         return cppFloatLiteral(fromSlot<double>(slot));
     case TypeCode::Bool:
         return fromSlot<bool>(slot) ? "true" : "false";
+    // A complex constant is a std::complex of the two parts' literals (the shortest round-trip
+    // digits; the c64 parts are exactly f32 values).
+    case TypeCode::Complex64: {
+        const auto *value = fromSlot<camel::core::rtdata::Complex *>(slot);
+        return std::format(
+            "std::complex<float>{{{}, {}}}",
+            cppFloatLiteral(value != nullptr ? value->realF() : 0.0f),
+            cppFloatLiteral(value != nullptr ? value->imaginaryF() : 0.0f));
+    }
+    case TypeCode::Complex128: {
+        const auto *value = fromSlot<camel::core::rtdata::Complex *>(slot);
+        return std::format(
+            "std::complex<double>{{{}, {}}}",
+            cppFloatLiteral(value != nullptr ? value->real() : 0.0),
+            cppFloatLiteral(value != nullptr ? value->imaginary() : 0.0));
+    }
     case TypeCode::Void:
         return "rt::Unit{}";
     case TypeCode::String: {

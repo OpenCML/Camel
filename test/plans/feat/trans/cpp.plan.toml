@@ -16,10 +16,22 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "complex_numbers"
+desc = "A complex number is translated as std::complex of its parts' width (c64 is std::complex<float>, c128 is std::complex<double>): the literal is a std::complex of two float literals, `/` goes through rt::complexDiv, which faults on the complex zero at a located site, abs is rt::complexAbs (hypot of the parts), and `^` with an integer exponent is rt::pow (repeated squaring). The program itself is built and run by agree_with_fvm."
+kind = "behavior"
+case = "../../../cases/trans/cpp/complex_scalar.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["std::complex<double>{3.0, 4.0}", "std::complex<float>", "rt::complexDiv(", "rt::complexAbs(", "rt::pow(", "std::exp(", "rt::toText("]
+expect_output_not_contains = ["camel/core/", "libcamel", "TranslationRefused", "bridge"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "agree_with_fvm"
 # Slow layer: measured 23.8 s in the full serial run (docs/handover/reports/H10.md).
 tier = "slow"
-desc = "The programs of test/tools/cppexec/expect.txt are translated with std::cpp, built with the system's C++ compiler and run; each prints what std::fvm prints and exits with its code: scalars and their text, strings, branches as statements, the order of effects, faults with their located report, the recursion limit, tail calls as loops (also between two functions), exit codes, and operators of runtime modules through the bridge."
+desc = "The programs of test/tools/cppexec/expect.txt are translated with std::cpp, built with the system's C++ compiler and run; each prints what std::fvm prints and exits with its code: scalars and their text, strings, branches as statements, the order of effects, faults with their located report, the recursion limit, tail calls as loops (also between two functions), exit codes, complex numbers (arithmetic, `^`, the math functions, their text and formatting, a faulting division), and operators of runtime modules through the bridge."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/cppexec/run.py"
@@ -53,7 +65,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 1
-expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'scale' returns a value of type 'Tensor'; std::cpp translates numbers, bool, string, enums, arrays, tuples, structs, T?, T!, functions and var variables of these, and void"]
+expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'scale' returns a value of type 'Tensor'; std::cpp translates numbers (real and complex), bool, string, enums, arrays, tuples, structs, T?, T!, functions and var variables of these, and void"]
 expect_output_not_contains = ["internal error", "node#", "non-bridgeable", ":?:?:", "#include"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
