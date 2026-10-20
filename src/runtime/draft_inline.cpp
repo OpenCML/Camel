@@ -863,22 +863,18 @@ bool specializeDirectFuncInDraft(
     if (!funcHeader || funcHeader->kind != GCNodeKind::Func) {
         return false;
     }
-    const auto payloadBytes = draft.payloadOf(funcNodeId);
-    if (payloadBytes.size_bytes() < sizeof(GCFuncBody)) {
-        return false;
-    }
-    const auto *funcBody = reinterpret_cast<const GCFuncBody *>(payloadBytes.data());
-    if (!funcBody->calleeGraph) {
+    GCGraph *const calleeGraph = draft.calleeGraphOf(funcNodeId);
+    if (!calleeGraph) {
         return false;
     }
 
     const std::vector<DraftFormalBinding> bindings =
-        collectDirectFuncSpecializations(draft, funcNodeId, funcBody->calleeGraph);
+        collectDirectFuncSpecializations(draft, funcNodeId, calleeGraph);
     CAMEL_LOG_INFO_S(
         "DraftOpt",
         "Specialize FUNC node {} callee='{}' bindings={}.",
         funcNodeId,
-        funcBody->calleeGraph->name(),
+        calleeGraph->name(),
         bindings.size());
     if (bindings.empty()) {
         return false;
@@ -890,19 +886,19 @@ bool specializeDirectFuncInDraft(
         std::ranges::none_of(
             bindings,
             [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
-        onCallCycle(funcBody->calleeGraph);
+        onCallCycle(calleeGraph);
     if (boundedTypeSpecialization &&
         !session.findSpecialization(
-            makeRuntimeSpecializationKey(funcBody->calleeGraph, bindings))) {
-        const GraphId root = isValid(funcBody->calleeGraph->typeSpecializationRoot())
-                                 ? funcBody->calleeGraph->typeSpecializationRoot()
-                                 : funcBody->calleeGraph->id();
+            makeRuntimeSpecializationKey(calleeGraph, bindings))) {
+        const GraphId root = isValid(calleeGraph->typeSpecializationRoot())
+                                 ? calleeGraph->typeSpecializationRoot()
+                                 : calleeGraph->id();
         if (session.typeSpecializationCount(root) >= kMaxTypeSpecializationsPerRecursiveFunction) {
             CAMEL_LOG_INFO_S(
                 "DraftOpt",
                 "FUNC node {} keeps callee '{}': '{}' has {} type specializations.",
                 funcNodeId,
-                funcBody->calleeGraph->name(),
+                calleeGraph->name(),
                 toText(root),
                 kMaxTypeSpecializationsPerRecursiveFunction);
             return false;
@@ -912,7 +908,7 @@ bool specializeDirectFuncInDraft(
 
     GCGraph *specializedGraph = specializeGraphWithBindings(
         session,
-        funcBody->calleeGraph,
+        calleeGraph,
         bindings,
         boundedTypeSpecialization ? kTypeSpecializationTag : std::string_view("spec"),
         specializationNonce++);
@@ -926,7 +922,7 @@ bool specializeDirectFuncInDraft(
         draft.withInputsOf(funcNodeId).begin(),
         draft.withInputsOf(funcNodeId).end());
 
-    const size_t normCount = funcBody->calleeGraph->normPorts().size();
+    const size_t normCount = calleeGraph->normPorts().size();
     std::vector<gc_node_ref_t> boundActuals; // arguments the call no longer passes
     for (auto it = bindings.rbegin(); it != bindings.rend(); ++it) {
         if (!it->bindsValue()) {
@@ -944,8 +940,8 @@ bool specializeDirectFuncInDraft(
         }
     }
 
-    GCFuncBody newBody{.calleeGraph = specializedGraph};
-    std::array<std::byte, sizeof(GCFuncBody)> newPayload{};
+    GCFuncRef newBody{.ref = draft.payloadGraphIndexOf(specializedGraph)};
+    std::array<std::byte, sizeof(GCFuncRef)> newPayload{};
     std::memcpy(newPayload.data(), &newBody, sizeof(newBody));
     init.payload    = std::span<const std::byte>(newPayload.data(), newPayload.size());
     init.normInputs = normInputs;
@@ -1122,8 +1118,8 @@ bool devirtualizeClosureCallInDraft(
         draft.normInputsOf(callNodeId).end());
     normInputs.insert(normInputs.end(), captures.begin(), captures.end());
     const std::vector<gc_node_ref_t> directWith(withInputs.begin() + 1, withInputs.end());
-    GCFuncBody funcBody{.calleeGraph = lifted};
-    std::array<std::byte, sizeof(GCFuncBody)> payload{};
+    GCFuncRef funcBody{.ref = draft.payloadGraphIndexOf(lifted)};
+    std::array<std::byte, sizeof(GCFuncRef)> payload{};
     std::memcpy(payload.data(), &funcBody, sizeof(funcBody));
     init.kind                       = GCNodeKind::Func;
     init.payload                    = std::span<const std::byte>(payload.data(), payload.size());
@@ -1229,8 +1225,8 @@ bool devirtualizeStaticCallInDraft(
     }
 
     DraftNodeInit init = snapshotNodeInit(draft, callNodeId);
-    GCFuncBody funcBody{.calleeGraph = targetGraph};
-    std::array<std::byte, sizeof(GCFuncBody)> newPayload{};
+    GCFuncRef funcBody{.ref = draft.payloadGraphIndexOf(targetGraph)};
+    std::array<std::byte, sizeof(GCFuncRef)> newPayload{};
     std::memcpy(newPayload.data(), &funcBody, sizeof(funcBody));
     init.kind    = GCNodeKind::Func;
     init.payload = std::span<const std::byte>(newPayload.data(), newPayload.size());
@@ -1835,17 +1831,8 @@ DraftInlineResult inlineCallableInDraft(
         return result;
     }
 
-    const auto payloadBytes = draft.payloadOf(funcNodeId);
-    if (payloadBytes.size_bytes() < sizeof(GCFuncBody)) {
-        CAMEL_LOG_INFO_S(
-            "DraftInline",
-            "Inline splice node {} rejected: payload too small ({} bytes).",
-            funcNodeId,
-            payloadBytes.size_bytes());
-        return result;
-    }
-    const auto *funcBody = reinterpret_cast<const GCFuncBody *>(payloadBytes.data());
-    if (!funcBody->calleeGraph) {
+    GCGraph *const calleeGraph = draft.calleeGraphOf(funcNodeId);
+    if (!calleeGraph) {
         CAMEL_LOG_INFO_S(
             "DraftInline",
             "Inline splice node {} rejected: null callee graph.",
@@ -1853,10 +1840,10 @@ DraftInlineResult inlineCallableInDraft(
         return result;
     }
 
-    const GraphDraft *calleeDraftView             = session.tryDraft(funcBody->calleeGraph);
+    const GraphDraft *calleeDraftView             = session.tryDraft(calleeGraph);
     const std::vector<gc_node_ref_t> actualInputs = orderedFuncActualInputs(draft, funcNodeId);
     const auto formalNodes = calleeDraftView ? orderedDirectCallFormalNodes(*calleeDraftView)
-                                             : orderedDirectCallFormalNodes(funcBody->calleeGraph);
+                                             : orderedDirectCallFormalNodes(calleeGraph);
     if (actualInputs.size() != formalNodes.size()) {
         CAMEL_LOG_INFO_S(
             "DraftInline",
@@ -1867,9 +1854,9 @@ DraftInlineResult inlineCallableInDraft(
         return DraftInlineResult{};
     }
     const gc_node_ref_t calleeEntry =
-        calleeDraftView ? calleeDraftView->entryNode() : funcBody->calleeGraph->entryNodeRef();
+        calleeDraftView ? calleeDraftView->entryNode() : calleeGraph->entryNodeRef();
     const gc_node_ref_t calleeOutput =
-        calleeDraftView ? calleeDraftView->outputNode() : funcBody->calleeGraph->outputNodeRef();
+        calleeDraftView ? calleeDraftView->outputNode() : calleeGraph->outputNodeRef();
     if (calleeEntry == kInvalidNodeRef || calleeOutput == kInvalidNodeRef) {
         CAMEL_LOG_INFO_S(
             "DraftInline",
@@ -1884,7 +1871,7 @@ DraftInlineResult inlineCallableInDraft(
         "DraftInline",
         "Inline splice node {} validated callee graph {:p}.",
         funcNodeId,
-        static_cast<void *>(funcBody->calleeGraph));
+        static_cast<void *>(calleeGraph));
 
     // What the body has to wait on: the control predecessors of the call, and the arguments
     // that place the call inside a branch arm (see armPlacingArguments).
@@ -1901,7 +1888,7 @@ DraftInlineResult inlineCallableInDraft(
 
     DraftGraphCloneResult cloned = calleeDraftView
                                        ? cloneDraftGraphIntoDraft(draft, *calleeDraftView)
-                                       : cloneRuntimeGraphIntoDraft(draft, funcBody->calleeGraph);
+                                       : cloneRuntimeGraphIntoDraft(draft, calleeGraph);
     CAMEL_LOG_INFO_S(
         "DraftInline",
         "Inline splice node {} cloned {} nodes from callee.",
@@ -1909,7 +1896,7 @@ DraftInlineResult inlineCallableInDraft(
         cloned.clonedNodes.size());
     const std::vector<gc_node_ref_t> entryRoots =
         calleeDraftView ? collectExecutableEntryRoots(*calleeDraftView, cloned.sourceToCloned)
-                        : collectExecutableEntryRoots(funcBody->calleeGraph, cloned.sourceToCloned);
+                        : collectExecutableEntryRoots(calleeGraph, cloned.sourceToCloned);
     CAMEL_LOG_INFO_S(
         "DraftInline",
         "Inline splice node {} collected {} executable entry roots.",
@@ -1918,7 +1905,7 @@ DraftInlineResult inlineCallableInDraft(
 
     const auto clonedFormalNodes =
         calleeDraftView ? orderedClonedDirectCallFormalNodes(cloned, *calleeDraftView)
-                        : orderedClonedDirectCallFormalNodes(cloned, funcBody->calleeGraph);
+                        : orderedClonedDirectCallFormalNodes(cloned, calleeGraph);
     ASSERT(
         clonedFormalNodes.size() == formalNodes.size(),
         "Runtime inline formal-node planning diverged between source and cloned graphs.");
@@ -2006,7 +1993,7 @@ DraftInlineResult inlineCallableInDraft(
     result.valueExit = resolveInlineValueExit(
         draft,
         cloned,
-        funcBody->calleeGraph,
+        calleeGraph,
         calleeDraftView,
         boundActualInputs);
     if (result.valueExit == kInvalidNodeRef) {
@@ -2022,12 +2009,12 @@ DraftInlineResult inlineCallableInDraft(
                 result.valueExit,
                 draft.header(result.valueExit) ? draft.header(result.valueExit)->dataIndex : 0,
                 "<draft>",
-                funcBody->calleeGraph ? funcBody->calleeGraph->name() : "<null>"));
+                calleeGraph ? calleeGraph->name() : "<null>"));
     }
     result.ctrlExit = resolveInlineCtrlExit(
         draft,
         cloned,
-        funcBody->calleeGraph,
+        calleeGraph,
         calleeDraftView,
         boundActualInputs);
     if (result.ctrlExit == kInvalidNodeRef) {

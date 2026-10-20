@@ -747,25 +747,25 @@ void emitDraftPayload(
         switch (draftHeader->kind) {
         case GCNodeKind::Func:
             if (!payloadBytes.empty()) {
-                GCFuncBody body = *reinterpret_cast<const GCFuncBody *>(payloadBytes.data());
+                GCGraph *callee = draft.calleeGraphOf(planned.draftId);
                 CAMEL_LOG_INFO_S(
                     "GCGraphBuild",
                     "FUNC node runtimeRef={} placeholder before resolve={}.",
                     planned.ref,
-                    static_cast<const void *>(body.calleeGraph));
+                    static_cast<const void *>(callee));
                 if (resolveRuntimeGraph) {
-                    body.calleeGraph = resolveRuntimeGraph(body.calleeGraph);
+                    callee = resolveRuntimeGraph(callee);
                 }
                 CAMEL_LOG_INFO_S(
                     "GCGraphBuild",
                     "FUNC node runtimeRef={} callee after resolve={}.",
                     planned.ref,
-                    static_cast<const void *>(body.calleeGraph));
+                    static_cast<const void *>(callee));
                 // The frozen node names the callee by its index in the reference table; a
                 // callee that is not in it is a graph the encoder was not told this one calls.
                 const auto *refIndex = payload.refIndex;
                 const auto found =
-                    refIndex ? refIndex->find(body.calleeGraph)
+                    refIndex ? refIndex->find(callee)
                              : std::unordered_map<const GCGraph *, uint32_t>::const_iterator{};
                 if (refIndex == nullptr || found == refIndex->end()) {
                     throw std::runtime_error(
@@ -781,9 +781,9 @@ void emitDraftPayload(
             // The draft holds the two graphs; the frozen node names them by their indexes in
             // the reference table, as a FUNC node names its callee.
             ASSERT(
-                payloadBytes.size_bytes() >= sizeof(GCLoopBody),
+                payloadBytes.size_bytes() >= sizeof(GCLoopRef),
                 "Draft LOOP payload is missing.");
-            GCLoopBody body = *reinterpret_cast<const GCLoopBody *>(payloadBytes.data());
+            GCLoopBody body = draft.loopGraphsOf(planned.draftId);
             if (resolveRuntimeGraph) {
                 body.condGraph = body.condGraph ? resolveRuntimeGraph(body.condGraph) : nullptr;
                 body.bodyGraph = resolveRuntimeGraph(body.bodyGraph);

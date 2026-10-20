@@ -447,7 +447,7 @@ void replaceLoop(GraphDraft &draft, const LoopShape &loop, GCGraph *rec) {
     }
 
     const DraftNodeHeader *header = draft.header(id);
-    const GCFuncBody body{.calleeGraph = rec};
+    const GCFuncRef body{.ref = draft.payloadGraphIndexOf(rec)};
     std::vector<std::byte> payload(sizeof(body));
     std::memcpy(payload.data(), &body, sizeof(body));
     const std::vector<gc_node_ref_t> ctrl(

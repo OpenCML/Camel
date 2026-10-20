@@ -384,22 +384,17 @@ void visitDraftGraphs(
         }
         const DraftNodeHeader *header = draft.header(id);
         if (header && header->kind == GCNodeKind::Loop) {
-            const auto *loop = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(id).data());
-            if (loop->condGraph) {
-                visitor(loop->condGraph);
+            const GCLoopBody loop = draft.loopGraphsOf(id);
+            if (loop.condGraph) {
+                visitor(loop.condGraph);
             }
-            visitor(loop->bodyGraph);
+            visitor(loop.bodyGraph);
             continue;
         }
         if (!header || header->kind != GCNodeKind::Func) {
             continue;
         }
-        auto payload = draft.payloadOf(id);
-        if (payload.size_bytes() < sizeof(GCFuncBody)) {
-            continue;
-        }
-        auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-        visitor(body->calleeGraph);
+        visitor(draft.calleeGraphOf(id));
     }
 
     const auto staticSlotTypes = draft.staticSlotTypes();
@@ -428,20 +423,15 @@ std::vector<GCGraph *> collectDraftDependencyGraphs(const GraphDraft &draft) {
         const DraftNodeHeader *header = draft.header(id);
         if (header && header->kind == GCNodeKind::Loop) {
             // A LOOP node calls its two graphs each round: they are callees too.
-            const auto *loop = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(id).data());
-            pushUniqueGraph(dependencies, loop->condGraph);
-            pushUniqueGraph(dependencies, loop->bodyGraph);
+            const GCLoopBody loop = draft.loopGraphsOf(id);
+            pushUniqueGraph(dependencies, loop.condGraph);
+            pushUniqueGraph(dependencies, loop.bodyGraph);
             continue;
         }
         if (!header || header->kind != GCNodeKind::Func) {
             continue;
         }
-        auto payload = draft.payloadOf(id);
-        if (payload.size_bytes() < sizeof(GCFuncBody)) {
-            continue;
-        }
-        auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-        pushUniqueGraph(dependencies, body->calleeGraph);
+        pushUniqueGraph(dependencies, draft.calleeGraphOf(id));
     }
     return dependencies;
 }

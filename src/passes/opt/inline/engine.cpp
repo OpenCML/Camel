@@ -53,7 +53,6 @@
 namespace {
 
 using camel::runtime::gc_node_ref_t;
-using camel::runtime::GCFuncBody;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::kInvalidNodeRef;
@@ -194,12 +193,8 @@ std::unordered_map<const GCGraph *, size_t> directCallCounts(
                 if (!header || header->kind != GCNodeKind::Func) {
                     continue;
                 }
-                const auto payload = draft->payloadOf(id);
-                if (payload.size_bytes() >= sizeof(GCFuncBody)) {
-                    const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-                    if (body->calleeGraph) {
-                        ++counts[body->calleeGraph];
-                    }
+                if (GCGraph *callee = draft->calleeGraphOf(id)) {
+                    ++counts[callee];
                 }
             }
             continue;
@@ -340,10 +335,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
                 if (!header || header->kind != GCNodeKind::Func) {
                     continue;
                 }
-                const auto payload = draft->payloadOf(id);
-                if (payload.size_bytes() >= sizeof(GCFuncBody)) {
-                    reach(reinterpret_cast<const GCFuncBody *>(payload.data())->calleeGraph);
-                }
+                reach(draft->calleeGraphOf(id));
             }
             const auto slots = draft->staticSlots();
             const auto types = draft->staticSlotTypes();
@@ -674,9 +666,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                         roundCallCounts.reset();
                         // The callee after the rewrite is the copy (counted in full even when
                         // an existing copy was reused).
-                        const auto *body = reinterpret_cast<const GCFuncBody *>(
-                            draft.payloadOf(funcNodeId).data());
-                        growthSpent += body->calleeGraph ? body->calleeGraph->nodeCount() : 0;
+                        const GCGraph *copy = draft.calleeGraphOf(funcNodeId);
+                        growthSpent += copy ? copy->nodeCount() : 0;
                     }
                 }
             }
@@ -730,27 +721,23 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 if (draft.sourceRefOf(id) == kInvalidNodeRef) {
                     continue;
                 }
-                const auto payload = draft.payloadOf(id);
-                if (payload.size_bytes() < sizeof(GCFuncBody)) {
-                    continue;
-                }
-                const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-                if (!body->calleeGraph || body->calleeGraph == nextGraph) {
+                GCGraph *const calleeGraph = draft.calleeGraphOf(id);
+                if (!calleeGraph || calleeGraph == nextGraph) {
                     continue;
                 }
                 // Growth: the copy must fit the pass's budget and the owner's size cap. Both are
                 // checked last (below), so that a call they stop is known to be one the engine
                 // would otherwise have inlined.
-                const size_t copied = inlinedNodeCount(body->calleeGraph);
+                const size_t copied = inlinedNodeCount(calleeGraph);
                 const size_t calls =
-                    callCounts.contains(body->calleeGraph) ? callCounts.at(body->calleeGraph) : 0;
+                    callCounts.contains(calleeGraph) ? callCounts.at(calleeGraph) : 0;
                 const auto decline = [&](InlineDecline why) {
                     declined.push_back(
-                        {nextGraph, body->calleeGraph, why, copied, draft.nodeCount(), calls});
+                        {nextGraph, calleeGraph, why, copied, draft.nodeCount(), calls});
                 };
                 if (shouldSkipRecursiveInline(
                         nextGraph,
-                        body->calleeGraph,
+                        calleeGraph,
                         sccInfo,
                         config.inlineConfig)) {
                     decline(InlineDecline::Recursive);
@@ -766,22 +753,22 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 // that calls of it can be devirtualized.
                 // Graphs created in this session (specializations, lifted closures) are not in
                 // the call-graph analysis yet; they qualify in the next session.
-                const bool acyclic = sccInfo.componentOf.contains(body->calleeGraph) &&
-                                     !sccInfo.reachesRecursion.contains(body->calleeGraph);
+                const bool acyclic = sccInfo.componentOf.contains(calleeGraph) &&
+                                     !sccInfo.reachesRecursion.contains(calleeGraph);
                 const bool isSmall =
-                    isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig) ||
-                    (acyclic && calls == 1) || (acyclic && returnsClosure(body->calleeGraph)) ||
+                    isSmallRuntimeSubgraphForInline(calleeGraph, config.inlineConfig) ||
+                    (acyclic && calls == 1) || (acyclic && returnsClosure(calleeGraph)) ||
                     (acyclic && calls > 1 &&
                      (calls - 1) * copied <= config.inlineConfig.duplicationBudgetNodes);
                 CAMEL_LOG_INFO_S(
                     "OptimizePass",
                     "Inline probe '{}' -> '{}': small={} acyclic={} calls={} closure={}.",
                     nextGraph->name(),
-                    body->calleeGraph->name(),
-                    isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig),
+                    calleeGraph->name(),
+                    isSmallRuntimeSubgraphForInline(calleeGraph, config.inlineConfig),
                     acyclic,
                     calls,
-                    returnsClosure(body->calleeGraph));
+                    returnsClosure(calleeGraph));
                 const bool isArm = isDraftBranchArmHead(draft, id);
                 const bool suppressNonRecursiveArmInlining =
                     config.inlineConfig.inlineStrategy == InlineTargetStrategy::Hybrid &&
@@ -817,9 +804,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 if (!draft.alive(funcNodeId)) {
                     continue;
                 }
-                const size_t copied = inlinedNodeCount(
-                    reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data())
-                        ->calleeGraph);
+                const size_t copied = inlinedNodeCount(draft.calleeGraphOf(funcNodeId));
                 if (!camel::passes::opt::inlineCallInOrder(session, draft, funcNodeId)) {
                     continue;
                 }
@@ -902,8 +887,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
     // is spliced; the inliner hands a call's control predecessors to the body.
     // Only a body that has an effect or touches state cares when it runs; a pure
     // callee (most of a tensor program) gets no extra edge.
-    const bool calleeOrdered = mayHaveEffects(
-        reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data())->calleeGraph);
+    const bool calleeOrdered = mayHaveEffects(draft.calleeGraphOf(funcNodeId));
     for (gc_node_ref_t source : argSources) {
         if (!calleeOrdered) {
             break;

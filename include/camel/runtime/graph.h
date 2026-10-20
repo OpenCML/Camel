@@ -119,7 +119,7 @@ enum class GCNodeKind : uint8_t {
     // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):
     // Norm inputs the array (For, ForWhile) then the k first values of the state; With inputs
     // the m captured values, shared by the condition graph and the body graph; Ctrl inputs
-    // ordering. Its payload names the two graphs (GCLoopRef / GCLoopBody). Its value is the
+    // ordering. Its payload names the two graphs (GCLoopRef). Its value is the
     // last state: the value when k = 1, the k-tuple when k > 1. A producer may also give it s
     // collection slots (payload collectionCount): the body then returns (state…, v…) each round
     // and the value is (state…, array…), the arrays holding the v of every round (see
@@ -222,24 +222,23 @@ enum GCGraphRefRole : uint8_t {
     kGraphRefStatic = 1 << 2, // the graph of a function constant of the static area
 };
 
-/// Payload of a FUNC node in a frozen graph: the index of the callee in the graph's reference
-/// table. (A draft's FUNC payload is a GCFuncBody, holding the callee itself; the encoder
-/// turns one into the other.)
+/// "No graph" in a GCFuncRef or a GCLoopRef: a FUNC node that names no callee yet, the condition
+/// of a For loop.
+inline constexpr uint32_t kNoLoopGraph = UINT32_MAX;
+
+/// Payload of a FUNC node: the index of the callee in the graph's reference table (a draft has
+/// one too, GraphDraft::payloadGraphs), kNoLoopGraph for none yet.
 struct GCFuncRef {
-    uint32_t ref      = 0;
+    uint32_t ref      = kNoLoopGraph;
     uint32_t reserved = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCFuncRef>);
-
-/// "No graph" in a GCLoopRef: the condition of a For loop.
-inline constexpr uint32_t kNoLoopGraph = UINT32_MAX;
 
 /// Payload of a LOOP node in a frozen graph: its form, the indexes of its condition graph
 /// (kNoLoopGraph for For) and of its body graph in the graph's reference table, where both are
 /// marked callee and nested (the LOOP node calls them each round; they are written inside the
 /// graph), and how many values the loop collects into arrays (its collection slots; 0 for a
-/// loop the source wrote, which has none). (A draft's LOOP payload is a GCLoopBody, holding the
-/// graphs themselves.)
+/// loop the source wrote, which has none).
 struct GCLoopRef {
     camel::core::LoopKind kind = camel::core::LoopKind::While;
     uint8_t reserved0          = 0;
@@ -251,7 +250,8 @@ struct GCLoopRef {
 static_assert(std::is_trivially_copyable_v<GCLoopRef>);
 static_assert(sizeof(GCLoopRef) == 16, "A LOOP payload is two words.");
 
-/// Payload of a LOOP node in a draft (see GCLoopRef for frozen graphs).
+/// What a LOOP node names, as values: the graphs themselves instead of their reference-table
+/// indexes (GraphDraft::loopGraphsOf, GCGraph's loopBodyOf).
 struct GCLoopBody {
     class GCGraph *condGraph   = nullptr; // nullptr for a For loop
     class GCGraph *bodyGraph   = nullptr;
@@ -261,12 +261,6 @@ struct GCLoopBody {
     uint32_t collectionCount   = 0; // the typed collection slots of the loop (see LoopView)
 };
 static_assert(std::is_trivially_copyable_v<GCLoopBody>);
-
-/// Payload of a FUNC node in a draft (see GCFuncRef for frozen graphs).
-struct GCFuncBody {
-    class GCGraph *calleeGraph = nullptr;
-};
-static_assert(std::is_trivially_copyable_v<GCFuncBody>);
 
 struct GCCallBody {
     GCCallKind callKind = GCCallKind::Indirect;
