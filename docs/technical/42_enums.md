@@ -40,7 +40,7 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 - 匹配（`visitEnumMatch`）：先 `__enum_tag__(value) => int` 取一次标签，绑定成临时值；然后按源码顺序生成一条**嵌套分支链**：每一层判断 `tag == 变体的常量`，成立走该臂（用 `__enum_field__(tag, index, value)` 取出字段、绑定名字），否则进入下一层。最后一层要么是 `case _` 的臂，要么在穷尽时是一份最后臂的副本（不可达，只为让 `BRCH` 的第二条臂与 `JOIN` 有值）。只有 `case _` 时直接用一条常量 `true` 的单臂分支。分支链是普通的 `BRCH`/`JOIN`，四个调度器都已有。
 - `__enum_field__` 的签名是 `(tag: int, index: int, value: E) => T`，`tag` 与 `index` 都必须是静态字面量：**字段的类型由变体决定**，`EnumOpTypeResolver` 从 `normStatics` 读出它们、从 `norm[2]` 的枚举类型取出 `fieldType(tag, index)`。运行期 `tag` 用作断言：值的标签与模式不一致说明图与源码不一致，是内部错误。
 - 结果类型由算子自己的解析器决定（`EnumOpTypeResolver` 重写 `resolve` / `resolveWith` / `resolveForCall`），不在建完调用之后改节点类型：这是算子注册的既有约定，`T?`/`T!` 的算子也这样做。
-- 诊断在**建图时**给出，位置是源码区间：`EnumConstructionMismatch`、`EnumVariantFieldCount`、`EnumFieldTypeMismatch`、`EnumTypeArgumentNotInferred`、`EnumFieldAccess`（对枚举值用 `ACCS`）、`EnumPatternMismatch`、`EnumMatchNotExhaustive`、`DuplicateEnumVariant`、`DuplicateEnumField`、`EnumVariantCaseRepeated`（警告）、`MatchCaseAfterWildcard`（警告）。
+- 诊断在**建图时**给出，位置是源码区间：`EnumConstructionMismatch`、`EnumVariantFieldCount`、`EnumFieldTypeMismatch`、`EnumTypeArgumentNotInferred`、`EnumFieldAccess`（对枚举值用 `ACCS`）、`EnumPatternMismatch`、`EnumMatchNotExhaustive`、`DuplicateEnumVariant`、`DuplicateEnumField`、`EnumVariantCaseRepeated`（警告）、`MatchCaseAfterWildcard`（警告）、`MatchWildcardRedundant`（警告：列全所有变体后还写 `case _`）。`case Empty`（单元变体不写限定名）被读成绑定名，`EnumPatternMismatch` 指出它是该枚举的变体并给出 `case Shape::Empty`。
 
 ## 运行时
 
@@ -52,11 +52,11 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 
 `std::nvm`、`std::fvm`、`std::jit`、`std::prl` 都只看见普通的构造、`__enum_*__` 调用、`BRCH`/`JOIN`，不需要为枚举加分支。`std::macro` 遇到能求值的部分照常求值，枚举值可以成为宏的结果并物化为常量。
 
-`std::cpp`、`onnx::export`、autodiff 暂时拒绝：前两者是翻译目标还没有枚举的表示，autodiff 是"把依赖微分参数的值放进枚举"没有导数规则。三处都给出带位置的 `RuntimeDiag::TranslationRefused` / `MacroEvaluationFailed`，而不是返回 0 或崩溃。`std::cpp` 的支持需要先在 `camel/standalone/runtime.h` 里给出枚举的运行时表示与构造/取标签/取字段/打印/相等的辅助，再在 `cpp_types` 与算子规则里接上，见交接报告 H1 的"没做完的"。
+`onnx::export` 与 autodiff 拒绝：ONNX 是翻译目标还没有枚举的表示，autodiff 是"把依赖微分参数的值放进枚举"没有导数规则。两者都给出带位置的 `RuntimeDiag::TranslationRefused` / `MacroEvaluationFailed`，而不是返回 0 或崩溃。`std::cpp` 已经支持枚举（H8）：每个枚举生成一个带 `tag` 与 `std::variant` 载荷的 `struct`，构造与读取由声明生成的 `make<Tag>` / `get<Tag, Index>` 完成，打印与解释器逐字一致；实现见 `include/camel/standalone/enum.h`、`cpp_types.cpp` 与 `operator_rules.cpp`，测试见 `trans/cpp.plan.toml` 的 `enum_types` 与 `test/tools/cppexec/expect.txt`。
 
 ## 已退役的联合类型
 
-语言层不再有联合类型：`A | B` 在 GCT 的 `visitTypeExpr` 里给出 `UnionTypeRetired`，`T ? U` 给出 `ReservedTypeQuestionRetired`。解析器仍认识这两条产生式，只为把诊断定位在源码上；`UnionType` 类本身还留在类型层，但已经没有任何语言入口能构造它（清理它需要同时改 `storage.h`、`typevar.cpp`、`tuple.cpp` 与 ANTLR 生成的头文件，见报告）。`stdlib/signatures/*.cml` 里原先用联合写的签名已按接受类型展开成多条声明（例如 `sqrt` 的四条），`json` 的访问器写成 `Json` 与 `Json?` 两条。
+语言层不再有联合类型：`A | B` 在 GCT 的 `visitTypeExpr` 里给出 `UnionTypeRetired`，`T ? U` 给出 `ReservedTypeQuestionRetired`。解析器仍认识这两条产生式，只为把诊断定位在源码上；`UnionType` 类型类已删除（H8）：`union.h/.cpp`、`TypeStorageKind::Union`、`TypeCode` 的编号（按退役的 `any` 的先例留注释）与 `typevar.cpp`/`tuple.cpp` 的分支都去掉了，语言入口只剩退役诊断。`stdlib/signatures/*.cml` 里原先用联合写的签名已按接受类型展开成多条声明（例如 `sqrt` 的四条），`json` 的访问器写成 `Json` 与 `Json?` 两条。
 
 ## 留给语言作者的问题
 

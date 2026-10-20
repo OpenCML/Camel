@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-164 diagnostics: 148 errors, 16 warnings.
+165 diagnostics: 148 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -145,6 +145,7 @@ prints one entry.
 | `0x03100111` | [SemanticDiag::KnownNotNull](#knownnotnull) | Warn |
 | `0x03100130` | [SemanticDiag::EnumVariantCaseRepeated](#enumvariantcaserepeated) | Warn |
 | `0x03100131` | [SemanticDiag::MatchCaseAfterWildcard](#matchcaseafterwildcard) | Warn |
+| `0x03100132` | [SemanticDiag::MatchWildcardRedundant](#matchwildcardredundant) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -3702,6 +3703,43 @@ func f(s: Shape): float {
         case Shape::Circle(r) => r
         case _ => -1.0
         case Shape::Empty => 0.0
+    }
+}
+
+func main(): void sync {
+    println(f(Shape::Circle(1.0)))
+}
+```
+
+### MatchWildcardRedundant
+
+`0x03100132` · Warn · `SemanticDiag::MatchWildcardRedundant`
+
+**Message**
+
+```text
+Every variant of '{0}' is matched before 'case _': the wildcard is never taken.
+```
+
+**Help**
+
+```text
+Naming every variant already covers every value of the enum. Remove 'case _', or remove the case it was meant to stand in for.
+```
+
+**Example** (`test/cases/compile/enum/warn_redundant_wildcard.cml`, run as `camel -E short test/cases/compile/enum/warn_redundant_wildcard.cml`)
+
+```camel
+type Shape = enum {
+    Circle(float),
+    Empty,
+}
+
+func f(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => r
+        case Shape::Empty => 0.0
+        case _ => -1.0
     }
 }
 
