@@ -954,13 +954,21 @@ class Builder {
     /// Builds `graph`, a loop's condition or body graph made with its ports, from `exec`: the
     /// names of its Norm ports are declared in it, and its result is the value of the block.
     void buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec);
-    /// Rewrites the body of a loop whose only use of its (single) state is `xs->append<v>`,
-    /// when the state's first value is a fresh literal, to the form that may append to the
-    /// state in place (design principles 10.5): the state's old value cannot be seen once the
-    /// next round begins, the same criterion as `t = t->relu`.
+    /// Rewrites the body of a loop whose state values are handed back as `xs->append<v>`, when
+    /// that state's first value is a fresh literal, to the form that may append to the state in
+    /// place (design principles 10.5): the state's old value cannot be seen once the next round
+    /// begins, the same criterion as `t = t->relu`. The decision is made per state, so a loop
+    /// that appends to one state and counts in another rewrites only the appended one; with one
+    /// state the body hands the append call back directly, with several it returns a tuple whose
+    /// j-th component is state j's next value.
     void markLoopStateInPlace(
         const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
         std::vector<node_handle_t> &initial);
+    /// The per-state half of markLoopStateInPlace: rewrites state `index` when its next value
+    /// (`next`) is `state->append<v>` and the body uses that state's parameter nowhere else.
+    void markLoopStateInPlaceOne(
+        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+        std::vector<node_handle_t> &initial, size_t index, node_handle_t next);
     /// The condition and the body graph of a loop capture the same values in the same order
     /// (design principles 3.10: one capture table): a capture made into one is made into the
     /// other (captureInto).
