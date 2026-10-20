@@ -280,10 +280,10 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
         size_t i = 0;
         for (; i < nodesSize; ++i) {
-            const gc_node_ref_t nodeRef = currNodes[i];
+            const camel::runtime::ExecNode &en = currPlan->nodes[i];
+            const gc_node_ref_t nodeRef = en.ref;
             faultNodeRef                = nodeRef;
-            const GCNode *n             = currRuntimeGraph->node(nodeRef);
-            ASSERT(n != nullptr, "NodeVM execution resolved to a null runtime node.");
+            const GCNode *n             = en.node;
 
             if (tillNode != kInvalidNodeRef) {
                 if (tillNode == nodeRef) {
@@ -345,7 +345,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             });
             switch (n->kind) {
             case GCNodeKind::Cast: {
-                const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
+                const auto normInputs = en.normInputs();
                 ASSERT(!normInputs.empty(), "CAST node must have one norm input.");
                 const auto srcIdx = planDataIndex(*currPlan, normInputs.front());
                 Type *srcType     = currFrame->typeAt<Type>(srcIdx);
@@ -356,7 +356,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             } break;
 
             case GCNodeKind::Copy: {
-                const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
+                const auto normInputs = en.normInputs();
                 ASSERT(!normInputs.empty(), "COPY node must have one norm input.");
                 gc_data_idx_t srcIdx = planDataIndex(*currPlan, normInputs.front());
                 TypeCode srcCode     = currFrame->codeAt(srcIdx);
@@ -372,8 +372,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             } break;
 
             case GCNodeKind::Fill: {
-                const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
-                const auto dataInputs = currRuntimeGraph->withInputsOf(nodeRef);
+                const auto normInputs = en.normInputs();
+                const auto dataInputs = en.withInputs();
                 ASSERT(!normInputs.empty(), "FILL node must have one source input.");
                 const auto srcIdx = planDataIndex(*currPlan, normInputs.front());
                 Type *srcType     = n->dataType();
@@ -390,16 +390,16 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 camel::execute::writeRuntimeFillSlots(
                     srcObj,
                     srcType,
-                    currRuntimeGraph->nodeBodyAs<camel::runtime::GCFillBody>(nodeRef),
+                    en.bodyAs<camel::runtime::GCFillBody>(),
                     fillValues);
                 currFrame->set(n->dataIndex, srcObj);
             } break;
 
             case GCNodeKind::Accs: {
-                const auto normInputs = currRuntimeGraph->normInputsOf(nodeRef);
+                const auto normInputs = en.normInputs();
                 ASSERT(!normInputs.empty(), "ACCS node must have one source input.");
                 gc_data_idx_t srcIdx = planDataIndex(*currPlan, normInputs.front());
-                const auto *body     = currRuntimeGraph->nodeBodyAs<GCAccsBody>(nodeRef);
+                const auto *body     = en.bodyAs<GCAccsBody>();
                 if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
                     size_t idx = body->value;
                     Tuple *t   = currFrame->get<Tuple *>(srcIdx);
@@ -416,11 +416,11 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
             case GCNodeKind::Brch: {
                 const size_t jumpIdx =
-                    camel::execute::selectRuntimeBranchArm(currRuntimeGraph, nodeRef, currFrame);
+                    camel::execute::selectRuntimeBranchArm(*currPlan, en, currFrame);
                 currFrame->set(n->dataIndex, fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
 
-                const auto arms  = currRuntimeGraph->branchArmsOf(nodeRef);
-                const auto *body = currRuntimeGraph->nodeBodyAs<GCBrchBody>(nodeRef);
+                const auto arms  = en.branchArms();
+                const auto *body = en.bodyAs<GCBrchBody>();
                 ASSERT(jumpIdx < arms.size(), "Branch arm index out of range in NodeVM.");
                 // The arm runs from its first executable node in the linear order (not from
                 // its recorded head: after inlining, nodes of the arm can precede the head)
@@ -443,8 +443,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             } break;
 
             case GCNodeKind::Join: {
-                const auto nargs = currRuntimeGraph->normInputsOf(nodeRef);
-                const auto wargs = currRuntimeGraph->withInputsOf(nodeRef);
+                const auto nargs = en.normInputs();
+                const auto wargs = en.withInputs();
                 ASSERT(!nargs.empty(), "JOIN must have norm input (branch index).");
                 int32_t brIndex = currFrame->get<int32_t>(planDataIndex(*currPlan, nargs.front()));
                 ASSERT(
@@ -465,7 +465,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             } break;
 
             case GCNodeKind::Call: {
-                const auto withInputs = currRuntimeGraph->withInputsOf(nodeRef);
+                const auto withInputs = en.withInputs();
                 ASSERT(!withInputs.empty(), "CALL node must have exactly one callee input");
                 Function *func =
                     currFrame->get<Function *>(planDataIndex(*currPlan, withInputs.front()));
@@ -546,7 +546,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             } break;
 
             case GCNodeKind::Oper: {
-                const auto *body = currRuntimeGraph->nodeBodyAs<GCOperBody>(nodeRef);
+                const auto *body = en.bodyAs<GCOperBody>();
                 operator_t opFunc =
                     currPlan->resolvedOpers[nodeRef].load(std::memory_order_relaxed);
                 if (!opFunc) {
@@ -564,7 +564,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     }
                 }
 
-                slot_t result = evalNativeOperator(currRuntimeGraph, nodeRef, *currFrame, opFunc);
+                slot_t result = evalNativeOperator(currRuntimeGraph, en, *currPlan, *currFrame, opFunc);
 
                 currFrame->set(n->dataIndex, result);
             } break;
@@ -910,18 +910,18 @@ void NodeVMSchedPass::evalMarkedOperator_isolate(
 
 // Keep callback state out of call()'s recursive native frame, like marked-operator helpers.
 slot_t NodeVMSchedPass::evalNativeOperator(
-    camel::runtime::GCGraph *currRuntimeGraph, gc_node_ref_t nodeRef, Frame &operatorFrame,
-    operator_t opFunc) {
+    camel::runtime::GCGraph *currRuntimeGraph, const camel::runtime::ExecNode &en,
+    const camel::runtime::ExecPlan &plan, Frame &operatorFrame, operator_t opFunc) {
     Frame *currFrame = &operatorFrame;
     operIndices_.clear();
-    for (gc_node_ref_t inputRef : currRuntimeGraph->normInputsOf(nodeRef))
-        operIndices_.push_back(dataIndexOf(currRuntimeGraph, inputRef));
+    for (gc_node_ref_t inputRef : en.normInputs())
+        operIndices_.push_back(plan.dataIndexByRef[inputRef]);
     size_t normCnt = operIndices_.size();
-    for (gc_node_ref_t inputRef : currRuntimeGraph->withInputsOf(nodeRef))
-        operIndices_.push_back(dataIndexOf(currRuntimeGraph, inputRef));
+    for (gc_node_ref_t inputRef : en.withInputs())
+        operIndices_.push_back(plan.dataIndexByRef[inputRef]);
 
-    const bool callsGraphs = camel::core::OperatorTable::instance().callsGraphs(
-        currRuntimeGraph->nodeBodyAs<GCOperBody>(nodeRef)->oper);
+    const bool callsGraphs =
+        camel::core::OperatorTable::instance().callsGraphs(en.bodyAs<GCOperBody>()->oper);
     // Nested calls reuse operIndices_. Keep this operator's views alive independently.
     std::vector<runtime_data_idx_t> ownedIndices;
     if (callsGraphs)
@@ -931,11 +931,11 @@ slot_t NodeVMSchedPass::evalNativeOperator(
     data_arr_t wargs{indices.data() + normCnt, indices.size() - normCnt};
     FrameArgsView withView(*currFrame, wargs);
     FrameArgsView normView(*currFrame, nargs);
-    withView.setResultType(currRuntimeGraph->node(nodeRef)->dataType());
+    withView.setResultType(en.node->dataType());
     normView.setResultType(withView.resultType());
 
     if (camel::core::effect_trace::enabled()) [[unlikely]] {
-        camel::core::effect_trace::setSite(currRuntimeGraph->nodeOrigin(nodeRef));
+        camel::core::effect_trace::setSite(currRuntimeGraph->nodeOrigin(en.ref));
     }
     camel::execute::FunctionInvoker invoker;
     if (callsGraphs) {

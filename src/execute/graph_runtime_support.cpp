@@ -709,19 +709,18 @@ gc_node_ref_t resolveRuntimeBranchArmEntry(
     return brchBody->join;
 }
 
-size_t selectRuntimeBranchArm(camel::runtime::GCGraph *graph, gc_node_ref_t brchRef, Frame *frame) {
-    ASSERT(graph != nullptr, "Runtime branch selection requires a graph.");
+namespace {
+
+/// The arm a BRCH takes: `norm` and `with` are its inputs, `slotOf` gives the data slot of a node.
+template <typename SlotOf>
+size_t selectBranchArm(
+    std::span<const gc_node_ref_t> norm, std::span<const gc_node_ref_t> with, SlotOf slotOf,
+    Frame *frame) {
     ASSERT(frame != nullptr, "Runtime branch selection requires a frame.");
+    ASSERT(norm.size() == 1, "Runtime BRCH must have exactly one norm input.");
 
-    const auto normInputs = graph->normInputsOf(brchRef);
-    const auto withInputs = graph->withInputsOf(brchRef);
-    ASSERT(normInputs.size() == 1, "Runtime BRCH must have exactly one norm input.");
-
-    const auto *condNode = graph->node(normInputs.front());
-    ASSERT(condNode != nullptr, "Runtime BRCH condition node is missing.");
-    const auto condIndex = condNode->dataIndex;
-
-    if (withInputs.empty()) {
+    const auto condIndex = slotOf(norm.front());
+    if (with.empty()) {
         return frame->get<bool>(condIndex) ? 0 : 1;
     }
 
@@ -730,27 +729,47 @@ size_t selectRuntimeBranchArm(camel::runtime::GCGraph *graph, gc_node_ref_t brch
         camel::core::type::Type *condTypePtr = frame->typeAt<camel::core::type::Type>(condIndex);
         camel::core::rtdata::Object *condData =
             frame->get<camel::core::rtdata::Object *>(condIndex);
-        for (size_t i = 0; i < withInputs.size(); ++i) {
-            const auto *caseNode = graph->node(withInputs[i]);
-            ASSERT(caseNode != nullptr, "Runtime BRCH case node is missing.");
+        for (size_t i = 0; i < with.size(); ++i) {
             camel::core::rtdata::Object *caseData =
-                frame->get<camel::core::rtdata::Object *>(caseNode->dataIndex);
+                frame->get<camel::core::rtdata::Object *>(slotOf(with[i]));
             if (condData->equals(caseData, condTypePtr, false)) {
                 return i;
             }
         }
-        return withInputs.size();
+        return with.size();
     }
 
     const slot_t condData = frame->get<slot_t>(condIndex);
-    for (size_t i = 0; i < withInputs.size(); ++i) {
-        const auto *caseNode = graph->node(withInputs[i]);
-        ASSERT(caseNode != nullptr, "Runtime BRCH case node is missing.");
-        if (condData == frame->get<slot_t>(caseNode->dataIndex)) {
+    for (size_t i = 0; i < with.size(); ++i) {
+        if (condData == frame->get<slot_t>(slotOf(with[i]))) {
             return i;
         }
     }
-    return withInputs.size();
+    return with.size();
+}
+
+} // namespace
+
+size_t selectRuntimeBranchArm(camel::runtime::GCGraph *graph, gc_node_ref_t brchRef, Frame *frame) {
+    ASSERT(graph != nullptr, "Runtime branch selection requires a graph.");
+    return selectBranchArm(
+        graph->normInputsOf(brchRef),
+        graph->withInputsOf(brchRef),
+        [&](gc_node_ref_t ref) {
+            const auto *node = graph->node(ref);
+            ASSERT(node != nullptr, "Runtime BRCH operand node is missing.");
+            return node->dataIndex;
+        },
+        frame);
+}
+
+size_t selectRuntimeBranchArm(
+    const camel::runtime::ExecPlan &plan, const camel::runtime::ExecNode &brch, Frame *frame) {
+    return selectBranchArm(
+        brch.normInputs(),
+        brch.withInputs(),
+        [&](gc_node_ref_t ref) { return plan.dataIndexByRef[ref]; },
+        frame);
 }
 
 slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, Frame *frame) {

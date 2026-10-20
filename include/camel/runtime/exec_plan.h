@@ -44,11 +44,35 @@
 
 namespace camel::runtime {
 
+/// A node of the plan with what a back end reads of it while running, resolved once: the record,
+/// the input runs, the payload and the arms of a BRCH. They point into the frozen graph, which
+/// does not move, so running a node does not look anything up in the graph.
+struct ExecNode {
+    gc_node_ref_t ref  = kInvalidNodeRef;
+    const GCNode *node = nullptr;
+    const gc_node_ref_t *norm = nullptr;
+    const gc_node_ref_t *with = nullptr;
+    const std::byte *body     = nullptr; // the payload; null when the node has none
+    const GCBranchArm *arms   = nullptr; // BRCH only
+    uint32_t normCount = 0;
+    uint32_t withCount = 0;
+    uint32_t armCount  = 0;
+
+    std::span<const gc_node_ref_t> normInputs() const { return {norm, normCount}; }
+    std::span<const gc_node_ref_t> withInputs() const { return {with, withCount}; }
+    std::span<const GCBranchArm> branchArms() const { return {arms, armCount}; }
+    template <typename Body> const Body *bodyAs() const {
+        return reinterpret_cast<const Body *>(body);
+    }
+};
+
 class ExecPlan {
   public:
     /// The live nodes in the order they run (every node after its inputs; an arm of a branch is
     /// one range between the BRCH and its JOIN).
     std::vector<gc_node_ref_t> topo;
+    /// The nodes of `topo`, in the same order.
+    std::vector<ExecNode> nodes;
     /// The position in `topo` of each node, by node reference; kNotInPlan for a node that does
     /// not run (dead).
     static constexpr uint32_t kNotInPlan = UINT32_MAX;

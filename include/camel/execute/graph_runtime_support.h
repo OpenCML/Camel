@@ -80,6 +80,10 @@ camel::runtime::gc_node_ref_t resolveRuntimeBranchArmEntry(
 size_t selectRuntimeBranchArm(
     camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef,
     camel::core::context::Frame *frame);
+/// The same for a BRCH of the execution plan, without looking anything up in the graph.
+size_t selectRuntimeBranchArm(
+    const camel::runtime::ExecPlan &plan, const camel::runtime::ExecNode &brch,
+    camel::core::context::Frame *frame);
 slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
 
 void writeRuntimeFillSlots(
