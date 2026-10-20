@@ -1,7 +1,7 @@
 /**
  * Overloads of which some are decorated. A decorated function is what its decorators return,
- * and a call chooses among the functions of the name by their parameters, in declaration
- * order. It used to see the decorated function declared last only, and passed it the
+ * and a call chooses among the functions of the name by their parameters (exact matches
+ * first). It used to see the decorated function declared last only, and passed it the
  * arguments unchecked: `scale(1.5)` handed a float to a function that takes an int.
  */
 module decorated_overloads

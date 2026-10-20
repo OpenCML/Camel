@@ -458,6 +458,12 @@ class Builder {
     // The callee expression of such a binding, for the binding used as a value
     // (partialApplicationOf builds the call from it).
     std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithCallee_;
+    // The candidates of such a binding when the pass being used has several and the position
+    // has not chosen one (H27e). The ambiguity is reported when the binding is refused for
+    // good (rejectUnappliedBinding): visiting a value first must not preempt the position
+    // that may still say which function is meant (`apply(scale<2>, 1.5)`).
+    std::unordered_map<node_handle_t, std::vector<camel::core::type::FunctionType *>>
+        ambiguousBindings_;
     // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
     // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
     // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`
@@ -856,6 +862,22 @@ class Builder {
     /// application could be made of (PartialApplicationRefused): the binding is never
     /// dropped without a word.
     void rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin);
+    /// An error at `origin` when a call has several candidates in the pass it is making:
+    /// the exact matches when there are any, otherwise the functions a literal enters
+    /// (design principles 5.1, H27e). An ordinary call, an operator call and a partial
+    /// application used as a value all report through this one, so they cannot drift.
+    /// Declaration order never settles the choice; the candidates are listed and the help
+    /// says how to choose one. Throws BuildAbortException.
+    void rejectAmbiguousCall(
+        const std::string &name, const std::string &argumentTypes,
+        const std::vector<std::string> &candidates, const GCT::node_ptr_t &origin);
+    /// The same for candidates that are function types: their signatures are listed in the
+    /// order they were written, which is all an ordinary call and a partial application
+    /// have to show.
+    void rejectAmbiguousCall(
+        const std::string &name, const std::string &argumentTypes,
+        const std::vector<camel::core::type::FunctionType *> &candidates,
+        const GCT::node_ptr_t &origin);
     // The functions named `name` when `decorated` is one of several of that name (the set a
     // call chooses from); null when the decorated function is the only one.
     graph_set_ptr_t
@@ -1112,7 +1134,7 @@ class Builder {
     /// The program's overload a call of an operator takes (an instance for a generic one), or
     /// nullptr when the call is the built-in group's to resolve (no overload of the program
     /// accepts the arguments; then the group reports what does not fit). Reports
-    /// AmbiguousOperatorCall when more than one overload, built-in ones included, accepts them.
+    /// AmbiguousCall when more than one overload, built-in ones included, accepts them.
     compile_graph_ptr_t chooseOperatorOverload(
         const OperatorOverloads &set, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,

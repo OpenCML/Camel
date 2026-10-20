@@ -153,8 +153,62 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "ambiguous_literal"
+desc = "A call whose numeric literal enters two parameter types is refused as ambiguous, not settled by declaration order (design principles 5.1); both candidates are listed and the help says to annotate the literal or add a cast."
+kind = "negative"
+case = "../../../cases/compile/overloads/ambiguous_literal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
+expect_diagnostic_code = "0x030000F4"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 18
+expect_output_contains = ["The call to 'scale' with (int) fits more than one overload", "(x: f32) => f32", "(x: float) => float", "annotate the literal with its type", "2 as f32"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "ambiguous_composite"
+desc = "A call whose array literal enters two parameter types is refused the same way: a composite literal enters parameter types as a numeric one does, and several candidates in that pass are an ambiguity."
+kind = "negative"
+case = "../../../cases/compile/overloads/ambiguous_composite.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
+expect_diagnostic_code = "0x030000F4"
+expect_diagnostic_line = 17
+expect_diagnostic_column = 17
+expect_output_contains = ["The call to 'pick' with (int[])", "(xs: f32[]) => f32", "(xs: float[]) => float", "annotate the literal with its type", "2 as f32"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "exact_over_entering"
+desc = "An exact match still wins over a literal entering a parameter type, whatever the declaration order: `[1.0]` is a `float[]` and `2.0` a `float`, so the float overloads are meant though the f32 ones are declared first."
+kind = "behavior"
+case = "../../../cases/compile/overloads/exact_over_entering.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "float[]\nfloat\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "single_entering"
+desc = "A literal that enters exactly one candidate is accepted: entering is not an ambiguity by itself."
+kind = "behavior"
+case = "../../../cases/compile/overloads/single_entering.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3.5\n2.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "decorated_overloads"
-desc = "Overloads of which some are decorated are chosen by the parameters of what the decorators return, in declaration order; only the decorated function declared last used to be seen. The same on the four back ends."
+desc = "Overloads of which some are decorated are chosen by the parameters of what the decorators return, exact matches first; only the decorated function declared last used to be seen. The same on the four back ends."
 kind = "behavior"
 case = "../../../cases/compile/overloads/decorated_overloads.cml"
 args = ["${case}", "${backend}"]

@@ -1,0 +1,13 @@
+with <k: f32>
+func scale(x: f32): f32 { return x * k }
+
+with <k: float>
+func scale(x: float): float { return x * k }
+
+func main(): int sync {
+    // `2` enters both context parameter types, so the binding does not choose one; this is
+    // the same ambiguity an ordinary call reports.
+    let g = scale<2>
+    println(g(3))
+    return 0
+}

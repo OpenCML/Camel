@@ -1,0 +1,19 @@
+/**
+ * One candidate that a literal enters is accepted: there is no ambiguity when only one
+ * overload takes the arguments in the entering pass.
+ */
+module single_entering
+
+func bump(x: f32): f32 {
+    return x + 0.5
+}
+
+func first(xs: f32[]): f32 {
+    return xs[0]
+}
+
+func main(): int sync {
+    println(bump(3))
+    println(first([2]))
+    return 0
+}

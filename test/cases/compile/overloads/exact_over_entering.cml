@@ -1,0 +1,29 @@
+/**
+ * An exact match still wins over a literal entering a parameter type, whatever the
+ * declaration order: `[1.0]` is a `float[]` as written, so the second overload is the one
+ * meant even though the first would take it by entering `f32[]`. Likewise `2.0` is a
+ * `float` and takes the `float` parameter.
+ */
+module exact_over_entering
+
+func pick(xs: f32[]): string {
+    return 'f32[]'
+}
+
+func pick(xs: float[]): string {
+    return 'float[]'
+}
+
+func scale(x: f32): string {
+    return 'f32'
+}
+
+func scale(x: float): string {
+    return 'float'
+}
+
+func main(): int sync {
+    println(pick([1.0]))
+    println(scale(2.0))
+    return 0
+}

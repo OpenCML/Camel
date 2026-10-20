@@ -1,0 +1,20 @@
+/**
+ * An ordinary call whose array literal argument enters two parameter types: it is refused
+ * as ambiguous, exactly as a numeric literal is. It used to take the first overload in
+ * declaration order.
+ */
+module ambiguous_composite
+
+func pick(xs: f32[]): f32 {
+    return xs[0]
+}
+
+func pick(xs: float[]): float {
+    return xs[0]
+}
+
+func main(): int sync {
+    println(pick([1]))
+    println('never printed')
+    return 0
+}

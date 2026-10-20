@@ -1,0 +1,19 @@
+/**
+ * An ordinary call whose literal argument enters two parameter types: it is refused as
+ * ambiguous. It used to take the first overload in declaration order.
+ */
+module ambiguous_literal
+
+func scale(x: f32): f32 {
+    return x * 2.0
+}
+
+func scale(x: float): float {
+    return x * 2.0
+}
+
+func main(): int sync {
+    println(scale(2))
+    println('never printed')
+    return 0
+}

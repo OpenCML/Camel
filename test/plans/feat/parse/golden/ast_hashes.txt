@@ -734,12 +734,16 @@ d16625b85fb430e2 ok test/cases/compile/operators/inv_float.cml
 c9144aea38412fc5 ok test/cases/compile/operators/neg_string.cml
 3b9e868441d1ac25 ok test/cases/compile/operators/string_pow_assign.cml
 6080c7ccc193101c ok test/cases/compile/operators/string_sub_assign.cml
+ce1dc4541764ddb2 ok test/cases/compile/overloads/ambiguous_composite.cml
+bc967c2c888c0689 ok test/cases/compile/overloads/ambiguous_literal.cml
 4e68289991f710ce ok test/cases/compile/overloads/decorated_call_mismatch.cml
 c0cd8ced514d1163 ok test/cases/compile/overloads/decorated_overloads.cml
+4b4ff4f9b69a37fc ok test/cases/compile/overloads/exact_over_entering.cml
 e80a66502864aae1 ok test/cases/compile/overloads/no_match.cml
 d6b83a146f205062 ok test/cases/compile/overloads/overloaded_name_as_value.cml
-210397fc01c9f49d ok test/cases/compile/overloads/overloads.cml
+9d5f33020655a316 ok test/cases/compile/overloads/overloads.cml
 12c48344af7d7aac ok test/cases/compile/overloads/same_signature.cml
+5eab9b23c06faf66 ok test/cases/compile/overloads/single_entering.cml
 f1981a3d98447754 ok test/cases/compile/return_type/accepted.cml
 1c738e8c67295d96 ok test/cases/compile/return_type/int_as_float.cml
 79582a09501ccb0a ok test/cases/compile/return_type/nested_literals.cml
@@ -995,6 +999,7 @@ cc3f438335451aa9 ok test/cases/consistency/partial_application/context_arguments
 6a974542e71f4455 ok test/cases/consistency/partial_application/err_configured_twice.cml
 81845b33a8cc8dde ok test/cases/consistency/partial_application/err_context_argument_name.cml
 d129e3a5a5d4c38a ok test/cases/consistency/partial_application/err_context_argument_out_of_range.cml
+088dc56856ec06ed ok test/cases/consistency/partial_application/err_entering_ambiguous.cml
 458457fdb28a5d2b ok test/cases/consistency/partial_application/err_overload_choice_name.cml
 dc66f9a3b30af3d6 ok test/cases/consistency/partial_application/err_var_parameter.cml
 5c3024f8d11e6cec ok test/cases/consistency/partial_application/graph.cml

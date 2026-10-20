@@ -766,6 +766,36 @@ void Builder::rejectLiteralConversion(
         operands.empty() ? nullptr : operands[0].expr);
 }
 
+void Builder::rejectAmbiguousCall(
+    const std::string &name, const std::string &argumentTypes,
+    const std::vector<std::string> &candidates, const GCT::node_ptr_t &origin) {
+    // The one report for several candidates in the pass a call is making (design principles
+    // 5.1, H27e): an ordinary call, an operator call and a partial application used as a
+    // value all come here. Listing the candidates in declaration order lets a reader see
+    // both the one written here and the one that makes the choice ambiguous; the help says
+    // how to choose (annotate the literal, add a cast).
+    ASSERT(!candidates.empty(), "An ambiguity has candidates.");
+    diags_->of(SemanticDiag::AmbiguousCall)
+        .atOrigin(origin->origin())
+        .commit(
+            name,
+            argumentTypes,
+            strutil::join(candidates, "; ", [](const std::string &s) { return s; }));
+    throw BuildAbortException();
+}
+
+void Builder::rejectAmbiguousCall(
+    const std::string &name, const std::string &argumentTypes,
+    const std::vector<FunctionType *> &candidates, const GCT::node_ptr_t &origin) {
+    std::vector<std::string> signatures;
+    signatures.reserve(candidates.size());
+    for (FunctionType *candidate : candidates) {
+        ASSERT(candidate != nullptr, "An ambiguity lists function types.");
+        signatures.push_back(candidate->toString());
+    }
+    rejectAmbiguousCall(name, argumentTypes, signatures, origin);
+}
+
 void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin) {
     const auto boundIt = boundWithArgs_.find(node);
     if (boundIt == boundWithArgs_.end()) {
@@ -778,6 +808,17 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     if (const auto callee = boundWithCallee_.find(node);
         callee != boundWithCallee_.end() && callee->second->type() == GCT::NodeKind::DREF) {
         name = callee->second->name();
+    }
+    // Several candidates in the pass the binding could use: the same ambiguity an ordinary
+    // call reports, with the same candidate list (H27e). No position chose one (`expected`),
+    // which is why the binding is being refused now.
+    if (const auto ambiguous = ambiguousBindings_.find(node);
+        ambiguous != ambiguousBindings_.end()) {
+        std::vector<FunctionType *> candidates = std::move(ambiguous->second);
+        ambiguousBindings_.erase(ambiguous);
+        boundWithArgs_.erase(node);
+        boundWithCallee_.erase(node);
+        rejectAmbiguousCall(name, given, candidates, origin);
     }
     std::string why;
     if (genericDrefs_.contains(node)) {
