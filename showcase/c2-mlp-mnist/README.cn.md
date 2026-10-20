@@ -134,6 +134,8 @@ camel showcase\c2-mlp-mnist\train.cml `
    **问**：是注释对（应当整体替换、失败时保留旧目录），还是实现对（拒绝覆盖）？如果是后者，
    是否要给 `save_tree` 一个 `replace` 变体（像 `fs.replace` 那样），或给 `fs` 补一个删除
    操作？
+   **已解决（H20）**：按注释实现——`save_tree` 整体替换，旧目录在成功前保留、失败时放回；
+   `fs::remove`、`fs::remove_dir` 返回 `T!`。见 `docs/handover/reports/H20.md` 的 `## H20-4`。
 2. **张量没有按行取子集/重排的算子，数据管线只能在语言外打乱。** 取小批只有
    `slice(t, axis, start, end)`，`t[i]` 取的是单个标量；没有 `gather`/`index_select`/按索引
    数组取行。于是“每个 epoch 重新打乱”在 Camel 里写不出来，示例只能让 `make_data.py` 先

@@ -34,6 +34,29 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "fs.remove"
+desc = "fs.remove and fs.remove_dir return void!: a missing path is a NotFound error value, a directory passed to remove and a file or non-empty directory passed to remove_dir are IOError with the operator as location, and no removal recurses."
+kind = "behavior"
+case = "../../../cases/modules/std/fs/remove.cml"
+args = ["${case}", "std::nvm", "--arg", "mode=0", "--arg", "path="]
+expect_exit = 0
+expect_stdout_contains = ["ok | -", "NotFound | <fs::remove> | missing", "IOError | <fs::remove> | is a directory", "IOError | <fs::remove_dir> | not empty", "IOError | <fs::remove_dir> | not a directory", "exists after remove = false", "not-empty contents survive = true", "exists after remove_dir = false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fs.remove_permissions"
+desc = "A removal the file system refuses is an error value of kind PermissionDenied (not NotFound), carries the operator as its location, and leaves the entry in place."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/modules/std/fs/remove_permissions.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["fs.remove permission checks passed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "io.basic"
 desc = "Exercises the minimal console IO surface provided by the io module."
 kind = "behavior"

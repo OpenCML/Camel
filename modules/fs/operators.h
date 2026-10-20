@@ -38,5 +38,11 @@ slot_t __fs_file_size__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_read_chunk__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_mkdir__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_mkdirs__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+/// `remove` and `remove_dir`, as operations that can fail: `(path: string) => void!` (design
+/// principles 3.9). A missing path is an error of kind `NotFound`, a refusal by the file system
+/// one of kind `PermissionDenied`, and anything else `IOError`; `remove` refuses a directory and
+/// `remove_dir` a file, a symbolic link, or a directory that is not empty.
+slot_t __fs_remove__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __fs_remove_dir__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getFsOpsMap();

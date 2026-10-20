@@ -239,7 +239,7 @@ error DivByZero: the divisor is zero
 - 两种标记可以组合：`T?!`、`T!?`。同一种不能重复。数组元素等位置需要括号：`(int?)[]`。
 - 与泛型配合：`(typeas T)?` 从可空实参里绑定 `T`（[7.5](07_statements.md#75-泛型函数)）。
 - `let x: int! = v` 中 `!` 与 `=` 之间要有空格。
-- 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
+- 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`、`remove(path)`、`remove_dir(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
 
 **错误与故障是两回事。** 只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障：程序带位置终止，`!!` 接不住它（见 [4.6](04_execution_model.md#46-故障退出与资源上限)）。
 

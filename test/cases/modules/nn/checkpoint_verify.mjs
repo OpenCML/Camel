@@ -14,6 +14,37 @@ const camel = path.join(runtime, 'bin', process.platform === 'win32' ? 'camel.ex
 const parent = fs.realpathSync(process.env.CAMEL_TEST_TMPDIR || os.tmpdir())
 const root = fs.mkdtempSync(path.join(parent, 'camel-checkpoint-'))
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
+// Every file under a directory and its hash, to prove a failed save changed nothing.
+function snapshotTree(directory) {
+    const entries = []
+    const walk = (current, prefix) => {
+        for (const name of fs.readdirSync(current).sort()) {
+            const full = path.join(current, name)
+            if (fs.statSync(full).isDirectory()) walk(full, `${prefix}${name}/`)
+            else entries.push(`${prefix}${name}:${sha256(fs.readFileSync(full))}`)
+        }
+    }
+    walk(directory, '')
+    return entries
+}
+// Writes into a directory are refused for this process: on Windows with a deny ACE on the
+// directory (deny ACEs bind administrators too), elsewhere with the permission bits. Returns
+// the undo.
+function denyWrites(directory) {
+    if (process.platform === 'win32') {
+        const user = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`
+        const denied = spawnSync('icacls', [directory, '/deny', `${user}:(W)`], { encoding: 'utf8' })
+        assert.equal(denied.status, 0, denied.stdout + denied.stderr)
+        return () => {
+            const undone = spawnSync('icacls', [directory, '/remove:d', user], { encoding: 'utf8' })
+            assert.equal(undone.status, 0, undone.stdout + undone.stderr)
+        }
+    }
+    const mode = fs.statSync(directory).mode
+    fs.chmodSync(directory, 0o555)
+    return () => fs.chmodSync(directory, mode)
+}
+const privileged = process.platform !== 'win32' && typeof process.getuid === 'function' && process.getuid() === 0
 function invoke(source, pass, mode, directory, extraEnv = {}, exit = 0) {
     const result = spawnSync(camel, [path.join(cases, source), pass, '--arg', `mode=${mode}`, '--arg', `dir=${directory}`], {
         env: { ...process.env, ...extraEnv }, encoding: 'utf8', timeout: 30000
@@ -68,6 +99,28 @@ try {
             const files = fs.readdirSync(directory).filter(name => name.slice(0, name.lastIndexOf('.')) === leaf)
             assert.equal(files.length, 1, `no file named by the path ${leaf}`)
         }
+        // Replacing an existing checkpoint as a whole: mode 7 saves a different state over a
+        // checkpoint of the same tree and reads the new content back, on every scheduler. It
+        // must equal a fresh checkpoint of that state (not a mix of old and new leaves), and
+        // leave no temporary or previous directory behind. A separate directory is used so the
+        // restart checks below still see the checkpoint they were given.
+        const replaceDir = path.join(root, `replace-${pass.slice(5)}`)
+        assert.equal(invoke('checkpoint_roundtrip.cml', pass, 0, replaceDir).stdout, saved)
+        const fresh = path.join(root, `fresh-${pass.slice(5)}`)
+        const expectedReplacement = invoke('checkpoint_roundtrip.cml', pass, 7, fresh).stdout
+        assert.equal(invoke('checkpoint_roundtrip.cml', pass, 8, fresh).stdout, expectedReplacement, `${pass}: the replacement round trip is not the state`)
+        const replacedOver = invoke('checkpoint_roundtrip.cml', pass, 7, replaceDir).stdout
+        assert.notEqual(replacedOver, saved, `${pass}: saving over a checkpoint did not change it`)
+        assert.equal(replacedOver, expectedReplacement, `${pass}: replacing a checkpoint mixed the old and new states`)
+        assert.deepEqual(
+            fs.readdirSync(replaceDir).filter(name => name.includes('.pending-') || name.endsWith('.previous')),
+            [],
+            `${pass}: a temporary or previous directory was left behind`
+        )
+        // A tree of a different shape replaces every leaf: the old leaf files are gone, not
+        // merged under the new manifest.
+        assert.equal(invoke('checkpoint_roundtrip.cml', pass, 9, replaceDir).stdout.trim(), '1 false true')
+        assert.deepEqual(fs.readdirSync(replaceDir).sort(), ['a.txt', 'manifest.json'], `${pass}: old leaves survived the replacement`)
     }
     const stress = {
         CAMEL_GC: 'generational', CAMEL_GC_ENABLE_YOUNG_COPYING: '1', CAMEL_GC_VERIFY: 'both',
@@ -82,9 +135,6 @@ try {
     const immutable = fs.readFileSync(path.join(tensor, '_root.npy'))
     assert.match(invoke('checkpoint_tensor.cml', 'std::fvm', 1, tensor).stdout, /CheckpointError.*tensor dtype differs/)
     assert.match(invoke('checkpoint_tensor.cml', 'std::nvm', 2, tensor).stdout, /CheckpointError.*extent differs at axis 0/)
-    const collision = invoke('checkpoint_tensor.cml', 'std::jit', 4, tensor, {}, 1)
-    assert.match(collision.stdout + collision.stderr, /checkpoint already exists/)
-    assert.deepEqual(fs.readFileSync(path.join(tensor, '_root.npy')), immutable)
     const corrupt = path.join(root, 'corrupt')
     fs.cpSync(tensor, corrupt, { recursive: true })
     fs.appendFileSync(path.join(corrupt, '_root.npy'), 'x')
@@ -102,6 +152,71 @@ try {
     fs.writeFileSync(manifestFile, JSON.stringify(manifest))
     assert.match(invoke('checkpoint_tensor.cml', 'std::jit', 3, malformed).stdout, /CheckpointError.*exact f32\/int64\/bool storage dtype/)
     assert.match(invoke('checkpoint_tensor.cml', 'std::nvm', 3, path.join(root, 'missing')).stdout, /CheckpointError.*manifest.json/)
+    // A tensor checkpoint is replaced too: mode 4 writes one element over the four of the
+    // original, and the old leaf is gone rather than left beside the new manifest.
+    const overwritten = invoke('checkpoint_tensor.cml', 'std::jit', 4, tensor, {}, 0)
+    assert.equal(overwritten.status, 0)
+    assert.notDeepEqual(fs.readFileSync(path.join(tensor, '_root.npy')), immutable)
+    assert.deepEqual(fs.readdirSync(tensor).sort(), ['_root.npy', 'manifest.json'])
+    assert.equal(invoke('checkpoint_tensor.cml', 'std::nvm', 5, tensor).stdout.trim(), '[0, 0, 16, 65]')
+
+    // The same directory named with a trailing separator is the same checkpoint.
+    const trailing = path.join(root, 'trailing')
+    const trailingSaved = invoke('checkpoint_roundtrip.cml', 'std::nvm', 0, `${trailing}${path.sep}`).stdout
+    assert.equal(invoke('checkpoint_roundtrip.cml', 'std::nvm', 1, trailing).stdout, trailingSaved)
+
+    // An interrupted save between its two renames: the destination is missing and only
+    // `dir.previous` holds the complete old checkpoint. A load reads it (with a warning); the
+    // next save restores it, replaces it, and leaves neither the previous nor a temporary
+    // directory behind.
+    const recovery = path.join(root, 'recovery')
+    const recoverySaved = invoke('checkpoint_roundtrip.cml', 'std::nvm', 0, recovery).stdout
+    fs.renameSync(recovery, `${recovery}.previous`)
+    const recoveredRead = invoke('checkpoint_roundtrip.cml', 'std::nvm', 1, recovery)
+    assert.equal(recoveredRead.stdout, recoverySaved, 'reading the previous checkpoint changed the state')
+    assert.match(recoveredRead.stderr, /previous checkpoint an interrupted save_tree left/)
+    const recoveredSave = invoke('checkpoint_roundtrip.cml', 'std::nvm', 7, recovery).stdout
+    assert.equal(recoveredSave, invoke('checkpoint_roundtrip.cml', 'std::nvm', 8, recovery).stdout)
+    assert(!fs.existsSync(`${recovery}.previous`))
+    assert.equal(invoke('checkpoint_roundtrip.cml', 'std::nvm', 1, recovery).stdout, recoveredSave)
+    // A previous directory left by a save whose cleanup failed is removed by the next save.
+    fs.mkdirSync(`${recovery}.previous`)
+    fs.writeFileSync(path.join(`${recovery}.previous`, 'stale.txt'), 'stale')
+    assert.equal(invoke('checkpoint_roundtrip.cml', 'std::nvm', 7, recovery).stdout, recoveredSave)
+    assert(!fs.existsSync(`${recovery}.previous`))
+    assert.deepEqual(fs.readdirSync(recovery).filter(name => name.includes('.pending-') || name.endsWith('.previous')), [])
+
+    // A failure while writing the temporary directory leaves the old checkpoint exactly as it
+    // was: the new checkpoint is never written into the destination. On a privileged POSIX
+    // process the permission bits do not refuse the write, so the check is skipped there.
+    if (privileged) {
+        console.log('native checkpoints: the failure path is skipped (privileged process)')
+    } else {
+        const failingParent = path.join(root, 'failure-parent')
+        fs.mkdirSync(failingParent)
+        const failing = path.join(failingParent, 'ckpt')
+        const failingSaved = invoke('checkpoint_roundtrip.cml', 'std::nvm', 0, failing).stdout
+        const failingBefore = snapshotTree(failing)
+        const undo = denyWrites(failingParent)
+        let failed
+        try {
+            failed = invoke('checkpoint_roundtrip.cml', 'std::nvm', 7, failing, {}, 1)
+        } finally {
+            undo()
+        }
+        assert.match(
+            failed.stdout + failed.stderr,
+            /FileSystemError|cannot create the checkpoint temporary directory/,
+            'a save that cannot create its temporary directory did not report a fault'
+        )
+        assert.deepEqual(snapshotTree(failing), failingBefore, 'a failed save changed the old checkpoint')
+        assert.equal(invoke('checkpoint_roundtrip.cml', 'std::nvm', 1, failing).stdout, failingSaved)
+        assert.deepEqual(
+            fs.readdirSync(failingParent).filter(name => name.includes('.pending-') || name.endsWith('.previous')),
+            [],
+            'a failed save left a temporary or previous directory behind'
+        )
+    }
     console.log('native checkpoints: schedulers, restart equality, GC, exact bits and rejection checks passed')
 } finally {
     // This is the single directory reserved by mkdtemp, never an input checkpoint directory.
