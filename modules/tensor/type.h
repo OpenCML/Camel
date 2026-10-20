@@ -27,6 +27,14 @@
  * The plain `Tensor` annotation is the fully unknown type and accepts every
  * tensor. Types are interned, so equal types share one instance.
  *
+ * A shape written in a signature may name its extents (design principles 5.4):
+ * `Tensor<f32, const [constas n, 3]>` keeps the linear form of each named extent
+ * (`core/type/extent.h`), so the caller can bind `n` and hold every occurrence of
+ * it to one value. The forms take part in interning (the signature keeps the
+ * names) but not in `equals` / assignability / cast safety: two shapes with the
+ * same extents are the same type for every check, as two function types that
+ * differ only in parameter names are.
+ *
  * Refinement order: a type with less information is assignable from one with
  * more. `unify` computes the least common refinement (used at branch joins),
  * keeping only the facts both sides agree on.
@@ -59,12 +67,24 @@ class TensorType : public type::OtherType {
      */
     static TensorType *
     get(std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape = std::nullopt);
+    /**
+     * The same, with named extents (design principles 5.4): `forms` holds one extent per
+     * dimension, and the dimensions that are not constant are unknown in `shape`. Names are
+     * part of the interned type (two signatures that name their dimensions differently are
+     * different types) but not of equality or assignability: `Tensor<[n, 3]>` is the same
+     * tensor type as `Tensor<[?, 3]>` for every check that is not about names.
+     */
+    static TensorType *
+    get(std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape,
+        std::vector<type::ExtentForm> forms);
 
     /// The fully unknown tensor type (`Tensor`).
     static TensorType *Default();
 
     std::optional<type::TypeCode> dtype() const { return dtype_; }
     const std::optional<StaticShape> &shape() const { return shape_; }
+    /// The named extents, one per dimension, when the type states any; empty otherwise.
+    const std::vector<type::ExtentForm> &forms() const { return forms_; }
     std::optional<size_t> rank() const {
         return shape_ ? std::optional<size_t>(shape_->size()) : std::nullopt;
     }
@@ -92,12 +112,17 @@ class TensorType : public type::OtherType {
     /// unknown; `const []` is a scalar tensor.
     type::OtherType *cloneWithArguments(
         std::span<const type::TypeArgument> arguments, std::string &error) const override;
+    bool extentForms(std::vector<type::ExtentForm> &out) const override;
+    type::OtherType *withExtentValues(const type::ExtentValues &values) const override;
 
   private:
-    TensorType(std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape);
+    TensorType(
+        std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape,
+        std::vector<type::ExtentForm> forms = {});
 
     std::optional<type::TypeCode> dtype_;
     std::optional<StaticShape> shape_;
+    std::vector<type::ExtentForm> forms_;
 };
 
 /// The TensorType of `type`, or nullptr when `type` is not a tensor.

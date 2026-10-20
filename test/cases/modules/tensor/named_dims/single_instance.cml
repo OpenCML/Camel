@@ -1,0 +1,12 @@
+module named_dims_single_instance
+import { Tensor, ones } from tensor
+// Dimension names are for checking only: `dense` is one graph, called with two different
+// shapes, and no instance name carries an extent (design principles 5.4).
+func dense(x: Tensor<f32, const [constas n, 3]>, w: Tensor<f32, const [3, constas k]>): Tensor<f32, const [n, k]> {
+    return x @ w
+}
+func main(): int sync {
+    println(dense(ones([2, 3]), ones([3, 4])))
+    println(dense(ones([5, 3]), ones([3, 2])))
+    return 0
+}

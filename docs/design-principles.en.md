@@ -210,6 +210,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 
 - **No `break` and `continue`.** Finishing early is written as a continue condition in the loop header (like `found` above).
 - A loop header must have `for` or `while`; `for … while` tests the condition first in each round and then takes the next element; `for` iterates only arrays for now, strings, maps and tensors will be added later; the type of the state is the type of the initial value, tensor shapes are not widened automatically, and a type annotation is written when needed.
+- **A loop can collect per-round outputs**: besides its final state, a `LOOP` node can have outputs that produce one value per round, collected by round into an array (the scan outputs of ONNX `Loop`). This is a graph-level capability with no source syntax; its first user is automatic differentiation (9.9).
 
 ---
 
@@ -247,6 +248,8 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **`f<w>` is partial application**: `let g = f<w>` gives a function whose context parameters are already set.
 - **A `with` parameter is not a generic parameter.** It is a context parameter; do not use it to declare type parameters or compile-time parameters.
 - **A generic function can appear in any position that expects a function**, including being passed to another generic function (see 5.5).
+- **Angle brackets are only for "configuration"**: what configures a function (the mapping function of `map`, the predicate of `filter`, weights) is a `with` parameter, keeping the pipeline style `xs->map<f>`; the main input a function processes (such as the function `grad` differentiates) is an ordinary parameter: `grad(loss)`, `value_and_grad(loss)`. When a function passed as an ordinary argument is known at compile time, the compiler still specialises for it (an optimisation, not semantics). Which standard functions fall on which side is settled one by one once the showcase programs exist.
+- **A pipeline call may take extra arguments**: `x->f(a, b)` means `f(x, a, b)`; `x->f` and `x->f<w>` are unchanged.
 
 ---
 
@@ -261,6 +264,8 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **Converting a value to its own type is legal and does nothing**: `xs as int[]` (`xs: int[]`) passes, as does `p as A` through an alias.
 - There should be no type that is still undetermined at run time: after compilation every value has a determined type (for `any` see 5.10).
 - **Diagnostics and the graph use the type names in the source** (`first<int>`, not `first<i64>`).
+- **Literals take their type from context** (as Go's untyped constants): in order, the expected type (declaration, parameter, return position), the type of the other operand of a binary operation, then the default (`int` for integers, `float` for decimals, `c128` for imaginary); operations between literals are computed exactly at compile time; a value that does not fit the target type is a compile-time error. Variables are still never converted implicitly. Example: in `x * 2 + 1` with `x` of type `f32`, `2` and `1` are `f32`.
+- **Complex numbers**: core numeric types `c64` and `c128`, stored compactly in arrays. An imaginary literal is a number immediately followed by the suffix `i`: `4i`, `4.0i`, `1e-3i` (not on hexadecimal or binary literals); `3 + 4i` is `c128`, `let w: c64 = 1 - 2i`. Printed as `3+4i`.
 
 ### 5.2 Named types and structural types
 
@@ -290,18 +295,13 @@ A `sync` written before a block (including the postfix form on a function body, 
 
 - When a `match` on an `enum` lists all variants, `case _` need not be written (the same as for `bool`, `T?`, `T!`). Variants are not distinguished by the type of the value (that would be a run-time type test, already excluded). The `A | B` that can be written now but that no value can enter is retired, and `|` is kept only for logical or. No new node kind is added on the graph (see 2.1).
 
-### 5.4 Tensors and named dimensions
+### 5.4 Multi-dimensional arrays and dimensions
 
-- **Compile-time checking of tensor shapes is necessary.** It is not implemented at present. The way to implement it: Camel allows a type (especially one introduced by a third-party C++ module) to define its own type resolver, and shape checking can be done with C++ logic in the resolver, without changing the language core.
-- **Computation with numbers inside types** (such as tensor shapes): users should be able to write it too, coexisting with the C++ type resolver. Using C++ is allowed; it is not the only way. When a dimension is unknown, the result is unknown too; check with `as` when needed.
-- **A tensor of unknown shape entering a position with a declared shape**: not let through implicitly; convert explicitly with the keyword `as` (such as `t as Tensor<const [3]>`), and the check is done at the conversion.
-- **Tensor dimensions can have names**: write `constas n` at the first occurrence in a parameter type to bind it (the same pattern as `typeas T` binding a type variable), and write `n` directly afterwards; a name that appears only in the return type is an error.
-
-  ```camel
-  func dense(x: Tensor<f32, const [constas n, 3]>, w: Tensor<f32, const [3, constas k]>): Tensor<f32, const [n, k]>
-  ```
-
-  Addition and multiplication by a constant can be done on dimensions (linear expressions, whose equality is decidable); other results are recorded as unknown. When the argument dimension at the call site is unknown (`?`), the compiler lets it pass and a run-time check is done at the call site (the same as `as`). Named dimensions are used only for checking and produce no new instance: a function is still one graph.
+- **Native multi-dimensional arrays are a core type**: `T[dims...]`, an element type plus a shape, with value semantics. `int[]` (one-dimensional, length known only at run time, appendable) is `int[?]`; `f32[3]`, `f32[n, 784]`, `u8[h, w, 3]`; `int[][]` remains an array of arrays (rows may differ in length). A "tensor" is a multi-dimensional array with a numeric element type. Write `f32[m, n]`, not `f32[m][n]`: a multi-dimensional array is one object. Appending applies only to `T[]`.
+- **A dimension name bound at its first occurrence in a parameter type, when it is not an existing name** (replacing `constas`); existing names are references; a name appearing only in the return type is an error; a dimension name used only once draws a warning (suggesting `?`). `?` is an unnamed size of any value (unknown at compile time, checked at run time at the call, as with `as`); `..s` is any number of dimensions. Dimensions allow addition and multiplication by constants (linear forms whose equality is decidable); other results are unknown. Dimension names live only in types and may not share a name with a run-time variable; named dimensions create no new instances.
+- **An array of unknown shape entering a position that declares a shape**: not let through implicitly; convert explicitly with `as`, checked at the conversion.
+- **Shape checking belongs to the core**; elementwise operations, matmul, reductions and the like are library functions whose facts are standard tags on their declarations (6.6). Sparse, quantized, distributed and tabular data are named types defined by libraries, built from core arrays, with common interfaces expressed through generics.
+- Details and reasons: [Native multi-dimensional arrays, memory management and interop](design/arrays-memory/README.cn.md).
 
 ### 5.5 Generics
 
@@ -530,6 +530,11 @@ Design motivation: the dynamism of the Python language itself determines its fle
 
 - **Automatic differentiation is a library built on the pass mechanism, not the language core.** It has constraints of its own: a graph on which no macro has been executed does not carry enough information for differentiation, so using `grad` and the like needs `std::macro` in the pipeline. This is a precondition of the library, not a constraint of the language core; when it is not met, the library should give a clear diagnostic.
 - For a function being differentiated and `var`, see 3.5.
+- **Differentiating through loops**: the reverse pass needs the intermediate values (residuals) of every forward round. The forward loop keeps each round's residuals as collected outputs (values, not closures), with a manifest saying which slot holds which residual; the reverse pass is a loop over the rounds in reverse order. O(1) per round, O(n) in total. The forward loop's round count may depend on its condition.
+- **Residuals are not bounded**: as with any growing array, running out of memory is reported as resource exhaustion with a location; no separate round limit. A recomputation tag (checkpointing) may later bring memory down to O(√n); the residual design does not preclude it.
+- **A loop whose iterated or captured array depends on the differentiated parameters is refused**, with a located diagnostic naming the `loop` and the array (arrays have no tangents; dropping the gradient silently would give a wrong result).
+- **Effects in a loop's body or condition follow the existing rule**: effects run in the forward pass only and the reverse pass is pure; the check "reading a `var` of a differentiable type is refused" extends to the loop's condition and body, the diagnostic naming the `loop`.
+- **ONNX export of gradients with loops is a separate item**: residuals are values and map to `Loop` scan outputs and a reverse `Loop` (with ONNX sequence types for ragged nested loops when needed).
 
 ### 9.10 Schedulers, back ends and releases
 
@@ -574,6 +579,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 - **The way memory is managed does not enter the semantics of the language**: objects have no observable identity, the timing of reclamation is not observable, and C++ operators reach objects through handles. Each back end may choose the way that suits it; a back end may reclaim little or even no garbage, and neither the timing of reclamation nor whether it happens is observable.
 - **Garbage collection**: small native Camel objects can go through generational management (they can move); where external interfaces are involved, native Camel objects are used to manage external pointers, and external memory does not enter the movable heap. A module must not keep a raw pointer to a Camel object across calls. The constraint generational reclamation places on C++ operator authors is acceptable. Order of landing: first audit the modules and set down the handle rules, then enable generations on the interpreting back end and stress-test it, and turn it on for the JIT and the like after stack maps are done. Generational reclamation is on by default once it is available.
 - **Things with identity must be listed**: `var` cells, objects modified in place through a `var` parameter, objects wrapped from external libraries (Python objects and so on); other values have no observable identity, and a back end may copy or share them freely. No type word is added in the object header.
+- **Memory management has three layers, all implementation**: compile-time planning (numeric buffers whose lifetimes the graph shows), reference counting (the other numeric buffers), and generational tracing collection (all other objects, graphs and snapshots included). **Compact numeric buffers hold only numbers, never references** (guaranteed by the type system), so buffers cannot form cycles and can be handed to foreign code without copying. **When the count is 1, array operations that "return a new value" work in place; this is a guaranteed behaviour.** The run-time representation of numeric arrays is compatible with DLPack (data pointer, device, element type, shape, strides, offset), exchanged with PyTorch, NumPy and CUDA libraries without copying. Cross-language cycles formed when Python embeds Camel are not collected in the first phase. Small logic computations must not get slower; checked against the performance baseline. See [Native multi-dimensional arrays, memory management and interop](design/arrays-memory/README.cn.md).
 
 ### 10.6 `std::cpp`
 
@@ -595,6 +601,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 - `json.decode` returns the self-describing `Json` type, and `decode_as<T>` is provided (for explicit type arguments see 5.9).
 - For bad JSON text, `decode` returns the error value of `Json!`, not a fault.
 - The accessors of `Json` accept `Json?` and `Json!`, for chained access (access can be chained even when parsing failed); `as_float` accepts integers; `get<index>` out of range gives `null`.
+- **When `Json` accessors take a `Json!`, the error passes through unchanged**: `decode(text)->get<'a'>` has type `Json?!`, handled with `!!` or `??`. A document that is too deep reports `JsonTooDeep` (distinct from malformed text); the default depth limit is 10000, to become an optional parameter of `decode`.
 
 ### 11.3 Collections and sorting
 
@@ -608,6 +615,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 - Iterating and printing a map is by sorted key; the types that can be keys are integers, booleans, strings, and tuples made of them.
 - **`append` returns a new array and does not modify the original**: after `let ys = xs->append<5>`, `xs` is unchanged; to "append to a variable" write `acc = acc->append<5>`, like `x = x + 1`. In-place rewriting is only an implementation-level optimization (when the old value is no longer used it can be appended in place); it does not enter the semantics, and no explicit in-place operator is set up. The other standard-library operators are the same. The result of a pure operation that is not used (such as `xs->append<5>` written as a statement) is a compile-time error, with a hint to rewrite it as a rebinding.
 - Returning a new value and modifying in place are not told apart by two names: there is only `sort`, which returns a new array; `xs = xs->sort` sorts in place when the old value is no longer used, the same kind of implementation-level optimization as `acc = acc->append<v>`. Tensors keep explicit in-place operators, arrays have none.
+- **An `enum` can be a map key or a set element** when all its field types are comparable; ordered first by the variants' declaration order, then field by field.
 
 ### 11.4 Call style
 
@@ -616,6 +624,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 ### 11.5 Output and formatting
 
 - **The output of a program and the text written by `fs` are the same bytes on all platforms**; `\r\n` is not written on Windows. For the rule of converting floats to text see 7.7.
+- **String interpolation uses backticks**: `` `step ${i}: loss ${l:.4f}` ``; `${expression}` interpolates, with an optional `:format` as in `format`; a plain `{` needs no escape; it may span lines; it is shorthand for `'...'->format<...>`, and a format that does not match the type is a compile-time error.
 
 ---
 

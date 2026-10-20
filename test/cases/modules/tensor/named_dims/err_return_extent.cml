@@ -1,0 +1,11 @@
+module named_dims_err_return_extent
+import { Tensor, ones } from tensor
+// The return type says the result has extent n. The body returns an extent of its own; the
+// relation is checked where the call runs, like an argument's extent.
+func bad(x: Tensor<f32, const [constas n]>): Tensor<f32, const [n]> {
+    return ones([4])
+}
+func main(): int sync {
+    println(bad(ones([3])))
+    return 0
+}

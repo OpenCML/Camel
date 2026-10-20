@@ -59,6 +59,12 @@ class IndexBuilder {
     /// A constant argument: the scalar operand `operand`, or element `element` of an int array.
     ExprId constant(
         std::string name, size_t operand, int64_t value, std::optional<size_t> element = {});
+    /// A scalar argument known only when the program runs (ParamSource::Runtime): its value is
+    /// left unknown; a check on it states the legal interval.
+    ExprId runtime(std::string name, size_t operand);
+    /// Records a check on the value of `operand`, held by parameter `param`: it must lie in
+    /// [lower, upper], or the operator faults (IndexedInstance::checks).
+    void check(size_t operand, ExprId param, ExprId lower, ExprId upper);
     /// A parameter computed from the others, with its value when known.
     ExprId derived(std::string name, std::optional<int64_t> value, ExprId definition);
 

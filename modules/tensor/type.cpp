@@ -25,10 +25,10 @@
 
 #include "camel/core/data/composite/array.h"
 #include "camel/core/data/primary.h"
-#include "camel/core/mm.h"
-#include "camel/utils/assert.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm.h"
 #include "camel/core/rtdata.h"
+#include "camel/utils/assert.h"
 #include "dtype.h"
 #include "tensor.h"
 
@@ -58,10 +58,33 @@ internKey(const std::optional<TypeCode> &dtype, const std::optional<StaticShape>
     return key;
 }
 
+/// The intern key of the named extents: a type that states `[n, 3]` is not the type that states
+/// `[?, 3]` (it keeps the name for its signature), even though the two are equal for every check
+/// that is not about names.
+std::string formsKey(const std::vector<ExtentForm> &forms) {
+    std::string key = "|";
+    for (const ExtentForm &form : forms) {
+        key += (form.hasNames() ? form.toString() : std::string("-")) + ",";
+    }
+    return key;
+}
+
+/// Whether any extent names a dimension. The forms of a type that names none are not kept: the
+/// shape says everything, and the intern key stays the one it always had.
+bool hasNamedExtent(const std::vector<ExtentForm> &forms) {
+    for (const ExtentForm &form : forms) {
+        if (form.hasNames()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
-TensorType::TensorType(std::optional<TypeCode> dtype, std::optional<StaticShape> shape)
-    : OtherType(typeCode()), dtype_(dtype), shape_(std::move(shape)) {}
+TensorType::TensorType(
+    std::optional<TypeCode> dtype, std::optional<StaticShape> shape, std::vector<ExtentForm> forms)
+    : OtherType(typeCode()), dtype_(dtype), shape_(std::move(shape)), forms_(std::move(forms)) {}
 
 TypeCode TensorType::typeCode() {
     static TypeCode code = registerOtherType("Tensor", TypeFlag::GC_Traced);
@@ -69,6 +92,12 @@ TypeCode TensorType::typeCode() {
 }
 
 TensorType *TensorType::get(std::optional<TypeCode> dtype, std::optional<StaticShape> shape) {
+    return get(std::move(dtype), std::move(shape), {});
+}
+
+TensorType *TensorType::get(
+    std::optional<TypeCode> dtype, std::optional<StaticShape> shape,
+    std::vector<ExtentForm> forms) {
     if (dtype) {
         dtype = normalizeTensorDType(*dtype);
     }
@@ -79,16 +108,19 @@ TensorType *TensorType::get(std::optional<TypeCode> dtype, std::optional<StaticS
             }
         }
     }
+    if (forms.size() != (shape ? shape->size() : 0) || !hasNamedExtent(forms)) {
+        forms.clear();
+    }
     static std::mutex mutex;
     static std::unordered_map<std::string, TensorType *> interned;
-    const std::string key = internKey(dtype, shape);
+    const std::string key = internKey(dtype, shape) + formsKey(forms);
     std::lock_guard guard(mutex);
     if (auto it = interned.find(key); it != interned.end()) {
         return it->second;
     }
     void *mem = mm::permSpace().alloc(sizeof(TensorType), alignof(TensorType));
     ASSERT(mem != nullptr, "Failed to allocate TensorType from permSpace");
-    auto *created = new (mem) TensorType(dtype, std::move(shape));
+    auto *created = new (mem) TensorType(dtype, std::move(shape), std::move(forms));
     interned.emplace(key, created);
     return created;
 }
@@ -118,7 +150,9 @@ std::string TensorType::toString() const {
     if (shape_) {
         result += ", [";
         for (size_t i = 0; i < shape_->size(); ++i) {
-            result += (i ? ", " : "") + dimText((*shape_)[i]);
+            result += (i ? ", " : "");
+            result += i < forms_.size() && forms_[i].hasNames() ? forms_[i].toString()
+                                                                : dimText((*shape_)[i]);
         }
         result += "]";
     }
@@ -155,9 +189,13 @@ std::string TensorType::spelling() const {
     if (shape_) {
         arguments += arguments.empty() ? "const [" : ", const [";
         for (size_t i = 0; i < shape_->size(); ++i) {
-            arguments +=
-                (i ? ", " : "") +
-                ((*shape_)[i] == kUnknownDim ? std::string("-1") : std::to_string((*shape_)[i]));
+            arguments += (i ? ", " : "");
+            if (i < forms_.size() && forms_[i].hasNames()) {
+                arguments += forms_[i].toString();
+            } else {
+                arguments +=
+                    (*shape_)[i] == kUnknownDim ? std::string("-1") : std::to_string((*shape_)[i]);
+            }
         }
         arguments += "]";
     }
@@ -169,8 +207,14 @@ std::string TensorType::mangle() const { return "T" + internKey(dtype_, shape_) 
 Type *TensorType::clone(bool) const { return const_cast<TensorType *>(this); }
 
 bool TensorType::equals(Type *other) const {
-    // Interning makes structural equality pointer equality.
-    return this == other;
+    // Named extents are compile-time metadata of the signature that writes them, like parameter
+    // names: `Tensor<[n, 3]>` and `Tensor<[?, 3]>` are equal as tensor types. Two interned types
+    // may therefore be equal without being the same object.
+    if (other == nullptr || other->code() != typeCode()) {
+        return false;
+    }
+    const auto *rhs = static_cast<const TensorType *>(other);
+    return dtype_ == rhs->dtype_ && shape_ == rhs->shape_;
 }
 
 Type *TensorType::unify(Type *other) const {
@@ -224,7 +268,7 @@ CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
 
 slot_t TensorType::castSlotFrom(slot_t value, Type *sourceType) const {
     (void)sourceType;
-    auto *tensor = camel::core::rtdata::fromSlot<TensorObject *>(value);
+    auto *tensor      = camel::core::rtdata::fromSlot<TensorObject *>(value);
     const auto refuse = [&](const std::string &what) {
         camel::core::error::throwRuntimeFault(
             camel::core::error::RuntimeDiag::RuntimeError,
@@ -234,8 +278,7 @@ slot_t TensorType::castSlotFrom(slot_t value, Type *sourceType) const {
         refuse("the value is null");
     }
     if (dtype_ && normalizeTensorDType(tensor->dtype()) != *dtype_) {
-        refuse(
-            "the tensor has element type " + std::string(dtypeName(tensor->dtype())));
+        refuse("the tensor has element type " + std::string(dtypeName(tensor->dtype())));
     }
     if (shape_) {
         std::string actual = "[";
@@ -289,6 +332,7 @@ OtherType *TensorType::cloneWithArguments(
     std::span<const type::TypeArgument> arguments, std::string &error) const {
     std::optional<TypeCode> dtype;
     std::optional<StaticShape> shape;
+    std::vector<ExtentForm> forms;
     for (const type::TypeArgument &argument : arguments) {
         if (argument.type != nullptr) {
             if (dtype || shape) {
@@ -298,12 +342,29 @@ OtherType *TensorType::cloneWithArguments(
             }
             // As cloneWithParams: the type's code names the element type.
             const TypeCode code = argument.type->code();
-            dtype = code;
+            dtype               = code;
             continue;
         }
         if (shape) {
             error = "Tensor takes at most one shape: Tensor<dtype, const [d0, d1, ...]>";
             return nullptr;
+        }
+        if (argument.extents) {
+            // A shape written over dimension names: each extent is a linear form, and the
+            // non-constant ones are unknown in the shape (the name is the metadata).
+            StaticShape extents;
+            extents.reserve(argument.extents->size());
+            forms.reserve(argument.extents->size());
+            for (const ExtentForm &form : *argument.extents) {
+                if (form.isConstant()) {
+                    extents.push_back(form.constant() < 0 ? kUnknownDim : form.constant());
+                } else {
+                    extents.push_back(kUnknownDim);
+                }
+                forms.push_back(form);
+            }
+            shape = std::move(extents);
+            continue;
         }
         const auto array = std::dynamic_pointer_cast<camel::core::data::ArrayData>(argument.data);
         if (!array) {
@@ -325,7 +386,47 @@ OtherType *TensorType::cloneWithArguments(
         }
         shape = std::move(extents);
     }
-    return get(dtype, std::move(shape));
+    return get(dtype, std::move(shape), std::move(forms));
+}
+
+bool TensorType::extentForms(std::vector<ExtentForm> &out) const {
+    if (!shape_) {
+        return false;
+    }
+    out.clear();
+    out.reserve(shape_->size());
+    for (size_t i = 0; i < shape_->size(); ++i) {
+        if (i < forms_.size() && forms_[i].hasNames()) {
+            out.push_back(forms_[i]);
+        } else if ((*shape_)[i] == kUnknownDim) {
+            out.push_back(ExtentForm::unknown());
+        } else {
+            out.push_back(ExtentForm::constant((*shape_)[i]));
+        }
+    }
+    return true;
+}
+
+OtherType *TensorType::withExtentValues(const ExtentValues &values) const {
+    if (!shape_ || forms_.empty()) {
+        return const_cast<TensorType *>(this);
+    }
+    StaticShape shape = *shape_;
+    bool refined      = false;
+    for (size_t i = 0; i < shape.size() && i < forms_.size(); ++i) {
+        if (!forms_[i].hasNames()) {
+            continue;
+        }
+        if (auto value = forms_[i].evaluate(values)) {
+            shape[i] = *value;
+            refined  = true;
+        }
+    }
+    if (!refined) {
+        return const_cast<TensorType *>(this);
+    }
+    // The refined type is concrete: the names have served their purpose at this call.
+    return get(dtype_, std::move(shape));
 }
 
 const TensorType *asTensorType(const Type *type) {

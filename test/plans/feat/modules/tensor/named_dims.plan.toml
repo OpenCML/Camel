@@ -1,0 +1,202 @@
+id = "modules.tensor.named_dims"
+order = 366
+tier = "feat"
+tags = ["feat", "modules", "tensor", "types", "dimensions"]
+desc = "Named dimensions `constas` in tensor shapes (design principles 5.4): a name binds where it first appears in a parameter type and later occurrences write it; extents are linear forms whose equality is decidable, other results are unknown; an argument whose extent is unknown at compile time is accepted and checked where the call runs (like `as`); a name only the return type writes is an error; and the checking builds no new instance"
+
+[[tests]]
+name = "bind_and_reuse"
+desc = "`constas n` in the first parameter binds the extent; the second parameter writes `n` and must have the same one. The function is called with two different extents."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/named_dims/bind_and_reuse.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["6.0", "10.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "linear_forms"
+desc = "Extents are linear: `n`, `n + 1`, `2 * n` and `n + m`; a name may be written by a parameter before the one that binds it, and two calls with different extents both hold."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/named_dims/linear_forms.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["17.0", "27.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "nonlinear_unknown"
+desc = "A product of two named dimensions is not linear, so its value is unknown and the argument is accepted whatever its extent is."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/named_dims/nonlinear_unknown.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["104.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "unknown_extent_checked"
+desc = "An argument whose extent the compiler does not know (`Tensor<... const [-1]>`) is accepted; the extent another argument binds is checked where the call runs."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/named_dims/unknown_extent_checked.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["6.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_param"
+desc = "A `with` parameter binds a name like a normal parameter, and the normal parameters write it."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/named_dims/with_param.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["6.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "unknown_extent_mismatch"
+desc = "The same call with a tensor of four elements: the extent is unknown statically, so the check runs at the call and fails with the conversion the compiler made, naming both extents and the argument."
+kind = "negative"
+case = "../../../../cases/modules/tensor/named_dims/unknown_extent_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]", "unknown_extent_mismatch.cml:10:17"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unknown_extent_mismatch_fvm"
+desc = "The run-time check of the same call under std::fvm."
+kind = "negative"
+case = "../../../../cases/modules/tensor/named_dims/unknown_extent_mismatch.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unknown_extent_mismatch_jit"
+desc = "The run-time check of the same call under std::jit."
+kind = "negative"
+case = "../../../../cases/modules/tensor/named_dims/unknown_extent_mismatch.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 1
+expect_output_contains = ["conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unknown_extent_mismatch_prl"
+desc = "The run-time check of the same call under std::prl."
+kind = "negative"
+case = "../../../../cases/modules/tensor/named_dims/unknown_extent_mismatch.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 1
+expect_output_contains = ["conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "return_extent_checked"
+desc = "The return type says the result has extent `n`. The body returns an extent of its own; the relation is checked where the call runs, like an argument's extent, and names both."
+kind = "negative"
+case = "../../../../cases/modules/tensor/named_dims/err_return_extent.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["conversion to 'Tensor<float32, [3]>' failed: the tensor has shape [4]", "err_return_extent.cml:9:16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "err_unbound_name"
+desc = "A name that only the return type writes is an error at that name: no parameter binds it."
+kind = "negative"
+case = "../../../../cases/modules/tensor/named_dims/err_unbound_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionNameNotBound"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 54
+expect_output_contains = ["The dimension name 'n' is not bound by any parameter of this signature."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "err_mismatch"
+desc = "Two parameters write the same name and the arguments have extents 3 and 4: the conflict is reported on the argument that contradicts what the earlier one bound."
+kind = "negative"
+case = "../../../../cases/modules/tensor/named_dims/err_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionMismatch"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 33
+expect_output_contains = ["Argument b has extent 4, but the dimensions the earlier arguments bound do not allow it."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "err_constas_return"
+desc = "`constas` in the return type binds nothing: only a parameter type binds a name."
+kind = "negative"
+case = "../../../../cases/modules/tensor/named_dims/err_constas_return.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasNotAllowed"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 46
+expect_output_contains = ["The dimension name 'n' is bound here, but only a parameter type can bind one."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "err_constas_twice"
+desc = "A second `constas` of the same name would bind it twice: the first occurrence binds, later ones write the name."
+kind = "negative"
+case = "../../../../cases/modules/tensor/named_dims/err_constas_twice.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DimensionNameAlreadyBound"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 67
+expect_output_contains = ["The dimension name 'n' is already bound; write 'n' here instead of 'constas n'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "single_instance"
+desc = "Dimension names are for checking only: `dense` is one graph called with two different shapes, its signature keeps the names, and no instance name carries an extent."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/named_dims/single_instance.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const graphs = (out.match(/label="dense";/g) || []).length
+  assert(graphs === 1, `expected exactly one 'dense' graph, found ${graphs}`)
+  const calls = (out.match(/label="dense", type="FUNC"/g) || []).length
+  assert(calls === 2, `expected the two calls to reach one FUNC node each, found ${calls}`)
+  assert(!/dense</.test(out), 'a name carries an extent into an instance name')
+  assert(out.includes('value_type="Tensor<float32, [n, k]>"'), 'the graph keeps its signature with the names')
+}
+"""
+timeout_ms = 8000

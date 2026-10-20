@@ -94,6 +94,7 @@ CAMEL_NODE(CompExpr, Expr)             // annoExpr (('..' | '?..') annoExpr)*
 CAMEL_NODE(AnnoExpr, Expr)             // accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!' | memberAccess)*
 CAMEL_NODE(AccessExpr, Expr)           // primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
 CAMEL_NODE(RefData, Expr)              // identRef, as an operand
+CAMEL_NODE(ConstasData, Expr)          // 'constas' identDef: binds a named dimension (design principles 5.4)
 CAMEL_NODE(Literal, Expr)              // ('+' | '-')? (INTEGER | REAL) | STRING | MULTI_STR | FSTRING | 'true' | 'false' | 'null'
 CAMEL_NODE(ArrayData, Expr)            // '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' dataExpr ('if' dataExpr)?)? ']'
 CAMEL_NODE(StructData, Expr)           // '{' (pairedValues ','?)? '}'

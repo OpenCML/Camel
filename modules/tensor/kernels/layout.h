@@ -65,6 +65,11 @@ struct SliceRange {
     int64_t start;
     int64_t end;
 };
+/// One bound of a slice along an axis of `extent` elements, normalized: a negative bound counts
+/// from the end. nullopt when the bound is outside [-extent, extent] (the operator faults with
+/// SliceOutOfRange). The single source of the bound rule: normalizeSliceBounds and the index
+/// semantics declaration (ops/indexing.cpp) both go through it.
+std::optional<int64_t> normalizeSliceBound(int64_t extent, int64_t bound);
 std::optional<SliceRange> normalizeSliceBounds(int64_t extent, int64_t start, int64_t end);
 
 /// Slice [start, end) with `step` along one axis. A bound out of range throws

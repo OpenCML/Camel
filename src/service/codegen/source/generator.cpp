@@ -824,6 +824,9 @@ string Generator::generateDataLoad(const AST::node_ptr_t &node) {
     case AST::DataType::Ref:
         result = generateRefDataLoad(node);
         break;
+    case AST::DataType::ConstAs:
+        result = dataLoad->geneCode();
+        break;
     default:
         result = generateChildren(node);
         break;

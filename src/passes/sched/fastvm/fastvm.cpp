@@ -649,31 +649,24 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
 }
 
 void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
-    const MarkOpCode mark  = bc.extra()->mark;
-    const auto *words      = reinterpret_cast<const uint64_t *>(&bc + bc.opsize - 3);
-    auto *cond             = reinterpret_cast<camel::runtime::GCGraph *>(words[0]);
-    auto *body             = reinterpret_cast<camel::runtime::GCGraph *>(words[1]);
-    const bool iterates    = mark != MarkOpCode::LoopWhile;
-    const data_arr_t nargs = bc.nargs();
-    const data_arr_t wargs = bc.wargs();
-    const data_idx_t self  = bc.result;
-    const size_t first     = iterates ? 1 : 0;
-    const size_t k         = nargs.size() - first;
-    auto *tupleType =
-        k > 1 ? static_cast<const TupleType *>(currFrame.typeAt<Type>(self)) : nullptr;
+    const auto &loopExtra    = bc.extra()->loop;
+    const MarkOpCode mark    = loopExtra.mark;
+    const auto *words        = reinterpret_cast<const uint64_t *>(&bc + bc.opsize - 3);
+    auto *cond               = reinterpret_cast<camel::runtime::GCGraph *>(words[0]);
+    auto *body               = reinterpret_cast<camel::runtime::GCGraph *>(words[1]);
+    const bool iterates      = mark != MarkOpCode::LoopWhile;
+    const size_t collections = loopExtra.collectionCount;
+    const data_arr_t nargs   = bc.nargs();
+    const data_arr_t wargs   = bc.wargs();
+    const data_idx_t self    = bc.result;
+    const size_t first       = iterates ? 1 : 0;
+    const size_t k           = nargs.size() - first;
+    const bool wraps         = k > 1 || collections != 0;
+    const auto *valueType =
+        wraps ? static_cast<const TupleType *>(currFrame.typeAt<Type>(self)) : nullptr;
 
-    // The state: the value itself (k = 1) or a tuple of the k values, in the result slot.
-    if (k == 1) {
-        currFrame.set(self, currFrame.get<slot_t>(nargs[first]));
-    } else {
-        Tuple *state = Tuple::create(k, mm::autoSpace());
-        for (size_t j = 0; j < k; ++j) {
-            state->set(j, currFrame.get<slot_t>(nargs[first + j]), tupleType);
-        }
-        currFrame.set(self, state);
-    }
-    // The rounds are the loop's (camel/execute/loop_driver.h); this interpreter supplies a frame
-    // and a call for each, through the call path of the higher-order operators.
+    // The state and the rounds are the loop's (camel/execute/loop_driver.h); this interpreter
+    // supplies a frame and a call for each, through the call path of the higher-order operators.
     struct Host {
         FastVMSchedPass &vm;
         Frame &currFrame;
@@ -685,7 +678,12 @@ void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
         HigherOrderCallSite condSite, bodySite;
 
         void beforeRound(size_t) {}
-        slot_t callRound(camel::runtime::GCGraph *target, const slot_t *element) {
+        slot_t initialState(size_t j) { return currFrame.get<slot_t>(nargs[first + j]); }
+        slot_t stateValue() { return currFrame.get<slot_t>(self); }
+        void setStateValue(slot_t value) { currFrame.set(self, value); }
+        slot_t callRound(
+            const camel::execute::LoopShape &shape, camel::runtime::GCGraph *target,
+            const slot_t *element) {
             vm.requireNestedCallRoom(&currFrame);
             Frame *frame = vm.framePool_.acquire(target);
             camel::execute::bindLoopRound(
@@ -695,14 +693,12 @@ void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
                 element,
                 wargs.size(),
                 [&](size_t j) {
-                    return k == 1 ? currFrame.get<slot_t>(self)
-                                  : currFrame.get<Tuple *>(self)->get<slot_t>(j);
+                    return camel::execute::loopStateComponent(shape, stateValue(), j);
                 },
                 [&](size_t c) { return currFrame.get<slot_t>(wargs[c]); });
             return vm.callElement(target == condSite.runtimeGraph ? condSite : bodySite, frame);
         }
         Array *iterable() { return currFrame.get<Array *>(nargs[0]); }
-        void advance(slot_t next) { currFrame.set(self, next); }
     } host{
         *this,
         currFrame,
@@ -713,7 +709,17 @@ void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
         first,
         HigherOrderCallSite{.runtimeGraph = cond, .entryPc = cond ? graphEntryPc(cond) : 0},
         HigherOrderCallSite{.runtimeGraph = body, .entryPc = graphEntryPc(body)}};
-    camel::execute::driveLoopRounds(camel::execute::LoopShape{cond, body, iterates, k}, host);
+    camel::execute::driveLoopRounds(
+        camel::execute::LoopShape{
+            .cond            = cond,
+            .body            = body,
+            .iterates        = iterates,
+            .stateCount      = k,
+            .collectionCount = collections,
+            .valueType       = valueType,
+            .origin          = camel::source::kInvalidOriginId,
+        },
+        host);
 }
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(

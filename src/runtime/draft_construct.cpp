@@ -420,6 +420,15 @@ void GraphDraft::setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags) {
     draftNode->header.runtimeFlags = runtimeFlags;
 }
 
+void GraphDraft::setLoopCollectionCount(gc_node_ref_t id, uint32_t count) {
+    DraftNode *draftNode = node(id);
+    ASSERT(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
+        "Only a LOOP node has collection slots.");
+    auto *body            = DraftNodeView::payloadAs<GCLoopBody>(draftNode);
+    body->collectionCount = count;
+}
+
 void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot rewrite a missing draft node.");

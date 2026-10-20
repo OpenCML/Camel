@@ -28,6 +28,7 @@
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
 #include "camel/passes/test/control.h"
+#include "camel/passes/test/loop_collect.h"
 #include "camel/passes/trans/json/gir.h"
 #include "camel/runtime/capacity.h"
 #include "macro/macro.h"
@@ -836,6 +837,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
         TEST_PASS(kResourcesTestPass, ResourcesTestPass),
         TEST_PASS(kControlTestPass, ControlTestPass),
+        TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
+        TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
         TEST_PASS(kFactSeedTestPass, FactSeedTestPass),
         TEST_PASS(kFactCheckTestPass, FactCheckTestPass),
@@ -1173,8 +1176,15 @@ PassApplyResult applyPassesDetailed(
                 // setting that raises it, at the graph that was being built when one is known.
                 setPipelineStage("pass:" + specName(p));
                 auto diag = ctx->rtmDiags()->of(RuntimeDiag::MemoryExhausted);
-                if (e.origin() != camel::source::kInvalidOriginId) {
-                    diag.atOrigin(e.origin());
+                // The allocator names a source only when the caller told it one (the loop
+                // driver does for its tapes); otherwise the bytecode the VM was running is the
+                // innermost place the program asked for memory.
+                uint64_t origin = e.origin();
+                if (origin == camel::source::kInvalidOriginId && ctx->sourceContext() != nullptr) {
+                    origin = ctx->sourceContext()->currentRuntimeOrigin();
+                }
+                if (origin != camel::source::kInvalidOriginId) {
+                    diag.atOrigin(origin);
                 }
                 diag.commit(std::format(" in pass '{}'", p), std::string(e.what()));
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);
