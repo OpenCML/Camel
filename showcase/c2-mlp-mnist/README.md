@@ -164,6 +164,10 @@ The genuinely awkward parts of writing this example. Each comes with a question 
    **Question**: is the comment right (replace as a whole, keep the old directory on
    failure), or is the implementation right (refuse)? If the latter, should `save_tree` get a
    `replace` variant (like `fs.replace`), or should `fs` get a removal operation?
+   **Resolved (H20)**: the comment was right — `save_tree` replaces as a whole, keeping the
+   old directory until the new one is published and putting it back on failure;
+   `fs::remove` and `fs::remove_dir` return `T!`. See `## H20-4` in
+   `docs/handover/reports/H20.md`.
 2. **Tensors have no way to select or reorder rows, so the data pipeline shuffles outside the
    language.** The only minibatch operation is `slice(t, axis, start, end)`; `t[i]` returns a
    single scalar. There is no `gather`/`index_select`/row-selection by an index array, so

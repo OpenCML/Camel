@@ -320,13 +320,23 @@ slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
         if (!output)
             throw std::invalid_argument(
                 "backend did not supply the static checkpoint result layout");
-        const auto manifest = Json::parse(readCheckpointFile(directoryPath, "manifest.json"));
+        // A save interrupted between its two renames leaves the complete previous checkpoint
+        // at `dir.previous`: read that instead of failing, and say so (the next save restores
+        // it before replacing it).
+        bool recovered           = false;
+        const auto readDirectory = checkpointReadDirectory(directoryPath, recovered);
+        if (recovered)
+            std::cerr << "warning: tree.load_tree: '" << directory
+                      << "' is missing; reading the previous checkpoint an interrupted "
+                         "save_tree left at '"
+                      << camel::utils::pathToUtf8(readDirectory) << "'\n";
+        const auto manifest = Json::parse(readCheckpointFile(readDirectory, "manifest.json"));
         if (manifest.at("schema") != 1)
             throw std::invalid_argument("unsupported checkpoint schema");
         if (!manifest.at("camel_version").is_string())
             throw std::invalid_argument("missing Camel version");
         const auto restored =
-            readNode(output->payloadType(), manifest.at("tree"), directoryPath, "");
+            readNode(output->payloadType(), manifest.at("tree"), readDirectory, "");
         if (!dataHash.empty() && manifest.at("dataset_manifest_sha256") != dataHash)
             std::cerr
                 << "warning: tree.load_tree: dataset manifest SHA-256 differs from checkpoint\n";

@@ -42,7 +42,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [algo](#algo) | `import { ... } from algo` | C++ | 8 |
 | [random](#random) | `import { ... } from random` | C++ | 7 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
-| [fs](#fs) | `import { ... } from fs` | C++ | 13 |
+| [fs](#fs) | `import { ... } from fs` | C++ | 15 |
 | [os](#os) | `import { ... } from os` | C++ | 8 |
 | [sys](#sys) | `import { ... } from sys` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
@@ -1045,12 +1045,18 @@ save_tree: (dir: string, tree: T, dataset_manifest_sha256: string) => void
 
 Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
 tensor), with a manifest that records the types, sizes and SHA-256 sums. The directory is
-replaced as a whole or not at all. A leaf type a checkpoint cannot hold (anything but a
-tensor, `Bytes`, `string`, `bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that
-names the path.
+replaced as a whole or not at all: the new checkpoint is written and flushed into a
+temporary sibling and renamed into place, and the old directory is kept beside it as
+`dir.previous` until that rename succeeds, so a failure puts the old directory back. A
+destination that does not exist is created; one that does is replaced; a symbolic link or a
+reparse point there is refused. If the process dies between the two renames,
+`load_tree` reads `dir.previous` and the next `save_tree` restores it before replacing it.
+(A directory rename cannot replace a non-empty directory on Windows or POSIX, hence the two
+renames.) A leaf type a checkpoint cannot hold (anything but a tensor, `Bytes`, `string`,
+`bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that names the path.
 
-- With effects: writes the directory.
-- Failure: fault `FileSystemError` when the directory cannot be written.
+- With effects: writes and replaces the directory.
+- Failure: fault `FileSystemError` when the directory cannot be written or published.
 - Example: `save_tree('out/ckpt', { w: zeros([2, 2]), step: 10 })`
 
 #### `load_tree`
@@ -1062,7 +1068,9 @@ load_tree: (dir: string, dataset_manifest_sha256: string) => T!
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
 the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
 `CheckpointError` value, nothing is partly loaded. T is the explicit type argument or the
-expected type of the result.
+expected type of the result. When a save was interrupted after moving the old directory
+aside, the complete `dir.previous` is read instead, with a warning on standard error; the
+next save restores it before replacing it.
 
 - With effects: reads the directory.
 - Example: `load_tree::<{ w: Tensor<f32>, step: int }>('out/ckpt') !! initial()`
@@ -2398,6 +2406,32 @@ Creates a directory and every missing parent; false when it already exists.
 - With effects: changes the file system.
 - Failure: fault `FileSystemError` when it cannot be created.
 - Example: `mkdirs('out/logs/today')` gives `true`
+
+#### `remove`
+
+```camel
+remove: (path: string) => void!
+```
+
+Removes a file or a symbolic link; a directory, even an empty one, is an error (use
+`remove_dir`). Removing a path that is not there is an error value, not a silent success.
+
+- With effects: removes a file.
+- Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a directory or the removal fails for another reason.
+- Example: `remove('notes.txt')`
+
+#### `remove_dir`
+
+```camel
+remove_dir: (path: string) => void!
+```
+
+Removes one empty directory. A directory that is not empty is an error, not a recursive
+delete; a file or a symbolic link is an error too.
+
+- With effects: removes a directory.
+- Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
+- Example: `remove_dir('out/old')`
 
 <a id="os"></a>
 

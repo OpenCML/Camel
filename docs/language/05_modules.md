@@ -56,7 +56,7 @@ func main(): int sync {
 | `math` | 常量 `pi`、`e`、`inf`、`nan`（值）；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
 | `random` | `seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle` |
 | `time` | `now`、`strftime`、`strptime` |
-| `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`read_text`、`try_read_text`、`write_text`、`file_size`、`read_chunk` |
+| `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`remove`、`remove_dir`、`read_text`、`try_read_text`、`write_text`、`file_size`、`read_chunk`、`read_bytes`、`write_bytes`、`replace` |
 | `json` | 类型 `Json`；`encode`、`decode`、`decode_as`；`kind`、`is_null`、`get`、`as_bool`、`as_int`、`as_float`、`as_string`、`as_array`、`as_object` |
 | `os`、`sys` | `whoami`、`cpu_count`、终端输入；`get_cwd`、`get_env` |
 | `re` | `test` |

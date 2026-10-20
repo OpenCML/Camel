@@ -99,6 +99,18 @@ FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
             "mkdirs",
             {{"fs:mkdirs",
               StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Bool())}}));
+    // Deleting as an operation that can fail (design principles 3.9): a missing path is an
+    // error value with kind NotFound, not a silent success, and a refusal is PermissionDenied.
+    for (const std::string name : {"remove", "remove_dir"})
+        exportEntity(
+            name,
+            OperatorGroup::create(
+                name,
+                {{"fs:" + name,
+                  StaticFuncTypeResolver::create(
+                      {},
+                      {{Type::String(), false}},
+                      TupleType::fallible(Type::Void()))}}));
 }
 
 module_ptr_t FsModule::create(context_ptr_t ctx) { return std::make_shared<FsModule>(ctx); }
@@ -125,6 +137,8 @@ bool FsModule::load() {
             {"write_text", false},
             {"mkdir", false},
             {"mkdirs", false},
+            {"remove", false},
+            {"remove_dir", false},
         });
     // What each touches (docs/design/op-semantics 8): the file system, outside the program.
     {
@@ -146,6 +160,8 @@ bool FsModule::load() {
                 {"write_text", externalAmbient("fs", AccessMode::ReadModifyWrite)},
                 {"mkdir", externalAmbient("fs", AccessMode::ReadModifyWrite)},
                 {"mkdirs", externalAmbient("fs", AccessMode::ReadModifyWrite)},
+                {"remove", externalAmbient("fs", AccessMode::ReadModifyWrite)},
+                {"remove_dir", externalAmbient("fs", AccessMode::ReadModifyWrite)},
             });
     }
     loaded_ = true;
