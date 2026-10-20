@@ -1,0 +1,82 @@
+/**
+ * `fs::remove` and `fs::remove_dir` return `void!` (design principles 3.9): removing a path
+ * that is not there is an error value of kind NotFound, not a silent success; a refusal by the
+ * file system is PermissionDenied; `remove` refuses a directory and `remove_dir` refuses a
+ * file and a directory that is not empty (no recursive delete). Each error value's location is
+ * the operator.
+ */
+module fs_remove
+
+import { exists, mkdirs, write_text, remove, remove_dir } from fs
+import { get_env } from sys
+import { find } from str
+
+/// The kind and location of a `void!`, or ok.
+func report(r: void!) {
+    return match r {
+        case error e => e.kind + ' | ' + e.location
+        case _ => 'ok'
+    }
+}
+
+/// Why a failed removal failed, in the words the operator chose (the OS message differs by
+/// platform and locale, so it is not part of this report).
+func reason(r: void!) {
+    return match r {
+        case error e =>
+            if (e.message->find<'not empty'> ?? -1) >= 0 then 'not empty'
+            else if (e.message->find<'is a directory'> ?? -1) >= 0 then 'is a directory'
+            else if (e.message->find<'not a directory'> ?? -1) >= 0 then 'not a directory'
+            else if (e.message->find<'no such file'> ?? -1) >= 0 then 'missing'
+            else if (e.message->find<'denied'> ?? -1) >= 0 then 'denied'
+            else 'io'
+        case _ => '-'
+    }
+}
+
+func line(r: void!): int sync {
+    println(report(r), '|', reason(r))
+    return 0
+}
+
+func main(mode: int, path: string): int sync {
+    return if mode == 1 then sync {
+        // The permission case is set up by the node verifier (remove_permissions.mjs).
+        let _ = line(remove(path))
+        return 0
+    } else if mode == 2 then sync {
+        let _ = line(remove_dir(path))
+        return 0
+    } else sync {
+        let root = get_env('CAMEL_TEST_TMPDIR')
+        let dir = if root == '' then 'test/tmp/fs_remove' else root + '/fs_remove'
+        mkdirs(dir)
+        let file = dir + '/file.txt'
+        write_text(file, 'x')
+        // A file: removed once, then not found.
+        let _ = line(remove(file))
+        println('exists after remove =', exists(file))
+        let _ = line(remove(file))
+        let _ = line(remove(dir + '/missing.txt'))
+        // A directory is not a file; an empty directory can be removed by remove_dir.
+        let _ = line(remove(dir))
+        let _ = line(remove_dir(dir + '/missing'))
+        mkdirs(dir + '/empty')
+        let _ = line(remove_dir(dir + '/empty'))
+        let _ = line(remove_dir(dir + '/empty'))
+        // A directory that is not empty is refused, and its contents survive.
+        mkdirs(dir + '/full')
+        write_text(dir + '/full/inside.txt', 'y')
+        let _ = line(remove_dir(dir + '/full'))
+        println('not-empty contents survive =', exists(dir + '/full/inside.txt'))
+        let _ = line(remove(dir + '/full/inside.txt'))
+        let _ = line(remove_dir(dir + '/full'))
+        // remove_dir on a file is refused; remove on the file then works.
+        write_text(dir + '/other.txt', 'z')
+        let _ = line(remove_dir(dir + '/other.txt'))
+        let _ = line(remove(dir + '/other.txt'))
+        let _ = line(remove_dir(dir))
+        println('exists after remove_dir =', exists(dir))
+        return 0
+    }
+}

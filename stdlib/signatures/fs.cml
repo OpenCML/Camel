@@ -106,3 +106,21 @@ inner func mkdir(path: string): bool {
 inner func mkdirs(path: string): bool {
     return 'fs:mkdirs'
 }
+
+/// Removes a file or a symbolic link; a directory, even an empty one, is an error (use
+/// `remove_dir`). Removing a path that is not there is an error value, not a silent success.
+/// @effect removes a file
+/// @fails error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a directory or the removal fails for another reason
+/// @example remove('notes.txt')
+inner func remove(path: string): void! {
+    return 'fs:remove'
+}
+
+/// Removes one empty directory. A directory that is not empty is an error, not a recursive
+/// delete; a file or a symbolic link is an error too.
+/// @effect removes a directory
+/// @fails error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a file, a symbolic link, or a directory that is not empty
+/// @example remove_dir('out/old')
+inner func remove_dir(path: string): void! {
+    return 'fs:remove_dir'
+}
