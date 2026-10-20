@@ -147,6 +147,8 @@
 
 协调者一方已合入 fsh-dev：32 位编号与容量上限删除、`GraphId` 与程序快照 `Program`（遍的签名为 `apply(const Program*) -> const Program*`）、`stableId`/`lineage`/`serial` 删除、冻结图分块（`GCNodeChunk`）、草稿读者列表与 O(1) 删除、`std::opt` 的筛选与内联器提速。即将合入：图引用改用 `GraphId`、统一的执行计划（`ExecPlan`，图上的扩展槽删除）、墓碑与块共用。
 
+**协调者一方将修改 `src/core/mm/gen.cpp` 的全量回收路径**（图空间改由 GC 标记与清扫，快照与图版本由 GC 管理）：乙车道暂不改动 `gen.cpp` 中与图空间、全量回收相关的部分；数据块记账与延迟释放队列保持不变。
+
 **下一步是控制区域**（设计稿第 5 步）：`if`/`match` 的臂与 `LOOP` 的条件、循环体改为同一张图内共用帧的区域，前端的分支与循环建图（`builder_control.cpp`）、`loop_lowering.cpp`、`branch_arms.cpp` 将被重写或删除。**甲车道在 `builder_control.cpp` 与分支、循环相关的建图代码上只做必要的小改动，并频繁合入 develop**；需要较大改动时先在报告中提出。
 
 ### 5.0 并行车道（2026-10-20）
