@@ -29,11 +29,11 @@ name = "complex.views_selftest"
 desc = "The compact-element view boundary: a materialised value is clean, an unmaterialised view is detected."
 case = "../../../cases/feat/mm/blocks.cml"
 args = ["${case}", "std::gc::views", "std::nvm"]
-expect_stdout_contains = ["VIEW_SELFTEST ok normal=clean escape=caught"]
+expect_stdout_contains = ["VIEW_SELFTEST ok normal=clean escape=caught", "VIEW_ACCUMULATOR ok alias=detected kept=stable"]
 
 [[tests]]
 name = "complex.views_selftest_alias"
 desc = "The same self-test through its short alias."
 case = "../../../cases/feat/mm/blocks.cml"
 args = ["${case}", "std::gcviews", "std::nvm"]
-expect_stdout_contains = ["VIEW_SELFTEST ok normal=clean escape=caught"]
+expect_stdout_contains = ["VIEW_SELFTEST ok normal=clean escape=caught", "VIEW_ACCUMULATOR ok alias=detected kept=stable"]
