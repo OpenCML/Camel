@@ -1,13 +1,10 @@
 /**
  * Trains a residual MLP written as a plain struct model: grad of the loss gives a gradient
  * struct of the same shape, and sgd / adam map (model, gradient) to the updated model.
- *
- * The model is the first normal parameter of the loss (9.9); the helpers take the piece they
- * need as a normal parameter too.
  */
 module residual_mlp
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, zeros, sum, tanh } from tensor
 import { OptimizerState, sgd, adam, adam_state } from nn
 
@@ -23,17 +20,20 @@ type ResidualMlp = {
     depth: int
 }
 
-func linear(x: Tensor, layer: Linear): Tensor {
+with <layer: Linear>
+func linear(x: Tensor): Tensor {
     return x @ layer.weight + layer.bias
 }
 
-func forward(model: ResidualMlp, x: Tensor): Tensor {
-    let hidden = tanh(linear(x, model.l0))
-    return linear(hidden, model.l1) + linear(x, model.skip)
+with <model: ResidualMlp>
+func forward(x: Tensor): Tensor {
+    let hidden = tanh(x->linear<model.l0>)
+    return hidden->linear<model.l1> + x->linear<model.skip>
 }
 
-func loss(model: ResidualMlp, x: Tensor, target: Tensor): float {
-    let diff = forward(model, x) - target
+with <model: ResidualMlp>
+func loss(x: Tensor, target: Tensor): float {
+    let diff = x->forward<model> - target
     return sum(diff * diff) / 4.0
 }
 
@@ -47,11 +47,11 @@ func init(): ResidualMlp {
 }
 
 func train_sgd(model: ResidualMlp, x: Tensor, y: Tensor, steps: int): ResidualMlp {
-    return if steps == 0 then model else train_sgd(sgd(model, grad(loss)(model, x, y), 0.1), x, y, steps - 1)
+    return if steps == 0 then model else train_sgd(sgd(model, grad(loss)<model>(x, y), 0.1), x, y, steps - 1)
 }
 
 func train_adam(model: ResidualMlp, state: OptimizerState, x: Tensor, y: Tensor, steps: int): ResidualMlp {
-    let updated = adam(model, grad(loss)(model, x, y), state, 0.05)
+    let updated = adam(model, grad(loss)<model>(x, y), state, 0.05)
     return if steps == 0 then model else train_adam(updated.0, updated.1, x, y, steps - 1)
 }
 
@@ -59,12 +59,12 @@ func main(): int sync {
     let x = full([2, 2], 1.0)
     let y = full([2, 2], 1.0)
     let model = init()
-    let start = loss(model, x, y)
-    let vg = value_and_grad(loss)(model, x, y)
+    let start = loss<model>(x, y)
+    let vg = with_grad(loss)<model>(x, y)
     let by_sgd = train_sgd(model, x, y, 20)
-    let after_sgd = loss(by_sgd, x, y)
+    let after_sgd = loss<by_sgd>(x, y)
     let by_adam = train_adam(model, adam_state(model), x, y, 20)
-    let after_adam = loss(by_adam, x, y)
+    let after_adam = loss<by_adam>(x, y)
     'residual_mlp start={} value={} sgd={} adam={} depth={}'->format<start, vg.0, after_sgd, after_adam, by_sgd.depth>->println
     return 0
 }

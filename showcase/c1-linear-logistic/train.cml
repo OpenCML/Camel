@@ -1,7 +1,7 @@
 // C1 -- linear and logistic regression, one training loop each.
 //
 // The example is deliberately smaller than C2: a two-parameter model (`w`, `b`), a plain
-// gradient from `value_and_grad`, a plain SGD step from `nn.sgd`, and the training loop as a
+// gradient from `with_grad`, a plain SGD step from `nn.sgd`, and the training loop as a
 // `do` expression.  The two problems share every line except the loss: mean squared error for
 // regression, a stable binary cross-entropy for classification.
 //
@@ -12,7 +12,7 @@ module c1_linear_logistic
 
 // == imports ==
 import { Tensor, abs, exp, load_npy, log, mean, numel, relu, set_num_threads, shape, slice } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd } from nn
 import { now } from time
 
@@ -86,17 +86,18 @@ func main(
     `c1 init loss=${before.0:.9f} metric=${before.1:.9f}`->println
 
     // == train ==
-    // The loop carries the model and the step counter.  `value_and_grad` gives the loss and the
+    // The loop carries the model and the step counter.  `with_grad` gives the loss and the
     // gradient of the same tree; the pair is taken apart by destructuring.  `sgd` returns a
     // model of the same type, so the loop state needs no casts.
     let started = now()
+    let loss_with_grad = with_grad(loss)
     let (trained, finished) = loop m = initial, step = 0
         while step < steps
         do sync {
             let start = (step % batches) * batch
             let x = slice(train_x, 0, start, start + batch)
             let y = slice(train_y, 0, start, start + batch)
-            let (value, gradient) = value_and_grad(loss)<m>(x, y, kind)
+            let (value, gradient) = loss_with_grad<m>(x, y, kind)
             if step % log_every == 0 then {
                 `c1 step=${step} loss=${value:.9f}`->println
             }

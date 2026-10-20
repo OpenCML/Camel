@@ -10,27 +10,31 @@ import { Tensor, reshape, sum } from tensor
 import { grad } from autodiff
 import { get_env } from sys
 
-func cube(x: float): float {
+with <x: float>
+func cube(): float {
     return x * x * x
 }
 
-func dcube(x: float): float {
-    return grad(cube)(x)
+with <x: float>
+func dcube(): float {
+    return grad(cube)<x>()
 }
 
-func g(x: Tensor): float {
+with <x: Tensor>
+func g(): float {
     return sum(x * x * x)
 }
 
-func h(x: Tensor): float {
-    return sum(grad(g)(x))
+with <x: Tensor>
+func h(): float {
+    return sum(grad(g)<x>())
 }
 
 func main(): int sync {
     // Read at run time, so the gradient graphs stay general rather than folding to constants.
     let x = if get_env('SECOND_ORDER_X') == '' then 2.0 else 2.0
-    'scalar d2={}'->format<grad(dcube)(x)>->println
+    'scalar d2={}'->format<grad(dcube)<x>()>->println
     let t = reshape([1.0, -2.0, 0.5], [3])
-    println(grad(h)(t))
+    println(grad(h)<t>())
     return 0
 }

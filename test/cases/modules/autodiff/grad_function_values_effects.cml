@@ -22,7 +22,8 @@ func apply(f: (t: Tensor) => Tensor, p: Tensor): Tensor sync {
 }
 
 // 1. a closure passed to a function that prints and calls it twice
-func loss1(p: Tensor): float sync {
+with <p: Tensor>
+func loss1(): float sync {
     println('loss1')
     let s = sum(p)
     let r = apply((t: Tensor): Tensor => tanh(t * s), p)
@@ -31,7 +32,8 @@ func loss1(p: Tensor): float sync {
 }
 
 // 2. a closure returned by a factory that prints, called twice
-func loss2(p: Tensor): float sync {
+with <p: Tensor>
+func loss2(): float sync {
     println('loss2')
     let g = make(sum(p))
     println('loss2: made')
@@ -39,7 +41,8 @@ func loss2(p: Tensor): float sync {
 }
 
 // 3. a closure called inside a second closure, built after a print
-func loss3(p: Tensor): float sync {
+with <p: Tensor>
+func loss3(): float sync {
     let s = sum(p)
     let g = (t: Tensor): Tensor => tanh(t * s)
     println('loss3')
@@ -50,8 +53,8 @@ func loss3(p: Tensor): float sync {
 
 func main(): int sync {
     let x = reshape([0.5, 0.25, -0.35], [3])
-    println(grad(loss1)(x))
-    println(grad(loss2)(x))
-    println(grad(loss3)(x))
+    println(grad(loss1)<x>())
+    println(grad(loss2)<x>())
+    println(grad(loss3)<x>())
     return 0
 }

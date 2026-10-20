@@ -1,4 +1,4 @@
-"""JAX (jit + value_and_grad) baseline for the E2 training-step benchmark (CPU).
+"""JAX (jit + with_grad) baseline for the E2 training-step benchmark (CPU).
 
 Same workload as ``train.py``: the loss is ``mean(y * y)`` of the model output
 on the benchmark input; one training step is the loss, its gradient with
@@ -13,7 +13,7 @@ math is the same unrolled recurrence the other frameworks execute.
 
 One step is a single ``jax.jit``-compiled function::
 
-    loss, grads = jax.value_and_grad(loss_fn)(params, x)
+    loss, grads = jax.with_grad(loss_fn)(params, x)
     params = tree_map(lambda w, g: w - lr * g, params, grads)
 
 so forward, backward, and the SGD update are all inside the XLA executable.
@@ -177,7 +177,7 @@ def _forwards():
 
 
 def _make_step(fwd):
-    """jit(loss + value_and_grad + SGD update); the whole step is one XLA executable."""
+    """jit(loss + with_grad + SGD update); the whole step is one XLA executable."""
     import jax
     import jax.numpy as jnp
 
@@ -186,7 +186,7 @@ def _make_step(fwd):
         return jnp.mean(y * y)
 
     def step(p, x):
-        loss, grads = jax.value_and_grad(loss_fn)(p, x)
+        loss, grads = jax.with_grad(loss_fn)(p, x)
         new = jax.tree_util.tree_map(lambda w, g: w - LR * g, p, grads)
         return loss, new
 

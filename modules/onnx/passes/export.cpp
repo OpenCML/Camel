@@ -607,7 +607,7 @@ collectRequests(const core::context::Context &ctx, GCGraph *root, const std::str
     return requests;
 }
 
-/// A macro operator (grad, value_and_grad, ...) left in the function means std::macro did
+/// A macro operator (grad, with_grad, ...) left in the function means std::macro did
 /// not run: its expansion is a graph rewrite, which this pass does not perform.
 void refuseUnexpandedMacros(const GCGraph *g) {
     for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {

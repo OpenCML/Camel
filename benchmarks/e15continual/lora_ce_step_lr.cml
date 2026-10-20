@@ -16,7 +16,7 @@
 module lora_ce_step_lr
 
 import { Tensor, relu, mean, sum, neg, log_softmax, load_npy } from tensor
-import { value_and_grad, stop_gradient } from autodiff
+import { with_grad, stop_gradient } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from sys
 import { export_model } from onnx
@@ -51,7 +51,7 @@ func ce_lr(): float sync {
 }
 
 func step_ce(m: LoraMlp, x: Tensor, target: Tensor, lr: float): (float, LoraMlp) {
-    let vg = value_and_grad(loss_ce)<m>(x, target)
+    let vg = with_grad(loss_ce)<m>(x, target)
     return (vg.0, sgd(m, vg.1, lr))
 }
 

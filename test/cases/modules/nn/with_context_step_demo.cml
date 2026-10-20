@@ -1,16 +1,11 @@
 /**
- * Demonstrates a Linear model trained functionally: value_and_grad of a loss that calls a
- * Linear-shaped helper yields the loss plus a Linear-shaped gradient, and one sgd step returns
- * the updated Linear.
- *
- * `grad` differentiates the first normal parameter (9.9), so the model `layer` is an ordinary
- * argument rather than a `with` parameter. The `with` parameter `scale` is configuration: it
- * does not take part in differentiation and survives as a `with` parameter of the gradient
- * function, supplied with `<scale>` at the call site.
+ * Demonstrates a with-context Linear model trained functionally: with_grad of a loss that
+ * calls a with-context helper yields the loss plus a Linear-shaped gradient, and one sgd step
+ * returns the updated Linear.
  */
 module with_context_step_demo
 
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { Tensor, ones, shape, sum, zeros } from tensor
 import { sgd } from nn
 
@@ -18,16 +13,17 @@ type Linear = {
     weight: Tensor
 }
 
-func linear(x: Tensor, layer: Linear): Tensor {
+with <layer: Linear>
+func linear(x: Tensor): Tensor {
     return x @ layer.weight
 }
 
-with <scale: float>
-func mse_loss(layer: Linear, x: Tensor, y: Tensor): float {
-    let pred = linear(x, layer)
+with <layer: Linear>
+func mse_loss(x: Tensor, y: Tensor): float {
+    let pred = x->linear<layer>
     let errors = pred - y
     let squared = errors * errors
-    return scale * sum(squared) / float(shape(x)[0])
+    return sum(squared) / float(shape(x)[0])
 }
 
 func init(): Linear {
@@ -38,13 +34,12 @@ func main(): int sync {
     let layer = init()
     let X = ones([4, 2])
     let y = ones([4, 1])
-    let scale = 1.0
 
-    let before = mse_loss<scale>(layer, X, y)
-    let vg = value_and_grad(mse_loss)<scale>(layer, X, y)
+    let before = mse_loss<layer>(X, y)
+    let vg = with_grad(mse_loss)<layer>(X, y)
     let gradient = vg.1
     let trained = sgd(layer, gradient, 0.01)
-    let after = mse_loss<scale>(trained, X, y)
+    let after = mse_loss<trained>(X, y)
 
     'with_context_step_demo metrics before={} step={} after={}'->format<before, vg.0, after>->println
     'with_context_step_demo weight={}'->format<trained.weight>->println

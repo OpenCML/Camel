@@ -1,6 +1,6 @@
 """The gradient of tail recursions that carry and return several values, as paired ONNX Loops.
 
-ort_grad_loop_values.cml (value_and_grad of four losses over loops that return a tensor state
+ort_grad_loop_values.cml (with_grad of four losses over loops that return a tensor state
 together with an integer counter: as a tuple, with the counter entering the loss as a number, as
 a struct, and with two more differentiable carried values, a tensor and a float) is exported
 once and must pass onnx.checker's full check. For inputs on which the loop stops after 0, 1 and

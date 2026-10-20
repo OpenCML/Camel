@@ -1,8 +1,9 @@
 module tiles_resident_scalars
 import { Tensor, reshape, sum, abs, zeros } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { Device, upload, download, run, run_device } from tiles
-func loss(x: Tensor<f32>): float { return sum(x * x) }
+with <x: Tensor<f32>>
+func loss(): float { return sum(x * x) }
 func total(x: Tensor<f32>): float { return sum(x) }
 func identity(x: float): float { return x }
 func scale(x: Tensor<f32>, k: float): Tensor<f32> { return x * k }
@@ -12,7 +13,7 @@ func mixed(x: Tensor<f32>): (float, Tensor<f32>, float) {
 func read(x: Device<float>): float { return download(x) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0], [3])
-    let vg = value_and_grad(loss)
+    let vg = (v: Tensor<f32>): (float, Tensor<f32>) => with_grad(loss)<v>()
     let result = run_device<vg>(upload(x))
     println(read(result.0) - 14.0)
     println(sum(abs(download(result.1) - x * 2.0)))

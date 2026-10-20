@@ -4,7 +4,8 @@ import { grad } from autodiff
 
 // Refused: the function called is chosen by a branch at run time. It is called twice; the
 // diagnostic is located at the first call (line 10), although the gradient meets the second first.
-func loss(p: Tensor): float {
+with <p: Tensor>
+func loss(): float {
     let s = sum(p)
     let g = if s > 0.0 then (t: Tensor): Tensor => tanh(t * s) else (t: Tensor): Tensor => t * s
     let a = g(p)
@@ -13,6 +14,6 @@ func loss(p: Tensor): float {
 }
 
 func main(): int sync {
-    println(grad(loss)(reshape([0.5, 0.25, -0.35], [3])))
+    println(grad(loss)<reshape([0.5, 0.25, -0.35], [3])>())
     return 0
 }

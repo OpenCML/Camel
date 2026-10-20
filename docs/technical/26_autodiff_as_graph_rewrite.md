@@ -2,7 +2,7 @@
 
 > **Read [`../design-principles.cn.md`](../design-principles.cn.md) first** (English translation: [`design-principles.en.md`](../design-principles.en.md)). It is the language author's normative statement of what Camel is and of its execution model; it prevails over code and other documents, and questions it leaves undecided go to the language author.
 >
-> In its terms (section 4): automatic differentiation is a **library built on the pass mechanism, not part of the language core**. Its precondition is that `std::macro` runs before `grad` / `value_and_grad` / `vjp` are used: a graph on which macros have not been executed lacks the information differentiation needs. When the precondition is not met the library must give a clear diagnostic. Pass order is otherwise unrestricted by the language and may change results.
+> In its terms (section 4): automatic differentiation is a **library built on the pass mechanism, not part of the language core**. Its precondition is that `std::macro` runs before `grad` / `with_grad` / `vjp` are used: a graph on which macros have not been executed lacks the information differentiation needs. When the precondition is not met the library must give a clear diagnostic. Pass order is otherwise unrestricted by the language and may change results.
 >
 > **Implementation status**: an unmet precondition can still surface as a run-time error instead of a clear located diagnostic (e.g. "branch arms must be subgraph calls" after `std::opt` on the GRU benchmark; tracking item N3 / D21).
 
@@ -17,7 +17,7 @@ Implementation map:
 - Core: `include/camel/core/derivative.h` (VjpBuilder, rule registry, tangent
   spaces, tangent types of aggregates). Scalar rules live in
   `src/builtin/operators/derivative.cpp`.
-- Engine: `modules/autodiff` (`grad`, `value_and_grad`, `vjp`,
+- Engine: `modules/autodiff` (`grad`, `with_grad`, `vjp`,
   `stop_gradient`; the pullback transform in `pullback.cpp`). It is an
   ordinary package, not part of the core: grad is a macro operator like any
   other, and third-party packages can ship their own.
@@ -148,35 +148,30 @@ expression.
 type Linear = { w: Tensor, b: Tensor }
 type Mlp    = { l1: Linear, l2: Linear }
 
-func loss(m: Mlp, x: Tensor, y: Tensor): float {
-    return mse(forward(m, x), y)
+with <m: Mlp>
+func loss(x: Tensor, y: Tensor): float {
+    return mse(forward<m>(x), y)
 }
 
-let g        = grad(loss)              // <with config> (m, x, y) => Mlp'
-let dm       = g(model, x, y)          // gradient shaped like the first normal parameter (m)
-let (l, dm2) = value_and_grad(loss)(model, x, y)
+let g        = grad(loss)              // macro: <m: Mlp> (x, y) => Mlp'
+let dm       = g<model>(x, y)          // gradients, structured like the model
+let (l, dm2) = with_grad(loss)<model>(x, y)
 let model2   = sgd(model, dm, 0.01)    // optimizers are functions over trees
 ```
 
-- Differentiation is with respect to the **first normal parameter** (design
-  principles 9.9); model parameters are ordinary parameters, as in JAX. The
-  other normal parameters are data and are not perturbed.
-- **`with` parameters are configuration** (4.4): they are never differentiated.
-  The gradient function keeps them as `with` parameters, so a call supplies
-  them with angle brackets, `grad(loss)<cfg>(model, x, y)`; the differentiated
-  function's own `with` parameters are passed through unchanged.
+- Differentiation is with respect to the **first `with` parameter** (9.9): weights
+  are `with` parameters, exactly like `forward<m>`; the remaining `with`
+  parameters (hyperparameters, targets) are constants, and ordinary parameters
+  are data. There is no variant that targets ordinary parameters: to
+  differentiate data, wrap it in a lambda that makes it the first `with`
+  parameter. In a loop, bind the transform once and call it with the weights:
+  `let loss_with_grad = with_grad(loss)`, then
+  `let (l, g) = loss_with_grad<m>(x, y)`.
 - **Tangent types** are derived statically: `Tensor -> Tensor`,
   `float -> float`, `int`/`bool`/`string` have no tangent,
   structs/tuples/arrays map element-wise and drop non-differentiable members.
-  `grad(loss)` therefore type-checks at compile time: the first normal
-  parameter must not be a `var` and must have a tangent, and the function must
-  have at least one normal parameter. Otherwise the call is refused at
-  signature resolution and the message names which condition failed.
-- The gradient has the shape of the first normal parameter, and
-  `value_and_grad` returns `(value, gradient)`. To differentiate another
-  parameter, reorder it to the front with a lambda:
-  `grad((y: Tensor): float => loss(m, x, y))(y)`.
-- `apply_gradients` was removed; a training step is `value_and_grad` + `sgd`.
+  `grad(loss)` therefore type-checks at compile time.
+- `apply_gradients` was removed; a training step is `with_grad` + `sgd`.
 
 ## 4. The Transformation
 
@@ -314,7 +309,7 @@ A variable (`var`) is a cell: the graph passes the cell and reads its content wi
 the operator `:var/get` (design principles 3.5). **Gradients do not flow through
 variables.** This is a rule of the library, not of the language:
 
-- A `var` parameter is not a differentiable input; `grad` and `value_and_grad`
+- A `var` parameter is not a differentiable input; `grad` and `with_grad`
   take no gradient with respect to it. The gradient function keeps it a `var`
   parameter, so the function's writes reach the caller's variable.
 - A read of a variable of a differentiable type is a **constant of the call**,
@@ -377,15 +372,13 @@ mutable parameter objects.
 - **Layers are Camel code in a library:** a struct type plus functions, e.g.
   `type Linear = { w, b }`, `func linear(l: Linear, x: Tensor)`,
   `init_linear(in, out)`.
-- **A model is a normal parameter.** `forward(m, x)` names the whole tree, and
-  `grad` differentiates it because it is first (9.9). `with <cfg: ...>` is
-  configuration only (4.4): helpers can read it, `grad` never differentiates it.
+- **`with <m: Model>` is the implicit `self`.** `forward<m>(x)` threads the
+  whole tree without naming parameters.
 - **Gradients have the same shape as the model** (tangent types, §3), so
   optimizers are generic tree functions: `sgd(tree, grads, lr)`, and
   `adam(tree, grads, state, ...)` with a state tree of the same shape. They are
   implemented once over `Struct`/`Tuple`/`Array` values with tensor leaves.
-- **Freezing** uses `stop_gradient(t)`, or a lambda whose first normal
-  parameter is the subtree to update.
+- **Freezing** uses `stop_gradient(t)`.
 - **`Parameter` objects** were removed; models are plain trees.
 
 ## 7. ONNX as a Thin Translation Pass
@@ -572,7 +565,7 @@ What differs from the design above:
     forward function returns `((state, counter), pullback)` and the pullback
     takes one cotangent per differentiable element of the result, as a tuple
     or struct; the counter has no tangent and is not differentiated. This is
-    inside the class above, so `value_and_grad` of a loss computed from the
+    inside the class above, so `with_grad` of a loss computed from the
     returned values exports as paired `Loop`s, with the counter usable as a
     number in the loss and as an output of the model. What is accepted for
     the gradient is NARROWER than for the forward loop: ONE if / else must
@@ -590,7 +583,7 @@ What differs from the design above:
     changed arguments, or that is called with a function or with an array
     whose elements depend on the model input. The conditions on the returned
     function are reported at the recursive call (they used to be reported at
-    the `value_and_grad` expression, where the pullback is called).
+    the `with_grad` expression, where the pullback is called).
   Tests: `ort_linear_recursion` (NumPy, depths 0, 1 and more), `ort_grad_loop`
   (gradient of a data-dependent loop, with a branch in the body, against
   Camel's native gradient and NumPy), `ort_grad_loop_values` (gradient of
@@ -612,7 +605,7 @@ What differs from the design above:
 ## 8. Phases
 
 1. Move the VJP builder and registry to core; add tangent types; add
-   `grad` / `value_and_grad` as macro operators (typing, macro eligibility).
+   `grad` / `with_grad` as macro operators (typing, macro eligibility).
 2. The transform for straight-line graphs and direct calls (memoized per
    graph, recursion through pullback closures); validate that the static cases
    optimize to straight-line code.

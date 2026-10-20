@@ -1516,8 +1516,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
                     strutil::join(normInputTypes, ", ", [](Type *t) { return t->toString(); }));
                 // An overload whose parameter kinds fit may know the precise reason (e.g. a
-                // static tensor shape conflict); report that instead of "no match".
+                // static tensor shape conflict); report that instead of "no match". A rule may
+                // also name its own diagnostic for the rejection, when the generic one would not
+                // say the right thing (grad's NotDifferentiable, 9.9).
                 std::vector<std::string> reasons;
+                std::optional<SemanticDiag> dedicated;
+                bool mixedDiagnostics = false;
                 for (const auto &[uri, resolver] : ops->resolvers()) {
                     if (auto reason = resolver->explainCallRejection(
                             explicitTypes,
@@ -1527,14 +1531,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             normStatics,
                             Modifier::None)) {
                         if (std::ranges::find(reasons, *reason) == reasons.end()) {
+                            if (auto diag = resolver->rejectionDiag()) {
+                                if (dedicated.has_value() && *dedicated != *diag) {
+                                    mixedDiagnostics = true;
+                                } else {
+                                    dedicated = diag;
+                                }
+                            } else {
+                                mixedDiagnostics = true;
+                            }
                             reasons.push_back(std::move(*reason));
                         }
                     }
                 }
                 if (!reasons.empty()) {
-                    diags_->of(SemanticDiag::ArgumentsRejected)
-                        .atOrigin(gct->origin())
-                        .commit(ops->name(), argTypesStr, strutil::join(reasons, "; "));
+                    if (dedicated.has_value() && !mixedDiagnostics) {
+                        diags_->of(*dedicated)
+                            .atOrigin(gct->origin())
+                            .commit(strutil::join(reasons, "; "));
+                    } else {
+                        diags_->of(SemanticDiag::ArgumentsRejected)
+                            .atOrigin(gct->origin())
+                            .commit(ops->name(), argTypesStr, strutil::join(reasons, "; "));
+                    }
                     throw BuildAbortException();
                 }
                 // An operator written in the program: say which, the group name is not what
@@ -1679,7 +1698,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             // An operator calls a function argument with values. A function with a `var`
             // parameter needs a variable there, which an operator does not have. A macro
-            // operator (grad, value_and_grad, ...) does not call its argument: it rewrites the
+            // operator (grad, with_grad, ...) does not call its argument: it rewrites the
             // function's graph into another function, whose `var` parameters are passed by
             // the caller of that function as usual.
             const auto takesVariable = [](Type *type) {

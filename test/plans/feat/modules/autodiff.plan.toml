@@ -5,7 +5,7 @@ tags = ["feat", "modules", "autodiff"]
 
 [[tests]]
 name = "scalar_grad.runtime.nvm"
-desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built at run time)"
+desc = "Differentiates straight-line scalar code with helper calls, with_grad and stop_gradient. (grad built at run time)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
 args = ["${case}", "${run_nvm}"]
@@ -21,7 +21,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "scalar_grad.macro.nvm"
-desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built by std::macro)"
+desc = "Differentiates straight-line scalar code with helper calls, with_grad and stop_gradient. (grad built by std::macro)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
 args = ["${case}", "std::macro", "${run_nvm}"]
@@ -37,7 +37,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "scalar_grad.simplified.nvm"
-desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (pullbacks inlined and folded by std::opt)"
+desc = "Differentiates straight-line scalar code with helper calls, with_grad and stop_gradient. (pullbacks inlined and folded by std::opt)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
 args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::opt::dce", "${run_nvm}"]
@@ -53,7 +53,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "scalar_grad.macro.fvm"
-desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built by std::macro)"
+desc = "Differentiates straight-line scalar code with helper calls, with_grad and stop_gradient. (grad built by std::macro)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
 args = ["${case}", "std::macro", "${run_fvm}"]
@@ -69,7 +69,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "scalar_grad.macro.jit"
-desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built by std::macro)"
+desc = "Differentiates straight-line scalar code with helper calls, with_grad and stop_gradient. (grad built by std::macro)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
 args = ["${case}", "std::macro", "${run_jit}"]
@@ -445,7 +445,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "scalar_grad.runtime.fvm"
-desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built at run time, compiled by FastVM when first called)"
+desc = "Differentiates straight-line scalar code with helper calls, with_grad and stop_gradient. (grad built at run time, compiled by FastVM when first called)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
 args = ["${case}", "${run_fvm}"]
@@ -524,7 +524,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "scalar_grad.simplify.fvm"
-desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (simplified, then run by FastVM)"
+desc = "Differentiates straight-line scalar code with helper calls, with_grad and stop_gradient. (simplified, then run by FastVM)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_fvm}"]
@@ -540,7 +540,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "scalar_grad.simplify.jit"
-desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (simplified, then run by the JIT)"
+desc = "Differentiates straight-line scalar code with helper calls, with_grad and stop_gradient. (simplified, then run by the JIT)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_jit}"]
@@ -728,7 +728,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "scalar_grad.runtime.jit"
-desc = "Differentiates straight-line scalar code with helper calls, value_and_grad and stop_gradient. (grad built at run time, run by the JIT)"
+desc = "Differentiates straight-line scalar code with helper calls, with_grad and stop_gradient. (grad built at run time, run by the JIT)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/scalar_grad.cml"
 args = ["${case}", "${run_jit}"]
@@ -1155,7 +1155,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.reference"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: no pass."
+desc = "with_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: no pass."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
 args = ["${case}"]
@@ -1172,7 +1172,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.macro_simplify.nvm"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::macro then std::opt."
+desc = "with_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::macro then std::opt."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
 args = ["${case}", "std::macro", "std::opt", "std::nvm"]
@@ -1189,7 +1189,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.specialize_inline.nvm"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt::specialize then std::opt::inline (two sessions: already correct)."
+desc = "with_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt::specialize then std::opt::inline (two sessions: already correct)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
 args = ["${case}", "std::opt::specialize", "std::opt::inline", "std::nvm"]
@@ -1206,7 +1206,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.opt.nvm"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt (failed at run time after printing: branch arms must be subgraph calls; the arms of the copy specialization made in the same session were inlined)."
+desc = "with_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt (failed at run time after printing: branch arms must be subgraph calls; the arms of the copy specialization made in the same session were inlined)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
 args = ["${case}", "std::opt", "std::nvm"]
@@ -1223,7 +1223,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.simplify.nvm"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt (the failing pipeline of benchmarks/gru training)."
+desc = "with_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt (the failing pipeline of benchmarks/gru training)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
 args = ["${case}", "std::opt", "std::nvm"]
@@ -1240,7 +1240,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.opt.fvm"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt on FastVM."
+desc = "with_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt on FastVM."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
 args = ["${case}", "std::opt", "std::fvm"]
@@ -1257,7 +1257,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "grad_unexpanded_specialize.simplify.jit"
-desc = "value_and_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt on the JIT."
+desc = "with_grad left to run with the program, of a loss that calls a recursive function with a constant start index (the recurrence of benchmarks/gru). Under: std::opt on the JIT."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_unexpanded_specialize.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -1463,12 +1463,12 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loop_grad_refuse_iterable"
-desc = "A loop that iterates over an array built from the differentiated parameter is refused at the loop: the reverse pass has no per-round scatter of each element's gradient back into the iterated array. The diagnostic names the loop (line 13), says what the loop does with the array, and tells the program to capture it and read by index instead."
+desc = "A loop that iterates over an array built from the differentiated parameter is refused at the loop: the reverse pass has no per-round scatter of each element's gradient back into the iterated array. The diagnostic names the loop (line 14), says what the loop does with the array, and tells the program to capture it and read by index instead."
 kind = "negative"
 case = "../../../cases/modules/autodiff/loop_grad_refuse_iterable.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
-expect_diagnostic_line = 13
+expect_diagnostic_line = 14
 expect_output_contains = ["a 'loop' iterates over an array that depends on a differentiated parameter", "scattered back into the array", "Capture the array and read its elements by index"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -1480,7 +1480,7 @@ kind = "negative"
 case = "../../../cases/modules/autodiff/loop_grad_refuse_iterable.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 1
-expect_diagnostic_line = 13
+expect_diagnostic_line = 14
 expect_output_contains = ["a 'loop' iterates over an array that depends on a differentiated parameter", "scattered back into the array", "Capture the array and read its elements by index"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -1523,7 +1523,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "grad_effects_kept.default"
-desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with value_and_grad. Under: the default run (grad runs with the program)."
+desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with with_grad. Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_effects_kept.cml"
 args = ["${case}"]
@@ -1539,7 +1539,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_effects_kept.macro"
-desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with value_and_grad. Under: std::macro (grad built at compile time)."
+desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with with_grad. Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_effects_kept.cml"
 args = ["${case}", "std::macro"]
@@ -1555,7 +1555,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_effects_kept.macro.simplify"
-desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with value_and_grad. Under: std::macro std::opt (the derivative inlined and folded)."
+desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with with_grad. Under: std::macro std::opt (the derivative inlined and folded)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_effects_kept.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -1571,7 +1571,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_effects_kept.macro.fvm"
-desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with value_and_grad. Under: std::macro std::fvm."
+desc = "grad of a function with effects runs the function: all its prints happen, once and in order, also the print after the last value the gradient reads (it was dropped: the gradient did not depend on it). Compared with the plain call and with with_grad. Under: std::macro std::fvm."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_effects_kept.cml"
 args = ["${case}", "std::macro", "std::fvm"]
@@ -1715,7 +1715,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_branch.default"
-desc = "Refused: the function called is chosen by a branch at run time. The value is called twice; the diagnostic itself is located at the first call in source order (line 10), although the reverse pass meets the second call (line 11) first, and the reason given is the branch. Under: the default run (grad runs with the program)."
+desc = "Refused: the function called is chosen by a branch at run time. The value is called twice; the diagnostic itself is located at the first call in source order (line 11), although the reverse pass meets the second call (line 11) first, and the reason given is the branch. Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_branch.cml"
 args = ["${case}"]
@@ -1724,8 +1724,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_branch.cml:10:13: [Error]'), 'the diagnostic is not located at the call (10:13): ' + text)
-assert(/[(]at [^ ]*grad_function_value_branch[.]cml:10:13[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_branch.cml:11:13: [Error]'), 'the diagnostic is not located at the call (11:13): ' + text)
+assert(/[(]at [^ ]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -1735,7 +1735,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_branch.macro"
-desc = "Refused: the function called is chosen by a branch at run time. The value is called twice; the diagnostic itself is located at the first call in source order (line 10), although the reverse pass meets the second call (line 11) first, and the reason given is the branch. Under: std::macro (grad built at compile time)."
+desc = "Refused: the function called is chosen by a branch at run time. The value is called twice; the diagnostic itself is located at the first call in source order (line 11), although the reverse pass meets the second call (line 11) first, and the reason given is the branch. Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_branch.cml"
 args = ["${case}", "std::macro"]
@@ -1744,8 +1744,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_branch.cml:10:13: [Error]'), 'the diagnostic is not located at the call (10:13): ' + text)
-assert(/[(]at [^ ]*grad_function_value_branch[.]cml:10:13[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_branch.cml:11:13: [Error]'), 'the diagnostic is not located at the call (11:13): ' + text)
+assert(/[(]at [^ ]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -1766,8 +1766,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_static_branch.cml:10:16: [Error]'), 'the diagnostic is not located at the call (10:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:10:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_static_branch.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
+assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -1786,8 +1786,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_static_branch.cml:10:16: [Error]'), 'the diagnostic is not located at the call (10:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:10:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_static_branch.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
+assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -1799,7 +1799,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.default"
-desc = "Refused: the function called is a parameter of the differentiated function itself. Called twice; the diagnostic is located at the first call (line 10) and says that it is a parameter. Under: the default run (grad runs with the program)."
+desc = "Refused: the function called is a parameter of the differentiated function itself. Called twice; the diagnostic is located at the first call (line 9) and says that it is a parameter. Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}"]
@@ -1808,8 +1808,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_parameter.cml:10:13: [Error]'), 'the diagnostic is not located at the call (10:13): ' + text)
-assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:10:13[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_parameter.cml:11:13: [Error]'), 'the diagnostic is not located at the call (11:13): ' + text)
+assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:11:13[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 }
@@ -1818,7 +1818,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.macro"
-desc = "Refused: the function called is a parameter of the differentiated function itself. Called twice; the diagnostic is located at the first call (line 10) and says that it is a parameter. Under: std::macro (grad built at compile time)."
+desc = "Refused: the function called is a parameter of the differentiated function itself. Called twice; the diagnostic is located at the first call (line 9) and says that it is a parameter. Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}", "std::macro"]
@@ -1827,8 +1827,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_parameter.cml:10:13: [Error]'), 'the diagnostic is not located at the call (10:13): ' + text)
-assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:10:13[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_parameter.cml:11:13: [Error]'), 'the diagnostic is not located at the call (11:13): ' + text)
+assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:11:13[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
@@ -1848,8 +1848,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_container.cml:10:16: [Error]'), 'the diagnostic is not located at the call (10:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_container[.]cml:10:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_container.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
+assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 }
@@ -1867,8 +1867,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_container.cml:10:16: [Error]'), 'the diagnostic is not located at the call (10:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_container[.]cml:10:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_container.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
+assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
@@ -1996,8 +1996,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_passed.cml:14:12: [Error]'), 'the diagnostic is not located at the call (14:12): ' + text)
-assert(/[(]at [^ ]*grad_function_value_passed[.]cml:14:12[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_passed.cml:15:12: [Error]'), 'the diagnostic is not located at the call (15:12): ' + text)
+assert(/[(]at [^ ]*grad_function_value_passed[.]cml:15:12[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
 assert(text.includes('call0'), 'missing: call0 in: ' + text)
@@ -2018,8 +2018,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_passed.cml:14:12: [Error]'), 'the diagnostic is not located at the call (14:12): ' + text)
-assert(/[(]at [^ ]*grad_function_value_passed[.]cml:14:12[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_passed.cml:15:12: [Error]'), 'the diagnostic is not located at the call (15:12): ' + text)
+assert(/[(]at [^ ]*grad_function_value_passed[.]cml:15:12[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
 assert(text.includes('call0'), 'missing: call0 in: ' + text)
@@ -2033,7 +2033,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_through_as.runtime.nvm"
-desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and value_and_grad give 2 * x * w. (grad built at run time)"
+desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and with_grad give 2 * x * w. (grad built at run time)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_through_as.cml"
 args = ["${case}", "${run_nvm}"]
@@ -2043,14 +2043,14 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 assert(!out.includes('FAIL'), `gradient check failed: ${out}`)
-assert(out.includes('grad ok') && out.includes('value_and_grad ok') && out.includes('value 88.75'), `unexpected output: ${out}`)
+assert(out.includes('grad ok') && out.includes('with_grad ok') && out.includes('value 88.75'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "grad_through_as.macro.nvm"
-desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and value_and_grad give 2 * x * w. (grad expanded by std::macro)"
+desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and with_grad give 2 * x * w. (grad expanded by std::macro)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_through_as.cml"
 args = ["${case}", "std::macro", "${run_nvm}"]
@@ -2060,14 +2060,14 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 assert(!out.includes('FAIL'), `gradient check failed: ${out}`)
-assert(out.includes('grad ok') && out.includes('value_and_grad ok') && out.includes('value 88.75'), `unexpected output: ${out}`)
+assert(out.includes('grad ok') && out.includes('with_grad ok') && out.includes('value 88.75'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "grad_through_as.simplified.nvm"
-desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and value_and_grad give 2 * x * w. (std::macro, then std::opt, which folds the conversion of the constant)"
+desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and with_grad give 2 * x * w. (std::macro, then std::opt, which folds the conversion of the constant)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_through_as.cml"
 args = ["${case}", "std::macro", "std::opt", "${run_nvm}"]
@@ -2077,7 +2077,7 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 assert(!out.includes('FAIL'), `gradient check failed: ${out}`)
-assert(out.includes('grad ok') && out.includes('value_and_grad ok') && out.includes('value 88.75'), `unexpected output: ${out}`)
+assert(out.includes('grad ok') && out.includes('with_grad ok') && out.includes('value 88.75'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2157,120 +2157,132 @@ expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=relu: PASS
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 900000
 
-
-
-
 [[tests]]
-name = "grad_first_parameter.macro"
-desc = "grad/value_and_grad differentiate the first normal parameter (9.9): the others are data, `with` parameters are configuration, another parameter is differentiated through a reordering lambda, the gradient keeps the first parameter's shape (float, struct, tensor), and value_and_grad returns (value, gradient)."
+name = "grad_first_with_parameter.macro.nvm"
+desc = "grad and with_grad differentiate the first `with` parameter (a float, a struct, a tensor); the remaining `with` parameters are constants, ordinary parameters are data, and a lambda reorders a second `with` parameter to the front. (grad built by std::macro)"
 kind = "behavior"
-case = "../../../cases/modules/autodiff/grad_first_parameter.cml"
+case = "../../../cases/modules/autodiff/grad_first_with_parameter.cml"
 args = ["${case}", "std::macro", "${run_nvm}"]
 expect_exit = 0
+expect_stdout_contains = ["gx=3.0 vg=(9.0, 3.0)", "pg={ a: 4.0, b: 1.0 }", "pvg=(11.0, { a: 4.0, b: 1.0 })", "sk=6.0 sx=4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout
-assert(out.includes('grad_first_parameter gx=3.0 vg=(9.0, 3.0) gy=3.0 gl=3.0'), `unexpected scalars: ${out}`)
-assert(out.includes('grad_first_parameter pg={ a: 4.0, b: 1.0 } pvg=(11.0, { a: 4.0, b: 1.0 })'), `unexpected struct gradient: ${out}`)
-assert(out.includes('grad_first_parameter wg=tensor(') && out.includes('wvg=(32.0, tensor('), `unexpected tensor gradient: ${out}`)
-assert(out.includes('grad_first_parameter with_config=8.0'), `with parameters must stay configuration: ${out}`)
-}
-"""
 timeout_ms = 8000
 
 [[tests]]
-name = "grad_first_parameter.runtime"
-desc = "The same with grad built at run time (no std::macro)."
+name = "grad_first_with_parameter.runtime.nvm"
+desc = "grad and with_grad differentiate the first `with` parameter (a float, a struct, a tensor); the remaining `with` parameters are constants, ordinary parameters are data, and a lambda reorders a second `with` parameter to the front. (grad built at run time)"
 kind = "behavior"
-case = "../../../cases/modules/autodiff/grad_first_parameter.cml"
+case = "../../../cases/modules/autodiff/grad_first_with_parameter.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
+expect_stdout_contains = ["gx=3.0 vg=(9.0, 3.0)", "pg={ a: 4.0, b: 1.0 }", "pvg=(11.0, { a: 4.0, b: 1.0 })", "sk=6.0 sx=4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout
-assert(out.includes('grad_first_parameter gx=3.0 vg=(9.0, 3.0) gy=3.0 gl=3.0'), `unexpected scalars: ${out}`)
-assert(out.includes('grad_first_parameter pg={ a: 4.0, b: 1.0 } pvg=(11.0, { a: 4.0, b: 1.0 })'), `unexpected struct gradient: ${out}`)
-assert(out.includes('grad_first_parameter with_config=8.0'), `with parameters must stay configuration: ${out}`)
-}
-"""
 timeout_ms = 8000
 
 [[tests]]
-name = "grad_refuse_string"
-desc = "Refused: grad differentiates the first normal parameter (9.9); a string has no tangent."
-kind = "negative"
-case = "../../../cases/modules/autodiff/grad_refuse_string.cml"
+name = "math_sqrt.macro.nvm"
+desc = "Scalar sqrt pullbacks for float and f32, a non-trainable integer input, and a tensor coefficient; the differentiated value is the first `with` parameter."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/math_sqrt.cml"
 args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["sqrt64=(2.0, 0.25)", "sqrt32=(2.0, 0.25)", "repeated=1.0", "integer=2.0", "weighted=(22.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_no_with"
+desc = "Refused at compile time with NotDifferentiable: the function has no `with` parameter."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_no_with.cml"
+args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_diagnostic_line = 10
-expect_output_contains = ["cannot differentiate a function of type (name: string) => float", "its first normal parameter has type string, which has no gradient"]
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "it has no `with` parameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_var"
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a `var` (3.5)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_var.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_line = 12
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "first `with` parameter is a `var`", "design principles 3.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "grad_refuse_int"
-desc = "Refused: grad differentiates the first normal parameter (9.9); an int has no tangent."
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is an int."
 kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_int.cml"
-args = ["${case}", "std::macro", "${run_nvm}"]
+args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 10
-expect_output_contains = ["cannot differentiate a function of type (n: int) => float", "its first normal parameter has type int, which has no gradient"]
+expect_diagnostic_line = 11
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type int, which has no gradient"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "grad_refuse_no_parameter"
-desc = "Refused: the function has no normal parameter, and grad differentiates the first one (9.9)."
+name = "grad_refuse_string"
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a string."
 kind = "negative"
-case = "../../../cases/modules/autodiff/grad_refuse_no_parameter.cml"
-args = ["${case}", "std::macro", "${run_nvm}"]
+case = "../../../cases/modules/autodiff/grad_refuse_string.cml"
+args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 10
-expect_output_contains = ["cannot differentiate a function of type () => float", "it has no normal parameter, and grad differentiates the first normal parameter"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "grad_refuse_var.macro"
-desc = "Refused: the first normal parameter is a `var`; gradients do not flow through variables (3.5), and grad marks no parameter var (9.9)."
-kind = "negative"
-case = "../../../cases/modules/autodiff/grad_refuse_var.cml"
-args = ["${case}", "std::macro", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 14
-expect_output_contains = ["cannot differentiate a function of type sync (var v: float, w: float) => float", "its first normal parameter is a `var` of type float", "gradients do not flow through variables (design principles 3.5)"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "grad_refuse_var.runtime"
-desc = "The same refusal with grad built at run time: the signature check does not depend on std::macro."
-kind = "negative"
-case = "../../../cases/modules/autodiff/grad_refuse_var.cml"
-args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 14
-expect_output_contains = ["its first normal parameter is a `var` of type float", "gradients do not flow through variables"]
+expect_diagnostic_line = 11
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type string, which has no gradient"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "grad_refuse_function"
-desc = "Refused: the first normal parameter is a function value, which has no tangent (9.9)."
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a function."
 kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_function.cml"
-args = ["${case}", "std::macro", "${run_nvm}"]
+args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 10
-expect_output_contains = ["cannot differentiate a function of type (f: (t: float) => float, x: float) => float", "its first normal parameter has type (t: float) => float, which has no gradient"]
+expect_diagnostic_line = 11
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "which has no gradient"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_struct"
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a struct whose members have no tangent."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_struct.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_line = 13
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type { s: string, n: int }, which has no gradient"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_return"
+desc = "Refused at compile time with NotDifferentiable: the function returns an int, not a float."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_return.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_line = 11
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "it returns int, not a float"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_grad.old_name_removed"
+desc = "The old name `value_and_grad` is deleted outright: it is an ordinary unresolved reference, not an alias and not a pointing diagnostic."
+kind = "negative"
+case = "../../../cases/modules/autodiff/with_grad_old_name.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_line = 7
+expect_output_contains = ["SemanticDiag::UnresolvedReference", "value_and_grad"]
+expect_output_not_contains = ["retired", "use `with_grad`"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

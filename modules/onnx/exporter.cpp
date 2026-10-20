@@ -2287,7 +2287,7 @@ Value Evaluator::callClosure(
 void Evaluator::refuseLinear(const LinearFrame &f, std::string_view what) {
     // A condition on the function a recursion returns is reported at the recursive call, not
     // at the place where that function happens to be called (for a pullback: the
-    // value_and_grad expression). Without a position there, the caller's node locates it.
+    // with_grad expression). Without a position there, the caller's node locates it.
     const std::string graph = f.fn->name().substr(0, f.fn->name().find('$'));
     const std::string text =
         isSourceName(graph) ? std::format("in '{}': {}", graph, what) : std::string(what);
@@ -3575,7 +3575,7 @@ GCGraph *
 simplifyFully(const core::context::context_ptr_t &context, GCGraph *root, std::ostream &log) {
     const OptimizeRewriteConfig config = exportRewriteConfig();
     constexpr size_t kMaxRounds        = kMaxExportRounds;
-    // Macros (grad, value_and_grad) expand once their arguments are constants, which
+    // Macros (grad, with_grad) expand once their arguments are constants, which
     // simplification may be what makes them.
     root = MacroRewritePass(context).apply(root, log);
     while (true) {

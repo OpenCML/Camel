@@ -20,7 +20,7 @@ out\latest\bin\camel.exe benchmarks\transformer\model.cml
 
 ## 根因(已定位)
 
-与 nvm 无关,是 **GC 根覆盖缺口**:零 pass 时 `value_and_grad` 在运行期构建梯度图,
+与 nvm 无关,是 **GC 根覆盖缺口**:零 pass 时 `with_grad` 在运行期构建梯度图,
 产物是"运行时创建的图"(gradient graph + 各 pullback 子图)。这些图不是 graph-carrier
 根——没有任何 tracer 引用它们。梯度执行途中的 GC(large-object 预算触发,在图边界
 safepoint 做 major 收集)会把 pullback 子图静态区里的常量(如 `permute_inverse` 的

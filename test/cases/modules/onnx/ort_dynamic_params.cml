@@ -11,20 +11,21 @@
 module ort_dynamic_params
 
 import { Tensor, load_npy, save_npy, reshape, sum, mean, tanh, transpose } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from sys
 
 type P = { w: Tensor, b: Tensor }
 
-func loss(m: P, x: Tensor): float {
+with <m: P>
+func loss(x: Tensor): float {
     let h = tanh(x @ transpose(m.w) + m.b)
     return sum(mean(h * h, 0))
 }
 
 func step(w: Tensor, b: Tensor, x: Tensor): (Tensor, Tensor, Tensor) {
     let m = { w: w, b: b }
-    let vg = value_and_grad(loss)(m, x)
+    let vg = with_grad(loss)<m>(x)
     return (reshape([vg.0], [1]), vg.1.w, vg.1.b)
 }
 

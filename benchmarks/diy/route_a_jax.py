@@ -146,7 +146,7 @@ def _unified_mlp():
         return jax.grad(loss)(p, x)
 
     def full_step(p, x):
-        l, g = jax.value_and_grad(loss)(p, x)
+        l, g = jax.with_grad(loss)(p, x)
         new = jax.tree_util.tree_map(lambda w, gg: w - LR * gg, p, g)
         return l, new
 

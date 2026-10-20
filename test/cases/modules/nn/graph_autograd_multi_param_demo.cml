@@ -1,13 +1,11 @@
 /**
  * Exercises autodiff over a struct model with multiple tensor leaves and a broadcast bias:
- * value_and_grad returns the loss and a LinearBias-shaped gradient whose bias entry is reduced
+ * with_grad returns the loss and a LinearBias-shaped gradient whose bias entry is reduced
  * back to the bias shape, and sgd applies one update to both leaves.
- *
- * The model is the first normal parameter of the loss (9.9); the data follows it.
  */
 module graph_autograd_multi_param_demo
 
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { Tensor, ones, shape, sum, zeros } from tensor
 import { sgd } from nn
 
@@ -16,7 +14,8 @@ type LinearBias = {
     bias: Tensor
 }
 
-func mse_loss(model: LinearBias, x: Tensor, y: Tensor): float {
+with <model: LinearBias>
+func mse_loss(x: Tensor, y: Tensor): float {
     let pred = (x @ model.weight) + model.bias
     let errors = pred - y
     let squared = errors * errors
@@ -32,10 +31,10 @@ func main(): int sync {
     let X = ones([4, 2])
     let y = ones([4, 1])
 
-    let before = mse_loss(model, X, y)
-    let vg = value_and_grad(mse_loss)(model, X, y)
+    let before = mse_loss<model>(X, y)
+    let vg = with_grad(mse_loss)<model>(X, y)
     let trained = sgd(model, vg.1, 0.01)
-    let after = mse_loss(trained, X, y)
+    let after = mse_loss<trained>(X, y)
 
     'graph_autograd_multi_param_demo metrics before={} step={} after={}'->format<before, vg.0, after>->println
     'graph_autograd_multi_param_demo weight={}'->format<trained.weight>->println

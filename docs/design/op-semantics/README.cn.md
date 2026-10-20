@@ -1061,7 +1061,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 ```
 
 - 语义：每一轮先求条件（`While`、`ForWhile`；条件看得到状态，看不到元素），再取下一个元素（`For`、`ForWhile`），再求循环体；条件为假或元素取完即结束；循环的值是最后的状态。`camel/core/loop_kind.h` 写明了这一点。
-- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它。**运行时 `tiles.run<f>` 等在每个后端上收到的都是程序原来的 `f` 的图**（`lane/facts` 起）：`std::nvm` 原生执行 `LOOP`；`std::fvm`、`std::jit`（默认）、`std::prl`、`std::cpp` 在私有副本上降级，副本里每张图记着它复制自程序的哪张图（`GCGraph::originalGraph()`），声明了 `inspectsGraphs` 的算子（`OperatorTraits::inspectsGraphs`：Tiles 的 `run`、`run_device`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`value_and_grad`）的每个函数类型的操作数在副本里先经过 `:graph/original`，把副本的函数值换回原图、闭包不变。所以在降级的后端上 Tiles 看到的也是带 `LOOP` 的 `f`，不是 `f.loopN.rec`、`.next`、`.done`。新的模块算子若读函数值的图，同样在登记时声明 `inspectsGraphs`。
+- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它。**运行时 `tiles.run<f>` 等在每个后端上收到的都是程序原来的 `f` 的图**（`lane/facts` 起）：`std::nvm` 原生执行 `LOOP`；`std::fvm`、`std::jit`（默认）、`std::prl`、`std::cpp` 在私有副本上降级，副本里每张图记着它复制自程序的哪张图（`GCGraph::originalGraph()`），声明了 `inspectsGraphs` 的算子（`OperatorTraits::inspectsGraphs`：Tiles 的 `run`、`run_device`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`with_grad`）的每个函数类型的操作数在副本里先经过 `:graph/original`，把副本的函数值换回原图、闭包不变。所以在降级的后端上 Tiles 看到的也是带 `LOOP` 的 `f`，不是 `f.loopN.rec`、`.next`、`.done`。新的模块算子若读函数值的图，同样在登记时声明 `inspectsGraphs`。
 - Tiles 自己决定原生处理还是在自己的入口降级：降级用 `lowerLoopsToTailRecursion(context, root)`，它返回一个脱离主程序的副本，不改共享的程序。
 - 校验已保证：初值能赋给状态类型、循环体返回状态类型、条件返回 `bool`、元素端口类型是数组的元素类型、两张子图的捕获端口个数、次序、类型相同并与 `captures()` 一一对应（I18、I19）。
 

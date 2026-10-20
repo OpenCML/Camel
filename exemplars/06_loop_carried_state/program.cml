@@ -1,19 +1,20 @@
 /**
  * Loop-carried graph state. A training loop is a recursion whose carried
  * state is the whole model: each step computes the gradient with
- * value_and_grad (a graph transformation, not a tape) and passes the
+ * with_grad (a graph transformation, not a tape) and passes the
  * SGD-updated parameter struct to the next step. The loss falls step by step,
  * and the same program runs unchanged after std::opt.
  */
 module loop_carried_state
 
 import { Tensor, reshape, relu, mean } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd } from nn
 
 type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
 
-func loss(m: Mlp, x: Tensor): float {
+with <m: Mlp>
+func loss(x: Tensor): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     return mean(y * y)
@@ -21,7 +22,7 @@ func loss(m: Mlp, x: Tensor): float {
 
 sync func train(m: Mlp, x: Tensor, step: int, steps: int): Mlp {
     return if step >= steps then m else sync {
-        let vg = value_and_grad(loss)(m, x)
+        let vg = with_grad(loss)<m>(x)
         `step ${step} loss ${vg.0}`->println
         return train(sgd(m, vg.1, 0.1), x, step + 1, steps)
     }
@@ -36,6 +37,6 @@ func main(): int sync {
     }
     let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
     let trained = train(m, x, 0, 5)
-    `final loss ${loss(trained, x)}`->println
+    `final loss ${loss<trained>(x)}`->println
     return 0
 }

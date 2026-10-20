@@ -5,19 +5,22 @@ import { grad } from autodiff
 // The value to differentiate flows through a map (x is stored in it and read back), and
 // there is no derivative rule for an operator over a collection: `grad` refuses and names
 // the operator. A map that does not depend on x is a constant to `grad` and is no obstacle.
+// x is the first `with` parameter of each function.
 
-func through_map(x: float): float {
+with <x: float>
+func through_map(): float {
     let m = [(1, x)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
-func beside_map(x: float): float {
+with <x: float>
+func beside_map(): float {
     let m = [(1, 2.0)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
 func main(): int sync {
-    println(grad(beside_map)(3.0))
-    println(grad(through_map)(3.0))
+    println(grad(beside_map)<3.0>())
+    println(grad(through_map)<3.0>())
     return 0
 }

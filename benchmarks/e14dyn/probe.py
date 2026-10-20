@@ -1,4 +1,4 @@
-"""E14/T7 probe driver: dynamic-batch TRAINING step export (value_and_grad + sgd).
+"""E14/T7 probe driver: dynamic-batch TRAINING step export (with_grad + sgd).
 
 One graph exported with dynamic_axes = [0] (benchmarks/e14dyn/dyn_train_step.cml,
 LOSS=summean: batch mean written as sum / shape arithmetic) is run on ONNX
@@ -138,7 +138,7 @@ def main() -> int:
     worst_dyn = max(e for _, _, e in rows_dyn)
     worst_nat = max(e for _, _, e in rows_nat)
     with (OUT / "summary.txt").open("w") as f:
-        f.write("E14/T7 dynamic-batch training step (2-layer MLP, value_and_grad + sgd, lr 0.01)\n")
+        f.write("E14/T7 dynamic-batch training step (2-layer MLP, with_grad + sgd, lr 0.01)\n")
         f.write(f"loss: batch mean as sum/shape arithmetic (LOSS=summean); canonical mean(y*y) "
                 f"dynamic export FAILS -> tensor:numel has no ONNX lowering (mean_failure.log)\n")
         f.write(f"dynamic graph exported with example batch {EXPORT_BATCH}, run at batches {BATCHES}\n")

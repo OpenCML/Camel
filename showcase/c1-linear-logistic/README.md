@@ -1,6 +1,6 @@
 # C1 — linear and logistic regression
 
-This example is the smallest complete training run: tensors, `value_and_grad`, a `do` loop and
+This example is the smallest complete training run: tensors, `with_grad`, a `do` loop and
 SGD over a parameter tree.  One program solves both problems and only swaps the loss:
 
 - linear regression: `y = 2*x1 - 1.5*x2 + 0.5` with a little noise;
@@ -96,18 +96,18 @@ numeric disagreement.
 |---|---|---|
 | model | `type Model = { w, b: Tensor }` | `nn.Linear(2, 1)` |
 | loss | hand-written formula reduced with `mean` | `F.mse_loss` / `F.binary_cross_entropy_with_logits` |
-| gradient | `value_and_grad(loss)<m>(x, y, kind)` | `value.backward()` |
+| gradient | `with_grad(loss)<m>(x, y, kind)` | `value.backward()` |
 | update | `sgd(m, gradient, lr)`, returns a tree of the same type | `optimizer.step()` |
 | loop | `loop m = initial, step = 0 while ... do sync { ... }` | `for step in range(steps)` |
 | printing | backtick interpolation `` `c1 step=${step} loss=${value:.9f}` `` | f-string |
 
-### The future spelling
+### Differentiation spelling
 
-Design principles 9.9 / H21-3 settle "differentiate the first parameter, model parameters are
-ordinary parameters": the final spelling is `value_and_grad(loss)(m, x, y)`, with no
-`with <m: Model>`.  H21-3 has not landed, so this example keeps the `with` form; when it lands,
-only the `with` parameter of `loss` moves to the first ordinary parameter, and the loop does not
-change.  The H13 report records this.
+Design principles 9.9 (H21 item 3 was withdrawn; see H25): weights are `with` parameters, and
+`with_grad(loss)<m>(x, y)` differentiates the first `with` parameter, returning a gradient of
+the same type as `m`; the remaining `with` parameters are constants and ordinary parameters are
+data.  This example binds `with_grad(loss)` outside the loop and calls it with the weights
+inside.
 
 ## Problems found
 

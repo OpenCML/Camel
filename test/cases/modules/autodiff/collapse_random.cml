@@ -11,11 +11,12 @@ import { grad } from autodiff
 import { seed, rand } from random
 
 func sq(x: float): float { return x * x }
-func h(x: float): float { return sq(x) + 3.0 * sq(x + 1.0) }
+with <x: float>
+func h(): float { return sq(x) + 3.0 * sq(x + 1.0) }
 
 func main(): int sync {
     seed(42)
     let x = rand()
-    'collapse_random x={} dh={}'->format<x, grad(h)(x)>->println
+    'collapse_random x={} dh={}'->format<x, grad(h)<x>()>->println
     return 0
 }

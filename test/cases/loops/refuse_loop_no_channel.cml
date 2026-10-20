@@ -3,12 +3,13 @@
 // the loop's value would drop the contribution without any sign of it (design principles 9.9).
 import { grad } from autodiff
 
-func f(w: float): float {
+with <w: float>
+func f(): float {
     let n = loop i = 0 for k in [1, 2] do i + (if w > 0.0 then 1 else 0)
     return w * (n as float)
 }
 
 func main(): int sync {
-    println(grad(f)(2.0))
+    println(grad(f)<2.0>())
     return 0
 }

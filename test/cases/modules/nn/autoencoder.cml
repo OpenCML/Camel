@@ -1,14 +1,11 @@
 /**
- * Tiny sigmoid autoencoder trained with autodiff: value_and_grad of the reconstruction loss
+ * Tiny sigmoid autoencoder trained with autodiff: with_grad of the reconstruction loss
  * gives an AutoEncoder-shaped gradient, one sgd step lowers the loss, and a recursive train
  * loop repeats the step.
- *
- * The model is the loss's first normal parameter (`grad` differentiates it, 9.9); the data
- * follows.
  */
 module autoencoder
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, shape, sigmoid, sum, zeros } from tensor
 import { sgd } from nn
 
@@ -19,7 +16,8 @@ type AutoEncoder = {
     dec_b: Tensor
 }
 
-func reconstruction_loss(model: AutoEncoder, x: Tensor, target: Tensor): float {
+with <model: AutoEncoder>
+func reconstruction_loss(x: Tensor, target: Tensor): float {
     let hidden = sigmoid((x @ model.enc_w) + model.enc_b)
     let recon = sigmoid((hidden @ model.dec_w) + model.dec_b)
     let errors = recon - target
@@ -37,19 +35,19 @@ func init(): AutoEncoder {
 }
 
 func train(model: AutoEncoder, x: Tensor, steps: int): AutoEncoder {
-    return if steps == 0 then model else train(sgd(model, grad(reconstruction_loss)(model, x, x), 0.1), x, steps - 1)
+    return if steps == 0 then model else train(sgd(model, grad(reconstruction_loss)<model>(x, x), 0.1), x, steps - 1)
 }
 
 func main(): int sync {
     let model = init()
     let x = full([4, 2], 1.0)
 
-    let before = reconstruction_loss(model, x, x)
-    let vg = value_and_grad(reconstruction_loss)(model, x, x)
+    let before = reconstruction_loss<model>(x, x)
+    let vg = with_grad(reconstruction_loss)<model>(x, x)
     let stepped = sgd(model, vg.1, 0.1)
-    let after = reconstruction_loss(stepped, x, x)
+    let after = reconstruction_loss<stepped>(x, x)
     let trained = train(model, x, 10)
-    let after_train = reconstruction_loss(trained, x, x)
+    let after_train = reconstruction_loss<trained>(x, x)
 
     'autoencoder metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
     'autoencoder enc_w={}'->format<stepped.enc_w>->println

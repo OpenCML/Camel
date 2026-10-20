@@ -8,7 +8,7 @@
  *            that leaves the extent open): they are constants of the model;
  *   checked  conversions of values computed from the input, which the shape of the example
  *            proves: they are exported as nothing;
- *   step     value_and_grad of a loss that converts a constant and a computed value: a
+ *   step     with_grad of a loss that converts a constant and a computed value: a
  *            conversion of a tensor is the identity for the derivative.
  *
  * The models are written next to the working directory (literal paths: the pass reads them).
@@ -16,7 +16,7 @@
 module ort_const_under_as
 
 import { Tensor, reshape, sum, tanh } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { export_model } from onnx
 
 func affine(x: Tensor<f32, const [2, 3]>): Tensor {
@@ -31,14 +31,15 @@ func checked(x: Tensor): Tensor {
     return z + 1.0
 }
 
-func loss(x: Tensor): float {
+with <x: Tensor>
+func loss(): float {
     let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) as Tensor<f32, const [2, 3]>
     let y = (x * x) as Tensor<f32, const [2, 3]>
     return sum(y * w)
 }
 
 func step(x: Tensor): (float, Tensor) {
-    return value_and_grad(loss)(x)
+    return with_grad(loss)<x>()
 }
 
 func main(): int sync {

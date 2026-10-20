@@ -1,12 +1,13 @@
-/** Refused: the first normal parameter is a string, which has no tangent (grad differentiates it, 9.9). */
+/** Refused: the first `with` parameter is a string, which has no tangent (9.9). */
 module grad_refuse_string
 import { grad } from autodiff
 
-func greet(name: string): float {
-    return 1.0
+with <s: string>
+func repeated(x: float): float {
+    return float(len(s)) * x
 }
 
 func main(): int sync {
-    println(grad(greet)('world'))
+    println(grad(repeated)<'abc'>(2.0))
     return 0
 }

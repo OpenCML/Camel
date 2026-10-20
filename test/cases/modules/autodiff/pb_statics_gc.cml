@@ -4,13 +4,11 @@
  * (e.g. the permutation array of permute_inverse) were not reachable from any
  * GC root, so a collection while the gradient executed freed them mid-flight.
  * Run with GC stress enabled (see the plan): without the fix this crashes.
- *
- * The model is the first normal parameter of the loss, as `grad` expects (9.9).
  */
 module pb_statics_gc
 
 import { Tensor, new, reshape, permute, transpose, shape, mean, sum } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 
 type QK = {
     q_w: Tensor,
@@ -22,14 +20,16 @@ func split_heads(t: Tensor, heads: int): Tensor {
     return permute(reshape(t, [dims[0], dims[1], heads, dims[2] / heads]), [0, 2, 1, 3])
 }
 
-func scores(m: QK, x: Tensor): Tensor {
+with <m: QK>
+func scores(x: Tensor): Tensor {
     let q = split_heads(x @ m.q_w, 2)
     let k = split_heads(x @ m.k_w, 2)
     return q @ transpose(k)
 }
 
-func loss(m: QK, x: Tensor): float {
-    let y = scores(m, x)
+with <m: QK>
+func loss(x: Tensor): float {
+    let y = scores<m>(x)
     return mean(y * y)
 }
 
@@ -39,14 +39,14 @@ func main(): int sync {
         k_w: reshape(new([0.5, 0.3, -0.8, 0.6, 0.1, -0.9, 0.4, -0.3, 0.7, -0.2, 0.8, -0.5, 0.2, 0.6, -0.1, 0.9]), [4, 4])
     }
     let x = reshape(new([1.0, -0.5, 0.25, 0.75, -1.0, 0.5, -0.25, 0.9, 0.6, -0.8, 0.4, 0.3, -0.7, 0.2, 0.8, -0.6]), [1, 4, 4])
-    let g = value_and_grad(loss)
-    let vg = g(m, x)
+    let g = with_grad(loss)
+    let vg = g<m>(x)
     'loss={} gqw={} gkw={}'->format<vg.0, sum(vg.1.q_w), sum(vg.1.k_w)>->println
     // Churn the heap, then call again: the pullback constants must survive collections.
     let junk = reshape(new([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0, 3.1, 3.2]), [2, 4, 4])
     let junk2 = junk @ transpose(junk)
     let x2 = x + sum(junk2) * 0.0
-    let vg2 = value_and_grad(loss)(m, x2)
+    let vg2 = with_grad(loss)<m>(x2)
     'loss2={} gqw2={} gkw2={}'->format<vg2.0, sum(vg2.1.q_w), sum(vg2.1.k_w)>->println
     return 0
 }

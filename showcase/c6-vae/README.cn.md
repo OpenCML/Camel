@@ -84,11 +84,11 @@ python showcase/c6-vae/compare.py --profile standard   # 写 RESULTS.md
 | 更新 | `adam(m, gradient, opt, lr)`，优化器状态在循环里 | `optimizer.step()` |
 | 循环 | `loop m, opt, step ... do sync { ... }` | `for step in range(...)` |
 
-### 与将来的写法
+### 求导的写法
 
-设计原则 9.9 / H21-3 会把模型参数改成第一个普通参数，写法变为
-`value_and_grad(loss)(m, x, eps)`；H21-3 落地前保留 `with <m: Vae>`。到这里为止的每个
-Camel 示例都这样标注，避免读者以为 `with` 是最终形态。
+设计原则 9.9（H21 第 3 项已撤回，见 H25）：`with <m: Vae>` 是最终形态，
+`with_grad(loss)<m>(x, eps)` 对第一个 `with` 参数求导，返回与 `m` 同型的梯度；其余
+参数是数据。本示例把 `with_grad(loss)` 绑定在循环外。
 
 ## 遇到的问题
 

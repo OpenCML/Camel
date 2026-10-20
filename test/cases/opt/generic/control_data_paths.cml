@@ -1,13 +1,15 @@
 /**
  * A runtime branch feeds a gradient. Data dependencies already carry most of
- * the post-JOIN ordering, but the selected arm's effects must still run.
+ * the post-JOIN ordering, but the selected arm's effects must still run. The
+ * differentiated value is the first `with` parameter.
  */
 module control_data_paths
 
 import { grad } from autodiff
 
 func sq(x: float): float { return x * x }
-func h(x: float): float { return sq(x) + 3.0 * sq(x + 1.0) }
+with <x: float>
+func h(): float { return sq(x) + 3.0 * sq(x + 1.0) }
 
 func left(x: float): float sync {
     println('left')
@@ -21,6 +23,7 @@ func right(x: float): float sync {
 
 func main(x: float, flag: bool): int sync {
     let value = if flag then left(x) else right(x)
-    'data dh={}'->format<grad(h)(value)>->println
+    let dh = grad(h)<value>()
+    'data dh={}'->format<dh>->println
     return 0
 }

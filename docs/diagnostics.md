@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-170 diagnostics: 153 errors, 17 warnings.
+171 diagnostics: 154 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -139,6 +139,7 @@ prints one entry.
 | `0x03000142` | [SemanticDiag::DimensionNameAlreadyBound](#dimensionnamealreadybound) | Error |
 | `0x03000143` | [SemanticDiag::DimensionMismatch](#dimensionmismatch) | Error |
 | `0x03000144` | [SemanticDiag::InvalidExtentExpression](#invalidextentexpression) | Error |
+| `0x03000150` | [SemanticDiag::NotDifferentiable](#notdifferentiable) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -3496,6 +3497,38 @@ Each extent is an integer, a dimension name bound by the signature, or a linear 
 
 *No example: no test small enough to show raises it.*
 
+### NotDifferentiable
+
+`0x03000150` · Error · `SemanticDiag::NotDifferentiable`
+
+**Message**
+
+```text
+The function cannot be differentiated: {0}.
+```
+
+**Help**
+
+```text
+grad and with_grad differentiate the first `with` parameter of a function that returns a float (design principles 9.9). Weights are `with` parameters; the remaining `with` parameters are constants and the ordinary parameters are data. Give the function a `with` parameter of a differentiable type, or wrap the value to differentiate in a lambda that makes it the first `with` parameter.
+```
+
+**Example** (`test/cases/modules/autodiff/grad_refuse_no_with.cml`, run as `camel test/cases/modules/autodiff/grad_refuse_no_with.cml std::macro`)
+
+```camel
+module grad_refuse_no_with
+import { grad } from autodiff
+
+func ordinary(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    println(grad(ordinary)(2.0))
+    return 0
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -3927,20 +3960,23 @@ import { grad } from autodiff
 // The value to differentiate flows through a map (x is stored in it and read back), and
 // there is no derivative rule for an operator over a collection: `grad` refuses and names
 // the operator. A map that does not depend on x is a constant to `grad` and is no obstacle.
+// x is the first `with` parameter of each function.
 
-func through_map(x: float): float {
+with <x: float>
+func through_map(): float {
     let m = [(1, x)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
-func beside_map(x: float): float {
+with <x: float>
+func beside_map(): float {
     let m = [(1, 2.0)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
 func main(): int sync {
-    println(grad(beside_map)(3.0))
-    println(grad(through_map)(3.0))
+    println(grad(beside_map)<3.0>())
+    println(grad(through_map)<3.0>())
     return 0
 }
 ```
@@ -4287,20 +4323,23 @@ import { grad } from autodiff
 // The value to differentiate flows through a map (x is stored in it and read back), and
 // there is no derivative rule for an operator over a collection: `grad` refuses and names
 // the operator. A map that does not depend on x is a constant to `grad` and is no obstacle.
+// x is the first `with` parameter of each function.
 
-func through_map(x: float): float {
+with <x: float>
+func through_map(): float {
     let m = [(1, x)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
-func beside_map(x: float): float {
+with <x: float>
+func beside_map(): float {
     let m = [(1, 2.0)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
 func main(): int sync {
-    println(grad(beside_map)(3.0))
-    println(grad(through_map)(3.0))
+    println(grad(beside_map)<3.0>())
+    println(grad(through_map)<3.0>())
     return 0
 }
 ```

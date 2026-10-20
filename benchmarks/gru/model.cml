@@ -7,7 +7,7 @@
 module gru
 
 import { Tensor, sigmoid, tanh, slice, reshape, shape, zeros, mean } from tensor
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from sys
 import { export_model } from onnx
@@ -52,14 +52,14 @@ func loss(x: Tensor): float {
 }
 
 func train_step(m: Gru, x: Tensor): float sync {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     let next = sgd(m, vg.1, 0.01)
     return vg.0
 }
 
 /// The training step as a function of the parameters: the loss and the updated parameters.
 func step(m: Gru, x: Tensor): (float, Gru) {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 

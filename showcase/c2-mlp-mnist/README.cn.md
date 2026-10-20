@@ -10,7 +10,7 @@
 
 ```
 showcase/c2-mlp-mnist/
-  train.cml                Camel 实现（展示品：参数树、value_and_grad、loop、save_tree）
+  train.cml                Camel 实现（展示品：参数树、with_grad、loop、save_tree）
   baseline/train_torch.py  PyTorch 对照（nn.Linear、F.cross_entropy、torch.optim.Adam、state_dict）
   make_data.py             数据与初始权重的生成脚本（MNIST 或确定性的合成替身）
   compare.py               运行两边、比较、度量、写 RESULTS.md；比较失败时以非 0 退出
@@ -102,7 +102,7 @@ camel showcase\c2-mlp-mnist\train.cml `
 ## 并排对照的要点
 
 - **参数就是类型**：Camel 的 `type Mlp = { w1, b1, w2, b2 }` 同时是初始权重、梯度和优化器
-  状态的类型；`value_and_grad(loss)(m, x, y)` 直接给出同形状的梯度树，`adam(m, g, state, lr)`
+  状态的类型；`with_grad(loss)<m>(x, y)` 直接给出同形状的梯度树，`adam(m, g, state, lr)`
   直接吃这棵树，程序里没有一处按名字数叶子。PyTorch 要 `nn.Module` + `optimizer` 对象 +
   `state_dict` 三套东西来分别表达同一件事。
 - **训练是表达式**：整个训练是一次 `loop`，状态（模型、优化器状态、步数）显式列出，不需要
@@ -157,11 +157,10 @@ camel showcase\c2-mlp-mnist\train.cml `
 
 ## 测试
 
-上面四条已由检查意见立项：取行/标签/键式随机数与 `save_tree` 整体替换在 H20，下标切片、
-lambda 推断与“对第一个参数求导”在 H21。本示例保留现有写法（`with <m: Mlp>`、
-`slice`、one-hot 目标、Python 侧删检查点目录），等 H20-4 与 H21-3 落地后按
-`value_and_grad(loss)(m, x, y)`、`take`/`permutation`、整数标签整体改写；报告 H13 记了
-这个顺序。检查意见要求的反引号插值与 `let (value, gradient) = ...` 解构已经改好。
+上面四条已由检查意见立项：取行/标签/键式随机数与 `save_tree` 整体替换在 H20，
+下标切片与 lambda 推断在 H21（这些项在本分支尚未落地）。H21 第 3 项已撤回（见 H25）：`with <m: Mlp>` 与
+`with_grad(loss)<m>(x, y)` 是最终形态。本示例把 `with_grad(loss)` 绑定在循环外，循环内
+`let (value, gradient) = loss_with_grad<m>(x, y)`。
 
 小规模配置已进计划 `test/plans/perf/showcase_c2.plan.toml`（`tier = "slow"`）：它用合成替身
 跑 200 步、跑两边、检查上面那组容差，约 6 秒。H10 的 fast/slow 分层已经落地，默认的

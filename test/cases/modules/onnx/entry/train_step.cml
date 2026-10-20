@@ -1,25 +1,24 @@
 /**
- * One training step as `main`: the weights are `with` parameters of the entry (configuration
- * supplied by the caller), the data ordinary ones, and the result is the loss and the updated
- * weights. `loss` takes the weights as its first normal parameter, so `value_and_grad` returns
- * a weight-shaped gradient. Exported, the weights are inputs and outputs of the model (`p_w`,
- * `p_b` in, `output_1_w`, `output_1_b` out).
+ * One training step as `main`: the weights are `with` parameters, the data ordinary ones, and
+ * the result is the loss and the updated weights. Exported, the weights are inputs and
+ * outputs of the model (`p_w`, `p_b` in, `output_1_w`, `output_1_b` out).
  */
 module train_step
 
 import { Tensor, tanh, mean } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd } from nn
 
 type Linear = { w: Tensor<f32, const [3, 4]>, b: Tensor<f32, const [4]> }
 
-func loss(p: Linear, x: Tensor, y: Tensor): float {
+with <p: Linear>
+func loss(x: Tensor, y: Tensor): float {
     let d = tanh(x @ p.w + p.b) - y
     return mean(d * d)
 }
 
 with <p: Linear>
 func main(x: Tensor<f32, const [5, 3]>, y: Tensor<f32, const [5, 4]>): (float, Linear) {
-    let vg = value_and_grad(loss)(p, x, y)
+    let vg = with_grad(loss)<p>(x, y)
     return (vg.0, sgd(p, vg.1, 0.1))
 }

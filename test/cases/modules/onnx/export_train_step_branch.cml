@@ -1,7 +1,7 @@
 /**
  * A training step whose loss takes a data-dependent branch (the arm is chosen
  * by a runtime value computed from the input) exports as one ONNX graph:
- * value_and_grad differentiates through the branch, the per-arm pullbacks are
+ * with_grad differentiates through the branch, the per-arm pullbacks are
  * devirtualized across the JOIN, and the branch becomes standard If
  * operators. The parameters (a struct) and the input are graph inputs; the
  * loss and the SGD-updated parameters are graph outputs.
@@ -9,14 +9,15 @@
 module export_train_step_branch
 
 import { Tensor, relu, mean, reshape } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
 import { get_env } from sys
 
 type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
 
-func loss(m: Mlp, x: Tensor): float {
+with <m: Mlp>
+func loss(x: Tensor): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     let s = mean(y * y)
@@ -24,7 +25,7 @@ func loss(m: Mlp, x: Tensor): float {
 }
 
 func step(m: Mlp, x: Tensor): (float, Mlp) {
-    let vg = value_and_grad(loss)(m, x)
+    let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
