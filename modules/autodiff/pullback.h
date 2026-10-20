@@ -60,19 +60,22 @@ namespace camel::autodiff {
 
 namespace type = camel::core::type;
 
-/// What grad(f) differentiates and returns. Gradients are taken with respect to f's
-/// differentiable with-parameters (the model) when it has any, otherwise with respect to its
-/// differentiable norm-parameters. One parameter gives its tangent, several a tuple of tangents.
+/// What grad(f) differentiates and returns. The differential form differentiates f's **first
+/// normal parameter** (design principles 9.9, like JAX); the other normal parameters are data
+/// and f's `with` parameters are configuration, not differentiated. The gradient is shaped like
+/// that first parameter.
 struct GradientSignature {
-    std::vector<size_t> withPorts;
-    std::vector<size_t> normPorts;
     type::Type *gradientType = nullptr;
     /// Type of grad(f), or of value_and_grad(f) whose result is (value, gradient).
     type::FunctionType *functionType = nullptr;
 };
 
-/// The signature of grad(f) (or value_and_grad(f)), or nullopt when f cannot be differentiated:
-/// its result is not a float, or none of its parameters has a tangent.
+/// Why f cannot be differentiated: not returning a float, no normal parameter, a `var` first
+/// parameter, or a first parameter whose type has no tangent. Empty when it can be.
+std::string differentiationRefusal(type::FunctionType *function);
+
+/// The signature of grad(f) (or value_and_grad(f)), or nullopt when f cannot be differentiated
+/// (see differentiationRefusal).
 std::optional<GradientSignature> gradientSignature(type::FunctionType *function, bool withValue);
 
 /// Builds the graph of grad(f) (or value_and_grad(f)) for the graph of f.

@@ -2,6 +2,8 @@
  * Embedding matrix factorization trained with autodiff through true gather calls: the
  * embedding pullback scatters into an EmbeddingMf-shaped gradient, one sgd step lowers the
  * loss, and a recursive train loop repeats the step.
+ *
+ * The model is the first normal parameter of the loss (9.9).
  */
 module embedding_mf
 
@@ -14,8 +16,7 @@ type EmbeddingMf = {
     item_table: Tensor
 }
 
-with <model: EmbeddingMf>
-func score(user_ids: Tensor, item_ids: Tensor): float {
+func score(model: EmbeddingMf, user_ids: Tensor, item_ids: Tensor): float {
     let users = embedding(model.user_table, user_ids)
     let items = embedding(model.item_table, item_ids)
     return sum(users * items)
@@ -26,9 +27,8 @@ func mse_loss(pred: float, rating: float): float {
     return diff * diff
 }
 
-with <model: EmbeddingMf>
-func model_loss(user_ids: Tensor, item_ids: Tensor, rating: float): float {
-    let pred = score<model>(user_ids, item_ids)
+func model_loss(model: EmbeddingMf, user_ids: Tensor, item_ids: Tensor, rating: float): float {
+    let pred = score(model, user_ids, item_ids)
     return mse_loss(pred, rating)
 }
 
@@ -40,7 +40,7 @@ func init(): EmbeddingMf {
 }
 
 func train(model: EmbeddingMf, u: Tensor, i: Tensor, rating: float, steps: int): EmbeddingMf {
-    return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(u, i, rating), 0.2), u, i, rating, steps - 1)
+    return if steps == 0 then model else train(sgd(model, grad(model_loss)(model, u, i, rating), 0.2), u, i, rating, steps - 1)
 }
 
 func main(): int sync {
@@ -49,12 +49,12 @@ func main(): int sync {
     let item_ids = reshape([0, 1], [2])
     let rating = 1.0
 
-    let before = model_loss<model>(user_ids, item_ids, rating)
-    let vg = value_and_grad(model_loss)<model>(user_ids, item_ids, rating)
+    let before = model_loss(model, user_ids, item_ids, rating)
+    let vg = value_and_grad(model_loss)(model, user_ids, item_ids, rating)
     let stepped = sgd(model, vg.1, 0.2)
-    let after = model_loss<stepped>(user_ids, item_ids, rating)
+    let after = model_loss(stepped, user_ids, item_ids, rating)
     let trained = train(model, user_ids, item_ids, rating, 10)
-    let after_train = model_loss<trained>(user_ids, item_ids, rating)
+    let after_train = model_loss(trained, user_ids, item_ids, rating)
 
     'embedding_mf metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
     'embedding_mf user_table={}'->format<stepped.user_table>->println

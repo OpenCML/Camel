@@ -33,8 +33,7 @@ type Mlp = {
 
 // == model ==
 // x: [batch, 784] -> hidden: [batch, 128] -> logits: [batch, 10].
-with <m: Mlp>
-func logits(x: Tensor): Tensor {
+func logits(m: Mlp, x: Tensor): Tensor {
     let hidden = relu(x @ m.w1 + m.b1)
     return hidden @ m.w2 + m.b2
 }
@@ -42,9 +41,8 @@ func logits(x: Tensor): Tensor {
 // == loss ==
 // The training loss of one minibatch.  Its `with` parameter is the whole parameter tree,
 // so `value_and_grad` gives back a tree of the same shape.  The targets are one-hot rows.
-with <m: Mlp>
-func loss(x: Tensor, targets: Tensor): float {
-    return softmax_cross_entropy(logits<m>(x), targets)
+func loss(m: Mlp, x: Tensor, targets: Tensor): float {
+    return softmax_cross_entropy(logits(m, x), targets)
 }
 
 // == data ==
@@ -62,7 +60,7 @@ func load_model(data: string): Mlp {
 // == evaluate ==
 // Validation: the loss over all rows at once and the fraction classified correctly.
 func evaluate(m: Mlp, x: Tensor, targets: Tensor): (float, float) {
-    let value = logits<m>(x)
+    let value = logits(m, x)
     let correct = sum(argmax(value, 1) == argmax(targets, 1))
     return (softmax_cross_entropy(value, targets), float(correct) / float(shape(x)[0]))
 }
@@ -98,7 +96,7 @@ func main(
             let start = (step % batches) * batch
             let x = slice(train_x, 0, start, start + batch)
             let y = slice(train_targets, 0, start, start + batch)
-            let (value, gradient) = value_and_grad(loss)<m>(x, y)
+            let (value, gradient) = value_and_grad(loss)(m, x, y)
             let next = adam(m, gradient, opt, lr)
             if step % log_every == 0 then {
                 `c2 step=${step} loss=${value:.9f}`->println

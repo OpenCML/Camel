@@ -14,7 +14,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -30,7 +30,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -46,7 +46,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -62,7 +62,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -78,7 +78,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -94,7 +94,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0'), `unexpected output: ${out}`)
+assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -110,7 +110,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0'), `unexpected output: ${out}`)
+assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -126,7 +126,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0'), `unexpected output: ${out}`)
+assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -142,7 +142,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0'), `unexpected output: ${out}`)
+assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -158,7 +158,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0'), `unexpected output: ${out}`)
+assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -282,7 +282,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=(3.0, 3.0)'), `unexpected output: ${out}`)
+assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -298,7 +298,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=(3.0, 3.0)'), `unexpected output: ${out}`)
+assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -314,7 +314,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=(3.0, 3.0)'), `unexpected output: ${out}`)
+assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -454,7 +454,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -470,7 +470,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0'), `unexpected output: ${out}`)
+assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -533,7 +533,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -549,7 +549,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -565,7 +565,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0'), `unexpected output: ${out}`)
+assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -581,7 +581,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0'), `unexpected output: ${out}`)
+assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -651,7 +651,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=(3.0, 3.0)'), `unexpected output: ${out}`)
+assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -667,7 +667,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=(3.0, 3.0)'), `unexpected output: ${out}`)
+assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -737,7 +737,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('scalar_grad df=(12.5, 7.25) vg=(17.5, (12.5, 7.25)) dg=12'), `unexpected output: ${out}`)
+assert(out.includes('scalar_grad df=12.5 vg=(17.5, 12.5) dg=12.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -753,7 +753,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0'), `unexpected output: ${out}`)
+assert(out.includes('control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -870,7 +870,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=(3.0, 3.0)'), `unexpected output: ${out}`)
+assert(out.includes('custom_rule value=8.0 cube=20.0 clip=4.0 mix=3.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 4000
@@ -908,7 +908,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0', `unexpected output: ${out}`)
+assert(out === 'control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 6000
@@ -924,7 +924,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0', `unexpected output: ${out}`)
+assert(out === 'control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 6000
@@ -940,7 +940,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0', `unexpected output: ${out}`)
+assert(out === 'control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 6000
@@ -956,7 +956,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'control_flow_grad a=6.0 b=0.5 c=80.0 d=(12.0, 4.0) e=(0.0, 1.0) w=-10.0', `unexpected output: ${out}`)
+assert(out === 'control_flow_grad a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 6000
@@ -1801,7 +1801,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.default"
-desc = "Refused: the function called is a parameter of the differentiated function itself. Called twice; the diagnostic is located at the first call (line 9) and says that it is a parameter. Under: the default run (grad runs with the program)."
+desc = "Refused: the function called is a parameter of the differentiated function itself. Called twice; the diagnostic is located at the first call (line 10) and says that it is a parameter. Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}"]
@@ -1810,8 +1810,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_parameter.cml:9:13: [Error]'), 'the diagnostic is not located at the call (9:13): ' + text)
-assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:9:13[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_parameter.cml:10:13: [Error]'), 'the diagnostic is not located at the call (10:13): ' + text)
+assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:10:13[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 }
@@ -1820,7 +1820,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.macro"
-desc = "Refused: the function called is a parameter of the differentiated function itself. Called twice; the diagnostic is located at the first call (line 9) and says that it is a parameter. Under: std::macro (grad built at compile time)."
+desc = "Refused: the function called is a parameter of the differentiated function itself. Called twice; the diagnostic is located at the first call (line 10) and says that it is a parameter. Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}", "std::macro"]
@@ -1829,8 +1829,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_parameter.cml:9:13: [Error]'), 'the diagnostic is not located at the call (9:13): ' + text)
-assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:9:13[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_parameter.cml:10:13: [Error]'), 'the diagnostic is not located at the call (10:13): ' + text)
+assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:10:13[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
@@ -2158,3 +2158,121 @@ expect_exit = 0
 expect_stdout_contains = ["verdict resnetbn seed=benchmark activation=relu: PASS", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 900000
+
+
+
+
+[[tests]]
+name = "grad_first_parameter.macro"
+desc = "grad/value_and_grad differentiate the first normal parameter (9.9): the others are data, `with` parameters are configuration, another parameter is differentiated through a reordering lambda, the gradient keeps the first parameter's shape (float, struct, tensor), and value_and_grad returns (value, gradient)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_first_parameter.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('grad_first_parameter gx=3.0 vg=(9.0, 3.0) gy=3.0 gl=3.0'), `unexpected scalars: ${out}`)
+assert(out.includes('grad_first_parameter pg={ a: 4.0, b: 1.0 } pvg=(11.0, { a: 4.0, b: 1.0 })'), `unexpected struct gradient: ${out}`)
+assert(out.includes('grad_first_parameter wg=tensor(') && out.includes('wvg=(32.0, tensor('), `unexpected tensor gradient: ${out}`)
+assert(out.includes('grad_first_parameter with_config=8.0'), `with parameters must stay configuration: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_first_parameter.runtime"
+desc = "The same with grad built at run time (no std::macro)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_first_parameter.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('grad_first_parameter gx=3.0 vg=(9.0, 3.0) gy=3.0 gl=3.0'), `unexpected scalars: ${out}`)
+assert(out.includes('grad_first_parameter pg={ a: 4.0, b: 1.0 } pvg=(11.0, { a: 4.0, b: 1.0 })'), `unexpected struct gradient: ${out}`)
+assert(out.includes('grad_first_parameter with_config=8.0'), `with parameters must stay configuration: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_string"
+desc = "Refused: grad differentiates the first normal parameter (9.9); a string has no tangent."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_string.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_output_contains = ["cannot differentiate a function of type (name: string) => float", "its first normal parameter has type string, which has no gradient"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_int"
+desc = "Refused: grad differentiates the first normal parameter (9.9); an int has no tangent."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_int.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_output_contains = ["cannot differentiate a function of type (n: int) => float", "its first normal parameter has type int, which has no gradient"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_no_parameter"
+desc = "Refused: the function has no normal parameter, and grad differentiates the first one (9.9)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_no_parameter.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_output_contains = ["cannot differentiate a function of type () => float", "it has no normal parameter, and grad differentiates the first normal parameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_var.macro"
+desc = "Refused: the first normal parameter is a `var`; gradients do not flow through variables (3.5), and grad marks no parameter var (9.9)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_var.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 14
+expect_output_contains = ["cannot differentiate a function of type sync (var v: float, w: float) => float", "its first normal parameter is a `var` of type float", "gradients do not flow through variables (design principles 3.5)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_var.runtime"
+desc = "The same refusal with grad built at run time: the signature check does not depend on std::macro."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_var.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 14
+expect_output_contains = ["its first normal parameter is a `var` of type float", "gradients do not flow through variables"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_refuse_function"
+desc = "Refused: the first normal parameter is a function value, which has no tangent (9.9)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/grad_refuse_function.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 10
+expect_output_contains = ["cannot differentiate a function of type (f: (t: float) => float, x: float) => float", "its first normal parameter has type (t: float) => float, which has no gradient"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -6,6 +6,8 @@
  * call. Expected output:
  *   plain call: value 3.0
  *   value_and_grad: value 3.0 grad 3.0
+ *
+ * The model is the first normal parameter of the loss (9.9).
  */
 module var_array_append
 import { Tensor, reshape, sum } from tensor
@@ -13,8 +15,7 @@ import { value_and_grad } from autodiff
 
 type P = { p0: Tensor }
 
-with <m: P>
-func loss(x: Tensor): float sync {
+func loss(m: P, x: Tensor): float sync {
     var parts: int[] = []
     parts = parts->append<1>
     parts = parts->append<2>
@@ -25,8 +26,8 @@ func loss(x: Tensor): float sync {
 func main(): int sync {
     let x = reshape([1.0, 2.0], [2])
     let m = { p0: reshape([0.5, 0.25], [2]) }
-    println("plain call: value {}"->format<loss<m>(x)>)
-    let vg = value_and_grad(loss)<m>(x)
+    println("plain call: value {}"->format<loss(m, x)>)
+    let vg = value_and_grad(loss)(m, x)
     println("value_and_grad: value {} grad {}"->format<vg.0, sum(vg.1.p0)>)
     return 0
 }

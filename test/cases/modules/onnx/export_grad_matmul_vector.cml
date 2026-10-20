@@ -12,8 +12,7 @@ import { get_env } from sys
 type P = { w: Tensor, v: Tensor }
 
 // w: [3, 2] matrix, v: [3] vector, x: [2] vector.
-with <m: P>
-func loss(x: Tensor): float {
+func loss(m: P, x: Tensor): float {
     let a = m.w @ x        // matrix @ vector -> [3]
     let b = m.v @ m.w      // vector @ matrix -> [2]
     let c = m.v @ tanh(a)  // vector @ vector -> scalar
@@ -22,7 +21,7 @@ func loss(x: Tensor): float {
 
 func step(w: Tensor, v: Tensor, x: Tensor): (Tensor, Tensor, Tensor) {
     let m = { w: w, v: v }
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = value_and_grad(loss)(m, x)
     return (reshape([vg.0], [1]), vg.1.w, vg.1.v)
 }
 

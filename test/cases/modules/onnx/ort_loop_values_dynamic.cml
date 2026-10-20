@@ -4,6 +4,9 @@
  * step the gradient is a struct of constants (zeros) inside a branch arm, which simplification
  * does not fold there. Run by ort_loop_values_dynamic.py: x.npy is read from the working
  * directory, the native results are saved there, and the model is exported when ONNX_OUT is set.
+ *
+ * The captured weights are configuration (`with` parameters); `grad` differentiates the loss's
+ * first normal parameter, the input, so the gradient has the input's shape.
  */
 module ort_loop_values_dynamic
 import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
@@ -28,7 +31,7 @@ with <m: P>
 func step(x: Tensor): (Tensor, int, Tensor, Tensor) {
     let (h, k) = walk<m>(x, 0)
     let g = value_and_grad(loss)<m>(x)
-    return (h, k, reshape([g.0], [1]), g.1.w)
+    return (h, k, reshape([g.0], [1]), g.1)
 }
 
 func main(): int sync {
