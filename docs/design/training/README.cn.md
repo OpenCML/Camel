@@ -37,7 +37,7 @@ export func stepFF(p: FF, g: FF, m: FF, v: FF, rate: float, bc1: float, bc2: flo
 - 值层面：没有"对结构的每个叶子做同一件事"的写法；
 - 类型层面：没有办法从 `FF` 得到"每个字段都在设备上的 `FF`"。
 
-而核心内部早已理解这种树：`value_and_grad(loss)<m>` 对整个 `Model` 求梯度并返回同构的梯度；`run_device` 按原结构返回设备值。缺的只是让用户也能写。
+而核心内部早已理解这种树：`value_and_grad(loss)(m, ...)` 对整个 `Model` 求梯度并返回同构的梯度（模型是第一个普通参数，9.9）；`run_device` 按原结构返回设备值。缺的只是让用户也能写。
 
 ### 1.2 一个训练步在主机与设备之间往返
 
@@ -208,7 +208,7 @@ func train_step(s: Device<State>, data: Device<Tensor<f32>>, cfg: Config): (Devi
     let t     = randint(fold(k, 1), 0, cfg.timesteps - 1)
     let noise = normal(fold(k, 2), [cfg.batch, 784])
     let noisy = q_sample(clean, noise, cfg.abar[t])
-    let (l, g) = value_and_grad(loss)<s.params>(noisy, noise, embedding(t))
+    let (l, g) = value_and_grad(loss)(s.params, noisy, noise, embedding(t))
     let (p, m, v) = adam(s.params, g, s.m, s.v, hyper(cfg, s.step))
     return ({ params: p, m: m, v: v, ema: ema(s.ema, p), key: s.key, step: s.step + 1 }, l)
 }

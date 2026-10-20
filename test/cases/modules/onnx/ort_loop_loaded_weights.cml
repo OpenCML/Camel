@@ -1,11 +1,15 @@
 /**
  * A loop whose depth depends on the model input, with weights READ FROM A FILE into a captured
  * struct: the forward (state, counter) and the gradient of a loss over the state with respect
- * to the weights, exported with a dynamic batch axis. The declared type of the weights says
+ * to the input, exported with a dynamic batch axis. The declared type of the weights says
  * nothing (`{ w: Tensor }`); the export gives the captured constant the element type and shape
  * its value has. Without that the body of the loop knew less about the weights than the place
  * calling it, and the export's simplification unrolled the recursion until it ran out of
  * memory ("Runtime draft encoding failed to allocate ... bytes").
+ *
+ * The captured weights are configuration (`with` parameters), never differentiated: `grad`
+ * differentiates the loss's first normal parameter, the input, and the captured constant stays
+ * out of the gradient.
  *
  * Reads w.npy and x.npy from the working directory, writes the native results next to them,
  * and exports when ONNX_OUT is set.
@@ -34,7 +38,7 @@ with <m: P>
 func step(x: Tensor): (Tensor, int, Tensor, Tensor) {
     let (h, k) = walk<m>(x, 0)
     let g = value_and_grad(loss)<m>(x)
-    return (h, k, reshape([g.0], [1]), g.1.w)
+    return (h, k, reshape([g.0], [1]), g.1)
 }
 
 func main(): int sync {

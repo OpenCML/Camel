@@ -9,9 +9,13 @@ const REPO_ROOT = path.dirname(TEST_ROOT)
 const PLANS_ROOT = path.join(TEST_ROOT, 'plans')
 const RUNNER = path.join(TEST_ROOT, 'tools', 'run-tests.mjs')
 const SELECTION_PATH = path.join(TEST_ROOT, 'plan-selection.json')
-// `origin/fsh-dev` is the branch handover work is based on: `--changed` answers what this
-// checkout changed relative to it.
-const CHANGED_BASE = 'origin/fsh-dev'
+// `--changed` answers what this checkout changed relative to the base branch. `origin/develop`
+// is the branch work lands on; CAMEL_TEST_BASE overrides it (a release branch, a fork's base).
+const DEFAULT_CHANGED_BASE = 'origin/develop'
+
+export function changedBase() {
+    return process.env.CAMEL_TEST_BASE || DEFAULT_CHANGED_BASE
+}
 
 const TARGETS = {
     smoke: path.join(PLANS_ROOT, 'smoke'),
@@ -131,10 +135,10 @@ function parseArgs(argv) {
     }
 }
 
-/** Files changed against `origin/fsh-dev`, committed or not; null when git cannot answer. */
-function changedFiles() {
+/** Files changed against the base branch, committed or not; null when git cannot answer. */
+export function changedFiles() {
     const run = (args) => spawnSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8', windowsHide: true })
-    const diff = run(['diff', '--name-only', CHANGED_BASE])
+    const diff = run(['diff', '--name-only', changedBase()])
     if (diff.error || diff.status !== 0) return null
     const untracked = run(['ls-files', '--others', '--exclude-standard'])
     const text = `${diff.stdout || ''}\n${untracked.status === 0 ? untracked.stdout || '' : ''}`
@@ -161,12 +165,53 @@ export function loadSelectionRules() {
  * union over all files is run in plan order by the runner. Null when no rule matched anything
  * (the caller then runs the whole fast layer).
  */
+/**
+ * The directory rules: a changed file under one of these roots is first looked up by its
+ * directory, so `modules/tensor/ops.cpp` selects `test/plans/feat/modules/tensor` (and
+ * `test/cases/compile/enum/x.cml` selects `test/plans/feat/compile`) without a per-subsystem
+ * mapping. The deepest plan directory or plan file that matches wins; the file rules below are
+ * the fallback for a path no plan directory mirrors (a pass, the standard library, docs).
+ */
+export function loadDirectoryRules() {
+    const doc = JSON.parse(fs.readFileSync(SELECTION_PATH, 'utf8'))
+    return (doc.directoryRules || []).map((rule) => ({
+        paths: (rule.paths || []).map((entry) => String(entry).replace(/\\/g, '/')),
+        plans: String(rule.plans || '').replace(/\\/g, '/').split('/').filter(Boolean),
+    }))
+}
+
+function planForDirectory(file) {
+    for (const rule of loadDirectoryRules()) {
+        const prefix = rule.paths.find((entry) => file === entry || file.startsWith(entry))
+        if (!prefix) continue
+        const rest = file.slice(prefix.length)
+        const dir = path.posix.dirname(rest)
+        const segments = dir === '.' || dir === '' ? [] : dir.split('/').filter(Boolean)
+        for (let length = segments.length; length >= 1; length--) {
+            const candidate = path.join(PLANS_ROOT, ...rule.plans, ...segments.slice(0, length))
+            if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) return candidate
+            const planFile = `${candidate}.plan.toml`
+            if (fs.existsSync(planFile) && fs.statSync(planFile).isFile()) return planFile
+        }
+        return null
+    }
+    return null
+}
+
 export function plansForChanges(files) {
     const rules = loadSelectionRules()
     const names = new Set()
-    const targets = []
+    const targets = new Set()
     let matched = false
     for (const file of files) {
+        // Directory first. When it finds a plan, the file rules do not add a broader set: the
+        // narrow selection is the point of the order.
+        const byDirectory = planForDirectory(file)
+        if (byDirectory) {
+            matched = true
+            targets.add(byDirectory)
+            continue
+        }
         const rule = rules.find((candidate) =>
             candidate.paths.some((prefix) => file === prefix || file.startsWith(prefix))
         )
@@ -175,10 +220,10 @@ export function plansForChanges(files) {
         for (const plan of rule.plans) names.add(plan)
         if (rule.self && file.endsWith('.plan.toml')) {
             const target = path.join(REPO_ROOT, ...file.split('/'))
-            if (fs.existsSync(target)) targets.push(target)
+            if (fs.existsSync(target)) targets.add(target)
         }
     }
-    return matched ? { names: [...names], targets } : null
+    return matched ? { names: [...names], targets: [...targets] } : null
 }
 
 /** A plan named by the selection file, relative to test/plans (a directory or a *.plan.toml). */
@@ -191,13 +236,14 @@ function resolveSelectionTarget(name) {
 }
 
 function selectChangedTargets() {
+    const base = changedBase()
     const files = changedFiles()
     if (files === null) {
-        console.log(`[INFO] --changed: cannot read ${CHANGED_BASE}; running the whole fast layer`)
+        console.log(`[INFO] --changed: cannot read ${base}; running the whole fast layer`)
         return []
     }
     if (files.length === 0) {
-        console.log(`[INFO] --changed: no change against ${CHANGED_BASE}; running the whole fast layer`)
+        console.log(`[INFO] --changed: no change against ${base}; running the whole fast layer`)
         return []
     }
     const plans = plansForChanges(files)

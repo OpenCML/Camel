@@ -1,7 +1,8 @@
-# Fixture of test/tools/selftest/run.mjs: every test gets its own scratch directory (`${test_tmp}`),
-# a file another test wrote is not visible in it, `${test_tmp}` is expanded in an expectation, and
-# the runner clears a fixed path under tmp/test before the first test. The runner is started twice
-# against this plan to show that a second run inherits nothing from the first.
+# Fixture of test/tools/selftest/run.mjs: every test gets its own scratch directory
+# (`${test_tmp}`, under the run's `tmp/test/run-<pid>`), a file another test wrote is not
+# visible in it, `${test_tmp}` is expanded in an expectation, and a file another RUN keeps under
+# tmp/test is neither read nor removed. The runner is started twice against this plan to show
+# that a second run inherits nothing from the first.
 id = "selftest.scratch"
 order = 2
 tier = "fast"
@@ -35,8 +36,8 @@ expect_exit = 0
 expect_stdout_contains = ["scratch directory is clean"]
 
 [[tests]]
-name = "scratch.legacy_path_cleared"
-desc = "A file left at a fixed path under tmp/test, as an earlier run leaves, is cleared before the tests run (the command runs from the repository root)."
-args = ["${case}", "absent-path", "tmp/test/stale_from_previous_run.txt"]
+name = "scratch.other_run_untouched"
+desc = "A file another run keeps under tmp/test is outside this test's directory and survives the run: the runner removes its own root, not the whole tree."
+args = ["${case}", "outside", "${test_tmp}"]
 expect_exit = 0
-expect_stdout_contains = ["stale file is gone"]
+expect_stdout_contains = ["the other run's file is outside this scratch, under this run's root"]

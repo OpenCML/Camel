@@ -9,8 +9,11 @@ desc = "Every program of examples/ runs as its header says and prints the record
 # std::prl; the four agree on exit code and standard output, and the output is the golden
 # file's. The entries at the end run the other command lines the headers give.
 #
-# The programs under examples/files and examples/ml, and examples/text/log_filter.cml, write to
-# tmp/examples (not tracked).
+# The programs under examples/files and examples/ml, and examples/text/log_filter.cml, write
+# their files into CAMEL_TEST_TMPDIR (the test's own scratch directory) when the runner sets it,
+# and into tmp/examples (not tracked) on a direct run. They used to write the fixed tmp/examples
+# path, which is why their tests were marked `parallel = false`; the per-test directory made
+# that mark unnecessary.
 # After an intended change of an example's output:
 #   node test/tools/run-tests.mjs --update-golden test/plans/feat/examples.plan.toml
 
@@ -88,17 +91,14 @@ name = "examples.files.json_config"
 desc = "A JSON settings file written, read into a struct, with defaults on failure."
 case = "../../../examples/files/json_config.cml"
 golden = "golden/examples/files_json_config.txt"
-# The program writes a fixed path under tmp/examples (the header names it), so its four back
-# ends would overwrite each other's file in a parallel run.
-parallel = false
+# No `parallel = false`: the program writes under CAMEL_TEST_TMPDIR, which is this test's own
+# directory, so the four back ends no longer overwrite one file.
 
 [[tests]]
 name = "examples.files.read_write"
 desc = "A text file written, read back and split into lines; a missing file handled through string!."
 case = "../../../examples/files/read_write.cml"
 golden = "golden/examples/files_read_write.txt"
-# Fixed path under tmp/examples (see examples.files.json_config).
-parallel = false
 
 [[tests]]
 name = "examples.functions.closures"
@@ -117,8 +117,6 @@ name = "examples.ml.export_onnx"
 desc = "A two-layer model run and exported with onnx.export_model."
 case = "../../../examples/ml/export_onnx.cml"
 golden = "golden/examples/ml_export_onnx.txt"
-# Writes the fixed tmp/examples/tiny_model.onnx (see examples.files.json_config).
-parallel = false
 
 [[tests]]
 name = "examples.ml.train_linear"
@@ -161,8 +159,6 @@ name = "examples.text.log_filter"
 desc = "A log file split into lines and fields with str; lines selected by str.find and re.test, counted per level."
 case = "../../../examples/text/log_filter.cml"
 golden = "golden/examples/text_log_filter.txt"
-# Writes the fixed tmp/examples/service.log (see examples.files.json_config).
-parallel = false
 
 [[tests]]
 name = "examples.text.table_report"
@@ -229,10 +225,10 @@ expect_output_contains = ["'value', 'unit' and 'steps'", "--arg name=value"]
 
 [[tests]]
 name = "examples.ml.export_onnx_translate"
-desc = "The second command of the header: the program is translated without being run, and onnx::export writes the model."
+desc = "The second command of the header: the program is translated without being run, and onnx::export writes the model. The pass's out parameter names the model in this test's scratch directory (the program's own path is computed at run time and the translator does not run it)."
+kind = "behavior"
 case = "../../../examples/ml/export_onnx.cml"
-golden = "golden/examples/ml_export_onnx_translate.txt"
 backends = false
-# Writes the same fixed tmp/examples/tiny_model.onnx as examples.ml.export_onnx.
-parallel = false
-args = ["${case}", "std::macro", "std::opt", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/tiny_model.onnx")']
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/tiny_model.onnx"]
+expect_output_not_contains = ["model file written"]

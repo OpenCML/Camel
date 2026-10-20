@@ -1,0 +1,12 @@
+/** Refused: the first normal parameter is an int, which has no tangent (grad differentiates it, 9.9). */
+module grad_refuse_int
+import { grad } from autodiff
+
+func twice(n: int): float {
+    return float(n) * 2.0
+}
+
+func main(): int sync {
+    println(grad(twice)(3))
+    return 0
+}

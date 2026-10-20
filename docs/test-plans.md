@@ -18,8 +18,10 @@ When adding a new feature or test case, manually run the case from the command l
 
 - `npm run test` runs the **fast** layer: what a developer runs after a change.
 - `npm run test:all` runs everything, fast and slow (`--tier all`).
-- `node scripts/test.js <plan file or directory>` runs that target; the same layer rules apply,
-  so add `--tier all` to include its slow tests.
+- `node scripts/test.js <plan file>` runs that plan in full: naming the file is the intent, so
+  its slow tests run whatever `--tier` says. A **directory** target selects test by test and
+  follows `--tier`; add `--tier all` to include the slow tests of a directory or of the whole
+  tree.
 - `--jobs N` sets how many tests run at once (default: the processor count). `--jobs 1` is the
   serial execution, useful to reproduce a failure or to compare output.
 - `node scripts/test.js --changed` selects the plans a change touches (see "Selecting plans from
@@ -27,6 +29,11 @@ When adding a new feature or test case, manually run the case from the command l
 
 The runner prints one line per test and, at the end, `[SUMMARY]` counts and the wall time with
 the job count and layer.
+
+`node test/tools/selftest/run.mjs` checks the runner itself: the back-end matrix, the per-test
+scratch directories and the run root, parallel versus serial output, the tier filter and the
+named-plan rule, the risk-based sweep sample, and the `--changed` mapping (directory rule,
+file rules, `CAMEL_TEST_BASE`).
 
 ## Layers: fast And slow
 
@@ -52,22 +59,27 @@ Rules for a new test:
   layer as that test. When a layer filter would separate them, the runner keeps the reference
   too, so a selected test never fails only because its baseline was filtered out.
 - A plan written before the split still works: any `tier` other than `slow` is the fast layer.
+- Naming a plan **file** as the target runs all its tests, whatever `--tier` says; the layer
+  still filters a directory target and the whole tree. This keeps a named slow test reachable
+  without `--tier all` and keeps `--tier` meaningful for a broad run.
 
 ## Parallel Execution
 
 Tests run in parallel by default, one per core (`--jobs N` overrides; `--jobs 1` is serial).
-Every test already has its own scratch directory, so files do not collide. What must not run
-next to another test is marked instead of being dropped:
+Every test already has its own scratch directory under the run's own root, so files do not
+collide, and two runner instances can run at the same time. What must not run next to another
+test is marked instead of being dropped:
 
 - `parallel = false` on a `[[tests]]` entry, or on the plan to mark all its tests, runs that
   test alone: no other test runs while it does.
 - `kind = "benchmark"` tests run alone unless they say `parallel = true`, because the machine's
   load is part of what they measure.
 
-Use `parallel = false` only when a test shares something outside `${test_tmp}`: a fixed path
-another test writes, a compiler cache or a build directory, a port, a global counter file. A
-test that writes a fixed path in the repository for its own purposes is a reason to mark it,
-not to keep a plan serial for everything.
+Use `parallel = false` only when a test shares something outside `${test_tmp}`: a compiler
+cache or a build directory, a port, a global counter file. A fixed output path under `tmp/test`
+is no longer a reason: it belongs in `${test_tmp}`. The examples and mnist tests used to be
+marked because they wrote `tmp/examples` or shared `tmp/mnist`; both now run in parallel,
+against their own `${test_tmp}`, and the marks are gone.
 
 The output is the serial run's output: results are printed in plan and test order, whichever
 test finished first, and the exit code and failure text are the same. The run's log directory
@@ -75,14 +87,27 @@ and `summary.json` land under `test/results/log/` as before.
 
 ## Selecting Plans From A Change
 
-`node scripts/test.js --changed` takes the files that differ from `origin/fsh-dev` (committed,
+`node scripts/test.js --changed` takes the files that differ from the base branch (committed,
 staged or not) and runs the plans they touch, so a small change does not start the whole fast
-layer. The mapping is `test/plan-selection.json`: a list of rules, each a path prefix and the
-plans it selects, as paths under `test/plans`; a rule with `"self": true` selects the changed
-plan file itself (a change to `test/plans/...` runs that plan). The first rule a file matches
-wins; the union of the rules that matched is run in plan order. When no rule matches, or git
-cannot read the base branch, the whole fast layer runs. `--tier all` combines with `--changed`
-to run the selected plans' slow tests too.
+layer. The base is `origin/develop`; `CAMEL_TEST_BASE` overrides it for a release branch or a
+local comparison.
+
+`test/plan-selection.json` is applied in two steps:
+
+- **Directory rules first** (`directoryRules`): a change under `modules/`, `tools/` or
+  `test/cases/` selects the plan mirroring its directory. The deepest existing match wins, so
+  `modules/tensor/ops/matmul.cpp` selects `test/plans/feat/modules/tensor/`,
+  `test/cases/compile/enum/shapes.cml` selects `test/plans/feat/compile/enum.plan.toml`, and
+  `test/cases/modules/tensor/bounds.cml` selects `test/plans/feat/modules/tensor/`. A plan file
+  found this way is a named target and runs in full.
+- **File rules second**: only when no plan directory mirrors the path. Each rule is a path
+  prefix and the plans it selects, as paths under `test/plans`; a rule with `"self": true`
+  selects the changed plan file itself (a change to `test/plans/...` runs that plan). Rules
+  may name plan directories or plan files; the first matching rule wins.
+
+The union of everything selected runs in plan order. When no rule matches, or git cannot read the
+base branch, the whole fast layer runs. `--tier all` combines with `--changed` to run the slow
+tests of directory targets too.
 
 Keep the file short and honest: map the smallest set of plans that would catch a regression in
 that area, specific rules first (`src/passes/sched/` before `src/passes/`). Add a rule when a
@@ -364,17 +389,23 @@ envs = ["CAMEL_GC_POISON=1"]
 skip_env_prefix = "CAMEL_GC_"         # leave out tests that set such a variable themselves
 timeout_scale = 20                    # their timeouts are multiplied by this
 fast_sample = 1                       # keep one test per source plan in the fast layer
+risk_tags = ["collections", "closures", "iterators"]  # plans whose sample is larger
+risk_sample = 2                       # keep two or three of those instead
 ```
 
 Only `behavior` and `snapshot` tests of the `camel` tool are taken; a test marked
-`known_fail` or `sweep = false` is left out. `fast_sample = N` keeps the first N such tests of
-each source plan (preferring one whose program runs to completion) in the fast layer and puts
-the rest in the slow one; without it every copy follows the plan's layer. Use a sweep for a property that every program
-must keep whatever it computes: `feat/mm/gc_poison_sweep.plan.toml` checks the handle rules
-of the collector (`docs/technical/36_gc_handle_rules.md`) against the tests of the modules,
-so an operator added later is covered as soon as it has a test. A test that cannot run under
-a sweep (it asserts wall-clock time, or which graphs a back end compiles) says
-`sweep = false` with a comment.
+`known_fail` or `sweep = false` is left out.
+
+The fast sample is risk-based. A source plan whose `tags` include one of `risk_tags` keeps
+`risk_sample` tests (two or three: a collection, a closure or an iterator moves objects across
+safepoints in more ways, so one sample is thin there); every other source plan keeps
+`fast_sample`. The first tests of each source plan are taken, preferring one whose program runs
+to completion; without either field every copy follows the plan's layer. `--tier all` keeps
+every copy, and that is what a milestone run uses. `feat/mm/gc_poison_sweep.plan.toml` is the
+sweep: it checks the handle rules of the collector (`docs/technical/36_gc_handle_rules.md`)
+against the tests of the modules, so an operator added later is covered as soon as it has a
+test. A test that cannot run under a sweep (it asserts wall-clock time, or which graphs a back
+end compiles) says `sweep = false` with a comment.
 
 ## Runner environment
 
@@ -451,21 +482,21 @@ test can name its own output path in an assertion about what a program printed.
 Every test runs with its own fresh scratch directory, exposed three ways:
 
 - `${test_tmp}`: its repository-relative path with forward slashes
-  (`tmp/test/run/<run>/<plan id>/<test>`)
+  (`tmp/test/run-<pid>/<plan>/<test>`; the root is one per runner process)
 - `CAMEL_TEST_TMPDIR`: its absolute path in the child process environment
 - `test_tmp` / `test_tmp_relative`: the absolute and repository-relative paths in the
   `verify_script` payload (`input.test_tmp`, `input.test_tmp_relative`)
 
 A test that writes a file writes it under `${test_tmp}` (or `CAMEL_TEST_TMPDIR`), never under a
 fixed path that an earlier test or an earlier run could have written. The directory is removed
-after the test, and `tmp/test` and `test/tmp` are cleared before and after a run, so repeated runs
-do not accumulate files and a stale file cannot be mistaken for this run's output. Files that a
-golden prints keep their fixed path (`tmp/examples`): those plans write there on purpose. A case
-run outside the runner (e.g. a benchmark, which has no private working directory) may keep its
-older fixed path as a fallback when `CAMEL_TEST_TMPDIR` is unset. Tests run in parallel inside
-one runner, each in its own directory; two runner *instances* must still not run at the same
-time, because both clear `tmp/test` before and after their run and a plan that keeps a fixed
-path (`tmp/examples`) is not safe between them.
+after the test; the run's root (`tmp/test/run-<pid>`) is removed when the run succeeds, and is
+kept, with its path printed (`[INFO] test scratch kept: ...`), when it fails. Nothing else under
+`tmp/test` is cleared: a file another run keeps there survives, which is what lets two runner
+instances run at the same time without seeing each other's files. A case run outside the runner
+(a benchmark, or a direct `camel` command) may keep its older fixed path as a fallback when
+`CAMEL_TEST_TMPDIR` is unset; the examples and mnist cases take it through
+`get_env('CAMEL_TEST_TMPDIR')`, and the one ONNX refusal case that writes a model gets an
+`onnx::export(out="${test_tmp}/...")` path.
 
 ## Field Constraints And Style
 

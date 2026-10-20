@@ -13,8 +13,7 @@ sync func push(v: Tensor, var acc: Tensor): int sync {
     return 0
 }
 
-with <m: P>
-sync func loss(x: Tensor, var acc: Tensor): float sync {
+sync func loss(m: P, x: Tensor, var acc: Tensor): float sync {
     wait push(m.p0 * x, acc)
     let b = acc * 1.0
     return sum(m.p0 * x) + sum(b)
@@ -24,7 +23,7 @@ func main(): int sync {
     let x = reshape([1.0, 2.0], [2])
     let m = { p0: reshape([0.5, 0.25], [2]) }
     var acc = reshape([0.0, 0.0], [2])
-    let vg = wait value_and_grad(loss)<m>(x, acc)
+    let vg = wait value_and_grad(loss)(m, x, acc)
     println("value {} grad {}"->format<vg.0, sum(vg.1.p0)>)
     return 0
 }

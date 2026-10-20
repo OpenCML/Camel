@@ -67,8 +67,11 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 - `npm run test` runs the **fast** layer of `smoke` plus all `feat/**` plans, in parallel (one test per core).
 - `npm run test:all` runs every plan under `test/plans/`, including `perf/**` and the slow tests.
 - `--jobs N` sets the parallel width; `--jobs 1` reproduces the serial run. `--tier fast|slow|all`
-  selects a layer (default `fast`); a target's slow tests run only with `--tier all`.
-- `node scripts/test.js --changed` runs the plans a change touches, selected by `test/plan-selection.json`.
+  selects a layer (default `fast`) for a directory or the whole tree; a plan **file** named as
+  the target runs in full, whatever `--tier` says.
+- `node scripts/test.js --changed` runs the plans a change touches: directory rules in
+  `test/plan-selection.json` first, file rules second; base `origin/develop`, override with
+  `CAMEL_TEST_BASE`.
 - Prefer passing the target explicitly instead of adding new `npm run test:*` aliases.
 - Shorthand targets such as `smoke`, `feat`, `parse`, `compile`, `opt`, `trans`, `linear`, `para`, `modules`, and `perf` resolve to the matching plan directories.
 - Direct examples:

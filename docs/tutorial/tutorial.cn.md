@@ -1056,8 +1056,9 @@ func f(x: float, y: float): float {
 
 func main(): int sync {
     println(f(3.0, 2.0))
-    println(grad(f)(3.0, 2.0))                 // (df/dx, df/dy) = (2xy, x^2 + 1)
-    println(value_and_grad(f)(3.0, 2.0))
+    println(grad(f)(3.0, 2.0))                 // df/dx = 2xy = 12; y is data
+    println(value_and_grad(f)(3.0, 2.0))       // (20, 12)
+    println(grad((y: float): float => f(3.0, y))(2.0))  // df/dy = 10
     return 0
 }
 ```
@@ -1067,15 +1068,18 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 ```
 
 ```text
-20
-(12, 10)
-(20, (12, 10))
+20.0
+12.0
+(20.0, 12.0)
+10.0
 ```
 
-- `grad(f)` 返回一个函数，它对 `f` 的每个参数给出一个偏导数。
+- `grad(f)` 返回一个函数，它对 `f` 的第一个普通参数求导（[设计原则](../design-principles.cn.md) 9.9）；其余普通参数是数据，不参与求导。梯度与被求导参数同形：`float` 给 `float`，张量给同形张量，结构体给同形结构体。
+- `value_and_grad(f)` 返回 `(值, 梯度)`。
+- 想对别的参数求导，用 lambda 把它挪到第一位：`grad((y: float): float => f(3.0, y))(2.0)`。
 - `grad` 是 macro 算子。流水线里的 `std::macro` 在运行之前就把它展开成导数的图，后面的优化遍可以继续优化这张图。这是这个库的前提，不是语言的约束。
-- 被求导的函数用 `let` 写成纯的数据流；梯度需要经过 `var` 的读写时会被直接拒绝。
-- 训练一步就是“梯度 + 更新”：模型的权重写成 `with` 参数，`grad(loss)<model>(x, y)` 对权重求导，`nn` 模块的 `sgd` 给出更新后的权重。完整的例子见 [`examples/ml/train_linear.cml`](../../examples/ml/train_linear.cml)。
+- 被求导的函数用 `let` 写成纯的数据流；梯度需要经过 `var` 的读写时会被直接拒绝。第一个普通参数本身是 `var`、是 `string`/`int` 这类没有切空间的类型，或者函数根本没有普通参数时，`grad` 在编译期就拒绝并说明原因。
+- 训练一步就是“梯度 + 更新”：模型作为 loss 的第一个普通参数，`grad(loss)(model, x, y)` 对模型求导，`nn` 模块的 `sgd` 给出更新后的权重。`with` 参数只是配置，不参与求导：`grad(loss)<cfg>(model, x, y)` 把配置原样传给梯度函数。完整的例子见 [`examples/ml/train_linear.cml`](../../examples/ml/train_linear.cml)。
 
 ## 接下来
 

@@ -59,8 +59,8 @@ PROGRAMS = [
 ]
 # (program, passes, expected fragment of the message, expected 1-based line of the position)
 REFUSALS = [
-    ("export_train_step.cml", ["onnx::export"], "run std::opt before onnx::export", 29),
-    ("export_train_step.cml", ["std::opt", "onnx::export"], "run std::macro", 25),
+    ("export_train_step.cml", ["onnx::export"], "run std::opt before onnx::export", 28),
+    ("export_train_step.cml", ["std::opt", "onnx::export"], "run std::macro", 24),
     ("export_nontail_recursion.cml", PIPELINE, "several branches decide whether a function calls itself", None),
 ]
 DTYPES = {"tensor(float)": "float32", "tensor(double)": "float64", "tensor(int64)": "int64"}

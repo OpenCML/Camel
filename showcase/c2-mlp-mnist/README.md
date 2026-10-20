@@ -125,7 +125,7 @@ configuration (synthetic stand-in) differs at the `1e-5` level.
 
 - **The parameters are a type.** Camel's `type Mlp = { w1, b1, w2, b2 }` is at once the type
   of the starting weights, of the gradient and of the optimizer state;
-  `value_and_grad(loss)<m>(x, y)` returns a gradient tree of the same shape and
+  `value_and_grad(loss)(m, x, y)` returns a gradient tree of the same shape and
   `adam(m, g, state, lr)` consumes it, so no line in the program names a leaf. PyTorch needs
   three things — an `nn.Module`, an optimizer object and a `state_dict` — to express the same
   facts.
