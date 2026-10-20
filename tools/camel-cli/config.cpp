@@ -34,6 +34,7 @@
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/params.h"
 #include "camel/utils/log.h"
+#include "camel/utils/path.h"
 #include "camel/utils/str.h"
 #include "clipp/clipp.h"
 #include "config.h"
@@ -810,11 +811,13 @@ bool parseArgs(int argc, char *argv[]) {
 
         // Apply .opencmlrc: list = prefix + CLI passes + suffix; fallback used only when graph !=
         // null after list.
-        string cwd = fs::current_path().string();
+        string cwd = camel::utils::currentDirectory();
         string scriptDir =
             Run::resolvedInputPath.empty()
                 ? ""
-                : fs::absolute(fs::path(Run::resolvedInputPath)).parent_path().string();
+                : camel::utils::pathToUtf8(
+                      fs::absolute(camel::utils::pathFromUtf8(Run::resolvedInputPath))
+                          .parent_path());
         Run::resolvedPassList = opencmlrc::resolvePassListWithRc(
             cwd,
             scriptDir,

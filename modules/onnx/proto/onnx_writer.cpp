@@ -37,6 +37,8 @@
 
 #include "onnx_writer.h"
 
+#include "camel/utils/path.h"
+
 #include <bit>
 #include <fstream>
 #include <stdexcept>
@@ -468,14 +470,15 @@ void writeModelFile(const Model &model, const std::filesystem::path &path) {
     }
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     if (!out) {
-        throw std::runtime_error("onnx: cannot open '" + path.string() + "' for writing");
+        throw std::runtime_error(
+            "onnx: cannot open '" + camel::utils::pathToUtf8(path) + "' for writing");
     }
     out.write(
         reinterpret_cast<const char *>(bytes.data()),
         static_cast<std::streamsize>(bytes.size()));
     out.flush();
     if (!out) {
-        throw std::runtime_error("onnx: failed to write '" + path.string() + "'");
+        throw std::runtime_error("onnx: failed to write '" + camel::utils::pathToUtf8(path) + "'");
     }
 }
 

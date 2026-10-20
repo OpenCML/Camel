@@ -22,6 +22,7 @@
 #include "camel/utils/ascii.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
+#include "camel/utils/path.h"
 #include "camel/utils/str.h"
 
 #include <algorithm>
@@ -54,7 +55,7 @@ std::string diagnosticModuleName(const Diagnostic &d, const std::string &path) {
     if (path.empty()) {
         return "";
     }
-    return std::filesystem::path(path).stem().string();
+    return camel::utils::pathToUtf8(camel::utils::pathFromUtf8(path).stem());
 }
 
 std::optional<CharRange>
@@ -506,8 +507,9 @@ void Diagnostics::locateByOriginFrom(size_t from) {
             continue;
         }
         std::error_code ec;
-        const auto here  = std::filesystem::weakly_canonical(d.modulePath, ec);
-        const auto there = std::filesystem::weakly_canonical(path, ec);
+        const auto here =
+            std::filesystem::weakly_canonical(camel::utils::pathFromUtf8(d.modulePath), ec);
+        const auto there = std::filesystem::weakly_canonical(camel::utils::pathFromUtf8(path), ec);
         if (here != there) {
             d.modulePath = path;
         }

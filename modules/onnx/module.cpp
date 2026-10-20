@@ -45,6 +45,7 @@
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
 #include "camel/runtime/node_roles.h"
+#include "camel/utils/path.h"
 
 #include <format>
 
@@ -87,7 +88,7 @@ slot_t exportKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         // Its allocation is bounded by the size of the exported graph.
         camel::core::mm::NoCollectionScope noCollection;
         const camel::onnx::Model model = camel::onnx::exportFunction(ctx, fn, examples, options);
-        camel::onnx::writeModelFile(model, path->toString());
+        camel::onnx::writeModelFile(model, camel::utils::pathFromUtf8(path->toString()));
     } catch (const camel::onnx::ExportError &e) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,

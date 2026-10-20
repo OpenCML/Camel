@@ -20,6 +20,7 @@
 #pragma once
 
 #include "camel/utils/env.h"
+#include "camel/utils/path.h"
 
 #include <filesystem>
 #include <string>
@@ -117,7 +118,7 @@ inline void pushUniquePath(
         }
     }
     p               = std::filesystem::absolute(p).lexically_normal();
-    std::string key = p.string();
+    std::string key = pathToUtf8(p);
     if (seen.insert(key).second) {
         out.push_back(key);
     }
@@ -137,7 +138,7 @@ inline std::filesystem::path resolveInstallRoot() {
     namespace fs        = std::filesystem;
     std::string envRoot = getEnv("CAMEL_HOME");
     if (!envRoot.empty()) {
-        return fs::absolute(fs::path(envRoot)).lexically_normal();
+        return fs::absolute(pathFromUtf8(envRoot)).lexically_normal();
     }
 
     fs::path exeDir = detail::executableDirectoryRaw();
@@ -157,13 +158,13 @@ inline std::vector<std::string> buildModuleSearchPaths(
 
     std::vector<std::string> paths;
     std::unordered_set<std::string> seen;
-    fs::path baseEntry = entryDir.empty() ? fs::current_path() : fs::path(entryDir);
+    fs::path baseEntry = entryDir.empty() ? fs::current_path() : pathFromUtf8(entryDir);
     baseEntry          = fs::absolute(baseEntry).lexically_normal();
     detail::pushUniquePath(paths, seen, baseEntry);
 
     const auto appendEnvList = [&](const std::string &name) {
         for (const auto &item : detail::splitPathList(getEnv(name))) {
-            detail::pushUniquePath(paths, seen, fs::path(item), baseEntry);
+            detail::pushUniquePath(paths, seen, pathFromUtf8(item), baseEntry);
         }
     };
 
@@ -177,7 +178,7 @@ inline std::vector<std::string> buildModuleSearchPaths(
     std::string stdlib =
         opts.stdlibOverride.empty() ? getEnv("CAMEL_STD_LIB") : opts.stdlibOverride;
     if (!stdlib.empty()) {
-        detail::pushUniquePath(paths, seen, fs::path(stdlib), baseEntry);
+        detail::pushUniquePath(paths, seen, pathFromUtf8(stdlib), baseEntry);
     }
 
     fs::path exeDir = detail::executableDirectoryRaw();

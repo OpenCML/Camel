@@ -25,6 +25,7 @@
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/warnings.h"
+#include "camel/utils/path.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -541,7 +542,7 @@ std::string ProgramEmitter::emit(GCGraph *root) {
     std::string ns   = "program";
     if (auto module = context_->mainModule()) {
         source = module->path();
-        stem   = std::filesystem::path(source).stem().string();
+        stem   = camel::utils::pathToUtf8(camel::utils::pathFromUtf8(source).stem());
     }
     const size_t limit = camel::execute::recursionLimit(*context_).frames;
 

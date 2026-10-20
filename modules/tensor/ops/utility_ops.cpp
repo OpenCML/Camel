@@ -31,6 +31,7 @@
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/bytes.h"
+#include "camel/utils/path.h"
 #include "catalog.h"
 #include "support.h"
 #include <format>
@@ -112,13 +113,13 @@ slot_t showKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t loadNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("load_npy", [&] {
-        return wrap(loadNpy(stringArg(norm, 0), resultAllocator()));
+        return wrap(loadNpy(camel::utils::pathFromUtf8(stringArg(norm, 0)), resultAllocator()));
     });
 }
 
 slot_t saveNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("save_npy", [&] {
-        saveNpy(tensorArg(norm, 0), stringArg(norm, 1));
+        saveNpy(tensorArg(norm, 0), camel::utils::pathFromUtf8(stringArg(norm, 1)));
         return NullSlot;
     });
 }

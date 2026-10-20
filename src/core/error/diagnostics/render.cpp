@@ -30,6 +30,7 @@
 #include "camel/core/error/diagnostics/render.h"
 
 #include "camel/core/error/diagnostics.h"
+#include "camel/utils/path.h"
 
 #include <algorithm>
 #include <atomic>
@@ -226,7 +227,7 @@ std::optional<std::string> diskLine(const std::string &path, size_t line) {
     auto it = cache.find(path);
     if (it == cache.end()) {
         std::vector<std::string> lines;
-        std::ifstream in(path, std::ios::binary);
+        std::ifstream in(camel::utils::pathFromUtf8(path), std::ios::binary);
         if (in) {
             std::string text;
             while (std::getline(in, text)) {

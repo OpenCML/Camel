@@ -19,6 +19,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/utils/path.h"
 #include "camel/utils/type.h"
 
 #include <pybind11/embed.h>
@@ -40,11 +41,11 @@ namespace py = pybind11;
 namespace {
 
 void writeFallbackSvg(const std::vector<double> &data, const std::string &filename) {
-    const std::filesystem::path outputPath(filename);
+    const std::filesystem::path outputPath = camel::utils::pathFromUtf8(filename);
     if (outputPath.has_parent_path()) {
         std::filesystem::create_directories(outputPath.parent_path());
     }
-    std::ofstream out(filename, std::ios::binary);
+    std::ofstream out(outputPath, std::ios::binary);
     if (!out) {
         throw std::runtime_error("could not open output file '" + filename + "'");
     }

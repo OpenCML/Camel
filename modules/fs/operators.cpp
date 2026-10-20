@@ -26,6 +26,7 @@
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tagged.h"
+#include "camel/utils/path.h"
 
 #include <filesystem>
 
@@ -42,6 +43,10 @@ using namespace camel::core::rtdata;
 namespace fs_impl = std::filesystem;
 
 namespace {
+
+// Every path in this module is a UTF-8 Camel string; converting it where the file system is
+// reached keeps the rest of the module in one encoding (see camel/utils/path.h).
+fs_impl::path pathOf(const String *text) { return camel::utils::pathFromUtf8(text->view()); }
 
 // Why a file could not be opened, in the same words on every platform: the text of
 // std::generic_category() is the C library's (glibc "No such file or directory", the MSVC
@@ -83,7 +88,7 @@ std::string openFailureReason(int code) {
 slot_t __fs_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *path = norm.get<String *>(0);
     errno        = 0;
-    std::ifstream f(path->c_str(), std::ios::binary);
+    std::ifstream f(pathOf(path), std::ios::binary);
     if (!f.is_open()) {
         throwRuntimeFault(
             RuntimeDiag::FileOpenFailed,
@@ -113,11 +118,12 @@ slot_t __fs_try_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
         camel::core::type::TupleType::fallible(camel::core::type::Type::String());
     String *path = norm.get<String *>(0);
     const std::string name(path->c_str());
+    const fs_impl::path target = pathOf(path);
     std::error_code ec;
-    if (fs_impl::is_directory(name, ec)) {
+    if (fs_impl::is_directory(target, ec)) {
         return makeError("IOError", "'" + name + "' is a directory", "<fs::try_read_text>");
     }
-    std::ifstream f(name, std::ios::binary);
+    std::ifstream f(target, std::ios::binary);
     if (!f.is_open()) {
         return makeError("IOError", "cannot open '" + name + "'", "<fs::try_read_text>");
     }
@@ -138,7 +144,7 @@ slot_t __fs_try_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *path    = norm.get<String *>(0);
     String *content = norm.get<String *>(1);
-    fs_impl::path p(path->c_str());
+    fs_impl::path p = camel::utils::pathFromUtf8(path->view());
     auto parent = p.parent_path();
     if (!parent.empty() && !fs_impl::exists(parent)) {
         std::error_code ec;
@@ -147,11 +153,12 @@ slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
                 RuntimeDiag::FileSystemError,
                 "fs.write_text",
                 std::string(path->c_str()),
-                "cannot create the directory '" + parent.string() + "': " + ec.message());
+                "cannot create the directory '" + camel::utils::pathToUtf8(parent) +
+                    "': " + ec.message());
         }
     }
     errno = 0;
-    std::ofstream f(path->c_str(), std::ios::binary | std::ios::trunc);
+    std::ofstream f(p, std::ios::binary | std::ios::trunc);
     if (!f.is_open()) {
         throwRuntimeFault(
             RuntimeDiag::FileOpenFailed,
@@ -174,23 +181,23 @@ slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __fs_exists__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *p = norm.get<String *>(0);
-    return toSlot(fs_impl::exists(p->c_str()));
+    return toSlot(fs_impl::exists(camel::utils::pathFromUtf8(p->view())));
 }
 
 slot_t __fs_is_file__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *p = norm.get<String *>(0);
-    return toSlot(fs_impl::is_regular_file(p->c_str()));
+    return toSlot(fs_impl::is_regular_file(camel::utils::pathFromUtf8(p->view())));
 }
 
 slot_t __fs_is_dir__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *p = norm.get<String *>(0);
-    return toSlot(fs_impl::is_directory(p->c_str()));
+    return toSlot(fs_impl::is_directory(camel::utils::pathFromUtf8(p->view())));
 }
 
 slot_t __fs_file_size__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *p = norm.get<String *>(0);
     std::error_code ec;
-    auto size = fs_impl::file_size(p->c_str(), ec);
+    auto size = fs_impl::file_size(camel::utils::pathFromUtf8(p->view()), ec);
     if (ec) {
         throwRuntimeFault(
             RuntimeDiag::FileSystemError,
@@ -216,7 +223,7 @@ slot_t __fs_read_chunk__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     errno = 0;
-    std::ifstream f(path->c_str(), std::ios::binary);
+    std::ifstream f(pathOf(path), std::ios::binary);
     if (!f.is_open()) {
         throwRuntimeFault(
             RuntimeDiag::FileOpenFailed,
@@ -258,7 +265,7 @@ slot_t __fs_read_chunk__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __fs_mkdir__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *p = norm.get<String *>(0);
     std::error_code ec;
-    bool ok = fs_impl::create_directory(p->c_str(), ec);
+    bool ok = fs_impl::create_directory(camel::utils::pathFromUtf8(p->view()), ec);
     if (!ok && ec) {
         throwRuntimeFault(
             RuntimeDiag::FileSystemError,
@@ -272,7 +279,7 @@ slot_t __fs_mkdir__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __fs_mkdirs__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *p = norm.get<String *>(0);
     std::error_code ec;
-    bool ok = fs_impl::create_directories(p->c_str(), ec);
+    bool ok = fs_impl::create_directories(camel::utils::pathFromUtf8(p->view()), ec);
     if (!ok && ec) {
         throwRuntimeFault(
             RuntimeDiag::FileSystemError,
