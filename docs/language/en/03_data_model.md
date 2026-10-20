@@ -37,7 +37,7 @@ There is no type `any`: after compilation every value has a definite type (desig
 | `e as any` | nothing: the value keeps its own type |
 | values of different types side by side (`any[]`, `(int, any)`) | a tuple or a struct: `(int, string)`, `{ id: int, name: string }` |
 | JSON of a known shape | `json::decode_as(text, shape)`, whose result is a `T!` |
-| JSON of an unknown shape | `json::decode(text)` gives a `Json!`: an error value `JsonParseError` when the text is not JSON (not a fault, design principles 11.2), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2). For a known shape use `decode_as`, whose target type is given by a shape value for now |
+| JSON of an unknown shape | `json::decode(text)` gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000 by default and `CAMEL_JSON_MAX_DEPTH` sets it), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json?!` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json?!` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2). For a known shape use `decode_as`, whose target type is given by a shape value for now |
 
 The `T` and `U...` in the signatures of the standard library (as in `println: (x: T, ...rest: U...) => T`) are a notation of the reference only: these operators check their arguments with type rules, and the graph holds concrete types only.
 
@@ -237,7 +237,7 @@ Rules:
 - The two tags can be combined: `T?!`, `T!?`. The same one cannot be repeated. Positions such as array elements need parentheses: `(int?)[]`.
 - With generics: `(typeas T)?` binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
 - In `let x: int! = v` there must be a space between `!` and `=`.
-- Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)` of the `fs` module, `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
+- Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
 

@@ -232,6 +232,6 @@ sweep = false
 
 [[tests]]
 name = "value.deep_json_depth"
-desc = "JSON has no depth of its own, but every walk of a document in the json module is native recursion: a text deeper than CAMEL_JSON_MAX_DEPTH (10000) is an error value with the line and column of the bracket that goes too deep, and a text at the limit decodes (jsonMaxDepth in modules/json/operators.cpp)."
+desc = "JSON has no depth of its own, but every walk of a document in the json module is native recursion: a text deeper than CAMEL_JSON_MAX_DEPTH (10000) is the error value JsonTooDeep with the line and column of the bracket that goes too deep, and a text at the limit decodes (jsonMaxDepth in modules/json/operators.cpp)."
 case = "../../../cases/consistency/values/deep_json_depth.cml"
 golden = "golden/deep_json_depth.txt"

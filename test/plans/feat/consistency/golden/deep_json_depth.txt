@@ -1,2 +1,2 @@
-error JsonParseError: the text nests deeper than 10000 levels (at line 1, column 10001); decoding a deeper document would exhaust the native stack: decode a shallower document or set CAMEL_JSON_MAX_DEPTH to a larger limit
+error JsonTooDeep: the JSON document nests deeper than the limit of 10000 levels (at line 1, column 10001); decoding a deeper document would exhaust the native stack: decode a shallower document or set CAMEL_JSON_MAX_DEPTH to a larger limit
 20001

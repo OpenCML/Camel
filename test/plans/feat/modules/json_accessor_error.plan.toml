@@ -1,0 +1,36 @@
+id = "modules.json_accessor_error"
+order = 362
+tier = "feat"
+tags = ["feat", "modules", "std", "json", "errors"]
+
+# A Json accessor takes a `Json!` and passes the error of the document on unchanged, and a
+# document nested deeper than the limit is the error kind JsonTooDeep (design principles 11.2).
+# The value of a `Json!` still comes out of the accessors, chainable over the two layers.
+
+[[tests]]
+name = "json.accessor_error"
+desc = "get<key>, get<index>, as_int, as_string, as_bool, as_float, as_array and as_object of a failed Json! give that same error (same kind, message and location, not null and not a crash); the accessors of a plain Json still take parts out; the accessors of a document that has a value chain over Json?!; a document nested past CAMEL_JSON_MAX_DEPTH (default 10000) gives JsonTooDeep with the line and column of the bracket that goes too deep, from decode and decode_as."
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+case = "../../../cases/modules/std/json/json_accessor_error.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+golden = "golden/json_accessor_error.txt"
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "json.accessor_error.opt"
+desc = "The same output through `std::opt::inline std::opt std::fvm`."
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+case = "../../../cases/modules/std/json/json_accessor_error.cml"
+args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
+golden = "golden/json_accessor_error.txt"
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000

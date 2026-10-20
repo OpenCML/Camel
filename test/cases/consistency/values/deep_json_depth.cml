@@ -1,7 +1,8 @@
 // JSON has no depth of its own, but every walk of a document in this module (nlohmann's
 // parser and serializer and JsonValue's fromJson/toJson) is native recursion. A text deeper
-// than CAMEL_JSON_MAX_DEPTH (10000 by default) is therefore an error value pointing at the
-// bracket that goes too deep, not a crash (modules/json/operators.cpp, jsonMaxDepth).
+// than CAMEL_JSON_MAX_DEPTH (10000 by default) is therefore the error value JsonTooDeep
+// pointing at the bracket that goes too deep, not a crash (modules/json/operators.cpp,
+// jsonMaxDepth).
 
 import { decode } from json
 

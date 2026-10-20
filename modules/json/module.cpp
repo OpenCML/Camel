@@ -39,17 +39,33 @@ using camel::json::JsonType;
 
 namespace {
 
-/// The argument of an accessor: a `Json`, or a `Json?` so that accessors chain
-/// (`j->get<'server'>->get<'port'>->as_int ?? 8080`); a null in gives a null out.
-bool isJsonOrNullable(Type *type) {
-    if (isJsonType(type)) {
-        return true;
-    }
+/// The result type of an accessor on an argument of type `type`: `R?` for a `Json` or a
+/// `Json?`, and `R?!` for a `Json!` or a `Json?!`, so that calls chain over a failed document
+/// and its error is passed on unchanged (design principles 11.2). nullptr when `type` is none
+/// of those.
+Type *accessorResultType(Type *type, Type *result) {
     TupleType *tagged = asTagged(type);
-    return tagged != nullptr && tagged->isNullable() && isJsonType(tagged->payloadType());
+    if (tagged == nullptr) {
+        return isJsonType(type) ? TupleType::nullable(result) : nullptr;
+    }
+    if (tagged->isNullable()) {
+        Type *payload = tagged->payloadType();
+        if (isJsonType(payload)) {
+            return TupleType::nullable(result);
+        }
+        TupleType *inner = asTagged(payload);
+        if (inner != nullptr && inner->isFallible() && isJsonType(inner->payloadType())) {
+            return TupleType::nullable(TupleType::fallible(result));
+        }
+        return nullptr;
+    }
+    if (tagged->isFallible() && isJsonType(tagged->payloadType())) {
+        return TupleType::nullable(TupleType::fallible(result));
+    }
+    return nullptr;
 }
 
-/// An accessor `(j: Json | Json?) => R?`.
+/// An accessor `(j: Json | Json? | Json!) => R?` (`R?!` for a `Json!`).
 std::pair<std::string, resolver_ptr_t> accessor(const char *uri, const char *text, Type *result) {
     return {
         uri,
@@ -57,12 +73,7 @@ std::pair<std::string, resolver_ptr_t> accessor(const char *uri, const char *tex
             {{0, {}}, {1, {false}}},
             text,
             [result](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                -> std::optional<Type *> {
-                if (!isJsonOrNullable(norm[0])) {
-                    return std::nullopt;
-                }
-                return TupleType::nullable(result);
-            }),
+                -> std::optional<Type *> { return accessorResultType(norm[0], result); }),
     };
 }
 
@@ -70,10 +81,10 @@ std::pair<std::string, resolver_ptr_t> accessor(const char *uri, const char *tex
 ResolverFunc memberRule(TypeCode keyCode) {
     return [keyCode](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                -> std::optional<Type *> {
-        if (with[0]->code() != keyCode || !isJsonOrNullable(norm[0])) {
+        if (with[0]->code() != keyCode) {
             return std::nullopt;
         }
-        return TupleType::nullable(JsonType::get());
+        return accessorResultType(norm[0], JsonType::get());
     };
 }
 
@@ -148,6 +159,10 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
                   })}}));
 
     // ---- looking into a Json ----
+    // `kind` and `is_null` take a `Json` itself: they answer for the value, so a document that
+    // failed or is null is not one of their arguments. The accessors below take the tagged
+    // forms: `Json?` so that calls chain, and `Json!`/`Json?!` so that the error of a document
+    // decoded before is passed on unchanged (design principles 11.2).
     exportEntity(
         "kind",
         OperatorGroup::create(
@@ -163,38 +178,52 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
     exportEntity(
         "as_bool",
         OperatorGroup::create(
-            "as_bool", {accessor("json:as_bool", "(j: Json | Json?) => bool?", Type::Bool())}));
+            "as_bool",
+            {accessor(
+                "json:as_bool",
+                "(j: Json | Json? | Json!) => bool? | bool?!",
+                Type::Bool())}));
     exportEntity(
         "as_int",
         OperatorGroup::create(
-            "as_int", {accessor("json:as_int", "(j: Json | Json?) => int?", Type::Int64())}));
+            "as_int",
+            {accessor("json:as_int", "(j: Json | Json? | Json!) => int? | int?!", Type::Int64())}));
     exportEntity(
         "as_float",
         OperatorGroup::create(
             "as_float",
-            {accessor("json:as_float", "(j: Json | Json?) => float?", Type::Float64())}));
+            {accessor(
+                "json:as_float",
+                "(j: Json | Json? | Json!) => float? | float?!",
+                Type::Float64())}));
     exportEntity(
         "as_string",
         OperatorGroup::create(
             "as_string",
-            {accessor("json:as_string", "(j: Json | Json?) => string?", Type::String())}));
+            {accessor(
+                "json:as_string",
+                "(j: Json | Json? | Json!) => string? | string?!",
+                Type::String())}));
     exportEntity(
         "as_array",
         OperatorGroup::create(
             "as_array",
             {accessor(
-                "json:as_array", "(j: Json | Json?) => Json[]?", camel::json::jsonArrayType())}));
+                "json:as_array",
+                "(j: Json | Json? | Json!) => Json[]? | Json[]?!",
+                camel::json::jsonArrayType())}));
     exportEntity(
         "as_object",
         OperatorGroup::create(
             "as_object",
             {accessor(
                 "json:as_object",
-                "(j: Json | Json?) => Map<string, Json>?",
+                "(j: Json | Json? | Json!) => Map<string, Json>? | Map<string, Json>?!",
                 camel::json::jsonObjectType())}));
     // get<key>: a member of an object; get<index>: an element of an array. Null when the
     // value is not of that kind or has no such member or element (a lookup that finds
-    // nothing is empty, as for a map: design principles 11.3).
+    // nothing is empty, as for a map: design principles 11.3). A `Json!` argument gives a
+    // `Json?!`, the error of the document passed on unchanged.
     exportEntity(
         "get",
         OperatorGroup::create(
@@ -202,12 +231,12 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
             {{"json:get",
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
-                  "<key: string> (j: Json | Json?) => Json?",
+                  "<key: string> (j: Json | Json? | Json!) => Json? | Json?!",
                   memberRule(TypeCode::String))},
              {"json:get",
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
-                  "<index: int> (j: Json | Json?) => Json?",
+                  "<index: int> (j: Json | Json? | Json!) => Json? | Json?!",
                   memberRule(TypeCode::Int64))}}));
 }
 

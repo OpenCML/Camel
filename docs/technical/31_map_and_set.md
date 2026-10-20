@@ -480,9 +480,15 @@ let xs = json::decode_as(text, [0])                                    // int[]!
 
 A call cannot be handed a type (whether type arguments may be written at a call is undecided,
 principles section 15), so the type is that of a **shape** argument whose value is not read.
-The result is a `T!`: text that is not JSON is an error value of kind `JsonParseError`, JSON
-that does not have the shape of `T` one of kind `JsonTypeError` whose message names the path
-(`at $.b: expected an integer, found a string`). Neither is a fault.
+The result is a `T!`: text that is not JSON is an error value of kind `JsonParseError`, a
+document nested deeper than the limit (10000 by default, `CAMEL_JSON_MAX_DEPTH`) one of kind
+`JsonTooDeep` whose message names the limit and the position of the bracket that goes too deep,
+and JSON that does not have the shape of `T` one of kind `JsonTypeError` whose message names the
+path (`at $.b: expected an integer, found a string`). None of them is a fault.
+
+The accessors of the same module (`get`, `as_int`, ...) take a `Json`, a `Json?`, a `Json!` or a
+`Json?!`: of a document that failed they pass the error on unchanged, as a result with both
+layers (`Json?!`, `int?!`, ...) that `??` and `!!` take apart (design principles 11.2).
 
 | Target | JSON |
 |---|---|

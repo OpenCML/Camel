@@ -58,9 +58,10 @@ using json = nlohmann::json;
 // fromJson/toJson all walk a document with native recursion, so a text deeper than the native
 // stack allows would crash the process instead of failing (docs/design-principles.cn.md 7.7:
 // a limit that a program can reach must be diagnosed). The limit is checked on the text before
-// parsing, so a document deeper than this is an ordinary JsonParseError, never a crash. The
-// default leaves room for the recursive walk on every scheduler's stack; a program that needs
-// deeper documents raises it with CAMEL_JSON_MAX_DEPTH (whole levels, at least 1).
+// parsing, so a document deeper than this is the error value JsonTooDeep, never a crash (design
+// principles 11.2: a document that is too deep is distinguished from text that is not JSON).
+// The default leaves room for the recursive walk on every scheduler's stack; a program that
+// needs deeper documents raises it with CAMEL_JSON_MAX_DEPTH (whole levels, at least 1).
 size_t jsonMaxDepth() {
     static const size_t limit = [] {
         const char *text = std::getenv("CAMEL_JSON_MAX_DEPTH");
@@ -119,9 +120,9 @@ bool jsonTooDeep(std::string_view text, size_t limit, size_t &line, size_t &colu
 
 std::string jsonTooDeepMessage(size_t limit, size_t line, size_t column) {
     return std::format(
-        "the text nests deeper than {} levels (at line {}, column {}); decoding a deeper "
-        "document would exhaust the native stack: decode a shallower document or set "
-        "CAMEL_JSON_MAX_DEPTH to a larger limit",
+        "the JSON document nests deeper than the limit of {} levels (at line {}, column {}); "
+        "decoding a deeper document would exhaust the native stack: decode a shallower "
+        "document or set CAMEL_JSON_MAX_DEPTH to a larger limit",
         limit,
         line,
         column);
@@ -480,15 +481,16 @@ slot_t __json_encode__(ArgsView &, ArgsView &norm, Context &ctx) {
     return toSlot(String::from(out, mm::autoSpace()));
 }
 
-// decode(text): a `Json!`. Text that is not JSON is an error value `JsonParseError`, not a
-// fault (design principles 11.2): decoding is an operation declared to fail, like parse_int.
+// decode(text): a `Json!`. Text that is not JSON is an error value `JsonParseError`, and a
+// document nested deeper than the limit is `JsonTooDeep`, not a fault (design principles 11.2):
+// decoding is an operation declared to fail, like parse_int.
 slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &) {
     static const TupleType *result = TupleType::fallible(JsonType::get());
     String *str                    = norm.get<String *>(0);
     const std::string_view text    = str ? str->view() : std::string_view();
     size_t line = 0, column = 0;
     if (const size_t limit = jsonMaxDepth(); jsonTooDeep(text, limit, line, column)) {
-        return makeError("JsonParseError", jsonTooDeepMessage(limit, line, column), "<json::decode>");
+        return makeError("JsonTooDeep", jsonTooDeepMessage(limit, line, column), "<json::decode>");
     }
     try {
         return makeOk(toSlot(JsonValue::fromJson(json::parse(text.begin(), text.end()))), result);
@@ -567,7 +569,8 @@ bool jsonTypeEncodable(Type *type) {
 
 // decode_as<shape>(text), decode_as(text, shape): the type of `shape` is the type decoded to;
 // its value is not read (DESIGN-QUESTION(json-typed-decode)). The result is a `T!`: text that
-// is not JSON, and JSON that does not have the shape of `T`, are error values, not faults.
+// is not JSON, JSON that does not have the shape of `T`, and a document deeper than the limit
+// (JsonTooDeep) are error values, not faults.
 slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
     static const char *kWhere = "<json::decode_as>";
     Type *target              = with.size() > 0 ? with.type(0) : norm.type(1);
@@ -581,7 +584,7 @@ slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
         const std::string_view text = str ? str->view() : std::string_view();
         size_t line = 0, column = 0;
         if (const size_t limit = jsonMaxDepth(); jsonTooDeep(text, limit, line, column)) {
-            return makeError("JsonParseError", jsonTooDeepMessage(limit, line, column), kWhere);
+            return makeError("JsonTooDeep", jsonTooDeepMessage(limit, line, column), kWhere);
         }
         try {
             document = json::parse(text);
@@ -606,30 +609,71 @@ slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 namespace {
 
-/// The Json argument `i` of an accessor, which may also be a `Json?`; nullptr for a null.
-const JsonValue *jsonArgument(ArgsView &norm, size_t i) {
-    slot_t slot = norm.slot(i);
-    if (asTagged(norm.type(i)) != nullptr) {
+/// The argument of an accessor, with the layers its static type declares taken off. An
+/// accessor takes a `Json`, a `Json?`, or a `Json!` (also the `Json!` inside a `Json?!`, so
+/// that calls chain over a document decoded before); of a `Json!` it passes the error of the
+/// document on unchanged (design principles 11.2).
+struct JsonAccessorArg {
+    /// The Json being looked into; nullptr when the argument is null or has failed.
+    const JsonValue *value = nullptr;
+    /// The failed `Json!` itself, passed on unchanged; NullSlot when the argument did not fail.
+    slot_t failed = NullSlot;
+    /// Whether the argument has the `Json!` layer: the result then carries the same one.
+    bool fallible = false;
+};
+
+JsonAccessorArg jsonAccessorArg(ArgsView &norm, size_t i) {
+    JsonAccessorArg arg;
+    slot_t slot       = norm.slot(i);
+    TupleType *tagged = asTagged(norm.type(i));
+    if (tagged == nullptr) {
+        arg.value = fromSlot<JsonValue *>(slot);
+        return arg;
+    }
+    if (tagged->isNullable()) {
         if (isNullValue(slot)) {
-            return nullptr;
+            return arg; // a null `Json?`, or the null of a `Json?!`
         }
         slot = nullablePayload(slot);
+        if (asFallible(tagged->payloadType()) == nullptr) {
+            arg.value = fromSlot<JsonValue *>(slot);
+            return arg;
+        }
     }
-    return fromSlot<JsonValue *>(slot);
+    // A `Json!`, or the `Json!` of a `Json?!` whose null was handled above.
+    arg.fallible = true;
+    if (isErrorValue(slot)) {
+        arg.failed = slot;
+        return arg;
+    }
+    arg.value = fromSlot<JsonValue *>(falliblePayload(slot));
+    return arg;
 }
 
-/// `value` as a `T?` of `payloadType`.
-slot_t some(slot_t value, Type *payloadType) {
-    return makeSome(value, TupleType::nullable(payloadType));
-}
-
-/// The payload of the Json argument as a `T?` when it is of `kind`, null otherwise.
-slot_t payloadIf(ArgsView &norm, JsonValue::Kind kind) {
-    const JsonValue *value = jsonArgument(norm, 0);
-    if (value == nullptr || value->kind() != kind) {
+/// The result of an accessor: `value` as the value of the result type, null when there is
+/// none, or the error of the document passed on unchanged. `result` is the type of the value
+/// a success carries (`Json`, `int`, ...); the result itself is a `R?`, or a `R?!` when the
+/// argument had the `Json!` layer.
+slot_t jsonAccessorResult(const JsonAccessorArg &arg, Type *result, slot_t value) {
+    if (arg.failed != NullSlot) {
+        return makeSome(arg.failed, TupleType::nullable(TupleType::fallible(result)));
+    }
+    if (value == NullSlot) {
         return NullSlot;
     }
-    return some(value->payload(), JsonValue::payloadType(kind));
+    if (arg.fallible) {
+        return makeSome(
+            makeOk(value, TupleType::fallible(result)),
+            TupleType::nullable(TupleType::fallible(result)));
+    }
+    return makeSome(value, TupleType::nullable(result));
+}
+
+/// The payload of the Json argument when it is of `kind`, null otherwise.
+slot_t payloadIf(ArgsView &norm, JsonValue::Kind kind, Type *payloadType) {
+    const JsonAccessorArg arg = jsonAccessorArg(norm, 0);
+    const bool present        = arg.value != nullptr && arg.value->kind() == kind;
+    return jsonAccessorResult(arg, payloadType, present ? arg.value->payload() : NullSlot);
 }
 
 } // namespace
@@ -644,68 +688,70 @@ slot_t __json_is_null__(ArgsView &, ArgsView &norm, Context &) {
 }
 
 slot_t __json_as_bool__(ArgsView &, ArgsView &norm, Context &) {
-    return payloadIf(norm, JsonValue::Kind::Bool);
+    return payloadIf(norm, JsonValue::Kind::Bool, Type::Bool());
 }
 
 slot_t __json_as_int__(ArgsView &, ArgsView &norm, Context &) {
-    return payloadIf(norm, JsonValue::Kind::Int);
+    return payloadIf(norm, JsonValue::Kind::Int, Type::Int64());
 }
 
 // JSON has one number type: an integer is also a float (as decode_as reads it), a fraction is
 // never an int.
 slot_t __json_as_float__(ArgsView &, ArgsView &norm, Context &) {
-    const JsonValue *value = jsonArgument(norm, 0);
-    if (value == nullptr) {
-        return NullSlot;
+    const JsonAccessorArg arg = jsonAccessorArg(norm, 0);
+    if (arg.value == nullptr) {
+        return jsonAccessorResult(arg, Type::Float64(), NullSlot);
     }
-    if (value->kind() == JsonValue::Kind::Int) {
-        const auto number = static_cast<Float64>(fromSlot<Int64>(value->payload()));
-        return some(toSlot<Float64>(number), Type::Float64());
+    if (arg.value->kind() == JsonValue::Kind::Int) {
+        const auto number = static_cast<Float64>(fromSlot<Int64>(arg.value->payload()));
+        return jsonAccessorResult(arg, Type::Float64(), toSlot<Float64>(number));
     }
-    return payloadIf(norm, JsonValue::Kind::Float);
+    const bool present = arg.value->kind() == JsonValue::Kind::Float;
+    return jsonAccessorResult(arg, Type::Float64(), present ? arg.value->payload() : NullSlot);
 }
 
 slot_t __json_as_string__(ArgsView &, ArgsView &norm, Context &) {
-    return payloadIf(norm, JsonValue::Kind::String);
+    return payloadIf(norm, JsonValue::Kind::String, Type::String());
 }
 
 slot_t __json_as_array__(ArgsView &, ArgsView &norm, Context &) {
-    return payloadIf(norm, JsonValue::Kind::Array);
+    return payloadIf(norm, JsonValue::Kind::Array, camel::json::jsonArrayType());
 }
 
 slot_t __json_as_object__(ArgsView &, ArgsView &norm, Context &) {
-    return payloadIf(norm, JsonValue::Kind::Object);
+    return payloadIf(norm, JsonValue::Kind::Object, camel::json::jsonObjectType());
 }
 
 // get<key>(j) and get<index>(j): the member or element, or null.
 slot_t __json_get__(ArgsView &with, ArgsView &norm, Context &) {
-    const JsonValue *value = jsonArgument(norm, 0);
-    if (value == nullptr) {
-        return NullSlot;
+    const JsonAccessorArg arg = jsonAccessorArg(norm, 0);
+    Type *result              = camel::json::JsonType::get();
+    if (arg.value == nullptr) {
+        return jsonAccessorResult(arg, result, NullSlot);
     }
     if (with.type(0)->code() == TypeCode::Int64) {
         const Int64 index = fromSlot<Int64>(with.slot(0));
-        if (value->kind() != JsonValue::Kind::Array) {
-            return NullSlot;
+        if (arg.value->kind() != JsonValue::Kind::Array) {
+            return jsonAccessorResult(arg, result, NullSlot);
         }
-        const Array *elements = fromSlot<Array *>(value->payload());
+        const Array *elements = fromSlot<Array *>(arg.value->payload());
         if (index < 0 || static_cast<size_t>(index) >= elements->size()) {
-            return NullSlot;
+            return jsonAccessorResult(arg, result, NullSlot);
         }
-        return some(elements->data()[index], camel::json::JsonType::get());
+        return jsonAccessorResult(arg, result, elements->data()[index]);
     }
-    if (value->kind() != JsonValue::Kind::Object) {
-        return NullSlot;
+    if (arg.value->kind() != JsonValue::Kind::Object) {
+        return jsonAccessorResult(arg, result, NullSlot);
     }
     slot_t member = NullSlot;
     if (!table::lookup(
-            fromSlot<Table *>(value->payload()),
+            fromSlot<Table *>(arg.value->payload()),
             with.slot(0),
             Type::String(),
             member)) {
-        return NullSlot;
+        return jsonAccessorResult(arg, result, NullSlot);
     }
-    return some(member, camel::json::JsonType::get());
+    return jsonAccessorResult(arg, result, member);
 }
 
 std::unordered_map<std::string, operator_t> getJsonOpsMap() {
