@@ -1,0 +1,21 @@
+id = "perf.showcase_c6_vae"
+order = 902
+tier = "slow"
+tags = ["showcase", "slow", "c6", "vae", "autoencoder"]
+
+# The small configuration of showcase/c6-vae (H13): four Gaussian clusters in the plane, a
+# 2-16-2 VAE, 200 Adam steps, and a fixed epsilon file shared by both implementations.  It
+# runs in seconds and fails when the losses disagree beyond the tolerances.
+
+[[tests]]
+name = "small"
+desc = "C6 small configuration: compare.py runs the Camel VAE and its PyTorch counterpart on the same data and epsilons and checks the initial loss, every logged training loss, the final validation loss and the reconstruction error; it exits non-zero when a bound is exceeded."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/c6-vae/compare.py"
+args = ["${case}", "--profile", "small", "--data", "tmp/c6-showcase-small", "--results", "tmp/c6-showcase-small/RESULTS.md"]
+skip_unless = ["${python}", "-c", "import numpy, torch, psutil"]
+expect_exit = 0
+expect_stdout_contains = ["c6 compare: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

@@ -155,13 +155,15 @@ camel showcase\c2-mlp-mnist\train.cml `
 
 ## 测试
 
-小规模配置已进计划 `test/plans/perf/showcase_c2.plan.toml`（`tier = "benchmark"`，
-`tags` 含 `slow`）：它用合成替身跑 200 步、跑两边、检查上面那组容差，约 5 秒。默认的
-`npm run test` 不含它，`npm run test:all` 或 `node scripts/test.js test\plans\perf` 会跑到。
+上面四条已由检查意见立项：取行/标签/键式随机数与 `save_tree` 整体替换在 H20，下标切片、
+lambda 推断与“对第一个参数求导”在 H21。本示例保留现有写法（`with <m: Mlp>`、
+`slice`、one-hot 目标、Python 侧删检查点目录），等 H20-4 与 H21-3 落地后按
+`value_and_grad(loss)(m, x, y)`、`take`/`permutation`、整数标签整体改写；报告 H13 记了
+这个顺序。检查意见要求的反引号插值与 `let (value, gradient) = ...` 解构已经改好。
 
-计划不放在更合适的 `slow` 层，是因为 **H10 的 fast/slow 分层还没有落地**：现有计划只有
-`smoke`、`feat`、`benchmark`、`gpu` 四层，`benchmark` 是唯一“默认不跑、全量才跑”的桶。
-H10 合入后把这个计划移到 `slow` 即可（报告“待决问题”里也记了这一条）。
+小规模配置已进计划 `test/plans/perf/showcase_c2.plan.toml`（`tier = "slow"`）：它用合成替身
+跑 200 步、跑两边、检查上面那组容差，约 6 秒。H10 的 fast/slow 分层已经落地，默认的
+`npm run test` 跳过 slow 层，`npm run test:all`（或 `--tier all`）会跑到它。
 
 ## 不入库的东西
 
