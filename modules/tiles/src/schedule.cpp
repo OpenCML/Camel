@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,8 @@ const void *hostData(const Node &node) {
     return node.data.empty() ? nullptr : node.data.data();
 }
 size_t bytes(const Node &node) {
+    if (!node.results.empty())
+        return 0; // Operation producers carry dependencies; only their results hold values.
     const size_t width = node.dtype == DType::F64 ? sizeof(double) : sizeof(float);
     const size_t count = elements(node.shape);
     if (count > SIZE_MAX / width)
@@ -67,7 +69,16 @@ bool scalar64(const std::string &op) {
 }
 bool orderedAxis(const std::string &op) { return op == "sum_axis" || op == "mean_axis"; }
 bool parallelMaximum(const Program &p, const Node &n) {
-    if (!n.indexing || n.semantic >= p.contracts.size())
+    if (!n.indexing || n.semantic >= p.contracts.size() || !elements(n.shape))
+        return false;
+    const auto &shape = p.nodes[n.inputs[0]].shape;
+    // The block kernel reads through reductionAccess(row, ordinal). Its only
+    // shape-derived traversal bound must equal the core contribution count;
+    // repeated or otherwise mapped contributions remain valid parallel inputs.
+    if (shape.empty() || n.attributes.size() != 1 || n.attributes[0] < 0 ||
+        size_t(n.attributes[0]) + 1 != shape.size() ||
+        kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0)).count !=
+            size_t(shape.back()))
         return false;
     const auto *declaration = p.contracts[n.semantic].declaration;
     if (!declaration || n.indexing->law >= declaration->laws.size())
@@ -105,7 +116,8 @@ std::vector<Lifetime> lifetimes(const Program &p) {
             life[id].materialized = true;
     for (size_t stage = 0; stage < p.launches.size(); ++stage) {
         const auto &launch = p.launches[stage];
-        life[launch.node]  = {stage + 1, stage + 1, true};
+        for (auto output : launch.outputs)
+            life[output] = {stage + 1, stage + 1, true};
         for (auto id : launch.members)
             for (auto in : p.nodes[id].inputs)
                 if (std::find(launch.members.begin(), launch.members.end(), in) ==
@@ -145,12 +157,14 @@ void validate(const Program &p, InputBindings bindings) {
     size_t outputBytes = 0;
     for (auto output : p.outputs) {
         require(output < p.nodes.size(), "missing output");
+        require(p.nodes[output].results.empty(), "operation producer used as output value");
         const size_t count = bytes(p.nodes[output]);
         require(count <= SIZE_MAX - outputBytes, "combined output size overflow");
         outputBytes += count;
     }
     for (size_t id = 0; id < p.nodes.size(); ++id) {
         const auto &n = p.nodes[id];
+        require(n.op == "loop" || !n.loop, "nonloop node owns a recurrence");
         require(
             n.semantic == SIZE_MAX || n.semantic < p.contracts.size(),
             "missing operator contract");
@@ -166,6 +180,23 @@ void validate(const Program &p, InputBindings bindings) {
         bytes(n);
         for (auto in : n.inputs)
             require(in < id, "dependency is not topologically earlier");
+        require(n.op == "loop" || n.results.empty(), "nonproducer owns result descriptors");
+        if (n.op == "result") {
+            require(
+                n.inputs.size() == 1 && n.attributes.size() == 1 && n.attributes[0] >= 0,
+                "result projection arity or index");
+            const auto &producer = p.nodes[n.inputs[0]];
+            require(size_t(n.attributes[0]) < producer.results.size(), "result projection index");
+            const auto &type = producer.results[size_t(n.attributes[0])];
+            require(n.shape == type.shape && n.dtype == type.dtype, "result projection type");
+            require(
+                !n.resident && n.data.empty() && !n.scalarBits && !n.indexing && n.offset == 0 &&
+                    n.strides.empty(),
+                "result projection has payload");
+            continue;
+        }
+        for (auto in : n.inputs)
+            require(p.nodes[in].results.empty(), "operation producer used as operand value");
         if (n.op == "input") {
             require(
                 n.dtype == DType::F32 || (n.dtype == DType::F64 && n.shape.empty()),
@@ -187,6 +218,17 @@ void validate(const Program &p, InputBindings bindings) {
         }
         require(!n.resident, "computed value borrows input storage");
         require(n.data.empty() && !n.scalarBits, "computed value has host payload");
+        if (n.op == "loop") {
+            kernel::validateLoopRegion(p, n);
+            continue;
+        }
+        if (n.op == "loop_index_f64") {
+            require(
+                n.dtype == DType::F64 && n.shape.empty() && n.inputs.empty() &&
+                    n.attributes.empty(),
+                "loop element conversion type");
+            continue;
+        }
         if (n.op == "scalar_add" || n.op == "scalar_sub" || n.op == "scalar_mul" ||
             n.op == "scalar_div" || n.op == "scalar_neg") {
             require(
@@ -204,9 +246,6 @@ void validate(const Program &p, InputBindings bindings) {
                 n.dtype == DType::F64 && n.shape.empty() && n.inputs.size() == 1 &&
                     p.nodes[n.inputs[0]].dtype == DType::F32,
                 "scalar reduction type");
-            require(
-                n.op != "mean_all" || elements(p.nodes[n.inputs[0]].shape),
-                "mean of empty tensor");
             (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
             continue;
         }
@@ -237,22 +276,22 @@ void validate(const Program &p, InputBindings bindings) {
             for (size_t input = 0; input < n.inputs.size(); ++input)
                 (void)kernel::pointwiseAddress(p, n, input, kernel::IndexExpr(0));
         const auto &a = p.nodes[n.inputs[0]].shape;
-        if (n.op == "sum_to")
-            require(
-                broadcast(n.shape, a) == a && n.shape.size() <= a.size(),
-                "sum_to broadcast domain");
         if (n.op == "reindex") {
-            require(n.strides.size() == n.shape.size(), "index map rank");
-            if (count) {
-                size_t last = n.offset;
-                for (size_t d = 0; d < n.shape.size(); ++d) {
-                    const size_t extent = size_t(n.shape[d] - 1);
-                    require(
-                        !extent || n.strides[d] <= (SIZE_MAX - last) / extent,
-                        "index map address overflow");
-                    last += extent * n.strides[d];
+            if (n.indexing)
+                (void)kernel::coreViewAddress(p, n, kernel::IndexExpr(0));
+            else {
+                require(n.strides.size() == n.shape.size(), "index map rank");
+                if (count) {
+                    size_t last = n.offset;
+                    for (size_t d = 0; d < n.shape.size(); ++d) {
+                        const size_t extent = size_t(n.shape[d] - 1);
+                        require(
+                            !extent || n.strides[d] <= (SIZE_MAX - last) / extent,
+                            "index map address overflow");
+                        last += extent * n.strides[d];
+                    }
+                    require(last < elements(a), "index map outside source domain");
                 }
-                require(last < elements(a), "index map outside source domain");
             }
         } else {
             require(n.offset == 0 && n.strides.empty(), "unexpected index map");
@@ -265,23 +304,16 @@ void validate(const Program &p, InputBindings bindings) {
             require(elements(a) == count, "reshape element count");
         if (n.op == "matmul") {
             const auto &b = p.nodes[n.inputs[1]].shape;
-            require(a.size() == 2 && b.size() == 2, "matmul rank");
-            require(a[1] == b[0] && n.shape == Shape{a[0], b[1]}, "matmul dimensions");
+            require(a.size() >= 2 && b.size() >= 2, "matmul rank");
+            auto output = broadcast(Shape(a.begin(), a.end() - 2), Shape(b.begin(), b.end() - 2));
+            output.push_back(a[a.size() - 2]);
+            output.push_back(b.back());
+            require(a.back() == b[b.size() - 2] && n.shape == output, "matmul dimensions");
             kernel::validateMatmulContract(p, n);
         }
         if (n.op == "sum_to")
             (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
         if (reduction) {
-            require(
-                n.attributes.size() == 1 && n.attributes[0] >= 0 &&
-                    size_t(n.attributes[0]) < a.size(),
-                "reduction axis");
-            size_t axis = n.attributes[0];
-            require(n.op != "max_axis" || a[axis] != 0, "empty maximum");
-            Shape kept = a, removed = a;
-            kept[axis] = 1;
-            removed.erase(removed.begin() + axis);
-            require(n.shape == kept || n.shape == removed, "reduction output shape");
             (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
         }
     }
@@ -297,6 +329,9 @@ void schedule(Program &p, ScheduleOptions options, InputBindings bindings) {
             ++users[in];
             consumer[in] = id;
         }
+    for (size_t id = 0; id < count; ++id)
+        if (p.nodes[id].op == "result")
+            owner[id] = p.nodes[id].inputs[0];
     // Reverse traversal attaches single-use scalar computations to their consumer.
     // Each dependency carries its own logical index; layouts need not share a domain.
     for (size_t id = count; id-- > 0;) {
@@ -353,11 +388,31 @@ void schedule(Program &p, ScheduleOptions options, InputBindings bindings) {
             .node     = id,
             .elements = elements(p.nodes[id].shape),
             .name     = "tiles_" + std::to_string(id)};
-        for (size_t member = 0; member <= id; ++member)
+        for (size_t member = 0; member < count; ++member)
             if (owner[member] == id)
                 launch.members.push_back(member);
+        if (p.nodes[id].results.empty())
+            launch.outputs = {id};
+        else {
+            launch.outputs.assign(p.nodes[id].results.size(), SIZE_MAX);
+            for (auto member : launch.members)
+                if (p.nodes[member].op == "result") {
+                    auto &output = launch.outputs.at(size_t(p.nodes[member].attributes[0]));
+                    require(output == SIZE_MAX, "duplicate result projection");
+                    output = member;
+                }
+            require(
+                std::find(launch.outputs.begin(), launch.outputs.end(), SIZE_MAX) ==
+                    launch.outputs.end(),
+                "missing result projection");
+        }
         launch.implementation = "standard";
         const auto &n         = p.nodes[id];
+        constexpr auto mixed =
+            core::sem::kReassociate | core::sem::kChangePrecision | core::sem::kFiniteMath;
+        if (n.op == "matmul" && (n.permissions & mixed) == mixed && launch.elements &&
+            p.nodes[n.inputs[0]].shape.back() > 0)
+            launch.implementation = "cublas_bf16";
         if (launch.members.size() > 1 &&
             std::any_of(launch.members.begin(), launch.members.end(), [&](size_t member) {
                 return orderedAxis(p.nodes[member].op);
@@ -383,7 +438,8 @@ void schedule(Program &p, ScheduleOptions options, InputBindings bindings) {
                 .name           = "tiles_rows",
                 .implementation = "row_region",
                 .blockX         = 32,
-                .gridX          = static_cast<unsigned>(std::min<size_t>(region->rows, 65535))}};
+                .gridX          = static_cast<unsigned>(std::min<size_t>(region->rows, 65535)),
+                .outputs        = {p.outputs[0]}}};
         }
     }
     planStorage(p, bindings);
@@ -431,13 +487,46 @@ void validatePlan(const Program &p, InputBindings bindings) {
         const auto &launch = p.launches[stage];
         require(
             launch.node < p.nodes.size() && !launch.members.empty() &&
-                launch.members.back() == launch.node,
+                std::find(launch.members.begin(), launch.members.end(), launch.node) !=
+                    launch.members.end(),
             "invalid stage root");
         require(launch.elements == elements(p.nodes[launch.node].shape), "launch extent");
+        const auto &producer = p.nodes[launch.node];
+        const bool multiple  = !producer.results.empty();
+        if (multiple) {
+            require(
+                launch.outputs.size() == producer.results.size() &&
+                    launch.members.size() == launch.outputs.size() + 1 &&
+                    launch.members.front() == launch.node,
+                "multi-result stage arity");
+            for (size_t i = 0; i < launch.outputs.size(); ++i) {
+                const auto output = launch.outputs[i];
+                require(output < p.nodes.size(), "invalid stage output");
+                const auto &result = p.nodes[output];
+                require(
+                    result.op == "result" && result.inputs == std::vector<size_t>{launch.node} &&
+                        result.attributes == std::vector<int64_t>{static_cast<int64_t>(i)} &&
+                        std::find(launch.members.begin(), launch.members.end(), output) !=
+                            launch.members.end(),
+                    "stage result projection mismatch");
+            }
+        } else {
+            require(launch.members.back() == launch.node, "invalid stage root");
+            require(launch.outputs == std::vector<size_t>{launch.node}, "stage output mismatch");
+        }
         require(
             launch.implementation == "standard" || launch.implementation == "parallel_max" ||
-                launch.implementation == "ordered_reduce" || launch.implementation == "row_region",
+                launch.implementation == "ordered_reduce" ||
+                launch.implementation == "row_region" || launch.implementation == "cublas_bf16",
             "unknown implementation");
+        if (launch.implementation == "cublas_bf16") {
+            constexpr auto mixed =
+                core::sem::kReassociate | core::sem::kChangePrecision | core::sem::kFiniteMath;
+            require(
+                p.nodes[launch.node].op == "matmul" &&
+                    (p.nodes[launch.node].permissions & mixed) == mixed,
+                "mixed GEMM permissions");
+        }
         if (launch.implementation == "row_region") {
             const auto region = kernel::rowKernel(p);
             require(
@@ -488,7 +577,7 @@ void validatePlan(const Program &p, InputBindings bindings) {
                 id < p.nodes.size() && stageOf[id] == SIZE_MAX,
                 "duplicate/invalid scheduled value");
             require(
-                launch.implementation == "row_region" || launch.members.size() == 1 ||
+                multiple || launch.implementation == "row_region" || launch.members.size() == 1 ||
                     (indexedScalar(p.nodes[id].op) && indexedScalar(p.nodes[launch.node].op)) ||
                     (launch.implementation == "ordered_reduce" &&
                      (id == reduction || indexedScalar(p.nodes[id].op))) ||
@@ -499,8 +588,8 @@ void validatePlan(const Program &p, InputBindings bindings) {
                     stageOf[in] != SIZE_MAX && stageOf[in] <= stage + 1,
                     "unscheduled dependency");
                 require(
-                    stageOf[in] == stage + 1 || p.storage.slots[in] != SIZE_MAX ||
-                        p.nodes[in].resident,
+                    (multiple && in == launch.node) || stageOf[in] == stage + 1 ||
+                        p.storage.slots[in] != SIZE_MAX || p.nodes[in].resident,
                     "register value escapes stage");
                 if (stageOf[in] == stage + 1)
                     ++internalUses[in];
@@ -509,7 +598,8 @@ void validatePlan(const Program &p, InputBindings bindings) {
         }
         for (auto id : launch.members)
             require(
-                launch.implementation == "row_region" || id == launch.node || internalUses[id] == 1,
+                multiple || launch.implementation == "row_region" || id == launch.node ||
+                    internalUses[id] == 1,
                 "fused value must have one use");
     }
     for (auto stage : stageOf)
@@ -571,6 +661,12 @@ std::string inspect(const Program &p) {
             if (j)
                 out << ',';
             out << s.members[j];
+        }
+        out << "],\"outputs\":[";
+        for (size_t j = 0; j < s.outputs.size(); ++j) {
+            if (j)
+                out << ',';
+            out << s.outputs[j];
         }
         out << "]}";
     }

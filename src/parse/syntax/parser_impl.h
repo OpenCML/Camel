@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -51,22 +51,22 @@ class ParserImpl {
     Tree tree_;
     const Token *toks_ = nullptr;
     uint32_t count_    = 0;
-    uint32_t pos_      = 0;        // the current token (never trivia)
-    uint32_t prev_     = 0;        // the last token consumed
-    TK cur_            = TK::Eof;  // kind of the current token
-    std::vector<uint32_t> stack_;  // children of the nodes under construction
+    uint32_t pos_      = 0;       // the current token (never trivia)
+    uint32_t prev_     = 0;       // the last token consumed
+    TK cur_            = TK::Eof; // kind of the current token
+    std::vector<uint32_t> stack_; // children of the nodes under construction
 
-    static constexpr uint32_t kNone = UINT32_MAX;
+    static constexpr uint32_t kNone     = UINT32_MAX;
     static constexpr uint8_t kEmptyNode = 1; // NodeData::flags: the node has no token
 
     // Layout context (see Scope). `nl_`: a line break before a token that could also start a
     // statement ends the expression. `angle_`: the `<` of the angle-bracket list the parser is
     // directly inside (not inside a bracket or a block nested in it), or kNone.
-    bool nl_             = true;
-    uint32_t angle_      = kNone;
+    bool nl_              = true;
+    uint32_t angle_       = kNone;
     bool typeBeforeBlock_ = false; // the type being parsed is followed by a block
     bool castType_        = false; // the type being parsed is that of `e as T` / `e is T`
-    uint32_t spacedGt_   = kNone;  // a `>` after a space read as a comparison inside angle_
+    uint32_t spacedGt_    = kNone; // a `>` after a space read as a comparison inside angle_
 
     bool panic_     = false; // an error was reported and the parser has not resynchronized
     uint32_t depth_ = 0;     // nesting of expressions, types and blocks
@@ -203,6 +203,9 @@ class ParserImpl {
     void parsePairedParams(TK closer);
     void parseParentParams();
     void parseAngledParams();
+    void parseEnumType();
+    void parseEnumVariant();
+    void parseEnumField();
     /// Whether a function declaration follows after the modifiers at the current token.
     uint32_t afterModifiers() const;
     /// `{` at token offset `n` opens a struct literal: `{ name: ...` or `{ ...`.
@@ -213,6 +216,27 @@ class ParserImpl {
 
     // ---- Expressions (parser_expr.cpp) ----
     bool startsExpr(TK kind) const;
+    /// The last closed node is a `RefData` whose path has a `::`: the type of a variant
+    /// construction (`Shape::Rect { ... }`) or the constructor of a pattern (`case Shape::Rect …`).
+    bool lastRefIsPath() const {
+        if (stack_.empty()) {
+            return false;
+        }
+        const uint32_t word = stack_.back();
+        if ((word & Tree::kTokenBit) != 0) {
+            return false;
+        }
+        const NodeData &node = tree_.nodes_[word];
+        if (node.kind != NK::RefData) {
+            return false;
+        }
+        for (uint32_t token = node.firstToken; token <= node.lastToken; ++token) {
+            if (toks_[token].kind == TK::ColonColon) {
+                return true;
+            }
+        }
+        return false;
+    }
     void parseExpr();
     void parseAssign();
     void parseLogicalOr();
@@ -237,6 +261,8 @@ class ParserImpl {
     void parseIf();
     void parseMatch();
     void parseMatchCase();
+    void parseEnumTuplePattern();
+    void parseEnumStructPattern();
     void parsePattern();
     void parseTry();
     void parseLoop();
@@ -252,6 +278,7 @@ class ParserImpl {
     void parseIndices();
     void parseParentArgues();
     void parseAngledValues();
+    void parseTypeArguments();
     bool literalSignAhead() const {
         if ((cur_ != TK::Minus && cur_ != TK::Plus) ||
             (peek(1) != TK::Integer && peek(1) != TK::Real)) {

@@ -1,7 +1,7 @@
 /**
- * progen finding F11 (written variable taken for one value). `std::opt::simplify` loses a write to
+ * progen finding F11 (written variable taken for one value). `std::opt` loses a write to
  *   a variable made in the taken arm: the read after the branch still sees the initial value.
- * Pipeline: std::opt::simplify std::nvm
+ * Pipeline: std::opt std::nvm
  * Expected output: a
  * Actual: (empty line)
  * Reduced by test/tools/progen from seed 92 (generator version 1, all features).

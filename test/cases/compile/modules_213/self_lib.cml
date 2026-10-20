@@ -1,4 +1,4 @@
-// A module that imports itself (design principles 2.13): no effect.
+// A module that imports itself (design principles 10.1): no effect.
 module self_lib
 
 import self_lib

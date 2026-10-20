@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,7 +38,9 @@
  * 6. The source position of each node is a column parallel to the records (nodeOrigin): one
  *    32-bit origin id per node, 0 when the node has none. Beside it, only in a graph where some
  *    node has any, the numeric permissions the program granted with @numeric(...): one byte per
- *    node (nodePermissions; design principles 2.13, docs/design/op-semantics 6.3).
+ *    node (nodePermissions; design principles 7.5, docs/design/op-semantics 6.3), and the
+ *    attributes libraries attached to the nodes: one 32-bit interned set per node
+ *    (nodeAttrs; camel/core/node_attrs.h, language reference 7.6).
  * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
  *    FUNC node names its callee by an index into it (GCFuncRef), and the graphs the function
  *    constants of the static area point to, the graphs written inside this one and the graphs
@@ -59,6 +61,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 #include <span>
 #include <string_view>
 #include <type_traits>
@@ -85,7 +88,6 @@ using gc_cnt_t      = uint16_t;
 constexpr gc_node_ref_t kInvalidNodeRef = static_cast<gc_node_ref_t>(-1);
 constexpr gc_off_t kInvalidOffset       = static_cast<gc_off_t>(-1);
 
-
 // The kinds of node. The numeric values are part of the graph model (docs/design/graph-model,
 // section 3.5) and must not be renumbered.
 //
@@ -111,7 +113,7 @@ enum class GCNodeKind : uint8_t {
     Sync = 12,
     Gate = 13,
     Dref = 14, // build-time only, see above
-    // A loop (design principles 2.10, 2.12, 2.13; docs/design/graph-model 3.5, the LOOP card):
+    // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):
     // Norm inputs the array (For, ForWhile) then the k first values of the state; With inputs
     // the m captured values, shared by the condition graph and the body graph; Ctrl inputs
     // ordering. Its payload names the two graphs (GCLoopRef / GCLoopBody). Its value is the
@@ -327,7 +329,7 @@ static_assert(std::is_trivially_copyable_v<GCJoinBody>);
 struct GCOperBody {
     // The implementation, when a scheduler has resolved it; nullptr until then. A cache of what
     // the executor manager answers for `oper`, not part of the node's identity.
-    operator_t op = nullptr;
+    operator_t op            = nullptr;
     camel::core::OperId oper = camel::core::kNoOper;
     uint32_t reserved        = 0;
 
@@ -343,6 +345,7 @@ struct GCGraphNativePayload {
     GCNode *nodes              = nullptr; // nodeCount + 1 records (the last is a sentinel)
     uint32_t *origins          = nullptr; // nodeCount source origins (0: none)
     uint8_t *permissions       = nullptr; // nodeCount numeric permissions; null when all are 0
+    uint32_t *attrs            = nullptr; // nodeCount attribute sets; null when all are 0
     gc_node_ref_t *inputs      = nullptr; // edgeCount entries
     gc_payload_word_t *payload = nullptr; // payloadWordCount words
     gc_node_ref_t *normPorts   = nullptr;
@@ -405,6 +408,11 @@ class GCGraph : public camel::core::rtdata::Object {
     uint8_t nodePermissions(gc_node_ref_t ref) const;
     /// True when some node of the graph has numeric permissions.
     bool hasNodePermissions() const { return nativePayload_.permissions != nullptr; }
+    /// The attributes (camel/core/node_attrs.h, AttrSetId) of node `ref`, 0 when none; the
+    /// graph has no attribute column when no node has any.
+    uint32_t nodeAttrs(gc_node_ref_t ref) const;
+    /// True when some node of the graph has attributes.
+    bool hasNodeAttrs() const { return nativePayload_.attrs != nullptr; }
     /// The names of the values the function captures from where it was written, in the order
     /// it captured them (symbols of camel/core/symbol.h). Compile and debug metadata: what a
     /// capture is bound to at run time is the closure tuple and the with-inputs of a call.
@@ -635,7 +643,9 @@ class GCGraphManager {
 
     void adoptRoot(GCGraph *rootGraph);
     void replaceRoot(GCGraph *rootGraph);
-    GCGraph *root() const { return root_; }
+    GCGraph *root() const;
+    // The collector reads this stable vector only when collections are allowed.
+    // Runtime publishers hold NoCollectionScope while changing it.
     std::vector<camel::core::rtdata::Object *> &gcRoots() { return gcRoots_; }
     const std::vector<camel::core::rtdata::Object *> &gcRoots() const { return gcRoots_; }
 
@@ -656,6 +666,10 @@ class GCGraphManager {
   private:
     void rebuildGcRoots();
 
+    // Publishing a detached graph can happen on different execution workers.
+    // Recursive because the lifecycle operations below compose (adopt/replace,
+    // destruction/release/clear); the lock is never held through graph execution.
+    mutable std::recursive_mutex mutex_;
     std::vector<GCGraph *> graphs_;
     std::vector<GCGraph *> detached_;
     std::vector<GCGraph *> pinned_;

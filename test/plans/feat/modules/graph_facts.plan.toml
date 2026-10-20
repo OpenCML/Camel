@@ -98,10 +98,10 @@ assert(!facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'l
 
 [[tests]]
 name = "rewrite_inline"
-desc = "Facts computed before std::inline: the graphs it changed (main, which gets the callees' bodies, the root and twice, which refer to them) read stale, apart from the shapes whose node types did not change (Cone: revalidated); the graphs it did not change keep every fact. Everything stale is computed again and every stored fact then equals a fresh computation. A private loop lowering (as std::fvm does) makes the graphs that held a loop, and those referring to them, new; the loops' own graphs and the others keep their facts."
+desc = "Facts computed before std::opt::inline: the graphs it changed (main, which gets the callees' bodies, the root and twice, which refer to them) read stale, apart from the shapes whose node types did not change (Cone: revalidated); the graphs it did not change keep every fact. Everything stale is computed again and every stored fact then equals a fresh computation. A private loop lowering (as std::fvm does) makes the graphs that held a loop, and those referring to them, new; the loops' own graphs and the others keep their facts."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
-args = ["${case}", "test::facts_seed", "std::inline", "test::facts_check"]
+args = ["${case}", "test::facts_seed", "std::opt::inline", "test::facts_check"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 0
 verify_script = """
@@ -139,7 +139,7 @@ const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
 for (const l of [
   'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
   'FACTS graph count.loop1.cond valid=1 revalidated=0 stale=0',
-  'FACTS graph main valid=0 revalidated=2 stale=9', 'FACTS gone 0', '60.0',
+  'FACTS graph main valid=0 revalidated=1 stale=10', 'FACTS gone 0', '60.0',
 ]) line(l)
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
 }
@@ -147,10 +147,10 @@ assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals 
 
 [[tests]]
 name = "rewrite_macro_simplify"
-desc = "The same across std::macro and std::opt::simplify."
+desc = "The same across std::macro and std::opt."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
-args = ["${case}", "test::facts_seed", "std::macro", "std::opt::simplify", "test::facts_check"]
+args = ["${case}", "test::facts_seed", "std::macro", "std::opt", "test::facts_check"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 0
 verify_script = """

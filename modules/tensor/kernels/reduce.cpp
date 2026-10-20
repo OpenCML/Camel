@@ -147,7 +147,7 @@ TensorObject *reduceAxis(
             case ReduceOp::Sum:
             case ReduceOp::Mean: {
                 // f64 accumulation for floats; integers and bools exactly in int64, wrapping on
-                // overflow as integer arithmetic does (design principles 2.10, 2.14): the
+                // overflow as integer arithmetic does (design principles 5.1, 7.7): the
                 // addition is done on uint64_t, where it is defined to wrap.
                 using Acc = std::conditional_t<std::is_same_v<T, float>, double, uint64_t>;
                 Acc acc   = 0;
@@ -191,7 +191,7 @@ TensorObject *reduceAxis(
             case ReduceOp::ArgMin: {
                 // The position of the first maximum (minimum) by IEEE 754-2019 maximum
                 // (minimum): the first NaN if there is one, +0 above -0, the first on a tie
-                // (design principles 2.14; beyondExtreme in minmax.h).
+                // (design principles 7.7; beyondExtreme in minmax.h).
                 const bool max  = op == ReduceOp::ArgMax;
                 T best          = src[base];
                 int64_t bestIdx = 0;
@@ -221,8 +221,8 @@ double sumAll(const TensorObject *input) {
             }
             return acc;
         } else {
-            // int64 and bool: exactly in int64, wrapping on overflow (design principles 2.10,
-            // 2.14), then converted to the float result once.
+            // int64 and bool: exactly in int64, wrapping on overflow (design principles 5.1,
+            // 7.7), then converted to the float result once.
             uint64_t acc = 0;
             for (uint64_t i = 0; i < input->numel(); ++i) {
                 acc += static_cast<uint64_t>(static_cast<int64_t>(src[i]));
@@ -239,7 +239,7 @@ enum class SoftmaxKind { Softmax, LogSoftmax };
 /**
  * softmax and log_softmax along `axis`.
  *
- * softmax is computed exactly as its definition (design principles 2.13: the definition is
+ * softmax is computed exactly as its definition (design principles 7.1: the definition is
  * canonical, a fused kernel must agree with it bit for bit):
  *
  *     m = max(x, axis, keepdims)          IEEE maximum (minmax.h)

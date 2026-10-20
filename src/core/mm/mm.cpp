@@ -97,7 +97,7 @@ std::atomic<int> selectedCollectorMode{-1};
 std::atomic<bool> autoSpaceCreated{false};
 
 // The collector the environment asks for; generational unless CAMEL_GC names mark-sweep
-// (design principles 2.12: generational collection is the default once usable).
+// (design principles 10.5: generational collection is the default once usable).
 // CAMEL_GC_ENABLE_YOUNG_COPYING, the older name of CAMEL_GC=generational, no longer changes
 // anything; safepoint poisoning is a mode of the moving collector and implies it.
 CollectorMode collectorModeFromEnv() {

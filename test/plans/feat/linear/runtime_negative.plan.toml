@@ -68,10 +68,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "recursion_depth_limit.inline_nvm"
-desc = "Non-tail recursion past the default limit of 1000 open calls stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM after std::inline); depth(200) printed before it, nothing after."
+desc = "Non-tail recursion past the default limit of 1000 open calls stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM after std::opt::inline); depth(200) printed before it, nothing after."
 kind = "negative"
 case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"
@@ -84,7 +84,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "effects_outside_sync.nvm"
-desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (nvm)."
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 3.1, log 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (nvm)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_nvm}"]
@@ -101,7 +101,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "effects_outside_sync.fvm"
-desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (fvm)."
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 3.1, log 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (fvm)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_fvm}"]
@@ -118,7 +118,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "effects_outside_sync.jit"
-desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (jit)."
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 3.1, log 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (jit)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_jit}"]
@@ -135,7 +135,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "effects_outside_sync.tf"
-desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 2.1, 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (tf)."
+desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body and in a prefix `sync func` it is absent from the graph (design principles 3.1, log 2.3). `wait` on it changes nothing, by design: the expression involves no `var`, so `wait` has nothing to order by, and that is not an error (2.6). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (tf)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "std::tf"]
@@ -232,10 +232,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "sync_literal_operands.simplify.fvm"
-desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::opt::simplify on FastVM."
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::opt on FastVM."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_literal_operands.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -248,10 +248,10 @@ timeout_ms = 6000
 
 [[tests]]
 name = "sync_literal_operands.macro_simplify.tf"
-desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::macro then std::opt::simplify on Taskflow."
+desc = "Effects reached through the operands of struct, tuple and array literals in a sync block run in written order, between the statements around the literal. Under: std::macro then std::opt on Taskflow."
 kind = "behavior"
 case = "../../../cases/linear/runtime/sync_literal_operands.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "std::tf"]
+args = ["${case}", "std::macro", "std::opt", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

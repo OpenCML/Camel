@@ -1,0 +1,80 @@
+/**
+ * Decorators that grant node attributes (language reference 7.6): the nodes written in the
+ * function or block they decorate get the attribute, the arms, loop bodies and lambdas written
+ * there too, and no function they call. Nested grants combine by the rule of the attribute's
+ * key: flags (of any width) unite, an integer takes the inner value. The program computes
+ * the same with or without them.
+ */
+module grants
+import { mark, flags, level, plain as pass } from test_attrs
+
+/// No attributes: called from decorated code, it keeps none.
+func plain(a: float, b: float): float {
+    return a * b + 1.0
+}
+
+@mark
+func marked(a: float, b: float): float {
+    return a * b + plain(a, b)
+}
+
+@flags<1>
+func nested(k: float): float {
+    let f = (v: float) => v * k + 0.5
+    let z = if k > 0.0 then k * 2.0 else k / 2.0
+    @flags<70>
+    {
+        return f(z) + plain(k, 3.0)
+    }
+}
+
+func blocky(x: float): float {
+    let y = x * 3.0
+    @mark @flags<3>
+    {
+        return y / 7.0 - 1.0
+    }
+}
+
+@mark
+func looped(n: int): int {
+    return loop acc = 0 for i in range(0, n) do acc + i * i
+}
+
+/// The innermost decorator grants as the program is built; the outer one is applied as it runs.
+@pass @mark
+func inner_mark(a: float): float {
+    return a * 4.0
+}
+
+/// Applied as it runs: the attribute of the outer decorator is not granted (the function is
+/// what `pass` returned, which is not known as the program is built).
+@mark @pass
+func outer_mark(a: float): float {
+    return a * 5.0
+}
+
+/// A value not given as the program is built: applied as it runs, nothing granted.
+@flags<1001>
+func zero(a: float): float {
+    return a * 6.0
+}
+
+@level<3>
+func leveled(a: float): float {
+    let b = a * 7.0
+    @level<5>
+    {
+        return b + a * 8.0
+    }
+}
+
+func main(): int sync {
+    println(marked(1.5, 2.0))
+    println(nested(1.25))
+    println(blocky(2.0))
+    println(looped(4))
+    println(inner_mark(1.0), outer_mark(1.0), zero(1.0))
+    println(leveled(1.0))
+    return 0
+}

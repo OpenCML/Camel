@@ -1,4 +1,4 @@
-"""Loops over the time axis exported for sequence lengths 1 to 7, with and without std::inline.
+"""Loops over the time axis exported for sequence lengths 1 to 7, with and without std::opt::inline.
 
 ort_time_axis.cml is exported once per length and pipeline; each model is run on ONNX Runtime on
 five random inputs of that length and compared with NumPy (1e-5). A model that only works on its
@@ -49,7 +49,7 @@ def main() -> int:
     failures, worst = 0, 0.0
     with tempfile.TemporaryDirectory() as t:
         for steps in range(1, 8):
-            for passes in ([], ["std::inline"]):
+            for passes in ([], ["std::opt::inline"]):
                 model = Path(t) / f"m{steps}_{len(passes)}.onnx"
                 env = {**os.environ, "ONNX_OUT": str(model), "STEPS": str(steps)}
                 env.setdefault("CAMEL_HOME", str(REPO_ROOT / "out" / "latest"))

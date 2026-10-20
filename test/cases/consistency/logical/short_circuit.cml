@@ -1,5 +1,5 @@
 /**
- * `&&` and `||` are branches (design principles 2.11): `a && b` is `if a then b else false`,
+ * `&&` and `||` are branches (design principles 4.2): `a && b` is `if a then b else false`,
  * `a || b` is `if a then true else b`. The right side is an arm, evaluated only when the left
  * side does not decide. `&` and `|` are the operators that evaluate both sides.
  */

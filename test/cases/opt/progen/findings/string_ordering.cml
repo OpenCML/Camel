@@ -2,7 +2,7 @@
  * progen finding F27 ((other) operator not implemented). The ordering comparisons of two strings
  * compile and all give false, without any pass: `'a' < 'b'`, `'b' > 'a'`, `'a' <= 'a'`, `'a' >=
  * 'a'`. (`==` and `!=` work.)
- * Expected output (byte order, design principles 2.9): four lines `true`.
+ * Expected output (byte order, design principles log 2.9): four lines `true`.
  */
 module string_ordering
 

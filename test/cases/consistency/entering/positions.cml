@@ -1,6 +1,6 @@
 /**
  * A value enters a `T?` / `T!` position by itself where the target type is known (design
- * principles 2.10): an argument, an annotated `let`, an element of an array, the arms of a
+ * principles 3.8): an argument, an annotated `let`, an element of an array, the arms of a
  * branch, `return`. `null` likewise. On the graph each is the CAST node a program would
  * write with `as`.
  */

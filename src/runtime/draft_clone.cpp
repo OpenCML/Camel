@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Apr. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -322,6 +322,7 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
             .runtimeFlags = sourceNode->flags,
             .origin       = sourceGraph->nodeOrigin(sourceRef),
             .permissions  = sourceGraph->nodePermissions(sourceRef),
+            .attrs        = sourceGraph->nodeAttrs(sourceRef),
             .payload      = payload,
         };
         CAMEL_LOG_INFO_S("DraftClone", "Clone addNode for sourceRef={}.", sourceRef);
@@ -459,6 +460,7 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDra
             .runtimeFlags = sourceNode->runtimeFlags,
             .origin       = sourceNode->origin,
             .permissions  = sourceNode->permissions,
+            .attrs        = sourceNode->attrs,
             .payload      = payload,
         };
         const gc_node_ref_t clonedId = owner.addNode(init);

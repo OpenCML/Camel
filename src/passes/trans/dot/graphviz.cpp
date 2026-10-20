@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "graphviz.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/passes/trans/gir_metadata.h"
 
@@ -369,14 +370,21 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         const string valueType =
             outputType ? camel::core::type::sourceTypeSpelling(outputType->toString()) : "";
         // The numeric permissions the program granted with @numeric(...) (design principles
-        // 2.13): an attribute only on the nodes that have any, so that the dump of a program
+        // 7.5): an attribute only on the nodes that have any, so that the dump of a program
         // without the annotation is unchanged.
         const uint8_t permissions = graph->nodePermissions(nodeRef);
         const string valueAttr =
             (valueType.empty() ? "" : std::format(", value_type=\"{}\"", escape(valueType))) +
-            (permissions == 0
+            (permissions == 0 ? ""
+                              : std::format(
+                                    ", numeric=\"{}\"",
+                                    camel::core::sem::permissionsText(permissions))) +
+            // The attributes libraries attached to the node (language reference 7.6), likewise.
+            (graph->nodeAttrs(nodeRef) == 0
                  ? ""
-                 : std::format(", numeric=\"{}\"", camel::core::sem::permissionsText(permissions)));
+                 : std::format(
+                       ", attrs=\"{}\"",
+                       escape(camel::core::attr::text(graph->nodeAttrs(nodeRef)))));
         // Boundary roles: a role attribute; styled dumps also fill the node with its first role's
         // color and list every role in the tooltip.
         string roleAttr, roleFill, roleTooltip;

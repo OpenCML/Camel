@@ -1,5 +1,5 @@
 /**
- * A sync block executes its expressions in written order (docs/design-principles.cn.md 2.2),
+ * A sync block executes its expressions in written order (docs/design-principles.cn.md 3.4),
  * also when the block ends in a plain value, is written inside another sync block, or binds
  * several names at once. Expected output:
  *   A1 | A2 | 2        a sync block as the arm of a let-bound `if`: effects before and after a

@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,7 @@
  */
 
 #include "npy.h"
+#include "binary.h"
 
 #include <algorithm>
 #include <bit>
@@ -77,10 +78,21 @@ NpyHeader parseHeader(const std::string &header, const std::filesystem::path &pa
     if (descr.size() < 5 || descr[0] != '\'') {
         fail(path, "unsupported descr");
     }
-    result.byteOrder            = descr[1];
-    result.kind                 = descr[2];
-    result.itemSize             = static_cast<size_t>(std::stoul(descr.substr(3)));
-    result.fortran              = field(header, "fortran_order", path).starts_with("True");
+    result.byteOrder = descr[1];
+    result.kind      = descr[2];
+    size_t sizeEnd   = 0;
+    result.itemSize  = static_cast<size_t>(std::stoul(descr.substr(3), &sizeEnd));
+    if (3 + sizeEnd >= descr.size() || descr[3 + sizeEnd] != '\'')
+        fail(path, "malformed dtype size");
+    const auto order = field(header, "fortran_order", path);
+    size_t orderEnd  = order.starts_with("True") ? 4 : order.starts_with("False") ? 5 : 0;
+    if (!orderEnd)
+        fail(path, "malformed Fortran order flag");
+    result.fortran = orderEnd == 4;
+    while (orderEnd < order.size() && order[orderEnd] == ' ')
+        ++orderEnd;
+    if (orderEnd == order.size() || (order[orderEnd] != ',' && order[orderEnd] != '}'))
+        fail(path, "malformed Fortran order flag");
     const std::string shapeText = field(header, "shape", path);
     const size_t open = shapeText.find('('), close = shapeText.find(')');
     if (open == std::string::npos || close == std::string::npos) {
@@ -195,26 +207,28 @@ TensorObject *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocat
     return tensor;
 }
 
-void saveNpy(const TensorObject *tensor, const std::filesystem::path &path) {
-    static_assert(
-        std::endian::native == std::endian::little,
-        "saveNpy writes host-order little-endian data");
+std::string encodeNpy(TypeCode dtype, std::span<const int64_t> dims, std::string_view payload) {
+    if (payload.size() != tensorPayloadSize(dtype, dims)) {
+        throw ShapeError("NPY payload length does not match its storage dtype and shape");
+    }
     std::string descr;
-    switch (tensor->dtype()) {
+    switch (dtype) {
     case TypeCode::Float32:
         descr = "<f4";
         break;
     case TypeCode::Int64:
         descr = "<i8";
         break;
-    default:
+    case TypeCode::Bool:
         descr = "|b1";
         break;
+    default:
+        throw std::invalid_argument("unsupported NPY storage dtype");
     }
     std::string shape = "(";
-    for (size_t i = 0; i < tensor->rank(); ++i) {
-        shape += std::to_string(tensor->dim(i)) +
-                 (tensor->rank() == 1 ? "," : (i + 1 < tensor->rank() ? ", " : ""));
+    for (size_t i = 0; i < dims.size(); ++i) {
+        shape +=
+            std::to_string(dims[i]) + (dims.size() == 1 ? "," : (i + 1 < dims.size() ? ", " : ""));
     }
     shape += ")";
     std::string header =
@@ -224,20 +238,80 @@ void saveNpy(const TensorObject *tensor, const std::filesystem::path &path) {
     header.append((64 - unpadded % 64) % 64, ' ');
     header.push_back('\n');
 
+    if (header.size() > UINT16_MAX)
+        throw std::invalid_argument("NPY v1 header exceeds 65535 bytes");
+    std::string result(kMagic, 6);
+    result.append("\1\0", 2);
+    const auto length = static_cast<uint16_t>(header.size());
+    result.push_back(static_cast<char>(length & 0xff));
+    result.push_back(static_cast<char>(length >> 8));
+    result += header;
+    result.append(payload);
+    return result;
+}
+
+NpyStorageView inspectNpyExact(std::string_view bytes) {
+    const std::filesystem::path source("<checkpoint>");
+    if (bytes.size() < 10 || bytes.substr(0, 6) != std::string_view(kMagic, 6))
+        fail(source, "invalid magic");
+    const auto major = static_cast<unsigned char>(bytes[6]);
+    if (bytes[7] != 0 || major < 1 || major > 3)
+        fail(source, "unsupported format version");
+    const size_t lengthSize = major == 1 ? 2 : 4;
+    if (bytes.size() < 8 + lengthSize)
+        fail(source, "truncated header length");
+    size_t headerSize = 0;
+    for (size_t i = 0; i < lengthSize; ++i)
+        headerSize |= size_t(static_cast<unsigned char>(bytes[8 + i])) << (8 * i);
+    if (headerSize > 1024 * 1024 || headerSize > bytes.size() - 8 - lengthSize)
+        fail(source, "invalid header length");
+    const auto parsed = parseHeader(std::string(bytes.substr(8 + lengthSize, headerSize)), source);
+    if (parsed.fortran)
+        fail(source, "Fortran order is not a checkpoint storage layout");
+    TypeCode dtype;
+    if (parsed.kind == 'f' && parsed.itemSize == 4)
+        dtype = TypeCode::Float32;
+    else if (parsed.kind == 'i' && parsed.itemSize == 8)
+        dtype = TypeCode::Int64;
+    else if (parsed.kind == 'b' && parsed.itemSize == 1)
+        dtype = TypeCode::Bool;
+    else
+        fail(source, "checkpoint requires an exact f32/int64/bool storage dtype");
+    if (parsed.byteOrder != '<' && parsed.byteOrder != '>' && parsed.byteOrder != '=' &&
+        !(parsed.byteOrder == '|' && parsed.itemSize == 1))
+        fail(source, "invalid byte order");
+    const auto payload = bytes.substr(8 + lengthSize + headerSize);
+    if (payload.size() != tensorPayloadSize(dtype, parsed.shape))
+        fail(source, "payload length differs from shape");
+    if (dtype == TypeCode::Bool &&
+        !std::all_of(payload.begin(), payload.end(), [](unsigned char b) { return b <= 1; }))
+        fail(source, "bool payload must contain only zero or one");
+    const bool big = parsed.byteOrder == '>' ||
+                     (parsed.byteOrder == '=' && std::endian::native == std::endian::big);
+    return {dtype, parsed.shape, payload, big};
+}
+
+TensorObject *decodeNpyExact(std::string_view bytes, mm::IAllocator &allocator) {
+    const auto parsed = inspectNpyExact(bytes);
+    std::string payload(parsed.payload);
+    const size_t itemSize = parsed.dtype == TypeCode::Int64     ? 8
+                            : parsed.dtype == TypeCode::Float32 ? 4
+                                                                : 1;
+    if (parsed.bigEndian)
+        for (size_t i = 0; i < payload.size(); i += itemSize) {
+            std::reverse(payload.begin() + i, payload.begin() + i + itemSize);
+        }
+    return tensorFromLittleEndian(payload, parsed.dtype, parsed.shape, allocator);
+}
+
+void saveNpy(const TensorObject *tensor, const std::filesystem::path &path) {
+    const auto encoded =
+        encodeNpy(tensor->dtype(), tensor->shapeSpan(), tensorToLittleEndian(tensor));
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     if (!out) {
         fail(path, "cannot open file for writing");
     }
-    out.write(kMagic, 6);
-    const char version[2] = {1, 0};
-    out.write(version, 2);
-    const auto length = static_cast<uint16_t>(header.size());
-    const char len[2] = {static_cast<char>(length & 0xFF), static_cast<char>(length >> 8)};
-    out.write(len, 2);
-    out.write(header.data(), static_cast<std::streamsize>(header.size()));
-    out.write(
-        reinterpret_cast<const char *>(tensor->rawData()),
-        static_cast<std::streamsize>(tensor->byteSize()));
+    out.write(encoded.data(), static_cast<std::streamsize>(encoded.size()));
     if (!out) {
         fail(path, "write failed");
     }

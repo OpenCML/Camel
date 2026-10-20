@@ -15,9 +15,10 @@
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
-#include "camel/core/type.h"
-#include "camel/core/type/resolver.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/type.h"
+#include "camel/core/type/bytes.h"
+#include "camel/core/type/resolver.h"
 #include "executor.h"
 #include "operators.h"
 
@@ -30,8 +31,10 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
             "sha256",
-            {{"crypto:sha256",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String())}}),
+            {{"crypto:sha256_str",
+              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String())},
+             {"crypto:sha256_bytes",
+              StaticFuncTypeResolver::create({}, {{BytesType::get(), false}}, Type::String())}}),
         OperatorGroup::create(
             "sha256_rounds",
             {{"crypto:sha256_rounds",
@@ -57,11 +60,12 @@ bool CryptoModule::load() {
     context_->registerExecutorFactory("crypto", [ctx = context_]() {
         return createCryptoExecutor(ctx);
     });
-    // The purity of every operator (design principles 2.9).
+    // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
         "crypto",
         {
-            {"sha256", true},
+            {"sha256_str", true},
+            {"sha256_bytes", true},
             {"sha256_rounds", true},
         });
     loaded_ = true;

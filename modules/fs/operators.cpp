@@ -13,15 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "operators.h"
+#include "binary.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tagged.h"
 
@@ -34,8 +36,8 @@ using namespace camel::core::rtdata;
 #include <cerrno>
 #include <format>
 #include <fstream>
-#include <system_error>
 #include <sstream>
+#include <system_error>
 
 namespace fs_impl = std::filesystem;
 
@@ -76,9 +78,8 @@ std::string openFailureReason(int code) {
 
 } // namespace
 
-// Files are opened in binary mode: what is written is the bytes of the string and what is read
-// is the bytes of the file, on every platform. (In text mode the C runtime of Windows writes
-// "\r\n" for every "\n", so file_size differed from the length of what was written.)
+// Text is UTF-8. Binary mode preserves its exact line endings on every platform;
+// arbitrary binary content belongs to read_bytes/write_bytes instead.
 slot_t __fs_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *path = norm.get<String *>(0);
     errno        = 0;
@@ -92,7 +93,19 @@ slot_t __fs_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     std::ostringstream oss;
     oss << f.rdbuf();
-    return toSlot(String::from(oss.str(), mm::autoSpace()));
+    if (f.bad())
+        throwRuntimeFault(
+            RuntimeDiag::FileSystemError,
+            "fs.read_text",
+            std::string(path->view()),
+            "cannot read complete file");
+    const auto text = oss.str();
+    if (const auto bad = invalidUtf8Offset(text))
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "fs.read_text",
+            "invalid UTF-8 at byte " + std::to_string(*bad) + "; use read_bytes for binary data");
+    return toSlot(String::from(text, mm::autoSpace()));
 }
 
 slot_t __fs_try_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -113,7 +126,13 @@ slot_t __fs_try_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (f.bad()) {
         return makeError("IOError", "cannot read '" + name + "'", "<fs::try_read_text>");
     }
-    return makeOk(toSlot(String::from(oss.str(), mm::autoSpace())), resultType);
+    const auto text = oss.str();
+    if (const auto bad = invalidUtf8Offset(text))
+        return makeError(
+            "EncodingError",
+            "invalid UTF-8 at byte " + std::to_string(*bad),
+            "<fs::try_read_text>");
+    return makeOk(toSlot(String::from(text, mm::autoSpace())), resultType);
 }
 
 slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -140,7 +159,16 @@ slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
             std::string(path->c_str()),
             openFailureReason(errno));
     }
-    f << content->c_str();
+    // UTF-8 permits NUL; use the stored length, never C-string termination.
+    f.write(content->c_str(), static_cast<std::streamsize>(content->size()));
+    f.close();
+    if (!f) {
+        throwRuntimeFault(
+            RuntimeDiag::FileSystemError,
+            "fs.write_text",
+            std::string(path->c_str()),
+            "cannot write the complete file");
+    }
     return NullSlot;
 }
 
@@ -207,7 +235,7 @@ slot_t __fs_read_chunk__(ArgsView &with, ArgsView &norm, Context &ctx) {
             "the size of the file cannot be determined");
     }
     if (offset >= fileSize || size == 0) {
-        return toSlot(String::from("", mm::autoSpace()));
+        return toSlot(BytesObject::from("", mm::autoSpace()));
     }
 
     std::streamoff remaining = fileSize - static_cast<std::streamoff>(offset);
@@ -218,7 +246,13 @@ slot_t __fs_read_chunk__(ArgsView &with, ArgsView &norm, Context &ctx) {
     f.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
     f.read(buffer.data(), toRead);
     buffer.resize(static_cast<size_t>(f.gcount()));
-    return toSlot(String::from(buffer, mm::autoSpace()));
+    if (f.bad())
+        throwRuntimeFault(
+            RuntimeDiag::FileSystemError,
+            "fs.read_chunk",
+            std::string(path->view()),
+            "cannot read complete chunk");
+    return toSlot(BytesObject::from(buffer, mm::autoSpace()));
 }
 
 slot_t __fs_mkdir__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -251,6 +285,9 @@ slot_t __fs_mkdirs__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 std::unordered_map<std::string, operator_t> getFsOpsMap() {
     return {
+        {"read_bytes", fsReadBytes},
+        {"write_bytes", fsWriteBytes},
+        {"replace", fsReplaceBytes},
         {"read_text", __fs_read_text__},
         {"try_read_text", __fs_try_read_text__},
         {"write_text", __fs_write_text__},

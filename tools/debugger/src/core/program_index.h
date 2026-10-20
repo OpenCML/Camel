@@ -31,7 +31,7 @@
  *    a function, a lambda, or a subgraph of a function (the arm of a branch) that the stack
  *    folds into the function's frame (5.4).
  *
- * Names are full names (design principles 2.12): `module::path::name`, without the module for
+ * Names are full names (design principles 10.2): `module::path::name`, without the module for
  * the entry module's own, as the graph builder names graphs.
  *
  * Names come from the builders through the recorder of the semantic query layer
@@ -117,7 +117,7 @@ enum class GraphRole {
     /// The arm of a branch (`if`, `match`, `&&`, `||`, `??`, `!!`, `?->`, narrowing): code of
     /// the function that branches, which a call makes a frame of its own. Folded into the
     /// function's frame unless the user asks for the subgraphs. The condition and the body of
-    /// a `LOOP` will be subgraphs of this kind too (design principles 2.10, 2.12): they belong
+    /// a `LOOP` will be subgraphs of this kind too (design principles 3.10): they belong
     /// to the function the loop is written in, and fold the same way.
     Arm,
 };
@@ -181,7 +181,7 @@ struct LineResolution {
 };
 
 /// A line whose code the graph builder left out of the graph because nothing uses its result
-/// (design principles 2.1): what a line step that goes past it says (35_debugger.md, 4.2).
+/// (design principles 3.1): what a line step that goes past it says (35_debugger.md, 4.2).
 struct DroppedLine {
     int file     = -1;
     int line     = 0;

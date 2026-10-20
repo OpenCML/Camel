@@ -279,7 +279,7 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
 // slice(t, axis, start, end, step = 1)
 slot_t sliceKernel(ArgsView &, ArgsView &norm, context::Context &) {
     // Bounds outside the axis are a located fault, as for an array's slice (design principles
-    // 2.10); checked before the kernel so the diagnostic is SliceOutOfRange, not a kernel error.
+    // 3.9); checked before the kernel so the diagnostic is SliceOutOfRange, not a kernel error.
     // A malformed axis or step is left to the kernel.
     const TensorObject *input = tensorArg(norm, 0);
     const int64_t axisArg     = intArg(norm, 1);
@@ -321,8 +321,8 @@ std::optional<Type *> sliceInfer(const InferContext &ctx) {
         return tensorOf(in);
     }
     // Extent and bounds are known at compile time: an interval that leaves the axis is an
-    // error here (design principles 2.7). With an unknown extent or bounds the operator checks
-    // at run time and faults with SliceOutOfRange (2.10).
+    // error here (design principles 3.9). With an unknown extent or bounds the operator checks
+    // at run time and faults with SliceOutOfRange (3.9).
     const auto range = k::normalizeSliceBounds(ext, *start, *end);
     if (!range) {
         throw ShapeError(

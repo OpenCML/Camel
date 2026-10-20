@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 #include "camel/core/type.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
+#include "camel/execute/pass/params.h"
 #include "camel/execute/pass/snapshot.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/init.h"
@@ -123,7 +124,7 @@ namespace {
 
 /// Whether the function `main` declared at the top level of the entry module writes a return
 /// type (`func main(): int`). Only then is what it returns the result of the program (design
-/// principles 2.10). nullopt when the tree holds no such declaration (`main` bound some other
+/// principles 9.8). nullopt when the tree holds no such declaration (`main` bound some other
 /// way): the value then counts as it always did.
 std::optional<bool> entryDeclaresReturnType(const AST::node_ptr_t &node, int depth = 0) {
     if (!node || depth > 3) {
@@ -250,6 +251,13 @@ int runCommand(int argc, char *argv[]) {
     }
 
     std::optional<phase::Scope> contextPhase(std::in_place, "context");
+    // The entry module must define `main` only when the command executes the program.
+    // `inspect` and `check` analyse a module (a library included) and never enter it; passes
+    // that translate the graph (std::gir, std::jgir, ...) do the same. Requiring `main` there
+    // would reject a valid library before its graphs can be dumped or checked. Deciding this
+    // for the pass list needs the context, because a pass may be contributed by a module.
+    const bool analyseOnly =
+        selectedCommand == Command::Inspect || selectedCommand == Command::Check;
     context_ptr_t ctx = Context::create(
         EntryConfig{
             .entryDir          = entryDir,
@@ -258,11 +266,13 @@ int runCommand(int argc, char *argv[]) {
             .maxThreads        = Run::maxThreads > 0 ? static_cast<size_t>(Run::maxThreads) : 0,
             .maxRecursionDepth = Run::maxRecursionDepth,
             .maxMacroDepth     = Run::maxMacroDepth,
+            .requireEntry      = !analyseOnly,
+            .maxMacroRounds    = Run::maxMacroRounds,
         },
         compileDiagsConfig);
     // However the run ends (main returns, a fault, exit(n)), it ends by returning from here:
     // the external resources the program still holds are released first, before the context
-    // and the modules that own their release code go away (design principles 2.9).
+    // and the modules that own their release code go away (design principles 3.9).
     struct ReleaseExternalResources {
         ~ReleaseExternalResources() { camel::core::rtdata::disposeAllForeignResources(); }
     } releaseExternalResources;
@@ -271,6 +281,11 @@ int runCommand(int argc, char *argv[]) {
     parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
     auto mainModule     = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
     ctx->setMainModule(mainModule);
+    // The pass list is resolved against a context that has the program's module. Doing it
+    // before the build leaves the entry requirement decided before anything is compiled.
+    if (selectedCommand == Command::Run && passListTranslatesProgram(Run::resolvedPassList, ctx)) {
+        ctx->setRequireEntry(false);
+    }
     contextPhase.reset();
     startupPhase.reset();
     // Declared after everything a run owns (the context, the parser, the entry module), so it
@@ -365,6 +380,16 @@ int runCommand(int argc, char *argv[]) {
         if (selectedCommand == Command::Inspect) {
             if (Inspect::dumpGCT && mainModule->gct()) {
                 mainModule->gct()->print(os);
+            }
+            // A `-g`/`--tns`/... dump reads the program graph: a failed build has none. Report
+            // the diagnostics instead of materializing a half-built graph (the shape of an
+            // access violation: the dump used to walk it and die).
+            if ((Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpInstances ||
+                 Inspect::dumpFacts) &&
+                !mainModule->loaded()) {
+                ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+                compileSummary(false);
+                return 1;
             }
             if (Inspect::dumpGIR) {
                 GraphVizDumpPass pass(ctx);

@@ -2,7 +2,7 @@ id = "compile.equality"
 order = 333
 tier = "feat"
 tags = ["feat", "compile", "equality", "types"]
-desc = "`==` and `!=` by content on arrays, tuples and structs, and `contains` on strings (design principles 2.10): the four back ends, the optimisation pipelines, and what is refused at compile time"
+desc = "`==` and `!=` by content on arrays, tuples and structs, and `contains` on strings (design principles 4.2): the four back ends, the optimisation pipelines, and what is refused at compile time"
 
 # The values themselves are checked on the four back ends by consistency.values
 # (value.content_equality). Here: the pipelines give the same output (the operator is pure and
@@ -14,7 +14,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "equality.inline"
-desc = "The golden output of value.content_equality after std::inline, on the three linear back ends."
+desc = "The golden output of value.content_equality after std::opt::inline, on the three linear back ends."
 backends = ["inline_nvm", "inline_fvm", "inline_jit"]
 args = ["${case}", "${backend}"]
 kind = "snapshot"
@@ -39,8 +39,8 @@ expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "equality.simplify"
-desc = "The same output under std::opt::simplify."
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+desc = "The same output under std::opt."
+args = ["${case}", "std::opt", "std::nvm"]
 kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"

@@ -1,4 +1,4 @@
-// argmax and argmin compare by IEEE 754-2019 maximum and minimum (design principles 2.14): with a
+// argmax and argmin compare by IEEE 754-2019 maximum and minimum (design principles 7.7): with a
 // NaN the position of the first NaN; on a tie the position of the first extreme, +0 above -0.
 import { Tensor, reshape, argmax, argmin } from tensor
 

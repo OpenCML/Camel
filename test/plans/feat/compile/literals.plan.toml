@@ -355,7 +355,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "literal_range.exponent_is_float"
-desc = "A literal with an exponent is a floating-point number (design principles 2.10): `1e-2` is 0.01 and `15e-1` is 1.5; nothing is truncated and nothing is warned about."
+desc = "A literal with an exponent is a floating-point number (design principles 5.1): `1e-2` is 0.01 and `15e-1` is 1.5; nothing is truncated and nothing is warned about."
 kind = "behavior"
 case = "../../../cases/compile/literals/int_negative_exponent.cml"
 args = ["-E", "short", "${case}"]

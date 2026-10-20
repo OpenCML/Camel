@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,7 +22,7 @@
  * and writes besides its operands' values, declared as data so that a scheduler can tell two
  * effects that touch the same thing from two that do not.
  *
- * Only some things have an identity a program can observe (design principles 2.12): a `var`
+ * Only some things have an identity a program can observe (design principles 10.5): a `var`
  * cell, an object changed in place through a `var` parameter or an in-place form, an object a
  * module wraps (Tiles' device memory, a Python object). Every other value can be copied or
  * shared at will and is not a resource. Besides those, some state is named by no value at all:
@@ -64,7 +64,7 @@
 
 namespace camel::core::sem {
 
-/// The class of a resource (design principles 2.12, "有身份的东西要列明").
+/// The class of a resource (design principles 10.5, "有身份的东西要列明").
 enum class ResourceClass : uint8_t {
     /// Any of the others: what an undeclared operator may touch.
     Unknown = 0,
@@ -178,7 +178,8 @@ struct ResourceSpec {
 // ---- Builders for declarations --------------------------------------------------------------
 
 /// An access to the resource named by the ordinary operand `operand`, whole.
-ResourceAccess operandAccess(ResourceClass cls, uint8_t operand, AccessMode mode, std::string name = {});
+ResourceAccess
+operandAccess(ResourceClass cls, uint8_t operand, AccessMode mode, std::string name = {});
 /// An access to the ambient resource `name`.
 ResourceAccess ambientAccess(std::string name, AccessMode mode);
 /// The spec of an operator whose one touch is the ambient resource `name`, with an effect
@@ -190,13 +191,28 @@ ResourceSpec externalAmbient(std::string name, AccessMode mode);
  * a pure one; otherwise a read-modify-write of every operand, whole and of unknown class, a
  * result that may alias any operand, and the external effect the traits give.
  */
-ResourceSpec conservativeResources(size_t normCount, size_t withCount, bool pure, bool externalEffect);
+ResourceSpec
+conservativeResources(size_t normCount, size_t withCount, bool pure, bool externalEffect);
 
 /// The problem with a spec in words (design 4.4), nullopt when it is consistent in itself: a
 /// Foreign or Ambient resource has a name and the others have none; an ambient access is bound
 /// to no operand and every other access is; an Unknown class is not declared (it is the
 /// conservative reading, not a declaration); a Same or View result names an operand.
 std::optional<std::string> checkResources(const ResourceSpec &spec);
+
+/// Whether the spec writes the resource that the ordinary (or with) operand `index` names.
+bool writesOperand(const ResourceSpec &spec, bool isWith, size_t index);
+
+/// Whether the spec reads or writes a resource of class `cls` at all (`writesOnly`: writes).
+bool touchesClass(const ResourceSpec &spec, ResourceClass cls, bool writesOnly = false);
+
+/// The declaration against the `var` parameters of the operator's signature (design principles
+/// 3.3: the resource declaration is the truth about effects, the signature is checked against
+/// it): nullopt when they agree. A `var` parameter is declared written; a cell (Variable) or an
+/// object changed in place (Object) is written only through a `var` parameter; a Foreign
+/// resource is a handle a module wraps and may be written through an ordinary operand.
+std::optional<std::string> checkVarParameters(
+    const ResourceSpec &spec, const std::vector<bool> &withVars, const std::vector<bool> &normVars);
 
 /// The text form, for `camel inspect --ops` and diagnostics: "rmw variable norm 0 whole; result
 /// fresh", "read ambient fs; external", "none".

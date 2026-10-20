@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,14 +31,14 @@ class Context;
 
 namespace camel::execute {
 
-/// The limit on non-tail recursion (design principles 2.9: tail recursion is optimized, non-tail
+/// The limit on non-tail recursion (design principles 3.9: tail recursion is optimized, non-tail
 /// recursion gets a configurable limit). It counts the calls that are open at once and are not
 /// in tail position; a tail call replaces its caller and is not counted.
 ///
 /// It is given by `--max-recursion-depth <n>` (EntryConfig::maxRecursionDepth) or, without the
 /// option, by the environment variable CAMEL_MAX_RECURSION_DEPTH. Without either, every
 /// scheduler stops at kDefaultMaxRecursionDepth: the default is 1000 on all of them, and the
-/// parallel scheduler counts like the others (design principles 2.10, "默认值").
+/// parallel scheduler counts like the others (design principles 3.9, "默认值").
 ///
 /// What is counted is the same on every back end: each call of a function (written directly,
 /// made through a function value, or made by a higher-order operator for an element) that is
@@ -47,16 +47,25 @@ namespace camel::execute {
 /// (kEntryCalls). So with a limit of L, `depth(L - 1)` called from `main` is the deepest that
 /// runs, for `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`: L calls of `depth` are
 /// open at the bottom.
-inline constexpr size_t kEntryCalls                     = 1;
-inline constexpr size_t kDefaultMaxRecursionDepth       = 1000;
-inline constexpr const char *kMaxRecursionDepthEnvVar   = "CAMEL_MAX_RECURSION_DEPTH";
-inline constexpr const char *kMaxRecursionDepthOption   = "--max-recursion-depth";
+inline constexpr size_t kEntryCalls                   = 1;
+inline constexpr size_t kDefaultMaxRecursionDepth     = 1000;
+inline constexpr const char *kMaxRecursionDepthEnvVar = "CAMEL_MAX_RECURSION_DEPTH";
+inline constexpr const char *kMaxRecursionDepthOption = "--max-recursion-depth";
 
 /// The limit on nested calls while std::macro evaluates a call ahead of time (its evaluator has
 /// no tail calls: every call counts). `--max-macro-depth <n>`, else CAMEL_MAX_MACRO_DEPTH.
 inline constexpr size_t kDefaultMaxMacroDepth     = 64;
 inline constexpr const char *kMaxMacroDepthEnvVar = "CAMEL_MAX_MACRO_DEPTH";
 inline constexpr const char *kMaxMacroDepthOption = "--max-macro-depth";
+
+/// The limit on the rounds one loop may run while std::macro evaluates it ahead of time (design
+/// principles 8; a loop that would not end makes the compilation fail instead of hang).
+/// `--max-macro-rounds <n>`, else CAMEL_MAX_MACRO_ROUNDS. Rounds do not nest, so the count has no
+/// relation to the stack and its range is wider than the depth limits'.
+inline constexpr size_t kDefaultMaxMacroRounds     = 1'000'000;
+inline constexpr size_t kMaxRoundsLimit            = size_t{1} << 40;
+inline constexpr const char *kMaxMacroRoundsEnvVar = "CAMEL_MAX_MACRO_ROUNDS";
+inline constexpr const char *kMaxMacroRoundsOption = "--max-macro-rounds";
 
 /// The largest value either limit accepts. The interpreters nest on the native stack (NodeVM
 /// for every call, FastVM for calls through function values and higher-order operators, the
@@ -92,6 +101,11 @@ struct RecursionLimit {
 /// command line reports it before anything runs).
 RecursionLimit recursionLimit(const core::context::Context &context);
 size_t macroDepthLimit(const core::context::Context &context);
+/// A round limit written as text: a decimal integer from 1 to kMaxRoundsLimit.
+std::optional<size_t> parseRoundLimit(std::string_view text);
+/// The rounds one loop may run under std::macro in `context`: the option, else the environment,
+/// else kDefaultMaxMacroRounds.
+size_t macroRoundLimit(const core::context::Context &context);
 
 /// The fault of a call that is not in tail position and would be open call number `limit + 1`.
 /// `graphName` is the graph the call is written in. Every back end raises this one, so the

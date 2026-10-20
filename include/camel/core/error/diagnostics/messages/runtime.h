@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,17 +57,19 @@ enum class RuntimeDiag : uint32_t {
     FileOpenFailed         = 0x000035,
     FileSystemError        = 0x000036,
     // 0x37 (JsonDecodeFailed) was the fault of json.decode on text that is not JSON; decode
-    // returns an error value instead (design principles 2.13). The code is not reused.
+    // returns an error value instead (design principles 11.2). The code is not reused.
     JsonEncodeUnsupported  = 0x000038,
     RegexInvalid           = 0x000039,
     TimeFormatFailed       = 0x00003A,
     OperatorNotImplemented = 0x00003B,
-    // Faults and reports of the rulings of 2026-10-12 (design principles 2.10).
-    ConversionOutOfRange   = 0x000050,
-    UnhandledError         = 0x000051,
-    SliceOutOfRange        = 0x000052,
+    // Faults and reports of the rulings of 2026-10-12 (design principles log 2.10).
+    ConversionOutOfRange = 0x000050,
+    UnhandledError       = 0x000051,
+    SliceOutOfRange      = 0x000052,
+    // The pipeline's pass specifications `name(key=value, ...)` (design principles 9.3).
+    InvalidPassParameter = 0x000060,
     // Warnings (severity bits = Warn).
-    PassesNeverRun = 0x10000F,
+    PassesNeverRun           = 0x10000F,
     ConstantExpressionFaults = 0x100015,
     TranslationLinksRuntime  = 0x100016,
 };

@@ -2,11 +2,11 @@
 
 This note is the design of source-level debugging in `camel-db` (`tools/debugger`), of its
 Debug Adapter Protocol (DAP) front end and of its REPL. It follows the rulings of
-[design principles](../design-principles.cn.md) 2.9: *the debugger has a source-line view and a
-graph-node view, and it steps by line and by node*; 2.11: *the arms of a branch are folded into
+[design principles](../design-principles.cn.md) 12.1: *the debugger has a source-line view and a
+graph-node view, and it steps by line and by node*; 12.1: *the arms of a branch are folded into
 the frame of their function by default, and can be shown as the real subgraphs; a line step
 follows the order of execution, and when a line did not execute because nothing used its
-result, the debugger says so*; 2.12: *the debugger shows full names, `module::path::name`, the
+result, the debugger says so*; 10.2: *the debugger shows full names, `module::path::name`, the
 module left out when that is not ambiguous.* Positions and origins are those of
 [10](10_source_mapping_and_debug_locations.md); names come from the builders' report channel of
 [32](32_semantic_query_layer.md); faults are those of [33](33_fault_isolation.md). The guide
@@ -18,7 +18,7 @@ section 8.
 
 ## 1. Why two views
 
-A Camel program is a graph. Evaluation is driven by dependencies (design principles 2.1): two
+A Camel program is a graph. Evaluation is driven by dependencies (design principles 3.1): two
 statements that do not depend on each other have no order, a call whose result nothing uses
 does not run, a function is a subgraph, a pass may have rewritten everything before it runs. A
 debugger that only knows source lines then shows things it cannot explain: the highlighted line
@@ -56,7 +56,7 @@ The relation between lines and nodes is many to many, and the debugger never hid
 |------|--------------|
 | One line, several nodes (`println(f(x) + g(x))`) | The line is entered once (2.1); node steps walk the nodes |
 | One line, nodes in several graphs (a generic function's instances; a function inlined at several places) | A line breakpoint binds to all of them |
-| A node whose source is in another function (after `std::inline`) | The frame is the graph that runs; the location is the source it came from, and the frame says "inlined" (5.3) |
+| A node whose source is in another function (after `std::opt::inline`) | The frame is the graph that runs; the location is the source it came from, and the frame says "inlined" (5.3) |
 | A line with code but no node | The code is not executed: nothing depends on it, or a pass removed it. A breakpoint there is unverified and says which (3.2) |
 | A node without a line | Reached by node steps only |
 
@@ -116,7 +116,7 @@ in the graph before the passes, those in the graph that runs.
 | some | some | none | The code on this line is not in the graph that runs: a pass (...) removed or replaced it. |
 | | | some | verified |
 
-The second row is the sentence design principles 2.1 asks tools to be able to say. It names the
+The second row is the sentence design principles 3.1 asks tools to be able to say. It names the
 values declared on the line that are in no graph (`let y = ...`); a line that declares none (a
 call written as a statement outside a sync block) says *nothing uses its result*. The second row
 has a variant: when the source function the line is written in has no graph that the program
@@ -179,7 +179,7 @@ this frame enters another line, or until it has returned and its caller runs its
 node.
 
 The line reached is the next one *in execution order*, not the next one in the text (design
-principles 2.11). Reasons:
+principles 12.1). Reasons:
 
 - the next line of the text may never run (nothing depends on it), may already have run, or
   may run much later; stopping "there" would mean stopping somewhere else and pretending;
@@ -197,14 +197,19 @@ with F not S or line(N) not L. It enters a callee when the next node is a call.
 ### 4.1 Tail calls
 
 A tail call replaces the frame (section 5.2): the callee takes the place of S at the same
-depth. For stepping, the replacement is a new frame at depth `d`, so a line step at
-`return loop(n - 1, acc)` stops at the first line of `loop`, and step out runs until the whole
-chain of tail calls has returned to the real caller. A recursion written as tail calls is thus
-stepped like the loop it is. `DESIGN-QUESTION(step-over-tail-call)`.
+depth. Step in (F11) stops at its first executable source location with the new arguments.
+Step over (F10) and step out run until the chain returns to the real caller; a breakpoint,
+fault or explicit pause can still interrupt them. This also applies to node-granularity
+step over. The source author's ruling on 2026-10-16 resolves `step-over-tail-call` this way.
+
+The top frame in `camel/stopped` includes its `activation`, `functionId`, `entry` flag and
+bounded `arguments` snapshots (name, type, value, evaluated). These are immutable display
+values, not heap handles. Graph clients can show changed arguments between activations of
+the same function without inventing a stack frame or requesting values after resume.
 
 ### 4.2 Lines that did not execute
 
-Design principles 2.11: when a line did not execute because nothing used its result, the
+Design principles 12.1: when a line did not execute because nothing used its result, the
 debugger says so. It says it when a line step goes past such a line, and at the end of the run
 for a breakpoint on one (3.2); never for a line whose reason it cannot establish from the graph.
 
@@ -233,7 +238,7 @@ REPL prints them under the stop. A variable whose node is not in the graph says 
 
 ### 4.3 Inlined calls
 
-After `std::inline` the callee's nodes are in the caller's graph and there is no frame. Nodes
+After `std::opt::inline` the callee's nodes are in the caller's graph and there is no frame. Nodes
 keep their origins, so the debugger knows which *function of the source* a node was written in
 (the innermost function whose span contains the node's span), though not at which call it was
 inlined (10: there is no "inlined at" chain). Stepping uses the source function as a frame
@@ -285,7 +290,7 @@ same structure) is a branch node and one graph per arm; the builder names these 
 *owners*, the graphs that hold the branch node), is read from the branch nodes of the running
 program (`GCGraph::branchArmsOf`); a graph the compiler named that is no arm is a lambda.
 
-Design principles 2.11: an arm is code of the function it is written in, so by default
+Design principles 12.1: an arm is code of the function it is written in, so by default
 (`frames` is `functions`) its frame is part of the frame of that function. The core keeps one
 shadow frame per activation of a graph, as the schedulers run them, and groups them into
 *activations of functions*:
@@ -323,14 +328,14 @@ An arm takes the values it uses from its function as unnamed `with` ports. The d
 such a port after what the caller passes there (a port of the caller, or the name bound to the
 node), so an arm shows `n`, not `port`.
 
-A loop (design principles 2.10, 2.12) will be a `LOOP` node with a condition subgraph and a body
+A loop (design principles 3.10) will be a `LOOP` node with a condition subgraph and a body
 subgraph; they are code of the function the loop is written in and fold the same way. In the
 index they will be a role of graph that folds (`GraphRole`), with the graph that holds the
 `LOOP` node as their owner, so the activations, the names and the steps need no other change.
 
 ### 5.5 Full names
 
-Design principles 2.12: the debugger shows the full name `module::path::name` of everything it
+Design principles 10.2: the debugger shows the full name `module::path::name` of everything it
 names, the module left out for the entry module's own, as the graph builder names graphs (and
 dumps and diagnostics show them): `names_lib::Config::clamp`, `util::half` for a function of a
 namespace of the entry module. That is the name of a frame, of the function an arm or a lambda
@@ -365,7 +370,7 @@ Scopes of a frame (with frames of functions, of every graph of the frame, 5.4):
 
 ### 6.2 Values
 
-A run-time value does not carry its type (design principles 2.7); the type is the static type
+A run-time value does not carry its type (design principles 5.10); the type is the static type
 of the node or slot, and values are printed with it, by the program's own printing code.
 
 | Value | Shown as |
@@ -490,11 +495,11 @@ are not stops.
 - **`std::tf` / `std::prl`** (parallel) run as `std::fvm` as well, with a notice: several nodes
   run at once, there is no single current node, and the scheduler has no hooks. The sequential
   order of `std::fvm` is one of the orders the parallel scheduler may choose (design principles
-  2.7: no order is promised between the elements of `map` and between independent nodes), so
+  3.6: no order is promised between the elements of `map` and between independent nodes), so
   the program is the same program; what cannot be observed this way is a defect that depends
   on the interleaving. A stop-the-world mode showing the node of each worker is possible
   later; it needs hooks in the task bodies. `DESIGN-QUESTION(parallel-debugging)`.
-- **Passes that rewrite the graph** (`std::inline`, `std::opt`, `std::macro`, ...) run as asked.
+- **Passes that rewrite the graph** (`std::opt::inline`, `std::opt`, `std::macro`, ...) run as asked.
   Positions survive because nodes keep their origins through rewrites (10); breakpoints are
   answered again against the graph the scheduler is given (3.1). What is lost: the name of a
   `let` bound to a call that was inlined or a value that was folded (its node is gone: the
@@ -602,19 +607,19 @@ has ruled since, which say so.
 1. `line-breakpoint-hits`: stop once when a frame enters the line (recommended), or once per
    node of the line.
 2. `line-step-order`: the next line in execution order, or in the text. **Ruled** (design
-   principles 2.11): in execution order.
-3. `step-over-tail-call`: a line step over a tail call stops in the callee (recommended), or
-   runs until the chain returns to the caller.
+   principles 12.1): in execution order.
+3. `step-over-tail-call`: **Ruled 2026-10-16**: F10 runs until the chain returns to the
+   caller; F11 enters the callee at its first executable location. Breakpoints still apply.
 4. `tail-call-stack`: show the stack as it is, marking replaced frames (recommended), or keep
    a shadow record of replaced callers for display.
 5. `inlined-frames`: one frame marked as inlined code, stepping by source function
-   (recommended), or have `std::inline` record call sites so that virtual frames can be shown.
-   (Ruling 2.11 folds arms into the frame of their function; whether a function inlined into
+   (recommended), or have `std::opt::inline` record call sites so that virtual frames can be shown.
+   (Ruling 12.1 folds arms into the frame of their function; whether a function inlined into
    another should then be shown as a frame of its own has not been ruled.)
 6. `parallel-debugging`: run on the sequential `std::fvm` with a notice (implemented), refuse
    to debug, or stop-the-world with one current node per worker.
 7. `arm-frames`: show the arm of a branch as the frame it is, or fold arms into the frame of
-   their function. **Ruled** (design principles 2.11): folded by default, the real subgraphs on
+   their function. **Ruled** (design principles 12.1): folded by default, the real subgraphs on
    request (5.4). `func fact(n: int): int { return if n <= 1 then 1 else n * fact(n - 1) }`
    stopped in the third call shows `fact` three times, `main`; with frames of subgraphs `fact`,
    `fact [arm at line 1] (tail call, 1 frame replaced)` twice, `main`.
@@ -641,7 +646,7 @@ been run since), macOS, and the VS Code user interface (the tests speak DAP to t
 | Faults: stop with the diagnostic, isolated faults by filter | implemented, tested on both back ends |
 | DAP adapter (7.3) | implemented, tested |
 | `std::jit`, `std::prl` | run as `std::fvm` with a notice; tested |
-| After `std::inline` / `std::opt` | positions kept, breakpoints re-answered, inlined code labelled; tested for no crash and for the surviving positions |
+| After `std::opt::inline` / `std::opt` | positions kept, breakpoints re-answered, inlined code labelled; tested for no crash and for the surviving positions |
 | Graph view over DAP | OpenCML-Ext uses `camel/structuredGraph` and immutable pass snapshots; source/type and hierarchy UI tested |
 | Graphical debugger | OpenCML-Ext + native VS Code debugging; standalone Web frontend retired after migration acceptance |
 | Conditional breakpoints, hit counts, logpoints, set value, restart, attach | not done |

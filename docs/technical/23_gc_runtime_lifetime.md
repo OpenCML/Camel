@@ -9,7 +9,7 @@ Camel's runtime values live in four allocator domains with different ownership r
 
 `GCGraph` is an `rtdata::Object` only so the GC can use its `updateRefs` hook to trace static data.
 The graph carrier itself is not an `autoSpace` object and is reclaimed by `GCGraphManager`, not by
-mark-sweep.
+the collector.
 
 ## Growable Program Spaces
 
@@ -68,7 +68,7 @@ The permanent space never releases, so **a question must not allocate in it**. R
 operator overload builds a new function type every time; the rewrites ask "is this argument
 passed to a var parameter" for every user of every value and again after every inlined call,
 and re-infer the result type of every operator node at every commit. One program of 120 lines
-left 1.4 million function types (more than 256 MB) behind under `std::specialize std::opt`.
+left 1.4 million function types (more than 256 MB) behind under `std::opt::specialize std::opt`.
 Two rules follow, and code on a query or probe path has to keep them:
 
 - Overload questions that do not depend on constant argument values go through
@@ -87,7 +87,7 @@ caller:
   (`ArrayType::create`) are interned by their component type objects: re-encoding an unchanged
   graph, graphs with equal layouts and every place a program writes `int[]` allocate nothing
   new. This became possible when converting a value to its own type was ruled legal (design
-  principles 2.12): the cast rule of these types compares structure, not object identity.
+  principles 5.1): the cast rule of these types compares structure, not object identity.
 - Function types (`FunctionType::create`, `FunctionTypeFactory::build`) are interned with their
   parameter names: an operator's signature for a call, a function type a program writes, a
   branch arm's signature, every signature a rewrite re-infers. The one exception is the

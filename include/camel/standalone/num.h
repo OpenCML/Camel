@@ -19,7 +19,7 @@
 
 /*
  * Numbers in the programs std::cpp writes: the arithmetic of the language and the conversions
- * between numbers (design principles 2.10, "数值").
+ * between numbers (design principles 5.1, "数值").
  *
  * Each function does what the operator of the runtime with the same name does (the URI is
  * given with it; src/builtin/operators/ops.cpp and cast.cpp), including where that is a fault:
@@ -99,7 +99,7 @@ template <typename T> T remainder(T a, T b, const Site &site) {
 
 } // namespace detail
 
-/// Integer `+`, `-`, `*` and unary `-`: they wrap around (design principles 2.10).
+/// Integer `+`, `-`, `*` and unary `-`: they wrap around (design principles 5.1).
 constexpr int64_t add(int64_t a, int64_t b) { return detail::wrapAdd(a, b); }
 constexpr int64_t sub(int64_t a, int64_t b) { return detail::wrapSub(a, b); }
 constexpr int64_t mul(int64_t a, int64_t b) { return detail::wrapMul(a, b); }

@@ -127,11 +127,11 @@ the built-in operators and the modules `fs`, `json`, `re`, `time`, `math` (and s
 `os`, `random`, `crypto`, `algo`, `statistics`) now raise codes of their own with the values
 involved (`InvalidNumberText`, `FormatFailed`, `OperandTypeUnsupported`, `FieldNotFound`,
 `InvalidArgument`, `FileOpenFailed`, `FileSystemError`, `JsonDecodeFailed` (retired: `json.decode`
-returns an error value since design principles 2.13),
+returns an error value since design principles 11.2),
 `JsonEncodeUnsupported`, `RegexInvalid`, `TimeFormatFailed`, `OperatorNotImplemented`).
 
 Only the code and the message of a fault changed. What is a fault and what is an error value is
-decided by the design principles (2.9): no fault was turned into an error value, and nothing
+decided by the design principles (3.9): no fault was turned into an error value, and nothing
 that did not fault before faults now.
 
 ## 5. Warnings

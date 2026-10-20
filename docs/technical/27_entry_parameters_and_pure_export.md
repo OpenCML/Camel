@@ -1,7 +1,7 @@
 # Entry Parameters and the Export of a Pure Program
 
 This note describes how a `main` with parameters is compiled, run and exported. The normative
-text is `docs/design-principles.cn.md` section 2.7 (the rulings on `main` with parameters,
+text is `docs/design-principles.cn.md` section 9.8 (the rulings on `main` with parameters,
 `with` parameters, automatic module loading, entry and export). User-facing behaviour is in
 `docs/cli.md`.
 
@@ -23,7 +23,7 @@ program's inputs, and each consumer says what an open parameter means:
 
 | Consumer | An open parameter is |
 |---|---|
-| a rewriting pass (`std::opt::*`, `std::macro`, `std::inline`) | an unknown value, as in any function |
+| a rewriting pass (`std::opt::*`, `std::macro`, `std::opt::inline`) | an unknown value, as in any function |
 | a dump (`std::rgir`, `std::gir`) | a PORT node named like the parameter |
 | a scheduling pass | an error: `EntryArgumentMissing` |
 | `onnx::export` | an input of the model |
@@ -91,7 +91,7 @@ The pass first looks for `onnx.export_model` requests in the entry graph, as bef
 there is none:
 
 - if a request exists in a graph reachable from the entry graph, the program is a driver
-  program whose `main` was not inlined: the old refusal naming `std::opt::simplify` is kept;
+  program whose `main` was not inlined: the old refusal naming `std::opt` is kept;
 - otherwise the program makes no request, and the entry graph itself is translated
   (`translateEntryGraph`, `modules/onnx/exporter.cpp`).
 
@@ -105,7 +105,7 @@ there is none:
 2. names the constants that came from `--arg` after their parameter and fields
    (`boundEntryArguments`), so they appear as named initializers;
 3. hands the graph to the part of the exporter shared with the two function entries
-   (`translatePrepared`): the `std::opt::simplify` fixpoint with export settings (everything
+   (`translatePrepared`): the `std::opt` fixpoint with export settings (everything
    non-recursive inlined, which removes the call of `main` when no earlier pass did), the
    effect check, the node-by-node translation, and one output per leaf of the result.
 
@@ -122,9 +122,9 @@ value is given with `--arg` at export. The convention the language suggests (dat
 parameters, weights as `with` parameters) therefore reads naturally on the command line:
 
     # weights baked in, data as input
-    CAMEL_ONNX_OUT=m.onnx camel model.cml --arg p=weights std::macro std::opt::simplify onnx::export
+    camel model.cml --arg p=weights std::macro std::opt 'onnx::export(out="m.onnx")'
     # weights as inputs (and, for a training step, as outputs)
-    CAMEL_ONNX_OUT=m.onnx camel step.cml std::macro std::opt::simplify onnx::export
+    camel step.cml std::macro std::opt 'onnx::export(out="m.onnx")'
 
 An ordinary parameter given with `--arg` is baked in the same way; the exporter does not treat
 the two kinds differently beyond their order.
@@ -135,11 +135,11 @@ the two kinds differently beyond their order.
   float32); the parameter is refused unless its value is given.
 - Dynamic axes come from the declared types only; there is no `dynamic_axes` or `target`
   option for the entry export (the target is the default, `onnxruntime-cpu`).
-- `CAMEL_ONNX_OUT` is the only way to name the file, until passes take arguments.
+- The parameter `out` of the pass is the way to name the file (passes take parameters, design principles 9.3).
 - The result of `main` is neither printed nor written under `--timeit`.
 - `std::cpp` translates a `main` with parameters of type int, i32, float, f32, bool or string: the
   generated program reads them from its command line as `--arg name=value`, with the same reports
-  as `camel` (design principles 2.13; `include/camel/standalone/entry.h`). A parameter of another
+  as `camel` (design principles 10.6; `include/camel/standalone/entry.h`). A parameter of another
   type (a tensor, a struct) is refused with `TranslationRefused` at `main`.
 - An optimizer state (`nn` Adam state) is not accepted as a parameter type on the command line
   or as a declared model input.

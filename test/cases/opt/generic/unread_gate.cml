@@ -1,0 +1,26 @@
+/**
+ * Unread return gates must transfer their ordering to control users, including
+ * effects reached through the discarded value. A read gate waiting only on
+ * its returned value is redundant too; the caller's return anchor remains.
+ */
+module unread_gate
+
+func constant(): int sync {
+    println(1)
+    return 41
+}
+
+func effect_value(): int sync {
+    println(3)
+    return println(4)
+}
+
+func main(): int sync {
+    constant()
+    println(2)
+    effect_value()
+    println(5)
+    let kept = effect_value()
+    println(kept)
+    return 0
+}

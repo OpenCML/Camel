@@ -57,7 +57,7 @@ func main(): int sync { println(show(2)); return 0 }
 
 当前：`[Error]: No matching function found for argument types: <> (i64). ... show: (u: Union<string, i64>) => string`。`let a: int | string = 1` 是 `LiteralStaticCastFailed`。
 
-期望：联合类型要么可用，要么在声明处被拒绝。**与未决问题有关**：设计原则 2.9“不做通用联合类型的运行时分辨”、第 6 节“类型表达式语言的具体内容”。
+期望：联合类型要么可用，要么在声明处被拒绝。**与未决问题有关**：设计原则 3.8“不做通用联合类型的运行时分辨”、第 15 节“类型表达式语言的具体内容”。
 
 ## 10.（已处理，见文末）
 
@@ -117,7 +117,7 @@ func main(): int sync { println(parse(1)); return 0 }
 
 ## 20.（已处理，见文末）
 
-## 21. `std::inline std::jit` 下很深的原生递归段错误
+## 21. `std::opt::inline std::jit` 下很深的原生递归段错误
 
 ```cml
 func depth(n: int): int {
@@ -126,11 +126,11 @@ func depth(n: int): int {
 func main(): int sync { println(depth(100000)); return 0 }
 ```
 
-当前：`camel --max-recursion-depth 1000000 t.cml std::inline std::jit` 以段错误结束（core dumped），没有诊断。默认上限下同一个流水线给出正常的 `MaxRecursionDepthExceeded`；`std::nvm`、`std::fvm` 在调高上限后由原生栈检查给出诊断。
+当前：`camel --max-recursion-depth 1000000 t.cml std::opt::inline std::jit` 以段错误结束（core dumped），没有诊断。默认上限下同一个流水线给出正常的 `MaxRecursionDepthExceeded`；`std::nvm`、`std::fvm` 在调高上限后由原生栈检查给出诊断。
 
 期望：原生栈将满的检查覆盖已编译的代码，给出带位置的 `MaxRecursionDepthExceeded`。
 
-**已修复（2026-10-12，`lane/jit-coverage`）。** 已编译的代码在每次原生调用之前，除了递归计数（r15），还把栈指针与 `JitContext::stackLimit` 比较；后者由 `invokeOwnedJitFrame` 在进入原生代码前按当前线程的栈下界加保留量（`execute::nativeStackFloor()`，与解释器的 `nativeStackNearlyExhausted` 同一个保留量）写入。低于它就走故障出口，诊断与解释器相同：`Maximum recursion depth (70103 open calls: the native stack of the thread, 8188 KiB, is full) exceeded when evaluating graph 'depth'`，位置是那次递归调用。实测（8 MiB 主线程栈）：上限一万时各后端都在第一万次调用上报计数超限；上限十万、一百万时，`std::inline std::jit` 下 `depth` 算到约七万层后报栈满（每层 112 字节），`std::fvm` 与不加 `std::inline` 的 `std::jit` 的调用不占原生栈，能算完九十万层；包在 `attempt` 里时故障在边界上变成错误值，之后同一个函数照常运行。测试：`test/plans/feat/consistency/limits.plan.toml` 的 `limit.10000.*`、`limit.raised.native.*`、`limit.raised.isolated`。
+**已修复（2026-10-12，`lane/jit-coverage`）。** 已编译的代码在每次原生调用之前，除了递归计数（r15），还把栈指针与 `JitContext::stackLimit` 比较；后者由 `invokeOwnedJitFrame` 在进入原生代码前按当前线程的栈下界加保留量（`execute::nativeStackFloor()`，与解释器的 `nativeStackNearlyExhausted` 同一个保留量）写入。低于它就走故障出口，诊断与解释器相同：`Maximum recursion depth (70103 open calls: the native stack of the thread, 8188 KiB, is full) exceeded when evaluating graph 'depth'`，位置是那次递归调用。实测（8 MiB 主线程栈）：上限一万时各后端都在第一万次调用上报计数超限；上限十万、一百万时，`std::opt::inline std::jit` 下 `depth` 算到约七万层后报栈满（每层 112 字节），`std::fvm` 与不加 `std::opt::inline` 的 `std::jit` 的调用不占原生栈，能算完九十万层；包在 `attempt` 里时故障在边界上变成错误值，之后同一个函数照常运行。测试：`test/plans/feat/consistency/limits.plan.toml` 的 `limit.10000.*`、`limit.raised.native.*`、`limit.raised.isolated`。
 
 ## 22.（已处理，见文末）
 
@@ -161,9 +161,9 @@ func main(): int sync { println(depth(100000)); return 0 }
 - 第 20 条 `camel check`：发现错误时退出码为 1；`-i` 只做词法分析，`-s` 做到语法树为止。
 - 第 22 条 入口的两处细节：语法错误诊断里的模块名现在是文件声明的名字；未声明返回类型、以 `println(...)` 结尾的 `main` 返回被打印的值是现有规则的结果（函数体没有 `return` 时取最后一条语句的值，而 `println(x)` 的值是 `x`），已写进语言参考 7.4.1 与 4.1，行为未改，两条规则是否保留见下面“待裁定”。
 - 其他工作线记录的几条：`zip` 传三个数组时只用前两个（并且按三元组的类型读两元素的元组）——现在按数组个数构造元组；`head([])` 返回零值——现在是 `RuntimeDiag::IndexOutOfRange`；模块导入自身时段错误——现在是 `SemanticDiag::ImportCycle`。
-- 第 12 条 尖括号的歧义（四种表现）：由两条已裁定的排版规则解决（设计原则 2.10；`docs/technical/34_handwritten_parser.md`）。尖括号实参必须紧贴前一个记号，比较运算符 `<` 前要有空格；换行结束语句。(a)(b) 以 `>` 结尾的语句后面跟一行以字符串或名字开头的语句，现在是两条语句；(c) `println(scale<2>(1), scale<3>(1))`、(d) `zip_with<f>(a, b)->all<p>` 现在按写出来的样子读。`i<n` 这样紧贴的比较是 `SyntaxDiag::ComparisonNeedsSpace`。测试：`test/plans/feat/compile/surface.plan.toml` 的 `surface.angle_then_*`，探针 `test/tools/parsecheck/probes.py`。
-- 第 7 条 `^` 的优先级：按设计原则 2.10，`^` 比乘除高一级、从右到左结合（`2 * 3 ^ 2` 是 18，`2 ^ 3 ^ 2` 是 512），一元运算符比它松（`-n ^ 2` 是 `-(n ^ 2)`）。紧贴数字的负号是字面量的一部分，`-2 ^ 2` 仍是 4（待问语言负责人）。
-- 第 3 条 带指数的字面量：按 2.10，带指数或小数点的字面量一律是浮点数，`1e-2` 是 `0.01`。
+- 第 12 条 尖括号的歧义（四种表现）：由两条已裁定的排版规则解决（设计原则 4.1；`docs/technical/34_handwritten_parser.md`）。尖括号实参必须紧贴前一个记号，比较运算符 `<` 前要有空格；换行结束语句。(a)(b) 以 `>` 结尾的语句后面跟一行以字符串或名字开头的语句，现在是两条语句；(c) `println(scale<2>(1), scale<3>(1))`、(d) `zip_with<f>(a, b)->all<p>` 现在按写出来的样子读。`i<n` 这样紧贴的比较是 `SyntaxDiag::ComparisonNeedsSpace`。测试：`test/plans/feat/compile/surface.plan.toml` 的 `surface.angle_then_*`，探针 `test/tools/parsecheck/probes.py`。
+- 第 7 条 `^` 的优先级：按设计原则 4.2，`^` 比乘除高一级、从右到左结合（`2 * 3 ^ 2` 是 18，`2 ^ 3 ^ 2` 是 512），一元运算符比它松（`-n ^ 2` 是 `-(n ^ 2)`）。紧贴数字的负号是字面量的一部分，`-2 ^ 2` 仍是 4（待问语言负责人）。
+- 第 3 条 带指数的字面量：按 5.1，带指数或小数点的字面量一律是浮点数，`1e-2` 是 `0.01`。
 - 导入改名：`import { find as str_find } from str` 可用；`ImportNameConflict` 的建议里给出这个写法。整模块改名 `import m as n` 未裁定。
 
 ## 待裁定（修复这批缺陷时遇到的）

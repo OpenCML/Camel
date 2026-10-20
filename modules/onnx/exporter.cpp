@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -2505,6 +2505,8 @@ std::optional<Value> Evaluator::foldConstantOper(
     }
     FoldArgsView withView(std::move(withSlots), std::move(withTypes));
     FoldArgsView normView(std::move(normSlots), std::move(normTypes));
+    withView.setResultType(resultType);
+    normView.setResultType(resultType);
     slot_t result;
     try {
         result = (*found)(withView, normView, ctx_);
@@ -2575,7 +2577,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
             continue;
         }
         if (operUriOf(g, last) == ":op/assn_append") {
-            // `acc = acc->append<v>` (design principles 2.12): an array grown in a variable,
+            // `acc = acc->append<v>` (design principles 11.3): an array grown in a variable,
             // which a model has no form for.
             unsupported(
                 act,
@@ -3535,7 +3537,7 @@ Model finishModel(Emitter &emitter, const ExportOptions &options) {
     return model;
 }
 
-/// How both export entries simplify the bound function: the std::opt::simplify fixpoint with
+/// How both export entries simplify the bound function: the std::opt fixpoint with
 /// everything that is not recursive inlined, and the export-only split of branched calls.
 OptimizeRewriteConfig exportRewriteConfig() {
     OptimizeRewriteConfig config;
@@ -3649,7 +3651,7 @@ void bindCaptures(camel::runtime::GraphDraft &draft, std::span<const Example> ca
 
 /// How much of the function's simplification an export performs itself.
 enum class Preparation {
-    /// onnx.export_model: macro expansion and the whole std::opt::simplify fixpoint.
+    /// onnx.export_model: macro expansion and the whole std::opt fixpoint.
     Full,
     /// onnx::export: the same simplification without macro expansion, which is the business
     /// of std::macro before the pass (the name is historical: the pass used to fold shapes

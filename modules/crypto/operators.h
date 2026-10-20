@@ -22,7 +22,8 @@
 
 namespace ctx = camel::core::context;
 
-slot_t __crypto_sha256__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __crypto_sha256_str__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __crypto_sha256_bytes__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __crypto_sha256_rounds__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getCryptoOpsMap();

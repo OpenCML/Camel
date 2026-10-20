@@ -2,7 +2,7 @@
  * The export request is written in a `main` that also runs a loop (a recursion whose depth is
  * read from the environment) and does some more work. The inliner copies a function that
  * reaches a recursion only while it is small, so the call of `main` stays, and onnx::export
- * sees no request. std::opt::simplify did run: the refusal, at `main` (line 22), says why the
+ * sees no request. std::opt did run: the refusal, at `main` (line 22), says why the
  * call was left instead of asking for the pass.
  */
 module main_reaches_loop

@@ -13,19 +13,19 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
  * The semantics of the built-in scalar arithmetic (`:op/` operators on i32, int, f32 and
  * float): their stable keys, numeric semantics and faults (camel/core/operator_semantics.h,
- * docs/design/op-semantics section 6.2, design principles 2.13).
+ * docs/design/op-semantics section 6.2, design principles 7.1).
  *
  *   integer + - * neg, comparisons    exact (two's complement, wrapping)
  *   integer / %                       exact; a zero divisor is a fault
  *   float + - *                       one correctly rounded IEEE step in the operand type
- *   float /                           the same; a divisor of +0 or -0 is a fault (2.9)
+ *   float /                           the same; a divisor of +0 or -0 is a fault (3.9)
  *   float neg, comparisons            exact
  *
  * Every operator is declared at version 1.0. Operators not listed here (pow, the untyped
@@ -44,6 +44,7 @@
 
 #include "camel/core/operator_table.h"
 
+#include <bit>
 #include <string>
 #include <string_view>
 
@@ -66,6 +67,44 @@ constexpr NumericType kNumericTypes[] = {
     {"d", TypeCode::Float64, true},
 };
 
+/// The bit pattern of `value` in the type: what a neutral element is declared as.
+uint64_t bitsOf(const NumericType &t, int value) {
+    if (!t.isFloat) {
+        return static_cast<uint64_t>(value);
+    }
+    if (t.type == TypeCode::Float32) {
+        return std::bit_cast<uint32_t>(static_cast<float>(value));
+    }
+    return std::bit_cast<uint64_t>(static_cast<double>(value));
+}
+
+/// The laws of `+`, `-` and `*` over one numeric type (design section 7b): a sum is commutative
+/// and, on wrapping integers, exactly associative; a float sum has a neutral element of -0 for
+/// the sum and +0 for the difference; the product distributes over the sum; the difference is
+/// the sum of the negation.
+std::optional<BinaryAlgebra> binaryLaws(const std::string &name, const NumericType &t) {
+    const std::string sum = std::string(":op/add_") + t.suffix;
+    BinaryLaw law{.element = t.type};
+    if (name == "add") {
+        law.commutative      = true;
+        law.exactAssociative = !t.isFloat;
+        law.neutralBits = t.isFloat ? (t.type == TypeCode::Float32 ? std::bit_cast<uint32_t>(-0.0f)
+                                                                   : std::bit_cast<uint64_t>(-0.0))
+                                    : 0;
+    } else if (name == "sub") {
+        law.subtractionOf = sum;
+        law.neutralBits   = bitsOf(t, 0);
+    } else if (name == "mul") {
+        law.commutative      = true;
+        law.exactAssociative = !t.isFloat;
+        law.neutralBits      = bitsOf(t, 1);
+        law.distributesOver  = sum;
+    } else {
+        return std::nullopt;
+    }
+    return BinaryAlgebra{.laws = {law}};
+}
+
 /// Declares `:op/<name>_<suffix>` with the given numeric semantics and faults.
 void declare(
     const std::string &name, const NumericType &t, NumericSemantics numeric,
@@ -76,6 +115,7 @@ void declare(
         OperatorSemantics{
             .key     = OperatorKey::of(uri),
             .numeric = std::move(numeric),
+            .binary  = binaryLaws(name, t),
             .faults  = std::move(faults),
         });
 }
@@ -145,10 +185,44 @@ void declareUnorderedReduce() {
     OperatorTable::instance().declareSemantics(
         uri,
         OperatorSemantics{
-            .key      = OperatorKey::of(uri),
-            .indexing = indexing,
-            .laws     = {law},
+            .key          = OperatorKey::of(uri),
+            .indexing     = indexing,
+            .laws         = {law},
+            .elementCalls = ElementCalls{.shape = ElementShape::Fold, .independent = true},
         });
+}
+
+/**
+ * How the higher-order operators call their function (design principles 3.6), the one place
+ * a scheduler or a code generator learns it from. `map`, `apply` and `filter` leave the order of
+ * their calls open: the function of one element does not depend on that of another, so they
+ * may run at once; `foreach` and `reduce` run in order, their unordered forms do not.
+ * `attempt` calls its function once and keeps its faults.
+ */
+void declareElementCalls() {
+    struct Row {
+        std::string_view uri;
+        ElementShape shape;
+        bool independent;
+    };
+    constexpr Row rows[] = {
+        {":mark/map_arr", ElementShape::Map, true},
+        {":mark/apply_arr", ElementShape::Map, true},
+        {":mark/filter_arr", ElementShape::Filter, true},
+        {":mark/foreach_arr", ElementShape::Foreach, false},
+        {":mark/unordered_foreach_arr", ElementShape::Foreach, true},
+        {":mark/reduce_arr", ElementShape::Fold, false},
+        {":mark/isolate", ElementShape::Isolate, false},
+    };
+    auto &table = OperatorTable::instance();
+    for (const Row &row : rows) {
+        OperatorSemantics record{.key = OperatorKey::of(row.uri)};
+        if (const auto id = table.lookup(row.uri); id && table.semantics(*id) != nullptr) {
+            record = *table.semantics(*id);
+        }
+        record.elementCalls = ElementCalls{.shape = row.shape, .independent = row.independent};
+        table.declareSemantics(row.uri, std::move(record));
+    }
 }
 
 } // namespace
@@ -181,27 +255,34 @@ void declareBuiltinOperatorSemantics() {
                 t,
                 exact(t, "a / b truncated toward zero; b = 0 is a fault"),
                 zeroDivisor);
-            declare(
-                "mod",
-                t,
-                exact(t, "the remainder of a / b; b = 0 is a fault"),
-                zeroDivisor);
+            declare("mod", t, exact(t, "the remainder of a / b; b = 0 is a fault"), zeroDivisor);
         }
-        declare("neg", t, exact(t, t.isFloat ? "-a: the sign flipped" : "-a, wrapping"), std::nullopt);
+        declare(
+            "neg",
+            t,
+            exact(t, t.isFloat ? "-a: the sign flipped" : "-a, wrapping"),
+            std::nullopt);
         for (const char *cmp : {"lt", "le", "gt", "ge"}) {
             declare(
                 cmp,
                 t,
-                exact(t, t.isFloat ? "IEEE comparison (false when either side is NaN)" : "comparison"),
+                exact(
+                    t,
+                    t.isFloat ? "IEEE comparison (false when either side is NaN)" : "comparison"),
                 none);
         }
     }
     declareUnorderedReduce();
+    declareElementCalls();
 }
 
+bool storesIntoCell(std::string_view name) { return name.starts_with("op/assn"); }
+
 void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
-    auto &table      = OperatorTable::instance();
-    const auto cell  = [](AccessMode mode) { return operandAccess(ResourceClass::Variable, 0, mode); };
+    auto &table     = OperatorTable::instance();
+    const auto cell = [](AccessMode mode) {
+        return operandAccess(ResourceClass::Variable, 0, mode);
+    };
     const auto alias = [](uint8_t operand) {
         return ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = operand};
     };
@@ -211,7 +292,9 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         ResourceSpec{.allocates = Resource{.cls = ResourceClass::Variable}});
     // Reading a variable reads its cell; the value read is (or shares) what the cell holds.
     for (const char *uri : {":var/get", ":var/peek"}) {
-        table.declareResources(uri, ResourceSpec{.accesses = {cell(AccessMode::Read)}, .result = alias(0)});
+        table.declareResources(
+            uri,
+            ResourceSpec{.accesses = {cell(AccessMode::Read)}, .result = alias(0)});
     }
     // `:var/take` hands an in-place form the cell's own array when nothing else holds it, so
     // the cell's content changes with what the form does (Builder::inPlaceRebindingOf).
@@ -222,16 +305,17 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
     // reads the cell, combines and stores (and returns the new value, a number or a string);
     // `acc = acc->append<v>` may append to the cell's own array and returns it.
     for (std::string_view name : names) {
-        if (!name.starts_with("op/assn")) {
+        if (!storesIntoCell(name)) {
             continue;
         }
-        const std::string uri = ":" + std::string(name);
+        const std::string uri       = ":" + std::string(name);
         const std::string_view rest = name.substr(std::string_view("op/assn").size());
         ResourceSpec spec;
         if (rest.empty() || rest == "_owned" || (rest.size() == 2 && rest[0] == '_')) {
             spec = ResourceSpec{.accesses = {cell(AccessMode::Write)}, .result = alias(1)};
         } else if (rest == "_append") {
-            spec = ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)};
+            spec =
+                ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)};
         } else {
             spec = ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}};
         }
@@ -241,7 +325,9 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
     for (const char *uri : {":io/print", ":io/println"}) {
         table.declareResources(
             uri,
-            ResourceSpec{.accesses = {ambientAccess("io:stdout", AccessMode::Write)}, .externalEffect = true});
+            ResourceSpec{
+                .accesses       = {ambientAccess("io:stdout", AccessMode::Write)},
+                .externalEffect = true});
     }
     table.declareResources(
         ":io/input",

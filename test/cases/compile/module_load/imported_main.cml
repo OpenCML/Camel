@@ -1,4 +1,4 @@
-// The `main` of an imported module is an ordinary function (design principles 2.11).
+// The `main` of an imported module is an ordinary function (design principles 10.1).
 import lib_main
 
 func main(): int sync {

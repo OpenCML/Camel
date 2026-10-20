@@ -58,9 +58,9 @@ concat(std::span<const TensorObject *const> inputs, int64_t axis, mm::IAllocator
 
 /// The bounds of a slice along an axis of `extent` elements, normalized: a negative bound
 /// counts from the end of the axis. A bound still outside [0, extent] after that is out of
-/// range: nullopt, and the operator faults (design principles 2.10: a `slice` out of bounds at
+/// range: nullopt, and the operator faults (design principles 3.9: a `slice` out of bounds at
 /// run time is a fault, as an index out of bounds is). An end before the start is the empty
-/// range, not a fault (2.11).
+/// range, not a fault (3.9).
 struct SliceRange {
     int64_t start;
     int64_t end;

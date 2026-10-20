@@ -216,7 +216,7 @@ class Walker {
     }
 
     /// The documentation of a declaration: the `///` lines right above it (design principles
-    /// 2.10).
+    /// 4.1).
     std::string docAbove(syn::TokenRef first) const {
         return first ? buffer_.docAbove(first.index()) : std::string();
     }
@@ -308,7 +308,7 @@ class Walker {
         case NK::FuncData:
             return funcData(cst::FuncData(node));
         case NK::FuncAnno:
-            // `@numeric(...)` names permissions, not values (design principles 2.13); only a
+            // `@numeric(...)` names permissions, not values (design principles 7.5); only a
             // decorator (`@name`, `@name<args>`) refers to a function.
             if (node.get<cst::ParentIdents>()) {
                 return;
@@ -413,7 +413,7 @@ class Walker {
         }
         std::vector<cst::IdentDef> names;
         if (single) {
-            // `import a from m` is `import { a } from m` (design principles 2.12).
+            // `import a from m` is `import { a } from m` (design principles 10.2).
             const auto local = single.get<cst::IdentDef>(1);
             names.push_back(local ? local : single.get<cst::IdentDef>(0));
         }

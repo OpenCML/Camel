@@ -11,7 +11,7 @@
 
 /// The whole content of the file.
 /// @effect reads a file
-/// @fails fault `FileOpenFailed` when the file cannot be opened; use try_read_text to handle that in the program
+/// @fails fault `FileOpenFailed` when the file cannot be opened; fault `InvalidArgument` for malformed UTF-8; use read_bytes for binary files
 /// @example read_text('notes.txt')    // the text of the file
 inner func read_text(path: string): string {
     return 'fs:read_text'
@@ -19,7 +19,7 @@ inner func read_text(path: string): string {
 
 /// The whole content of the file, or an error value.
 /// @effect reads a file
-/// @fails error `IOError` when the path is a directory, or the file cannot be opened or read
+/// @fails error `IOError` when the path is a directory, or the file cannot be opened or read; error `EncodingError` for malformed UTF-8
 /// @example try_read_text('notes.txt') !! ''    // the text, or '' when it cannot be read
 inner func try_read_text(path: string): string! {
     return 'fs:try_read_text'
@@ -29,8 +29,29 @@ inner func try_read_text(path: string): string! {
 /// @effect reads a file
 /// @fails fault `InvalidArgument` when offset or size is negative; fault `FileOpenFailed` or `FileSystemError` when the file cannot be opened or read
 /// @example read_chunk('notes.txt', 0, 16)    // the first 16 bytes
-inner func read_chunk(path: string, offset: int, size: int): string {
+inner func read_chunk(path: string, offset: int, size: int): Bytes {
     return 'fs:read_chunk'
+}
+
+/// The complete binary content, preserving every byte.
+/// @effect reads a file
+/// @example read_bytes('pixels.bin')
+inner func read_bytes(path: string): Bytes {
+    return 'fs:read_bytes'
+}
+
+/// Writes binary content, creating parent directories when needed.
+/// @effect writes a file
+/// @example write_bytes('pixels.bin', payload)
+inner func write_bytes(path: string, content: Bytes): void {
+    return 'fs:write_bytes'
+}
+
+/// Flushes a temporary in the same directory and atomically replaces the destination.
+/// @effect writes and replaces a file
+/// @example replace('checkpoint.bin', payload)
+inner func replace(path: string, content: Bytes): void {
+    return 'fs:replace'
 }
 
 /// Replaces the content of the file, creating it and its parent directories when needed.

@@ -3,9 +3,9 @@ import { runTest, check, checkEq, fixture } from '../../../tools/debugger/client
 const program = fixture('calls.cml')
 await runTest(async t => {
     const dap = await t.dap()
-    const launch = await dap.launch(program, { passes: ['std::macro', 'std::inline', 'std::nvm'], stopOnPassEntry: true })
+    const launch = await dap.launch(program, { passes: ['std::macro', 'std::opt::inline', 'std::nvm'], stopOnPassEntry: true })
     check(launch.launch.success, 'launch compiler debugging')
-    for (const [index, pass] of [[0, null], [1, 'std::macro'], [2, 'std::inline']]) {
+    for (const [index, pass] of [[0, null], [1, 'std::macro'], [2, 'std::opt::inline']]) {
         const stop = await dap.waitEvent('stopped')
         checkEq(stop?.body.reason, 'pause', 'compiler pause is distinct from a source step')
         const detail = await dap.waitEvent('camel/stopped')

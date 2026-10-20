@@ -18,15 +18,15 @@ if has perf; then
         f=$E/accepted/$s.cml
         exe=$(bash $T/cppbuild.sh $f 2>&1 | tail -1)
         exe_inl=""
-        CPPMEM_OUT=$CPPMEM_OUT/inl bash $T/cppbuild.sh $f std::inline >/dev/null 2>&1 && exe_inl=$CPPMEM_OUT/inl/$s
+        CPPMEM_OUT=$CPPMEM_OUT/inl bash $T/cppbuild.sh $f std::opt::inline >/dev/null 2>&1 && exe_inl=$CPPMEM_OUT/inl/$s
         echo "---- $s"
         $M --rounds $R --label "std::nvm" -- $C $f std::nvm
         $M --rounds $R --label "std::fvm" -- $C $f std::fvm
-        $M --rounds $R --label "std::inline std::fvm" -- $C $f std::inline std::fvm
+        $M --rounds $R --label "std::opt::inline std::fvm" -- $C $f std::opt::inline std::fvm
         $M --rounds $R --label "std::jit" -- $C $f std::jit
-        $M --rounds $R --label "std::inline std::jit" -- $C $f std::inline std::jit
+        $M --rounds $R --label "std::opt::inline std::jit" -- $C $f std::opt::inline std::jit
         [ -x "$exe" ] && $M --rounds $R --label "std::cpp, clang -O2" -- $exe
-        [ -n "$exe_inl" ] && [ -x "$exe_inl" ] && $M --rounds $R --label "std::inline std::cpp, clang -O2" -- $exe_inl
+        [ -n "$exe_inl" ] && [ -x "$exe_inl" ] && $M --rounds $R --label "std::opt::inline std::cpp, clang -O2" -- $exe_inl
     done
     echo "---- a01_fib with the scalar operators written as C++ operators (examples/handwritten/fib_direct.cpp)"
     direct=$(bash $T/cppbuild.sh $E/handwritten/fib_direct.cpp 2>&1 | tail -1)

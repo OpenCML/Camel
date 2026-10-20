@@ -78,11 +78,11 @@ with `--features all,modules`.
 | `comprehension` | `[e for x in xs if c]` with a pure element expression and condition (the condition is left out in two of five), over arrays of every element type, nested in any expression |
 | `nullable` | `T?`: functions that return `T?` (`if c then e else null`) and take one (`x ?? d`); `let o: T? = ...`; a plain value, `null` or a `T?` written where a `T?` is expected (argument, typed `let`, `return`); `a ?? d` and `a ?? b ?? d`, with a nullable right side too; a nullable value printed by itself |
 | `partial` | functions with one or two context parameters (`with <k: T>`), called in place (`f<w>(x)`), bound (`let g = f<w>`), and handed to `map` / `filter` / user functions as `f<w>` |
-| `ifnoelse` | `if c then e` as a statement of a sync block with one expression as its arm: a `println`, a call with effects, or a pure value of any type that is dropped (a literal or a name: a dropped call of a pure operator is UnusedPureResult since design principles 2.12) |
+| `ifnoelse` | `if c then e` as a statement of a sync block with one expression as its arm: a `println`, a call with effects, or a pure value of any type that is dropped (a literal or a name: a dropped call of a pure operator is UnusedPureResult since design principles 11.3) |
 | `modules` (not on by default) | two to four top-level `let`s of scalar types (each a pure expression over literals and the ones made before it), written in a shuffled order and used by functions and by `main`; and the program split into three modules: `<name>_vals` exports the values and the struct types, `<name>_funcs` exports a random set of functions that call only each other and imports what it uses from `<name>_vals`, the entry module imports both by name and keeps the rest. The reference is the same as for the program in one file: the values are evaluated once, before `main` |
-| `append` | `xs->append<v>` as an array expression (a new array; `xs` unchanged), and `acc = acc->append<v>` as a write of an array variable, also in `foreach` element functions, where it is the rebinding the compiler carries out in place (design principles 2.12) |
-| `loop` | loops (design principles 2.10, 2.13): `while` with a counter against a small bound, `for` over a generated array, `for ... while`, one or two values of state (the loop's value or one member of its tuple), struct and tuple states, and `let n = loop ... do sync { effects; next }` statements whose body runs its effects every round; the reference runs the condition first, then takes the element |
-| `opover` | operator overloads of the program on the struct `P` (`func operator +(a: P, b: P): P`, unary `-`, `*` of an int and a `P`, `<`, `[]`), used wherever a `P`, a `bool` or an `int` is generated, next to the built-in operators (design principles 2.12) |
+| `append` | `xs->append<v>` as an array expression (a new array; `xs` unchanged), and `acc = acc->append<v>` as a write of an array variable, also in `foreach` element functions, where it is the rebinding the compiler carries out in place (design principles 11.3) |
+| `loop` | loops (design principles 3.10): `while` with a counter against a small bound, `for` over a generated array, `for ... while`, one or two values of state (the loop's value or one member of its tuple), struct and tuple states, and `let n = loop ... do sync { effects; next }` statements whose body runs its effects every round; the reference runs the condition first, then takes the element |
+| `opover` | operator overloads of the program on the struct `P` (`func operator +(a: P, b: P): P`, unary `-`, `*` of an int and a `P`, `<`, `[]`), used wherever a `P`, a `bool` or an `int` is generated, next to the built-in operators (design principles 4.3) |
 
 The spelling of a program varies without touching the random stream (a seed still names the
 same program): `+`, `-` and `*` are written with both spaces, with none, or with one (`a - b`,
@@ -108,23 +108,23 @@ checks it on every generated and every reduced program:
 1. **Every effect is in an effect position.** An effect (`println`, an assignment, `foreach`,
    a call of a function that prints or writes, `reduce` with such an element function) is the
    expression of a statement of a `sync` block, and all enclosing blocks up to the function or
-   lambda body are `sync` blocks (principles 2.2). `if` and `match` pass the position on only to
+   lambda body are `sync` blocks (principles 3.4). `if` and `match` pass the position on only to
    arms written as `sync { ... }`, and a statement `if c then e` without `else` to the one
-   expression `e` that is its arm (2.10: the arm is evaluated as any arm is; only its value is
+   expression `e` that is its arm (3.7: the arm is evaluated as any arm is; only its value is
    dropped). Nowhere else can an effect appear, so "an effect outside a
-   sync block whose result is not used does not run" (2.1, misreadings 1 and 3) never decides
-   an output. A function that prints has a sync body of its own (2.4).
+   sync block whose result is not used does not run" (3.1, misreadings 1 and 3) never decides
+   an output. A function that prints has a sync body of its own (3.2).
 2. **One effect per statement.** An effectful call is a whole statement (`let r = f(...)`,
    `f(...)`) with pure arguments, so no order between two effects of one statement is assumed.
-3. **Element functions of `map` and `filter` are pure** (2.7: their elements have no order).
+3. **Element functions of `map` and `filter` are pure** (3.6: their elements have no order).
    `foreach` and `reduce` are ordered and may print and write.
 4. **Everything outside sync blocks is pure**, so whether and when it runs cannot be seen.
-5. **`wait` only appears in sync blocks**, where it changes nothing (2.6). The ordering that
+5. **`wait` only appears in sync blocks**, where it changes nothing (log 2.6). The ordering that
    `wait` gives outside sync blocks is not generated.
 6. **No fault can happen**: no division by zero, no index out of range, recursion depth at
    most 9 (far below 256), no macro evaluation deeper than the limit by construction of the
    depth arguments. A program whose reference evaluation meets one is discarded.
-7. **Pipelines are not assumed to commute** (principles section 4, misreading 9). Nothing is
+7. **Pipelines are not assumed to commute** (principles section 9, misreading 8). Nothing is
    compared between two pipelines. Each run is compared with the reference, and the claim
    checked is only "a standard pass must not make a determined program print something else".
    A pipeline may decline: a located diagnostic of a pass before anything ran is the outcome
@@ -187,8 +187,8 @@ seed back; when the generator changes the programs of existing seeds, raise
 present.
 
 The same plan runs `progen.py fixed`: every finding with a `fixed` key in `findings.json`, under
-the rewrite sequence it was found with and under `std::inline`, `std::opt`,
-`std::inline std::opt::dce`, `std::opt::simplify` and `std::specialize`, on the four schedulers. When a finding is fixed, give it that key.
+the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
+`std::opt::inline std::opt::dce`, `std::opt` and `std::opt::specialize`, on the four schedulers. When a finding is fixed, give it that key.
 
 ## What is not covered
 
@@ -197,8 +197,8 @@ the rewrite sequence it was found with and under `std::inline`, `std::opt`,
 - Effect order under parallelism: no effect is generated where the order is open (effects
   outside sync blocks, element functions of `map` / `filter` that print, `para` operators).
   `std::prl` is in the matrix, but only on programs whose output is determined.
-- `wait` outside sync blocks (ordering by the use of a variable, principles 2.6), and writes to
-  one variable from several places without `wait` (principles section 6, undecided).
+- `wait` outside sync blocks (ordering by the use of a variable, principles log 2.6), and writes to
+  one variable from several places without `wait` (principles section 15, undecided).
 - Effects that run on demand: nothing checks that an unused effect outside a sync block does
   *not* run.
 - Module-level variables (`var`), imports of whole modules and qualified names (`m::f`),
@@ -224,8 +224,8 @@ the rewrite sequence it was found with and under `std::inline`, `std::opt`,
   `null` (it used to be `return null`, which the warning ExitInUnusedBranch now reports);
   since the ruling of 2026-10-12 the arm may be one expression of any type, which the feature
   `ifnoelse` writes (`generate.VERSION` 3, with `comprehension`, `nullable` and `partial`).
-  `generate.VERSION` 5 adds `append` and `opover` (design principles 2.12).
-  `generate.VERSION` 6 adds `loop` (design principles 2.13). Seeds 1-100 under `--matrix full`:
+  `generate.VERSION` 5 adds `append` and `opover` (design principles 11.3).
+  `generate.VERSION` 6 adds `loop` (design principles 3.10). Seeds 1-100 under `--matrix full`:
   10100 cells, all agree with the reference (2026-10-15, `lane/loop`).
 - Integers near the 64-bit range (programs are discarded when a value leaves +-2^62), bit
   operators, `^`, `i32` / `f32`, `as` / `is`, slices with a step.

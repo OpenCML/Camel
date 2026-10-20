@@ -4,7 +4,7 @@
 # For each file, with the graph dumped and thrown away (`std::rgir > /dev/null`, nothing runs):
 #   malloc calls / bytes / peak (malloc_count.c), graph / perm / meta space use (CAMEL_GC_STATS),
 #   graphs / nodes / edges (std::stats), and wall time of the best of 5 runs.
-# With GM_PASSES="std::inline" (any pipeline) the same after those passes.
+# With GM_PASSES="std::opt::inline" (any pipeline) the same after those passes.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 so=/tmp/gm_malloc_count_$$.so

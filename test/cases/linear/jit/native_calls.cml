@@ -1,5 +1,5 @@
 /**
- * The two calls of a graph the JIT compiles (after std::inline: a function that only calls
+ * The two calls of a graph the JIT compiles (after std::opt::inline: a function that only calls
  * itself), in the shapes that went wrong: a self call with more arguments than are kept in
  * registers and with a constant argument; a self tail call that exchanges its parameters;
  * one that rotates six of them (staged on the machine stack); and tail calls in activations

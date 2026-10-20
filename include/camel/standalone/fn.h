@@ -21,16 +21,16 @@
  * Function values and `var` cells in the programs std::cpp writes
  * (docs/design/cpp-standalone/README.cn.md, 4 and 5.3).
  *
- * A function value is "a graph and the values it captured" (design principles, section 1).
+ * A function value is "a graph and the values it captured" (design principles 2.1).
  * Fn<R(A...)> is one pointer to a counted block that holds the code to run and the captured
  * values; calling it passes the count of open calls first, as every generated function takes
  * it. A function constant without captures is a block too (made once where it is used).
  *
  * A Cell<T> is a `var` variable that leaves the function that declares it (a closure captures
  * it, or it is passed as a `var` argument): every holder reads and writes the same value
- * (design principles 2.5: a capture of a variable is a reference). A variable that does not
+ * (design principles 3.5: a capture of a variable is a reference). A variable that does not
  * leave its function is a plain C++ local and needs none of this. A cell that holds a closure
- * that holds the cell is a cycle the count never frees (design principles 2.12 allows a back
+ * that holds the cell is a cycle the count never frees (design principles 10.5 allows a back
  * end not to collect it).
  */
 

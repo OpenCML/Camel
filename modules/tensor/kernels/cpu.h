@@ -24,7 +24,7 @@
  *
  * The environment variable CAMEL_TENSOR_ISA=generic hides every feature, so the
  * portable units run on any processor. Tests use it to check that the GEMM
- * gives the same bits in every unit (design principles 2.13).
+ * gives the same bits in every unit (design principles 7.1).
  */
 
 #pragma once

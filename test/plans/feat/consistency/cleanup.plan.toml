@@ -5,7 +5,7 @@ tags = ["feat", "consistency", "runtime", "cleanup"]
 desc = "What a program wrote before a fault or an exit() is there afterwards, on the four back ends"
 
 # Before a program is stopped by a fault its output is flushed and its external resources are
-# released (design principles 2.9). exit(n) leaves through the same path as a fault and as a
+# released (design principles 3.9). exit(n) leaves through the same path as a fault and as a
 # normal return: the scheduler is unwound and the process returns from main with the exit code.
 
 [defaults]

@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * The program-wide side of the GIR builder (design principles 2.11 "模块"; the graph model,
+ * The program-wide side of the GIR builder (design principles 10.1 "模块"; the graph model,
  * docs/design/graph-model/README.cn.md 3.9.4): one builder per program, and loading in three
  * steps.
  *
@@ -71,9 +71,8 @@ class Builder::UnitContext {
           tree_(builder.tree_), graph_(builder.currGraph_), nodeScope_(builder.nodeScope_),
           graphScope_(builder.graphScope_), decoratedScope_(builder.decoratedScope_),
           templateScope_(builder.templateScope_), bindings_(builder.typeBindings_),
-          depth_(builder.instantiationDepth_), waited_(builder.waited_),
-          synced_(builder.synced_), varied_(builder.varied_),
-          declaresVariable_(builder.declaresVariable_),
+          depth_(builder.instantiationDepth_), waited_(builder.waited_), synced_(builder.synced_),
+          varied_(builder.varied_), declaresVariable_(builder.declaresVariable_),
           calleeAllowed_(builder.genericCalleeAllowed_), lastSynced_(builder.lastSyncedNode_),
           refOrigin_(builder.refOrigin_), namespacePath_(builder.namespacePath_),
           usingFrames_(builder.usingFrames_) {
@@ -150,9 +149,7 @@ class Builder::UnitContext {
 
 namespace {
 /// The namespaces of a qualified name (`A::B` of `A::B::f`).
-std::vector<std::string> namespacesOf(const std::string &name) {
-    return Reference(name).paths();
-}
+std::vector<std::string> namespacesOf(const std::string &name) { return Reference(name).paths(); }
 } // namespace
 
 std::vector<std::string> Builder::namespacesOf(const TopLevelDeclaration &declaration) const {
@@ -224,10 +221,9 @@ void Builder::claimRootNodes(size_t firstNode) {
 
 // ---- Step one: declare ----
 
-void Builder::declareModule(
-    const module_ptr_t &module, GCT::Tree &tree, diagnostics_ptr_t diags) {
+void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnostics_ptr_t diags) {
     ensureRootGraph();
-    recorder_ = context_ ? context_->semanticRecorder() : nullptr;
+    recorder_  = context_ ? context_->semanticRecorder() : nullptr;
     auto &slot = units_[module.get()];
     if (!slot) {
         slot = std::make_unique<ModuleUnit>();
@@ -265,9 +261,9 @@ void Builder::declareModule(
         GCT::node_ptr_t expt = nullptr;
         for (size_t i = 0; i < root->size(); ++i) {
             const GCT::node_ptr_t &child = root->at(i);
-            auto declaration  = std::make_unique<TopLevelDeclaration>();
-            declaration->gct  = child;
-            declaration->unit = &unit;
+            auto declaration             = std::make_unique<TopLevelDeclaration>();
+            declaration->gct             = child;
+            declaration->unit            = &unit;
             if (child->type() == GCT::NodeKind::EXPT) {
                 expt = child;
                 continue;
@@ -291,7 +287,7 @@ void Builder::declareModule(
                 declaration->names = {child->name()};
                 if (!unit.entry) {
                     // Shown with its module wherever it is shown (dumps, diagnostics, the
-                    // debugger), unless it is the entry module's (design principles 2.12).
+                    // debugger), unless it is the entry module's (design principles 10.2).
                     declaration->graph->setName(qualifiedName(unit, child->name()));
                 }
                 topLevelFunctions_[declaration->graph.get()] = declaration.get();
@@ -382,6 +378,8 @@ void Builder::buildTopLevelValue(TopLevelDeclaration &declaration) {
     declaration.state = BuildState::Building;
     buildStack_.push_back(&declaration);
     UnitContext context(*this, *declaration.unit);
+    // A declaration of the top level: no decorator is around it (language reference 7.6).
+    AttrScope attrs(currentAttrs_, camel::core::attr::kNoAttrs);
     // Built in the namespace it is declared in, with the `using namespace` of its blocks.
     namespacePath_ = namespacesOf(declaration);
     UsingScope usings(*this, declaration.unit->tree->usingsOf(declaration.gct));
@@ -432,6 +430,7 @@ void Builder::ensureFunctionBuilt(const compile_graph_ptr_t &graph) {
     buildStack_.push_back(&declaration);
     {
         UnitContext context(*this, *declaration.unit);
+        AttrScope attrs(currentAttrs_, camel::core::attr::kNoAttrs);
         namespacePath_ = namespacesOf(declaration);
         UsingScope usings(*this, declaration.unit->tree->usingsOf(declaration.gct));
         try {
@@ -601,7 +600,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     // Step three: link.
     if (ok) {
         UnitContext context(*this, entry);
-        refOrigin_ = camel::source::kInvalidOriginId;
+        refOrigin_             = camel::source::kInvalidOriginId;
         const size_t firstNode = rootGraph_->draft().nodeSlotCount();
         try {
             // Every direct call gets the captures of its callee; then the entry call, made
@@ -623,7 +622,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     if (ok) {
         settleEffectfulGraphs();
         // Before the graphs are encoded: the reads whose value cannot be kept leave the mark
-        // that lets `acc = acc->append<v>` append in place (design principles 2.12).
+        // that lets `acc = acc->append<v>` append in place (design principles 11.3).
         markNonRetainingReads();
         for (ModuleUnit *unit : order) {
             UnitContext context(*this, *unit);

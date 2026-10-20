@@ -366,7 +366,7 @@ Value lowerConcat(const LowerContext &ctx) {
 /**
  * slice(t, axis, start, end[, step]). The axis and the step are constants of the model. A
  * start or an end outside the axis (after a negative one is counted from the end) is a fault in
- * Camel (design principles 2.10), while the ONNX Slice clamps it, so the exporter never relies
+ * Camel (design principles 3.9), while the ONNX Slice clamps it, so the exporter never relies
  * on Slice for the bounds:
  *
  *   - constant bounds on an axis of known extent are checked here (proved in range, or the
@@ -433,7 +433,7 @@ Value lowerSlice(const LowerContext &ctx) {
             "'tensor:slice': its bounds on axis {} cannot be proved within the axis at export "
             "time, and it is on an arm of a branch on a model-dependent condition, which the "
             "exported model computes whether or not it is taken; an ONNX Slice there would "
-            "clamp bounds that Camel faults on (design principles 2.10). Prove the bounds with "
+            "clamp bounds that Camel faults on (design principles 3.9). Prove the bounds with "
             "constants, or move the slice out of the branch",
             at));
     }

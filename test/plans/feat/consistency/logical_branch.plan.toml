@@ -2,7 +2,7 @@ id = "consistency.logical_branch"
 order = 362
 tier = "feat"
 tags = ["feat", "consistency", "compile", "branches"]
-desc = "`&&` and `||` are branches (design principles 2.11): the right side is an arm, evaluated only when the left side does not decide; `&`, `|`, `&=`, `|=` evaluate both sides; both sides of `&&` / `||` are bool."
+desc = "`&&` and `||` are branches (design principles 4.2): the right side is an arm, evaluated only when the left side does not decide; `&`, `|`, `&=`, `|=` evaluate both sides; both sides of `&&` / `||` are bool."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -27,19 +27,19 @@ assert(input.stderr === '', 'no diagnostic: ' + input.stderr)
 
 [[tests]]
 name = "logical_branch.short_circuit.passes"
-desc = "The same program through std::inline, std::opt, std::jit: the passes keep the right side an arm."
+desc = "The same program through std::opt::inline, std::opt, std::jit: the passes keep the right side an arm."
 kind = "behavior"
 case = "../../../cases/consistency/logical/short_circuit.cml"
-args = ["${case}", "std::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout_starts_with = "a1\nfalse\nb1\nb2\nfalse\nc1\ntrue\nd1\nd2\ntrue\ne1\ne2\nfalse\n"
 
 [[tests]]
 name = "logical_branch.short_circuit.simplify"
-desc = "The same program through std::opt::simplify, std::fvm."
+desc = "The same program through std::opt, std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/logical/short_circuit.cml"
-args = ["${case}", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 expect_stdout_starts_with = "a1\nfalse\nb1\nb2\nfalse\nc1\ntrue\nd1\nd2\ntrue\ne1\ne2\nfalse\n"
 
@@ -56,10 +56,10 @@ expect_stdout_contains = ["[even digit, odd digit or far, other, odd digit or fa
 
 [[tests]]
 name = "logical_branch.values.inline"
-desc = "The same program through std::inline, std::fvm."
+desc = "The same program through std::opt::inline, std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/logical/pure.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 expect_stdout_contains = ["[even digit, odd digit or far, other, odd digit or far, other]", "true false false true\ntrue false false false\ntrue true true false\ntrue false false false\ntrue true true false\ntrue"]
 

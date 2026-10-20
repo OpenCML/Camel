@@ -1,8 +1,8 @@
 /**
- * progen finding F18 (branch arm). `std::inline` makes the body of a function called only in the
+ * progen finding F18 (branch arm). `std::opt::inline` makes the body of a function called only in the
  *   arm of `if false` run: the index it reads is out of range there, and the run fails with `Array
  *   index out of bounds` (exit 1).
- * Pipeline: std::inline std::nvm
+ * Pipeline: std::opt::inline std::nvm
  * Expected output: (nothing)
  * Actual: RUN_ERROR RuntimeDiag::RuntimeError: An error has occurred: Array index out of bounds..
  * Reduced by test/tools/progen from seed 5 (generator version 1, all features).

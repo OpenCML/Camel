@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -170,6 +170,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::InvalidPassParameter,
+            {
+                "InvalidPassParameter",
+                "Invalid pass specification '{0}': {1}.",
+                "A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the "
+                "values are constant expressions (bool, int, float or string). The message names "
+                "the parameter, the type it has and the parameters the pass declares.",
+            },
+        },
+        {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",
@@ -261,7 +271,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "ConversionOutOfRange",
                 "Cannot convert {0} to {1}: {2}.",
                 "A conversion whose value does not fit the target type is a fault (design "
-                "principles 2.10): a float that is NaN, infinite or beyond the integer's range, "
+                "principles 5.1): a float that is NaN, infinite or beyond the integer's range, "
                 "or an integer beyond the range of a narrower integer type. Check the value "
                 "before converting it, or clamp it (min, max) to the range of the target.",
             },

@@ -1,4 +1,4 @@
-// Converting a value to its own type is legal and does nothing (design principles 2.12, Q11 of
+// Converting a value to its own type is legal and does nothing (design principles 5.1, Q11 of
 // docs/design/graph-model): `xs as int[]` for `xs: int[]` passes exactly as a conversion
 // through an alias does, for arrays, tuples and structs, literals included.
 type A = int[]

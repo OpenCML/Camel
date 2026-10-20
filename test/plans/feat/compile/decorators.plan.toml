@@ -1,0 +1,154 @@
+id = "compile.decorators"
+order = 215
+tier = "feat"
+tags = ["feat", "compile", "decorators", "attributes", "semantics"]
+desc = "Node attributes and the decorators that grant them; decorators on blocks (language reference 7.6). A library operator declared to grant an attribute (OperatorTable::declareGrant), named by a decorator with constant with-arguments, is applied as the graph is built: the nodes written in the function or block get the attribute, the arms, loop bodies and lambdas written there too, no function they call. Each attribute key is registered by its library with the kind of its values (here a mark, flags of any width, an integer) and its rules: how nested grants combine and whether, and to what, two nodes that differ in it may be merged. Rewrites keep the attributes; CSE follows the merge rules. A decorated block is the block as a function of no parameters called where it is written, and behaves as the block without decorators. The decorators come from the test-only builtin module test_attrs (CAMEL_ENABLE_TEST_PASSES)."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
+[[tests]]
+name = "grants.results"
+desc = "Attributes only allow a library to do something else: the four back ends print the same results with them."
+kind = "behavior"
+case = "../../../cases/compile/decorators/grants.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "7.0\n8.375\n-0.1428571428571429\n14\n4.0 5.0 6.0\n15.0\n"
+
+[[tests]]
+name = "grants.graph"
+desc = "std::gir shows `attrs` on the nodes that have any (spans are 0-based lines): a decorated function's own nodes, its lambda, arms and loop body; a block's flags unite with the function's (bits 1 and 70: no 64-bit cap); an integer takes the block's value (inner wins); two decorators on a block both apply; a function they call, the code outside the block, an outer decorator applied as it runs and a value not given as the program is built grant nothing."
+kind = "behavior"
+case = "../../../cases/compile/decorators/grants.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const nodes = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"') || l.includes('type="LOOP"'))
+const at = (line) => nodes.filter((l) => l.includes(`span="${line}:`) && !l.includes('label="test_attrs:'))
+const attrs = (l) => { const m = l.match(/attrs="([^"]*)"/); return m ? m[1] : '' }
+const all = (line, value) => {
+  const found = at(line)
+  assert(found.length > 0, `no node at line ${line}`)
+  for (const l of found) assert(attrs(l) === value, `line ${line}: attrs="${attrs(l)}", expected "${value}": ${l}`)
+}
+all(12, '')                          // plain: called from decorated code
+all(17, 'test.mark')                 // marked
+all(22, 'test.flags={1}')            // the lambda in nested
+all(23, 'test.flags={1}')            // the condition and the arms of the if
+all(26, 'test.flags={1, 70}')        // the block: its grant and the function's
+all(31, '')                          // blocky outside its block
+all(34, 'test.flags={3}, test.mark') // two decorators on the block
+all(40, 'test.mark')                 // the loop and its body
+all(46, 'test.mark')                 // the innermost decorator
+all(53, '')                          // under a decorator applied as it runs
+all(59, '')                          // a value not given as the program is built
+all(64, 'test.level=3')              // leveled
+all(67, 'test.level=5')              // its block: the inner value
+}
+"""
+
+[[tests]]
+name = "grants.inline"
+desc = "std::opt::inline keeps each node's own attributes: the inlined body of plain has none in its decorated caller, the inlined lambda keeps its flags."
+kind = "behavior"
+case = "../../../cases/compile/decorators/grants.cml"
+args = ["${case}", "std::opt::inline", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const opers = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
+const at = (line) => opers.filter((l) => l.includes(`span="${line}:`))
+assert(at(12).length > 0 && at(12).every((l) => !l.includes('attrs=')), 'inlined plain must have no attributes')
+assert(at(22).length > 0 && at(22).every((l) => l.includes('attrs="test.flags={1}"')), 'the inlined lambda keeps its flags')
+assert(at(26).every((l) => l.includes('attrs="test.flags={1, 70}"')), 'the block keeps its attributes')
+}
+"""
+
+[[tests]]
+name = "grants.json"
+desc = "std::jgir gives a node's attributes as an object of key names and values: true for a mark, the bit indices of flags."
+kind = "behavior"
+case = "../../../cases/compile/decorators/cse.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+expect_stdout_contains = ["\"attrs\": {", "\"test.mark\": true", "\"test.flags\": ["]
+
+[[tests]]
+name = "cse"
+desc = "std::opt::cse asks each attribute's key: in `twice` a product with test.mark and one without stay two (a mark merges only with a mark); in `relaxed` the products with flags {1} and {1, 2} become one, with the intersection {1}."
+kind = "behavior"
+case = "../../../cases/compile/decorators/cse.cml"
+args = ["${case}", "std::opt::cse", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const muls = input.normalized.stdout.split('\n').filter((l) => l.includes('label=":op/mul_d"'))
+assert(muls.length === 3, `expected 3 products after cse, got ${muls.length}`)
+assert(muls.filter((l) => l.includes('attrs="test.mark"')).length === 1, 'one product has test.mark')
+assert(muls.filter((l) => !l.includes('attrs=')).length === 1, 'one product has none')
+assert(muls.filter((l) => l.includes('attrs="test.flags={1}"')).length === 1, 'the merged product keeps the intersection')
+}
+"""
+
+[[tests]]
+name = "cse.result"
+desc = "The program after std::opt::cse prints the same result."
+kind = "behavior"
+case = "../../../cases/compile/decorators/cse.cml"
+args = ["${case}", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "18.0\n9.0\n"
+
+[[tests]]
+name = "blocks"
+desc = "Each block is written without and with a decorator (applied as it runs, or as the program is built) and prints the same on the four back ends: the value of the block and its `return`, a `return` in the middle of a function, its scope, a decorator of the program. In a sync body a block that is not `sync` and whose value nothing takes runs none of its statements, decorated or not (design principles 3.4); a `sync` block runs them, and writes a variable of the function."
+kind = "behavior"
+case = "../../../cases/compile/decorators/blocks.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "20 20\n7 7\nplain after\ndecorated after\ngranted after\nplain a\nplain b\nplain after\ndecorated a\ndecorated b\ndecorated after\n15 15\n4\n10\n"
+
+[[tests]]
+name = "blocks.no_declaration_warning"
+desc = "A decorated block that writes a variable of its function is not a function the program declares: no CapturedWriteInAsyncFunction."
+kind = "behavior"
+case = "../../../cases/compile/decorators/blocks.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_output_not_contains = ["CapturedWriteInAsyncFunction"]
+
+[[tests]]
+name = "blocks.trees"
+desc = "The AST keeps a block's decorators; the GCT lowers the block to a call of the function it is."
+kind = "behavior"
+case = "../../../cases/compile/decorators/blocks.cml"
+args = ["inspect", "-a", "-c", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["FuncAnno*", "FUNC: (decorated block)"]
+
+[[tests]]
+name = "block_mismatch"
+desc = "A decorator that does not accept a function of no parameters is an ordinary error of its call, at the decorator."
+kind = "negative"
+case = "../../../cases/compile/decorators/block_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["NoMatchingFunction", "block_mismatch.cml:12:"]
+
+[[tests]]
+name = "test_module_needs_the_environment"
+desc = "test_attrs exports its decorators only under CAMEL_ENABLE_TEST_PASSES."
+kind = "negative"
+case = "../../../cases/compile/decorators/cse.cml"
+args = ["${case}"]
+envs = []
+expect_exit = 1
+expect_output_contains = ["ImportNameNotExported"]

@@ -1,0 +1,21 @@
+// Signatures of the tensor module that belong to the data model of the language rather than to
+// the numerics: the conversion between tensors and `Bytes` (design principles 11.1). The
+// rest of the module is documented by its own reference. These declarations are reference
+// metadata, checked against the registered operators of `from_bytes` and `to_bytes` only.
+
+/// The little-endian bytes of the elements of a tensor, in row-major order.
+/// @pure
+/// @example to_bytes(new([1.0, 2.0]))
+inner func to_bytes(t: Tensor): Bytes {
+    return 'tensor:to_bytes'
+}
+
+/// A tensor of the given shape made of little-endian elements. The element type is the explicit
+/// type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result;
+/// it is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
+/// @pure
+/// @fails fault `InvalidArgument` when the number of bytes does not fit the shape and the element type
+/// @example from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])
+inner func from_bytes(bytes: Bytes, shape: int[]): Tensor {
+    return 'tensor:from_bytes_*'
+}

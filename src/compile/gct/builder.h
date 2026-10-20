@@ -13,18 +13,18 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
-#include <set>
-#include <unordered_set>
 #include <iostream>
 #include <memory>
 #include <regex>
+#include <set>
 #include <string>
+#include <unordered_set>
 
 #include "camel/common/scope.h"
 #include "camel/compile/gct.h"
@@ -32,6 +32,7 @@
 #include "camel/core/error/abort.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/module/module.h"
+#include "camel/core/type/enum.h"
 #include "camel/parse/ast.h"
 
 namespace camel::compile::gct {
@@ -76,7 +77,7 @@ class Builder {
     // type is reported at all.
     std::unordered_set<std::string> poisonedTypes_;
     bool wholeImportFailed_ = false;
-    // Namespaces (design principles 2.12). The namespace path of the top-level declaration
+    // Namespaces (design principles 10.2). The namespace path of the top-level declaration
     // being lowered (`A::B` for `A::B::f`): a type name written in it is looked up there, then
     // in the enclosing namespaces, then at the top level. The `using namespace` in force, one
     // frame per block (the module's, a namespace block's, a block of a function body). The
@@ -91,7 +92,7 @@ class Builder {
     Type *lookupType(const Reference &ref, const AST::node_ptr_t &ast);
     /// `ref`, written at `ast`, names the type `remote` of the module `source`, which is
     /// not declared yet. When that declaration is in progress further up, the types form a
-    /// cycle across modules: reported with the cycle (ModuleTypeCycle; design principles 2.13).
+    /// cycle across modules: reported with the cycle (ModuleTypeCycle; design principles 10.1).
     /// When it is on a cycle reported already, the failure follows from that report and is not
     /// reported again. Either way BuildAbortException; otherwise nothing happens.
     void rejectTypeCycle(
@@ -120,21 +121,21 @@ class Builder {
     std::pair<data_ptr_t, bool>
     extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
-    // Type variables and type functions (design principles 2.9; camel/core/type/typevar.h).
+    // Type variables and type functions (design principles 5.6; camel/core/type/typevar.h).
     // `typeas T` binds a variable only among the parameters of a function declaration: the
     // builder notes that the function type it is about to visit is such a signature
     // (declSignature_, set from funcDeclPending_), allows binding while it visits the
     // parameters (typeasAllowed_), and records what was bound (declaredTypeVars_) so the
     // declaration can be checked. A type function may only appear as the base of
     // `Name<...>` (typeFunctionBase_).
-    // The numeric permissions in force where the builder is (design principles 2.13): the
+    // The numeric permissions in force where the builder is (design principles 7.5): the
     // union of the `@numeric(...)` grants of the blocks and functions it is inside. Every EXEC
     // is made with them (makeExec).
     uint8_t numericPermissions_ = 0;
     node_ptr_t makeExec(bool synced = false, bool operands = false);
 
-    bool funcDeclPending_  = false;
-    bool declSignature_    = false;
+    bool funcDeclPending_ = false;
+    bool declSignature_   = false;
     // The function type visited next is the signature of a function being defined (a
     // FuncData): it is built open (camel/core/type/composite/func.h), so that the graph
     // builder can set the result type the body decides when none is written. Every other
@@ -145,7 +146,7 @@ class Builder {
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
 
-    // `any` is not a type a program can write (design principles 2.11, 2.12): the name is
+    // `any` is not a type a program can write (design principles 5.10): the name is
     // not in the type scope, and visitRefType reports it with the form recommended for the
     // position it was written in. The visitors of those positions set this around the
     // type they visit (TypePositionGuard in builder.cpp). A type nested in another one is
@@ -214,23 +215,41 @@ class Builder {
     node_ptr_t visitStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitDataDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncDecl(const AST::node_ptr_t &ast);
-    /// `func operator <symbol>(...)` (design principles 2.12): reports, and aborts, an operator
+    /// `func operator <symbol>(...)` (design principles 4.3): reports, and aborts, an operator
     /// that cannot be overloaded (OperatorNotOverloadable) and a declaration that does not fit
     /// its operator: the number of parameters, a with-parameter or a var parameter
     /// (OperatorOverloadInvalid). `funcData` is the declaration's FuncData, `decl` the whole.
     void checkOperatorDeclaration(
         const std::string &symbol, const AST::node_ptr_t &funcData, const AST::node_ptr_t &decl);
     node_ptr_t visitTypeDecl(const AST::node_ptr_t &ast);
+    /// The parameters of a type declaration, as type variables in the scope pushed around its
+    /// right-hand side. Reports a parameter that is repeated or that denotes a type already.
+    void bindTypeParameters(
+        const AST::TypeDeclLoad *decl, const AST::node_ptr_t &ast, const std::string &name);
+    /// `type Name<params> = enum { ... }`: the declaration is created and its name is in scope
+    /// before the variants are read, so that a field can hold the enum being declared.
+    camel::core::type::Type *
+    declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl);
+    /// The variants of the declaration, with the field types of `instance` (the written ones
+    /// for the declaration's own instance).
+    std::vector<camel::core::type::EnumVariant>
+    buildEnumVariants(const AST::node_ptr_t &ast, const camel::core::type::EnumType *instance);
     node_ptr_t visitUsingNamespaceDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitExprStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitExitStmt(const AST::node_ptr_t &ast);
-    node_ptr_t visitStmtBlock(const AST::node_ptr_t &ast);
+    /// A block; one written with decorators is lowered by visitDecoratedBlock unless
+    /// `decorators` is false (it lowers the block itself).
+    node_ptr_t visitStmtBlock(const AST::node_ptr_t &ast, bool decorators = true);
+    /// `@d { ... }` (language reference 7.6): LINK(0)[FUNC (decorated block)[TYPE, EXEC,
+    /// ANNO...]], the block as a function of no parameters called where it is written. The
+    /// EXEC is the block lowered as without decorators (its scope, its exits, its value).
+    node_ptr_t visitDecoratedBlock(const AST::node_ptr_t &ast);
 
     // ast/data.h
     node_ptr_t visitData(const AST::node_ptr_t &ast);
     node_ptr_t visitUnaryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitBinaryExpr(const AST::node_ptr_t &ast);
-    /// `a && b` / `a || b`: the branch they stand for (design principles 2.11).
+    /// `a && b` / `a || b`: the branch they stand for (design principles 4.2).
     node_ptr_t visitLogicalExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitReservedExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitIfExpr(const AST::node_ptr_t &ast);
@@ -240,7 +259,7 @@ class Builder {
     node_ptr_t visitLiteral(const AST::node_ptr_t &ast);
     node_ptr_t visitArrayData(const AST::node_ptr_t &ast);
     /// `[e for x in xs if c]`: `xs->filter<(x) => c>->map<(x) => e>` (design principles
-    /// 2.10), built as those two calls are. The type of `x` is the element type of `xs`,
+    /// 4.2), built as those two calls are. The type of `x` is the element type of `xs`,
     /// which only the GIR builder knows: each of the two functions is written with a type
     /// variable for it and is instantiated where `map` / `filter` receive it.
     node_ptr_t visitComprehension(const AST::node_ptr_t &ast);

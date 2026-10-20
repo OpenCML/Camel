@@ -3,12 +3,12 @@
 This is the contract between the collector and every piece of C++ that touches run-time values:
 operators of the modules under `modules/`, the built-in operators, the schedulers, the macro
 evaluator and the passes. It will become part of the documentation of the public module
-interface. It implements the ruling of `docs/design-principles.cn.md` 2.9: Camel-native objects
+interface. It implements the ruling of `docs/design-principles.cn.md` 10.5: Camel-native objects
 may be managed by a generational collector and may move; foreign memory is owned by a
 Camel-native object and stays outside the movable heap; **a module does not keep a raw pointer
 to a Camel object across calls.**
 
-The rules hold for both collectors (`--gc mark-sweep`, the default, and `--gc generational`).
+The rules hold for both collectors (`--gc generational`, the default, and `--gc mark-sweep`).
 Under mark-sweep an object keeps its address, so a violation of rules 2, 3 and 6 goes unnoticed
 until the object is freed; under the generational collector it reads moved memory. Write code
 for the generational collector.
@@ -331,7 +331,7 @@ a stale pointer that is never used again; code that no test runs.
   Converting at once (`decode(s) as T`) was not safe either, contrary to what this section once
   said: `CAST` is a pure node without a control edge, so a back end runs it where its result is
   used, not right after `decode` (`docs/design/any-typing/examples/t21_cast_at_once.cml` failed
-  on all four back ends under forced collection). Design principles 2.11 and 2.12 settled it:
+  on all four back ends under forced collection). Design principles 5.10 settled it:
   `any` is removed from the language and from the type system, `json.decode` gives a `Json`
   (`modules/json/value.h`: a kind and a payload whose type the kind fixes, traced like a
   function value or a tensor), and a commit refuses a graph with an undetermined type.

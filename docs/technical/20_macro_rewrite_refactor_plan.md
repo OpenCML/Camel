@@ -2,7 +2,7 @@
 
 > **先读 [`../design-principles.cn.md`](../design-principles.cn.md)。** 它是语言作者对 Camel 根本定位与执行模型的规范性说明：与实现或其他文档冲突时以它为准；它没有覆盖或标为“未定”的问题，向语言作者提问，不要自行选择。
 >
-> 本文是 `std::macro` 的重构计划。语义以设计原则第 3 节为准：`std::macro` 是可选的遍，不定义阶段；macro 函数体的副作用按普通函数处理。
+> 本文是 `std::macro` 的重构计划。语义以设计原则第 8 节为准：`std::macro` 是可选的遍，不定义阶段；macro 函数体的副作用按普通函数处理。
 
 本文记录 `std::macro` 的系统性重构方案。目标不是“修复某一个宏样例”，而是把它重新纳入当前的 Graph Rewrite API 与运行时执行模型，使其成为一个长期稳定的图重写遍实现。
 
@@ -17,7 +17,7 @@
 - 它也不是新的 pass 分类
 - 它是一个 **基于运行时执行语义的图重写遍**
 
-换句话说，`std::macro` 与 `std::inline` 一样属于 rewrite pass；与 `NodeVM` 的关系则是：
+换句话说，`std::macro` 与 `std::opt::inline` 一样属于 rewrite pass；与 `NodeVM` 的关系则是：
 
 - `NodeVM` 消费图并产生运行结果
 - `std::macro` 借用相同的图执行语义，对满足条件的子图做求值，然后把结果重新物化回 GIR
@@ -238,7 +238,7 @@ CAST / COPY / FILL / ACCS / BRCH / JOIN / CALL / FUNC / OPER 这些节点的解�
 
 这意味着：
 
-- `std::macro` 不能直接照搬 `std::inline` 的“先切换到 draft graph，再在 draft graph 上执行”的模式
+- `std::macro` 不能直接照搬 `std::opt::inline` 的“先切换到 draft graph，再在 draft graph 上执行”的模式
 - 在共享执行内核或 source/draft node correspondence 补齐之前，`macro` 仍然只能基于 finalized graph 求值
 
 因此后续迁移时必须显式区分：
@@ -257,7 +257,7 @@ CAST / COPY / FILL / ACCS / BRCH / JOIN / CALL / FUNC / OPER 这些节点的解�
 目标：
 
 - 把 `inline` 当前私有的 graph materialization 机制沉到公共层
-- 让 `std::macro` 与 `std::inline` 使用同一套 editable graph tree API
+- 让 `std::macro` 与 `std::opt::inline` 使用同一套 editable graph tree API
 
 验收标准：
 

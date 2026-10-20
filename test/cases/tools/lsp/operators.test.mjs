@@ -1,4 +1,4 @@
-// Operator overloads of the program (design principles 2.12): hover and definition on the
+// Operator overloads of the program (design principles 4.3): hover and definition on the
 // operator of a call that took one, the declaration in the outline, the formatter's spelling.
 
 import { withServer, check, checkEq, fmtRange, marked } from '../../../tools/lsp/client.mjs'

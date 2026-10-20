@@ -4,17 +4,19 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Exact structural keys before CUDA printing, bounded LRU and per-call storage plans.
 #include "tiles/internal/codegen_cache.h"
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 #include <list>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,6 +27,7 @@ constexpr size_t maxEntries = 32, maxRetainedBytes = 16 * 1024 * 1024;
 
 class Key {
     std::string value;
+    std::vector<const LoopRegion *> activeLoops;
 
   public:
     void number(uint64_t n) {
@@ -103,39 +106,69 @@ class Key {
         indirect(v.output.indirect);
         number(v.law);
     }
+    void program(const Program &p, bool embeddedConstants = false) {
+        number(p.contracts.size());
+        for (const auto &contract : p.contracts) {
+            text(contract.uri);
+            number(contract.key.has_value());
+            number(reinterpret_cast<uintptr_t>(contract.declaration));
+            if (contract.key)
+                text(contract.key->toString());
+        }
+        number(p.nodes.size());
+        for (const auto &n : p.nodes) {
+            text(n.op);
+            number(static_cast<uint64_t>(n.dtype));
+            number(n.permissions);
+            number(n.semantic);
+            numbers(n.shape);
+            numbers(n.inputs);
+            numbers(n.attributes); // Includes graph constant64 literal bits.
+            number(n.results.size());
+            for (const auto &result : n.results) {
+                numbers(result.shape);
+                number(static_cast<uint64_t>(result.dtype));
+            }
+            number(n.offset);
+            numbers(n.strides);
+            number(n.indexing.has_value());
+            if (n.indexing)
+                indexed(*n.indexing);
+            // Outer inputs are invocation buffers and remain outside the key.
+            // A loop body's nonempty input payload is embedded in CUDA, whereas
+            // its deferred state/capture ports have no payload to serialize.
+            if (embeddedConstants) {
+                number(n.data.size());
+                for (const auto &scalar : n.data)
+                    number(std::bit_cast<uint32_t>(scalar));
+                number(n.scalarBits.has_value());
+                if (n.scalarBits)
+                    number(*n.scalarBits);
+            }
+            number(bool(n.loop));
+            if (n.loop) {
+                if (std::find(activeLoops.begin(), activeLoops.end(), n.loop.get()) !=
+                    activeLoops.end())
+                    throw std::runtime_error("tiles source cache: cyclic loop body");
+                activeLoops.push_back(n.loop.get());
+                numbers(n.loop->domain);
+                numbers(n.loop->stateInputs);
+                numbers(n.loop->captureInputs);
+                numbers(n.loop->nextStates);
+                program(n.loop->body, true);
+                activeLoops.pop_back();
+            }
+        }
+        numbers(p.outputs);
+    }
     std::string finish() { return std::move(value); }
 };
 std::string planKey(const Program &p, ScheduleOptions options) {
     Key key;
-    key.number(5); // Process-local key schema; not a persistent semantic fingerprint.
+    key.number(8); // Process-local key schema; not a persistent semantic fingerprint.
     key.number(options.fuseElementwise);
     key.number(options.parallelMax);
-    key.number(p.contracts.size());
-    for (const auto &contract : p.contracts) {
-        key.text(contract.uri);
-        key.number(contract.key.has_value());
-        key.number(reinterpret_cast<uintptr_t>(contract.declaration));
-        if (contract.key)
-            key.text(contract.key->toString());
-    }
-    key.number(p.nodes.size());
-    for (const auto &n : p.nodes) {
-        key.text(n.op);
-        key.number(static_cast<uint64_t>(n.dtype));
-        key.number(n.permissions);
-        key.number(n.semantic);
-        key.numbers(n.shape);
-        key.numbers(n.inputs);
-        key.numbers(n.attributes); // Includes graph constant64 literal bits.
-        key.number(n.offset);
-        key.numbers(n.strides);
-        key.number(n.indexing.has_value());
-        if (n.indexing)
-            key.indexed(*n.indexing);
-        // data/scalarBits and resident ownership only supply runtime buffer
-        // contents. Physical allocation slots are recomputed on every call.
-    }
-    key.numbers(p.outputs);
+    key.program(p);
     return key.finish();
 }
 struct Entry {
@@ -146,7 +179,7 @@ struct Entry {
                        launches.capacity() * sizeof(Launch);
         for (const auto &s : launches)
             total += s.name.capacity() + s.implementation.capacity() +
-                     s.members.capacity() * sizeof(size_t);
+                     (s.members.capacity() + s.outputs.capacity()) * sizeof(size_t);
         return total;
     }
 };

@@ -1,5 +1,5 @@
 // A value that cannot be null may be compared with `null`: the result is fixed, and the
-// compiler warns (design principles 2.13).
+// compiler warns (design principles 3.8).
 func main(): int sync {
     let a = 1
     println(a == null)          // line 5: warned, always false

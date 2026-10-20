@@ -1,4 +1,4 @@
-// Modules that import each other (design principles 2.11): functions calling each other
+// Modules that import each other (design principles 10.1): functions calling each other
 // across the two, values of one used by the other in both directions (without a cycle), and
 // a type of one used by the other.
 import mutual_a

@@ -328,7 +328,7 @@ name = "unknown_pass_after_rewrite_and_scheduler"
 desc = "The first unknown name is the one reported, wherever it is written: after a rewrite pass and a scheduling pass, in text mode. Nothing runs."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_direct_user.cml"
-args = ["${case}", "std::inline", "std::fvm", "std::typo_one", "std::typo_two"]
+args = ["${case}", "std::opt::inline", "std::fvm", "std::typo_one", "std::typo_two"]
 expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout
@@ -388,13 +388,13 @@ name = "passes_never_run_text"
 desc = "Passes written after a scheduling pass can never run. The program still runs; before it does, the warning PassesNeverRun on stderr names the consuming pass and the passes after it."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_direct_user.cml"
-args = ["${case}", "std::nvm", "std::inline", "std::fvm"]
+args = ["${case}", "std::nvm", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
 const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
-assert(lines[0].includes("[Warn]: Pass 'std::nvm' consumes the graph, so 'std::inline', 'std::fvm' written after it will not run."), lines[0])
+assert(lines[0].includes("[Warn]: Pass 'std::nvm' consumes the graph, so 'std::opt::inline', 'std::fvm' written after it will not run."), lines[0])
 assert(lines[0].endsWith('(name=RuntimeDiag::PassesNeverRun, code=0x0410000F)'), lines[0])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -425,7 +425,7 @@ name = "passes_last_consumer_quiet"
 desc = "A consuming pass written last is the normal pipeline: no warning."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_direct_user.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 verify_script = """
 assert(input.stderr === '', 'stderr: ' + input.stderr)

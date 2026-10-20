@@ -1,5 +1,5 @@
 /**
- * `xs = xs->sort` binds the variable to a new, sorted array (design principles 2.12, 2.13).
+ * `xs = xs->sort` binds the variable to a new, sorted array (design principles 11.3).
  * When nothing but the variable refers to the old array it is sorted in place; when something
  * else does (here `before`, `kept`, the caller's array), that keeps its value. The forms: a
  * local variable, the call written `sort(xs)`, another sorting operator, a `var` parameter, a

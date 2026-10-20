@@ -302,8 +302,8 @@ def cmd_findings(args):
 
 
 # Rewrite sequences every fixed finding is run under besides its own (on all four schedulers).
-FIXED_ALSO = [["std::inline"], ["std::opt"], ["std::inline", "std::opt::dce"], ["std::opt::simplify"],
-              ["std::specialize"]]
+FIXED_ALSO = [["std::opt::inline"], ["std::opt"], ["std::opt::inline", "std::opt::dce"],
+              ["std::opt::specialize"]]
 
 
 def cmd_fixed(args):

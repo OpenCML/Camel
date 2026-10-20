@@ -1,0 +1,22 @@
+id = "modules.tree"
+order = 368
+tier = "feat"
+tags = ["feat", "modules", "tree"]
+
+[[tests]]
+name = "type_directed_map_unzip_and_ordered_reduce"
+kind = "behavior"
+case = "../../../cases/modules/tree_operations.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "{ w: 6.0, block: (8.0, 10.0) }\n{ count: 4, weight: 3.0 }\n{ count: 3, weight: 2.0 }\n({ w: 6.0, block: (8.0, 10.0) }, { w: 0.0, block: (0.0, 0.0) }, { w: 9.0, block: (16.0, 25.0) })\n{ w: 9.0, block: (12.0, 15.0) }\n8.0\n(3.0, 4.0, 5.0)\n{ w: w, block: (block.0, block.1) }\n{ samples: 3 }\n1.0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "shape_mismatch_reports_first_path"
+kind = "negative"
+case = "../../../cases/modules/tree_shape_error.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["tree leaf 'block'", "tree structure differs"]
+timeout_ms = 10000

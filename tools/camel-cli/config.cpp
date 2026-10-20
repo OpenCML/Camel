@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,6 +32,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/execute/limits.h"
+#include "camel/execute/pass/params.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
 #include "clipp/clipp.h"
@@ -165,6 +166,31 @@ bool readDepthLimit(
     return true;
 }
 
+/// As readDepthLimit, for the rounds of a loop (a wider range).
+bool readRoundLimit(
+    const std::string &optionText, const char *option, const char *envName, size_t &out) {
+    const auto refuse = [](const char *what, std::string_view text) {
+        std::cerr << "Invalid " << what << " value: '" << text
+                  << "'. Expected an integer from 1 to " << camel::execute::kMaxRoundsLimit << "."
+                  << std::endl;
+        return false;
+    };
+    if (!optionText.empty()) {
+        const auto value = camel::execute::parseRoundLimit(optionText);
+        if (!value) {
+            return refuse(option, optionText);
+        }
+        out = *value;
+        return true;
+    }
+    if (const char *raw = std::getenv(envName)) {
+        if (!camel::execute::parseRoundLimit(raw)) {
+            return refuse(envName, raw);
+        }
+    }
+    return true;
+}
+
 /// Left-to-right over argv: last `--log-level` / `-v*` wins; then applies preset/include and stderr
 /// sink.
 void applyCamelCliLogging(int argc, char **argv) {
@@ -288,9 +314,11 @@ int maxThreads    = -1; // -1 means use the maximum number of threads
 
 string maxRecursionDepthOpt = ""; // raw --max-recursion-depth
 string maxMacroDepthOpt     = ""; // raw --max-macro-depth
+string maxMacroRoundsOpt    = ""; // raw --max-macro-rounds
 string gcModeOpt            = ""; // raw --gc
 size_t maxRecursionDepth    = 0;  // 0: not given on the command line
 size_t maxMacroDepth        = 0;
+size_t maxMacroRounds       = 0;
 } // namespace Run
 
 namespace Check {
@@ -577,14 +605,17 @@ bool parseArgs(int argc, char *argv[]) {
          (option("-S", "--scheduler") & value("scheduler type", schedular)) % "scheduler type",
          (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
          (option("--max-recursion-depth") & value("calls", maxRecursionDepthOpt)) %
-             "limit on calls open at once that are not tail calls (default: 256 on std::nvm and "
-             "std::fvm, the native stack on std::tf; also CAMEL_MAX_RECURSION_DEPTH)",
+             "limit on calls open at once that are not tail calls (default: 1000 on every "
+             "scheduler; also CAMEL_MAX_RECURSION_DEPTH)",
          (option("--max-macro-depth") & value("calls", maxMacroDepthOpt)) %
              "limit on nested calls while std::macro evaluates a call (default: 64; also "
              "CAMEL_MAX_MACRO_DEPTH)",
+         (option("--max-macro-rounds") & value("rounds", maxMacroRoundsOpt)) %
+             "limit on the rounds one loop may run while std::macro evaluates it (default: "
+             "1000000; also CAMEL_MAX_MACRO_ROUNDS)",
          (option("--gc") & value("collector", gcModeOpt)) %
-             "collector of run-time values: mark-sweep (default; objects keep their address) or "
-             "generational (young objects are copied); also CAMEL_GC",
+             "collector of run-time values: generational (default; young objects are copied) or "
+             "mark-sweep (objects keep their address); also CAMEL_GC",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
@@ -592,7 +623,9 @@ bool parseArgs(int argc, char *argv[]) {
              "diagnostics format: text (source excerpts), short (one line each) or json",
          diagOps,
          (option("--passes") & value("pass1,pass2,...", passesOpt)) %
-             "pass list as comma-separated (e.g. --passes std::gir,other)",
+             "pass list as comma-separated (e.g. --passes std::gir,other); a pass may take "
+             "parameters, "
+             "`std::opt(safe_fp=true)`",
          (option("--timeit") & value("pass/iterations", timeitSpec)) %
              "measure one pass N times from a fresh graph (e.g. --timeit std::jit/10)",
          (option("--input") & value("input file", inputFile)) %
@@ -751,11 +784,8 @@ bool parseArgs(int argc, char *argv[]) {
     }
     if (selectedCommand == Command::Run) {
         if (!Run::passesOpt.empty()) {
-            for (auto part : strutil::split(Run::passesOpt, ',')) {
-                std::string s(strutil::trim(part));
-                if (!s.empty())
-                    Run::passes.push_back(std::move(s));
-            }
+            // Commas inside a pass's parameters (`std::opt(a=1,b=2)`) do not separate passes.
+            Run::passes = splitPassList(Run::passesOpt);
         }
         if (!Run::timeitSpec.empty()) {
             if (!parseTimeitSpecValue(Run::timeitSpec, Run::timeitPass, Run::timeitIterations)) {
@@ -802,7 +832,12 @@ bool parseArgs(int argc, char *argv[]) {
                 Run::maxMacroDepthOpt,
                 camel::execute::kMaxMacroDepthOption,
                 camel::execute::kMaxMacroDepthEnvVar,
-                Run::maxMacroDepth)) {
+                Run::maxMacroDepth) ||
+            !readRoundLimit(
+                Run::maxMacroRoundsOpt,
+                camel::execute::kMaxMacroRoundsOption,
+                camel::execute::kMaxMacroRoundsEnvVar,
+                Run::maxMacroRounds)) {
             std::exit(1);
         }
 

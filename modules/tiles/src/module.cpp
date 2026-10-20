@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/tree.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/function_call.h"
 #include "modules/tensor/ops/registry.h"
@@ -28,8 +29,11 @@
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
+#include "tiles/internal/compiled_region.h"
 #include "tiles/internal/dispatch.h"
+#include "tiles/internal/graph_values.h"
 #include "tiles/internal/regions.h"
+#include "tiles/internal/tree_transfer.h"
 #include "tiles/program.h"
 #include <cstdlib>
 #include <cstring>
@@ -53,7 +57,7 @@ template <class F> slot_t checked(F &&body) {
     }
 }
 
-Program prepare(ArgsView &with, ArgsView &norm, Context &ctx) {
+Program prepare(ArgsView &with, ArgsView &norm, Context &ctx, bool staticRegion = false) {
     // Only extraction holds GC pointers. CUDA work uses owned host snapshots and releases
     // them after execution; the cache never retains Camel objects or shape-only identities.
     core::mm::NoCollectionScope noCollection;
@@ -67,7 +71,7 @@ Program prepare(ArgsView &with, ArgsView &norm, Context &ctx) {
         for (size_t i = 0; i < type->size(); ++i)
             args.push_back({tuple->get<slot_t>(i), type->typeAt(i)});
     }
-    return compile(fn, args, ctx.facts());
+    return prepareProgram(fn, args, ctx.facts(), staticRegion);
 }
 
 slot_t regionsKernel(ArgsView &with, ArgsView &, Context &ctx) {
@@ -140,6 +144,11 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         return runPrepared(with, std::make_shared<const Program>(prepare(with, norm, ctx)));
     });
 }
+slot_t runCompiledKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return checked([&] {
+        return runPrepared(with, std::make_shared<const Program>(prepare(with, norm, ctx, true)));
+    });
+}
 slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<const Program> program;
     const bool supported = checked([&] {
@@ -179,43 +188,6 @@ slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     return td::toSlot(
         td::ForeignResourceObject::create(core::mm::autoSpace(), std::move(descriptor), owner));
 }
-Type *buildResidentType(Type *type) {
-    if (tensor::asTensorType(type) || type->code() == TypeCode::Float64)
-        return DeviceType::get(type);
-    if (type->code() == TypeCode::Tuple) {
-        auto *tuple = static_cast<TupleType *>(type);
-        type_vec_t fields;
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            auto *field = buildResidentType(tuple->typeAt(i));
-            if (!field)
-                return nullptr;
-            fields.push_back(field);
-        }
-        return TupleType::create(fields);
-    }
-    if (type->code() == TypeCode::Struct) {
-        auto *object = static_cast<StructType *>(type);
-        StructTypeFactory fields;
-        for (size_t i = 0; i < object->size(); ++i) {
-            auto *field = buildResidentType(object->typeAt(i));
-            if (!field)
-                return nullptr;
-            fields.add(std::string(object->fieldName(i)), field);
-        }
-        return fields.build();
-    }
-    return nullptr;
-}
-Type *residentType(Type *type) {
-    static std::mutex mutex;
-    static std::unordered_map<Type *, Type *> types;
-    std::lock_guard lock(mutex);
-    if (auto it = types.find(type); it != types.end())
-        return it->second;
-    auto *result = buildResidentType(type);
-    types.emplace(type, result);
-    return result;
-}
 slot_t runResidentPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
     return checked([&] {
         auto values = executeResident(std::move(program));
@@ -249,44 +221,19 @@ slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     });
     return runResidentPrepared(with, std::move(program));
 }
-slot_t uploadKernel(ArgsView &, ArgsView &norm, Context &) {
-    return checked([&] {
-        if (norm.type(0)->code() == TypeCode::Float64) {
-            double value = norm.get<double>(0);
-            return wrapDevice(uploadValue({}, DType::F64, std::as_bytes(std::span(&value, 1))));
-        }
-        Shape shape;
-        std::vector<float> data;
-        {
-            core::mm::NoCollectionScope noCollection;
-            auto *tensor = norm.get<tensor::TensorObject *>(0);
-            if (tensor->dtype() != TypeCode::Float32)
-                throw std::runtime_error("upload currently requires f32 tensors");
-            shape              = tensor->shapeVector();
-            const size_t count = elements(shape);
-            if (count)
-                data.assign(tensor->dataAs<float>(), tensor->dataAs<float>() + count);
-        }
-        auto resident = uploadValue(shape, DType::F32, std::as_bytes(std::span(data)));
-        return wrapDevice(std::move(resident));
+slot_t runCompiledDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    std::shared_ptr<const Program> program;
+    checked([&] {
+        program = std::make_shared<const Program>(prepare(with, norm, ctx, true));
+        return slot_t{};
     });
+    return runResidentPrepared(with, std::move(program));
+}
+slot_t uploadKernel(ArgsView &, ArgsView &norm, Context &) {
+    return checked([&] { return transferTree(norm, true); });
 }
 slot_t downloadKernel(ArgsView &, ArgsView &norm, Context &) {
-    return checked([&] {
-        auto *wrapper = norm.get<td::ForeignResourceObject *>(0);
-        auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
-        auto data     = downloadValue(*resident);
-        if (resident->dtype == DType::F64) {
-            double value;
-            std::memcpy(&value, data.data(), sizeof(value));
-            return td::toSlot(value);
-        }
-        auto *out =
-            tensor::TensorObject::create(TypeCode::Float32, resident->shape, core::mm::autoSpace());
-        if (!data.empty())
-            std::memcpy(out->rawData(), data.data(), data.size());
-        return td::toSlot(out);
-    });
+    return checked([&] { return transferTree(norm, false); });
 }
 // Called only while collection is inhibited; aggregates are rebuilt with exact types.
 slot_t hostResidentValue(Type *hostType, slot_t value, bool retain) {
@@ -406,7 +353,7 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
         (void)configuredCudaOrdinal();
         try {
             (void)deviceInfo();
-            program = std::make_shared<Program>(prepare(with, norm, ctx));
+            program = std::make_shared<Program>(prepare(with, norm, ctx, true));
             return true;
         } catch (const BackendUnavailable &) {
             return false;
@@ -451,29 +398,9 @@ slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
 }
 
 bool supportedLeaves(Type *type) {
-    if (type->code() == TypeCode::Float64)
-        return true;
-    if (tensor::asTensorType(type))
-        return true;
-    if (type->code() == TypeCode::Tuple) {
-        auto *tuple = static_cast<TupleType *>(type);
-        if (!tuple->size())
-            return false;
-        for (size_t i = 0; i < tuple->size(); ++i)
-            if (!supportedLeaves(tuple->typeAt(i)))
-                return false;
-        return true;
-    }
-    if (type->code() == TypeCode::Struct) {
-        auto *object = static_cast<StructType *>(type);
-        if (!object->size())
-            return false;
-        for (size_t i = 0; i < object->size(); ++i)
-            if (!supportedLeaves(object->typeAt(i)))
-                return false;
-        return true;
-    }
-    return false;
+    return !core::type::tree::firstRejectedLeaf(type, [](Type *leaf) {
+        return leaf->code() == TypeCode::Float64 || tensor::asTensorType(leaf) != nullptr;
+    });
 }
 // Placement changes storage, not the computation function's tensor signature.
 bool acceptsInput(Type *expected, Type *actual) {
@@ -536,8 +463,13 @@ class TilesModule final : public BuiltinModule {
              "tiles:run_preferred_resident",
              "tiles:download"});
         registerRegionTestPasses(
-            &runKernel,
-            {&uploadKernel, &runDeviceKernel, &downloadKernel},
+            &runCompiledKernel,
+            {&uploadKernel,
+             &runCompiledDeviceKernel,
+             &downloadKernel,
+             "tiles:upload",
+             "tiles:run_compiled_device",
+             "tiles:download"},
             {&retainHostKernel,
              &runHostResidentKernel,
              &downloadKernel,
@@ -581,7 +513,7 @@ class TilesModule final : public BuiltinModule {
                     {{"tiles:" + name,
                       DynamicFuncTypeResolver::create(
                           {{0, {}}, {1, {false}}},
-                          name == "upload" ? "(T: Tensor or float) => Device<T>"
+                          name == "upload" ? "(T: Tensor, float, struct or tuple) => Device<T>"
                                            : "(Device<T>) => T",
                           [upload = name == "upload"](
                               const type_vec_t &with,
@@ -589,18 +521,8 @@ class TilesModule final : public BuiltinModule {
                               const ModifierSet &) -> std::optional<Type *> {
                               if (!with.empty() || norm.size() != 1)
                                   return std::nullopt;
-                              if (upload) {
-                                  if (norm[0]->code() == TypeCode::Float64)
-                                      return DeviceType::get(norm[0]);
-                                  const auto *tensor = tensor::asTensorType(norm[0]);
-                                  if (!tensor ||
-                                      (tensor->dtype() && *tensor->dtype() != TypeCode::Float32))
-                                      return std::nullopt;
-                                  return DeviceType::get(norm[0]);
-                              }
-                              const auto *device = asDeviceType(norm[0]);
-                              return device ? std::optional<Type *>(device->hostType())
-                                            : std::nullopt;
+                              auto *result = transferTreeType(norm[0], upload);
+                              return result ? std::optional<Type *>(result) : std::nullopt;
                           })}}));
         }
         std::vector<std::string>
@@ -667,8 +589,11 @@ class TilesModule final : public BuiltinModule {
                 ctx,
                 std::unordered_map<std::string, operator_t>{
                     {"run", &runKernel},
+                    {"run_compiled", &runCompiledKernel},
+                    {"run_compiled_device", &runCompiledDeviceKernel},
                     {"prefer_gpu", &preferGpuKernel},
                     {"test_call", &testNativeCall},
+                    {"test_compiled_call", &testCompiledCall},
                     {"gpu", &gpuKernel},
                     {"run_device", &runDeviceKernel},
                     {"retain_host", &retainHostKernel},
@@ -710,7 +635,15 @@ class TilesModule final : public BuiltinModule {
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
         for (const char *name :
-             {"run", "run_device", "source", "inspect", "benchmark", "regions", "gpu"}) {
+             {"run",
+              "run_device",
+              "run_compiled",
+              "run_compiled_device",
+              "source",
+              "inspect",
+              "benchmark",
+              "regions",
+              "gpu"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
                 {.pure = false, .inspectsGraphs = true});
@@ -718,6 +651,10 @@ class TilesModule final : public BuiltinModule {
         core::OperatorTable::instance().set(
             "tiles:prefer_gpu",
             {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+        for (const char *name : {"tiles:run_compiled", "tiles:run_compiled_device"})
+            core::OperatorTable::instance().set(
+                name,
+                {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
         // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
         // resource `tiles:device` (upload makes one; run and run_device read the device values
         // among their inputs, run_device returns new ones that may be inputs again); the driver
@@ -746,7 +683,17 @@ class TilesModule final : public BuiltinModule {
                      ResourceSpec{
                          .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .externalEffect = true}},
+                    {"run_compiled",
+                     ResourceSpec{
+                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .externalEffect = true}},
                     {"run_device",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .result   = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},
+                         .allocates      = device,
+                         .externalEffect = true}},
+                    {"run_compiled_device",
                      ResourceSpec{
                          .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .result   = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},

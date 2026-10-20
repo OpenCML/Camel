@@ -3,7 +3,7 @@
  * Every write is declared (var parameters, sync functions, wait), so every pipeline must make
  * all of them. After a few rounds of inlining the innermost call is a body that neither reads
  * its argument nor has an effect, and the write ordered before that call used to be dropped by
- * std::opt::simplify (the counter came out one short, silently).
+ * std::opt (the counter came out one short, silently).
  */
 module var_writes_through_recursion
 

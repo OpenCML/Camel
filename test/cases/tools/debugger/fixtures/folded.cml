@@ -1,7 +1,7 @@
 module main
 
 // The arms of a branch are subgraphs; the debugger folds them into the frame of the
-// function they are written in (design principles 2.11).
+// function they are written in (design principles 12.1).
 
 namespace geo {
     func scale(x: int): int {

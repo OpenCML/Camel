@@ -1,5 +1,5 @@
 /**
- * math::max and math::min are IEEE 754-2019 maximum and minimum (design principles 2.13): a NaN
+ * math::max and math::min are IEEE 754-2019 maximum and minimum (design principles 7.7): a NaN
  * on either side gives NaN, and -0 is below +0 whichever side each zero is on.
  */
 module max_min_special

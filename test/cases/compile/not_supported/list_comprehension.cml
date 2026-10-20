@@ -1,5 +1,5 @@
 /**
- * A list comprehension is `filter` then `map` (design principles 2.10). It used to be refused
+ * A list comprehension is `filter` then `map` (design principles 4.2). It used to be refused
  * as not implemented, and before that compiled as the empty array.
  */
 module list_comprehension

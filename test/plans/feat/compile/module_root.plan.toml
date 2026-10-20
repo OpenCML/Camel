@@ -4,7 +4,7 @@ tier = "feat"
 tags = ["feat", "compile", "semantic", "modules", "import"]
 desc = "All modules build into one root graph; a capture is bound to the value it captures, not to its name"
 
-# Design principles 2.11 ("模块"); docs/design/graph-model/README.cn.md 3.7 and 3.9. Every
+# Design principles 10.1 ("模块"); docs/design/graph-model/README.cn.md 3.7 and 3.9. Every
 # program here runs on several back ends: the root graph and the capture ports are ordinary
 # graph structure, which no back end treats specially.
 
@@ -65,7 +65,7 @@ name = "root.lib_uses_inline"
 desc = "The same after inlining."
 kind = "behavior"
 case = "../../../cases/compile/module_root/lib_uses.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "11 61 11\n21 [11, 12] [15]\n"
 
@@ -74,7 +74,7 @@ name = "root.lib_uses_simplify"
 desc = "The same after the macro evaluator and the simplifier."
 kind = "behavior"
 case = "../../../cases/compile/module_root/lib_uses.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "11 61 11\n21 [11, 12] [15]\n"
 
@@ -150,7 +150,7 @@ name = "root.values_simplify"
 desc = "The same after the macro evaluator and the simplifier, which fold the constant values."
 kind = "behavior"
 case = "../../../cases/compile/module_root/values.cml"
-args = ["${case}", "std::macro", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "geometry: making the unit vector\nmain starts\n3.14159 12.56636 6.28318\n6.28318 1.0\n"
 
@@ -175,7 +175,7 @@ expect_stdout_contains = ["return static_cast<int>(main_(0, 3.14159));"]
 
 [[tests]]
 name = "root.export_var"
-desc = "A `var` cannot be exported (design principles 2.11): ExportedVariable at the variable, in the module that exports it."
+desc = "A `var` cannot be exported (design principles 10.1): ExportedVariable at the variable, in the module that exports it."
 kind = "negative"
 case = "../../../cases/compile/module_root/export_var.cml"
 args = ["-E", "short", "${case}"]

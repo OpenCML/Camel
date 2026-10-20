@@ -14,13 +14,13 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * Generic, module-agnostic graph optimizations. They consult only the core
- * OperatorTable, never module knowledge:
+ * Generic graph optimizations. Algebra recognizes core scalar arithmetic by OperId;
+ * the other passes consult declared properties, never module-specific knowledge:
  *
  *   std::opt::fold  evaluates pure operators whose inputs are all static and
  *                   replaces them by static values, and replaces an element
@@ -28,20 +28,27 @@
  *                   value filled there;
  *   std::opt::cse   merges pure operator nodes with identical operator and
  *                   inputs;
+ *   std::opt::algebra combines local scalar arithmetic, with optional safe_fp mode;
  *   std::opt::dce   removes pure operator (and value-only) nodes whose results
- *                   are unused, and SYNC control joins.
+ *                   are unused, SYNC control joins, and GATEs used only for control;
+ *                   also bypasses non-anchor GATEs by transferring waits to mandatory users,
+ *                   within an edge-growth budget;
+ *                   their ordering is transferred to their control users.
+ *   std::opt::ctrl  removes control edges already implied by mandatory data/control paths,
+ *                   within a work budget and without changing branch boundaries or arm anchors.
  *
- * std::opt::simplify runs std::opt, fold and dce to a fixpoint.
+ * std::opt runs call rewriting, fold, cse, algebra and dce to a fixpoint, then ctrl once.
  *
- * Together with std::opt (devirtualization, which also turns calls of closures
+ * Together with call rewriting (devirtualization, which also turns calls of closures
  * built in the caller into direct calls of a lambda-lifted graph, and
  * inlining), they collapse the pullback closures of autodiff into straight-line
  * code when the program is static.
  *
- * All three keep side-effect ordering intact: when a node on a control chain
+ * These passes keep side-effect ordering intact: when a node on a control chain
  * (every call in `sync` code is on one) is replaced, all of its users inherit
  * its control predecessors, and nodes that anchor the graph (exit, output,
- * return, branch-arm heads and tails) are never rewritten.
+ * return, branch-arm heads and tails) keep their identities. Algebra may rewrite an
+ * anchor's arithmetic in place while retaining its dependencies.
  */
 
 #pragma once
@@ -60,14 +67,30 @@ class CommonSubexpressionPass : public RuntimeGraphRewritePass {
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };
 
+class AlgebraPass : public RuntimeGraphRewritePass {
+  public:
+    explicit AlgebraPass(const camel::core::context::context_ptr_t &ctx, bool safeFp = false)
+        : RuntimeGraphRewritePass(ctx), safeFp_(safeFp) {}
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+
+  private:
+    bool safeFp_;
+};
+
 class DeadCodePass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 };
 
+class ControlReductionPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+};
+
 /**
- * std::opt::simplify: std::opt, std::opt::fold and std::opt::dce repeated until the program stops
+ * std::opt: call rewriting, fold, cse, algebra and dce until the program stops
  * changing. The passes feed each other (specializing a call makes a condition constant, folding
  * prunes the branch, which exposes the next call to specialize and inline), so a recursion of
  * static depth unrolls and a static program reduces to straight-line code. Rounds are bounded:
@@ -79,7 +102,7 @@ class DeadCodePass : public RuntimeGraphRewritePass {
 struct OptimizeRewriteConfig;
 
 /**
- * The std::opt::simplify fixpoint on the program rooted at `root`, with `config` for its std::opt
+ * The std::opt fixpoint on the program rooted at `root`, with `config` for its call-rewrite
  * rounds. `root` may be detached from the running program (a function being exported); then the
  * program is left as it is. Stops after `maxRounds` rounds (each unrolls about one more level of
  * a recursion of static depth). Returns the rewritten root.
@@ -87,9 +110,3 @@ struct OptimizeRewriteConfig;
 camel::runtime::GCGraph *simplifyGraph(
     const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *root,
     const OptimizeRewriteConfig &config, std::ostream &os, size_t maxRounds = 16);
-
-class SimplifyPass : public RuntimeGraphRewritePass {
-  public:
-    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
-};

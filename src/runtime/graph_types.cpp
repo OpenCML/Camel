@@ -13,13 +13,13 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
  * The type invariant of an encoded graph, checked at every commit: every type on a graph is
- * determined (design principles 2.11: "no value has a type that is still undetermined at run
+ * determined (design principles 5.10: "no value has a type that is still undetermined at run
  * time"; docs/design/any-typing/README.cn.md, 4.6).
  *
  * The types that describe a graph are its function type (ports and result) and the layouts of
@@ -37,7 +37,6 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/core/type/composite/union.h"
 #include "camel/core/type/other.h"
 #include "camel/runtime/graph.h"
 
@@ -111,7 +110,7 @@ void check(const GCGraph *graph, const Type *type, const char *where) {
         throw std::runtime_error(
             std::format(
                 "Runtime graph '{}' has an undetermined type: '{}' in its {} ('{}'). Every type "
-                "on a committed graph is determined (design principles 2.11).",
+                "on a committed graph is determined (design principles 5.1).",
                 graph->name(),
                 found->toString(),
                 where,

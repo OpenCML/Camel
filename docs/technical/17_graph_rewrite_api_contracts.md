@@ -70,12 +70,12 @@
 
 ## 3. `inlineCallableInDraft` 契约（当前实现）
 
-**与 `std::inline` pass 的区分**（阅读本节时请先建立预期）：
+**与 `std::opt::inline` pass 的区分**（阅读本节时请先建立预期）：
 
 - **`inlineCallableInDraft`**：通用的内联原语；只要调用方传入合法的 `FUNC` 节点，就展开它的被调图。
-- **`std::inline`（`InlineRewritePass`）**：按策略（`InlineTargetStrategy`，
-  `include/camel/passes/opt/config.h`）选择目标并调用该原语：`std::inline::small`（Small）、
-  `std::inline::arm`（Arm，分支臂的被调图，不要求小）、`std::inline::hybrid` / `std::inline`（Hybrid，
+- **`std::opt::inline`（`InlineRewritePass`）**：按策略（`InlineTargetStrategy`，
+  `include/camel/passes/opt/config.h`）选择目标并调用该原语：`std::opt::inline::small`（Small）、
+  `std::opt::inline::arm`（Arm，分支臂的被调图，不要求小）、`std::opt::inline::hybrid` / `std::opt::inline`（Hybrid，
   默认）。对递归的限制、`blockCallsToSccEntryCallees`、大小与增长预算等选择规则见
   [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md) §1.1 与 §6.1，本文不重复。
 
@@ -222,7 +222,7 @@ docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
 
 **开销。** 每张图一次活性遍历，每个分支一次限于分支内部的遍历（到 `JOIN` 为止），总体与图的大小近似成
 线性。在 `benchmarks/` 的 mlp、gru、resnet、transformer、resnetbn 上经
-`std::macro std::opt::simplify std::stats`（每个程序校验 544–1164 张次图）累计 1.0–2.2 毫秒，占编译用时的
+`std::macro std::opt std::stats`（每个程序校验 544–1164 张次图）累计 1.0–2.2 毫秒，占编译用时的
 0.25%–1.1%（Release 构建，2026-10-12）。因此没有开关，所有构建模式下都执行。
 
 ---

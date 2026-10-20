@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,20 +38,6 @@
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
-
-namespace {
-
-bool envIs(const char *name, char value) {
-    const char *raw = std::getenv(name);
-    return raw != nullptr && raw[0] == value && raw[1] == '\0';
-}
-
-bool envSet(const char *name) {
-    const char *raw = std::getenv(name);
-    return raw != nullptr && raw[0] != '\0' && !(raw[0] == '0' && raw[1] == '\0');
-}
-
-} // namespace
 
 // ---------------------------------------------------------------------------------------------
 // TaskflowBytecodeHandoff
@@ -120,7 +106,7 @@ TaskflowExecSchedPass::TaskflowExecSchedPass(
     : RuntimeGraphSchedulePass(ctx), executor_(workerCount(ctx, max_concurrent_tasks)) {
     if (ctx) {
         // The same count as on the other schedulers, with the same default (design
-        // principles 2.10).
+        // principles 3.9).
         maxRecursionDepth_ = camel::execute::recursionLimit(*ctx).frames;
     }
 }
@@ -151,10 +137,10 @@ std::string_view TaskflowExecSchedPass::serialObstacle(const GraphPlan &plan) co
                 return "an operator has no body";
             }
             // The higher-order operators and `attempt` declare that they call function values
-            // (OperatorTraits::callsGraphs); `:mark/` is how the schedulers recognise them.
+            // (OperatorTraits::callsGraphs), and a marked operator is always one of them.
             const auto &table = camel::core::OperatorTable::instance();
             const auto traits = table.find(body->oper);
-            if (table.isMarked(body->oper) || (traits && traits->callsGraphs)) {
+            if (traits && traits->callsGraphs) {
                 return "it has a higher-order operator";
             }
             if (!context_->execMgr().findWithoutImport(std::string(body->uri()))) {
@@ -180,17 +166,17 @@ std::string_view TaskflowExecSchedPass::serialObstacle(const GraphPlan &plan) co
 
 void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
     handoff_.reset();
-    const bool diag = envSet("CAMEL_TF_DIAG");
+    const bool diag = options_.diag;
     const auto off  = [&](std::string_view why) {
         if (diag) {
             std::cerr << std::format("[taskflow] bytecode hand-off is off: {}\n", why);
         }
     };
-    if (envIs("CAMEL_TF_BYTECODE", '0')) {
-        return off("CAMEL_TF_BYTECODE=0");
+    if (!options_.bytecode) {
+        return off("std::tf(bytecode=false)");
     }
     if (forceLinear_) {
-        return off("CAMEL_TF_LINEAR asks for the node-by-node evaluator");
+        return off("std::tf(linear=true) asks for the node-by-node evaluator");
     }
     // The interpreter reports to an execution observer from whichever thread runs it, and in
     // inspection mode it keeps one "current origin" for the whole process: both are for one
@@ -215,7 +201,18 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
     std::vector<size_t> spoiled; // not serial, callers not yet told
     for (size_t i = 0; i < graphs.size(); ++i) {
         GCGraph *graph = graphs[i];
-        obstacle[i]    = serialObstacle(*planFor(graph));
+        // Original graphs retained by a private copy are reachable too. A runtime
+        // callback may hand one back, but its LOOP must first get a private execution
+        // graph; do not attach bytecode for the source to that execution graph's plan.
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if ((*it)->kind == GCNodeKind::Loop) {
+                obstacle[i] = "a source loop requires private lowering when called";
+                break;
+            }
+        }
+        if (obstacle[i].empty()) {
+            obstacle[i] = serialObstacle(*planFor(graph));
+        }
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const auto *node = *it;
             if (node == nullptr || node->kind != GCNodeKind::Func) {

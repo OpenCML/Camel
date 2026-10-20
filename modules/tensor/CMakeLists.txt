@@ -2,6 +2,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
 add_camel_module(
   NAME tensor
   SOURCES
+    binary.cpp
     dtype.cpp
     interop.cpp
     npy.cpp
@@ -19,6 +20,7 @@ add_camel_module(
     kernels/reduce.cpp
     kernels/unary_generic.cpp
     ops/catalog.cpp
+    ops/binary_ops.cpp
     ops/creation_ops.cpp
     ops/elementwise_ops.cpp
     ops/gradient_ops.cpp
@@ -40,7 +42,7 @@ add_camel_module(
 
 # Contraction (a * b + c into one fused multiply-add) is off in the whole project (top-level
 # CMakeLists.txt), the GEMM units included: matmul's canonical algorithm is a chain of fused
-# multiply-adds in ascending k (design principles 2.13), and gemm_blocked.inl writes each one
+# multiply-adds in ascending k (design principles 7.1), and gemm_blocked.inl writes each one
 # explicitly, so every unit computes the same bits, with or without FMA hardware.
 # The unary units (exp, tanh, sigmoid, gelu: bounded, not correctly rounded) are compiled with
 # contraction on: their polynomials may then round differently on processors with and without

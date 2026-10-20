@@ -47,7 +47,7 @@ slot_t __dtoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __stoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    // The whole string must be one number (design principles 2.10).
+    // The whole string must be one number (design principles 5.1).
     String *s = norm.get<String *>(0);
     return toSlot(camel::core::integerFromText<Int32>(s->view(), "i32"));
 }
@@ -70,7 +70,7 @@ slot_t __dtol__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __stol__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    // The whole string must be one number (design principles 2.10).
+    // The whole string must be one number (design principles 5.1).
     String *s = norm.get<String *>(0);
     return toSlot(camel::core::integerFromText<Int64>(s->view(), "int"));
 }
@@ -93,7 +93,7 @@ slot_t __dtof__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __stof__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    // The whole string must be one number (design principles 2.10).
+    // The whole string must be one number (design principles 5.1).
     String *s = norm.get<String *>(0);
     return toSlot(camel::core::floatFromText<Float32>(s->view(), "f32"));
 }
@@ -116,7 +116,7 @@ slot_t __ftod__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __dtod__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
 
 slot_t __stod__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    // The whole string must be one number (design principles 2.10).
+    // The whole string must be one number (design principles 5.1).
     String *s = norm.get<String *>(0);
     return toSlot(camel::core::floatFromText<Float64>(s->view(), "float"));
 }

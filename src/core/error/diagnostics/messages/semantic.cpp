@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -281,9 +281,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "InvalidAnnotation",
                 "The annotation '@{0}' is not accepted: {1}.",
                 "A line that starts with '@' annotates the function declaration or the block "
-                "that follows. '@name' and '@name<args>' are decorators of a function; "
-                "'@numeric(...)' grants numeric permissions to a function or a block (design "
-                "principles 2.13).",
+                "that follows. '@name' and '@name<args>' are decorators of a function or of a "
+                "block; '@numeric(...)' grants numeric permissions to a function or a block "
+                "(design principles 7.5).",
             },
         },
         {
@@ -365,7 +365,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TypeVariableNotAllowed",
                 "'typeas {0}' cannot bind a type variable here: {1}.",
-                "A type variable is bound where its type first appears among the parameters of "
+                "A type variable is declared where it first appears in the parameters or result of "
                 "a function declaration, e.g. 'func first(xs: (typeas T)[]): T', and is "
                 "written as plain '{0}' everywhere after that.",
             },
@@ -384,8 +384,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TypeVariableNotBindable",
                 "The type variable '{0}' of '{1}' can never be bound: {2}.",
-                "A type variable takes the type found at the position of 'typeas {0}' in the "
-                "type of an argument. That position must be reachable through arrays, tuples, "
+                "A type variable must remain present in a parameter or result type. Its position "
+                "must be reachable through arrays, tuples, "
                 "structs and function types.",
             },
         },
@@ -397,7 +397,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "A type variable takes the type of the argument found at its 'typeas' position, "
                 "or, when that argument says nothing (a 'null', a generic function that is "
                 "itself waiting for its types), at another occurrence; every parameter is then "
-                "checked against its type with the variables replaced. A value enters a 'T?' "
+                "checked against its type with the variables replaced. Result-only variables take "
+                "their types from the expected result or explicit f::<T> arguments. A value enters "
+                "a 'T?' "
                 "or 'T!' parameter by itself; nothing else is converted. Signature: {3}",
             },
         },
@@ -819,7 +821,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "LoopSequenceNotArray",
                 "'for' takes the elements of an array; '{0}' has type '{1}'.",
                 "A loop's 'for x in xs' visits the elements of the array xs in order (design "
-                "principles 2.10). 'range(a, b)' is the array of the integers from a to b; a "
+                "principles 3.10). 'range(a, b)' is the array of the integers from a to b; a "
                 "string, a map or a tensor is not iterated by 'for'.",
             },
         },
@@ -918,6 +920,138 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Cannot import module '{0}': it has errors ({1}).",
                 "The errors are reported for that module. This one follows from them and goes "
                 "away when they are fixed.",
+            },
+        },
+        {
+            SemanticDiag::DuplicateEnumVariant,
+            {
+                "DuplicateEnumVariant",
+                "The variant '{0}' is declared twice in enum '{1}'.",
+                "A variant is one of the values of its enum and is written by its name; each "
+                "name occurs once.",
+            },
+        },
+        {
+            SemanticDiag::DuplicateEnumField,
+            {
+                "DuplicateEnumField",
+                "The field '{0}' is declared twice in variant '{1}' of enum '{2}'.",
+                "A field of a struct variant is written by its name; each name occurs once.",
+            },
+        },
+        {
+            SemanticDiag::EnumVariantNeedsFields,
+            {
+                "EnumVariantNeedsFields",
+                "The variant '{0}' of enum '{1}' carries {2} field(s): write '{3}' to build one.",
+                "A variant without a field list is a single value; one with fields is built by "
+                "writing the fields after its name, 'Shape::Circle(1.0)' or "
+                "'Shape::Rect {{ w: 1.0, h: 2.0 }}'.",
+            },
+        },
+        {
+            SemanticDiag::EnumVariantFieldCount,
+            {
+                "EnumVariantFieldCount",
+                "The variant '{0}' of enum '{1}' takes {2} field(s), but {3} were given.",
+                "The fields of a variant are those its declaration writes: as many, and in the "
+                "same order for a variant written with '(...)'.",
+            },
+        },
+        {
+            SemanticDiag::EnumPatternMismatch,
+            {
+                "EnumPatternMismatch",
+                "The pattern '{0}' does not match a value of type '{1}': {2}.",
+                "A pattern names a variant of the enum it matches and, if that variant has "
+                "fields, binds each of them by its position ('Shape::Circle(r)') or by the name "
+                "its declaration gives ('Shape::Rect {{ w, h }}').",
+            },
+        },
+        {
+            SemanticDiag::EnumMatchNotExhaustive,
+            {
+                "EnumMatchNotExhaustive",
+                "The match over '{0}' has no case for {1}, and no 'case _'.",
+                "Every variant of an enum is a value of it, so a match that names variants must "
+                "name all of them or end with 'case _'. The compiler adds no arm the program does "
+                "not show.",
+            },
+        },
+        {
+            SemanticDiag::EnumFieldAccess,
+            {
+                "EnumFieldAccess",
+                "'{0}' is a value of enum '{1}': its fields are not read by name or index.",
+                "A field of a variant is taken out by matching the value and binding it in the "
+                "arm of that variant: 'match v {{ case {2} => ... }}'.",
+            },
+        },
+        {
+            SemanticDiag::UnionTypeRetired,
+            {
+                "UnionTypeRetired",
+                "The union type is retired: a value has one type, and no value enters "
+                "'A | B'.",
+                "When a value is one of several named cases, declare an enum: "
+                "'type T = enum {{ A(i32), B(string) }}'. '|' remains the logical or.",
+            },
+        },
+        {
+            SemanticDiag::ReservedTypeQuestionRetired,
+            {
+                "ReservedTypeQuestionRetired",
+                "The reserved form 'T ? U' is retired: '?' is only the nullable mark, as in "
+                "'T?'.",
+                "Write 'T?' for a value that may be null and 'T!' for one that may have "
+                "failed.",
+            },
+        },
+        {
+            SemanticDiag::EnumFieldTypeMismatch,
+            {
+                "EnumFieldTypeMismatch",
+                "Field {0} of variant '{1}' has type '{2}', but the value given has type "
+                "'{3}'.",
+                "The fields of a variant are those its declaration writes.",
+            },
+        },
+        {
+            SemanticDiag::EnumTypeArgumentNotInferred,
+            {
+                "EnumTypeArgumentNotInferred",
+                "Cannot infer the type argument '{0}' of enum '{1}' from the fields of "
+                "'{2}'.",
+                "The fields of the variant do not say what the argument is; where the value is "
+                "used the expected type does: 'let x: Option<int> = Option::None'.",
+            },
+        },
+        {
+            SemanticDiag::EnumConstructionMismatch,
+            {
+                "EnumConstructionMismatch",
+                "Variant '{0}' of enum '{1}' cannot be built from this value: {2}.",
+                "A variant written with '(...)' is built from its fields in order; one written "
+                "with '{{ }}' from a value that has a field of each name it declares; and one "
+                "without fields is the value itself.",
+            },
+        },
+        {
+            SemanticDiag::EnumVariantCaseRepeated,
+            {
+                "EnumVariantCaseRepeated",
+                "The variant '{0}' is matched more than once; the later case is never taken.",
+                "A branch takes the first case that matches. Remove the later case, or the "
+                "earlier one.",
+            },
+        },
+        {
+            SemanticDiag::MatchCaseAfterWildcard,
+            {
+                "MatchCaseAfterWildcard",
+                "This case follows 'case _': it is never taken.",
+                "'case _' matches every value, so nothing after it can. Remove it, or move it "
+                "before the wildcard.",
             },
         },
     };

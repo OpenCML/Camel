@@ -2,7 +2,7 @@
 
 This note describes the fault-isolation operator and what happens to the state of a run when a
 fault ends the program or is isolated. The normative text is `docs/design-principles.cn.md`
-section 2.9, "空值、错误与故障": a fault ends the program with a located diagnostic, *but can
+section 3.9, "空值、错误与故障": a fault ends the program with a located diagnostic, *but can
 be isolated at the boundary of a subgraph*, where it becomes an error value; before a program
 is ended, its output is flushed and its external resources are released.
 
@@ -10,7 +10,7 @@ Choices the design principles do not make are collected in section 9 as question
 language author. Each is implemented the way section 9 recommends and marked in the code and
 in the tests with `DESIGN-QUESTION(<label>)`, so that a ruling can be applied in one place.
 
-The name `attempt` is settled (design principles 2.10). In the C++ sources it is written in exactly one place,
+The name `attempt` is settled (design principles 3.9). In the C++ sources it is written in exactly one place,
 `camel::execute::kFaultIsolationName` (`include/camel/execute/fault_isolation.h`); everything
 else refers to the operator by its URI `:mark/isolate`, which does not contain the name.
 Outside C++ the name is in the signature entry (`stdlib/signatures/globals.cml`), the
@@ -51,7 +51,7 @@ call). Not accepted, each a compile-time error at the call (`NoMatchingFunction`
 - a function with `with` parameters (it is called through a closure that binds them);
 - a function with a `var` parameter: an existing rule of the front end refuses to hand such a
   function to any operator ("an operator calls a function argument with values"). The closure
-  form captures the variable instead, by reference (2.5).
+  form captures the variable instead, by reference (3.5).
 
 When `f` itself returns `U!`, the result is `U!`: an error value `f` returned is handed on
 unchanged, and a fault inside `f` becomes an error value of the same type. `T!!` is rejected
@@ -80,10 +80,10 @@ subgraph main {
 For comparison, the call `f(0)` through a function value is `CALL` with the function on a
 `WITH` edge and the argument on a `NORM` edge.
 
-"A marked call of a subgraph" (design principles, table of section 1) is this: the node
+"A marked call of a subgraph" (design principles, table 2.1) is this: the node
 calls the graph of the function value, exactly as `CALL` does, and the mark says that the
 call is a fault boundary. The structure does not depend on what the callee contains, which is
-the criterion of section 2.9. `:mark/...` is the existing family of operators that the
+the criterion of section 1. `:mark/...` is the existing family of operators that the
 schedulers run themselves because they call back into graphs (`:mark/map_arr`, ...); a new
 node kind was not added (it would have to be taught to every pass, back end and exporter for
 no gain: no pass has to look inside).
@@ -102,12 +102,12 @@ with everything it calls, directly or indirectly, on whatever thread.
   those.
 - **Effects that happened inside the boundary before the fault stay.** Lines already printed
   are printed, files written are written, and a `var` written inside the boundary keeps the
-  value written: a `var` is a shared cell (design principles 2.5), and nothing is rolled back.
+  value written: a `var` is a shared cell (design principles 3.5), and nothing is rolled back.
   `attempt` is not a transaction.
 - Values under construction inside the boundary are dropped. Nothing of them is visible
   outside, because the only way out of the boundary is the result of the node.
-- By 2.1 an `attempt` whose result is not used outside a `sync` block is not evaluated, like
-  any call; by 2.4 whether the callee's effects happen is decided by the callee's own graph.
+- By 3.1 an `attempt` whose result is not used outside a `sync` block is not evaluated, like
+  any call; by 3.2 whether the callee's effects happen is decided by the callee's own graph.
 
 ## 2. Which faults can be isolated
 
@@ -220,7 +220,7 @@ entry into compiled code.
 
 Verified with a callee that is compiled (`compiled.cml`): shape (a) with a division by zero
 in straight-line code under `std::jit`, and with a native self-recursion that exceeds the
-limit under `std::inline std::jit`; the compiled code runs again afterwards.
+limit under `std::opt::inline std::jit`; the compiled code runs again afterwards.
 
 The case "compiled `f` calls another graph through the interpreter" does not exist today: a
 graph that calls another graph is not compiled. If trampolines are added, `07` 16.5 applies
@@ -269,7 +269,7 @@ part of its `ThreadState`, inherited by every task exactly where the call depth 
 
 Sibling work outside the boundary is in another domain and is not affected (`concurrent.cml`).
 
-**What a failure stops** (ruled: design principles 2.10), for an isolated
+**What a failure stops** (ruled: design principles 3.9), for an isolated
 fault and for one that ends the run alike:
 
 - tasks that have started run to their end, with everything they start (there is no
@@ -288,9 +288,9 @@ acceptable for a program that goes on. It is removed; no running code polls anyt
 For `attempt(() => xs->map<f>)` where one element faults: on the linear back ends no element
 after the faulting one runs; on `std::prl` some do, a different number from run to run, each
 of them completely. *Which* effects of the other elements happen thus differs between a
-linear and a parallel run, as 2.7 already says for effects in a parallel `map`.
+linear and a parallel run, as 3.6 already says for effects in a parallel `map`.
 
-**Which of several concurrent faults is reported** (ruled: design principles 2.10): the one
+**Which of several concurrent faults is reported** (ruled: design principles 3.6): the one
 of the smallest element index; for nested operators the outer index decides first, then the
 inner one. The element tasks of `map`, `apply`, `filter`, `unordered_foreach` and the chunks
 of `unordered_reduce` do not let an exception escape into the executor (which would cancel the
@@ -352,14 +352,14 @@ fault, would make an isolated fault cost a full collection).
   rewrite `:mark/isolate` into a call; `camel::execute::isFaultIsolationUri` is the test.
 - **fold / cse / dce.** `:mark/isolate` is declared effectful in the operator-traits
   registry, as `map` is: what it does is what the function does, and its result depends on
-  whether the call faults. It is never folded (2.9 on `1 / 0`: a pass must not decide a fault
+  whether the call faults. It is never folded (3.9 on `1 / 0`: a pass must not decide a fault
   at compile time), never merged, and removed only where an effectful unused call already is.
-  `std::opt::simplify` specialises a callee on a constant argument and then warns
+  `std::opt` specialises a callee on a constant argument and then warns
   (`ConstantExpressionFaults`) that the division in the specialised copy always faults; it
   does not fold it, and the behaviour is unchanged.
 - **`std::macro`.** The macro evaluator runs none of the operators the schedulers run
   themselves (`map`, `filter`, ..., `attempt`): a macro call with constant arguments whose
-  body uses one fails to evaluate, which is a compile-time error (2.7), reported at the call
+  body uses one fails to evaluate, which is a compile-time error (8), reported at the call
   with the operator named. Without `std::macro` the function is an ordinary one.
 - **Autodiff, ONNX export, `std::cpp`.** Each refuses with a located diagnostic, with no
   change to them: `grad` at the `grad` call ("no derivative rule for operator
@@ -436,7 +436,7 @@ the machine; times are minima of several runs and still noisy).
 
 Each is implemented as recommended.
 
-- **`attempt-name`.** Ruled on (design principles 2.10): the name is `attempt`.
+- **`attempt-name`.** Ruled on (design principles 3.9): the name is `attempt`.
 - **`attempt-fallible-target`.** `attempt(f)` with `f: () => U!`.
   ```camel
   func checked(x: int): int! { ... throw error('Negative', ...) ... return 100 / x }
@@ -452,7 +452,7 @@ Each is implemented as recommended.
 - **`attempt-memory-exhausted`.** `attempt(() => build_huge()) !! [-1]` when the heap is full.
   Implemented: not isolated, the program ends with the `MemoryExhausted` diagnostic.
   Alternative: isolate it after a collection at the boundary, when that frees enough.
-- *Ruled (design principles 2.10; were `attempt-parallel-siblings` and
+- *Ruled (design principles 3.9; were `attempt-parallel-siblings` and
   `attempt-parallel-first-fault`):* started elements run to their end, elements not yet
   started do not start, and of several faults the one of the smallest index is reported
   (section 3.6).

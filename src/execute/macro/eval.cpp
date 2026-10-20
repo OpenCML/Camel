@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 06, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,7 @@
 #include "camel/core/effect_trace.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/conv.h"
 #include "camel/core/rtdata/func.h"
@@ -38,8 +39,10 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/function_call.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
+#include "camel/execute/loop_driver.h"
 #include "camel/runtime/loop.h"
 #include "camel/utils/log.h"
 
@@ -68,11 +71,6 @@ namespace {
 
 // Why a macro call is not evaluated when it nests deeper than the limit of the evaluator
 // (camel/execute/limits.h), with the limit and how to change it.
-/// The rounds one loop may run while std::macro evaluates it ahead of time: a loop that would
-/// not end makes the compilation fail instead of hang (design of loops, Q9; the bound is a
-/// question to the language author, this is the narrow reading meanwhile).
-constexpr size_t kMaxMacroLoopRounds = 1'000'000;
-
 std::string tooManyNestedCalls(size_t limit, std::string_view graphName) {
     return std::format(
         "the evaluation needs more than {} nested calls (at '{}'). The limit is set with {} <n> "
@@ -82,7 +80,7 @@ std::string tooManyNestedCalls(size_t limit, std::string_view graphName) {
         camel::execute::kMaxMacroDepthOption,
         camel::execute::kMaxMacroDepthEnvVar);
 }
-constexpr size_t kMacroFramePoolSize     = 8 * mm::MB;
+constexpr size_t kMacroFramePoolSize = 8 * mm::MB;
 
 class MacroExecutionError : public std::runtime_error {
   public:
@@ -640,13 +638,44 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         if (camel::core::effect_trace::enabled()) [[unlikely]] {
             camel::core::effect_trace::setSite(ownerGraph->nodeOrigin(nodeRef));
         }
-        slot_t value = (*op)(withView, normView, *context_);
+        slot_t value = callNativeOperator(op, body->oper, withView, normView);
         framePool_.release(frame);
         return anchorResult(value, node->dataType(), node->flags);
     } catch (...) {
         framePool_.release(frame);
         throw;
     }
+}
+
+slot_t MacroEvaluator::callNativeOperator(
+    operator_t op, camel::core::OperId oper, ArgsView &withView, ArgsView &normView) {
+    camel::execute::FunctionInvoker invoker;
+    if (camel::core::OperatorTable::instance().callsGraphs(oper)) {
+        invoker = [this](
+                      ::Function *function,
+                      std::span<const slot_t>
+                          withArgs,
+                      std::span<const slot_t>
+                          normArgs) {
+            return executeFunction(
+                function,
+                [&](Frame *calleeFrame, GCGraph *callee) {
+                    const auto norm = callee->normPorts();
+                    const auto with = callee->withPorts();
+                    for (size_t i = 0; i < normArgs.size(); ++i) {
+                        calleeFrame->set(callee->node(norm[i])->dataIndex, normArgs[i]);
+                    }
+                    for (size_t i = 0; i < withArgs.size(); ++i) {
+                        calleeFrame->set(callee->node(with[i])->dataIndex, withArgs[i]);
+                    }
+                },
+                false);
+        };
+    }
+    // Also for an operator that calls no graphs: its empty invoker masks the scope of anything
+    // that runs outside this evaluator.
+    camel::execute::FunctionCallScope scope(*context_, std::move(invoker));
+    return (*op)(withView, normView, *context_);
 }
 
 slot_t MacroEvaluator::executeFunction(
@@ -734,61 +763,79 @@ slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t n
             stateTupleType);
     }
     const auto captures = loop.captures();
-    const auto run      = [&](GCGraph *callee, std::optional<slot_t> element) {
-        auto *funcObj = ::Function::create(callee, ensureMacroClosureType(callee), mm::autoSpace());
-        return executeFunction(
-            funcObj,
-            [&](Frame *calleeFrame, GCGraph *) {
-                const auto norm = callee->normPorts();
-                size_t port     = 0;
-                if (element) {
-                    calleeFrame->set(callee->node(norm[port++])->dataIndex, *element);
-                }
+    // The rounds are the loop's (camel/execute/loop_driver.h); this evaluator supplies a call
+    // for each, with the state in a tuple the evaluator roots.
+    struct Host {
+        MacroEvaluator &evaluator;
+        Frame *frame;
+        GCGraph *graph;
+        std::span<const gc_node_ref_t> captures;
+        std::optional<gc_node_ref_t> iterableNode;
+        mm::RootHandle &state;
+        TupleType *stateTupleType;
+        size_t k;
+        size_t maxRounds;
+
+        void beforeRound(size_t round) {
+            if (round >= maxRounds) {
+                throw MacroExecutionError(
+                    std::format(
+                        "the loop in '{}' runs more than {} rounds ahead of time. The limit is set "
+                        "with {} <n> or {}=<n>",
+                        graph->name(),
+                        maxRounds,
+                        camel::execute::kMaxMacroRoundsOption,
+                        camel::execute::kMaxMacroRoundsEnvVar));
+            }
+            mm::safepoint("macro loop round");
+        }
+        slot_t callRound(GCGraph *callee, const slot_t *element) {
+            auto *funcObj =
+                ::Function::create(callee, ensureMacroClosureType(callee), mm::autoSpace());
+            return evaluator.executeFunction(
+                funcObj,
+                [&](Frame *calleeFrame, GCGraph *) {
+                    camel::execute::bindLoopRound(
+                        calleeFrame,
+                        callee,
+                        k,
+                        element,
+                        captures.size(),
+                        [&](size_t j) { return state.getAs<::Tuple>()->get<slot_t>(j); },
+                        [&](size_t c) {
+                            return frame->get<slot_t>(dataIndexOf(graph, captures[c]));
+                        });
+                },
+                false);
+        }
+        ::Array *iterable() { return frame->get<::Array *>(dataIndexOf(graph, *iterableNode)); }
+        void advance(slot_t next) {
+            if (k == 1) {
+                state.getAs<::Tuple>()->set(0, next, stateTupleType);
+            } else {
+                auto *tuple = fromSlot<::Tuple *>(next);
                 for (size_t j = 0; j < k; ++j) {
-                    calleeFrame->set(
-                        callee->node(norm[port++])->dataIndex,
-                        state.getAs<::Tuple>()->get<slot_t>(j));
+                    state.getAs<::Tuple>()->set(j, tuple->get<slot_t>(j), stateTupleType);
                 }
-                const auto with = callee->withPorts();
-                for (size_t c = 0; c < captures.size(); ++c) {
-                    calleeFrame->set(
-                        callee->node(with[c])->dataIndex,
-                        frame->get<slot_t>(dataIndexOf(graph, captures[c])));
-                }
-            },
-            false);
-    };
-    const auto iterable = loop.iterable();
-    for (size_t round = 0;; ++round) {
-        if (round >= kMaxMacroLoopRounds) {
-            throw MacroExecutionError(
-                std::format(
-                    "the loop in '{}' runs more than {} rounds ahead of time",
-                    graph->name(),
-                    kMaxMacroLoopRounds));
-        }
-        mm::safepoint("macro loop round");
-        if (loop.condGraph() && !fromSlot<Bool>(run(loop.condGraph(), std::nullopt))) {
-            break;
-        }
-        std::optional<slot_t> element;
-        if (iterable) {
-            auto *array = frame->get<::Array *>(dataIndexOf(graph, *iterable));
-            if (round >= array->size()) {
-                break;
-            }
-            element = array->get<slot_t>(round);
-        }
-        const slot_t next = run(loop.bodyGraph(), element);
-        if (k == 1) {
-            state.getAs<::Tuple>()->set(0, next, stateTupleType);
-        } else {
-            auto *tuple = fromSlot<::Tuple *>(next);
-            for (size_t j = 0; j < k; ++j) {
-                state.getAs<::Tuple>()->set(j, tuple->get<slot_t>(j), stateTupleType);
             }
         }
-    }
+    } host{
+        *this,
+        frame,
+        graph,
+        captures,
+        loop.iterable(),
+        state,
+        stateTupleType,
+        k,
+        camel::execute::macroRoundLimit(*context_)};
+    camel::execute::driveLoopRounds(
+        camel::execute::LoopShape{
+            loop.condGraph(),
+            loop.bodyGraph(),
+            loop.iterable().has_value(),
+            k},
+        host);
     // The value of the loop: the state, or the tuple of its values (a new object: the one the
     // loop kept is the evaluator's).
     if (k == 1) {
@@ -1006,7 +1053,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             if (camel::core::effect_trace::enabled()) [[unlikely]] {
                 camel::core::effect_trace::setSite(runtimeGraph->nodeOrigin(runtimeNodeIndex));
             }
-            slot_t result = (*op)(withView, normView, *context_);
+            slot_t result = callNativeOperator(op, body->oper, withView, normView);
             frame->set(node->dataIndex, result);
         } break;
 
@@ -1054,9 +1101,10 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             // Same arm range as the schedulers: from the arm's first executable node in the
             // linear order (nodes of an inlined arm can precede its recorded head) through
             // its tail; an arm with nothing to execute resumes at the JOIN.
-            size_t jumpIdx   = static_cast<size_t>(frame->get<Int32>(record->dataIndex));
-            const auto arms  = runtimeGraph->branchArmsOf(runtimeNodeIndex);
-            const auto *body = runtimeGraph->nodeBodyAs<camel::runtime::GCBrchBody>(runtimeNodeIndex);
+            size_t jumpIdx  = static_cast<size_t>(frame->get<Int32>(record->dataIndex));
+            const auto arms = runtimeGraph->branchArmsOf(runtimeNodeIndex);
+            const auto *body =
+                runtimeGraph->nodeBodyAs<camel::runtime::GCBrchBody>(runtimeNodeIndex);
             ASSERT(jumpIdx < arms.size(), "Macro BRCH arm index is out of range.");
             const auto entry = camel::execute::resolveRuntimeBranchArmEntry(
                 runtimeGraph,

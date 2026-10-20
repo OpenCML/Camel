@@ -26,7 +26,7 @@ import { inc } from lib::Tools       // bring in names of a namespace of the mod
 
 - `import module` does not put the module's names into the current module; they are reached as `module::name`, or put in scope with `using namespace module` ([5.4](#54-namespaces)).
 - **Modules can import each other** (`a` imports `b` and `b` imports `a`, or a longer ring): their functions can call each other and their values and types can be used by each other, as long as the top-level values do not depend on each other in a ring ([5.7](#57-loading-modules)). A module that is not found is `SemanticDiag::ModuleNotFound`, located at the `import`; where a module in error is imported, that is `SemanticDiag::ImportedModuleHasErrors`.
-- **A module may import itself, to no effect** (design principles 2.13): `import m` or `import { f } from m` in `module m` binds nothing; its names are its own already (with `m::` in front or without, [5.4](#54-namespaces)). An entry file that imports itself by its file name is not loaded a second time.
+- **A module may import itself, to no effect** (design principles 10.1): `import m` or `import { f } from m` in `module m` binds nothing; its names are its own already (with `m::` in front or without, [5.4](#54-namespaces)). An entry file that imports itself by its file name is not loaded a second time.
 - **A name can be renamed when it is imported**: `import { find as str_find } from str` brings the `find` of the module in under the name `str_find`; renamed and plain names may stand in one import (`import { find as str_find, trim } from str`). After a renaming the original name is not visible in this module. When two modules have a function of the same name, rename one of them, or import one and use the qualified name for the other (`import array`, then `array::find`). A single name can be renamed too (`import find as str_find from str`), and a whole module is renamed with `import m as n`.
 - Two imports by name that bring functions of the same name and the same parameter types are `SemanticDiag::ImportNameConflict`, located at the later `import` and pointing to the earlier one; neither is chosen silently. Functions of the same name and different parameter types form one set of overloads, chosen by the argument types (functions of one name in one layer are one set of overloads, [5.4](#54-namespaces)).
 - **Search order**: `.cml` files in the same directory as the entry file, the directories given by `-I <dir>`, the directories listed in the environment variable `CAMEL_PACKAGES`, and the modules installed with Camel.
@@ -47,7 +47,7 @@ func main(): int sync {
 
 ### 5.2.1 Modules provided with Camel
 
-Names that can be used without an import (global built-ins): `print`, `println`, `input`, `format`, `join`, `len`, `range`, `zip`, `head`, `tail`, `slice`, `concat`, `append`, `extend`, `contains`, `map`, `filter`, `reduce`, `foreach`, `exit`, `sleep`, `error`, `parse_int`, `parse_float`, the conversion functions (`int`, `float`, `string` and so on), and the operations on maps and sets ([3.5](03_data_model.md#35-maps-and-sets)).
+Names that can be used without an import (global built-ins): `print`, `println`, `input`, `format`, `join`, `len`, `range`, `zip`, `head`, `tail`, `slice`, `concat`, `append`, `extend`, `contains`, `map`, `filter`, `reduce`, `foreach`, `exit`, `sleep`, `error`, `parse_int`, `parse_float`, the conversion functions (`int`, `float`, `string` and so on), and the operations on maps and sets ([3.6](03_data_model.md#36-maps-and-sets)).
 
 | Module | Contents |
 |---|---|
@@ -112,7 +112,7 @@ func main(): int sync {
 - `export` is written before a `func`, `type` or `let`/`var` declaration, or in the form `export { a, b }` listing names already declared.
 - Generic functions can be exported ([7.5](07_statements.md#75-generic-functions)). A name that has both an annotated function and other overloads currently cannot be exported (`SemanticDiag::ConstructNotSupported`).
 
-**An exported function can use the `let` and `var` values of the top level of its own module**, directly or through functions of its module that it calls (design principles 2.11):
+**An exported function can use the `let` and `var` values of the top level of its own module**, directly or through functions of its module that it calls (design principles 10.1):
 
 ```cml
 // counter.cml
@@ -220,8 +220,8 @@ func f(): int {
 
 - What it opens can be an imported module or a namespace of one, or a namespace of this module.
 - **It applies to the block it is written in**: at the top level of the module to the whole module, in a namespace block to the declarations of that block, in a function body (or a block of it) only there. Its position in the block does not matter.
-- When two `using` bring things of one name that cannot be told apart (functions of the same parameter types, values, types), that is `SemanticDiag::AmbiguousName` **where the name is used**, listing the candidates by their full names, `module::path::name` (design principles 2.13; whatever alias an import gave the module); write one of them.
-- **Reopening a namespace block does not carry the `using` of an earlier block of it** (design principles 2.13): a `using` holds only in the block it is written in. Functions of one name with different parameter types form one set of overloads.
+- When two `using` bring things of one name that cannot be told apart (functions of the same parameter types, values, types), that is `SemanticDiag::AmbiguousName` **where the name is used**, listing the candidates by their full names, `module::path::name` (design principles 10.2; whatever alias an import gave the module); write one of them.
+- **Reopening a namespace block does not carry the `using` of an earlier block of it** (design principles 10.2): a `using` holds only in the block it is written in. Functions of one name with different parameter types form one set of overloads.
 
 **There is one rule of precedence for names**: local names > the module's own names (the namespace written in, the enclosing namespaces, the top level) > names imported by name (including those reached through a `module::` prefix) > names a `using namespace` brings > built-in names. The first layer that has the name is taken; within a layer, functions of one name form a set of overloads; nothing is merged across layers (so the module's own `inc(string)` hides an `inc(int)` a `using` brings). Operators are the exception: their overloads come from every layer.
 
@@ -245,13 +245,13 @@ For the functions each module exports (signature, whether it is pure, behaviour 
 
 - A function that may have no result returns `T?` (`find` and `index_of` when nothing is found, `min`, `max` and `median` of an empty array), handled with `??`; only operations declared as fallible return `T!` (such as decoding by code point a string that is not valid UTF-8); out-of-range arguments and arguments outside the domain are faults.
 - A library written in Camel (such as `array`) exports generic functions, which are instantiated by element type in the module that calls them (see [7.5](07_statements.md#75-generic-functions)).
-- Modules written in Camel can export values ([5.3](#53-exports)); so can C++ modules (design principles 2.13): the constants of `math`, `math::pi`, `math::e`, `math::inf`, `math::nan`, are written without parentheses, and each use is that constant itself, with no node on the root graph and no capture.
+- Modules written in Camel can export values ([5.3](#53-exports)); so can C++ modules (design principles 10.1): the constants of `math`, `math::pi`, `math::e`, `math::inf`, `math::nan`, are written without parentheses, and each use is that constant itself, with no node on the root graph and no capture.
 - A function passed to a higher-order function of the `array` module is applied with `map`: there is no agreed order between the calls on the elements (a parallel scheduler may execute them at the same time), and the results are arranged by position; for side effects that need an order use the built-in `foreach` and `reduce`.
 - `camel inspect --ops <file>` lists all the operators of the built-in modules and of every module the program imports, together with their declared purity.
 
 ## 5.7 Loading modules
 
-All modules of a program are built into one `__root__` graph (design principles 2.11), in three steps:
+All modules of a program are built into one `__root__` graph (design principles 10.1), in three steps:
 
 1. **Declare**: starting from the entry, every imported module is found, and each only records what it declares (the signatures of its functions, its top-level values, its types) and fills its export table, without looking at any function body. So modules may import each other in any way. A module's types are recorded before its other declarations, so two modules that import each other can use each other's types (type definitions themselves cannot depend on each other in a ring).
 2. **Build**: the function bodies and top-level values of the modules are built in the order of the imports; a function or a value is built when it is first needed, by whichever module needs it. So **the top-level declarations do not depend on the order they are written in**:
@@ -267,6 +267,6 @@ All modules of a program are built into one `__root__` graph (design principles 
 3. **Link**: every top-level value a function uses is passed along the calls up to `__root__`, the call of the entry module's `main` is made, and the summaries of effects are computed, with the warnings that depend on them.
 
 - A top-level value cannot depend on itself, directly or not (through other values, through the functions its initializer calls, through other modules): that is `SemanticDiag::ModuleValueCycle`, located at the reference that closes the ring, with the whole chain in the message: `The value 'a' depends on itself: a (m.cml:1:1) -> b (m.cml:2:1) -> a`. Functions calling each other are not a cycle.
-- Types cannot form a cycle across modules either: `type A = { b: B }` in `a` using `B` of `b`, whose `type B = { a: A }` uses `A`, is `SemanticDiag::ModuleTypeCycle` (design principles 2.13), located at the reference that closes the cycle, with the cycle in the message: `cycle_a::A -> cycle_b::B -> cycle_a::A`.
+- Types cannot form a cycle across modules either: `type A = { b: B }` in `a` using `B` of `b`, whose `type B = { a: A }` uses `A`, is `SemanticDiag::ModuleTypeCycle` (design principles 10.1), located at the reference that closes the cycle, with the cycle in the message: `cycle_a::A -> cycle_b::B -> cycle_a::A`.
 - A function named `main` in an imported module is an ordinary function; only the entry module's `main` is the entry of the program.
 - A top-level value a recursive function uses only after it calls itself reaches the recursive call as usual; but a **variable** used only after the recursive call is `SemanticDiag::CaptureAfterRecursiveCall`: that call was already ordered among the reads and writes of the variables known then. Write the first use of the variable before the recursive call, or pass it as a parameter.

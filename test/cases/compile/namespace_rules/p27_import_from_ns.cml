@@ -1,4 +1,4 @@
-// import { ... } from m::N: names of a namespace of the module (design principles 2.12, N6).
+// import { ... } from m::N: names of a namespace of the module (design principles 10.2, N6).
 import { inc, dec as down } from lib::Tools
 
 func main(): int sync {

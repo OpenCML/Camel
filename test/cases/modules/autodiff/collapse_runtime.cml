@@ -1,0 +1,25 @@
+/**
+ * Inspect std::macro and std::opt with x left as a main parameter, so the
+ * gradient remains runtime arithmetic. h'(x) = 2x + 6(x + 1).
+ * Compare without --arg (leave x as a port):
+ *   camel collapse_runtime.cml std::macro std::gir
+ *   camel collapse_runtime.cml std::macro std::opt std::gir
+ * Execute with an input (binding --arg may specialize the entry graph):
+ *   camel collapse_runtime.cml --arg x=2 std::macro std::opt std::nvm
+ */
+module collapse_runtime
+
+import { grad } from autodiff
+
+func sq(x: float): float {
+    return x * x
+}
+
+func h(x: float): float {
+    return sq(x) + 3.0 * sq(x + 1.0)
+}
+
+func main(x: float): int sync {
+    'collapse_runtime dh={}'->format<grad(h)(x)>->println
+    return 0
+}

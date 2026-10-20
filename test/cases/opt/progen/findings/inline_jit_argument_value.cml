@@ -1,8 +1,8 @@
 /**
- * progen finding F17 ((other) wrong value after inlining). After `std::inline`, the JIT passes 0
+ * progen finding F17 ((other) wrong value after inlining). After `std::opt::inline`, the JIT passes 0
  *   instead of 24 as the argument `r1(4, 0)` of a nested function (the node VM, the bytecode VM
  *   and the parallel scheduler print 24).
- * Pipeline: std::inline std::jit
+ * Pipeline: std::opt::inline std::jit
  * Environment: PROGEN_I1=2
  * Expected output: L8 0 0 24
  * Actual: L8 0 0 0

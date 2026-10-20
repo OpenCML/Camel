@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -95,11 +95,15 @@ struct DraftNodeHeader {
     uint8_t runtimeFlags             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
     // The numeric permissions the program granted to the node with @numeric(...)
-    // (camel/core/operator_semantics.h, PermissionMask; design principles 2.13), 0 when none.
+    // (camel/core/operator_semantics.h, PermissionMask; design principles 7.5), 0 when none.
     // Graph content, not a derived fact: rewrites keep it as they keep the origin (a node that
     // replaces another inherits it, inlined and cloned nodes keep their own), and the encoder
     // writes it to the frozen graph's permission column (GCGraph::nodePermissions).
     uint8_t permissions = 0;
+    // The node's attributes (camel/core/node_attrs.h, AttrSetId), 0 when none. Graph content,
+    // kept by rewrites like the permissions above; the encoder writes it to the frozen graph's
+    // attribute column (GCGraph::nodeAttrs).
+    uint32_t attrs = 0;
     // Source origin (camel::source::origin_id_t) of the node, 0 when unknown. Rewrites keep it:
     // a node that replaces another inherits its origin, inlined nodes keep the callee's.
     uint64_t origin = 0;
@@ -124,6 +128,7 @@ struct DraftNodeInit {
     uint8_t runtimeFlags              = 0;
     uint64_t origin                   = 0;
     uint8_t permissions               = 0; // see DraftNodeHeader::permissions
+    uint32_t attrs                    = 0; // see DraftNodeHeader::attrs
     std::span<const std::byte> payload{};
     std::span<const gc_node_ref_t> normInputs{};
     std::span<const gc_node_ref_t> withInputs{};
@@ -323,8 +328,8 @@ class GraphDraft {
         gc_slot_idx_t dataIndex = 0);
     /// A LOOP node calling `body.condGraph` and `body.bodyGraph` (camel/runtime/loop.h); the
     /// caller links its inputs and keeps the two graphs among the draft's dependencies.
-    gc_node_ref_t addLoopNode(
-        const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
+    gc_node_ref_t
+    addLoopNode(const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addOperNode(
         camel::core::type::Type *type, operator_t op, std::string_view uri,
         gc_slot_idx_t dataIndex = 0);
@@ -365,6 +370,9 @@ class GraphDraft {
     /// Numeric permissions of node `id` (see DraftNodeHeader::permissions).
     uint8_t nodePermissions(gc_node_ref_t id) const;
     void setNodePermissions(gc_node_ref_t id, uint8_t permissions);
+    /// Attributes of node `id` (camel/core/node_attrs.h; see DraftNodeHeader::attrs).
+    uint32_t nodeAttrs(gc_node_ref_t id) const;
+    void setNodeAttrs(gc_node_ref_t id, uint32_t attrs);
     void rewriteNode(gc_node_ref_t id, const DraftNodeInit &init);
     void appendNormPort(gc_node_ref_t id);
     void appendWithPort(gc_node_ref_t id);
@@ -410,13 +418,13 @@ class GraphDraft {
         gc_node_ref_t newId, bool norm, bool with, bool ctrl);
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
 
-    camel::core::type::FunctionType *funcType_     = nullptr;
+    camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside
     // the graph's own block (TupleType::constructFrameLayout).
     std::vector<camel::core::type::Type *> runtimeSlotTypes_;
-    bool hasFrameLayout_ = false;
-    camel::core::type::TupleType *closureType_     = nullptr;
+    bool hasFrameLayout_                       = false;
+    camel::core::type::TupleType *closureType_ = nullptr;
     DraftNodePool pool_;
     std::vector<DraftNode *> nodesById_;
     std::vector<gc_node_ref_t> sourceRefsById_;

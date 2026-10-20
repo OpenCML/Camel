@@ -9,7 +9,7 @@ module effects
 func main(): int sync {
     var total = 1
     // A function with a var parameter cannot be handed to an operator; the closure captures
-    // the variable instead (by reference, design principles 2.5).
+    // the variable instead (by reference, design principles 3.5).
     let work = sync (d: int): int => sync {
         println('work begins')
         total = total + 10

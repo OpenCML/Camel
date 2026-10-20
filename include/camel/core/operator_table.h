@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 13, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,15 +36,14 @@
  * module, yet they need to know whether an operator may be evaluated early, merged or
  * dropped. Modules and the builtin operator set declare those properties here when they are
  * loaded; passes only query. An operator nobody declared is treated conservatively: it has
- * side effects and may fault (design principles 2.9).
+ * side effects and may fault (design principles 3.9).
  *
  * Passes and back ends recognise an operator by its OperId, never by comparing URI text
  * (design section 3.8, R10). The operators the core itself knows have compile-time ids
  * (namespace `oper` below): the table interns their URIs first, in a fixed order. An operator
  * of a module that a pass of the same module recognises is interned once by that pass and
  * compared by id. Families are flags of the entry, derived from the URI when it is interned:
- * built-in (`:` prefix: no module protocol), marked (`:mark/`: the schedulers run it
- * themselves, it calls the function values it receives) and assignment (`:op/assn...`: `=`
+ * built-in (`:` prefix: no module protocol) and assignment (`:op/assn...`: `=`
  * and the compound assignments, which store into a variable cell).
  *
  * The implementation (the C++ function pointer) is deliberately not in the table: it is
@@ -67,6 +66,7 @@
 #pragma once
 
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/symbol.h"
@@ -87,6 +87,11 @@
 #include <utility>
 #include <vector>
 
+namespace camel::core::data {
+class Data;
+using data_ptr_t = std::shared_ptr<Data>;
+} // namespace camel::core::data
+
 namespace camel::core {
 
 /// Index of an operator in the OperatorTable.
@@ -100,18 +105,10 @@ inline constexpr OperId kNoOper = 0;
 /// table interns their URIs (kWellKnownOperatorUris, same order) before anything else, so
 /// `body->oper == oper::VarGet` is the test that `body->uri() == ":var/get"` used to be.
 namespace oper {
-inline constexpr OperId VarNew              = 1;  // ":var/new"  `var v = e`
-inline constexpr OperId VarGet              = 2;  // ":var/get"  reading a variable
-inline constexpr OperId MapArr              = 3;  // ":mark/map_arr"
-inline constexpr OperId ApplyArr            = 4;  // ":mark/apply_arr"
-inline constexpr OperId FilterArr           = 5;  // ":mark/filter_arr"
-inline constexpr OperId ReduceArr           = 6;  // ":mark/reduce_arr"
-inline constexpr OperId UnorderedReduceArr  = 7;  // ":mark/unordered_reduce_arr"
-inline constexpr OperId ForeachArr          = 8;  // ":mark/foreach_arr"
-inline constexpr OperId UnorderedForeachArr = 9;  // ":mark/unordered_foreach_arr"
-inline constexpr OperId Isolate             = 10; // ":mark/isolate"  `attempt`
-inline constexpr OperId VarPeek             = 11; // ":var/peek" a read whose value cannot be kept
-inline constexpr OperId kWellKnownCount     = 12; // kNoOper included
+inline constexpr OperId VarNew          = 1; // ":var/new"  `var v = e`
+inline constexpr OperId VarGet          = 2; // ":var/get"  reading a variable
+inline constexpr OperId VarPeek         = 3; // ":var/peek" a read whose value cannot be kept
+inline constexpr OperId kWellKnownCount = 4; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -125,14 +122,6 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     "",
     ":var/new",
     ":var/get",
-    ":mark/map_arr",
-    ":mark/apply_arr",
-    ":mark/filter_arr",
-    ":mark/reduce_arr",
-    ":mark/unordered_reduce_arr",
-    ":mark/foreach_arr",
-    ":mark/unordered_foreach_arr",
-    ":mark/isolate",
     ":var/peek",
 };
 
@@ -142,12 +131,13 @@ struct OperatorTraits {
     bool pure = false;
     /// Output element i depends only on input elements i (after broadcasting).
     bool elementwise = false;
-    /// Not pure, but without an effect outside the program's own variables: it creates or
-    /// reads a variable (`:var/new`, `:var/get`). Its result depends on when it runs, so it
-    /// is never folded, merged or moved across a write; it is not an effect a user can
-    /// observe, so it is not reported as one (effect trace).
+    /// Not pure, but without an effect outside the program's own variables: it creates, reads
+    /// or changes a variable (`:var/new`, `:var/get`, `:var/take`); which of them is its
+    /// resource declaration's to say, the effect summaries read it there. Its result depends on
+    /// when it runs, so it is never folded, merged or moved across a write; it is not an effect a
+    /// user can observe, so it is not reported as one (effect trace).
     bool stateOnly = false;
-    /// The operator can raise a fault (design principles 2.9: division by zero, an index out
+    /// The operator can raise a fault (design principles 3.9: division by zero, an index out
     /// of range, a conversion whose value does not fit). True unless the module declares
     /// otherwise. Recorded for consumers of the graph model; no pass in this repository
     /// changes its behaviour on it yet (docs/design/graph-model, question Q1).
@@ -176,6 +166,55 @@ struct OperatorTraits {
 using TypeFolder = std::function<std::optional<slot_t>(
     std::span<type::Type *const> types, type::static_args_t statics, mm::IAllocator &allocator)>;
 
+/**
+ * What an operator used as a decorator grants (language reference 7.6): an attribute
+ * (camel/core/node_attrs.h) on the nodes written in the function or block it decorates, the
+ * arms, loop bodies and lambdas written there included, and on no function they call.
+ *
+ * The operator itself takes its with-arguments and one function and returns a function of the
+ * same type (OperatorTraits as for any operator). When a decorator names it with with-arguments
+ * that are constants, the graph builder applies it while it builds the function: it gives the
+ * nodes the attribute and drops the call, so passes see the attribute and the function stays
+ * the one written. Anywhere else (a decorator that names it through a variable, arguments known
+ * only at run time, a call written as a call) the operator runs like any other; its function is
+ * then the decorator's runtime form, which may return the function unchanged
+ * (camel::core::module::attrDecoratorIdentity): an attribute only allows a library to do
+ * something else, so a node without it is always correct.
+ */
+struct AttrGrant {
+    /// The attribute key's name; the library registers the key with its kind and rules
+    /// (attr::registerKey).
+    std::string key;
+    /// The value granted for the with-arguments of one use, given as the constants written
+    /// (aligned with the with-parameters); nullopt when the constants do not give one, and the
+    /// decorator is then applied when it runs. Null: attr::unit() whatever the arguments.
+    std::function<std::optional<attr::AttrValueId>(std::span<const data::data_ptr_t> with)> value;
+};
+
+/**
+ * What the compiler does at a call of the operator because of what the operator is (design
+ * principles 6.6): facts of the operator, declared with it, instead of names the compiler
+ * knows. Declared at module load time (OperatorTable::declareCallSpec).
+ */
+struct CallSpec {
+    /// When the call is written with exactly this many ordinary arguments (-1: never), the
+    /// compiler appends the position of the call as one more, constant string argument: like
+    /// Rust's `#[track_caller]`. `error(kind, message)` uses it.
+    int8_t callSiteAtArity = -1;
+    /// The operator calls its function arguments and drops what they return (`foreach`): a
+    /// function written in place there whose value is a value nothing takes is refused.
+    bool discardsCallbackResult = false;
+    /// The index of the with-argument, or of the ordinary argument, that is a format string
+    /// (-1: none): when it is a constant, the compiler checks it against the other arguments.
+    int8_t formatWithArg = -1;
+    int8_t formatNormArg = -1;
+    /// Checks a constant format string against the types of the arguments it formats; returns
+    /// what is wrong with it, nullopt when it is fine. Set together with the index above.
+    std::function<std::optional<std::string>(
+        std::string_view pattern, std::span<type::Type *const> argumentTypes)>
+        checkFormat;
+};
+
 class OperatorTable {
   public:
     static OperatorTable &instance();
@@ -198,10 +237,16 @@ class OperatorTable {
     /// interpreter's own. Lock-free.
     bool isBuiltin(OperId id) const { return (entries_[id].family & kFamilyBuiltin) != 0; }
 
-    /// A `:mark/` operator: the schedulers run it themselves rather than through a function
-    /// pointer, because it calls the function values it receives (the higher-order array
-    /// operators and `attempt`). Lock-free.
-    bool isMarked(OperId id) const { return (entries_[id].family & kFamilyMarked) != 0; }
+    /// The operator declares how it calls the function values it receives (the higher-order
+    /// array operators and `attempt`): the schedulers may run it themselves, by that declaration,
+    /// rather than through its function pointer. Always a `callsGraphs` operator. Lock-free.
+    bool isMarked(OperId id) const { return elementCalls(id) != nullptr; }
+
+    /// The operator's element-call declaration, or nullptr.
+    const sem::ElementCalls *elementCalls(OperId id) const {
+        const sem::OperatorSemantics *declared = semantics(id);
+        return declared && declared->elementCalls ? &*declared->elementCalls : nullptr;
+    }
 
     /// An assignment (`:op/assn`, `:op/assn_l`, `:op/assn_add_i`, ...): `=` or a compound
     /// assignment, storing its second operand (or the result of the operation) into the
@@ -215,7 +260,7 @@ class OperatorTable {
 
     /// Declares the purity of the operators `protocol:name`, one `{name, pure}` each. Every
     /// operator of a module has to be declared, the ones with side effects too (design
-    /// principles 2.9): an operator nobody declared is treated as having side effects, and
+    /// principles 3.3): an operator nobody declared is treated as having side effects, and
     /// its module is told so when it is loaded. `pure` means the result depends on the
     /// arguments only: not on a clock, a random generator, the environment or a file.
     void declare(
@@ -243,7 +288,7 @@ class OperatorTable {
     bool hasExternalEffect(OperId id) const;
     bool hasExternalEffect(std::string_view uri) const;
 
-    // ---- In-place forms (design principles 2.12, 2.13) --------------------------------------
+    // ---- In-place forms (design principles 11.3) --------------------------------------
     //
     // An operator returns a new value and never changes its arguments (`sort` returns a new
     // array). Where a variable is bound to the result of the operator applied to the
@@ -261,6 +306,24 @@ class OperatorTable {
 
     /// The in-place form of the operator `uri`, or nullopt when it has none.
     std::optional<std::string> inPlaceForm(std::string_view uri) const;
+
+    // ---- Decorators that grant attributes (language reference 7.6) -------------------------
+
+    /// Declares that the operator `uri`, used as a decorator, grants an attribute (AttrGrant).
+    /// Module load time; std::invalid_argument when the key is not a valid key name.
+    void declareGrant(std::string_view uri, AttrGrant grant);
+
+    /// What the operator `uri` grants, or nullptr when it is not declared to grant anything.
+    std::shared_ptr<const AttrGrant> grantOf(std::string_view uri) const;
+
+    // ---- Call-site facts (CallSpec) --------------------------------------------------------
+
+    /// Declares the call-site facts of the operator `uri` (module load time).
+    void declareCallSpec(std::string_view uri, CallSpec spec);
+
+    /// The call-site facts of the operator, or nullptr when it declares none. The pointer stays
+    /// valid until the spec of the same operator is replaced (load time only).
+    const CallSpec *callSpec(std::string_view uri) const;
 
     // ---- Type rules -----------------------------------------------------------------------
 
@@ -343,6 +406,25 @@ class OperatorTable {
         return entries_[id].semantics.load(std::memory_order_acquire);
     }
 
+    /// Whether running the operator writes the resource the ordinary (or with) operand `index`
+    /// names: from its resource declaration (design principles 3.3), the one source of what
+    /// an operator writes. An operator without a declaration is read conservatively: every
+    /// operand of a non-pure one, except that the operands of one that calls or reads the graphs
+    /// of the function values it receives are not written by the operator (what the callee does
+    /// to them is the callee's, reached through the function value).
+    bool writesOperand(OperId id, bool isWith, size_t index) const;
+
+    /// Whether the operator declares an access to a resource of class `cls` (`writesOnly`: a
+    /// write). An undeclared operator declares none.
+    bool touchesClass(OperId id, sem::ResourceClass cls, bool writesOnly = false) const;
+
+    /// Whether the operator declares a write to a cell or to an object changed in place: state
+    /// of the program itself (not ambient state, not a module's objects).
+    bool writesProgramState(OperId id) const {
+        return touchesClass(id, sem::ResourceClass::Variable, true) ||
+               touchesClass(id, sem::ResourceClass::Object, true);
+    }
+
     /// The stable key of an operator that has semantics, nullopt otherwise.
     std::optional<sem::OperatorKey> key(OperId id) const;
 
@@ -371,10 +453,9 @@ class OperatorTable {
         kInspectsGraphs = 1 << 6,
     };
 
-    // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isMarked).
+    // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isAssignment).
     enum : uint8_t {
         kFamilyBuiltin    = 1 << 0,
-        kFamilyMarked     = 1 << 1,
         kFamilyAssignment = 1 << 2,
     };
 
@@ -388,6 +469,11 @@ class OperatorTable {
         std::unique_ptr<TypeFolder> folder;
         /// The in-place form (setInPlaceForm); kEmptySym when there is none.
         SymId inPlace = kEmptySym;
+        /// What it grants as a decorator (declareGrant), or nullptr.
+        std::shared_ptr<const AttrGrant> grant;
+
+        /// The call-site facts (declareCallSpec), or null.
+        std::unique_ptr<CallSpec> callSpec;
         /// The published semantics record (owned by declarations_), or nullptr.
         std::atomic<const sem::OperatorSemantics *> semantics{nullptr};
     };

@@ -4,7 +4,7 @@
      (stdlib/signatures/*.cml) or the comments of the library (stdlib/*.cml) and regenerate. -->
 
 The functions of the core standard library, by module. The boundary is the one the design
-principles draw (section 2.9): a primitive that touches the system or is sensitive to
+principles draw (section 10.5): a primitive that touches the system or is sensitive to
 performance is an operator written in C++, an opaque node of the graph; logic composed from
 primitives is written in Camel, a subgraph that passes can see into.
 
@@ -18,7 +18,7 @@ How to read an entry:
 - **Pure** operators depend on their arguments only: a pass may evaluate a call ahead of time,
   merge two equal calls or drop an unused one. An operator **with effects** is left alone, and
   its call runs only when it is reachable from a `sync` block or its result is used (design
-  principles 2.1). Every operator of these modules declares which it is.
+  principles 3.1). Every operator of these modules declares which it is.
 - **Failure**: a *fault* stops the program with a located diagnostic (an index out of range, an
   argument outside what the operator defines). An *error* is a value: the function returns
   `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is
@@ -32,14 +32,17 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | Module | Import | Written in | Functions |
 |---|---|---|---|
 | [built-in](#built-in-functions) | none | C++ | 47 |
-| [str](#str) | `import { ... } from str` | C++ | 20 |
+| [str](#str) | `import { ... } from str` | C++ | 16 |
+| [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
+| [tree](#tree) | `import { ... } from tree` | C++ | 7 |
+| [tensor](#tensor) | `import { ... } from tensor` | C++ | 2 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 45 |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
 | [algo](#algo) | `import { ... } from algo` | C++ | 8 |
 | [random](#random) | `import { ... } from random` | C++ | 7 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
-| [fs](#fs) | `import { ... } from fs` | C++ | 10 |
+| [fs](#fs) | `import { ... } from fs` | C++ | 13 |
 | [os](#os) | `import { ... } from os` | C++ | 8 |
 | [sys](#sys) | `import { ... } from sys` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
@@ -63,7 +66,11 @@ an integer drops the fraction.
 #### `int`
 
 ```camel
-int: (x: i32 | int | f32 | float | string) => int
+int: (x: i32) => int
+int: (x: int) => int
+int: (x: f32) => int
+int: (x: float) => int
+int: (x: string) => int
 ```
 
 x as a 64-bit integer.
@@ -75,7 +82,11 @@ x as a 64-bit integer.
 #### `i64`
 
 ```camel
-i64: (x: i32 | int | f32 | float | string) => int
+i64: (x: i32) => int
+i64: (x: int) => int
+i64: (x: f32) => int
+i64: (x: float) => int
+i64: (x: string) => int
 ```
 
 The same as int.
@@ -87,7 +98,11 @@ The same as int.
 #### `i32`
 
 ```camel
-i32: (x: i32 | int | f32 | float | string) => i32
+i32: (x: i32) => i32
+i32: (x: int) => i32
+i32: (x: f32) => i32
+i32: (x: float) => i32
+i32: (x: string) => i32
 ```
 
 x as a 32-bit integer.
@@ -99,7 +114,11 @@ x as a 32-bit integer.
 #### `float`
 
 ```camel
-float: (x: i32 | int | f32 | float | string) => float
+float: (x: i32) => float
+float: (x: int) => float
+float: (x: f32) => float
+float: (x: float) => float
+float: (x: string) => float
 ```
 
 x as a 64-bit float.
@@ -111,7 +130,11 @@ x as a 64-bit float.
 #### `f64`
 
 ```camel
-f64: (x: i32 | int | f32 | float | string) => float
+f64: (x: i32) => float
+f64: (x: int) => float
+f64: (x: f32) => float
+f64: (x: float) => float
+f64: (x: string) => float
 ```
 
 The same as float.
@@ -123,7 +146,11 @@ The same as float.
 #### `f32`
 
 ```camel
-f32: (x: i32 | int | f32 | float | string) => f32
+f32: (x: i32) => f32
+f32: (x: int) => f32
+f32: (x: f32) => f32
+f32: (x: float) => f32
+f32: (x: string) => f32
 ```
 
 x as a 32-bit float.
@@ -273,7 +300,8 @@ The strings of xs joined with sep between them.
 #### `len`
 
 ```camel
-len: (x: string | T[]) => int
+len: (x: string) => int
+len: (x: T[]) => int
 ```
 
 The number of bytes of a string, or of elements of an array.
@@ -469,7 +497,7 @@ type. The calls have no order among them, as for `map`.
 
 A fault (a division by zero, an index out of range, a recursion that is too deep, ...) ends
 the program with a located diagnostic. `attempt` isolates it at the boundary of one call
-(design principles 2.9; docs/technical/33_fault_isolation.md). The name is provisional.
+(design principles 3.9; docs/technical/33_fault_isolation.md). The name is provisional.
 
 #### `attempt`
 
@@ -490,7 +518,8 @@ isolated.
 #### `len`
 
 ```camel
-len: (c: Map<K, V> | Set<T>) => int
+len: (c: Map<K, V>) => int
+len: (c: Set<T>) => int
 ```
 
 The number of entries of a map or of elements of a set.
@@ -534,7 +563,8 @@ A map with value stored under key; an existing entry of that key is replaced. m 
 #### `remove`
 
 ```camel
-remove: <key: K> (c: Map<K, V> | Set<K>) => Map<K, V> | Set<K>
+remove: <key: K> (c: Map<K, V>) => Map<K, V>
+remove: (c: Set<K>) => Set<K>
 ```
 
 A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
@@ -545,7 +575,8 @@ A map without the entry of key, or a set without the element; a key or element t
 #### `has`
 
 ```camel
-has: <key: K> (c: Map<K, V> | Set<K>) => bool
+has: <key: K> (c: Map<K, V>) => bool
+has: (c: Set<K>) => bool
 ```
 
 Whether a map has an entry of key, or a set has the element.
@@ -678,12 +709,11 @@ Whether every element of s is an element of other.
 
 ## `str`: strings
 
-A string is stored as bytes: `len(s)` and `s[i]` count bytes, and so do the functions of the
-first group below. The second group reads and writes a string by Unicode code point (UTF-8).
+A string is always valid UTF-8, and its length and indices count Unicode code points:
+`len('中文')` is 2 and `'中文'[0]` is `'中'`. Binary data is `Bytes`; `bytes` and `from_bytes`
+below convert to and from the UTF-8 bytes of a string.
 The string a function works on is its ordinary argument; everything else is a with-argument,
 so calls chain: `s->trim->split<','>`.
-
-### By byte
 
 #### `split`
 
@@ -738,7 +768,7 @@ s without the ASCII white space at its end.
 to_upper: (s: string) => string
 ```
 
-s with the ASCII letters a-z in upper case. Every other byte is kept as it is, so letters
+s with the ASCII letters a-z in upper case. Every other character is kept as it is, so letters
 outside ASCII do not change: to_upper('é') is 'é'.
 
 - Pure.
@@ -750,7 +780,7 @@ outside ASCII do not change: to_upper('é') is 'é'.
 to_lower: (s: string) => string
 ```
 
-s with the ASCII letters A-Z in lower case. Every other byte is kept as it is.
+s with the ASCII letters A-Z in lower case. Every other character is kept as it is.
 
 - Pure.
 - Example: `to_lower('HeLLo')` gives `'hello'`
@@ -773,7 +803,7 @@ s with every occurrence of from replaced by to, found from left to right without
 find: <sub: string> (s: string) => int?
 ```
 
-The byte index of the first occurrence of sub in s, or null when there is none. An empty
+The index (in code points) of the first occurrence of sub in s, or null when there is none. An empty
 sub is found at 0.
 
 - Pure.
@@ -785,7 +815,7 @@ sub is found at 0.
 substr: <start: int, length: int> (s: string) => string
 ```
 
-The length bytes of s that start at byte start.
+The length characters of s that start at character start.
 
 - Pure.
 - Failure: fault `IndexOutOfRange` when start or start + length lies outside the string; fault `InvalidArgument` when length is negative.
@@ -822,7 +852,7 @@ repeat: <count: int> (s: string) => string
 s written count times in a row.
 
 - Pure.
-- Failure: fault `InvalidArgument` when count is negative or the result would be longer than a string can be (4 GiB).
+- Failure: fault `InvalidArgument` when count is negative or the result would be longer than a string can be (4 GiB of UTF-8).
 - Example: `'ab'->repeat<3>` gives `'ababab'`
 
 #### `bytes`
@@ -842,41 +872,25 @@ The bytes of s as numbers 0 to 255.
 from_bytes: (xs: int[]) => string
 ```
 
-The string made of the given bytes. The result need not be valid UTF-8.
+The string made of the given UTF-8 bytes.
 
 - Pure.
-- Failure: fault `InvalidArgument` when an element is not in 0 to 255.
+- Failure: fault `InvalidArgument` when an element is not in 0 to 255 or the bytes are not valid UTF-8 (a string is always valid UTF-8; binary data is `Bytes`).
 - Example: `from_bytes([104, 105])` gives `'hi'`
+- Example: `from_bytes([255])` gives `fault: not valid UTF-8`
 
-### By code point
-
-A string need not be valid UTF-8, so a function that decodes it can fail: it returns `T!`
-with an error of kind `EncodingError`. Decoding is strict: overlong forms, surrogates
-(U+D800 to U+DFFF), values above U+10FFFF, stray continuation bytes and sequences cut short
-are all invalid. An index out of range is a fault, as everywhere.
-
-#### `is_valid_utf8`
-
-```camel
-is_valid_utf8: (s: string) => bool
-```
-
-Whether s is valid UTF-8. The empty string is.
-
-- Pure.
-- Example: `is_valid_utf8(from_bytes([255]))` gives `false`
+### Code points as numbers
 
 #### `codepoints`
 
 ```camel
-codepoints: (s: string) => int[]!
+codepoints: (s: string) => int[]
 ```
 
 The code points of s.
 
 - Pure.
-- Failure: error `EncodingError` when s is not valid UTF-8.
-- Example: `codepoints('h€') !! [0]` gives `[104, 8364]`
+- Example: `codepoints('h€')` gives `[104, 8364]`
 
 #### `from_codepoints`
 
@@ -884,47 +898,203 @@ The code points of s.
 from_codepoints: (xs: int[]) => string!
 ```
 
-The string made of the given code points, encoded as UTF-8.
+The string made of the given code points.
 
 - Pure.
 - Failure: error `EncodingError` when an element is not a code point (negative, above 0x10FFFF, or a surrogate).
 - Example: `from_codepoints([104, 8364]) !! ''` gives `'h€'`
 
-#### `char_count`
+<a id="bytes"></a>
+
+## `bytes`: immutable binary values and UTF-8 conversion
+
+#### `encode`
 
 ```camel
-char_count: (s: string) => int!
+encode: (text: string) => Bytes
 ```
 
-The number of code points in s (len(s) is the number of bytes).
+Encodes valid UTF-8 text as an immutable Bytes value.
 
 - Pure.
-- Failure: error `EncodingError` when s is not valid UTF-8.
-- Example: `char_count('h€') !! -1` gives `2`
+- Example: `encode('hello')`
 
-#### `char_at`
+#### `decode`
 
 ```camel
-char_at: <index: int> (s: string) => string!
+decode: (content: Bytes) => string!
 ```
 
-The code point number index of s, as a string.
+Decodes UTF-8, returning an EncodingError value for malformed input.
 
 - Pure.
-- Failure: error `EncodingError` when s is not valid UTF-8; fault `IndexOutOfRange` when index is not below the number of code points.
-- Example: `'h€'->char_at<1> !! '?'` gives `'€'`
+- Example: `decode(encode('中文')) !! ''`
 
-#### `char_substr`
+#### `from_array`
 
 ```camel
-char_substr: <start: int, count: int> (s: string) => string!
+from_array: (values: int[]) => Bytes
 ```
 
-The count code points of s that start at code point start.
+Copies integers in the inclusive range 0..255 into a binary value.
 
 - Pure.
-- Failure: error `EncodingError` when s is not valid UTF-8; fault `IndexOutOfRange` when start or start + count lies outside the string; fault `InvalidArgument` when count is negative.
-- Example: `'h€llo'->char_substr<1, 2> !! '?'` gives `'€l'`
+- Failure: fault `InvalidArgument` for an element outside 0..255.
+- Example: `from_array([0, 128, 255])`
+
+#### `to_array`
+
+```camel
+to_array: (content: Bytes) => int[]
+```
+
+Copies each byte into an integer array.
+
+- Pure.
+- Example: `to_array(encode('AB'))` gives `[65, 66]`
+
+#### `size`
+
+```camel
+size: (content: Bytes) => int
+```
+
+The number of bytes in the binary value.
+
+- Pure.
+- Example: `size(encode('abc'))` gives `3`
+
+#### `concat`
+
+```camel
+concat: (left: Bytes, right: Bytes) => Bytes
+```
+
+Concatenates two binary values without decoding either one.
+
+- Pure.
+- Example: `concat(encode('header'), from_array([0, 255]))`
+
+<a id="tree"></a>
+
+## `tree`: parameter trees and checkpoints
+
+#### `tree_map`
+
+```camel
+tree_map: <f: (leaf: A) => B> (tree: T) => U
+```
+
+Applies f to the leaves in the same place of the trees (one tree, or several of the same
+shape: the callback then takes one leaf of each), and gives a tree of the results. The shape
+is that of the first tree.
+
+- With effects: whatever the callback does.
+- Example: `tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })` gives `{ a: 2, b: (3, 4) }`
+
+#### `tree_reduce`
+
+```camel
+tree_reduce: <f: (acc: R, leaf: A) => R> (tree: T, init: R) => R
+```
+
+Folds the leaves from the first to the last with f, starting from init.
+
+- With effects: whatever the callback does.
+- Example: `tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)` gives `6`
+
+#### `tree_unzip`
+
+```camel
+tree_unzip: (tree: T, reference: S) => U
+```
+
+Turns a tree of tuples into a tuple of trees: the shape is that of `reference`, and every
+leaf of `tree` at a leaf of the reference is a tuple of the same length.
+
+- Pure.
+- Example: `tree_unzip({ a: (1, 2.0) }, { a: 0 })` gives `({ a: 1 }, { a: 2.0 })`
+
+#### `tree_leaves`
+
+```camel
+tree_leaves: (tree: T) => L
+```
+
+The leaves of a tree, as a tuple.
+
+- Pure.
+- Example: `tree_leaves({ a: 1, b: (2, 3) })` gives `(1, 2, 3)`
+
+#### `tree_paths`
+
+```camel
+tree_paths: (tree: T) => P
+```
+
+The paths of the leaves, as a tree of the same shape.
+
+- Pure.
+- Example: `tree_paths({ a: 1, b: (2, 3) })` gives `{ a: 'a', b: ('b.0', 'b.1') }`
+
+#### `save_tree`
+
+```camel
+save_tree: (dir: string, tree: T, dataset_manifest_sha256: string) => void
+```
+
+Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
+tensor), with a manifest that records the types, sizes and SHA-256 sums. The directory is
+replaced as a whole or not at all. A leaf type a checkpoint cannot hold (anything but a
+tensor, `Bytes`, `string`, `bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that
+names the path.
+
+- With effects: writes the directory.
+- Failure: fault `FileSystemError` when the directory cannot be written.
+- Example: `save_tree('out/ckpt', { w: zeros([2, 2]), step: 10 })`
+
+#### `load_tree`
+
+```camel
+load_tree: (dir: string, dataset_manifest_sha256: string) => T!
+```
+
+Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
+the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
+`CheckpointError` value, nothing is partly loaded. T is the explicit type argument or the
+expected type of the result.
+
+- With effects: reads the directory.
+- Example: `load_tree::<{ w: Tensor<f32>, step: int }>('out/ckpt') !! initial()`
+
+<a id="tensor"></a>
+
+## `tensor`: binary conversion
+
+#### `to_bytes`
+
+```camel
+to_bytes: (t: Tensor) => Bytes
+```
+
+The little-endian bytes of the elements of a tensor, in row-major order.
+
+- Pure.
+- Example: `to_bytes(new([1.0, 2.0]))`
+
+#### `from_bytes`
+
+```camel
+from_bytes: (bytes: Bytes, shape: int[]) => Tensor
+```
+
+A tensor of the given shape made of little-endian elements. The element type is the explicit
+type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result;
+it is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
+
+- Pure.
+- Failure: fault `InvalidArgument` when the number of bytes does not fit the shape and the element type.
+- Example: `from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])`
 
 <a id="array"></a>
 
@@ -940,14 +1110,14 @@ argument.
   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
 - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
   returns an error value, and a wrong argument is a fault of the operator that meets it.
-- Order of evaluation (design principles 2.7). A function passed to one of these is applied
+- Order of evaluation (design principles 3.6). A function passed to one of these is applied
   with `map`: its calls on different elements have NO order among them and the parallel
   scheduler may run them at the same time; the result is put together by position and is
   the same on every back end. That holds for `find`, `any`, `all`, `count`, `flat_map`,
   `sort_by` and `zip_with`. None of them stops early: the function is applied to every
   element. A function with side effects belongs in `foreach` or `reduce`, which are ordered.
 - These are generic functions: there is one instance per set of element types in the whole
-  program, whichever module calls it (one root graph, design principles 2.11). `group_by`
+  program, whichever module calls it (one root graph, design principles 10.1). `group_by`
   is not here: it needs the map type.
 
 ### Rearranging
@@ -1167,7 +1337,7 @@ A constant is a value, written without parentheses: `pi`.
 
 ### Constants
 
-Values the module exports (design principles 2.13), written without parentheses.
+Values the module exports (design principles 10.1), written without parentheses.
 
 #### `pi`
 
@@ -1218,7 +1388,10 @@ A NaN. It equals nothing, itself included: test with is_nan.
 #### `abs`
 
 ```camel
-abs: (x: i32 | int | f32 | float) => i32 | int | f32 | float
+abs: (x: i32) => i32
+abs: (x: int) => int
+abs: (x: f32) => f32
+abs: (x: float) => float
 ```
 
 The absolute value. The smallest integer has no positive counterpart: its absolute value is
@@ -1230,7 +1403,10 @@ not defined.
 #### `sqrt`
 
 ```camel
-sqrt: (x: i32 | int | f32 | float) => f32 | float
+sqrt: (x: i32) => f32
+sqrt: (x: int) => float
+sqrt: (x: f32) => f32
+sqrt: (x: float) => float
 ```
 
 The square root. An integer argument is converted: i32 gives f32, int gives float.
@@ -1241,7 +1417,8 @@ The square root. An integer argument is converted: i32 gives f32, int gives floa
 #### `exp`
 
 ```camel
-exp: (x: f32 | float) => f32 | float
+exp: (x: f32) => f32
+exp: (x: float) => float
 ```
 
 e raised to the power x.
@@ -1252,7 +1429,8 @@ e raised to the power x.
 #### `expm1`
 
 ```camel
-expm1: (x: f32 | float) => f32 | float
+expm1: (x: f32) => f32
+expm1: (x: float) => float
 ```
 
 exp(x) - 1, accurate for x near 0.
@@ -1263,7 +1441,8 @@ exp(x) - 1, accurate for x near 0.
 #### `log`
 
 ```camel
-log: (x: f32 | float) => f32 | float
+log: (x: f32) => f32
+log: (x: float) => float
 ```
 
 The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is NaN.
@@ -1274,7 +1453,8 @@ The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is N
 #### `log2`
 
 ```camel
-log2: (x: f32 | float) => f32 | float
+log2: (x: f32) => f32
+log2: (x: float) => float
 ```
 
 The logarithm to base 2.
@@ -1285,7 +1465,8 @@ The logarithm to base 2.
 #### `log10`
 
 ```camel
-log10: (x: f32 | float) => f32 | float
+log10: (x: f32) => f32
+log10: (x: float) => float
 ```
 
 The logarithm to base 10.
@@ -1296,7 +1477,8 @@ The logarithm to base 10.
 #### `log1p`
 
 ```camel
-log1p: (x: f32 | float) => f32 | float
+log1p: (x: f32) => f32
+log1p: (x: float) => float
 ```
 
 log(1 + x), accurate for x near 0.
@@ -1307,7 +1489,8 @@ log(1 + x), accurate for x near 0.
 #### `pow`
 
 ```camel
-pow: (x: f32 | float, y: f32 | float) => f32 | float
+pow: (x: f32, y: f32) => f32
+pow: (x: float, y: float) => float
 ```
 
 x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gives NaN.
@@ -1318,7 +1501,8 @@ x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gi
 #### `hypot`
 
 ```camel
-hypot: (x: f32 | float, y: f32 | float) => f32 | float
+hypot: (x: f32, y: f32) => f32
+hypot: (x: float, y: float) => float
 ```
 
 The square root of x*x + y*y, without overflow in the squares.
@@ -1329,7 +1513,8 @@ The square root of x*x + y*y, without overflow in the squares.
 #### `sin`
 
 ```camel
-sin: (x: f32 | float) => f32 | float
+sin: (x: f32) => f32
+sin: (x: float) => float
 ```
 
 The sine of x, x in radians.
@@ -1340,7 +1525,8 @@ The sine of x, x in radians.
 #### `cos`
 
 ```camel
-cos: (x: f32 | float) => f32 | float
+cos: (x: f32) => f32
+cos: (x: float) => float
 ```
 
 The cosine of x, x in radians.
@@ -1351,7 +1537,8 @@ The cosine of x, x in radians.
 #### `tan`
 
 ```camel
-tan: (x: f32 | float) => f32 | float
+tan: (x: f32) => f32
+tan: (x: float) => float
 ```
 
 The tangent of x, x in radians.
@@ -1362,7 +1549,8 @@ The tangent of x, x in radians.
 #### `asin`
 
 ```camel
-asin: (x: f32 | float) => f32 | float
+asin: (x: f32) => f32
+asin: (x: float) => float
 ```
 
 The arc sine, in radians; NaN outside -1 to 1.
@@ -1373,7 +1561,8 @@ The arc sine, in radians; NaN outside -1 to 1.
 #### `acos`
 
 ```camel
-acos: (x: f32 | float) => f32 | float
+acos: (x: f32) => f32
+acos: (x: float) => float
 ```
 
 The arc cosine, in radians; NaN outside -1 to 1.
@@ -1384,7 +1573,8 @@ The arc cosine, in radians; NaN outside -1 to 1.
 #### `atan`
 
 ```camel
-atan: (x: f32 | float) => f32 | float
+atan: (x: f32) => f32
+atan: (x: float) => float
 ```
 
 The arc tangent, in radians.
@@ -1395,7 +1585,8 @@ The arc tangent, in radians.
 #### `atan2`
 
 ```camel
-atan2: (y: f32 | float, x: f32 | float) => f32 | float
+atan2: (y: f32, x: f32) => f32
+atan2: (y: float, x: float) => float
 ```
 
 The angle of the point (x, y) in radians, between -pi and pi. Note the order: y first.
@@ -1406,7 +1597,8 @@ The angle of the point (x, y) in radians, between -pi and pi. Note the order: y 
 #### `sinh`
 
 ```camel
-sinh: (x: f32 | float) => f32 | float
+sinh: (x: f32) => f32
+sinh: (x: float) => float
 ```
 
 The hyperbolic sine.
@@ -1417,7 +1609,8 @@ The hyperbolic sine.
 #### `cosh`
 
 ```camel
-cosh: (x: f32 | float) => f32 | float
+cosh: (x: f32) => f32
+cosh: (x: float) => float
 ```
 
 The hyperbolic cosine.
@@ -1428,7 +1621,8 @@ The hyperbolic cosine.
 #### `tanh`
 
 ```camel
-tanh: (x: f32 | float) => f32 | float
+tanh: (x: f32) => f32
+tanh: (x: float) => float
 ```
 
 The hyperbolic tangent.
@@ -1441,7 +1635,8 @@ The hyperbolic tangent.
 #### `floor`
 
 ```camel
-floor: (x: f32 | float) => f32 | float
+floor: (x: f32) => f32
+floor: (x: float) => float
 ```
 
 The largest whole number not above x, as a float.
@@ -1452,7 +1647,8 @@ The largest whole number not above x, as a float.
 #### `ceil`
 
 ```camel
-ceil: (x: f32 | float) => f32 | float
+ceil: (x: f32) => f32
+ceil: (x: float) => float
 ```
 
 The smallest whole number not below x, as a float.
@@ -1463,7 +1659,8 @@ The smallest whole number not below x, as a float.
 #### `round`
 
 ```camel
-round: (x: f32 | float) => f32 | float
+round: (x: f32) => f32
+round: (x: float) => float
 ```
 
 The nearest whole number, halves away from zero, as a float.
@@ -1474,7 +1671,8 @@ The nearest whole number, halves away from zero, as a float.
 #### `trunc`
 
 ```camel
-trunc: (x: f32 | float) => f32 | float
+trunc: (x: f32) => f32
+trunc: (x: float) => float
 ```
 
 x without its fraction (rounded toward zero), as a float.
@@ -1487,7 +1685,10 @@ x without its fraction (rounded toward zero), as a float.
 #### `min`
 
 ```camel
-min: (a: i32 | int | f32 | float, b: i32 | int | f32 | float) => i32 | int | f32 | float
+min: (a: i32, b: i32) => i32
+min: (a: int, b: int) => int
+min: (a: f32, b: f32) => f32
+min: (a: float, b: float) => float
 ```
 
 The smaller of two numbers of one type (IEEE 754 minimum). With a NaN on either side
@@ -1499,7 +1700,10 @@ the result is NaN; -0 is below +0.
 #### `max`
 
 ```camel
-max: (a: i32 | int | f32 | float, b: i32 | int | f32 | float) => i32 | int | f32 | float
+max: (a: i32, b: i32) => i32
+max: (a: int, b: int) => int
+max: (a: f32, b: f32) => f32
+max: (a: float, b: float) => float
 ```
 
 The larger of two numbers of one type (IEEE 754 maximum). With a NaN on either side
@@ -1511,7 +1715,10 @@ the result is NaN; -0 is below +0.
 #### `clamp`
 
 ```camel
-clamp: (x: i32 | int | f32 | float, lo: i32 | int | f32 | float, hi: i32 | int | f32 | float) => i32 | int | f32 | float
+clamp: (x: i32, lo: i32, hi: i32) => i32
+clamp: (x: int, lo: int, hi: int) => int
+clamp: (x: f32, lo: f32, hi: f32) => f32
+clamp: (x: float, lo: float, hi: float) => float
 ```
 
 x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
@@ -1523,7 +1730,10 @@ x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
 #### `sign`
 
 ```camel
-sign: (x: i32 | int | f32 | float) => i32 | int | f32 | float
+sign: (x: i32) => i32
+sign: (x: int) => int
+sign: (x: f32) => f32
+sign: (x: float) => float
 ```
 
 -1, 0 or 1 by the sign of x, in the type of x. The sign of a NaN is NaN.
@@ -1534,7 +1744,8 @@ sign: (x: i32 | int | f32 | float) => i32 | int | f32 | float
 #### `is_nan`
 
 ```camel
-is_nan: (x: f32 | float) => bool
+is_nan: (x: f32) => bool
+is_nan: (x: float) => bool
 ```
 
 Whether x is a NaN.
@@ -1545,7 +1756,8 @@ Whether x is a NaN.
 #### `is_inf`
 
 ```camel
-is_inf: (x: f32 | float) => bool
+is_inf: (x: f32) => bool
+is_inf: (x: float) => bool
 ```
 
 Whether x is positive or negative infinity.
@@ -1558,7 +1770,8 @@ Whether x is positive or negative infinity.
 #### `gcd`
 
 ```camel
-gcd: (a: i32 | int, b: i32 | int) => i32 | int
+gcd: (a: i32, b: i32) => i32
+gcd: (a: int, b: int) => int
 ```
 
 The greatest common divisor, never negative; gcd(0, 0) is 0.
@@ -1570,7 +1783,8 @@ The greatest common divisor, never negative; gcd(0, 0) is 0.
 #### `lcm`
 
 ```camel
-lcm: (a: i32 | int, b: i32 | int) => i32 | int
+lcm: (a: i32, b: i32) => i32
+lcm: (a: int, b: int) => int
 ```
 
 The least common multiple, never negative; 0 when either argument is 0.
@@ -1582,7 +1796,8 @@ The least common multiple, never negative; 0 when either argument is 0.
 #### `bin`
 
 ```camel
-bin: (x: i32 | int) => string
+bin: (x: i32) => string
+bin: (x: int) => string
 ```
 
 The digits of x in base 2 with the prefix 0b; a negative number is shown as its 64-bit
@@ -1594,7 +1809,8 @@ two's complement.
 #### `oct`
 
 ```camel
-oct: (x: i32 | int) => string
+oct: (x: i32) => string
+oct: (x: int) => string
 ```
 
 The digits of x in base 8 with the prefix 0o.
@@ -1605,7 +1821,8 @@ The digits of x in base 8 with the prefix 0o.
 #### `hex`
 
 ```camel
-hex: (x: i32 | int) => string
+hex: (x: i32) => string
+hex: (x: int) => string
 ```
 
 The digits of x in base 16, in upper case, with the prefix 0x.
@@ -1621,7 +1838,8 @@ bits, `i32` has 32.
 #### `bit_and`
 
 ```camel
-bit_and: (a: i32 | int, b: i32 | int) => i32 | int
+bit_and: (a: i32, b: i32) => i32
+bit_and: (a: int, b: int) => int
 ```
 
 The bits set in both a and b.
@@ -1632,7 +1850,8 @@ The bits set in both a and b.
 #### `bit_or`
 
 ```camel
-bit_or: (a: i32 | int, b: i32 | int) => i32 | int
+bit_or: (a: i32, b: i32) => i32
+bit_or: (a: int, b: int) => int
 ```
 
 The bits set in a or in b.
@@ -1643,7 +1862,8 @@ The bits set in a or in b.
 #### `bit_xor`
 
 ```camel
-bit_xor: (a: i32 | int, b: i32 | int) => i32 | int
+bit_xor: (a: i32, b: i32) => i32
+bit_xor: (a: int, b: int) => int
 ```
 
 The bits set in exactly one of a and b.
@@ -1654,7 +1874,8 @@ The bits set in exactly one of a and b.
 #### `bit_not`
 
 ```camel
-bit_not: (x: i32 | int) => i32 | int
+bit_not: (x: i32) => i32
+bit_not: (x: int) => int
 ```
 
 Every bit of x inverted; the same as the operator ~.
@@ -1665,7 +1886,8 @@ Every bit of x inverted; the same as the operator ~.
 #### `shl`
 
 ```camel
-shl: (x: i32 | int, count: i32 | int) => i32 | int
+shl: (x: i32, count: i32) => i32
+shl: (x: int, count: int) => int
 ```
 
 x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
@@ -1678,7 +1900,8 @@ change. The count may be of either integer type.
 #### `shr`
 
 ```camel
-shr: (x: i32 | int, count: i32 | int) => i32 | int
+shr: (x: i32, count: i32) => i32
+shr: (x: int, count: int) => int
 ```
 
 x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
@@ -1697,7 +1920,10 @@ in float.
 #### `mean`
 
 ```camel
-mean: (xs: (i32 | int | f32 | float)[]) => float
+mean: (xs: i32[]) => float
+mean: (xs: int[]) => float
+mean: (xs: f32[]) => float
+mean: (xs: float[]) => float
 ```
 
 The arithmetic mean; 0 for an empty array.
@@ -1708,7 +1934,10 @@ The arithmetic mean; 0 for an empty array.
 #### `stdev`
 
 ```camel
-stdev: (xs: (i32 | int | f32 | float)[]) => float
+stdev: (xs: i32[]) => float
+stdev: (xs: int[]) => float
+stdev: (xs: f32[]) => float
+stdev: (xs: float[]) => float
 ```
 
 The sample standard deviation (divisor n - 1); 0 for fewer than two elements.
@@ -1719,7 +1948,10 @@ The sample standard deviation (divisor n - 1); 0 for fewer than two elements.
 #### `variance`
 
 ```camel
-variance: (xs: (i32 | int | f32 | float)[]) => float
+variance: (xs: i32[]) => float
+variance: (xs: int[]) => float
+variance: (xs: f32[]) => float
+variance: (xs: float[]) => float
 ```
 
 The sample variance (divisor n - 1), the square of stdev; 0 for fewer than two elements.
@@ -1730,7 +1962,10 @@ The sample variance (divisor n - 1), the square of stdev; 0 for fewer than two e
 #### `median`
 
 ```camel
-median: (xs: (i32 | int | f32 | float)[]) => float?
+median: (xs: i32[]) => float?
+median: (xs: int[]) => float?
+median: (xs: f32[]) => float?
+median: (xs: float[]) => float?
 ```
 
 The middle value of the sorted elements, the mean of the two middle ones for an even
@@ -1742,7 +1977,10 @@ count; null for an empty array, NaN when an element is NaN.
 #### `quantile`
 
 ```camel
-quantile: <q: float> (xs: (i32 | int | f32 | float)[]) => float?
+quantile: <q: float> (xs: i32[]) => float?
+quantile: (xs: int[]) => float?
+quantile: (xs: f32[]) => float?
+quantile: (xs: float[]) => float?
 ```
 
 The q-quantile, q from 0 to 1, by linear interpolation between the two nearest ranks
@@ -1758,10 +1996,10 @@ element is NaN.
 ## `algo`: sorting and array primitives
 
 Sorting works on arrays of numbers (i32, int, f32, float) in ascending order. Every function
-returns a new array and leaves its argument unchanged (design principles 2.12, 2.13); to sort a
+returns a new array and leaves its argument unchanged (design principles 11.3); to sort a
 variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the variable's own
 array in place when nothing else refers to it, an optimisation that does not change what the
-program means (2.13). To sort anything else, or by a key, use `sort_by` of the `array` module.
+program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
 
 #### `sort`
 
@@ -1851,7 +2089,12 @@ module.
 #### `argsort`
 
 ```camel
-argsort: (keys: (i32 | int | f32 | float | bool | string)[]) => int[]
+argsort: (keys: i32[]) => int[]
+argsort: (keys: int[]) => int[]
+argsort: (keys: f32[]) => int[]
+argsort: (keys: float[]) => int[]
+argsort: (keys: bool[]) => int[]
+argsort: (keys: string[]) => int[]
 ```
 
 The positions of the keys in ascending order of key; equal keys keep their order (a stable
@@ -2015,7 +2258,7 @@ read_text: (path: string) => string
 The whole content of the file.
 
 - With effects: reads a file.
-- Failure: fault `FileOpenFailed` when the file cannot be opened; use try_read_text to handle that in the program.
+- Failure: fault `FileOpenFailed` when the file cannot be opened; fault `InvalidArgument` for malformed UTF-8; use read_bytes for binary files.
 - Example: `read_text('notes.txt')` gives `the text of the file`
 
 #### `try_read_text`
@@ -2027,13 +2270,13 @@ try_read_text: (path: string) => string!
 The whole content of the file, or an error value.
 
 - With effects: reads a file.
-- Failure: error `IOError` when the path is a directory, or the file cannot be opened or read.
+- Failure: error `IOError` when the path is a directory, or the file cannot be opened or read; error `EncodingError` for malformed UTF-8.
 - Example: `try_read_text('notes.txt') !! ''` gives `the text, or '' when it cannot be read`
 
 #### `read_chunk`
 
 ```camel
-read_chunk: (path: string, offset: int, size: int) => string
+read_chunk: (path: string, offset: int, size: int) => Bytes
 ```
 
 Up to size bytes of the file starting at byte offset; fewer at the end of the file.
@@ -2041,6 +2284,39 @@ Up to size bytes of the file starting at byte offset; fewer at the end of the fi
 - With effects: reads a file.
 - Failure: fault `InvalidArgument` when offset or size is negative; fault `FileOpenFailed` or `FileSystemError` when the file cannot be opened or read.
 - Example: `read_chunk('notes.txt', 0, 16)` gives `the first 16 bytes`
+
+#### `read_bytes`
+
+```camel
+read_bytes: (path: string) => Bytes
+```
+
+The complete binary content, preserving every byte.
+
+- With effects: reads a file.
+- Example: `read_bytes('pixels.bin')`
+
+#### `write_bytes`
+
+```camel
+write_bytes: (path: string, content: Bytes) => void
+```
+
+Writes binary content, creating parent directories when needed.
+
+- With effects: writes a file.
+- Example: `write_bytes('pixels.bin', payload)`
+
+#### `replace`
+
+```camel
+replace: (path: string, content: Bytes) => void
+```
+
+Flushes a temporary in the same directory and atomically replaces the destination.
+
+- With effects: writes and replaces a file.
+- Example: `replace('checkpoint.bin', payload)`
 
 #### `write_text`
 
@@ -2286,7 +2562,7 @@ decode: (text: string) => Json!
 
 The value a JSON text describes, as a `Json`: a value of a definite type whose content is
 known only when the program runs; an error value when the text is not JSON (design
-principles 2.13). Look into a Json with get, as_int, as_array and the other operators below,
+principles 11.2). Look into a Json with get, as_int, as_array and the other operators below,
 each of which gives a value of a definite type and takes a `Json?` as well, so that calls
 chain; read a part whose shape is known with decode_as. Prints as its JSON text. In the
 examples below, `j` is a Json decoded so.
@@ -2298,7 +2574,8 @@ examples below, `j` is a Json decoded so.
 #### `decode_as`
 
 ```camel
-decode_as: <shape: T> (text: string | Json) => T!
+decode_as: <shape: T> (text: string) => T!
+decode_as: (text: Json) => T!
 ```
 
 The value a JSON text (or a Json decoded before) describes, decoded to the type of shape;
@@ -2334,7 +2611,8 @@ Whether a Json is the JSON null.
 #### `get`
 
 ```camel
-get: <key: string> (j: Json | Json?) => Json?
+get: <key: string> (j: Json) => Json?
+get: (j: Json?) => Json?
 ```
 
 The member key of an object; null when j is not an object, has no such member, or is null
@@ -2346,7 +2624,8 @@ itself (so that calls chain: j->get<'a'>->get<'b'>).
 #### `get`
 
 ```camel
-get: <index: int> (j: Json | Json?) => Json?
+get: <index: int> (j: Json) => Json?
+get: (j: Json?) => Json?
 ```
 
 The element index of an array; null when j is not an array, the index is out of range, or j
@@ -2358,7 +2637,8 @@ is null itself.
 #### `as_bool`
 
 ```camel
-as_bool: (j: Json | Json?) => bool?
+as_bool: (j: Json) => bool?
+as_bool: (j: Json?) => bool?
 ```
 
 The bool a Json holds; null for any other kind.
@@ -2369,7 +2649,8 @@ The bool a Json holds; null for any other kind.
 #### `as_int`
 
 ```camel
-as_int: (j: Json | Json?) => int?
+as_int: (j: Json) => int?
+as_int: (j: Json?) => int?
 ```
 
 The integer a Json holds; null for any other kind (a number with a fraction is not an int).
@@ -2380,7 +2661,8 @@ The integer a Json holds; null for any other kind (a number with a fraction is n
 #### `as_float`
 
 ```camel
-as_float: (j: Json | Json?) => float?
+as_float: (j: Json) => float?
+as_float: (j: Json?) => float?
 ```
 
 The number a Json holds, an integer included; null for any other kind.
@@ -2391,7 +2673,8 @@ The number a Json holds, an integer included; null for any other kind.
 #### `as_string`
 
 ```camel
-as_string: (j: Json | Json?) => string?
+as_string: (j: Json) => string?
+as_string: (j: Json?) => string?
 ```
 
 The string a Json holds; null for any other kind.
@@ -2402,7 +2685,8 @@ The string a Json holds; null for any other kind.
 #### `as_array`
 
 ```camel
-as_array: (j: Json | Json?) => Json[]?
+as_array: (j: Json) => Json[]?
+as_array: (j: Json?) => Json[]?
 ```
 
 The elements of a JSON array; null for any other kind.
@@ -2413,7 +2697,8 @@ The elements of a JSON array; null for any other kind.
 #### `as_object`
 
 ```camel
-as_object: (j: Json | Json?) => Map<string, Json>?
+as_object: (j: Json) => Map<string, Json>?
+as_object: (j: Json?) => Map<string, Json>?
 ```
 
 The members of a JSON object, by name; null for any other kind.
@@ -2451,6 +2736,19 @@ The SHA-256 digest of the bytes of s, as 64 lower-case hexadecimal digits.
 
 - Pure.
 - Example: `sha256('abc')` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
+
+#### `sha256`
+
+```camel
+sha256: (s: Bytes) => string
+```
+
+The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits. The two overloads are
+two operators (`crypto:sha256_str`, `crypto:sha256_bytes`); the one is chosen when the program is
+compiled.
+
+- Pure.
+- Example: `sha256(encode('abc')) == sha256('abc')` gives `true`
 
 #### `sha256_rounds`
 

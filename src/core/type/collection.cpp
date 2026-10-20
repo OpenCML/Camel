@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,11 +25,10 @@
 
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
-#include "camel/core/type/storage.h"
 #include "camel/core/rtdata/collection.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
-#include "camel/core/type/composite/union.h"
+#include "camel/core/type/storage.h"
 #include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
 
@@ -40,7 +39,7 @@ namespace camel::core::type {
 
 // ---- Key types ----
 
-// What may be a key (design principles 2.10). The reasons are part of the diagnostic.
+// What may be a key (design principles 11.3). The reasons are part of the diagnostic.
 std::string collectionKeyProblem(Type *type) {
     if (type == nullptr) {
         return "it has no type";
@@ -69,8 +68,8 @@ std::string collectionKeyProblem(Type *type) {
         }
         for (Type *member : tuple->types()) {
             if (std::string problem = collectionKeyProblem(member); !problem.empty()) {
-                return "its element of type '" + member->toString() + "' cannot be a key: " +
-                       problem;
+                return "its element of type '" + member->toString() +
+                       "' cannot be a key: " + problem;
             }
         }
         return "";
@@ -202,7 +201,7 @@ slot_t CollectionType::castSlotFrom(slot_t value, Type *sourceType) const {
     return rtdata::toSlot(rtdata::table::fromArray(array, this));
 }
 
-OtherType *CollectionType::cloneWithArguments(
+Type *CollectionType::cloneWithArguments(
     std::span<const TypeArgument> arguments, std::string &error) const {
     const size_t expected = isMap_ ? 2 : 1;
     const char *usage     = isMap_ ? "Map<K, V>" : "Set<T>";
@@ -346,9 +345,7 @@ std::string SetType::toString() const {
     return complete() ? "Set<" + params_[0]->toString() + ">" : "Set";
 }
 
-std::string SetType::mangle() const {
-    return complete() ? "Ds" + params_[0]->mangle() : "Ds0";
-}
+std::string SetType::mangle() const { return complete() ? "Ds" + params_[0]->mangle() : "Ds0"; }
 
 OtherType *SetType::cloneWithParams(std::span<Type *const> params) const {
     ASSERT(params.size() == 1, "Set takes an element type.");

@@ -1,7 +1,7 @@
 /**
- * progen finding F02 (branch arm). After `std::inline` the `else` arm of an inner `if` runs
+ * progen finding F02 (branch arm). After `std::opt::inline` the `else` arm of an inner `if` runs
  *   although its test is true (`!f1(0)` is `true`): the lambda called there prints.
- * Pipeline: std::inline std::nvm
+ * Pipeline: std::opt::inline std::nvm
  * Expected output: (nothing)
  * Actual: (empty line)
  * Reduced by test/tools/progen from seed 89 (generator version 1, all features).

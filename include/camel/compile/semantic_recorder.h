@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,10 +81,19 @@ class SemanticRecorder {
     /// The expression at `expr` has a value of `type`.
     virtual void expressionTyped(origin_id_t expr, Type *type) = 0;
 
+    /// The declaration at `decl` binds `name` to the type `type` (`type Shape = enum { ... }`),
+    /// which is what the name denotes before arguments are applied. Optional: the default
+    /// ignores the report.
+    virtual void typeDeclared(origin_id_t decl, const std::string &name, Type *type) {
+        (void)decl;
+        (void)name;
+        (void)type;
+    }
+
     /// The name at `ref` stands for the value that `decl` bound to `declName` (see
     /// valueDeclared); `decl` is invalid when the builder does not know the declaration.
-    virtual void valueReferenced(
-        origin_id_t ref, const std::string &name, origin_id_t decl, Type *type) = 0;
+    virtual void
+    valueReferenced(origin_id_t ref, const std::string &name, origin_id_t decl, Type *type) = 0;
 
     /// The name at `ref` stands for the functions whose graphs have the stable ids `graphs`
     /// (several: overloads). The origin of a graph is in the debug map of the source context
@@ -93,8 +102,7 @@ class SemanticRecorder {
         origin_id_t ref, const std::string &name, std::vector<std::string> graphs) = 0;
 
     /// The name at `ref` stands for the generic function declared at `decl`.
-    virtual void
-    genericReferenced(origin_id_t ref, const std::string &name, origin_id_t decl) = 0;
+    virtual void genericReferenced(origin_id_t ref, const std::string &name, origin_id_t decl) = 0;
 
     /// The name at `ref` stands for an operator group (a built-in or module function
     /// implemented outside the language); `signatures` are those of its overloads.

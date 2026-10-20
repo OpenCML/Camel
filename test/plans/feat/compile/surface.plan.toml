@@ -67,7 +67,7 @@ expect_output_contains = ["2 functions of that name [(x: int) => int; (x: float)
 
 [[tests]]
 name = "surface.if_without_else"
-desc = "`if c then println(...)` compiles and runs: an if without else has no value and its arm may be of any type (design principles 2.10). It used to be an error."
+desc = "`if c then println(...)` compiles and runs: an if without else has no value and its arm may be of any type (design principles 3.7). It used to be an error."
 kind = "behavior"
 case = "../../../cases/compile/surface/if_without_else.cml"
 args = ["-E", "short", "${case}"]
@@ -106,7 +106,7 @@ expect_output_contains = ["import_missing.cml:3:1: [Error]: Module 'nosuch_modul
 
 [[tests]]
 name = "surface.self_import"
-desc = "A file that imports a module of its own name imports itself (the compiler crashed, then it was ImportCycle): modules may import each other (design principles 2.11), and a module importing itself is that cycle at its shortest; nothing is wrong."
+desc = "A file that imports a module of its own name imports itself (the compiler crashed, then it was ImportCycle): modules may import each other (design principles 10.1), and a module importing itself is that cycle at its shortest; nothing is wrong."
 kind = "behavior"
 case = "../../../cases/compile/surface/self_import.cml"
 args = ["-E", "short", "${case}"]
@@ -159,7 +159,7 @@ expect_output_not_contains = ["Warn", "Error"]
 
 [[tests]]
 name = "surface.main_implicit_result"
-desc = "A `main` without a declared return type whose body ends in `println(...)`: the body has the value that call returns, but only a main that declares its return type has a result (design principles 2.10), so the line appears once. (It appeared twice: the value was written as the result of the program.)"
+desc = "A `main` without a declared return type whose body ends in `println(...)`: the body has the value that call returns, but only a main that declares its return type has a result (design principles 9.8), so the line appears once. (It appeared twice: the value was written as the result of the program.)"
 kind = "behavior"
 case = "../../../cases/compile/surface/main_implicit_result.cml"
 args = ["${case}"]

@@ -1,5 +1,6 @@
 /**
- * The str module, by byte: length and indices count bytes (design principles 2.9).
+ * The str module: length and indices count code points (design principles 11.1); `bytes` and
+ * `from_bytes` convert to and from the UTF-8 bytes.
  * The subject is the ordinary argument, the rest are with-arguments
  * (DESIGN-QUESTION(param-style)).
  */
@@ -32,7 +33,7 @@ func main(): int sync {
     // U+00A0 (no-break space) is not ASCII white space and stays
     show('trim nbsp', trim('  x  '))
 
-    // case: ASCII letters only, other bytes are kept
+    // case: ASCII letters only, other characters are kept
     show('upper', to_upper('hello, World 123'))
     show('lower', to_lower('HELLO, World 123'))
     show('upper non-ascii', to_upper('héllo ünï straße'))
@@ -48,7 +49,7 @@ func main(): int sync {
     show('replace empty subject', ''->replace<'a', 'b'>)
     show('replace non-ascii', 'héllo'->replace<'é', 'e'>)
 
-    // find: the byte index of the first occurrence, or null
+    // find: the (code point) index of the first occurrence, or null
     println('hello'->find<'l'> ?? -1, 'hello'->find<'lo'> ?? -1, 'hello'->find<'z'> ?? -1)
     println('hello'->find<''> ?? -1, ''->find<''> ?? -1, ''->find<'a'> ?? -1)
     println('héllo'->find<'l'> ?? -1, 'hello'->find<'hello!'> ?? -1)
@@ -58,7 +59,9 @@ func main(): int sync {
     show('substr all', 'hello'->substr<0, 5>)
     show('substr empty at end', 'hello'->substr<5, 0>)
     show('substr empty', ''->substr<0, 0>)
-    show('substr one byte of é', 'é'->substr<0, 1>->bytes->from_bytes->bytes->len->string)
+    show('substr one char of é', 'é'->substr<0, 1>->bytes->from_bytes->bytes->len->string)
+    show('substr non-ascii', 'h€llo'->substr<1, 2>)
+    show('substr 4-byte', '😀a😀'->substr<1, 2>)
 
     // starts_with / ends_with
     println('hello'->starts_with<'he'>, 'hello'->starts_with<''>, 'hello'->starts_with<'hello!'>, ''->starts_with<''>)
@@ -74,12 +77,15 @@ func main(): int sync {
     show('from_bytes', from_bytes([104, 105]))
     show('from_bytes empty', from_bytes(bytes('')))
     show('round trip', from_bytes(bytes('héllo €')))
-    // a string need not be valid UTF-8, and a zero byte is a byte like any other
-    println(len(from_bytes([255, 0, 104])), bytes(from_bytes([255, 0, 104])))
+    // a zero byte is a character like any other
+    println(len(from_bytes([104, 0, 105])), bytes(from_bytes([104, 0, 105])))
+    // the bytes of a character
+    println(from_bytes([228, 184, 173]), len(from_bytes([228, 184, 173])))
 
-    // indexing: the byte at the index, as a string of one byte (design principles 2.10)
+    // indexing: the character at the index, as a string (design principles 11.1)
     let s = 'hello'
     println(s[0], s[4], len(s[1]))
-    println(bytes('é'[0]), bytes('é'[1]))
+    println('中'[0] == '中', '中文'[1], len('中文'), len('😀'), bytes('é'[0]))
+    println('h€😀é'[2], len('h€😀é'))
     return 0
 }

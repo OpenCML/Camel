@@ -54,14 +54,14 @@ code --install-extension camel-lang-0.1.0.vsix
 |------|------|
 | `Camel: Restart Language Server` | 停止 `camel-ls` 并重新启动。 |
 | `Camel: Show Graph of Current Function` | 把光标所在函数的图以 Graphviz DOT 文本显示在编辑器旁的只读文档中；保存文件时刷新。可用 Graphviz 预览扩展渲染。 |
-| `Camel: Run Current File with Passes…` | 询问一个遍序列（例如 `std::inline std::fvm`），在集成终端中运行 `camel <文件> <遍>`。 |
+| `Camel: Run Current File with Passes…` | 询问一个遍序列（例如 `std::opt::inline std::fvm`），在集成终端中运行 `camel <文件> <遍>`。 |
 
 | 设置项 | 默认值 | 含义 |
 |--------|--------|------|
 | `camel.server.path` | `""` | `camel-ls` 的路径。 |
 | `camel.path` | `""` | `camel` 的路径。 |
-| `camel.graph.passes` | `[]` | 打印图之前施加的遍，例如 `["std::inline"]`。 |
-| `camel.run.passes` | `["std::inline", "std::fvm"]` | 第一次运行文件时建议的遍序列。 |
+| `camel.graph.passes` | `[]` | 打印图之前施加的遍，例如 `["std::opt::inline"]`。 |
+| `camel.run.passes` | `["std::opt::inline", "std::fvm"]` | 第一次运行文件时建议的遍序列。 |
 | `camel.trace.server` | `off` | 记录协议消息（`messages` 或 `verbose`）。 |
 
 详见 [`editors/vscode/README.md`](../editors/vscode/README.md)。
@@ -76,7 +76,7 @@ code --install-extension camel-lang-0.1.0.vsix
 | 诊断（推送） | `textDocument/publishDiagnostics` | 已实现。文档打开或变更后发布；只对没有声明拉取式诊断的客户端推送（否则每个问题会显示两次），可用 `initializationOptions.diagnostics` = `"push"`、`"pull"`、`"both"` 覆盖。 |
 | 诊断（拉取） | `textDocument/diagnostic` | 已实现。`data` 携带目录名、建议与附注，次要位置作为 `relatedInformation`。 |
 | 增量同步 | `textDocument/didChange`（增量） | 已实现（区间编辑，UTF-16 位置）。 |
-| 悬停 | `textDocument/hover` | 已实现：按源码写法显示声明与类型、声明上方的注释、泛型函数的各实例以及调用处选中的实例或重载、字段、字面量、库函数签名、光标处诊断码的 `--explain` 说明。命名空间的成员按完整名字显示，如 `func Tools::inc(x: int): int`（设计原则 2.13）；大纲与补全同样如此。 |
+| 悬停 | `textDocument/hover` | 已实现：按源码写法显示声明与类型、声明上方的注释、泛型函数的各实例以及调用处选中的实例或重载、字段、字面量、库函数签名、光标处诊断码的 `--explain` 说明。命名空间的成员按完整名字显示，如 `func Tools::inc(x: int): int`（设计原则 10.2）；大纲与补全同样如此。 |
 | 跳转到定义 | `textDocument/definition` | 已实现：局部变量、参数、函数（调用选中的重载）、类型别名、类型变量、跨文件的导入名。用 C++ 实现的库函数没有定义位置。 |
 | 查找引用 | `textDocument/references` | 已实现，范围是一个程序：打开的文件与它导入的模块。 |
 | 文档高亮 | `textDocument/documentHighlight` | 已实现。 |
@@ -115,7 +115,7 @@ code --install-extension camel-lang-0.1.0.vsix
 {
   "textDocument": { "uri": "file:///path/to/file.cml" },
   "position": { "line": 7, "character": 10 },
-  "passes": ["std::inline"]
+  "passes": ["std::opt::inline"]
 }
 ```
 
@@ -126,7 +126,7 @@ code --install-extension camel-lang-0.1.0.vsix
 ```json
 {
   "function": "fib",
-  "passes": ["std::inline"],
+  "passes": ["std::opt::inline"],
   "text": "digraph GraphIR { ... }",
   "diagnostics": ""
 }

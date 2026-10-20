@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,13 +28,22 @@
 #include "camel/runtime/draft.h"
 
 #include <functional>
-#include <vector>
 #include <string_view>
+#include <vector>
 
 namespace camel::passes::generic {
 
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphDraft;
+
+/// Bounded local scalar arithmetic. safeFp restricts float rules to strict equivalence.
+size_t algebraDraft(GraphDraft &draft, bool safeFp = false);
+/// The same under an explicit policy (camel/core/operator_semantics.h): safeFp is the strict one.
+size_t algebraDraft(GraphDraft &draft, const camel::core::sem::NumericPolicy &policy);
+
+/// Bypass a non-anchor forwarding gate by putting its waits on mandatory consumers.
+/// Conditional value consumers and costly shared barriers stay gates; edgeBudget bounds growth.
+bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget);
 
 /// URI of an OPER node, or an empty view for other nodes. For messages: passes recognise an
 /// operator by operIdOf.

@@ -1,0 +1,132 @@
+id = "opt.pass_params"
+order = 331
+tier = "feat"
+tags = ["feat", "opt", "pipeline", "pass-parameters"]
+
+# Pass parameters are general pipeline syntax (design principles 9.2): `name(key=value, ...)`
+# for every pass, scheduler and module pass, the values constant expressions, checked against
+# the pass's declaration before anything runs.
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/opt/pass_params/plain.cml"
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "valid.opt"
+desc = "A parameter of the core's own pass, written as a literal; no special code in the pipeline."
+args = ["${case}", "std::opt(safe_fp=true)", "std::fvm"]
+expect_exit = 0
+expect_stdout_starts_with = "camel-ran-marker\n"
+
+[[tests]]
+name = "valid.constant_expression"
+desc = "The value is a Camel constant expression: operators, comparison, negation."
+args = ["${case}", "std::opt::algebra(safe_fp = 1 < 2 && !false)", "std::fvm"]
+expect_exit = 0
+expect_stdout_starts_with = "camel-ran-marker\n"
+
+[[tests]]
+name = "valid.passes_option"
+desc = "--passes splits at the commas outside the parameters."
+args = ["${case}", "--passes", "std::opt(safe_fp=false),std::fvm(native_loop=true, stats=\"\")"]
+expect_exit = 0
+expect_stdout_starts_with = "camel-ran-marker\n"
+
+[[tests]]
+name = "valid.scheduler_parameters"
+desc = "Parameters of the schedulers (they were environment variables)."
+args = ["${case}", "std::jit(hot_threshold=0)"]
+expect_exit = 0
+expect_stdout_starts_with = "camel-ran-marker\n"
+
+[[tests]]
+name = "valid.taskflow_parameters"
+desc = "Parameters of std::tf, with an int where an int is declared."
+args = ["${case}", "std::tf(bytecode=false, gc_stats=0, linear=true)"]
+expect_exit = 0
+expect_stdout_starts_with = "camel-ran-marker\n"
+
+[[tests]]
+name = "error.unknown_parameter"
+desc = "An unknown parameter is a located diagnostic that lists the parameters the pass takes; nothing runs."
+args = ["${case}", "std::fvm", "std::opt(safe_fpp=true)"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "'std::opt' has no parameter 'safe_fpp'", "safe_fp: bool = false", "column 10"]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "error.wrong_type"
+desc = "A value of the wrong type names both types."
+args = ["${case}", "std::opt(safe_fp=3)", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "parameter 'safe_fp' is an int, not a bool"]
+
+[[tests]]
+name = "error.missing_value"
+desc = "A parameter without a value is a syntax error of the parameter list."
+args = ["${case}", "std::opt(safe_fp=)", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "not valid Camel syntax"]
+
+[[tests]]
+name = "error.not_constant"
+desc = "A name is not a constant."
+args = ["${case}", "std::opt(safe_fp=x)", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "'x' is not a constant"]
+
+[[tests]]
+name = "error.written_twice"
+desc = "The same parameter twice."
+args = ["${case}", "std::opt(safe_fp=true, safe_fp=false)", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "'safe_fp' is written twice"]
+
+[[tests]]
+name = "error.positional"
+desc = "Parameters are named."
+args = ["${case}", "std::opt(true)", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "key=value"]
+
+[[tests]]
+name = "error.pass_without_parameters"
+desc = "A pass that declares none refuses any."
+args = ["${case}", "std::nvm(x=1)"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "no parameters"]
+
+[[tests]]
+name = "error.checked_before_running"
+desc = "A bad parameter after a scheduler is found before the program runs."
+args = ["${case}", "std::fvm", "std::opt(safe_fp=3)"]
+expect_exit = 1
+expect_output_not_contains = ["camel-ran-marker"]
+expect_output_contains = ["InvalidPassParameter"]
+
+[[tests]]
+name = "module.parameters"
+desc = "A module pass with parameters of every type: constant expressions, an int where a float is declared, a string with a comma and a parenthesis; the module's alias."
+args = ["${case}", "tensor::test_echo(n=2*3, ratio=1, label=\"a,b)\", flag=true)", "tensor::echo(label=\"alias\")", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_starts_with = "test_echo: n=6 ratio=1 label=a,b) flag=true\ntest_echo: n=1 ratio=0.5 label=alias flag=false\ncamel-ran-marker\n"
+
+[[tests]]
+name = "module.parameter_error"
+desc = "A module pass checks its parameters like any other."
+args = ["${case}", "tensor::test_echo(n=1.5)", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "parameter 'n' is a float, not an int"]
+
+[[tests]]
+name = "module_pass.written_explicitly"
+desc = "A pass a module contributes runs where the user writes it, not twice, also under its alias."
+args = ["${case}", "tensor::echo(label=\"mine\")", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_starts_with = "test_echo: n=1 ratio=0.5 label=mine flag=false\ncamel-ran-marker\n"
+

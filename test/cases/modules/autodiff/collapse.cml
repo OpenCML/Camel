@@ -17,7 +17,8 @@ func h(x: float): float {
 }
 
 func main(): int sync {
-    // Read at run time, so that the gradient graph stays general rather than folding to a constant.
+    // The condition runs at runtime, but equal arm values allow callers to fold the gradient.
+    // The generated grad(h) subgraph itself remains general over its parameter.
     let x = if get_env('CAMEL_COLLAPSE_X') == '' then 2.0 else 2.0
     'collapse dh={}'->format<grad(h)(x)>->println
     return 0

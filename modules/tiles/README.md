@@ -25,11 +25,11 @@ For programs with static f32 tensor shapes, the experimental region pass avoids
 wrapping individual functions:
 
 ```text
-camel program.cml std::tiles std::fvm
+camel program.cml tiles::compile std::fvm
 ```
 
-`std::tiles` loads the bundled module automatically (`tiles::compile` is its full
-module name). It extracts supported, pure, dependency-convex regions and inserts
+`tiles::compile` loads the bundled module automatically (the core no longer has a
+`std::tiles` alias; Tiles registers its own names). It extracts supported, pure, dependency-convex regions and inserts
 explicit resident inputs, calls and host reads. Shared device results remain
 resident across regions. Other nodes execute normally on the selected scheduler.
 The rewrite itself does not initialize CUDA; runtime prefers CUDA and falls back
@@ -39,8 +39,8 @@ are not retried. No special import or test environment variable is required.
 Current limits: dynamically shaped tensors, symbolic dimensions and unsupported
 operators remain outside selected regions; CPU fallback interprets the region
 through the current scheduler. Compiled CPU kernels, device cost-based placement
-and shape-polymorphic compilation are not yet implemented. Use `std::tiles std::gir`
-or `std::tiles std::jgir` to inspect the rewritten graph.
+and shape-polymorphic compilation are not yet implemented. Use `tiles::compile std::gir`
+or `tiles::compile std::jgir` to inspect the rewritten graph.
 
 `gpu` is a function decorator that prefers GPU execution:
 
@@ -59,14 +59,37 @@ nested decorated calls are supported. Inside a GPU compilation, a nested dispatc
 is lowered as the underlying computation, without host execution or a nested GPU
 launch. Numeric permissions remain attached to the original operator nodes.
 For statically shaped eligible tensor regions, decorating the function uses the
-same region extraction and resident transfers as `std::tiles`. Unsupported nodes
+same region extraction and resident transfers as `tiles::compile`. Unsupported nodes
 stay on CPU while supported regions prefer GPU; captures and CPU effects are
 preserved. Partitioning happens once when the decorated function value is built.
 Static regions now generate their launch plans and CUDA source from parameter types
 when outlined, without allocating placeholder input tensors or initializing CUDA.
-The process-local plan/source cache retains this work. NVRTC compilation still happens
-at execution time, as do graph extraction and binding validation; cached artifacts are
-not yet attached directly to graph calls. Symbolic and unknown shapes do not use this regional path.
+The core context's process-local `tiles.compiled_region` target fact associates the
+owned template with the extracted callee graph. Re-encoding an unchanged callee
+preserves its lineage and revision, so the actual runtime call reads the same fact.
+Each call copies the template and binds fresh inputs through an explicit parameter
+map; it does not extract the graph, infer shapes, instantiate operators or plan
+fusion again. Constants are retained separately from invocation bindings. Input
+snapshots and resident allocation owners exist only in that call's copy. Binding
+still checks shapes/dtypes and replans storage for host versus resident inputs;
+owned-plan validation still runs. NVRTC compilation remains lazy.
+
+Graph revision (including lexical numerical permissions), declaration epoch and
+the CUDA lowering-policy target hash govern validity. A stale fact is dropped;
+later compilation rebuilds it rather than executing an old declaration. Native
+declaration revision tokens are process-local and never serialized. Facts contain
+no Camel GC pointers. General call-site specialization with captures keeps its
+existing fresh-extraction path; captured region boundaries are fresh parameters.
+Symbolic and unknown shapes do not use this regional path.
+The outlined execution entry explicitly requests a static template, so a cache
+clear or another fact reader dropping a stale entry cannot permanently disable
+reuse. General `run` specialization does not infer eligibility from a cache miss.
+
+Templates live until replacement, explicit fact invalidation/clear, or destruction
+of their execution context. Replacing a revision reuses its lineage's fact entry.
+The source LRU remains bounded separately; the graph-fact store has no LRU, so
+repeated construction of distinct decorated graphs in one long-lived context can
+retain additional templates until that context or its facts are released.
 When no static region can be extracted, the existing whole-function, call-site
 specialization remains: an unavailable backend or unsupported computation runs
 the original function on the current CPU execution backend. Regional execution
@@ -131,12 +154,13 @@ result nodes in `indexed_nodes`. Instances are structurally validated against th
 captured declaration before scheduling. The parallel maximum implementation also
 requires a compatible f32 maximum law and the core's regroup, permute and block
 identity freedoms. Missing declarations choose the ordered implementation.
-Transpose, permutation and slice now derive their physical offset and strides
-from the core access map via `rowMajorView`; their duplicate index inference has
-been removed. The domain must write output coordinates directly and read an
-unconditional affine source. Empty domains retain zero physical strides without
-evaluating unused addresses. CUDA still prints these physical maps; other
-operators and graph facts have not yet migrated to generic domain-driven lowering.
+Transpose, permutation, slice, broadcast and axis expansion retain the core
+access map as their authority. The output domain writes coordinates directly;
+source coordinates may include the core's quotient/remainder reshape expressions.
+Physical address lowering checks nonnegative intermediate ranges and operand
+bounds. `rowMajorView` supplies compact strides when it proves an equivalent
+strided map. Empty domains evaluate no source address. Synthetic scalar fills
+and gradient matrix primitives still use their explicit physical layouts.
 
 FMA selection additionally requires the core declaration of correctly rounded
 f32 arithmetic sensitive to contraction; an opaque declaration grants no such
@@ -148,6 +172,10 @@ owners are excluded; graph literals, shapes, indexing, numeric permissions, oper
 declaration revisions and scheduling options are included. A hit restores the launch
 plan and source; storage planning and validation run on every call so host and
 resident inputs can share kernels without sharing allocation ownership.
+Loop keys additionally include the exact int64 domain, state/capture bindings,
+next-state outputs and the complete owned body, including its embedded constant
+bits, index instances, permissions and declaration revisions. Deferred body ports
+carry no invocation payload; changing an outer runtime input still reuses code.
 It retains at most 32 entries and 16 MiB of
 accounted entry payload (excluding allocator overhead), with synchronized access.
 This is not a persistent semantic fingerprint or a cache of graph compilation.
@@ -190,9 +218,11 @@ This is not a persistent semantic fingerprint or a cache of graph compilation.
   returns a host tensor. Both transfers complete before returning; repeated
   downloads preserve the device value. Empty tensors are supported.
   `upload(float)` and `download(Device<float>)` preserve all f64 bits.
-  Device storage is owned through Camel's foreign-resource control blocks and
-  released by finalization or end-of-run cleanup. The native allocation retains
-  its CUDA context and driver lifetime, and contains no moving-heap pointers.
+  Device storage is owned through Camel's foreign-resource control blocks; that
+  ownership ends with finalization or end-of-run cleanup, while the physical
+  native block may remain cached in its backend's pool until a trim or the
+  backend's destruction. The native allocation retains its CUDA context and
+  driver lifetime, and contains no moving-heap pointers.
   Graph APIs accept these values as inputs, including mixed host/device tensor
   leaves in tuples and structs. The function keeps its ordinary tensor signature:
   `run<square>(upload(x))` borrows the existing device allocation without copying
@@ -219,14 +249,52 @@ Boolean `if` conditions already known at specialization (for example, a captured
 configuration flag) select exactly one arm. Only that arm is translated; an
 unselected effect is neither executed nor rejected. A selected effect is rejected
 without execution. Aggregate branch results are supported. This is specialization,
-not device-side dynamic branching: GPU-dependent conditions, `match` and loops
+not device-side dynamic branching: GPU-dependent conditions and `match`
 still need additional lowering. Changing a captured flag specializes again; the
 generated-source cache cannot substitute the other arm's implementation.
+
+Pure `loop ... for ... do ...` expressions with one or more states support a static `int[]`
+domain and either f64 scalar states or statically shaped f32 tensor states with
+identical shapes and dtypes. Mixed scalar/tensor recurrent states remain a CPU
+boundary; read-only scalar captures are supported.
+The compiler owns one body program and emits one device loop with lane-local
+state; the body is compiled once, independently of the trip count. Captured f64
+scalars and f32 tensors bind as body inputs. Tensor body values must be scalar
+or match the state shape, and their access maps must be canonical pointwise maps.
+Supported body operations are pointwise arithmetic, f64 scalar add/subtract/
+multiply/divide/negation and explicit scalar conversions. Empty domains return
+every initial state without executing the body. All next-state expressions are
+computed before any state assignment, so swaps and coupled recurrences preserve
+simultaneous updates. One operation owns the body and exposes ordered typed
+result projections; it produces all states in one launch even when the caller
+uses only one result. Tuple destructuring does not duplicate the recurrence. Fixed tuple
+projections stay in the same selected region as their eligible producer, so a
+selected result downloads only its own visible leaf. Whole tuple results retain
+their structure while transferring each tensor/scalar leaf explicitly.
+
+The static iteration table preserves every signed int64 value, including negative
+values, values above 2^53 and the int64 extrema. The element may enter floating
+arithmetic through explicit `float(k)`; CUDA uses `__ll2double_rn` directly from
+the integer value. No floating conversion precedes that operation. Loop-body
+numeric permissions and operator dependencies remain attached to the owned body
+and participate in validation and source-cache identity; they grant no additional
+reassociation or contraction.
+
+`while`, `for ... while`, dynamic domains, mixed recurrent lane domains, nested loops, integer
+element arithmetic, shape-changing state, reductions and non-pointwise accesses
+inside the body remain unsupported. These are computation boundaries for `@gpu`
+fallback; explicit `run` and `source` report an unsupported computation. Scalar
+division faults during device execution are reported without CPU replay. Region
+analysis reads the body to establish the supported subset. A selected loop region
+owns that body, and `tiles::compile` does not outline it independently. Unsupported
+loops remain CPU boundaries; the graph pass may still select eligible regions
+in their unclaimed body graphs, as it does in other reachable graphs.
 
 ## Execution and numerical behavior
 
 The compiler snapshots inputs into an owned IR, retaining no Camel GC pointers
-across CUDA work. Shape inference reuses the tensor operation registry.
+across CUDA work. Fully resolved static graph outputs use `core.shape`; unknown
+graph shapes specialize through the tensor operation registry for that call.
 Intermediates remain on the device. Single-use indexed scalar chains
 are fused into groups of at most 64 operations. Shared results retain materialization
 boundaries; axis sum/mean may absorb their single-use producers. Each fused node keeps an f32 rounding point;
@@ -244,13 +312,39 @@ least 128. Extrema propagate any NaN to canonical f32 `0x7fc00000` and order
 negative zero below positive zero, matching the CPU numeric contract. Other axis
 reductions are serial per output, with f64 accumulation for sum/mean.
 There is no fast-math mode; GPU transcendental results need not be bitwise equal
-to CPU results. Floating-point agreement is tested with tolerances.
+to CPU results. Strict arithmetic is checked bitwise; transcendental operations
+use their declared ulp bounds. Relaxed comparison applies only to algorithms
+with the required numeric permissions.
 
 Driver contexts, streams, buffers, and modules have scoped ownership. A bounded
 32-entry cache stores compiled modules by generated source within the selected
 device context; it does not cache tensor values. Each invocation uploads fresh
-inputs. Calls are synchronous and serialized through the backend. This release
-does not claim competitive performance with Triton.
+host inputs, while resident inputs reuse their native allocations. Public calls
+wait for completion before returning Camel values. The internal native submission
+interface can chain work on distinct streams through completion events; it does
+not introduce a pending Camel value or change source-level `sync`/`wait`.
+Compilation-cache access uses a short mutex rather than serializing device
+execution. This release does not claim competitive performance with Triton.
+
+Native device and pinned-host blocks are served by two backend-private idle
+pools. Caching is ready-only and bounded: 64 MiB / 32 entries for device memory
+and 16 MiB / 32 entries for pinned host memory, allocated in 256-byte size
+classes. Checkout takes the smallest cached block that is large enough, so a
+small request prefers a small cached block but consumes a larger one whenever no
+smaller block is available. A block returns to its pool only when its last shared
+lease drops, and every live lease keeps its backend alive; an idle slot holds a
+raw handle only, so a pool can never extend its backend's lifetime. A released
+block that exceeds the idle byte budget or slot count is freed immediately; all
+other idle memory is freed only by an explicit trim, by the same-kind trim that an
+out-of-memory retry performs, or when the owning backend is destroyed.
+`inspect`'s `allocated_bytes` remains a planning metric for device storage; it
+does not describe cached or otherwise idle native memory. If draining a stream or
+activating the owning context fails during cleanup, both pools permanently
+disable reuse before any lease share is dropped: a block that may still be the
+target of pending work is abandoned rather than cached or freed, and further
+checkouts on that backend are rejected. That failure path does not retry or
+recover the memory, so a backend that reports a failed cleanup should be
+replaced rather than reused.
 
 ## Build and runtime
 
@@ -293,6 +387,18 @@ broadcasting, fresh values with cached code, reshape, captures, direct calls,
 negative-axis reduction, and empty dimensions across NodeVM, FastVM, and JIT.
 The host plan also runs native mutation tests built by the standard build. Its
 test executable stays in the build tree and is not a distributed runtime tool.
+When the CUDA Toolkit is present the same build also produces native CUDA contract
+executables; `tiles-async-check` covers the memory-pool contract described above
+(reuse and size classes, idle budgets, injected allocation failure, disabled reuse
+after a failed cleanup, lease lifetime and shared-backend reuse) and needs a GPU
+to run.
+The test-only `tiles::test_outline_compiled` pass verifies actual callee-fact
+reuse with per-thread extraction counts before comparing fresh input snapshots
+against an independent extraction. It covers changing inputs/captures, tuple
+exits, embedded axes and concurrent GC-stressed calls. Its pre-execution fixture
+also checks f64 bit patterns, embedded literals, resident owner release, explicit
+invalidation and stale facts consumed by another reader after declaration or
+numerical-permission changes. Test diagnostics produce no ordinary runtime output.
 
 ## Remaining architecture
 
@@ -311,8 +417,9 @@ at completion. Other scalar math functions, arbitrary pullback closures, control
 unsupported derivative operators still require further lowering work.
 
 Static `transpose`, `permute` (including negative axes) and positive-step `slice`
-lower to a checked index map: source address equals an element offset plus the
-dot product of output coordinates and element strides. Bounds are checked before
+lower to checked core index maps. Affine maps can simplify to an element offset
+plus a dot product with physical strides; reshape-based axis expansion can retain
+quotient/remainder expressions. Bounds are checked before
 CUDA execution, including arithmetic overflow. Empty domains do not dereference
 addresses. Transpose, permutation, slice and reshape can fuse with each other
 and with elementwise operations across different domains. Generated loads
@@ -374,9 +481,9 @@ the existing stages. This is a measured heuristic, not an autotuner. Row program
 are tested with signed zeros, subnormals, nonfinite values, cancellation and random
 finite bit patterns on NodeVM, FastVM and JIT (`gpu/tiles_rows.plan.toml`).
 
-First-class public index domains, masks, layouts, schedule/resource graphs, loop and
-branch lowering, general region fusion, asynchronous memory planning,
-asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
+First-class public index domains, masks, layouts, schedule/resource graphs, general
+loop and dynamic branch lowering, general region fusion, asynchronous memory planning,
+public asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.
 
@@ -439,9 +546,14 @@ of the public tensor element types. Integer add/subtract/multiply wrap modulo
 and logical right shift operate on the bit representation; shift counts use
 their low five bits. Explicit equal-width 32-bit bitcasts preserve all payload
 bits, including floating NaNs and signed zero. Integer division and numeric
-float/integer conversions are currently rejected. These are internal physical
+float/integer conversions other than the explicit i64-to-f64 conversion below
+are currently rejected. These are internal physical
 instructions, not new Camel source-language integer semantics. The host oracle
 and CUDA emitter implement the same rules without signed C++ overflow.
+Physical i64 literals, symbols and immutable constant-table loads preserve exact
+signed payloads. Same-type i64 comparisons remain integer comparisons, including
+above 2^53. The explicit i64-to-f64 cast rounds to nearest-even; other i64
+arithmetic, mixed-type comparisons and i64 bitcasts are rejected.
 Serial reduction bodies explicitly retain their accumulator type, initial value,
 ordered loop, mean finalization and output rounding. Fused producer and epilogue
 nodes use lexical scalar bindings, with contraction permitted only by both
@@ -479,8 +591,9 @@ member node IDs in dependency order, distinct boundary inputs and outputs, and
 exclusion reasons. It inspects the function graph without calling it or loading
 CUDA. Candidate selection uses core declarations, type/instance facts and the
 same physical index-contract checks as lowering. The current coverage is static
-f32 pointwise operations, rank-2 matrix multiplication and supported reductions;
-dynamic shapes, scalar arithmetic, layouts and other node kinds remain boundaries.
+f32 pointwise operations, rank-2 matrix multiplication, supported reductions and
+the static loop subset described above. Dynamic shapes, standalone scalar
+arithmetic, layouts and other node kinds remain boundaries.
 This is analysis for the graph pass, not automatic GPU execution.
 
 Each candidate is also extracted into a function draft. Runtime boundary values
@@ -493,6 +606,8 @@ Regions are connected and dependency-convex: replacing each region by one call
 must leave the complete CPU/GPU dependency graph acyclic. In particular, a direct
 GPU edge cannot justify fusion across a CPU detour. Shared values used outside a
 region remain explicit outputs; unreachable nodes are omitted. Control-edge
-endpoints are excluded, and this analysis does not descend into calls, branch
-arms or LOOP bodies. The internal planner is deterministic and produces maximal
-legal contractions for its greedy order, not a globally optimal cost partition.
+endpoints are excluded. Partitioning is local to each graph; loop eligibility
+also checks its body, and the graph pass visits reachable graphs while skipping
+bodies already owned by selected loop regions. The internal planner is deterministic
+and produces maximal legal contractions for its greedy order, not a globally
+optimal cost partition.

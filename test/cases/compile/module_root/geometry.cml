@@ -1,5 +1,5 @@
 /**
- * Helper module: exported values (design principles 2.11), one of them computed from another
+ * Helper module: exported values (design principles 10.1), one of them computed from another
  * and from a function of the module, with an effect that shows when it is evaluated.
  */
 module geometry

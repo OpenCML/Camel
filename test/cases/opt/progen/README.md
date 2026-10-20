@@ -16,8 +16,8 @@ prints, per finding, whether it still fails as recorded. All 33 failed on every 
 was written (2026-10-11, branch `lane/gen`, Linux container, release build). The test plan
 `feat/opt/progen` runs a batch of seeds that pass and, since the fixes below, the findings
 recorded as fixed (`progen.py fixed`: key `fixed` of `findings.json`, each on the four
-schedulers under the rewrite sequence it was found with, `std::inline`, `std::opt`,
-`std::inline std::opt::dce`, `std::opt::simplify` and `std::specialize`). The other findings are
+schedulers under the rewrite sequence it was found with, `std::opt::inline`, `std::opt`,
+`std::opt::inline std::opt::dce`, `std::opt` and `std::opt::specialize`). The other findings are
 in no test.
 
 **Fixed since**: F24 (branch `lane/capacity`), F25 to F31 and F33, the other failures without
@@ -56,7 +56,7 @@ pass; the status column of the tables names the cause.
 - **C** (`ff52c85b`, `src/passes/opt/generic/rewrite.cpp`). `replaceNode` gives the users of a
   removed node the ordered nodes its value came from. It walked through an arm's head that is
   a pure node to the BRCH, so the users waited on the BRCH and no longer on the head (F08, F13:
-  `std::opt::dce` after `std::inline` removed the unused conversion after the head).
+  `std::opt::dce` after `std::opt::inline` removed the unused conversion after the head).
 
 - **D** (`ca28e0b8`, `src/runtime/draft_inline.cpp`). `tryResolveStaticValue`, which finds the
   constant an argument is so that specialization can bind it, looked through CAST nodes: the
@@ -65,7 +65,7 @@ pass; the status column of the tables names the cause.
 **F17** and **F36** were in the JIT back end and are fixed on branch `lane/jit-fixes` (see
 "Fixed in the JIT" below).
 
-F12 and F19 (found with `std::opt::simplify`, which runs the same inliner) have cause A: the
+F12 and F19 (found with `std::opt`, which runs the same inliner) have cause A: the
 simplify line reached it independently, with `GATE(constant)` in front of the body where A
 above names the entry SYNC. F07, F11 and F23 print their expected output on the four schedulers
 since these commits as well; the simplify line traced them (and F06, F08, F13) to the
@@ -81,13 +81,13 @@ Seeds 1-1000 of the `cross` matrix (41 cells per program, all features), before 
 | after A, B and C | 40975 | 24 | 1 | 0 | 0 | 0 | 0 | 1 |
 
 No cell is bad after that was not bad before. The cell left is seed 944 (generator version 1)
-under `std::inline std::jit` (`L8 -nan` where `L8 -2` is expected; the other schedulers print
+under `std::opt::inline std::jit` (`L8 -nan` where `L8 -2` is expected; the other schedulers print
 `-2`). It has since been reduced to F37 and has the cause of F17.
 
 ## Fixed in the JIT (branch `lane/jit-fixes`)
 
 The JIT compiles a graph made of arithmetic, branches and calls to itself, which is what
-`std::inline` leaves of a small recursive function. Its findings had two causes, and the review
+`std::opt::inline` leaves of a small recursive function. Its findings had two causes, and the review
 of the encoder found more defects of the second kind than the findings showed:
 
 - **J-A: the JOIN of a fused compare-branch took the wrong arm (F17, F37, and seeds 5254,
@@ -141,7 +141,7 @@ Four more causes, each with one commit and one archived finding:
   are made to wait on what its arguments were computed from. For a call that was the tail of
   an arm the user is the JOIN, which then waited on code of the arm that no tail depended on.
   Found by the check alone: seeds 7113, 7176, 7317, 7347, 7359, 7533 and 7555 were internal
-  errors of `std::opt` and `std::opt::simplify` once it existed. Without the check these
+  errors of `std::opt` and `std::opt` once it existed. Without the check these
   programs printed the right output (the stray code is laid out behind the last arm and
   happens to be entered or skipped as needed).
 
@@ -152,11 +152,11 @@ Not done, with the reason:
 
 - *A dedicated SYNC as the head of every arm.* The back ends and the check define an arm by
   its tail, and none of E to H is about a head. A SYNC per arm adds a node to every arm of
-  every graph (the benchmark models have 30 to 48 branches after `std::opt::simplify`),
+  every graph (the benchmark models have 30 to 48 branches after `std::opt`),
   changes 14 recorded graphs and touches 17 source files that read arm heads, among them the
   JIT and the ONNX exporter, which other lines are changing.
 - *Removing the parameter GATEs of the inliner.* They order nothing the entry roots do not
-  (measured without them: 9% fewer nodes after `std::inline` on the benchmark models). The
+  (measured without them: 9% fewer nodes after `std::opt::inline` on the benchmark models). The
   ONNX exporter reads a gated constant as "exists only once the branch has run": without the
   gates four of its tests fail (an `export_model` request made in an arm is no longer
   refused). That has to be expressed otherwise before the gates can go.
@@ -193,8 +193,8 @@ fails. (On `4e14dee7`, 1969 tests: `gc_pacing.growth_25_prl` failed in one full 
 machine and passed three times alone.) The five sets above were not run again after the last
 rebase.
 
-Graph sizes of the benchmark models after `std::inline`, `std::opt` and
-`std::macro std::opt::simplify` (`std::stats`), before and after on `a3554607`: the same
+Graph sizes of the benchmark models after `std::opt::inline`, `std::opt` and
+`std::macro std::opt` (`std::stats`), before and after on `a3554607`: the same
 number of graphs and branches for mlp, lenet, gru, resnet and transformer, 6 more nodes each
 (the GATE on a constant arm, cause G) and 33 to 39 fewer edges.
 
@@ -212,8 +212,8 @@ number of graphs and branches for mlp, lenet, gru, resnet and transformer, 6 mor
 
 Reading the table:
 
-- "cross" is every one of 25 rewrite sequences on the node VM, plus no rewrite, `std::inline`,
-  `std::opt::simplify`, `std::opt` and `std::macro std::opt` on `std::fvm`, `std::jit` and
+- "cross" is every one of 25 rewrite sequences on the node VM, plus no rewrite, `std::opt::inline`,
+  `std::opt`, `std::opt` and `std::macro std::opt` on `std::fvm`, `std::jit` and
   `std::prl`, plus the run without passes.
 - "located refusal": all are `RuntimeDiag::MacroEvaluationFailed` of `std::macro` (see J1).
 - "not run": after four crashed cells the rest of a program is skipped (a crash takes many
@@ -228,17 +228,17 @@ Reading the table:
 
 **Where the bad cells are (batch A).** The run without passes, the four schedulers without a
 rewrite, and the sequences `std::opt::fold`, `std::opt::cse`, `std::opt::dce`, `std::macro`,
-`std::devirtualize`, `std::specialize`, `std::opt::fold std::opt::cse`,
+`std::opt::devirtualize`, `std::opt::specialize`, `std::opt::fold std::opt::cse`,
 `std::opt::cse std::opt::dce` and `std::macro std::opt::fold std::opt::cse std::opt::dce` each
 have exactly one bad program, the same one: it crashes without any pass (F25). Every other bad
-cell has `std::inline`, `std::opt::simplify` or `std::opt` in its pipeline: 52 programs are bad
-under `std::inline std::nvm`, 52 under `std::opt::simplify std::nvm`, 54 under
+cell has `std::opt::inline`, `std::opt` or `std::opt` in its pipeline: 52 programs are bad
+under `std::opt::inline std::nvm`, 52 under `std::opt std::nvm`, 54 under
 `std::opt std::nvm`.
 
 **`std::macro`.** No finding is of the class "macro operands inlined early". Over batches A to
 E, 9 cells of 4 programs (A 204, C 2508, D 2920 and 3027) are bad with `std::macro` in front of
 a sequence that passes without it on the same scheduler. The one that was reduced (D 2920,
-`std::macro std::inline`) is a crash that depends on the path of the source file and whose
+`std::macro std::opt::inline`) is a crash that depends on the path of the source file and whose
 `macro` function is not even called, so it says nothing about `std::macro` itself; the other
 three were not reduced.
 
@@ -268,7 +268,7 @@ batches, so nothing is archived for them.
 
 Seen in the same session and not reduced: seed 249 at the default size under the `quick` matrix
 (seeds 1-300, 33 cells each: 9888 of 9900 cells agree) prints 1 or 0 of its 5 lines under
-`std::inline` and `std::opt` on the node VM and the parallel scheduler and does not finish
+`std::opt::inline` and `std::opt` on the node VM and the parallel scheduler and does not finish
 within 30 s on `std::fvm` and `std::jit`; its run without passes agrees. The inliner was not
 looked at here.
 
@@ -282,44 +282,44 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 
 | id | program | pipeline | schedulers | expected | actual | class | status |
 |---|---|---|---|---|---|---|---|
-| F01 | `inline_untaken_arm_effect.cml` | `std::inline` | all | nothing | `a` (a call in the arm of `if false` runs) | branch arm | fixed (A, e82fa21e) |
-| F02 | `inline_wrong_arm_runs.cml` | `std::inline` | nvm, prl | nothing | an empty line (the `else` arm runs although the test is true) | branch arm | fixed (A, e82fa21e) |
+| F01 | `inline_untaken_arm_effect.cml` | `std::opt::inline` | all | nothing | `a` (a call in the arm of `if false` runs) | branch arm | fixed (A, e82fa21e) |
+| F02 | `inline_wrong_arm_runs.cml` | `std::opt::inline` | nvm, prl | nothing | an empty line (the `else` arm runs although the test is true) | branch arm | fixed (A, e82fa21e) |
 | F03 | `opt_untaken_arm_effect.cml` | `std::opt` | all | nothing | `L2 0 0 0 0` (a lambda in the arm of `if false` runs) | branch arm | fixed (A, e82fa21e) |
-| F04 | `inline_statement_effect_lost.cml` | `std::inline` | all | `pq` | nothing (a `println` statement of `main` is dropped) | effect order lost | fixed (A, e82fa21e) |
+| F04 | `inline_statement_effect_lost.cml` | `std::opt::inline` | all | `pq` | nothing (a `println` statement of `main` is dropped) | effect order lost | fixed (A, e82fa21e) |
 | F05 | `opt_statement_effect_lost.cml` | `std::opt` | all | an empty line | nothing (the first `println` of `main` is dropped) | effect order lost | fixed (B, ac9a55a1) |
 | F06 | `opt_lambda_effect_lost.cml` | `std::opt` | all | `false` | nothing (effect of a call with unused result in a sync lambda) | effect order lost | fixed (B, ac9a55a1); the schedulers also misread the arm (cause C1, 741b8705) |
-| F07 | `simplify_nested_function_effect_lost.cml` | `std::opt::simplify` | all | an empty line | nothing (`println` of a nested sync function) | effect order lost | passes since A-C; see the note below; the schedulers also misread the arm (cause C1, 741b8705) |
-| F08 | `inline_dce_arm_effect_lost.cml` | `std::inline std::opt::dce` | all | an empty line | nothing (`println` of the taken arm) | branch arm | fixed (C, ff52c85b); the schedulers also misread the arm (cause C1, 741b8705) |
-| F09 | `inline_fvm_arm_effect_lost.cml` | `std::inline` | fvm, jit | an empty line | nothing (`println` of the taken arm; nvm and prl print it) | branch arm | fixed (A, e82fa21e) |
-| F10 | `inline_unused_branch_effect_lost.cml` | `std::inline` | all | an empty line | nothing (`println` of the taken arm of an unused branch) | branch arm | fixed (A, e82fa21e) |
-| F11 | `simplify_arm_write_lost.cml` | `std::opt::simplify` | all | `a` | an empty line (a write made in the taken arm is lost) | written variable taken for one value | passes since A-C; see the note below; the schedulers also misread the arm (cause C1, 741b8705) |
-| F12 | `simplify_effect_order.cml` | `std::opt::simplify` | all | empty line, then `L1 0 0` | `L1 0 0`, then empty line | effect order lost | fixed (A, e82fa21e; found by the simplify line as well) |
-| F13 | `inline_dce_arm_value.cml` | `std::inline std::opt::dce` | all | `1` | `0` | branch arm | fixed (C, ff52c85b); the schedulers also misread the arm (cause C1, 741b8705) |
-| F14 | `inline_branch_value_null.cml` | `std::inline` | nvm, fvm, jit | `L4 (0, [0]) 0` | `L4 null 0` | branch arm | fixed (A, e82fa21e) |
-| F15 | `inline_match_value_null.cml` | `std::inline` | all | `L6 { n: 5, tag:  }` | `L6 null` | branch arm | fixed (A, e82fa21e) |
-| F16 | `fold_inline_env_value.cml` | `std::opt::fold std::inline` | all | `L11 false 4` | `L11 false 0` (a value read from the environment) | (other) wrong value after inlining | fixed (A, e82fa21e) |
-| F17 | `inline_jit_argument_value.cml` | `std::inline` | jit | `L8 0 0 24` | `L8 0 0 0` (nvm, fvm and prl print 24) | (other) wrong value after inlining | fixed (J-A) |
-| F37 | `inline_jit_arm_value_float.cml` | `std::inline` | jit | `L8 3.5` | `L8 1.5` (from seed 944 of generator version 1, which printed `-nan`) | (other) wrong value after inlining | fixed (J-A) |
-| F32 | `fold_inline_match_arm_value.cml` | `std::opt::fold std::inline` | all | `L4 0 3 a` | `L4 0 0 a` (a pure function; no effect, no variable) | branch arm | fixed (A, e82fa21e) |
-| F36 | `inline_jit_second_call.cml` | `std::inline` | jit | `1`, `1`, `11` | `1`, `2`, `17` (found by hand: a self-tail-recursive function, right on its first call, wrong on later ones) | (other) wrong value after inlining | fixed (J-B) |
-| F35 | `opt_cast_argument_value.cml` | `std::opt`, `std::opt::simplify`, `std::specialize` | all | `7.5`, `17.25`, `10.75` | `0.5`, `-1.75`, `7.75` (found by hand: an argument written `i as float`) | (other) wrong value after a rewrite | fixed (D, ca28e0b8) |
-| F38 | `inline_prl_tail_call_arguments.cml` | `std::inline` | prl | `L4 0 6` | `L4 0 0` (a self tail call with its parameters permuted; nvm, fvm and jit print 6) | (other) wrong value after inlining | fixed (E, 7f1b3f05) |
-| F39 | `opt_dead_branch_laid_out.cml` | `std::opt`, `std::inline` | all | an empty line | nothing on nvm and prl; on fvm and jit the unreduced program repeats its first lines until memory is exhausted | branch arm | fixed (F, fda8ac4f) |
+| F07 | `simplify_nested_function_effect_lost.cml` | `std::opt` | all | an empty line | nothing (`println` of a nested sync function) | effect order lost | passes since A-C; see the note below; the schedulers also misread the arm (cause C1, 741b8705) |
+| F08 | `inline_dce_arm_effect_lost.cml` | `std::opt::inline std::opt::dce` | all | an empty line | nothing (`println` of the taken arm) | branch arm | fixed (C, ff52c85b); the schedulers also misread the arm (cause C1, 741b8705) |
+| F09 | `inline_fvm_arm_effect_lost.cml` | `std::opt::inline` | fvm, jit | an empty line | nothing (`println` of the taken arm; nvm and prl print it) | branch arm | fixed (A, e82fa21e) |
+| F10 | `inline_unused_branch_effect_lost.cml` | `std::opt::inline` | all | an empty line | nothing (`println` of the taken arm of an unused branch) | branch arm | fixed (A, e82fa21e) |
+| F11 | `simplify_arm_write_lost.cml` | `std::opt` | all | `a` | an empty line (a write made in the taken arm is lost) | written variable taken for one value | passes since A-C; see the note below; the schedulers also misread the arm (cause C1, 741b8705) |
+| F12 | `simplify_effect_order.cml` | `std::opt` | all | empty line, then `L1 0 0` | `L1 0 0`, then empty line | effect order lost | fixed (A, e82fa21e; found by the simplify line as well) |
+| F13 | `inline_dce_arm_value.cml` | `std::opt::inline std::opt::dce` | all | `1` | `0` | branch arm | fixed (C, ff52c85b); the schedulers also misread the arm (cause C1, 741b8705) |
+| F14 | `inline_branch_value_null.cml` | `std::opt::inline` | nvm, fvm, jit | `L4 (0, [0]) 0` | `L4 null 0` | branch arm | fixed (A, e82fa21e) |
+| F15 | `inline_match_value_null.cml` | `std::opt::inline` | all | `L6 { n: 5, tag:  }` | `L6 null` | branch arm | fixed (A, e82fa21e) |
+| F16 | `fold_inline_env_value.cml` | `std::opt::fold std::opt::inline` | all | `L11 false 4` | `L11 false 0` (a value read from the environment) | (other) wrong value after inlining | fixed (A, e82fa21e) |
+| F17 | `inline_jit_argument_value.cml` | `std::opt::inline` | jit | `L8 0 0 24` | `L8 0 0 0` (nvm, fvm and prl print 24) | (other) wrong value after inlining | fixed (J-A) |
+| F37 | `inline_jit_arm_value_float.cml` | `std::opt::inline` | jit | `L8 3.5` | `L8 1.5` (from seed 944 of generator version 1, which printed `-nan`) | (other) wrong value after inlining | fixed (J-A) |
+| F32 | `fold_inline_match_arm_value.cml` | `std::opt::fold std::opt::inline` | all | `L4 0 3 a` | `L4 0 0 a` (a pure function; no effect, no variable) | branch arm | fixed (A, e82fa21e) |
+| F36 | `inline_jit_second_call.cml` | `std::opt::inline` | jit | `1`, `1`, `11` | `1`, `2`, `17` (found by hand: a self-tail-recursive function, right on its first call, wrong on later ones) | (other) wrong value after inlining | fixed (J-B) |
+| F35 | `opt_cast_argument_value.cml` | `std::opt`, `std::opt`, `std::opt::specialize` | all | `7.5`, `17.25`, `10.75` | `0.5`, `-1.75`, `7.75` (found by hand: an argument written `i as float`) | (other) wrong value after a rewrite | fixed (D, ca28e0b8) |
+| F38 | `inline_prl_tail_call_arguments.cml` | `std::opt::inline` | prl | `L4 0 6` | `L4 0 0` (a self tail call with its parameters permuted; nvm, fvm and jit print 6) | (other) wrong value after inlining | fixed (E, 7f1b3f05) |
+| F39 | `opt_dead_branch_laid_out.cml` | `std::opt`, `std::opt::inline` | all | an empty line | nothing on nvm and prl; on fvm and jit the unreduced program repeats its first lines until memory is exhausted | branch arm | fixed (F, fda8ac4f) |
 | F42 | `fold_joined_arm_slot.cml` | `std::opt::fold` (also with `cse`, and `macro` + `fold` + `cse` + `dce`) | all | `1.0` | `6.5937273290103e-310`: the arms `null` and `1.0` join to `float?`; the node of the arm kept a slot typed `float`, which the users of the JOIN read once the pass pruned the branch (a front-end defect the pass exposed; found by the `nullable` feature, 2 of 600 programs, seeds 7001-7600 on the full matrix) | branch arm | fixed (gir: a slot of the joined type) |
 
 ### Faults and crashes after a standard pass
 
 | id | program | pipeline | schedulers | expected | actual | class | status |
 |---|---|---|---|---|---|---|---|
-| F18 | `inline_untaken_arm_fault.cml` | `std::inline` | all | nothing, exit 0 | `Array index out of bounds`, exit 1: the body of a call in the arm of `if false` runs | branch arm | fixed (A, e82fa21e) |
-| F19 | `simplify_recursion_never_ends.cml` | `std::opt::simplify` | nvm, prl | nothing, exit 0 | `MaxRecursionDepthExceeded` in graph `__g_10__` (fvm and jit finish) | unbounded growth | fixed (A, e82fa21e; found by the simplify line as well) |
-| F20 | `inline_crash_function_argument.cml` | `std::inline` | all | nothing | segmentation fault | (other) crash after a rewrite | fixed (A, e82fa21e) |
-| F21 | `inline_crash_capturing_lambda.cml` | `std::inline` | all | nothing | segmentation fault | (other) crash after a rewrite | fixed (A, e82fa21e) |
-| F22 | `specialize_inline_crash.cml` | `std::specialize std::inline` | all | an empty line | segmentation fault | (other) crash after a rewrite | fixed (A, e82fa21e) |
-| F23 | `simplify_crash.cml` | `std::opt::simplify` | all | nothing | segmentation fault | (other) crash after a rewrite | passes since A-C; see the note below; the schedulers also misread the arm (cause C1, 741b8705) |
-| F34 | `opt_permanent_space.cml` | `std::specialize std::opt` | all (the pass fails before any scheduler runs) | nothing, exit 0 | `PassInternalError`: "Permanent space exhausted (32 MB of types and layouts)", no position, exit 1 | unbounded growth (a query that allocates; cause C3) | open: cause C3 |
-| F40 | `opt_rootless_callee_arm_tail.cml` | `std::opt`, `std::opt::simplify` | all (the pass fails) | nothing, exit 0 | `PassInternalError` of the branch-arm check, "GATE ... belongs to no arm"; before the check the unreduced program (seed 108, size 4) hung on nvm and prl | branch arm | fixed (G, 553d3bd8) |
-| F41 | `opt_argument_wait_on_join.cml` | `std::opt`, `std::opt::simplify` | all (the pass fails) | nothing, exit 0 | `PassInternalError` of the branch-arm check, "BRCH ... belongs to no arm"; before the check the program printed the right output | branch arm | fixed (H, 29198bff) |
+| F18 | `inline_untaken_arm_fault.cml` | `std::opt::inline` | all | nothing, exit 0 | `Array index out of bounds`, exit 1: the body of a call in the arm of `if false` runs | branch arm | fixed (A, e82fa21e) |
+| F19 | `simplify_recursion_never_ends.cml` | `std::opt` | nvm, prl | nothing, exit 0 | `MaxRecursionDepthExceeded` in graph `__g_10__` (fvm and jit finish) | unbounded growth | fixed (A, e82fa21e; found by the simplify line as well) |
+| F20 | `inline_crash_function_argument.cml` | `std::opt::inline` | all | nothing | segmentation fault | (other) crash after a rewrite | fixed (A, e82fa21e) |
+| F21 | `inline_crash_capturing_lambda.cml` | `std::opt::inline` | all | nothing | segmentation fault | (other) crash after a rewrite | fixed (A, e82fa21e) |
+| F22 | `specialize_inline_crash.cml` | `std::opt::specialize std::opt::inline` | all | an empty line | segmentation fault | (other) crash after a rewrite | fixed (A, e82fa21e) |
+| F23 | `simplify_crash.cml` | `std::opt` | all | nothing | segmentation fault | (other) crash after a rewrite | passes since A-C; see the note below; the schedulers also misread the arm (cause C1, 741b8705) |
+| F34 | `opt_permanent_space.cml` | `std::opt::specialize std::opt` | all (the pass fails before any scheduler runs) | nothing, exit 0 | `PassInternalError`: "Permanent space exhausted (32 MB of types and layouts)", no position, exit 1 | unbounded growth (a query that allocates; cause C3) | open: cause C3 |
+| F40 | `opt_rootless_callee_arm_tail.cml` | `std::opt`, `std::opt` | all (the pass fails) | nothing, exit 0 | `PassInternalError` of the branch-arm check, "GATE ... belongs to no arm"; before the check the unreduced program (seed 108, size 4) hung on nvm and prl | branch arm | fixed (G, 553d3bd8) |
+| F41 | `opt_argument_wait_on_join.cml` | `std::opt`, `std::opt` | all (the pass fails) | nothing, exit 0 | `PassInternalError` of the branch-arm check, "BRCH ... belongs to no arm"; before the check the program printed the right output | branch arm | fixed (H, 29198bff) |
 
 ### Without any pass
 
@@ -361,11 +361,11 @@ Notes on single findings:
   function that calls the first, and the first passed as a value to `map`. Two more programs
   of the batches crash without passes in the same family (a nested function that reads a
   captured `var`, passed to `map` in one arm and called in the other).
-- **F18** against principles 2.9 ("a constant expression that must fault is left for run time;
+- **F18** against principles 3.9 ("a constant expression that must fault is left for run time;
   the program behaves the same with and without optimization"): without passes the function is
   never called, so nothing faults. The index is not a literal one; the reducer rejects
-  candidates with a literal index outside a literal array (2.7 makes those compile-time errors).
-- **F17, F36, F37.** The graph and the bytecode `std::inline` leaves are right: `std::inline std::fvm`
+  candidates with a literal index outside a literal array (3.9 makes those compile-time errors).
+- **F17, F36, F37.** The graph and the bytecode `std::opt::inline` leaves are right: `std::opt::inline std::fvm`
   runs the same bytecode and prints the expected lines, and so do the node VM and the parallel
   scheduler. Inlining the arms into the function makes it call only itself, which is the
   condition for the JIT to compile it (`std::jit` alone reports "targets non-self graph" for it
@@ -381,7 +381,7 @@ Notes on single findings:
 ### Root causes
 
 Read from the graphs (`std::rgir` after each step of the smallest failing sequence) and the code.
-`std::opt::simplify` is rounds of `std::opt` (specialize, devirtualize, inline), fold and dce; it
+`std::opt` is rounds of `std::opt` (specialize, devirtualize, inline), fold and dce; it
 does not run cse.
 
 - **C1: an arm is looked for from its head only (F06, F07, F08, F11, F13, F23). Fixed in
@@ -390,8 +390,8 @@ does not run cse.
   `resolveRuntimeBranchArmEntry` (`src/execute/graph_runtime_support.cpp`) found the entry among
   what follows the arm's recorded head. After inlining, an arm's nodes wait on the BRCH directly,
   and the head can become a node nothing follows: dce removes the unused pure node after it (F11,
-  F23: `std::inline std::opt::dce`), or fold prunes the inner `if false` that held its only user
-  (F07: `std::inline std::opt::fold`). The arm was then taken to be empty: its effects did not run
+  F23: `std::opt::inline std::opt::dce`), or fold prunes the inner `if false` that held its only user
+  (F07: `std::opt::inline std::opt::fold`). The arm was then taken to be empty: its effects did not run
   and the JOIN read a slot never written (null; F23 crashes in `len(null)`). The rewritten graph
   was right; all four schedulers misread it. The entry lookup now also takes what the tail depends
   on inside the branch, which is how the execution order already lays an arm out.
@@ -432,11 +432,11 @@ does not run cse.
   ```
 
   With it F12 and F19 pass on all four schedulers, and over seeds 1-1000 (20 cells per program:
-  no pass, fold, dce, and 17 with `std::inline`, `std::opt` or `std::opt::simplify`) 19,988 of
+  no pass, fold, dce, and 17 with `std::opt::inline`, `std::opt` or `std::opt`) 19,988 of
   20,000 cells agree, 6 are located refusals, and one program is left with a bad cell: seed 299,
-  a silent mismatch under `std::specialize std::inline` (not reduced). After `741b8705` alone
+  a silent mismatch under `std::opt::specialize std::opt::inline` (not reduced). After `741b8705` alone
   34 programs have a bad cell (44 before it), so C2 is also behind most of what was filed under
-  `std::inline`. The default test set was not run with the change.
+  `std::opt::inline`. The default test set was not run with the change.
 - **C3: asking whether a value is written allocates in the space that is never freed (F34). Not
   fixed** (the capacity of that space and its diagnostic are handled elsewhere). `isVarArgument`
   (`src/runtime/draft_writes.cpp`) resolves the overload of an effectful operator through
@@ -444,14 +444,14 @@ does not run cse.
   each time. `isWrittenInPlace` asks it for every user of a value; the specialization probe of
   the rewrite engine (`tryResolveStaticValue`) asks that for every argument of every call, again
   after each inlined call. On seed 3293 the resolver ran 171,810 times before the limit (1,658
-  times in the run of `std::opt::simplify` alone, which passes); the graphs do not grow (79
+  times in the run of `std::opt` alone, which passes); the graphs do not grow (79
   graphs, 121 inlined calls, within the growth budget). So neither unbounded growth of the
   program nor a program too large: the cost is per query. Fold and cse ask the same question for
   every node.
 
 ### Seen, not reduced
 
-- **Results that change from run to run** after `std::inline`, `std::opt::simplify` or
+- **Results that change from run to run** after `std::opt::inline`, `std::opt` or
   `std::opt`: 100 bad cells of batch A, on every scheduler (see above). Under `std::prl` the
   lines of a sync body come out in another order on repeated runs (batch A seeds 244, 514, 752,
   960, 1049). Reducing seed 244 led to F01 instead; the cells on the node VM were not looked at.
@@ -459,14 +459,14 @@ does not run cse.
   `std::jit`: `L10 106794191113924` and `L10 98920901664452` where `L1 5 5 5 pq` is expected).
   Reducing it led to another instance of F05.
 - **Failures that depend on the path of the source file.** Two reduced programs (a crash after
-  `std::inline std::opt::dce`, and `MaxRecursionDepthExceeded` after `std::inline` in a recursion
+  `std::opt::inline std::opt::dce`, and `MaxRecursionDepthExceeded` after `std::opt::inline` in a recursion
   bounded by an environment value) failed on every run in the directory of the batch and on none
   of 10 runs after being copied elsewhere. They are not archived because they do not fail here.
-- **`Permanent space exhausted (32 MB of types and layouts)`** from `std::opt::simplify` in the
+- **`Permanent space exhausted (32 MB of types and layouts)`** from `std::opt` in the
   frozen pipeline R22 on a 113-line program (batch F seed 3293), reported as
   `RuntimeDiag::PassInternalError` without a position. Since reduced to 17 lines and archived as
-  F34 (cause C3): it needs neither `std::opt::simplify` nor a large program.
-- **An effect lost under `std::inline`** in a program without `var`, captures or effectful
+  F34 (cause C3): it needs neither `std::opt` nor a large program.
+- **An effect lost under `std::opt::inline`** in a program without `var`, captures or effectful
   functions (batch C seed 2508: a `println` of `main` before a `match` with a call in an arm
   that is not taken), and **`null` in place of a string** built in a function inlined into an
   `else` arm (batch C seed 2504). Same symptoms as F04 and F14.
@@ -482,20 +482,20 @@ its reference output (batches B, C and D need their `--features`, as in the tabl
 Each finding was compared with `docs/design-principles.cn.md` so that expected behaviour is not
 reported as a defect:
 
-- No finding relies on an effect outside a sync block (2.1, 2.4, misreadings 1 and 3): every
+- No finding relies on an effect outside a sync block (3.1, 3.2, misreadings 1 and 3): every
   `println`, write and effectful call of the programs is a statement of a sync block, and every
   function that prints has a sync body. The lost effects of F04-F10 are such statements.
-- No finding compares two pipelines (section 4, misreading 9). Each run is compared with the
+- No finding compares two pipelines (section 9, misreading 8). Each run is compared with the
   one output the principles allow for the program; the claim is "a standard pass must not make
   the program print something else" (section 4, last-but-two bullet).
-- No finding has an effect in a `map` or `filter` element function (2.7); `foreach` and `reduce`
+- No finding has an effect in a `map` or `filter` element function (3.6); `foreach` and `reduce`
   are ordered, which is what F12 depends on (the `reduce` is the first statement, the call the
   third).
 - No finding uses `wait` outside a sync block, a module-level variable, or two writers of one
   variable without order (section 6, undecided).
 - Macro: no finding is a refusal by `std::macro`; those are counted as legal (but see J1).
 - The reads of variables in the programs are after-the-fact reads in the same sync body (F11),
-  which 2.5 and 2.6 order by position.
+  which 3.5 and the log's 2.6 order by position.
 
 ## For the owner to decide
 
@@ -504,7 +504,7 @@ reported as a defect:
 at the call (`MacroEvaluationFailed`: "Operator ':mark/reduce_arr' is unavailable in macro
 execution"). 87 cells of the batches are this refusal; the generator now avoids declaring such
 functions `macro`.
-- Reading A: it is the ruling of 2.7 ("a failed macro evaluation is a compile-time error"), and
+- Reading A: it is the ruling of 8 ("a failed macro evaluation is a compile-time error"), and
   the diagnostic is located, so this is a legal refusal.
 - Reading B: the evaluation did not fail because of the program (as a division by zero would);
   the evaluator lacks an operator. Section 3 says a macro function *may* be evaluated ahead of
@@ -517,10 +517,10 @@ functions `macro`.
 sync body, where `wr` writes `c` and nothing reads `r` or `c` afterwards. The compiler warns
 that the call "is neither waited nor in a sync block ... the write runs only if the variable is
 read afterwards", and then the call runs (prints `wr`) under every pipeline tried.
-- Reading A (the warning): an arm is a sub-graph of its own, as a function is (2.4), so the
+- Reading A (the warning): an arm is a sub-graph of its own, as a function is (3.2), so the
   enclosing sync block does not order what is inside; the call should not run, and the
   behaviour is the defect.
-- Reading B (the behaviour): the `if` is one of the expressions of the sync block (2.2), the
+- Reading B (the behaviour): the `if` is one of the expressions of the sync block (3.4), the
   taken arm is its value, so it runs in order; the warning is wrong.
 The generator writes every effectful arm as `sync { ... }`, so no finding depends on this.
 

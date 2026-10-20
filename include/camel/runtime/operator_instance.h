@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,10 +49,13 @@ instanceOf(const GCGraph &graph, gc_node_ref_t node);
  * What a back end may do with the reduction of the OPER node `node` (design 7.3): the law its
  * instance combines by, with the permissions the program granted the node
  * (GCGraph::nodePermissions). nullopt when the node has no instance or its instance does not
- * reduce.
+ * reduce. A consumer with a default relaxation (design principles 7.3) passes its
+ * policy; the default asks for nothing the program did not write.
  */
-std::optional<camel::core::sem::ReorderFreedom>
-reorderFreedomOf(const GCGraph &graph, gc_node_ref_t node);
+std::optional<camel::core::sem::ReorderFreedom> reorderFreedomOf(
+    const GCGraph &graph, gc_node_ref_t node,
+    const camel::core::sem::NumericPolicy &policy =
+        camel::core::sem::NumericPolicy::explicitOnly());
 
 /**
  * `camel inspect --instances`: one line `INSTANCE {json}` per OPER node, of every graph

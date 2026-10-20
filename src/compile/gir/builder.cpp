@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,9 @@
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/rtdata/string.h"
 #include "camel/execute/entry_args.h"
+#include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
@@ -418,7 +420,8 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
 }
 
 inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
-    return linkCheek(from, to) && !hasDirectDataDependency(from, to);
+    return linkCheek(from, to) && !hasDirectDataDependency(from, to) &&
+           !runtime::hasControlDependency(*nodeDraftOf(to), nodeIdOf(from), nodeIdOf(to));
 }
 
 inline camel::source::SemanticPart semanticPart(
@@ -653,6 +656,13 @@ void Builder::buildEntryCall() {
     } else if (context_->requireEntry()) {
         diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
         throw BuildAbortException();
+    } else {
+        // A library module (no `main`) has no entry call. The root graph still needs a
+        // well-formed exit: the graph dumps (std::gir, std::jgir, `inspect -g`) and every
+        // reachability walk end at it, and an invalid exit is not a graph one can encode.
+        // Nothing executes this root, so the exit is an empty (void) return.
+        auto empty = rootGraph_->addStaticDataNode(Data::null());
+        setGraphReturnFromResult(rootGraph_, nodeIdOf(empty), nodeIdOf(empty), Type::Void());
     }
 }
 
@@ -925,6 +935,8 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return visitLinkNode(node);
     case GCT::NodeKind::WITH:
         return visitWithNode(node);
+    case GCT::NodeKind::TAPP:
+        return visitTypeApplication(node);
     case GCT::NodeKind::ACCS:
         return visitAccsNode(node);
     case GCT::NodeKind::BRCH:
@@ -975,6 +987,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
 
 compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
+    ExpectedValueScope functionScope(expectedValueType_, nullptr);
     std::string name         = gct->name();
     GCT::node_ptr_t typeLoad = gct->at(0);
     Type *type               = typeLoad->dataType();
@@ -993,6 +1006,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     }
     rejectRedeclaredFunction(name, funcType, gct);
     rejectOperatorConflict(name, funcType, gct);
+    staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);
     buildFuncBody(gct, graph, funcType, name);
     if (name.empty()) {
@@ -1000,13 +1014,11 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     }
     leaveScope();
 
-    std::vector<GCT::node_ptr_t> annoNodes;
-    for (size_t i = 2; i < gct->size(); ++i) {
-        const auto &annoNode = gct->at(i);
-        if (annoNode && annoNode->type() == GCT::NodeKind::ANNO) {
-            annoNodes.push_back(annoNode);
-        }
-    }
+    // The decorators that grant attributes as the program is built were applied to the body
+    // (buildFuncBody); the others make the decorated function. A decorated block applies its
+    // own where it is called (visitDecoratedBlock).
+    const std::vector<GCT::node_ptr_t> annoNodes =
+        gct->decoratedBlock() ? std::vector<GCT::node_ptr_t>{} : appliedDecoratorsOf(gct);
     if (!annoNodes.empty()) {
         graph_ptr_t decorated = buildDecoratedGraph(name, graph, annoNodes);
         insertDecoratedGraph(name, decorated);
@@ -1020,6 +1032,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
 void Builder::stampPermissions(node_handle_t operNode) const {
     if (operNode != nullptr) {
         operNode->header.permissions = numericPermissions_;
+        operNode->header.attrs       = currentAttrs_;
     }
 }
 
@@ -1033,6 +1046,11 @@ void Builder::buildFuncBody(
     NumericPermissionScope permissions(
         numericPermissions_,
         body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0);
+    // The attributes its decorators grant join those in force where it is written (each key's
+    // combine rule, camel/core/node_attrs.h), for everything written in it.
+    AttrScope attrs(
+        currentAttrs_,
+        camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first));
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -1061,7 +1079,16 @@ void Builder::buildFuncBody(
         if (!funcType->hasExitType()) {
             inferredExitGraphs_.insert(graph.get()); // the body sets it from now on
         }
-        setBodyResult(graph, visitBodyNode(gct->at(1)));
+        // A decorated block whose value nothing takes is a function whose value is dropped:
+        // it returns nothing, and a `return` in it gives no value (visitExitNode). Not a sync
+        // block: its statements run in order whatever is done with its value, as they do
+        // when the block is written without decorators.
+        const bool dropped = droppedBodies_.contains(gct->at(1)) && !gct->at(1)->synced();
+        if (dropped) {
+            droppedGraphs_.insert(graph.get());
+        }
+        node_handle_t bodyResult = visitBodyNode(gct->at(1));
+        setBodyResult(graph, dropped ? nullptr : bodyResult);
         // A body declared `: void` drops the value of its last statement.
         if (!inferredExitGraphs_.contains(graph.get()) &&
             isVoidGraphExitType(funcType->exitType())) {
@@ -1121,13 +1148,10 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             diags_->of(SemanticDiag::Redeclaration).atOrigin(child->origin()).commit(name);
             continue;
         }
-        for (size_t k = 2; k < child->size(); ++k) {
-            if (child->at(k) && child->at(k)->type() == GCT::NodeKind::ANNO) {
-                diags_->of(SemanticDiag::GenericFunctionUnsupported)
-                    .atOrigin(child->origin())
-                    .commit(name, "decorated: a decorator takes a function value");
-                break;
-            }
+        if (!appliedDecoratorsOf(child).empty()) {
+            diags_->of(SemanticDiag::GenericFunctionUnsupported)
+                .atOrigin(child->origin())
+                .commit(name, "decorated: a decorator takes a function value");
         }
         auto tmpl = std::make_shared<GenericTemplate>();
         // An operator's template is named as the program writes it (`operator +`), in its
@@ -1142,6 +1166,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->graphScope     = graphScope_;
         tmpl->decoratedScope = decoratedScope_;
         tmpl->templateScope  = templateScope_;
+        tmpl->attrs          = currentAttrs_;
         // A generic function of a namespace (registered at the top level) is in that
         // namespace; one written in a body is where the body is.
         tmpl->namespacePath = currGraph_ == rootGraph_ ? Reference(name).paths() : namespacePath_;
@@ -1169,6 +1194,7 @@ node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
     tmpl->graphScope       = graphScope_;
     tmpl->decoratedScope   = decoratedScope_;
     tmpl->templateScope    = templateScope_;
+    tmpl->attrs            = currentAttrs_;
     tmpl->namespacePath    = namespacePath_;
     tmpl->usingFrames      = usingFrames_;
     node_handle_t drefNode = currGraph_->addDrefNode(
@@ -1257,15 +1283,6 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
             return nullptr;
         }
     }
-    if (TupleType *repeated = findRepeatedMark(substituteTypeVars(signature, bindings))) {
-        diags_->of(SemanticDiag::TaggedTypeNesting)
-            .atOrigin(origin->origin())
-            .commit(
-                repeated->toString(),
-                asTagged(repeated->payloadType())->payloadType()->toString());
-        throw BuildAbortException();
-    }
-    rejectInvalidCollectionKey(substituteTypeVars(signature, bindings), origin);
     compile_graph_ptr_t graph = instantiateGeneric(tmpl, bindings, origin);
     if (!graph->funcType()->hasExitType()) {
         diags_->of(SemanticDiag::CallingIncompleteFunction)
@@ -1320,7 +1337,7 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
 compile_graph_ptr_t Builder::resolveGenericCall(
     const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
     std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
-    const GCT::node_ptr_t &call) {
+    const GCT::node_ptr_t &call, Type *expectedResult) {
     FunctionType *signature = tmpl->funcType;
     const size_t withCount  = signature->withTypesCount();
     const size_t normCount  = signature->normTypesCount();
@@ -1411,7 +1428,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             patternAt(i)->toString());
     };
     // 1. Each variable takes the type found at its `typeas` position. An argument that is
-    // not of the form of a `T?` / `T!` parameter enters it (design principles 2.10), so it
+    // not of the form of a `T?` / `T!` parameter enters it (design principles 3.8), so it
     // binds the variables of the payload: `or_zero(5, 0)` with `x: (typeas T)?` gives
     // `T = int`. `null` binds nothing.
     type_bindings_t bindings;
@@ -1442,6 +1459,9 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         if (!waiting[i]) {
             unifyTypeVars(patternAt(i), actualAt(i), bindings);
         }
+    }
+    if (expectedResult && signature->hasExitType()) {
+        unifyTypeVars(signature->exitType(), expectedResult, bindings);
     }
     // 3. The waiting arguments, as long as one of them can be given its types: the parameter
     // it is passed to, with what is known so far, is the function it has to be; its instance
@@ -1498,8 +1518,9 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     if (!open.empty()) {
         reject(
             "the type variable(s) " + openText +
-            " cannot be determined from the arguments (a 'null' or an empty array says nothing "
-            "about them)");
+            " cannot be determined from the arguments or expected result; give an expected type "
+            "or explicit " +
+            tmpl->name + "::<...> type arguments");
     }
     // ...and then every argument is held to its parameter exactly as for an ordinary function.
     for (size_t i = 0; i < withCount + normCount; ++i) {
@@ -1516,19 +1537,6 @@ compile_graph_ptr_t Builder::resolveGenericCall(
                     typeBindingsToString(bindings)));
         }
     }
-    // `T?` with `T = int?` would be `int??`: the same mark twice is rejected where a type is
-    // written, and so it is where substitution writes it (design principles 2.10: `int?!`
-    // is allowed, `int??` and `int!!` are not).
-    if (TupleType *repeated = findRepeatedMark(substituteTypeVars(signature, bindings))) {
-        diags_->of(SemanticDiag::TaggedTypeNesting)
-            .atOrigin(call->origin())
-            .commit(
-                repeated->toString(),
-                asTagged(repeated->payloadType())->payloadType()->toString());
-        throw BuildAbortException();
-    }
-    // Likewise a key type: `Set<T>` with `T = float` (DESIGN-QUESTION(map-key-types)).
-    rejectInvalidCollectionKey(substituteTypeVars(signature, bindings), call);
     return instantiateGeneric(tmpl, bindings, call);
 }
 
@@ -1645,8 +1653,8 @@ void Builder::settleGenericOperatorArguments(
                 }
             };
             for (const auto &[uri, resolver] : group->resolvers()) {
-                if (auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver)) {
-                    add(uri, fixed->funcType());
+                if (FunctionType *fixed = resolver->fixedSignature()) {
+                    add(uri, fixed);
                     continue;
                 }
                 // A signature computed from the argument types: asked for the candidate
@@ -1817,6 +1825,18 @@ void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) 
 
 compile_graph_ptr_t Builder::instantiateGeneric(
     const template_ptr_t &tmpl, const type_bindings_t &bindings, const GCT::node_ptr_t &call) {
+    ExpectedValueScope instanceScope(expectedValueType_, nullptr);
+    // All routes (inferred calls, function values and ::<T>) enforce the same type rules.
+    Type *concrete = substituteTypeVars(tmpl->funcType, bindings);
+    if (TupleType *repeated = findRepeatedMark(concrete)) {
+        diags_->of(SemanticDiag::TaggedTypeNesting)
+            .atOrigin(call->origin())
+            .commit(
+                repeated->toString(),
+                asTagged(repeated->payloadType())->payloadType()->toString());
+        throw BuildAbortException();
+    }
+    rejectInvalidCollectionKey(concrete, call);
     const auto sameBindings = [&](const type_bindings_t &other) {
         if (other.size() != bindings.size()) {
             return false;
@@ -1935,6 +1955,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     compile_graph_ptr_t graph;
     try {
         BuildState saved(*this, *tmpl);
+        AttrScope attrs(currentAttrs_, tmpl->attrs);
         currGraph_      = tmpl->ownerGraph;
         module_         = tmpl->module;
         namespacePath_  = tmpl->namespacePath;
@@ -1957,7 +1978,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
                                    : createCompileGraph(funcType, currGraph_, instanceName);
         if (const auto declaring = units_.find(tmpl->module.get());
             declaring != units_.end() && !tmpl->name.empty()) {
-            // Shown with the module that declares it (design principles 2.12).
+            // Shown with the module that declares it (design principles 10.2).
             graph->setName(qualifiedName(*declaring->second, instanceName));
         }
         if (currGraph_ == rootGraph_) {
@@ -2026,7 +2047,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             if (dataType->code() == TypeCode::Array && !dataType->resolved() && !refTypes.empty()) {
                 // An array whose elements are all computed (`[x, null]`, `[a, b]` with an
                 // `int` and an `int?`): its element type is what the elements join to, and
-                // an element that is not of that type enters it (design principles 2.10).
+                // an element that is not of that type enters it (design principles 3.8).
                 Type *joined = valueTypeOf(refTypes.front());
                 for (size_t i = 1; i < refTypes.size() && joined != nullptr; ++i) {
                     joined = joinTypes(joined, valueTypeOf(refTypes[i]));
@@ -2196,7 +2217,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         }
         throw;
     }
-    // Design principles 2.10: the empty literal `[]` takes its element type from where it
+    // Design principles 3.8: the empty literal `[]` takes its element type from where it
     // stands (an annotation, a parameter, the other arm of a branch, `as`). A name bound to
     // it without one has no element type; say so here, where the type can be written. (A
     // name the compiler made for an element of a literal starts with a digit.)
@@ -2213,7 +2234,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     if (ident == GCT::kDiscardName) {
-        // `let _ = e` (design principles 2.11): the value is evaluated where the statement
+        // `let _ = e` (design principles 3.9): the value is evaluated where the statement
         // stands and dropped on purpose. No name is bound, so the statement can be repeated.
         if (node != nullptr) {
             discardedValues_.insert(node);
@@ -2272,7 +2293,7 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
 
 void Builder::recordWrite(
     node_handle_t variable, node_handle_t entry, node_handle_t exit, bool throughCallee) {
-    // `A(i); wait modify(i); B(i)` gives A -> modify -> B (design principles 2.6). The second
+    // `A(i); wait modify(i); B(i)` gives A -> modify -> B (design principles log 2.6). The second
     // half follows from setModifier. The first: the waited writer is ordered after every
     // operation that directly used the variable's value before it: the operations that took a
     // value read from it (the read itself when nothing took it), and the calls and branches
@@ -2455,8 +2476,9 @@ void Builder::reportUndeclaredCapturedWrites() {
     // captured, itself or through the functions it calls, has side effects as well. This is a
     // declaration check only: the modifier changes nothing in how calls are compiled.
     for (const BuiltFunction &function : unit_->builtFunctions) {
-        if (function.graph->funcType()->modifiers().sync()) {
-            continue;
+        if (function.graph->funcType()->modifiers().sync() ||
+            blockGraphs_.contains(function.graph)) {
+            continue; // declared so, or a decorated block (no declaration to write it on)
         }
         std::vector<std::string> names;
         for (node_handle_t variable : capturedWritesOf(function.graph)) {
@@ -2663,11 +2685,11 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
 }
 
 void Builder::reportUnusedFallibleValues() {
-    // Design principles 2.11: a `T!` that is evaluated and that nothing takes is a warning,
+    // Design principles 3.9: a `T!` that is evaluated and that nothing takes is a warning,
     // because the error it may hold is lost without a trace. On the graph "evaluated and
     // not taken" is a node without a data user that something is ordered after: a statement
     // of a sync block. (Outside a sync block a value nothing takes is not evaluated at all:
-    // design principles 2.1, which has its own warning, EffectNotExecuted.)
+    // design principles 3.1, which has its own warning, EffectNotExecuted.)
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
     const auto warn =
         [&](const compile_graph_ptr_t &graph, node_handle_t node, Type *type, const char *remark) {
@@ -2692,7 +2714,7 @@ void Builder::reportUnusedFallibleValues() {
         return asFallible(valueTypeOf(type));
     };
     // The entry function, when it declares no return type: what its body ends with is not
-    // the result of the program (design principles 2.10), so nothing takes that either.
+    // the result of the program (design principles 9.8), so nothing takes that either.
     DraftGraphBuilder *undeclaredMain = nullptr;
     if (context_ && module_ && context_->mainModule() == module_) {
         if (auto mains = graphsAt("main");
@@ -2793,14 +2815,25 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     ENTER("DREF");
     // The name as written, and the name of the module it stands for when it is one (from the
-    // innermost namespace out; design principles 2.12, layers 1 and 2).
-    const string written  = gct->name();
+    // innermost namespace out; design principles 10.2, layers 1 and 2).
+    const string written = gct->name();
+    if (written.find("::") != std::string::npos) {
+        // `Shape::Empty`, a variant without fields: the value itself (design principles 5.3).
+        EnumType *enumType = nullptr;
+        size_t tag         = 0;
+        if (enumVariantOfName(written, gct, enumType, tag)) {
+            refOrigin_          = gct->origin();
+            node_handle_t built = visitEnumConstruction(gct, enumType, tag);
+            LEAVE("DREF");
+            return built;
+        }
+    }
     const string name     = moduleLevelName(written);
     genericCalleeAllowed_ = false;
     refOrigin_            = gct->origin();
     if (camel::core::isOverloadableOperatorGroup(written)) {
         // An operator (`a + b` is `__add__(a, b)`): its overloads from every layer are one
-        // set (design principles 2.12), not those of the first layer that has the name.
+        // set (design principles 10.2), not those of the first layer that has the name.
         node_handle_t drefNode = operatorDrefOf(written, gct);
         LEAVE("DREF");
         return drefNode;
@@ -2829,7 +2862,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (auto optTemplate = templateScope_->get(name); optTemplate.has_value()) {
         // The name of a generic function stands for a template, which has no graph. Called,
         // the arguments choose the instance; anywhere else a function is expected the
-        // position does (design principles 2.10; genericValueFor), and until then the name
+        // position does (design principles 5.5; genericValueFor), and until then the name
         // is this marker node.
         node_handle_t drefNode = graph->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
@@ -2850,12 +2883,8 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             if (known == topLevelFunctions_.end()) {
                 continue;
             }
-            const auto &func = known->second->gct;
-            for (size_t k = 2; k < func->size(); ++k) {
-                if (func->at(k)->type() == GCT::NodeKind::ANNO) {
-                    ensureFunctionBuilt(candidate);
-                    break;
-                }
+            if (!appliedDecoratorsOf(known->second->gct).empty()) {
+                ensureFunctionBuilt(candidate);
             }
         }
     }
@@ -2889,7 +2918,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         }
     }
-    // Layers 3 to 5 (design principles 2.12): imported by name (or through a module or
+    // Layers 3 to 5 (design principles 10.2): imported by name (or through a module or
     // namespace prefix), then through a `using namespace`, then what comes along unasked.
     // Operators take their overloads from every layer.
     std::optional<camel::core::module::entity> opt;
@@ -2904,7 +2933,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     if (isOperatorName(written) || (named.has_value() && named->isOperGroup())) {
         // Operator groups (`+`, and the operators a module of operators brings) take their
-        // overloads from every layer (design principles 2.12; the graph model, N3).
+        // overloads from every layer (design principles 10.2; the graph model, N3).
         importedName = importedName || module_->hasImportedRef(written);
         if (importedName) {
             opt = module_->getImportedEntity(written);
@@ -2933,7 +2962,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         const auto &e = opt.value();
         if (e.isValue()) {
-            // A constant a C++ module exports (`math::pi`; design principles 2.13): the
+            // A constant a C++ module exports (`math::pi`; design principles 10.1): the
             // constant itself, here, as the same value written as a literal would be. It has
             // no node on the root graph and needs no capture.
             const GCT::node_ptr_t literal = tree_->makeData(e.value());
@@ -2951,7 +2980,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         if (camel::core::module::detail::EntityAccess::isNode(e)) {
             // A value exported by another module: a node of the root graph (design principles
-            // 2.11), used like a value of this module's top level: on the root graph itself,
+            // 10.1), used like a value of this module's top level: on the root graph itself,
             // through a capture port in a function.
             node_handle_t node = exportedValueNode(
                 *static_cast<ExportedValue *>(camel::core::module::detail::EntityAccess::node(e)));
@@ -3024,7 +3053,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     throw BuildAbortException();
 }
 
-// ---- Operator overloads of the program (design principles 2.12) --------------------------
+// ---- Operator overloads of the program (design principles 10.2) --------------------------
 //
 // Where this meets the resolution of names: an operator is the one kind of name that does not
 // take the first layer having it (visitDRefNode, "local > this module > imported > using >
@@ -3118,7 +3147,7 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
             }
         }
     }
-    set.ops = OperatorGroup::create(group, std::move(resolvers));
+    set.ops = OperatorGroup::merged(group, std::move(resolvers));
     return importedOperators_.emplace(key, std::move(set)).first->second;
 }
 
@@ -3142,7 +3171,7 @@ bool Builder::hasProgramOperatorOverloads(const std::string &group) {
 
 node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct) {
     OperatorOverloads set = operatorOverloadsOf(group);
-    // `!=` is not overloaded itself: an overload of `==` gives it (design principles 2.13).
+    // `!=` is not overloaded itself: an overload of `==` gives it (design principles 4.3).
     // Where one applies, `a != b` is the negation of the call of that overload; where none
     // does, the built-in `!=` (the group of the DREF, which set.ops is not) is used as before.
     bool negated = false;
@@ -3217,7 +3246,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     }
     const bool builtinAccepts =
         set.ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
-    // Design principles 2.13: an overload of the program is preferred where it is more
+    // Design principles 4.3: an overload of the program is preferred where it is more
     // specific than the others that take the arguments. "More specific" is exact: its
     // parameter types are the argument types themselves (as written, without a value entering
     // `T?` / `T!`), while the others take them only as members of a family of types: a
@@ -3238,9 +3267,9 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         return true;
     };
     const bool builtinExact = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
-        const auto *fixed = dynamic_cast<const StaticFuncTypeResolver *>(entry.second.get());
-        return fixed != nullptr && exactFor(fixed->funcType()) &&
-               fixed->resolve(withTypes, normTypes, Modifier::None).has_value();
+        FunctionType *fixed = entry.second->fixedSignature();
+        return fixed != nullptr && exactFor(fixed) &&
+               entry.second->resolve(withTypes, normTypes, Modifier::None).has_value();
     });
     const auto where        = [&](const void *overload) {
         const auto it = set.moduleOf.find(overload);
@@ -3371,15 +3400,15 @@ void Builder::rejectOperatorConflict(
     // A built-in (or C++ module) overload declared for exactly these parameter types is as
     // specific as this one: the two cannot both be meant. One that takes them as members of a
     // family of types (by content, a type rule over several types) is less specific, and this
-    // one is preferred where both apply (design principles 2.13; chooseOperatorOverload).
+    // one is preferred where both apply (design principles 4.3; chooseOperatorOverload).
     const bool sameAsBuiltin = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
-        const auto *fixed = dynamic_cast<const StaticFuncTypeResolver *>(entry.second.get());
-        if (fixed == nullptr || fixed->funcType()->withTypesCount() != 0 ||
-            fixed->funcType()->normTypesCount() != params.size()) {
+        const FunctionType *fixed = entry.second->fixedSignature();
+        if (fixed == nullptr || fixed->withTypesCount() != 0 ||
+            fixed->normTypesCount() != params.size()) {
             return false;
         }
         for (size_t i = 0; i < params.size(); ++i) {
-            if (!fixed->funcType()->normTypeAt(i)->equals(params[i])) {
+            if (!fixed->normTypeAt(i)->equals(params[i])) {
                 return false;
             }
         }
@@ -3449,6 +3478,7 @@ void Builder::exportOperatorOverloads(const std::string &group, const GCT::node_
 
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
+    ExpectedValueScope expectedScope(expectedValueType_, boundType(gct->targetType()));
     if (const auto &operand = gct->at(0);
         operand->type() == GCT::NodeKind::DATA && containsTypeVar(gct->targetType()) &&
         asTagged(gct->targetType()) == nullptr &&
@@ -3559,9 +3589,9 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
         gct->at(0)->type() != GCT::NodeKind::DATA) {
         // The type a declaration is written with (`let x: T = e`; GCT Builder::declaredValue):
         // `e` must already have it. A value of that very type passes as it is (converting a
-        // value to its own type does nothing, design principles 2.12); one of a type the
+        // value to its own type does nothing, design principles 5.1); one of a type the
         // declared type accepts is cast to it, so that the name has the declared type; any
-        // other is refused, as numbers are not converted implicitly (design principles 2.7).
+        // other is refused, as numbers are not converted implicitly (design principles 5.1).
         Type *have = valueTypeOf(sourceType);
         if (targetType->equals(have)) {
             LEAVE("CAST");
@@ -3676,7 +3706,7 @@ Builder::namedValueOf(node_handle_t node, const std::string &name, const GCT::no
 
 node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin) {
     if (boundWithArgs_.contains(node)) {
-        // `f<w>` as a value is a partial application (design principles 2.10). The binding
+        // `f<w>` as a value is a partial application (design principles 4.4). The binding
         // used to be dropped here, without a word.
         if (node_handle_t applied = partialApplicationOf(node, origin)) {
             return applied;
@@ -3710,8 +3740,8 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
         const auto &ops = std::get<oper_group_ptr_t>(target);
         if (ops->resolvers().size() == 1) {
             const auto &[uri, resolver] = ops->resolvers().front();
-            if (auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver)) {
-                auto op = std::make_shared<OperatorIndex>(ops->name(), fixed->funcType(), uri);
+            if (FunctionType *fixed = resolver->fixedSignature()) {
+                auto op = std::make_shared<OperatorIndex>(ops->name(), fixed, uri);
                 if (compile_graph_ptr_t graph = operatorValueGraphOf(op, origin)) {
                     return createFuncDataNode(graph, true, false);
                 }
@@ -3838,8 +3868,18 @@ node_handle_t Builder::overloadValueFor(
     if (std::holds_alternative<oper_group_ptr_t>(target)) {
         const auto &ops = std::get<oper_group_ptr_t>(target);
         oper_idx_ptr_t chosen;
+        const auto typed = explicitOperatorTypes_.find(node);
+        const type_vec_t explicitTypes =
+            typed == explicitOperatorTypes_.end() ? type_vec_t{} : typed->second;
+        const std::vector<StaticArg> statics(normTypes.size());
         for (const auto &[uri, resolver] : ops->resolvers()) {
-            auto type = resolver->resolve(withTypes, normTypes, Modifier::None);
+            auto type = resolver->resolveForCall(
+                explicitTypes,
+                expected->exitType(),
+                withTypes,
+                normTypes,
+                statics,
+                Modifier::None);
             if (!type || !(*type)->hasExitType() ||
                 !(*type)->exitType()->equals(expected->exitType())) {
                 continue;
@@ -3850,6 +3890,7 @@ node_handle_t Builder::overloadValueFor(
             chosen = std::make_shared<OperatorIndex>(ops->name(), *type, uri);
         }
         if (chosen) {
+            explicitOperatorTypes_.erase(node);
             if (compile_graph_ptr_t graph = operatorValueGraphOf(chosen, origin)) {
                 return createFuncDataNode(graph, true, false);
             }
@@ -3888,8 +3929,7 @@ void Builder::rejectNameWithoutValue(
             "; ",
             [](const std::pair<std::string, resolver_ptr_t> &p) { return p.second->signature(); });
         if (ops->resolvers().size() == 1) {
-            const bool fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(
-                                   ops->resolvers().front().second) != nullptr;
+            const bool fixed = ops->resolvers().front().second->fixedSignature() != nullptr;
             what = fixed ? std::format("an operator that changes its argument in place [{}]", sigs)
                          : std::format(
                                "an operator whose signature depends on its arguments [{}]",
@@ -3905,7 +3945,7 @@ void Builder::rejectNameWithoutValue(
 
 void Builder::reportImportNameConflicts() {
     // Two imports by name that bring functions of the same name and the same parameter types
-    // (design principles 2.10): the call used to take the function of the import written
+    // (design principles 10.2): the call used to take the function of the import written
     // first, silently. Functions of different parameter types form a set of overloads, as
     // before; whether that stays is undecided.
     if (!module_) {
@@ -3959,7 +3999,7 @@ void Builder::reportImportNameConflicts() {
                 // is not overloaded).
                 std::optional<std::string> clash;
                 // A value: exported by a module written in Camel (a node of the root graph) or
-                // a constant of a C++ module (design principles 2.13).
+                // a constant of a C++ module (design principles 10.1).
                 const auto isValue = [](const camel::core::module::entity &e) {
                     return EntityAccess::isNode(e) || e.isValue();
                 };
@@ -4188,9 +4228,9 @@ node_handle_t Builder::partialApplicationOf(
             // called, so its binding cannot stand alone.
             for (const auto &[uri, resolver] :
                  std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
-                auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver);
-                if (fixed && fits(fixed->funcType())) {
-                    calleeType = fixed->funcType();
+                FunctionType *fixed = resolver->fixedSignature();
+                if (fixed && fits(fixed)) {
+                    calleeType = fixed;
                     ++candidates;
                 }
             }
@@ -4315,28 +4355,18 @@ node_handle_t Builder::partialApplicationOf(
 
 node_handle_t Builder::compoundAssignmentByRebinding(
     const std::string &group, const GCT::node_ptr_t &gct, const std::vector<Argument> &operands) {
-    static const std::unordered_map<std::string, std::string> kPlainOperator = {
-        {"__assn_add__", "__add__"},
-        {"__assn_sub__", "__sub__"},
-        {"__assn_mul__", "__mul__"},
-        {"__assn_div__", "__div__"},
-        {"__assn_mod__", "__mod__"},
-        {"__assn_mat__", "__mat__"},
-        {"__assn_pow__", "__pow__"},
-        {"__assn_and__", "__and__"},
-        {"__assn_or__", "__or__"},
-    };
-    const auto plain = kPlainOperator.find(group);
-    if (plain == kPlainOperator.end() || operands.size() != 2) {
+    // The plain operator a compound assignment follows: the table of operator_names.cpp.
+    const auto plainGroup = camel::core::plainGroupOfCompoundAssignment(group);
+    if (!plainGroup || operands.size() != 2) {
         return nullptr;
     }
+    const std::string plainName(*plainGroup);
     // Only for a type a module defines. The built-in types have their own operators, and
     // where one is missing (`%=` on a float, `+=` on an array) that stays an error.
     // Or for any type when the program overloads the plain operator: `m &= n` on a type of
-    // the program is `m = m & n` through its `operator &` (design principles 2.11, 2.12).
+    // the program is `m = m & n` through its `operator &` (design principles 4.2, 4.3).
     Type *target = valueTypeOf(nodeTypeOf(operands[0].node));
-    if (target == nullptr ||
-        (!target->isOtherType() && !hasProgramOperatorOverloads(plain->second))) {
+    if (target == nullptr || (!target->isOtherType() && !hasProgramOperatorOverloads(plainName))) {
         return nullptr;
     }
     const auto make = [&](GCT::node_ptr_t node) {
@@ -4346,7 +4376,7 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // The right operand is evaluated once: it was built already, and is named here.
     const std::string right = bindTemporary(valueOf(operands[1].node));
     GCT::node_ptr_t value   = make(tree_->makeLink(2));
-    *value << make(tree_->makeDRef(plain->second)) << tree_->clone(operands[0].expr)
+    *value << make(tree_->makeDRef(plainName)) << tree_->clone(operands[0].expr)
            << make(tree_->makeDRef(right));
     GCT::node_ptr_t assign = make(tree_->makeLink(2));
     *assign << make(tree_->makeDRef("__assn__")) << tree_->clone(operands[0].expr) << value;
@@ -4698,7 +4728,7 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
         written = symbol;
     }
     // When the operation is applied to a variable, the program most likely meant to change
-    // it, as `xs->append<5>` did before 2.12: the fix is to bind the variable to the result.
+    // it, as `xs->append<5>` did before 11.3: the fix is to bind the variable to the result.
     std::string fix;
     const std::string text = sourceTextOf(call);
     if (call->size() >= 2 && call->at(1)->type() == GCT::NodeKind::DREF &&
@@ -4927,6 +4957,9 @@ Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcV
     GCT::node_ptr_t linkNode = tree_->makeLink(1);
     *linkNode << tree_->clone(decorator);
     *linkNode << tree_->makeDRef(tmpRefName);
+    // A call of the decorator is reported at the decorator.
+    linkNode->setOrigin(decorator->origin());
+    linkNode->at(1)->setOrigin(decorator->origin());
 
     node_handle_t decoratedValue = visitLinkNode(linkNode);
     nodeScope_                   = nodeScope_->leave();
@@ -4992,6 +5025,185 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
     return decoratedGraph;
 }
 
+// ---- Decorators that grant attributes, decorated blocks (language reference 7.6) ------------
+
+std::optional<camel::core::attr::AttrSetId> Builder::staticGrantOf(const GCT::node_ptr_t &anno) {
+    if (auto it = staticGrants_.find(anno); it != staticGrants_.end()) {
+        return it->second;
+    }
+    // Asked first where the decorator is written (visitFuncNode before it enters the
+    // function, registerGenericTemplates): the names of the decorator and of its arguments are
+    // resolved there.
+    const auto compute = [&]() -> std::optional<camel::core::attr::AttrSetId> {
+        const GCT::node_ptr_t expr = anno->at(0);
+        GCT::node_ptr_t callee     = expr;
+        std::vector<GCT::node_ptr_t> args;
+        if (expr->type() == GCT::NodeKind::WITH) {
+            callee = expr->at(0);
+            for (size_t i = 1; i < expr->size(); ++i) {
+                args.push_back(expr->at(i));
+            }
+        }
+        // A name the program binds itself (a value, a function, a generic function) is not
+        // the operator: the decorator is applied as any other.
+        const auto programName = [&](const std::string &written) {
+            const std::string name = moduleLevelName(written);
+            return nodeAt(name).has_value() || templateScope_->get(name).has_value() ||
+                   graphsAt(name).has_value() || decoratedGraphAt(name).has_value() ||
+                   (unit_ != nullptr && unit_->values.contains(name));
+        };
+        // The entity an imported name stands for (design principles 10.2, layers 3 to 5).
+        const auto imported =
+            [&](const GCT::node_ptr_t &ref) -> std::optional<camel::core::module::entity> {
+            const std::string written = ref->name();
+            if (programName(written) || isOperatorName(written)) {
+                return std::nullopt;
+            }
+            if (module_->hasImportedRef(written, ImportLayer::Named)) {
+                return module_->getImportedEntity(written, ImportLayer::Named);
+            }
+            if (auto match = throughUsing(written, ref)) {
+                return match->ownName.empty() ? match->entity : std::nullopt;
+            }
+            if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
+                return module_->getImportedEntity(written, ImportLayer::Ambient);
+            }
+            return std::nullopt;
+        };
+        if (callee->type() != GCT::NodeKind::DREF) {
+            return std::nullopt;
+        }
+        const auto entity = imported(callee);
+        if (!entity.has_value() || !entity->isOperGroup() ||
+            entity->operGroup()->resolvers().size() != 1) {
+            return std::nullopt;
+        }
+        const auto grant = camel::core::OperatorTable::instance().grantOf(
+            entity->operGroup()->resolvers().front().first);
+        if (grant == nullptr) {
+            return std::nullopt;
+        }
+        // The with-arguments must be constants: literals, or constants a module exports.
+        std::vector<data_ptr_t> values;
+        for (const GCT::node_ptr_t &arg : args) {
+            if (arg->type() == GCT::NodeKind::DATA) {
+                values.push_back(arg->data());
+                continue;
+            }
+            if (arg->type() != GCT::NodeKind::DREF) {
+                return std::nullopt;
+            }
+            const auto value = imported(arg);
+            if (!value.has_value() || !value->isValue()) {
+                return std::nullopt;
+            }
+            values.push_back(value->value());
+        }
+        const std::optional<camel::core::attr::AttrValueId> granted =
+            grant->value ? grant->value(values)
+                         : std::optional<camel::core::attr::AttrValueId>(camel::core::attr::unit());
+        if (!granted.has_value()) {
+            return std::nullopt;
+        }
+        return camel::core::attr::single(camel::core::attr::key(grant->key), *granted);
+    };
+    std::optional<camel::core::attr::AttrSetId> result;
+    try {
+        result = compute();
+    } catch (const BuildAbortException &) {
+        result = std::nullopt; // reported, if at all, when the decorator is applied
+    }
+    staticGrants_.emplace(anno, result);
+    return result;
+}
+
+std::pair<camel::core::attr::AttrSetId, size_t>
+Builder::staticGrantsOf(const GCT::node_ptr_t &func) {
+    std::vector<GCT::node_ptr_t> annos;
+    for (size_t i = 2; i < func->size(); ++i) {
+        if (func->at(i) && func->at(i)->type() == GCT::NodeKind::ANNO) {
+            annos.push_back(func->at(i));
+        }
+    }
+    camel::core::attr::AttrSetId granted = camel::core::attr::kNoAttrs;
+    size_t count                         = 0;
+    // The decorator written last applies first: a run of granting ones from there is applied
+    // to the function as written, before any other decorator sees it.
+    for (auto it = annos.rbegin(); it != annos.rend(); ++it) {
+        const auto grant = staticGrantOf(*it);
+        if (!grant.has_value()) {
+            break;
+        }
+        granted = camel::core::attr::unite(granted, *grant);
+        ++count;
+    }
+    return {granted, count};
+}
+
+std::vector<GCT::node_ptr_t> Builder::appliedDecoratorsOf(const GCT::node_ptr_t &func) {
+    std::vector<GCT::node_ptr_t> annos;
+    for (size_t i = 2; i < func->size(); ++i) {
+        if (func->at(i) && func->at(i)->type() == GCT::NodeKind::ANNO) {
+            annos.push_back(func->at(i));
+        }
+    }
+    annos.resize(annos.size() - staticGrantsOf(func).second);
+    return annos;
+}
+
+node_handle_t Builder::visitDecoratedBlock(const GCT::node_ptr_t &link, bool unused) {
+    ENTER("DECORATED_BLOCK");
+    // `@d { ... }` is the block as a function of no parameters, passed to the decorators and
+    // called right where it is written (language reference 7.6). The block is lowered as a
+    // plain block would be (its scope, its exits, its value); the function's value is the
+    // block's, and is dropped when nothing takes the block's value.
+    const GCT::node_ptr_t func = link->at(0);
+    const GCT::node_ptr_t body = func->at(1);
+    staticGrantsOf(func); // resolved here, where the decorators are written
+    const std::vector<GCT::node_ptr_t> decorators = appliedDecoratorsOf(func);
+    if (decorators.empty()) {
+        // Every decorator grants attributes as the program is built: what they make is the
+        // block's own function with the attributes, called here, which is the block itself
+        // with the attributes. Built in place, as the same block without decorators is.
+        AttrScope attrs(
+            currentAttrs_,
+            camel::core::attr::unite(currentAttrs_, staticGrantsOf(func).first));
+        unusedStatement_     = unused ? body : nullptr;
+        node_handle_t result = visitExecNode(body);
+        LEAVE("DECORATED_BLOCK");
+        return result;
+    }
+    if (unused) {
+        droppedBodies_.insert(body);
+    }
+    compile_graph_ptr_t graph = visitFuncNode(func);
+    blockGraphs_.insert(graph.get());
+    node_handle_t value = createFuncDataNode(graph, true, false);
+    for (auto it = decorators.rbegin(); it != decorators.rend(); ++it) {
+        value = applyDecoratorAnno(*it, value);
+    }
+    // The call, as if written here: `(decorated)()`.
+    const std::string scopeName = "__block_tmp_scope_" + std::to_string(syntheticRefIndex_);
+    const std::string refName   = "__block_tmp_ref_" + std::to_string(syntheticRefIndex_++);
+    nodeScope_                  = nodeScope_->enter(scopeName);
+    nodeScope_->insert(refName, value);
+    GCT::node_ptr_t call = tree_->makeLink(0);
+    GCT::node_ptr_t ref  = tree_->makeDRef(refName);
+    ref->setOrigin(link->origin());
+    call->setOrigin(link->origin());
+    *call << ref;
+    node_handle_t result{};
+    try {
+        result = visitLinkNode(call);
+    } catch (...) {
+        nodeScope_ = nodeScope_->leave();
+        throw;
+    }
+    nodeScope_ = nodeScope_->leave();
+    LEAVE("DECORATED_BLOCK");
+    return result;
+}
+
 graph_set_ptr_t
 Builder::overloadsOfDecorated(const std::string &name, const compile_graph_ptr_t &decorated) {
     auto graphs = graphsAt(name);
@@ -5050,7 +5262,7 @@ StaticArg Builder::staticArgOf(node_handle_t node) const {
 // The part of a "no matching function" message for a call that wrote every argument in the
 // parentheses although `name` takes all but the first `normCount` in angle brackets: the
 // standard library's convention is that the value worked on is an ordinary argument and what
-// configures the operation a with-argument (design principles 2.10). Names the misplaced
+// configures the operation a with-argument (design principles 11.4). Names the misplaced
 // arguments and gives the call as it should be written.
 std::string Builder::withArgumentsHint(
     const std::string &name, const std::vector<Argument> &arguments, size_t normCount) const {
@@ -5226,9 +5438,16 @@ void Builder::requireMutableArgument(const Argument &arg, const std::string &cal
 
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
+    Type *expectedResult = expectedValueType_;
+    ExpectedValueScope callScope(expectedValueType_, nullptr);
     // Whether this call is a statement whose value nothing takes; the calls inside it are not.
     const bool unusedStatement = gct == unusedStatement_;
     unusedStatement_           = nullptr;
+    if (gct->at(0)->type() == GCT::NodeKind::FUNC && gct->at(0)->decoratedBlock()) {
+        node_handle_t result = visitDecoratedBlock(gct, unusedStatement);
+        LEAVE("LINK");
+        return result;
+    }
     if (unusedStatement) {
         if (node_handle_t rebound = rebindingAppendOf(gct)) {
             LEAVE("LINK");
@@ -5239,8 +5458,21 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             return rebound;
         }
     }
-    genericCalleeAllowed_ =
-        gct->at(0)->type() == GCT::NodeKind::DREF || gct->at(0)->type() == GCT::NodeKind::WITH;
+    if (gct->size() >= 1 && gct->at(0)->type() == GCT::NodeKind::DREF &&
+        gct->at(0)->name().find("::") != std::string::npos) {
+        // `Shape::Circle(1.0)`: the variant is built from its fields, not called (design
+        // principles 5.3). A qualified name that is no variant is resolved as it was.
+        EnumType *enumType = nullptr;
+        size_t tag         = 0;
+        if (enumVariantOfName(gct->at(0)->name(), gct->at(0), enumType, tag)) {
+            node_handle_t built = visitEnumConstruction(gct, enumType, tag);
+            LEAVE("LINK");
+            return built;
+        }
+    }
+    genericCalleeAllowed_ = gct->at(0)->type() == GCT::NodeKind::DREF ||
+                            gct->at(0)->type() == GCT::NodeKind::WITH ||
+                            gct->at(0)->type() == GCT::NodeKind::TAPP;
     any targetNodeRes     = visit(gct->at(0));
     genericCalleeAllowed_ = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
@@ -5289,17 +5521,38 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return nodeTypeOf(inputNode);
     };
 
+    FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
     for (size_t i = 1; i < gct->size(); i++) {
+        Type *wanted = argumentSignature && i <= argumentSignature->normTypesCount()
+                           ? argumentSignature->normTypeAt(i - 1)
+                           : nullptr;
+        ExpectedValueScope argumentScope(
+            expectedValueType_,
+            wanted && !containsTypeVar(wanted) ? wanted : nullptr);
         node_handle_t inputNode = visitOperand(gct->at(i), gct);
         normInputs.push_back({inputNode, gct->at(i)});
         normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
     }
-    if (gct->size() == 3 && nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
-        // `error(kind, message)`: an error value records where it was made (design
-        // principles 2.9), so the position of this call is its third, constant argument.
-        const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
-        if (std::holds_alternative<oper_group_ptr_t>(drefTarget) &&
-            std::get<oper_group_ptr_t>(drefTarget)->name() == "error") {
+    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+        // An operator that declares it takes the position of its call at this many arguments
+        // (CallSpec::callSiteAtArity; `error(kind, message)`: an error value records where it
+        // was made, design principles 3.9) gets that position as one more, constant argument.
+        const auto &drefTarget   = nodeGraphOf(targetNode)->drefTarget(targetNode);
+        const auto takesCallSite = [&] {
+            if (!std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
+                return false;
+            }
+            for (const auto &[uri, resolver] :
+                 std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
+                const auto *spec = camel::core::OperatorTable::instance().callSpec(uri);
+                if (spec != nullptr && spec->callSiteAtArity >= 0 &&
+                    static_cast<size_t>(spec->callSiteAtArity) + 1 == gct->size()) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (takesCallSite()) {
             node_handle_t location = currGraph_->addStaticDataNode(
                 tt::as_shared<Data>(
                     std::make_shared<StringData>(sourceLocationOf(gct->at(0)->origin()))));
@@ -5347,7 +5600,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     continue;
                 }
                 if (genericDrefs_.contains(node)) {
-                    // The name of a generic function (design principles 2.10). A callee
+                    // The name of a generic function (design principles 5.5). A callee
                     // with one known signature says which function it expects; a generic
                     // callee solves for it with its other arguments (resolveGenericCall);
                     // an operator tries the instances its other arguments suggest
@@ -5417,7 +5670,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         settle(normInputs, normInputTypes, false);
     }
 
-    // Design principles 2.10: an argument enters a `T?` / `T!` parameter by itself, `null`
+    // Design principles 3.8: an argument enters a `T?` / `T!` parameter by itself, `null`
     // too, and `[]` takes the element type of its parameter. A callee is first tried with the
     // argument types as they are, so that among overloads an exact match wins (`f(5)` with
     // `f(x: int)` and `f(x: int?)`); then with every argument that enters its parameter
@@ -5534,7 +5787,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputs,
             withInputTypes,
             normInputTypes,
-            gct);
+            gct,
+            expectedResult);
         if (!targetGraph->funcType()->hasExitType()) {
             diags_->of(SemanticDiag::CallingIncompleteFunction)
                 .atOrigin(gct->origin())
@@ -5651,6 +5905,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             auto ops = std::get<oper_group_ptr_t>(drefTarget);
+            if (auto expanded = explicitOperatorTypes_.contains(targetNode)
+                                    ? nullptr
+                                    : expandTreeCall(ops, withInputs, normInputs, gct)) {
+                LEAVE("LINK");
+                return expanded;
+            }
             settleGenericOperatorArguments(
                 ops,
                 withInputs,
@@ -5676,11 +5936,22 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             for (const Argument &input : normInputs) {
                 normStatics.push_back(staticArgOf(input.node));
             }
-            const auto &res =
-                ops->resolve(withInputTypes, normInputTypes, normStatics, Modifier::None);
+            type_vec_t explicitTypes;
+            if (auto typed = explicitOperatorTypes_.find(targetNode);
+                typed != explicitOperatorTypes_.end()) {
+                explicitTypes = std::move(typed->second);
+                explicitOperatorTypes_.erase(typed);
+            }
+            const auto &res = ops->resolveForCall(
+                explicitTypes,
+                expectedResult,
+                withInputTypes,
+                normInputTypes,
+                normStatics,
+                Modifier::None);
             if (!res.has_value() && withInputs.empty()) {
                 // `x == null` / `x != null` over a `T?`: the tag of `x`, not a comparison of
-                // two values (design principles 2.11).
+                // two values (design principles 3.8).
                 if (node_handle_t test =
                         nullComparison(ops->name(), gct, normInputs, normInputTypes)) {
                     LEAVE("LINK");
@@ -5705,7 +5976,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // static tensor shape conflict); report that instead of "no match".
                 std::vector<std::string> reasons;
                 for (const auto &[uri, resolver] : ops->resolvers()) {
-                    if (auto reason = resolver->explainRejection(
+                    if (auto reason = resolver->explainCallRejection(
+                            explicitTypes,
+                            expectedResult,
                             withInputTypes,
                             normInputTypes,
                             normStatics,
@@ -5757,7 +6030,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             return "<" + p.first + ">: " + p.second->signature();
                         }) +
                     "\n";
-                // The overloads of the program are part of the set (design principles 2.12).
+                // The overloads of the program are part of the set (design principles 10.2).
                 if (auto overloads = operatorOverloads_.find(targetNode);
                     overloads != operatorOverloads_.end()) {
                     for (const auto &graph : overloads->second.graphs) {
@@ -5789,9 +6062,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             rejectLiteralConversion(ops->name(), targetOperator->funcType(), normInputs, gct);
             // `foreach` drops what its element function gives: the value of the body of a
             // function written in place here is a value nothing takes (design principles
-            // 2.12). A function named here may be used elsewhere, where its value counts.
-            if (const auto uri = targetOperator->uri();
-                uri == ":mark/foreach_arr" || uri == ":mark/unordered_foreach_arr") {
+            // 11.3). A function named here may be used elsewhere, where its value counts.
+            // The operator says so itself (CallSpec::discardsCallbackResult).
+            const auto *callSpec =
+                camel::core::OperatorTable::instance().callSpec(targetOperator->uri());
+            if (callSpec != nullptr && callSpec->discardsCallbackResult) {
                 for (const Argument &input : withInputs) {
                     if (input.expr == nullptr) {
                         continue;
@@ -5799,6 +6074,33 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     if (auto element = lambdaGraphs_.find(input.expr);
                         element != lambdaGraphs_.end()) {
                         rejectDiscardedValue(element->second);
+                    }
+                }
+            }
+            // A constant format string is checked against the arguments it formats now, not
+            // when the program runs (CallSpec::checkFormat; design principles 5.4).
+            if (callSpec != nullptr && callSpec->checkFormat) {
+                const bool patternInWith = callSpec->formatWithArg >= 0;
+                const auto &patterns     = patternInWith ? withInputs : normInputs;
+                const size_t at          = static_cast<size_t>(
+                    patternInWith ? callSpec->formatWithArg : callSpec->formatNormArg);
+                if (at < patterns.size()) {
+                    const StaticArg pattern = staticArgOf(patterns[at].node);
+                    if (pattern.value.has_value() && *pattern.value != NullSlot &&
+                        valueTypeOf(nodeTypeOf(patterns[at].node))->code() == TypeCode::String) {
+                        const std::string_view text =
+                            rtdata::fromSlot<const ::String *>(*pattern.value)->view();
+                        const type_vec_t &formatted =
+                            patternInWith ? normInputTypes : withInputTypes;
+                        if (const auto problem = callSpec->checkFormat(text, formatted)) {
+                            diags_->of(SemanticDiag::ArgumentsRejected)
+                                .atOrigin(patterns[at].expr->origin())
+                                .commit(
+                                    ops->name(),
+                                    "format string '" + std::string(text) + "'",
+                                    *problem);
+                            throw BuildAbortException();
+                        }
                     }
                 }
             }
@@ -6074,13 +6376,21 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     ENTER("WITH");
     // `f<w>(x)`: the callee of the call is the target of the binding.
     genericCalleeAllowed_ =
-        std::exchange(genericCalleeAllowed_, false) && gct->at(0)->type() == GCT::NodeKind::DREF;
+        std::exchange(genericCalleeAllowed_, false) &&
+        (gct->at(0)->type() == GCT::NodeKind::DREF || gct->at(0)->type() == GCT::NodeKind::TAPP);
     any targetNodeRes     = visit(gct->at(0));
     genericCalleeAllowed_ = false;
     // As in visitLinkNode: a lambda written in place gives its graph.
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
     vector<Argument> inputs;
+    FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
     for (size_t i = 1; i < gct->size(); i++) {
+        Type *wanted = argumentSignature && i <= argumentSignature->withTypesCount()
+                           ? argumentSignature->withTypeAt(i - 1)
+                           : nullptr;
+        ExpectedValueScope argumentScope(
+            expectedValueType_,
+            wanted && !containsTypeVar(wanted) ? wanted : nullptr);
         inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});
     }
     auto &bound = boundWithArgs_[targetNode];
@@ -6098,6 +6408,27 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         "Unexpected result type from Enter the child of ACCS node.");
     node_handle_t tgtNode = any_cast<node_handle_t>(res);
     ASSERT(tgtNode != nullptr, "Access node target is null.");
+    if (EnumType *enumType = asEnumType(nodeTypeOf(tgtNode))) {
+        // A value of an enum has the fields of the variant it is, and which one that is the
+        // compiler does not know (design principles 3.8, 5.3): they are taken out by matching.
+        std::string example;
+        for (const EnumVariant &variant : enumType->variants()) {
+            if (variant.fieldCount() > 0) {
+                example = enumType->decl()->shortName() + "::" + variant.name;
+                example += variant.shape == VariantShape::Struct
+                               ? " { " + variant.fieldNames.front() + ", ... }"
+                               : "(...)";
+                break;
+            }
+        }
+        diags_->of(SemanticDiag::EnumFieldAccess)
+            .atOrigin(gct->origin())
+            .commit(
+                gct->accessByIndex() ? std::to_string(gct->accessIndex()) : gct->accessKey(),
+                enumType->toString(),
+                example);
+        throw BuildAbortException();
+    }
     if (!nodeTypeOf(tgtNode)->isComposite()) {
         diags_->of(SemanticDiag::TypeNotIndexable)
             .atOrigin(gct->origin())
@@ -6109,7 +6440,7 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     Type *elemType     = nullptr;
     if (asTagged(tgtType) != nullptr) {
         // A `T?` / `T!` has the layout of a tuple and is not one: its parts are reached by
-        // `??`, `!!`, `?->` and `match` only (design principles 2.9).
+        // `??`, `!!`, `?->` and `match` only (design principles 3.9).
         diags_->of(SemanticDiag::TaggedValueNotOpened)
             .atOrigin(gct->origin())
             .commit(tgtType->toString(), "a member cannot be read from it");
@@ -6195,6 +6526,11 @@ std::string Builder::bindTemporary(node_handle_t node) {
     std::string name = "$tagged" + std::to_string(tagTemporaries_++);
     insertNode(name, node);
     return name;
+}
+
+void Builder::registerTreeOrigin(
+    node_handle_t node, const GCT::node_ptr_t &origin, const char *kind) {
+    registerNodeOrigin(context_, node, origin, kind);
 }
 
 node_handle_t
@@ -6289,7 +6625,7 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
     const auto where = gct->origin() != 0 ? gct->origin() : gct->at(0)->origin();
     if (gct->exitType() == ExitType::Throw) {
         // `throw e`: the exit `return` is, with the failed form of the declared `T!` as its
-        // value (design principles 2.9). OPER __throw__ makes the failed value, the CAST
+        // value (design principles 3.9). OPER __throw__ makes the failed value, the CAST
         // gives it the declared type; both are the same object.
         TupleType *fallible = asFallible(declared);
         if (fallible == nullptr) {
@@ -6301,7 +6637,7 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
                         : "the function around it returns '" + declared->toString() + "'");
             throw BuildAbortException();
         }
-        // Design principles 2.10: `throw` takes an error value (made by `error(kind,
+        // Design principles 3.9: `throw` takes an error value (made by `error(kind,
         // message)` or bound by `case error e`), nothing else.
         if (!valueType->equals(errorType())) {
             diags_->of(SemanticDiag::ThrowNotAnError).atOrigin(where).commit(valueType->toString());
@@ -6313,7 +6649,7 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
     }
     // `return v` under a declared `T?` / `T!` puts `v` into that form: the counterpart of
     // `throw`, and one of the positions where a value enters by itself (design principles
-    // 2.10; coerceTo). A value that already has the declared type, and one that fits neither
+    // 3.8; coerceTo). A value that already has the declared type, and one that fits neither
     // way (reported by checkDeclaredReturn), is left alone.
     if (declared != nullptr && !declared->assignableFrom(valueType)) {
         if (node_handle_t entered = coerceTo(value, declared, gct->at(0))) {
@@ -6368,7 +6704,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     if (onNull && asTagged(valueTypeOf(nodeTypeOf(subject))) == nullptr &&
         isNarrowedName(gct->at(0))) {
         // `x ?? d` where an `if` around it already narrowed `x` to a `T` (design principles
-        // 2.13): allowed, with a warning.
+        // 3.8): allowed, with a warning.
         subject = reopenNarrowedName(gct->at(0), subject, gct, "??");
     }
     Type *subjectType = valueTypeOf(nodeTypeOf(subject));
@@ -6394,7 +6730,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
         // evaluated, only when the tag selects it. Arm 1 takes the value out.
         arms[0] = buildArmGraph(exec);
-        // Design principles 2.10: the right-hand side is a `T`, and the result is a `T`; or
+        // Design principles 3.8: the right-hand side is a `T`, and the result is a `T`; or
         // it is itself a `T?` (`T!` for `!!`), and the result is that: `a ?? b ?? 9` tries
         // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
         // taking the value out. Either way it is one branch.
@@ -6527,7 +6863,483 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
     return buildBranch(gct, tagNode, &arms);
 }
 
-// ---- Conditions (design principles 2.11) ----
+// ---- The enum (design principles 5.3) ----
+
+namespace {
+
+/// `Shape::Rect` gives ("Shape", "Rect"). A name that is not qualified gives an empty prefix.
+std::pair<std::string, std::string> splitQualifiedName(const std::string &written) {
+    const size_t last = written.rfind("::");
+    if (last == std::string::npos) {
+        return {{}, written};
+    }
+    return {written.substr(0, last), written.substr(last + 2)};
+}
+
+std::string lastSegmentOf(const std::string &path) {
+    const size_t last = path.rfind("::");
+    return last == std::string::npos ? path : path.substr(last + 2);
+}
+
+} // namespace
+
+EnumType *Builder::enumTypeOfName(const Reference &name) {
+    Type *resolved = nullptr;
+    if (const auto declared = unit_->typeDecls.find(name); declared != unit_->typeDecls.end()) {
+        resolved = declared->second;
+    } else if (const auto imported = module_->getImportedType(name); imported.has_value()) {
+        resolved = imported.value();
+    }
+    if (resolved == nullptr) {
+        return nullptr;
+    }
+    if (EnumType *instance = asEnumType(resolved)) {
+        return instance;
+    }
+    if (resolved->code() == TypeCode::TypeFunc) {
+        // A generic enum written without its arguments (`Option`): the declaration's own
+        // instance, whose arguments are its parameters; a value of it is made by inference.
+        return asEnumType(static_cast<TypeFunctionType *>(resolved)->body());
+    }
+    return nullptr;
+}
+
+bool Builder::enumVariantOfName(
+    const std::string &written, const GCT::node_ptr_t &origin, EnumType *&type, size_t &tag) {
+    const auto [prefix, name] = splitQualifiedName(written);
+    if (prefix.empty()) {
+        return false;
+    }
+    EnumType *found = enumTypeOfName(Reference(prefix));
+    if (found == nullptr) {
+        return false; // a qualified name of something else (`io::println`)
+    }
+    const auto variant = found->decl()->findVariant(name);
+    if (!variant.has_value()) {
+        diags_->of(SemanticDiag::EnumPatternMismatch)
+            .atOrigin(origin->origin())
+            .commit(
+                written,
+                found->toString(),
+                "'" + name + "' is not one of its variants (" + found->decl()->name() +
+                    " declares " +
+                    [&] {
+                        std::string list;
+                        for (const EnumVariant &each : found->decl()->variants()) {
+                            if (!list.empty()) {
+                                list += ", ";
+                            }
+                            list += each.name;
+                        }
+                        return list;
+                    }() +
+                    ")");
+        throw BuildAbortException();
+    }
+    type = found;
+    tag  = *variant;
+    return true;
+}
+
+node_handle_t Builder::applyInternalOperator(
+    const char *op, Type *typeArgument, const std::vector<GCT::node_ptr_t> &operands,
+    const GCT::node_ptr_t &origin) {
+    GCT::node_ptr_t callee = tree_->makeDRef(op);
+    if (typeArgument != nullptr) {
+        // The instance the call makes, as `f::<T>` gives one: the operator's result type is
+        // that instance, and its slot is of it (a value of an enum type holds references).
+        GCT::node_ptr_t application = tree_->makeTypeApplication();
+        *application << callee << tree_->makeType(typeArgument, ImplMark::Graph);
+        callee = application;
+    }
+    GCT::node_ptr_t call = tree_->makeLink(static_cast<uint32_t>(operands.size()));
+    *call << callee;
+    for (const auto &operand : operands) {
+        *call << operand;
+    }
+    call->setOrigin(origin->origin());
+    return visitLinkNode(call);
+}
+
+node_handle_t
+Builder::visitEnumConstruction(const GCT::node_ptr_t &gct, EnumType *type, size_t tag) {
+    const EnumDecl *decl       = type->decl();
+    const EnumVariant &variant = decl->variants()[tag];
+    const bool called          = gct->type() == GCT::NodeKind::LINK;
+    const size_t argumentCount = called ? gct->size() - 1 : 0;
+
+    std::vector<node_handle_t> fields;
+    std::vector<Type *> fieldTypes; // what the arguments are, before the field types are known
+    if (variant.shape == VariantShape::Struct) {
+        if (argumentCount != 1) {
+            diags_->of(SemanticDiag::EnumConstructionMismatch)
+                .atOrigin(gct->origin())
+                .commit(
+                    decl->shortName() + "::" + variant.name,
+                    decl->name(),
+                    "its fields are given by name: '" + decl->shortName() + "::" + variant.name +
+                        " { " +
+                        [&] {
+                            std::string list;
+                            for (const std::string &field : variant.fieldNames) {
+                                if (!list.empty()) {
+                                    list += ", ";
+                                }
+                                list += field + ": ...";
+                            }
+                            return list;
+                        }() +
+                        " }'");
+            throw BuildAbortException();
+        }
+        node_handle_t literal = visitOperand(gct->at(1), gct);
+        Type *literalType     = valueTypeOf(nodeTypeOf(literal));
+        if (literalType->code() != TypeCode::Struct) {
+            diags_->of(SemanticDiag::EnumConstructionMismatch)
+                .atOrigin(gct->at(1)->origin())
+                .commit(
+                    decl->shortName() + "::" + variant.name,
+                    decl->name(),
+                    "the value has type '" + literalType->toString() +
+                        "', and the fields of a struct variant are given by name");
+            throw BuildAbortException();
+        }
+        StructType *literalStruct = tt::as_ptr<StructType>(literalType);
+        for (size_t i = 0; i < variant.fieldCount(); ++i) {
+            const std::string &fieldName = variant.fieldNames[i];
+            const auto position          = literalStruct->findField(fieldName);
+            if (!position.has_value()) {
+                diags_->of(SemanticDiag::EnumConstructionMismatch)
+                    .atOrigin(gct->at(1)->origin())
+                    .commit(
+                        decl->shortName() + "::" + variant.name,
+                        decl->name(),
+                        "the value has no field '" + fieldName + "'");
+                throw BuildAbortException();
+            }
+            Type *fieldType         = literalStruct->typeAt(*position);
+            node_handle_t fieldNode = currGraph_->addAccsNode(fieldType, fieldName);
+            linkNodes(LinkType::Norm, literal, fieldNode);
+            registerNodeOrigin(context_, fieldNode, gct->at(1), "gir.accs");
+            fields.push_back(fieldNode);
+            fieldTypes.push_back(fieldType);
+        }
+        if (literalStruct->size() != variant.fieldCount()) {
+            diags_->of(SemanticDiag::EnumConstructionMismatch)
+                .atOrigin(gct->at(1)->origin())
+                .commit(
+                    decl->shortName() + "::" + variant.name,
+                    decl->name(),
+                    "the value has fields the variant does not: a struct variant takes exactly "
+                    "the fields its declaration writes");
+            throw BuildAbortException();
+        }
+    } else {
+        if (argumentCount != variant.fieldCount()) {
+            diags_->of(SemanticDiag::EnumVariantFieldCount)
+                .atOrigin(gct->origin())
+                .commit(
+                    variant.name,
+                    decl->name(),
+                    std::to_string(variant.fieldCount()),
+                    std::to_string(argumentCount));
+            throw BuildAbortException();
+        }
+        for (size_t i = 0; i < argumentCount; ++i) {
+            node_handle_t argument = visitOperand(gct->at(i + 1), gct);
+            fields.push_back(argument);
+            fieldTypes.push_back(valueTypeOf(nodeTypeOf(argument)));
+        }
+    }
+
+    // The instance: the declaration's own when it is not generic, otherwise the arguments the
+    // fields give (a field left open takes what the position expects, as `let x: Option<int>
+    // = Option::None` does).
+    EnumType *instance = type;
+    if (decl->generic()) {
+        type_bindings_t bindings;
+        for (size_t i = 0; i < fields.size(); ++i) {
+            unifyTypeVars(variant.fieldTypes[i], fieldTypes[i], bindings);
+        }
+        std::vector<Type *> arguments;
+        arguments.reserve(decl->params().size());
+        EnumType *expected = asEnumType(expectedValueType_);
+        for (size_t i = 0; i < decl->params().size(); ++i) {
+            Type *bound = findTypeBinding(bindings, decl->params()[i]);
+            if (bound == nullptr && expected != nullptr && expected->decl() == decl &&
+                expected->complete()) {
+                bound = expected->params()[i];
+            }
+            if (bound == nullptr) {
+                diags_->of(SemanticDiag::EnumTypeArgumentNotInferred)
+                    .atOrigin(gct->origin())
+                    .commit(decl->params()[i], decl->name(), variant.name);
+                throw BuildAbortException();
+            }
+            arguments.push_back(bound);
+        }
+        instance = EnumType::get(const_cast<EnumDecl *>(decl), arguments);
+    }
+
+    // Each field as the variant of this instance has it.
+    std::vector<GCT::node_ptr_t> operands;
+    operands.push_back(tree_->makeData(
+        tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(tag)))));
+    for (size_t i = 0; i < fields.size(); ++i) {
+        Type *wanted          = instance->fieldType(tag, i);
+        node_handle_t coerced = coerceTo(fields[i], wanted, gct);
+        if (coerced == nullptr) {
+            diags_->of(SemanticDiag::EnumFieldTypeMismatch)
+                .atOrigin(gct->origin())
+                .commit(
+                    variant.shape == VariantShape::Struct ? "'" + variant.fieldNames[i] + "'"
+                                                          : std::to_string(i),
+                    decl->shortName() + "::" + variant.name,
+                    wanted->toString(),
+                    fieldTypes[i]->toString());
+            throw BuildAbortException();
+        }
+        operands.push_back(tree_->makeDRef(bindTemporary(coerced)));
+    }
+    return applyInternalOperator("__enum_make__", instance, operands, gct);
+}
+
+node_handle_t
+Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, EnumType *type) {
+    using CaseType = GCT::CaseType;
+    struct Arm {
+        const GCT::node_ptr_t caseNode;
+        size_t tag = 0;
+        // The position of the field in the variant, and the name the arm binds it to.
+        std::vector<std::pair<size_t, std::string>> bindings;
+    };
+
+    const std::string name      = bindTemporary(scrutinee);
+    const node_handle_t tagNode = applyTagOperator("__enum_tag__", name, gct);
+    const std::string tagName   = bindTemporary(tagNode);
+
+    std::vector<Arm> arms;
+    const GCT::node_ptr_t wildcard = [&] {
+        for (size_t i = 1; i < gct->size(); ++i) {
+            if (gct->at(i)->caseType() == CaseType::Else) {
+                return gct->at(i);
+            }
+        }
+        return GCT::node_ptr_t(nullptr);
+    }();
+    std::vector<bool> covered(type->variantCount(), false);
+    for (size_t i = 1; i < gct->size(); ++i) {
+        const GCT::node_ptr_t &caseNode = gct->at(i);
+        if (caseNode->caseType() == CaseType::Else) {
+            break; // the last case
+        }
+        if (caseNode->caseType() != CaseType::Enum) {
+            diags_->of(SemanticDiag::EnumPatternMismatch)
+                .atOrigin(caseNode->origin())
+                .commit(
+                    "case",
+                    type->toString(),
+                    "every case of a match over an enum names a variant, and the value a case "
+                    "does not name falls to 'case _'");
+            throw BuildAbortException();
+        }
+        const GCT::Node::EnumCase &pattern = caseNode->enumCase();
+        const auto [prefix, variantName]   = splitQualifiedName(*pattern.label);
+        if (!prefix.empty() && lastSegmentOf(prefix) != lastSegmentOf(type->decl()->name())) {
+            diags_->of(SemanticDiag::EnumPatternMismatch)
+                .atOrigin(caseNode->origin())
+                .commit(*pattern.label, type->toString(), "it is a variant of another enum");
+            throw BuildAbortException();
+        }
+        const auto tag = type->decl()->findVariant(variantName);
+        if (!tag.has_value()) {
+            diags_->of(SemanticDiag::EnumPatternMismatch)
+                .atOrigin(caseNode->origin())
+                .commit(
+                    *pattern.label,
+                    type->toString(),
+                    "'" + variantName + "' is not one of its variants");
+            throw BuildAbortException();
+        }
+        const EnumVariant &variant = type->decl()->variants()[*tag];
+        const bool structPattern   = caseNode->enumStructPattern();
+        if (structPattern != (variant.shape == VariantShape::Struct)) {
+            diags_->of(SemanticDiag::EnumPatternMismatch)
+                .atOrigin(caseNode->origin())
+                .commit(
+                    *pattern.label,
+                    type->toString(),
+                    variant.shape == VariantShape::Struct
+                        ? "this variant's fields are named: write 'case " + variantName + " { " +
+                              [&] {
+                                  std::string list;
+                                  for (const std::string &field : variant.fieldNames) {
+                                      if (!list.empty()) {
+                                          list += ", ";
+                                      }
+                                      list += field;
+                                  }
+                                  return list;
+                              }() +
+                              " }'"
+                        : "this variant's fields are in order: write 'case " + variantName + "(" +
+                              [&] {
+                                  std::string list;
+                                  for (size_t f = 0; f < variant.fieldCount(); ++f) {
+                                      if (!list.empty()) {
+                                          list += ", ";
+                                      }
+                                      list += "_";
+                                  }
+                                  return list;
+                              }() +
+                              ")'");
+            throw BuildAbortException();
+        }
+        Arm arm{caseNode, *tag, {}};
+        if (structPattern) {
+            for (size_t f = 0; f < pattern.count; ++f) {
+                const std::string &fieldName = *pattern.fields[f];
+                const auto position          = variant.findField(fieldName);
+                if (!position.has_value()) {
+                    diags_->of(SemanticDiag::EnumPatternMismatch)
+                        .atOrigin(caseNode->origin())
+                        .commit(
+                            *pattern.label,
+                            type->toString(),
+                            "the variant has no field '" + fieldName + "'");
+                    throw BuildAbortException();
+                }
+                arm.bindings.emplace_back(*position, *pattern.bindings[f]);
+            }
+            // A field written twice binds one position twice: the later binding was read
+            // first, silently.
+            for (size_t a = 0; a < arm.bindings.size(); ++a) {
+                for (size_t b = a + 1; b < arm.bindings.size(); ++b) {
+                    if (arm.bindings[a].first == arm.bindings[b].first) {
+                        diags_->of(SemanticDiag::EnumPatternMismatch)
+                            .atOrigin(caseNode->origin())
+                            .commit(
+                                *pattern.label,
+                                type->toString(),
+                                "the field '" + variant.fieldNames[arm.bindings[a].first] +
+                                    "' is written twice");
+                        throw BuildAbortException();
+                    }
+                }
+            }
+        } else {
+            if (pattern.count != variant.fieldCount()) {
+                diags_->of(SemanticDiag::EnumPatternMismatch)
+                    .atOrigin(caseNode->origin())
+                    .commit(
+                        *pattern.label,
+                        type->toString(),
+                        "the variant has " + std::to_string(variant.fieldCount()) +
+                            " field(s) and the pattern gives " + std::to_string(pattern.count) +
+                            "; write each position, '_' for the one not bound");
+                throw BuildAbortException();
+            }
+            for (size_t f = 0; f < pattern.count; ++f) {
+                arm.bindings.emplace_back(f, *pattern.bindings[f]);
+            }
+        }
+        if (covered[*tag]) {
+            diags_->of(SemanticDiag::EnumVariantCaseRepeated)
+                .atOrigin(caseNode->origin())
+                .commit(variantName);
+        }
+        covered[*tag] = true;
+        arms.push_back(std::move(arm));
+    }
+    if (wildcard == nullptr) {
+        std::string missing;
+        for (size_t tag = 0; tag < type->variantCount(); ++tag) {
+            if (!covered[tag]) {
+                if (!missing.empty()) {
+                    missing += ", ";
+                }
+                missing += "'" + type->decl()->variants()[tag].name + "'";
+            }
+        }
+        if (!missing.empty()) {
+            diags_->of(SemanticDiag::EnumMatchNotExhaustive)
+                .atOrigin(gct->origin())
+                .commit(type->toString(), missing);
+            throw BuildAbortException();
+        }
+    }
+
+    const auto indexData = [&](size_t index) {
+        return tree_->makeData(
+            tt::as_shared<Data>(
+                std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(index))));
+    };
+    // The fields the case binds, each taken out of the value by the position of the variant the
+    // case names: the variant is known here, so the type of each field is known too.
+    const auto bindFields = [&](const Arm &arm) {
+        for (const auto &[index, binding] : arm.bindings) {
+            if (binding.empty()) {
+                continue;
+            }
+            node_handle_t fieldNode = applyInternalOperator(
+                "__enum_field__",
+                nullptr,
+                {indexData(arm.tag), indexData(index), tree_->makeDRef(name)},
+                arm.caseNode);
+            insertNode(binding, fieldNode);
+        }
+    };
+    // The arm that runs when no case names the value: the wildcard the program wrote, or,
+    // when it wrote every variant, an arm that cannot be reached. The second is needed all
+    // the same: the branch it ends offers the join one value of the arms' type.
+    std::function<compile_graph_ptr_t()> defaultArm = [&]() -> compile_graph_ptr_t {
+        if (wildcard != nullptr) {
+            return buildArmGraph(wildcard->at(0), [&] { return visitBodyNode(wildcard->at(0)); });
+        }
+        const Arm &last = arms.back();
+        return buildArmGraph(last.caseNode, [&] {
+            bindFields(last);
+            return visitBodyNode(last.caseNode);
+        });
+    };
+
+    // Every case of the value is one test of the tag: `tag == k`, an ordinary comparison,
+    // whose true arm is the body of that case and whose false arm is the test of the next.
+    // A branch on a boolean has no With inputs, so the case values of the GCT (variant
+    // names) never reach a node.
+    std::function<node_handle_t(size_t)> branchAt = [&](size_t k) -> node_handle_t {
+        const Arm &arm          = arms[k];
+        node_handle_t condition = applyInternalOperator(
+            "__eq__",
+            nullptr,
+            {tree_->makeDRef(tagName), indexData(arm.tag)},
+            arm.caseNode);
+        std::vector<compile_graph_ptr_t> two(2);
+        two[0] = buildArmGraph(arm.caseNode, [&] {
+            bindFields(arm);
+            return visitBodyNode(arm.caseNode);
+        });
+        if (k + 1 < arms.size()) {
+            const GCT::node_ptr_t next = arms[k + 1].caseNode;
+            two[1]                     = buildArmGraph(next, [&] { return branchAt(k + 1); });
+        } else {
+            two[1] = defaultArm();
+        }
+        return buildBranch(gct, condition, &two);
+    };
+    if (arms.empty()) {
+        // `match e { case _ => ... }`: nothing is tested; the only arm is the value. The
+        // branch has one arm and no case value, so the arm the runtime chooses is that one.
+        node_handle_t always = currGraph_->addStaticDataNode(
+            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(true)));
+        registerNodeOrigin(context_, always, gct, "gir.data");
+        std::vector<compile_graph_ptr_t> one(1);
+        one[0] = buildArmGraph(wildcard->at(0), [&] { return visitBodyNode(wildcard->at(0)); });
+        return buildBranch(gct, always, &one);
+    }
+    return branchAt(0);
+}
 
 namespace {
 
@@ -6598,7 +7410,7 @@ void collectNullTests(const GCT::node_ptr_t &expr, bool negated, std::vector<Nul
 
 /// The operands that `&&` joins in `expr` (`expr` itself when it is not an `&&`). Each of
 /// them holds where `expr` does: a test against null among them narrows the then arm
-/// (design principles 2.12).
+/// (design principles 3.8).
 void conjunctsOf(const GCT::node_ptr_t &expr, std::vector<const GCT::Node *> &conjuncts) {
     if (isLogicalBranch(expr, GCT::BranchKind::LogicalAnd)) {
         conjunctsOf(expr->at(0), conjuncts);
@@ -6645,7 +7457,7 @@ node_handle_t Builder::nullComparison(
     if (asNullable(subjectType) == nullptr) {
         // A value whose type is never null (`5`, an `int`, a name already narrowed to a `T`):
         // the test is allowed and its result is fixed, which is worth a warning (design
-        // principles 2.13). The value itself is not needed, so nothing evaluates it. `null`
+        // principles 3.8). The value itself is not needed, so nothing evaluates it. `null`
         // itself (type `void`) is left to the comparison of two `null`s, which is refused.
         if (subjectType == nullptr || subjectType->code() == TypeCode::Void) {
             return nullptr;
@@ -6681,7 +7493,7 @@ bool Builder::isNarrowedName(const GCT::node_ptr_t &expr) {
 node_handle_t Builder::reopenNarrowedName(
     const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
     const char *construct) {
-    // Design principles 2.13: the construct is still allowed on the name; it is applied to the
+    // Design principles 3.8: the construct is still allowed on the name; it is applied to the
     // value put back into `T?`, so that it is checked and built exactly as on the name before
     // narrowing (the right side of `??` still has to fit, the cases of the `match` still have
     // to be its fixed patterns), and only its null arm can never be taken.
@@ -6711,7 +7523,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
         return nullptr; // an `if` that tests no name against null
     }
 
-    // Narrowing (design principles 2.11, 2.12). In the arm of `if x != null then A else B`
+    // Narrowing (design principles 3.8). In the arm of `if x != null then A else B`
     // that excludes null, `x` is a `T`: the arm starts by taking the value out of `x`, and
     // the name `x` stands for that value inside the arm, as `v` does in
     // `match x { case null => B  case v => A }`. The value is taken out inside the arm
@@ -6867,7 +7679,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
             "right",
             rightSideOf(gct));
     }
-    // An `if` without `else` has no value (design principles 2.10; see buildBranch).
+    // An `if` without `else` has no value (design principles 3.7; see buildBranch).
     const bool valueless = !logical && elseArm.exec->size() == 0;
     return buildBranch(gct, condNode, &arms, valueless);
 }
@@ -6882,7 +7694,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         return node;
     }
     // `&&`, `||`, and an `if` whose condition compares names with `null` (design principles
-    // 2.11). Any other `if`, and every `match`, is built below.
+    // 3.8). Any other `if`, and every `match`, is built below.
     if (node_handle_t node = visitConditionBrchNode(gct)) {
         LEAVE("BRCH");
         return node;
@@ -6895,7 +7707,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     node_handle_t node{};
     if (asTagged(valueTypeOf(nodeTypeOf(condNode))) == nullptr && isNarrowedName(gct->at(0))) {
         // `match x { case null => ...  case v => ... }` where an `if` around it already
-        // narrowed `x` to a `T` (design principles 2.13): allowed, with a warning. A match
+        // narrowed `x` to a `T` (design principles 3.8): allowed, with a warning. A match
         // without `case null` is an ordinary match on the `T`.
         const bool nullCase = std::any_of(gct->begin() + 1, gct->end(), [](const auto &c) {
             return c->caseType() == GCT::CaseType::Value && isNullLiteral(c->at(0));
@@ -6906,6 +7718,8 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     }
     if (TupleType *tagged = asTagged(valueTypeOf(nodeTypeOf(condNode)))) {
         node = visitTaggedMatch(gct, condNode, tagged);
+    } else if (EnumType *enumType = asEnumType(valueTypeOf(nodeTypeOf(condNode)))) {
+        node = visitEnumMatch(gct, condNode, enumType);
     } else {
         for (size_t i = 1; i < gct->size(); ++i) {
             const GCT::node_ptr_t &boundCase = gct->at(i);
@@ -6959,7 +7773,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
     if (type == Type::Bool() && hasTrue && hasFalse) {
         return; // every value of the type has a case
     }
-    // Design principles 2.10: a `match` must have a default case, and the compiler adds no
+    // Design principles 3.7: a `match` must have a default case, and the compiler adds no
     // arm the program does not show. A `match` without `case _` is therefore refused here
     // (the fixed patterns over `T?` / `T!` never reach this function).
     diags_->of(SemanticDiag::MatchWithoutDefault).atOrigin(gct->origin()).commit(type->toString());
@@ -7043,7 +7857,7 @@ node_handle_t Builder::buildBranch(
             });
 
         if (absentElse) {
-            // Design principles 2.10: an `if` without `else` has no value. Its arm may be of
+            // Design principles 3.7: an `if` without `else` has no value. Its arm may be of
             // any type and what the arm gives is dropped: the join takes nothing. The arm
             // written is evaluated as any arm is; the one not written is an empty arm.
             joinType = Type::Void();
@@ -7054,7 +7868,7 @@ node_handle_t Builder::buildBranch(
         } else {
             // Arms must agree up to refinement: unify widens (for example two
             // tensors whose shapes differ in one extent) or fails. Failing that, one arm may
-            // enter the form of the other (design principles 2.10): `if c then 1 else null`
+            // enter the form of the other (design principles 3.8): `if c then 1 else null`
             // is an `int?`, `if c then v else failed` a `T!`. The arm that is not of the
             // joined type gets the CAST at its exit once the type is known (below).
             Type *unified = joinTypes(joinType, exitType);
@@ -7323,7 +8137,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     const size_t k         = gct->loopStateCount();
     const bool hasIterable = camel::core::loopHasIterable(kind);
 
-    // The names of the head are declared once, together (design principles 2.13).
+    // The names of the head are declared once, together (design principles 3.10).
     {
         std::unordered_set<std::string> names;
         for (size_t j = 0; j < k + (hasIterable ? 1 : 0); ++j) {
@@ -7410,7 +8224,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
     buildLoopGraph(bodyGraph, gct->loopBody());
     // The body gives the next state: of the state's type, or a value that enters it (an
-    // `int` where the state is an `int?`, design principles 2.10).
+    // `int` where the state is an `int?`, design principles 3.8).
     Type *bodyType = bodyGraph->funcType()->exitType();
     if (bodyType == nullptr || !stateType->assignableFrom(bodyType)) {
         if (bodyType != nullptr && entersImplicitly(stateType, bodyType)) {
@@ -7517,6 +8331,7 @@ node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
+    ExpectedValueScope expectedScope(expectedValueType_, declaredExitTypeHere());
     // `return f`: the function value of a function named here. The name itself is not a
     // value, and left in place it reached the end of compilation as a DREF node.
     node_handle_t resNode = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
@@ -7549,16 +8364,23 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         outputAnchor = gatedValue;
     }
     for (node_handle_t ctrlInput : pendingCtrlInputs) {
-        if (ctrlInput != nullptr && linkCheek(ctrlInput, outputAnchor)) {
+        // A return GATE must retain a CTRL input even when its value already depends on it.
+        if (ctrlInput != nullptr && linkCheek(ctrlInput, outputAnchor) &&
+            !runtime::hasControlDependency(
+                *nodeDraftOf(outputAnchor),
+                nodeIdOf(ctrlInput),
+                nodeIdOf(outputAnchor))) {
             linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
         }
     }
     checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
-    setGraphReturnFromResult(
-        currGraph_,
-        nodeIdOf(outputAnchor),
-        nodeIdOf(resNode),
-        nodeTypeOf(resNode));
+    if (!droppedGraphs_.contains(currGraph_.get())) {
+        setGraphReturnFromResult(
+            currGraph_,
+            nodeIdOf(outputAnchor),
+            nodeIdOf(resNode),
+            nodeTypeOf(resNode));
+    }
 
     LEAVE("EXIT");
     return resNode;
@@ -7743,7 +8565,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     // The permissions of this scope (they include those of the enclosing ones) are in force
     // for everything built in it, arms and lambdas included.
     NumericPermissionScope permissions(numericPermissions_, gct->numericPermissions());
-    // The `using namespace` written in this block are in force in it (design principles 2.12).
+    // The `using namespace` written in this block are in force in it (design principles 10.2).
     UsingScope usings(*this, GCT::Tree::of(gct)->usingsOf(gct));
     bool old                  = synced_;
     node_handle_t oldFuncNode = lastSyncedNode_;
@@ -7801,7 +8623,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     const GCT::Node *outerStatement = unusedStatement_;
     // A block that is itself a statement whose value nothing takes drops the value of its last
     // statement too.
-    const bool valueDropped = gct == unusedStatement_;
+    const bool valueDropped = gct == unusedStatement_ || droppedBodies_.contains(gct);
     std::pair<GCT::node_ptr_t, node_handle_t> lastStatement{};
     for (size_t i = 0; i < gct->size(); i++) {
         StatementState before(*this);
@@ -7878,10 +8700,8 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
             if (declaration->graph == nullptr || declaration->names.front() != name) {
                 continue;
             }
-            for (size_t k = 2; k < declaration->gct->size(); ++k) {
-                if (declaration->gct->at(k)->type() == GCT::NodeKind::ANNO) {
-                    return true;
-                }
+            if (!appliedDecoratorsOf(declaration->gct).empty()) {
+                return true;
             }
         }
         return false;
@@ -7927,7 +8747,7 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
         if (auto value = unit_->values.find(name); value != unit_->values.end()) {
             TopLevelDeclaration &declaration = *value->second;
             if (declaration.isVar) {
-                // Design principles 2.11: a `var` of the top level is written by the module's
+                // Design principles 10.1: a `var` of the top level is written by the module's
                 // own functions only, which are exported instead.
                 camel::source::origin_id_t origin = gct->origin();
                 for (const auto &child : *declaration.gct) {

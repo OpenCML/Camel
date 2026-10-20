@@ -64,7 +64,7 @@ The graph is shown as DOT text, the output of the `std::rgir` pass. The extensio
 a renderer: install a Graphviz preview extension and use it on the graph document (its name ends
 in `.dot`) to see the picture.
 
-Passes are applied in the order given. `camel fib.cml std::inline std::fvm` inlines, then runs on
+Passes are applied in the order given. `camel fib.cml std::opt::inline std::fvm` inlines, then runs on
 the bytecode VM; with no pass, or when no pass consumes the graph, `std::nvm` runs the program.
 
 ## Settings
@@ -74,8 +74,8 @@ the bytecode VM; with no pass, or when no pass consumes the graph, `std::nvm` ru
 | `camel.server.path` | `""` | Path of `camel-ls`. Changing it restarts the server. |
 | `camel.path` | `""` | Path of `camel`, for **Run Current File with Passes…**. |
 | `camel.debugger.path` | `""` | Path of `camel-db`, started as `camel-db --dap` for a debug session of type `camel`. |
-| `camel.graph.passes` | `[]` | Passes applied before the graph is printed, for example `["std::inline"]`. |
-| `camel.run.passes` | `["std::inline", "std::fvm"]` | Pass sequence proposed the first time a file is run. |
+| `camel.graph.passes` | `[]` | Passes applied before the graph is printed, for example `["std::opt::inline"]`. |
+| `camel.run.passes` | `["std::opt::inline", "std::fvm"]` | Pass sequence proposed the first time a file is run. |
 | `camel.trace.server` | `off` | Logs the protocol messages in the output channel "Camel Language Server". |
 
 ## Semantic highlighting

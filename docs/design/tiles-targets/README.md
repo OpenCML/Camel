@@ -87,10 +87,23 @@ or test-enablement checks. Test passes use the same rewriting implementation.
 
 With explicit device operators this component inserts typed uploads, resident
 calls and host-visible downloads. `tiles::test_outline_resident` exercises this
-GPU-required path. The public `std::tiles` alias loads `tiles::compile`, which
+GPU-required path. The public `tiles::compile` pass loads the module and
 uses preferred resident execution without test output or CUDA initialization
 during rewriting. This is the static-shape region implementation; symbolic
 shape compilation and cost-based target selection remain pending.
+
+Static region launch/source templates are now `tiles.compiled_region` target
+facts anchored on the actual extracted callee, with the core graph lineage,
+transitive revision and declaration epoch supplying invalidation. Draft commits
+preserve those identities for unchanged callees. A CUDA lowering-policy hash
+separates the current process-local artifact configuration; backend machine-code
+caches continue to include device architecture and NVRTC options. No native
+artifact is serialized by the core. Invocation binding uses an explicit
+parameter-to-input-node map and creates fresh input snapshots/owners, without
+re-extraction, index instantiation, shape inference or fusion planning. Storage
+planning and owned-IR validation still run per invocation. Templates have context
+lifetime (or explicit fact invalidation), with no extra LRU bound; fresh graph
+lineages can retain additional templates in long-lived contexts.
 
 `tiles::test_outline_host_resident` uses the same transfer graph with host-owned
 snapshots. It restores arguments into a rooted typed tuple, invokes the original

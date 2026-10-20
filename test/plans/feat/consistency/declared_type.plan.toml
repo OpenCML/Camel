@@ -2,7 +2,7 @@ id = "consistency.declared_type"
 order = 365
 tier = "feat"
 tags = ["feat", "consistency", "compile", "types"]
-desc = "A declaration written with a type (`let x: T = e`, `var x: T = e`) takes a value of that type; a value of that very type passes as it is (design principles 2.12), and nothing is converted on the way (2.7)."
+desc = "A declaration written with a type (`let x: T = e`, `var x: T = e`) takes a value of that type; a value of that very type passes as it is (design principles 5.1), and nothing is converted on the way (5.1)."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

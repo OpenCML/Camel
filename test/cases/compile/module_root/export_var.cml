@@ -1,4 +1,4 @@
-// A `var` cannot be exported (design principles 2.11).
+// A `var` cannot be exported (design principles 10.1).
 import export_var_lib
 
 func main(): int sync {

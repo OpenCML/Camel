@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,7 +25,7 @@
 
 namespace camel::parse::ast {
 
-// `Name` was the retired `use` declaration (design principles 2.12); the value is kept so that
+// `Name` was the retired `use` declaration (design principles 10.2); the value is kept so that
 // the numbering of the others does not change.
 enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block, UsingNamespace };
 
@@ -46,7 +46,7 @@ class StmtLoad : public Load {
     void setDoc(std::string doc) { doc_ = std::move(doc); }
 
     /// For a declaration written in namespace blocks: the `using namespace` written in those
-    /// blocks (design principles 2.12: a `using` applies to the block it is written in; the
+    /// blocks (design principles 10.2: a `using` applies to the block it is written in; the
     /// blocks are flattened into the module's declarations, so each declaration carries them).
     const std::vector<Reference> &scopeUsings() const { return scopeUsings_; }
     void addScopeUsings(const std::vector<Reference> &usings) {
@@ -86,14 +86,14 @@ class FuncDeclLoad : public StmtLoad {
 
     const Reference &ref() const { return ref_; }
 
-    /// An operator overload, `func operator +(...)` (design principles 2.12): the symbol as
+    /// An operator overload, `func operator +(...)` (design principles 4.3): the symbol as
     /// written (`+`, `[]`); empty for an ordinary function. ref() is then the reserved name of
     /// the operator's function (`__add__`), or `operator <symbol>` when the symbol cannot be
     /// overloaded with that many parameters, which the GCT builder reports.
     const std::string &operatorSymbol() const { return operatorSymbol_; }
     void setOperatorSymbol(std::string symbol) { operatorSymbol_ = std::move(symbol); }
     /// For an operator overload: the namespaces of the block it is written in. Its name is not
-    /// qualified by them (the operator belongs to the module, design principles 2.13), but the
+    /// qualified by them (the operator belongs to the module, design principles 4.3), but the
     /// names in its signature and body are looked up there, as for any declaration of the block.
     const std::vector<std::string> &declaredIn() const { return declaredIn_; }
     void setDeclaredIn(std::vector<std::string> path) { declaredIn_ = std::move(path); }
@@ -133,7 +133,6 @@ class TypeDeclLoad : public StmtLoad {
     std::string uri_;
     std::vector<std::string> params_;
 };
-
 
 class UsingNamespaceLoad : public StmtLoad {
   public:
@@ -176,10 +175,14 @@ class StmtBlockLoad : public StmtLoad {
 
     /// The numeric permissions (camel/core/operator_semantics.h, PermissionMask) granted by a
     /// `@numeric(...)` written on this block or on the function whose body it is (design
-    /// principles 2.13). Only this block's own grant: the GCT builder adds those of the
+    /// principles 7.5). Only this block's own grant: the GCT builder adds those of the
     /// enclosing blocks. 0 when none.
     void grantNumeric(uint8_t permissions) { numeric_ |= permissions; }
     uint8_t numeric() const { return numeric_; }
+
+    // A block written with decorators (`@d { ... }`, language reference 7.6) has a second
+    // child, a RepeatedLoad("FuncAnno") of the decorators in the order written; the first is
+    // always the statements.
 
     const std::string toString() const override;
     const std::string geneCode() const override;

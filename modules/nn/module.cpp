@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,8 +21,8 @@
 
 #include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"
-#include "camel/core/operator_traits.h"
 #include "camel/core/module/module.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 #include "layers.h"
 #include "optim.h"

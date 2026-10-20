@@ -1,5 +1,5 @@
 /**
- * A recursion whose depth is a constant: std::opt::simplify specializes each step on its constant
+ * A recursion whose depth is a constant: std::opt specializes each step on its constant
  * arguments, folds the stop condition, prunes the branch and inlines the step, so `forward` becomes
  * straight-line code. The value must not change.
  */

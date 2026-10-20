@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 09, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,5 +24,4 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/core/type/composite/union.h"
 #include "camel/core/type/typevar.h"

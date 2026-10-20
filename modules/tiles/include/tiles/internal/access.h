@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -19,12 +19,21 @@
 #include <unordered_map>
 #include <unordered_set>
 
+namespace camel::tiles {
+struct Program;
+struct Node;
+} // namespace camel::tiles
+
 namespace camel::tiles::kernel {
 // Compose a nonnegative affine core map with row-major storage, checking each
 // operand coordinate's bounds over the whole rectangular iteration domain.
 IndexExpr affineAddress(
     const core::sem::IndexedInstance &instance, const core::sem::Access &access,
     const std::vector<int64_t> &shape, const std::vector<IndexExpr> &point);
+// Lower an owned core view map into row-major storage. The graph instance remains
+// authoritative; strided views are only an optional physical simplification.
+IndexExpr coreViewAddress(const Program &program, const Node &node, const IndexExpr &linear);
+
 class Predicate {
     struct Node;
     std::shared_ptr<const Node> node;

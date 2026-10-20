@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -138,14 +138,18 @@ std::string typeName(ScalarType type) {
         return "int";
     case ScalarType::U32:
         return "unsigned";
+    case ScalarType::I64:
+        return "long long";
     }
     throw std::runtime_error("invalid physical scalar type");
 }
 std::string location(const KernelBody &kernel, const Access &access) {
-    const auto &b   = kernel.buffers[access.buffer];
-    const auto base = b.space == MemorySpace::Shared ? "shared_" + std::to_string(access.buffer)
-                                                     : "reinterpret_cast<" + typeName(b.type) +
-                                                           "*>(v[" + std::to_string(b.slot) + "])";
+    const auto &b = kernel.buffers[access.buffer];
+    const auto base =
+        b.space == MemorySpace::Constant ? "constant_" + std::to_string(access.buffer)
+        : b.space == MemorySpace::Shared
+            ? "shared_" + std::to_string(access.buffer)
+            : "reinterpret_cast<" + typeName(b.type) + "*>(v[" + std::to_string(b.slot) + "])";
     return base + "[" + access.address.cuda() + "]";
 }
 void printBlock(std::ostream &out, const KernelBody &kernel, const Block &block) {
@@ -219,8 +223,19 @@ void controlKinds(const Block &block, bool &returns, bool &barriers) {
 void validateBody(const KernelBody &body) {
     for (const auto &b : body.buffers) {
         (void)typeName(b.type);
-        require(b.space == MemorySpace::Global || b.space == MemorySpace::Shared, "memory space");
+        require(
+            b.space == MemorySpace::Global || b.space == MemorySpace::Shared ||
+                b.space == MemorySpace::Constant,
+            "memory space");
         require(b.space != MemorySpace::Shared || b.extent > 0, "empty shared buffer");
+        if (b.space == MemorySpace::Constant) {
+            require(
+                !b.writable && b.constants.size() == b.extent && b.extent > 0,
+                "invalid static table");
+            for (const auto &value : b.constants)
+                require(value.type == b.type, "static table element type");
+        } else
+            require(b.constants.empty(), "nonconstant buffer has static payload");
     }
     bool returns = false, barriers = false;
     controlKinds(body.statements, returns, barriers);
@@ -248,6 +263,15 @@ std::string emitBody(const KernelBody &body) {
         if (b.space == MemorySpace::Shared)
             out << "__shared__ " << typeName(b.type) << " shared_" << i << "[" << b.extent
                 << "];\n";
+        else if (b.space == MemorySpace::Constant) {
+            out << "const " << typeName(b.type) << " constant_" << i << "[" << b.extent << "]={";
+            for (size_t j = 0; j < b.constants.size(); ++j) {
+                if (j)
+                    out << ',';
+                out << ScalarExpr::literal(b.constants[j]).cuda();
+            }
+            out << "};\n";
+        }
     }
     printBlock(out, body, body.statements);
     return out.str();

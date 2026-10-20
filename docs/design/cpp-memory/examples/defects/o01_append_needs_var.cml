@@ -1,7 +1,7 @@
 /// Not a defect of std::cpp: an observation for section 3. `append` used to take its array as
 /// a `var` parameter and change it in place (`:struct/append_arr`), so this program was refused
-/// with ImmutablePassedToVarParam, while design principles 2.9 describe `append` as returning
-/// a new value. Settled by design principles 2.12: `append` returns a new array, and the
+/// with ImmutablePassedToVarParam, while design principles 11.3 describe `append` as returning
+/// a new value. Settled by design principles 11.3: `append` returns a new array, and the
 /// program prints 10.
 module o01_append_needs_var
 

@@ -111,8 +111,8 @@ static void mergeSortSlots(slot_t *vals, size_t n, Compare comp, slot_t *tmp) {
 }
 
 // Sorts `arr` and returns it: a copy of it, as the array a program passes is never changed
-// (design principles 2.12), or, for the in-place forms (`inPlace`), the array itself, which
-// the compiler hands over only when no one else refers to it (design principles 2.13;
+// (design principles 11.3), or, for the in-place forms (`inPlace`), the array itself, which
+// the compiler hands over only when no one else refers to it (design principles 11.3;
 // Builder::inPlaceRebindingOf). The elements are numbers: the slots hold no references, so
 // reordering them needs no write barrier.
 template <typename T>
@@ -244,7 +244,7 @@ slot_t __algo_merge_sorted_arrays__(ArgsView &with, ArgsView &norm, Context &ctx
 std::unordered_map<std::string, operator_t> getAlgoOpsMap() {
     std::unordered_map<std::string, operator_t> ops = getAlgoSequenceOpsMap();
     ops.merge(std::unordered_map<std::string, operator_t>{
-        // One name per operation: `sort` returns a new array (design principles 2.12, 2.13;
+        // One name per operation: `sort` returns a new array (design principles 11.3;
         // the `sorted` twins are gone). `*_in_place` are the in-place forms the compiler
         // calls for `xs = xs->sort` (OperatorTable::setInPlaceForm); no program names them.
         {"sort", __algo_quick_sort__},

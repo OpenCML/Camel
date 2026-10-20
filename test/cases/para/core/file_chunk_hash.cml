@@ -9,7 +9,7 @@ import { sha256, sha256_rounds } from crypto
 
 func digest_chunk(path: string, offset: int, size: int): string sync {
     let block = read_chunk(path, offset, size)
-    return sha256_rounds(block, 2048)
+    return sha256_rounds(sha256(block), 2047)
 }
 
 func main(): int sync {

@@ -2,7 +2,7 @@ module runtime_json
 
 import { Json, decode } from json
 
-// Text that is not JSON: decode gives an error value (design principles 2.13), which reaches
+// Text that is not JSON: decode gives an error value (design principles 11.2), which reaches
 // the exit of a `main` that declares a `T!` unhandled.
 func main(): Json! sync {
     return decode('{bad json')

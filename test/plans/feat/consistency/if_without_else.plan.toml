@@ -2,7 +2,7 @@ id = "consistency.if_without_else"
 order = 356
 tier = "feat"
 tags = ["feat", "consistency", "compile", "branches"]
-desc = "An if without else has no value: its arm may be of any type, what the arm gives is dropped, and using the if as a value is a compile-time error (design principles 2.10)"
+desc = "An if without else has no value: its arm may be of any type, what the arm gives is dropped, and using the if as a value is a compile-time error (design principles 3.7)"
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -36,28 +36,28 @@ expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n
 
 [[tests]]
 name = "if_without_else.statement.inline"
-desc = "The same program through std::inline, std::fvm."
+desc = "The same program through std::opt::inline, std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/if_without_else/statement.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n"
 
 [[tests]]
 name = "if_without_else.statement.simplify"
-desc = "The same program through std::opt::simplify, std::nvm."
+desc = "The same program through std::opt, std::nvm."
 kind = "behavior"
 case = "../../../cases/consistency/if_without_else/statement.cml"
-args = ["${case}", "std::opt::simplify", "std::nvm"]
+args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n"
 
 [[tests]]
 name = "if_without_else.statement.inline_opt"
-desc = "The same program through std::inline, std::opt, std::jit."
+desc = "The same program through std::opt::inline, std::opt, std::jit."
 kind = "behavior"
 case = "../../../cases/consistency/if_without_else/statement.cml"
-args = ["${case}", "std::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n"
 

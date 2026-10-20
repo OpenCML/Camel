@@ -47,7 +47,7 @@ std::string Builder::captureNameOf(node_handle_t origin, const std::string &fall
         return fallback;
     }
     // A value of the current module is shown as the module writes it; one of another module
-    // with its module's name, the way it is named from outside (design principles 2.12).
+    // with its module's name, the way it is named from outside (design principles 10.2).
     const TopLevelValue &value = it->second;
     if (module_ && value.module == module_.get()) {
         return value.name;
@@ -116,7 +116,7 @@ node_handle_t Builder::captureInto(
         captures_[graph.get()].variables.push_back(origin);
     }
     // The other graph of a loop takes the same capture at the same position: both lists grow
-    // together, so the LOOP node's With inputs serve both (design principles 2.12).
+    // together, so the LOOP node's With inputs serve both (design principles 3.10).
     if (auto twin = captureTwins_.find(graph.get()); twin != captureTwins_.end()) {
         (void)captureInto(twin->second, origin, name);
     }

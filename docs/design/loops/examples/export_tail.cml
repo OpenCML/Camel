@@ -1,6 +1,6 @@
 /**
  * A pure program whose `main` is a loop of data-dependent length, written as a tail recursion.
- *   CAMEL_ONNX_OUT=/tmp/loop.onnx camel export_tail.cml std::macro std::opt::simplify onnx::export
+ *   camel export_tail.cml std::macro std::opt 'onnx::export(out="/tmp/loop.onnx")'
  * exports it as one ONNX Loop; with `grad`, as paired Loops (docs/technical/26, section 7).
  */
 module export_tail

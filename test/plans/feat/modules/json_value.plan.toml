@@ -3,13 +3,13 @@ order = 352
 tier = "feat"
 tags = ["feat", "modules", "json", "gc"]
 
-# json.decode gives a `Json!` (design principles 2.12, 2.13; modules/json/value.h): a value of a
+# json.decode gives a `Json!` (design principles 11.2; modules/json/value.h): a value of a
 # definite type whose content describes itself, looked into with the accessors of the json
 # module, and traced by both collectors through the types its kinds fix.
 
 [[tests]]
 name = "json.value.nvm"
-desc = "decode gives a Json! (an error value for text that is not JSON, design principles 2.13); kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (nvm)."
+desc = "decode gives a Json! (an error value for text that is not JSON, design principles 11.2); kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (nvm)."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_value.cml"
 args = ["${case}", "${run_nvm}"]
@@ -20,7 +20,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "json.value.fvm"
-desc = "decode gives a Json! (an error value for text that is not JSON, design principles 2.13); kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (fvm)."
+desc = "decode gives a Json! (an error value for text that is not JSON, design principles 11.2); kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (fvm)."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_value.cml"
 args = ["${case}", "${run_fvm}"]
@@ -31,7 +31,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "json.value.jit"
-desc = "decode gives a Json! (an error value for text that is not JSON, design principles 2.13); kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (jit)."
+desc = "decode gives a Json! (an error value for text that is not JSON, design principles 11.2); kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (jit)."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_value.cml"
 args = ["${case}", "${run_jit}"]
@@ -42,7 +42,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "json.value.prl"
-desc = "decode gives a Json! (an error value for text that is not JSON, design principles 2.13); kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (prl)."
+desc = "decode gives a Json! (an error value for text that is not JSON, design principles 11.2); kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (prl)."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_value.cml"
 args = ["${case}", "${run_prl}"]

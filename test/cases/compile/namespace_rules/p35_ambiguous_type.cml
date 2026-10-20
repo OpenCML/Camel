@@ -1,4 +1,4 @@
-// Design principles 2.13: an ambiguous type name lists its candidates by their full names.
+// Design principles 10.2: an ambiguous type name lists its candidates by their full names.
 import libt1 as A
 import libt2 as B
 using namespace A::Shapes

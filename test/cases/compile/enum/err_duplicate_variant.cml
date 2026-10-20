@@ -1,0 +1,9 @@
+type Shape = enum {
+    Circle(float),
+    Circle(int),
+    Empty,
+}
+
+func main(): void sync {
+    println(Shape::Empty)
+}

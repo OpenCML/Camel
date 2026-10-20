@@ -9,7 +9,7 @@ desc = "What the modules of this repository register: every operator declares wh
 
 [[tests]]
 name = "registry.purity_declared"
-desc = "No operator of a module of this repository is left without a purity declaration (design principles 2.9), and the ones that read a clock, a random generator, the environment or a file are not declared pure."
+desc = "No operator of a module of this repository is left without a purity declaration (design principles 3.3), and the ones that read a clock, a random generator, the environment or a file are not declared pure."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/registry_all.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -34,8 +34,8 @@ for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
 const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median', 'algo:sort', 'algo:argsort',
-  're:test', 'json:encode', 'json:decode', 'crypto:sha256', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
-  // They return a new array and leave their argument unchanged (design principles 2.12).
+  're:test', 'json:encode', 'json:decode', 'crypto:sha256_str', 'crypto:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
+  // They return a new array and leave their argument unchanged (design principles 11.3).
   ':struct/append_arr', ':struct/extend_arr', 'algo:sort', 'algo:quick_sort', 'algo:insert_sort', 'algo:merge_sort']
 for (const uri of pure) {
   assert(purity[uri] === 'pure', `${uri} is declared ${purity[uri]}, expected pure`)

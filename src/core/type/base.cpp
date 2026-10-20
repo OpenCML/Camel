@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -117,12 +117,12 @@ string typeCodeToString(TypeCode code) {
         return "function";
     case TypeCode::Ref:
         return "ref";
-    case TypeCode::Union:
-        return "union";
     case TypeCode::TypeVar:
         return "typevar";
     case TypeCode::TypeFunc:
         return "typefunc";
+    case TypeCode::EnumHole:
+        return "_";
     default:
         return isOtherType(code) ? OtherTypeRegistry::getTypeName(code) : "unknown";
     }
@@ -157,6 +157,8 @@ std::string Type::mangle() const {
         return "s";
     case TypeCode::Ref:
         return "r";
+    case TypeCode::EnumHole:
+        return "H";
     default:
         ASSERT(false, "Unknown TypeCode");
         return "";
@@ -376,7 +378,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         ::String *s = reinterpret_cast<::String *>(static_cast<uintptr_t>(value));
         switch (to) {
         // The whole string must be one number; otherwise the fault of the conversion
-        // functions (design principles 2.10).
+        // functions (design principles 5.1).
         case TypeCode::Int32:
             return toSlot(integerFromText<Int32>(s->view(), "i32"));
         case TypeCode::Int64:

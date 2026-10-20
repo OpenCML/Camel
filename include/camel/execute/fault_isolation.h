@@ -13,19 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * The fault-isolation operator (design principles 2.9; docs/technical/33_fault_isolation.md).
+ * The fault-isolation operator (design principles 3.9; docs/technical/33_fault_isolation.md).
  *
  * On the graph it is one OPER node with the URI kFaultIsolationUri whose first input is a
  * function value and whose other inputs are the arguments: a marked call of the subgraph of
  * that function. A fault raised inside the call becomes, at the node, the failed form of the
- * node's `T!`. Every scheduler runs the node itself (it is one of the `:mark/...` operators);
- * this header holds what they share: the names, the type rule, and the conversion of a fault
- * that reached the boundary into an error value.
+ * node's `T!`. Every scheduler runs the node itself (it declares how it calls its function:
+ * ElementShape::Isolate); this header holds what they share: the names, the type rule, and the
+ * conversion of a fault that reached the boundary into an error value.
  */
 
 #pragma once
@@ -39,13 +39,13 @@
 
 namespace camel::execute {
 
-/// The name the operator has in a program: `attempt`, settled by design principles 2.10. This
+/// The name the operator has in a program: `attempt`, settled by design principles 3.9. This
 /// is the only place it is written: everything else uses the URI below, which does not
 /// contain it.
 inline constexpr const char *kFaultIsolationName = "attempt";
 
-/// The URI of the operator. Schedulers recognise it by its id, camel::core::oper::Isolate
-/// (camel/core/operator_table.h), which the operator table gives this URI.
+/// The URI of the operator. Schedulers recognise it by its declaration, not its name: it
+/// declares ElementShape::Isolate (camel/core/operator_semantics.h).
 inline constexpr std::string_view kFaultIsolationUri = ":mark/isolate";
 
 /// The result type of the operator applied to arguments of the types `norm` (the function value

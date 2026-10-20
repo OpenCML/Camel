@@ -1,5 +1,5 @@
 /**
- * `throw e` returns an error value (design principles 2.9), so the function around it must
+ * `throw e` returns an error value (design principles 3.9), so the function around it must
  * declare a `T!`. Here it returns `int`: a compile-time error at the statement (line 10).
  */
 module throw_outside_fallible

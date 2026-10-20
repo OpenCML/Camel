@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/data/primary.h"
+#include "camel/core/derivative.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
@@ -28,6 +29,7 @@
 #include "numeric.h"
 #include "operators.h"
 
+#include <array>
 #include <limits>
 #include <numbers>
 #include <optional>
@@ -38,6 +40,27 @@ using namespace camel::core::type;
 using camel::core::data::DoubleData;
 
 namespace {
+// sqrt accepts integer primals as well, but only floating inputs have a tangent.
+// For y = sqrt(x), the VJP is (dy * 0.5) / y, in the primal's float width.
+void sqrtVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call) {
+    using namespace camel::core;
+    using namespace camel::core::rtdata;
+    if (!tangentTypeOf(builder.nodeType(call.inputs[0]))) {
+        return;
+    }
+    if (auto dy = builder.gradientOf(call.output)) {
+        Type *type        = builder.nodeType(call.output);
+        const bool narrow = type->code() == TypeCode::Float32;
+        const auto half =
+            builder.addStatic(narrow ? toSlot<Float32>(0.5f) : toSlot<Float64>(0.5), type);
+        const std::array<vjp_node_t, 2> scaleInputs{*dy, half};
+        const auto scaled = builder.addOper(type, narrow ? ":op/mul_f" : ":op/mul_d", scaleInputs);
+        const std::array<vjp_node_t, 2> divideInputs{scaled, call.output};
+        const auto dx = builder.addOper(type, narrow ? ":op/div_f" : ":op/div_d", divideInputs);
+        builder.accumulateGradient(call.inputs[0], dx);
+    }
+}
+
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
@@ -135,7 +158,7 @@ MathModule::MathModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
         exportEntity(group->name(), group);
     for (const auto &group : getMathNumericGroups())
         exportEntity(group->name(), group);
-    // The constants are values (design principles 2.13): `math::pi`, written without
+    // The constants are values (design principles 10.1): `math::pi`, written without
     // parentheses, is the constant itself where it is used. (They were functions of no
     // arguments, `pi()`, while a module could export nothing but functions and types.)
     exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi));
@@ -161,6 +184,7 @@ bool MathModule::load() {
             "math:" + name,
             {.pure = true, .elementwise = false});
     }
+    camel::core::DerivativeRegistry::instance().setRule("math:sqrt", &sqrtVjp);
     loaded_ = true;
     return true;
 }

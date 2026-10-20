@@ -5,7 +5,7 @@
               [--timeout 20] [--out DIR] [--pipelines plain,inline,opt]
 
 Run from the repository root (CAMEL_EXE / CAMEL_HOME, else out/latest). Every program is run
-twice per pipeline, under std::fvm and under std::jit, with CAMEL_FVM_STATS set (see
+twice per pipeline, under std::fvm and under std::jit, with stats="file" given (see
 src/passes/sched/fastvm/fastvm_stats.cpp): the VM then writes, for every graph, whether the
 JIT compiled it, every construct that keeps it from being compiled, and how many of its
 bytecodes the interpreter ran.
@@ -41,7 +41,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 PIPELINES = {
     'plain': [],
-    'inline': ['std::inline'],
+    'inline': ['std::opt::inline'],
     'opt': ['std::opt'],
 }
 DEFAULT_CORPORA = [
@@ -80,8 +80,7 @@ def run_one(job):
         os.unlink(stats)
         env = dict(os.environ)
         env.update(env_extra)
-        env['CAMEL_FVM_STATS'] = stats
-        cmd = [camel_exe(), path] + PIPELINES[pipeline] + ['std::' + backend]
+        cmd = [camel_exe(), path] + PIPELINES[pipeline] + [f'std::{backend}(stats="{Path(stats).as_posix()}")']
         outcome = 'ok'
         try:
             p = subprocess.run(cmd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,

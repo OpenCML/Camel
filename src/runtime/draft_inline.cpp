@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 03, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,6 +34,7 @@
  */
 
 #include "camel/runtime/draft_inline.h"
+#include "camel/runtime/control.h"
 
 #include "camel/core/rtdata/func.h"
 #include "camel/runtime/draft_clone.h"
@@ -751,11 +752,7 @@ void bindPortValueUses(GraphDraft &draft, gc_node_ref_t portNodeId, gc_node_ref_
         draft.ctrlUsersOf(portNodeId).end());
     for (gc_node_ref_t user : waiting) {
         draft.unlinkInput(DraftEdgeKind::Ctrl, user, portNodeId);
-        const auto existing = draft.ctrlInputsOf(user);
-        if (user != actualInputId &&
-            std::find(existing.begin(), existing.end(), actualInputId) == existing.end()) {
-            draft.appendInput(DraftEdgeKind::Ctrl, user, actualInputId);
-        }
+        appendControlDependency(draft, actualInputId, user);
     }
 }
 
@@ -884,14 +881,15 @@ bool specializeDirectFuncInDraft(
     // Type-only specialization of a recursive function is bounded (see
     // kMaxTypeSpecializationsPerRecursiveFunction); a copy that already exists is reused freely.
     const bool boundedTypeSpecialization =
-        std::ranges::none_of(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
+        std::ranges::none_of(
+            bindings,
+            [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
         onCallCycle(funcBody->calleeGraph);
     if (boundedTypeSpecialization &&
         !session.findSpecialization(
             makeRuntimeSpecializationKey(funcBody->calleeGraph, bindings))) {
         const std::string root = typeSpecializationRoot(funcBody->calleeGraph->stableId());
-        if (session.typeSpecializationCount(root) >=
-            kMaxTypeSpecializationsPerRecursiveFunction) {
+        if (session.typeSpecializationCount(root) >= kMaxTypeSpecializationsPerRecursiveFunction) {
             CAMEL_LOG_INFO_S(
                 "DraftOpt",
                 "FUNC node {} keeps callee '{}': '{}' has {} type specializations.",
@@ -960,11 +958,7 @@ bool specializeDirectFuncInDraft(
                 break;
             }
             if (!draft.ctrlInputsOf(current).empty()) {
-                const auto existing = draft.ctrlInputsOf(funcNodeId);
-                if (current != funcNodeId &&
-                    std::find(existing.begin(), existing.end(), current) == existing.end()) {
-                    draft.appendInput(DraftEdgeKind::Ctrl, funcNodeId, current);
-                }
+                appendControlDependency(draft, current, funcNodeId);
                 break;
             }
             if (header->kind != GCNodeKind::Gate && header->kind != GCNodeKind::Copy &&
@@ -1022,11 +1016,7 @@ void keepCalleeOrdering(GraphDraft &draft, gc_node_ref_t funcNodeId, gc_node_ref
     if (!header || draft.ctrlInputsOf(callee).empty()) {
         return;
     }
-    const auto existing = draft.ctrlInputsOf(funcNodeId);
-    if (callee != funcNodeId &&
-        std::find(existing.begin(), existing.end(), callee) == existing.end()) {
-        draft.appendInput(DraftEdgeKind::Ctrl, funcNodeId, callee);
-    }
+    appendControlDependency(draft, callee, funcNodeId);
 }
 
 namespace {
@@ -1898,6 +1888,7 @@ DraftInlineResult inlineCallableInDraft(
             ctrlPreds.push_back(argument);
         }
     }
+    ctrlPreds                  = controlFrontier(draft, ctrlPreds);
     const bool hasExternalCtrl = !ctrlPreds.empty();
 
     DraftGraphCloneResult cloned = calleeDraftView
@@ -2069,18 +2060,29 @@ DraftInlineResult inlineCallableInDraft(
         result.ctrlExit                = bridgeGate;
         result.valueExit               = bridgeGate;
     } else if (result.ctrlExit != result.valueExit) {
-        const DraftNodeHeader *valueHeader = draft.header(result.valueExit);
-        DraftNodeInit gateInit{
-            .dataIndex    = valueHeader ? valueHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
-            .dataType     = valueHeader ? valueHeader->dataType : nullptr,
-            .kind         = GCNodeKind::Gate,
-            .runtimeFlags = 0,
-            .normInputs   = std::span<const gc_node_ref_t>(&result.valueExit, 1),
-            .ctrlInputs   = std::span<const gc_node_ref_t>(&result.ctrlExit, 1),
-        };
-        const gc_node_ref_t bridgeGate = draft.addNode(gateInit);
-        result.valueExit               = bridgeGate;
-        result.ctrlExit                = bridgeGate;
+        const auto *ctrlHeader = draft.header(result.ctrlExit);
+        const auto ctrlValue   = draft.normInputsOf(result.ctrlExit);
+        if (ctrlHeader && ctrlHeader->kind == GCNodeKind::Gate && ctrlValue.size() == 1 &&
+            ctrlValue.front() == result.valueExit) {
+            // The callee's completion gate already forwards the return value after all of
+            // its effects. Reuse it instead of building GATE(value, ctrl=GATE(value, ...)).
+            // Do not fold gates forwarding a different value, or the empty-body case above:
+            // that case still has to attach the caller's control predecessors.
+            result.valueExit = result.ctrlExit;
+        } else {
+            const DraftNodeHeader *valueHeader = draft.header(result.valueExit);
+            DraftNodeInit gateInit{
+                .dataIndex = valueHeader ? valueHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
+                .dataType  = valueHeader ? valueHeader->dataType : nullptr,
+                .kind      = GCNodeKind::Gate,
+                .runtimeFlags = 0,
+                .normInputs   = std::span<const gc_node_ref_t>(&result.valueExit, 1),
+                .ctrlInputs   = std::span<const gc_node_ref_t>(&result.ctrlExit, 1),
+            };
+            const gc_node_ref_t bridgeGate = draft.addNode(gateInit);
+            result.valueExit               = bridgeGate;
+            result.ctrlExit                = bridgeGate;
+        }
     }
     if (result.ctrlEntry == kInvalidNodeRef) {
         result.ctrlEntry = result.ctrlExit;

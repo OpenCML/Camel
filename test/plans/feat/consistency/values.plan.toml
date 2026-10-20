@@ -54,7 +54,7 @@ golden = "golden/counter_closure.txt"
 
 [[tests]]
 name = "value.effect_not_used"
-desc = "An effect whose result nothing uses, outside a sync block, does not run (design principles 2.1, 2.4)."
+desc = "An effect whose result nothing uses, outside a sync block, does not run (design principles 3.1, 3.2)."
 case = "../../../cases/consistency/values/effect_not_used.cml"
 golden = "golden/effect_not_used.txt"
 
@@ -108,7 +108,7 @@ golden = "golden/int_min_div.txt"
 
 [[tests]]
 name = "value.int_compound_wrap"
-desc = "Compound assignment wraps like the plain operators (design principles 2.10): += -= *= past the ends of int and i32, and /= and %= of the smallest value by -1 without a hardware trap."
+desc = "Compound assignment wraps like the plain operators (design principles 5.1): += -= *= past the ends of int and i32, and /= and %= of the smallest value by -1 without a hardware trap."
 case = "../../../cases/consistency/values/int_compound_wrap.cml"
 golden = "golden/int_compound_wrap.txt"
 
@@ -189,7 +189,7 @@ expect_stdout_starts_with = "inf\n-inf\n"
 
 [[tests]]
 name = "value.max_min_special"
-desc = "math::max and math::min are IEEE 754-2019 maximum and minimum (design principles 2.13): a NaN on either side gives NaN, -0 is below +0 on either side (max(-0, 0) was -0: the first argument won a tie)."
+desc = "math::max and math::min are IEEE 754-2019 maximum and minimum (design principles 7.7): a NaN on either side gives NaN, -0 is below +0 on either side (max(-0, 0) was -0: the first argument won a tie)."
 case = "../../../cases/consistency/values/max_min_special.cml"
 golden = "golden/max_min_special.txt"
 
@@ -204,3 +204,9 @@ name = "value.number_fit"
 desc = "Number to number: a float inside the range truncates toward zero; NaN, an infinity, a float beyond the integer's range and an int beyond i32 are ConversionOutOfRange (seen through attempt); a float beyond f32 becomes an infinity."
 case = "../../../cases/consistency/values/number_fit.cml"
 golden = "golden/number_fit.txt"
+
+[[tests]]
+name = "value.enums"
+desc = "An enum value is constructed by its qualified variant, matched, printed as `Shape::Circle(1.0)` / `Shape::Rect { w: 2.0, h: 3.0 }` / `Shape::Empty`, compared by tag and payload, and one enum holds another."
+case = "../../../cases/consistency/values/enums.cml"
+golden = "golden/enums.txt"

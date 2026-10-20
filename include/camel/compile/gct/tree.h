@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 13, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,10 +93,16 @@ class Tree {
     node_ptr_t makeWait();
     node_ptr_t makeLink(size_t argCount);
     node_ptr_t makeWith(size_t argCount);
+    node_ptr_t makeTypeApplication();
     node_ptr_t makeAccs(size_t index);
     node_ptr_t makeAccs(const std::string &key);
     node_ptr_t makeBrch(BranchKind kind = BranchKind::Cond);
     node_ptr_t makeCase(CaseType type, const std::string &binding = {});
+    /// A CASE of an enum variant: `label` the variant as written (`Shape::Rect`), `fields` and
+    /// `bindings` the entries of the pattern in the order written (see Node::EnumCase).
+    node_ptr_t makeEnumCase(
+        const std::string &label, const std::vector<std::string> &fields,
+        const std::vector<std::string> &bindings, bool structShape);
     node_ptr_t makeCast(Type *targetType, bool annotation = false);
     node_ptr_t makeAnno();
     node_ptr_t makeExit(ExitType type = ExitType::Return);
@@ -116,7 +122,7 @@ class Tree {
     /// The tree as indented text, one node per line (`camel inspect --gct`).
     void print(std::ostream &os) const;
 
-    /// The `using namespace` in force in `node` (design principles 2.12): for the root, those
+    /// The `using namespace` in force in `node` (design principles 10.2): for the root, those
     /// of the module; for an EXEC that is a block, those written in the block; for a top-level
     /// declaration, those of the namespace blocks it is written in. What they name is found
     /// where a name is used. Null when there are none.
@@ -125,7 +131,7 @@ class Tree {
 
     /// The namespaces of the block a top-level declaration is written in, when its name does
     /// not say them: an operator overload, whose name is the operator's (design principles
-    /// 2.13). Null for any other node; the namespaces of a name are then its path.
+    /// 10.2). Null for any other node; the namespaces of a name are then its path.
     void setNamespaceOf(const Node *node, const std::vector<std::string> &path);
     const std::vector<std::string> *namespaceOf(const Node *node) const;
 

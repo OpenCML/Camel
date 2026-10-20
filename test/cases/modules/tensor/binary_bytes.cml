@@ -1,0 +1,13 @@
+module binary_bytes
+import { new, reshape, to_bytes, zeros } from tensor
+import { to_array, size } from bytes
+
+func main(): int sync {
+    let floats = new([1.0, -2.5, 0.0, -0.0])
+    println(to_array(to_bytes(floats)))
+    println(to_array(to_bytes(new([9007199254740993, -2]))))
+    println(to_array(to_bytes(new([true, false, true]))))
+    println(size(to_bytes(zeros([0, 2]))))
+    println(to_array(to_bytes(reshape(floats, [2, 2]))))
+    return 0
+}

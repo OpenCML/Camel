@@ -1,0 +1,64 @@
+/** Local algebra must preserve strict float rounding and respect permission boundaries. */
+module algebra
+
+func strict(x: float): float {
+    let t = x * 3.0
+    return t + t
+}
+
+func underflow_sensitive(x: float): float {
+    let t = x * 0.1
+    return t + t
+}
+
+func strict_coefficients(x: float): float {
+    return x * 3.0 + x * 5.0
+}
+
+@numeric(reassociate)
+func relaxed_coefficients(x: float): float {
+    return x * 3.0 + x * 5.0
+}
+
+func mixed_permissions(x: float): float {
+    let t = x * 3.0
+    @numeric(reassociate, finite_math)
+    { return t + x * 5.0 }
+}
+
+func integer_coefficients(x: int): int {
+    return x * 3 + x * 5
+}
+
+func integer_chain(x: int): int {
+    return ((x + 0) * 3) * 2
+}
+
+func shared_product(x: float): float sync {
+    let t = x * 3.0
+    println(t)
+    return t + t
+}
+
+func strict32(x: f32): f32 {
+    let t = x * f32(3.0)
+    return t + t
+}
+
+func integer32(x: i32): i32 {
+    return x * i32(3) + x * i32(5)
+}
+
+func branch(x: float, flag: bool): float {
+    return if flag then strict(x) else strict(x + 1.0)
+}
+
+func main(x: float): int sync {
+    println(strict(x), underflow_sensitive(x), strict_coefficients(x))
+    println(relaxed_coefficients(x), mixed_permissions(x))
+    println(integer_coefficients(7), integer_chain(7), integer32(i32(7)))
+    println(strict32(f32(x)))
+    println(shared_product(x))
+    println(branch(x, true), branch(x, false))
+    return 0
+}

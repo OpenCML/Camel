@@ -3,8 +3,8 @@
 
 Arrays of int and of float; random, with duplicates, already sorted, reversed, constant; lengths 1 to
 257. Each of sort/quick_sort/insert_sort/merge_sort (all return a new array and leave the input
-unchanged: no operator changes its argument, design principles 2.12) is applied to each array,
-also as the in-place rebinding `v = v->sort` (2.13), and merge_sorted_arrays to pairs of sorted
+unchanged: no operator changes its argument, design principles 11.3) is applied to each array,
+also as the in-place rebinding `v = v->sort` (11.3), and merge_sorted_arrays to pairs of sorted
 arrays. A second program sorts 200000 elements that are
 already sorted, and reversed, which a quicksort with a first-element pivot cannot do in its stack.
 
@@ -24,7 +24,7 @@ REPO_ROOT = HERE.parents[4]
 HOME = Path(os.environ.get("CAMEL_HOME", REPO_ROOT / "out" / "latest"))
 CAMEL = HOME / "bin" / ("camel.exe" if os.name == "nt" else "camel")
 # Every sorting operator returns a new array and leaves its argument unchanged (design
-# principles 2.12); only the names without `-ed` remain (2.13). Each is also checked as the
+# principles 11.3); only the names without `-ed` remain (11.3). Each is also checked as the
 # rebinding `v = v->op` of a variable, which the compiler turns into the operator's in-place
 # form (Builder::inPlaceRebindingOf): on a copy the first time (the variable was made from a
 # value something else refers to), on the variable's own array the second time.

@@ -1,6 +1,6 @@
 /**
  * The shapes in which the parallel scheduler meets a graph with nothing to parallelise (it runs
- * such a graph on the bytecode interpreter; design principles 2.11), next to graphs it evaluates
+ * such a graph on the bytecode interpreter; design principles 9.10), next to graphs it evaluates
  * itself. Every line of output is the same on every back end.
  *
  *   - `fib`, `gcd`, `collatz`, `mix`, `churn`, `norm`, `digits`: serial (built-in operators, an

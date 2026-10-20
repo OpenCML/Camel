@@ -20,7 +20,7 @@
 /*
  * Random distributions that give the same numbers on every platform.
  *
- * A program's output is the same bytes on every platform (docs/design-principles.cn.md 2.11),
+ * A program's output is the same bytes on every platform (docs/design-principles.cn.md 11.5),
  * and a seeded program prints numbers drawn from a generator. The engine std::mt19937_64 is
  * specified bit for bit by the C++ standard, but the distributions are not: libc++ draws
  * std::uniform_int_distribution and std::normal_distribution differently from libstdc++, so the

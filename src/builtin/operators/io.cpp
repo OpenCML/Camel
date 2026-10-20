@@ -12,7 +12,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 01, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,9 +21,11 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/bytes.h"
 
 #include "float_format.h"
 #include "fmt/args.h"
+#include "text_format.h"
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;
@@ -53,7 +55,7 @@ void writeToStdout(const std::string &text, bool flush) {
 /// What `print` and `println` write for their arguments, without a line end: the arguments
 /// separated by one space, or, with a format (`print<fmt>(...)`), the format with the
 /// arguments put in. Returns the first argument (an effect function returns a value, design
-/// principles 2.10), null when there is none. `formatted` says whether a format was given.
+/// principles 3.1), null when there is none. `formatted` says whether a format was given.
 slot_t writeArguments(ArgsView &with, ArgsView &norm, std::ostringstream &out, bool &formatted) {
     slot_t result = norm.size() > 0 ? norm.slot(0) : NullSlot;
     formatted     = with.size() > 0;
@@ -88,7 +90,7 @@ slot_t writeArguments(ArgsView &with, ArgsView &norm, std::ostringstream &out, b
         default:
             std::ostringstream oss;
             printSlot(oss, norm.slot(i), norm.type(i));
-            store.push_back(oss.str());
+            store.push_back(camel::builtin::CodePointText{oss.str()});
             break;
         }
     }
@@ -104,7 +106,7 @@ slot_t writeArguments(ArgsView &with, ArgsView &norm, std::ostringstream &out, b
 
 // `print` ends nothing with a line end, with a format or without; `println` ends what it
 // writes with exactly one. (The formatted forms used to add one more: `print<fmt>` a line end
-// and `println<fmt>` an empty line. Design principles 2.13 calls that a defect of the
+// and `println<fmt>` an empty line. Design principles 10.6 calls that a defect of the
 // interpreter; the generated C++ programs copied it and were fixed with it.)
 slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::ostringstream out;
@@ -140,6 +142,6 @@ slot_t __op_input__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::string input;
     std::getline(std::cin, input);
 
-    String *str = String::from(input, mm::autoSpace());
+    String *str = camel::core::rtdata::checkedString(input, mm::autoSpace(), "input");
     return toSlot(str);
 }

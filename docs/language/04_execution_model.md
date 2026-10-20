@@ -191,7 +191,7 @@ func main(): int sync {
 - 修改的追踪覆盖捕获：函数通过捕获写入一个 `var`，调用处记为对该变量的一次写入。通过函数值（作为实参、返回值或存起来的 lambda）进行的调用，调用处只能按它的类型（`sync` 修饰符、`var` 形参）识别副作用。
 - `wait` 可以写在调用、赋值与运算符表达式之前。写在块、名字、字面量、lambda 之前保留，尚未实现（`SemanticDiag::ConstructNotSupported`）；要让一个块按顺序执行，用 `sync { ... }`。
 
-副作用的管理与追踪仍在研究中（设计原则 2.8）。同一个可变对象在同步块之外被多处写入、且都没有 `wait` 时的行为尚未决定。
+副作用的管理与追踪仍在研究中（设计原则 3.5）。同一个可变对象在同步块之外被多处写入、且都没有 `wait` 时的行为尚未决定。
 
 ## 4.5 `macro` 函数
 
@@ -283,7 +283,7 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
 | `std::jit` | 带即时编译的字节码虚拟机；不能编译的图由解释器执行 |
 | `std::prl` | 并行调度：互不依赖的节点可以并发执行 |
 | `std::macro` | 提前求值 macro 调用 |
-| `std::opt`、`std::inline`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt::simplify` | 优化 |
+| `std::opt`、`std::opt::inline`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt` | 优化 |
 | `std::rgir`、`std::gir` | 打印图（DOT 格式），不运行 |
 | `std::stats` | 打印图的统计数字，图原样传下去 |
 | `onnx::export`、`std::cpp` | 转译为 ONNX 模型、C++ 源码 |

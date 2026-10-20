@@ -2,7 +2,7 @@
  * The callee of `attempt` runs as compiled code under std::jit. `quot` is straight-line integer
  * arithmetic, which the JIT compiles; its division by zero leaves the native code through the
  * fault stub and the wrapper, and is thrown as a C++ exception only from the wrapper's caller.
- * `depth`, after std::inline has merged its branch arms into it, recurses natively and exceeds
+ * `depth`, after std::opt::inline has merged its branch arms into it, recurses natively and exceeds
  * the recursion limit inside compiled code. Both become error values at the `attempt`, the
  * compiled code runs again afterwards, and the graph that contains the `attempt` (an OPER) is
  * itself never compiled.

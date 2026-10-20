@@ -5,6 +5,7 @@
 module registry_all
 
 import algo
+import bytes
 import crypto
 import fs
 import io
@@ -20,6 +21,8 @@ import str
 import sys
 import this
 import time
+import tree
+import tensor
 import array
 
 func main(): int {

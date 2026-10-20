@@ -114,7 +114,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "contains_string"
-desc = "contains('abc', 'b') with both strings in the parentheses is rejected when compiled, with the hint that gives the kept form 'abc'->contains<'b'> (a string has contains since the ruling of 2.10; before that this spelling was rejected for want of an implementation, and before that it gave false)"
+desc = "contains('abc', 'b') with both strings in the parentheses is rejected when compiled, with the hint that gives the kept form 'abc'->contains<'b'> (a string has contains since the ruling of 11.1; before that this spelling was rejected for want of an implementation, and before that it gave false)"
 kind = "negative"
 case = "../../../cases/compile/operators/contains_string.cml"
 args = ["${case}"]

@@ -1,0 +1,706 @@
+id = "opt.algebra"
+order = 329
+tier = "feat"
+tags = ["feat", "opt", "numeric", "algebra"]
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 10000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "graph.default"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","std::opt::fold","std::opt::algebra","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout), safe=false;
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label.startsWith(':op/add_')).length,m=g(name).nodes.filter(n=>n.label.startsWith(':op/mul_')).length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
+ for(const name of ['strict','strict32','integer_coefficients','integer32','integer_chain'])counts(name,0,1);
+ counts('underflow_sensitive',safe?1:0,1);
+ for(const name of ['strict_coefficients','relaxed_coefficients'])counts(name,safe?1:0,safe?2:1);
+ counts('mixed_permissions',1,2);counts('shared_product',safe?1:0,safe?1:2);
+ const mul=g('strict').nodes.find(n=>n.label===':op/mul_d');
+ assert(g('strict').nodes.some(n=>n.label==='6.0'),'coefficient six missing');
+ assert(mul.origin&&mul.source,'consumer source lost');
+ const relaxed=g('relaxed_coefficients').nodes.filter(n=>n.kind==='OPER');
+ assert(relaxed.every(n=>n.numeric==='reassociate'),'permissions changed');
+}
+'''
+
+[[tests]]
+name = "graph.safe"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","std::opt::fold","std::opt::algebra(safe_fp=true)","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout), safe=true;
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label.startsWith(':op/add_')).length,m=g(name).nodes.filter(n=>n.label.startsWith(':op/mul_')).length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
+ for(const name of ['strict','strict32','integer_coefficients','integer32','integer_chain'])counts(name,0,1);
+ counts('underflow_sensitive',safe?1:0,1);
+ for(const name of ['strict_coefficients','relaxed_coefficients'])counts(name,safe?1:0,safe?2:1);
+ counts('mixed_permissions',1,2);counts('shared_product',safe?1:0,safe?1:2);
+ const mul=g('strict').nodes.find(n=>n.label===':op/mul_d');
+ assert(g('strict').nodes.some(n=>n.label==='6.0'),'coefficient six missing');
+ assert(mul.origin&&mul.source,'consumer source lost');
+ const relaxed=g('relaxed_coefficients').nodes.filter(n=>n.kind==='OPER');
+ assert(relaxed.every(n=>n.numeric==='reassociate'),'permissions changed');
+}
+'''
+
+[[tests]]
+name = "execution.reference"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","--arg","x=2","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "execution.algebra"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","--arg","x=2","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "execution.safe"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","--arg","x=2","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "execution.opt"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","--arg","x=2","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "execution.opt_safe"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","--arg","x=2","std::opt(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "execution.twice"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","--arg","x=2","std::opt::algebra","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0",input.normalized.stdout)
+'''
+
+[[tests]]
+name = "boundary64.5e-324.reference"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=5e-324","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("5e-324"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.5e-324.algebra"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=5e-324","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("5e-324"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,x*0.2];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.5e-324.safe"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=5e-324","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("5e-324"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.-5e-324.reference"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=-5e-324","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("-5e-324"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.-5e-324.algebra"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=-5e-324","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("-5e-324"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,x*0.2];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.-5e-324.safe"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=-5e-324","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("-5e-324"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.2.5e-323.reference"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=2.5e-323","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("2.5e-323"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.2.5e-323.algebra"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=2.5e-323","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("2.5e-323"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,x*0.2];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.2.5e-323.safe"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=2.5e-323","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("2.5e-323"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.-0.reference"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=-0","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("-0"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.-0.algebra"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=-0","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("-0"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,x*0.2];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.-0.safe"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=-0","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("-0"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.1e308.reference"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=1e308","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("1e308"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.1e308.algebra"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=1e308","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("1e308"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,x*0.2];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.1e308.safe"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=1e308","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("1e308"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.inf.reference"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=inf","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("inf"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.inf.algebra"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=inf","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("inf"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,x*0.2];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.inf.safe"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=inf","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("inf"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.nan.reference"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=nan","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("nan"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.nan.algebra"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=nan","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("nan"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,x*0.2];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary64.nan.safe"
+case = "../../../cases/opt/generic/algebra_boundary.cml"
+args = ["${case}","--arg","x=nan","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const x=parse("nan"),p=x*3,n=x*-3,f=x*0.1;
+ const expected=[p+p,n+n,f+f];const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(parse);
+ assert(actual.length===3&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary32.1.401298464324817e-45.false"
+case = "../../../cases/opt/generic/algebra_boundary32.cml"
+args = ["${case}","--arg","x=1.401298464324817e-45","std::opt::fold","std::opt::algebra(safe_fp=false)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const f=Math.fround,x=f(Number("1.401298464324817e-45")),t=f(x*3),q=f(x*f(0.1));
+ const expected=[f(t+t),f(x*f(f(0.1)+f(0.1)))];
+ const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(s=>f(parse(s)));
+ assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary32.1.401298464324817e-45.true"
+case = "../../../cases/opt/generic/algebra_boundary32.cml"
+args = ["${case}","--arg","x=1.401298464324817e-45","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const f=Math.fround,x=f(Number("1.401298464324817e-45")),t=f(x*3),q=f(x*f(0.1));
+ const expected=[f(t+t),f(q+q)];
+ const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(s=>f(parse(s)));
+ assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary32.7.006492321624085e-45.false"
+case = "../../../cases/opt/generic/algebra_boundary32.cml"
+args = ["${case}","--arg","x=7.006492321624085e-45","std::opt::fold","std::opt::algebra(safe_fp=false)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const f=Math.fround,x=f(Number("7.006492321624085e-45")),t=f(x*3),q=f(x*f(0.1));
+ const expected=[f(t+t),f(x*f(f(0.1)+f(0.1)))];
+ const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(s=>f(parse(s)));
+ assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary32.7.006492321624085e-45.true"
+case = "../../../cases/opt/generic/algebra_boundary32.cml"
+args = ["${case}","--arg","x=7.006492321624085e-45","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const f=Math.fround,x=f(Number("7.006492321624085e-45")),t=f(x*3),q=f(x*f(0.1));
+ const expected=[f(t+t),f(q+q)];
+ const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(s=>f(parse(s)));
+ assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary32.-0.false"
+case = "../../../cases/opt/generic/algebra_boundary32.cml"
+args = ["${case}","--arg","x=-0","std::opt::fold","std::opt::algebra(safe_fp=false)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const f=Math.fround,x=f(Number("-0")),t=f(x*3),q=f(x*f(0.1));
+ const expected=[f(t+t),f(x*f(f(0.1)+f(0.1)))];
+ const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(s=>f(parse(s)));
+ assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary32.-0.true"
+case = "../../../cases/opt/generic/algebra_boundary32.cml"
+args = ["${case}","--arg","x=-0","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const f=Math.fround,x=f(Number("-0")),t=f(x*3),q=f(x*f(0.1));
+ const expected=[f(t+t),f(q+q)];
+ const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(s=>f(parse(s)));
+ assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary32.3e38.false"
+case = "../../../cases/opt/generic/algebra_boundary32.cml"
+args = ["${case}","--arg","x=3e38","std::opt::fold","std::opt::algebra(safe_fp=false)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const f=Math.fround,x=f(Number("3e38")),t=f(x*3),q=f(x*f(0.1));
+ const expected=[f(t+t),f(x*f(f(0.1)+f(0.1)))];
+ const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(s=>f(parse(s)));
+ assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "boundary32.3e38.true"
+case = "../../../cases/opt/generic/algebra_boundary32.cml"
+args = ["${case}","--arg","x=3e38","std::opt::fold","std::opt::algebra(safe_fp=true)","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{const parse=s=>s==='inf'?Infinity:s==='-inf'?-Infinity:s==='nan'?NaN:Number(s);const same=(a,b)=>Object.is(a,b)||(Number.isNaN(a)&&Number.isNaN(b));
+ const f=Math.fround,x=f(Number("3e38")),t=f(x*3),q=f(x*f(0.1));
+ const expected=[f(t+t),f(q+q)];
+ const actual=input.normalized.stdout.trim().split(String.fromCharCode(10)).map(s=>f(parse(s)));
+ assert(actual.length===2&&actual.every((v,i)=>same(v,expected[i])),input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "wrapping.7"
+case = "../../../cases/opt/generic/algebra_integer.cml"
+args = ["${case}","--arg","n=7","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{
+ const n=BigInt("7");const expected=[BigInt.asIntN(64,n*8n),BigInt.asIntN(64,n*6n),-8n].map(String).join(String.fromCharCode(10));
+ assert(input.normalized.stdout.trim()===expected,input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "wrapping.9223372036854775807"
+case = "../../../cases/opt/generic/algebra_integer.cml"
+args = ["${case}","--arg","n=9223372036854775807","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{
+ const n=BigInt("9223372036854775807");const expected=[BigInt.asIntN(64,n*8n),BigInt.asIntN(64,n*6n),-8n].map(String).join(String.fromCharCode(10));
+ assert(input.normalized.stdout.trim()===expected,input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "wrapping.-9223372036854775808"
+case = "../../../cases/opt/generic/algebra_integer.cml"
+args = ["${case}","--arg","n=-9223372036854775808","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>{
+ const n=BigInt("-9223372036854775808");const expected=[BigInt.asIntN(64,n*8n),BigInt.asIntN(64,n*6n),-8n].map(String).join(String.fromCharCode(10));
+ assert(input.normalized.stdout.trim()===expected,input.normalized.stdout);
+}
+'''
+
+[[tests]]
+name = "gradient.false"
+case = "../../../cases/modules/autodiff/collapse_random.cml"
+args = ["${case}","std::macro","std::opt(safe_fp=false)","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ assert(g.nodes.filter(n=>[':op/add_d',':op/mul_d'].includes(n.label)).length===4,'gradient did not simplify');
+ for(const label of ['2.0','6.0','rand:rand','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
+}
+'''
+
+[[tests]]
+name = "gradient.true"
+case = "../../../cases/modules/autodiff/collapse_random.cml"
+args = ["${case}","std::macro","std::opt(safe_fp=true)","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ assert(g.nodes.filter(n=>[':op/add_d',':op/mul_d'].includes(n.label)).length===4,'gradient did not simplify');
+ for(const label of ['2.0','6.0','rand:rand','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
+}
+'''
+
+[[tests]]
+name = "invalid.std::opt(safe_fp=typo)"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","--arg","x=2","std::nvm","std::opt(safe_fp=typo)"]
+expect_exit = 1
+verify_script = '''
+({input,assert})=>{
+ assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
+}
+'''
+
+[[tests]]
+name = "invalid.std::opt::algebra(unknown=true)"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","--arg","x=2","std::nvm","std::opt::algebra(unknown=true)"]
+expect_exit = 1
+verify_script = '''
+({input,assert})=>{
+ assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
+}
+'''
+
+[[tests]]
+name = "invalid.std::opt(safe_fp=true,safe_fp=false)"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","--arg","x=2","std::nvm","std::opt(safe_fp=true,safe_fp=false)"]
+expect_exit = 1
+verify_script = '''
+({input,assert})=>{
+ assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
+}
+'''
+
+[[tests]]
+name = "invalid.std::opt::algebra(safe_fp=true"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}","--arg","x=2","std::nvm","std::opt::algebra(safe_fp=true"]
+expect_exit = 1
+verify_script = '''
+({input,assert})=>{
+ assert(!input.normalized.stdout.includes('12.0 0.4'),'program executed before invalid option was rejected');
+ assert((input.normalized.stdout+input.normalized.stderr).includes('InvalidPassParameter'),'missing diagnostic');
+}
+'''
+
+[[tests]]
+name = "integrated.graph.false"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}", "std::opt(safe_fp=false)", "std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ assert(g.normalPorts.length===1,'runtime input folded');
+ assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===11,'integrated algebra policy not applied');
+}
+'''
+
+[[tests]]
+name = "integrated.graph.true"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}", "std::opt(safe_fp=true)", "std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ assert(g.normalPorts.length===1,'runtime input folded');
+ assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===15,'integrated algebra policy not applied');
+}
+'''
+
+[[tests]]
+name = "tensor.graph.default"
+desc = "The elementwise tensor operators declare the laws the algebra pass uses (OperatorSemantics::binary), so x * 3 + x * 5 becomes x * 8 under the default policy as the scalar case does; a chain of float products is not regrouped without the finite_math grant, as for scalars; coefficients the element type does not hold exactly are left alone."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra_tensor.cml"
+args = ["${case}","std::opt::fold","std::opt::algebra","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout), safe=false;
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label==='tensor:add').length,m=g(name).nodes.filter(n=>n.label==='tensor:multiply').length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
+ counts('merged',safe?1:0,safe?2:1);counts('merged_explicit',safe?1:0,safe?2:1);
+ counts('chain',0,2);counts('inexact',1,2);
+}
+'''
+
+[[tests]]
+name = "tensor.graph.safe"
+desc = "With safe_fp=true the tensor rewrite is strict as the scalar one is: nothing is regrouped, not even by a node that carries @numeric(reassociate)."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra_tensor.cml"
+args = ["${case}","std::opt::fold","std::opt::algebra(safe_fp=true)","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout), safe=true;
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label==='tensor:add').length,m=g(name).nodes.filter(n=>n.label==='tensor:multiply').length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
+ counts('merged',safe?1:0,safe?2:1);counts('merged_explicit',safe?1:0,safe?2:1);
+ counts('chain',0,2);counts('inexact',1,2);
+}
+'''
+
+[[tests]]
+name = "tensor.execution"
+desc = "The rewritten tensor program prints what the original prints, on every back end."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra_tensor.cml"
+args = ["${case}","std::opt::fold","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["8.,      16.,      24.", "6.,      12.,      18.", "0.3,     0.6,     0.9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

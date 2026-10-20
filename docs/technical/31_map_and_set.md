@@ -2,7 +2,7 @@
 
 This note describes the two built-in collection types `Map<K, V>` and `Set<T>`: what was
 ruled, what was investigated, what was chosen and why, what was measured, and what remains
-for the language author. The normative text is `docs/design-principles.cn.md` section 2.9,
+for the language author. The normative text is `docs/design-principles.cn.md` section 11.3,
 "数据与控制"; the user-facing description is `docs/language/` 3.5 and 6.3.
 
 Choices the design principles do not make are collected in section 10. Each is implemented
@@ -104,7 +104,7 @@ written `Map` or `Set` alone is an `InvalidTypeArgument` error.
   use of one variable mangle alike).
 - **Assignability**: `Map<K, V>` from `Map<K, V>` only. No variance: `Map<string, int>` is
   not a `Map<string, int?>`.
-- **`any`** (removed since, design principles 2.12): a collection converted to `any` like every value; `any as Map<...>` was refused
+- **`any`** (removed since, design principles 5.10): a collection converted to `any` like every value; `any as Map<...>` was refused
   (nothing at run time could check it).
 - **Generics**: `func get_or_else(m: Map<typeas K, typeas V>, k: K, d: V): V` binds `K` and
   `V` from the argument's type and instantiates per pair, like any generic function. A key
@@ -112,7 +112,7 @@ written `Map` or `Set` alone is an `InvalidTypeArgument` error.
   called with a float) is reported at the call, where the repeated-mark check of `T??`
   already runs, and at a conversion written in the body (`xs as Set<T>`).
 
-### 3.1 Key types (ruled: design principles 2.10)
+### 3.1 Key types (ruled: design principles 11.3)
 
 A key (and a set element) must have a total order and an equality that cannot change:
 
@@ -121,7 +121,7 @@ A key (and a set element) must have a total order and an equality that cannot ch
 | `int`, `i32`, `bool`, `string` | yes | total order; a string is compared by bytes, as its length and index are |
 | a tuple of key types | yes | compared element by element |
 | `float`, `f32` | no | `NaN != NaN` (a key that cannot be found again), `0.0 == -0.0` with different bits |
-| `T[]` | no | not among the key types of design principles 2.10 (the reason given first, that `append` changed an array in place, no longer holds since 2.12) |
+| `T[]` | no | not among the key types of design principles 11.3 (the reason given first, that `append` changed an array in place, no longer holds since 11.3) |
 | struct | no | admissible in principle (field by field in declaration order); left out until asked for |
 | function, `Tensor`, other module types, `any` | no | no equality the language defines |
 | `T?`, `T!` | no | `==` is not defined for them (note 29, Q5) |
@@ -131,7 +131,7 @@ A type that is not allowed is `SemanticDiag::CollectionKeyNotAllowed` (0xA0) at 
 expression (or at the call that produces it by substitution), with the reason. The value
 type of a map is unrestricted.
 
-## 4. Order (ruled: design principles 2.10)
+## 4. Order (ruled: design principles 11.3)
 
 **A map is ordered by its keys, a set by its elements.** `keys`, `values`, `items`, printing
 and equality all follow that order: integers numerically, `false` before `true`, strings by
@@ -397,7 +397,7 @@ The conversion runs when the program runs (a `CAST` node), also for a literal; s
 All are declared pure (`registerBuiltinOperatorTraits`, the `coll/` family). Key and value
 arguments must have exactly the key and value type.
 
-**Calling form (ruled: design principles 2.10).** One form only, the convention of the whole
+**Calling form (ruled: design principles 11.4).** One form only, the convention of the whole
 standard library: the collection that flows through is the ordinary argument and what
 configures the operation is a `with` argument, `put<k, v>(m)` or, chained,
 `m->put<k, v>->remove<k2>` (as `contains<v>(xs)`, `slice<a, b>(xs)`, `map<f>(xs)`); an
@@ -415,7 +415,7 @@ brackets (`split('a,b', ',')`, `take(xs, 2)`), not only for these.
 The ANTLR grammar still mis-parses two prefix `with`-form calls in one argument list
 (`f(has<a>(m), has<b>(m))` is read as comparisons), which is why the second spelling had been
 accepted. Inside an argument list write the arrow form, `f(m->has<a>, m->has<b>)`, until the
-hand-written parser applies the "angle brackets touch" rule of 2.10.
+hand-written parser applies the "angle brackets touch" rule of 4.1.
 
 **`map_values` and `filter` are not operators.** An operator that calls a function value is
 a "marked" operator that each backend implements itself (`:mark/map_arr` in NVM, FVM, JIT,
@@ -470,7 +470,7 @@ Strings are not quoted, as in an array or a struct.
 
 ## 7. JSON (`DESIGN-QUESTION(json-typed-decode)`)
 
-`json::decode` gives a `Json` (design principles 2.12; it gave an `any` when this was written). The typed entry is `json::decode_as`:
+`json::decode` gives a `Json` (design principles 11.2; it gave an `any` when this was written). The typed entry is `json::decode_as`:
 
 ```camel
 let r = json::decode_as<[] as Map<string, int>>('{"b": 2, "a": 1}')    // Map<string, int>!
@@ -479,7 +479,7 @@ let xs = json::decode_as(text, [0])                                    // int[]!
 ```
 
 A call cannot be handed a type (whether type arguments may be written at a call is undecided,
-principles section 6), so the type is that of a **shape** argument whose value is not read.
+principles section 15), so the type is that of a **shape** argument whose value is not read.
 The result is a `T!`: text that is not JSON is an error value of kind `JsonParseError`, JSON
 that does not have the shape of `T` one of kind `JsonTypeError` whose message names the path
 (`at $.b: expected an integer, found a string`). Neither is a fault.
@@ -524,14 +524,14 @@ Alternatives, for the author:
   such run relocated 864 map tables, 344 set tables and 1608 strings (`CAMEL_GC_LOG_MOVES=1`).
 - **Passes.** The operators are pure operators without a registered folder, and a `CAST` to
   a module type is not folded, so `std::opt::fold` leaves them and CSE/DCE treat them like
-  any pure operator. The test programs print the same through `std::opt`, `std::inline`,
-  `std::macro std::opt`, `std::inline std::opt`, `std::opt::fold std::opt::cse std::opt::dce`
-  and `std::opt::simplify`.
+  any pure operator. The test programs print the same through `std::opt`, `std::opt::inline`,
+  `std::macro std::opt`, `std::opt::inline std::opt`, `std::opt::fold std::opt::cse std::opt::dce`
+  and `std::opt`.
 - **Constants.** `std::macro` evaluates a macro function ahead of time and stores its result
   in the static area of the calling graph; a `Map` or `Set` result is then a `DATA` node.
   Its keys and values (strings, arrays, other maps, function values) are carried over with
   it (section 2). Verified with and without `std::macro`, through `std::opt` and
-  `std::inline`, on the four backends, and under heap verification with a collection at
+  `std::opt::inline`, on the four backends, and under heap verification with a collection at
   every allocation.
 - **`std::cpp`, `onnx::export`.** Each refuses the graph with `TranslationRefused` and a
   position (at the array the collection is built from, which they do not translate either).
@@ -613,7 +613,7 @@ Each is implemented as recommended here; the tag is in the code.
 - **`map-nullable-value`.** For `Map<string, int?>`, `m[k]` is `int?` and does not tell an
   absent key from a null value (`has` does). Candidates: reject `m[k]` and `get` for such a
   map and require `has` + `get_or`; reject nullable value types altogether.
-- *Ruled (design principles 2.10; was `map-call-form`):* one calling form, `put<k, v>(m)` /
+- *Ruled (design principles 11.4; was `map-call-form`):* one calling form, `put<k, v>(m)` /
   `m->put<k, v>`; `put(m, k, v)` is refused with a hint (section 6.2).
 - **`map-persistence`.** Done: a persistent B+ tree behind the same operators (sections 5 and 9).
 - **`json-typed-decode`.** `json::decode_as<shape>(text): T!` (section 7, with the two

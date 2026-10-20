@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 30, 2026
- * Updated: Sep. 30, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,9 +21,9 @@
  * std::stats: graph size statistics of the program as it is at that point of
  * the pass pipeline. Prints one line
  *   GRAPH_STATS {"graphs":..,"nodes":..,"edges":..,"opers":..,"direct_calls":..,
- *                "indirect_calls":..,"closures":..,"branches":..}
+ *                "indirect_calls":..,"closures":..,"branches":..,"loops":..,"bytes":..}
  * over every graph reachable from the root, and passes the program on
- * unchanged, so `camel f.cml std::macro std::stats std::opt::simplify std::stats`
+ * unchanged, so `camel f.cml std::macro std::stats std::opt std::stats`
  * compares a program before and after simplification.
  */
 
@@ -44,6 +44,10 @@ struct GraphStats {
     size_t closures      = 0;
     size_t branches      = 0;
     size_t loops         = 0; // LOOP nodes
+    // The graph store's bytes over the reachable graphs: node records, their input runs and
+    // their payloads (camel/runtime/graph.h). A baseline for the graph-store work, not a
+    // measure of the process's heap.
+    size_t bytes = 0;
 
     std::string toJson() const;
 };

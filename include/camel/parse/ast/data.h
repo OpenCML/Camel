@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -38,7 +38,8 @@ enum class DataType {
     Tuple,
     Struct,
     Func,
-    Ref
+    Ref,
+    EnumPattern
 };
 
 enum class UnaryDataOp { Not, Neg, Inv };
@@ -76,7 +77,18 @@ enum class BinaryDataOp {
     Index
 };
 
-enum class ReservedDataOp { NullThen, ErrorThen, NotNullThen, Access, Call, Bind, Comp, As, Is };
+enum class ReservedDataOp {
+    NullThen,
+    ErrorThen,
+    NotNullThen,
+    Access,
+    Call,
+    Bind,
+    Instantiate,
+    Comp,
+    As,
+    Is
+};
 
 std::string to_string(DataType type);
 std::string to_string(UnaryDataOp op);
@@ -174,17 +186,10 @@ class IfExprLoad : public DataLoad {
 
 class MatchExprLoad : public DataLoad {
   public:
-    MatchExprLoad(const Reference &ref) : DataLoad(DataType::MatchExpr), ref_(ref) {}
+    MatchExprLoad() : DataLoad(DataType::MatchExpr) {}
 
-    const Reference &ref() const { return ref_; }
-
-    const std::string toString() const override {
-        return "MatchExpr: " + ref_.toString() + this->status();
-    }
+    const std::string toString() const override { return "MatchExpr" + this->status(); }
     const std::string geneCode() const override;
-
-  private:
-    Reference ref_;
 };
 
 class MatchCaseLoad : public DataLoad {
@@ -209,7 +214,7 @@ class TryExprLoad : public DataLoad {
 
 /// loop S1 = INIT1, ..., Sk = INITk (for BINDER in SEQUENCE)? (while CONDITION)? do BODY
 ///
-/// A loop is an expression with a state (design principles 2.10, the `do` form of 2.13). The
+/// A loop is an expression with a state (design principles 3.10, the `do` form). The
 /// load holds the names:
 ///   state()    the names of the state, in the order written (k >= 1);
 ///   binder()   the name bound to the element of each round; empty without `for`.
@@ -310,6 +315,38 @@ class RefDataLoad : public DataLoad {
 
   private:
     Reference ref_;
+};
+
+/// One field the pattern of an enum variant names. A tuple variant writes the bindings in
+/// order (no name); a struct variant names the field it takes. An empty binding is `_`: the
+/// value is matched but not bound.
+struct EnumPatternField {
+    std::string name;
+    std::string binding;
+};
+
+/// A pattern over an enum variant, `Shape::Circle(r)` or `Shape::Rect { w, h: height }`: the
+/// variant it names and what it binds out of the fields.
+class EnumPatternLoad : public DataLoad {
+  public:
+    EnumPatternLoad(const Reference &ref, bool structShape)
+        : DataLoad(DataType::EnumPattern), ref_(ref), structShape_(structShape) {}
+
+    const Reference &ref() const { return ref_; }
+    /// Whether the pattern was written with field names (`{ w, h }`) rather than in order.
+    bool structShape() const { return structShape_; }
+    std::vector<EnumPatternField> &fields() { return fields_; }
+    const std::vector<EnumPatternField> &fields() const { return fields_; }
+
+    const std::string toString() const override {
+        return "EnumPattern: " + ref_.toString() + this->status();
+    }
+    const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
+    bool structShape_ = false;
+    std::vector<EnumPatternField> fields_;
 };
 
 } // namespace camel::parse::ast

@@ -75,7 +75,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "slice_runtime"
-desc = "With an unknown extent, a slice bound outside the axis is a located run-time fault, SliceOutOfRange, as for an array (design principles 2.10; the kernel used to clamp). A negative bound still counts from the end, and an end before the start is the empty range (2.11): slice(b, 0, -2, 0) is shape [0]."
+desc = "With an unknown extent, a slice bound outside the axis is a located run-time fault, SliceOutOfRange, as for an array (design principles 3.9; the kernel used to clamp). A negative bound still counts from the end, and an end before the start is the empty range (3.9): slice(b, 0, -2, 0) is shape [0]."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/bounds/slice_runtime.cml"
 args = ["${case}"]

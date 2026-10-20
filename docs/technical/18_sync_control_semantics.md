@@ -122,7 +122,7 @@ sync func g(): int sync {
 - **规范未明确、实现暂定的几点**（`var` 形参、捕获、`let` 检查、别名均已按 2.3 实现，见 8.1）：没有 `var`
   的形参视同 `let`；`var` 变量传给没有 `var` 的形参或绑定到 `let` 时取当时所持的对象（对象共享，不复制）；
   对 `s.x`、`arr[0]` 赋值是编译期错误；带 `var` 形参的函数不能交给会调用它的算子（macro 算子除外）。
-- **JIT**：带 `var` 形参的图不再被排除，只把 `var` 形参继续传下去的函数在 `std::inline std::jit` 下会被
+- **JIT**：带 `var` 形参的图不再被排除，只把 `var` 形参继续传下去的函数在 `std::opt::inline std::jit` 下会被
   编译；但 JIT 对任何含通用算子（`OPER`）的图回退到解释器，赋值与 `:var/get` 都是这样的算子，所以读写变量
   的图仍由解释器执行（测试 `var_param_jit` 记录了这一现状）。
 - **告警的范围。** 模块没有 Error 时，Warn 级诊断在编译之后、运行之前输出到标准错误
@@ -334,7 +334,7 @@ func main(): int {
 函数类型仍记录源码签名（参数类型 `T` 与 `var` 标记）；重载决议按值类型进行（`valueTypeOf`）。
 
 - 赋值之外不再有带 `var` 形参的内建或标准库算子：`append`、`extend`、`apply`、`algo::sort` 等返回新值，
-  不修改实参（设计原则 2.12）。写成语句的 `acc = acc->append<v>` 由图构建器写成 `:op/assn_append`
+  不修改实参（设计原则 11.3）。写成语句的 `acc = acc->append<v>` 由图构建器写成 `:op/assn_append`
   （`__assn_append__`，与 `:op/assn` 同族：`acc` 的单元作为 `var` 实参，记为对它的一次写入）；单元记录
   它持有的数组是否只被它引用，是时原地追加，否则复制（`src/builtin/operators/ops.cpp`）。模块的算子仍可以
   声明 `var` 形参：它们收到的是对象本身（`:var/get` 的结果），该调用记为对这个变量的一次写入。

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,9 +45,10 @@
  *
  * Line breaks (rule 2). Where `nl_` is set, an operator that could also start a statement does
  * not continue an expression across a line break: `+`, `-` (a negation) and `@` (an
- * annotation). A symbol of two roles that starts a line has the role that starts something. Every other operator of the table can only be binary and continues the
- * expression wherever it stands. A token the grammar requires (the operand after an operator,
- * `then`, `=>`, a closing bracket) is taken wherever it stands, too.
+ * annotation). A symbol of two roles that starts a line has the role that starts something. Every
+ * other operator of the table can only be binary and continues the expression wherever it stands. A
+ * token the grammar requires (the operand after an operator, `then`, `=>`, a closing bracket) is
+ * taken wherever it stands, too.
  */
 
 #include "parser_impl.h"
@@ -211,8 +212,7 @@ void ParserImpl::parseEquality() {
     const size_t m = mark();
     parseRelational();
     bool any = false;
-    while ((cur_ == TK::EqEq || cur_ == TK::NotEq || cur_ == TK::EqEqEq ||
-            cur_ == TK::NotEqEq) &&
+    while ((cur_ == TK::EqEq || cur_ == TK::NotEq || cur_ == TK::EqEqEq || cur_ == TK::NotEqEq) &&
            !panic_) {
         bump();
         parseRelational();
@@ -350,7 +350,7 @@ void ParserImpl::parseLink() {
 /// The minus is always an operator, never part of a number, and reads the same before a
 /// literal and before a name: it binds less tightly than `^` and more tightly than `->` and
 /// every other binary operator. `-2 ^ 2` is `-(2 ^ 2)`, `-x->f` is `(-x)->f`, `-a * b` is
-/// `(-a) * b`. `!` and `~` are at the same level (design principles 2.12): `!x->f` is
+/// `(-a) * b`. `!` and `~` are at the same level (design principles 4.2): `!x->f` is
 /// `(!x)->f`, `!a ^ b` is `!(a ^ b)`. Under a prefix operator the power is taken here;
 /// elsewhere it is powerExpr, whose right operand reaches this function too, so `2 ^ -1` has
 /// a signed exponent.
@@ -385,16 +385,24 @@ void ParserImpl::parseComp() {
     }
 }
 
-/// annoExpr : accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
+/// annoExpr : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
+/// | memberAccess)*
 /// memberAccess : '.' (IDENTIFIER | INTEGER | REAL)
-/// Rule 1: an index, a call, an angle-bracket argument list and the postfix `!` touch the
-/// expression before them. For `<` the lexer has decided already (LAngle).
+/// Rule 1: an index, a call, an
+/// angle-bracket argument list and the postfix `!` touch the expression before them. For `<` the
+/// lexer has decided already (LAngle). `Shape::Rect { w: 2 }` is a struct variant construction:
+/// a struct literal follows a variant path, never a name that could be a value.
 void ParserImpl::parseAnno() {
     const size_t m = mark();
     parseAccess();
     bool any = false;
     while (!panic_) {
         if (adjacent()) {
+            if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
+                parseTypeArguments();
+                any = true;
+                continue;
+            }
             // `xs[]` is not an index: the empty brackets are an array literal of their own, as
             // they always were (two statements on a line).
             if (cur_ == TK::LBracket && peek(1) != TK::RBracket) {
@@ -417,6 +425,11 @@ void ParserImpl::parseAnno() {
                 any = true;
                 continue;
             }
+        }
+        if (cur_ == TK::LBrace && braceIsStruct(0) && lastRefIsPath()) {
+            parseStructData();
+            any = true;
+            continue;
         }
         if (cur_ == TK::Dot) {
             const TK member = peek(1);
@@ -675,6 +688,37 @@ void ParserImpl::parseAngledValues() {
     close(m, NK::AngledValues);
 }
 
+/// typeArguments : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
+/// namedTypeArgument : IDENTIFIER '=' typeExpr
+/// The arguments are all positional or all named (design principles 5.9): `f::<int, string>`
+/// or `f::<A = int, B = string>`.
+void ParserImpl::parseTypeArguments() {
+    const size_t m = mark();
+    bump(); // ::
+    const uint32_t open = pos_;
+    bump(); // < (not an expression's with-argument list)
+    {
+        Scope scope(*this, false, open);
+        if (cur_ == TK::Identifier && peek(1) == TK::Assign) {
+            while (!panic_) {
+                const size_t named = mark();
+                eat(TK::Identifier);
+                eat(TK::Assign);
+                parseType();
+                close(named, NK::NamedTypeArgument);
+                if (cur_ != TK::Comma || peek(1) == TK::Gt)
+                    break;
+                bump();
+            }
+        } else {
+            parseTypeList(TK::Gt);
+        }
+        eat(TK::Comma);
+        expect(TK::Gt);
+    }
+    close(m, NK::TypeArguments);
+}
+
 /// arrayData : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' dataExpr ('if' dataExpr)?)?
 ///             ']'
 void ParserImpl::parseArrayData() {
@@ -790,11 +834,13 @@ void ParserImpl::parseIf() {
     close(m, NK::IfExpr);
 }
 
-/// The `match` of ctrlExpr.
+/// The `match` of ctrlExpr: `match` logicalOrExpr '{' matchCase+ '}'.
+/// The subject is any expression; the `{` after it opens the cases (a struct literal after a
+/// name is read only when the name is a variant path, `Shape::Rect { ... }`).
 void ParserImpl::parseMatch() {
     const size_t m = mark();
     bump();
-    parseIdentRef(NK::IdentRef);
+    parseLogicalOr();
     if (panic_ || !expect(TK::LBrace)) {
         return close(m, NK::MatchExpr);
     }
@@ -829,16 +875,21 @@ void ParserImpl::parseMatchCase() {
     close(m, NK::MatchCase);
 }
 
-/// pattern : identRef identDef? | literal | '(' (dataList | identList)? ','? ')'
-///         | '{' (pairedValues | identList)? ','? '}' | '_'
+/// pattern : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
+///         | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
 /// A parenthesized pattern is read as a dataList (the first alternative, which every identList
-/// also is); a braced one as pairedValues when it starts with `name:` or `...`.
+/// also is); a braced one as pairedValues when it starts with `name:` or `...`. A path with a
+/// `::` followed by `(` or `{` is an enum pattern: the variant and the fields it binds.
 void ParserImpl::parsePattern() {
     const size_t m = mark();
     switch (cur_) {
     case TK::Identifier:
         parseIdentRef(NK::IdentRef);
-        if (cur_ == TK::Identifier) {
+        if (cur_ == TK::LParen) {
+            parseEnumTuplePattern();
+        } else if (cur_ == TK::LBrace) {
+            parseEnumStructPattern();
+        } else if (cur_ == TK::Identifier) {
             parseIdentDef();
         }
         break;
@@ -882,9 +933,9 @@ void ParserImpl::parsePattern() {
         break;
     }
     default:
-        if (cur_ == TK::Integer || cur_ == TK::Real || cur_ == TK::String ||
-            cur_ == TK::MultiStr || cur_ == TK::FString || cur_ == TK::KwTrue ||
-            cur_ == TK::KwFalse || cur_ == TK::KwNull || literalSignAhead()) {
+        if (cur_ == TK::Integer || cur_ == TK::Real || cur_ == TK::String || cur_ == TK::MultiStr ||
+            cur_ == TK::FString || cur_ == TK::KwTrue || cur_ == TK::KwFalse ||
+            cur_ == TK::KwNull || literalSignAhead()) {
             parseLiteral();
         } else {
             unexpected({SyntaxError::PatternItem});
@@ -892,6 +943,54 @@ void ParserImpl::parsePattern() {
         }
     }
     close(m, NK::Pattern);
+}
+
+/// enumTuplePattern : '(' (pattern (',' pattern)*)? ','? ')'
+/// A field the branch does not need is `_`. Nesting is read, so that the compiler can say it is
+/// not supported yet instead of the parser refusing the program.
+void ParserImpl::parseEnumTuplePattern() {
+    const size_t m = mark();
+    bump();
+    {
+        Scope scope(*this, false);
+        if (cur_ != TK::RParen && cur_ != TK::Comma) {
+            parsePattern();
+            while (cur_ == TK::Comma && peek(1) != TK::RParen && !panic_) {
+                bump();
+                parsePattern();
+            }
+        }
+        eat(TK::Comma);
+    }
+    if (!panic_) {
+        expectListEnd(TK::RParen);
+    }
+    close(m, NK::EnumTuplePattern);
+}
+
+/// enumStructPattern : '{' (IDENTIFIER (':' pattern)? ','?)* '}'
+/// `{ w, h }` binds the fields of those names, `{ w: width }` binds the field `w` to `width`,
+/// and `{ w: _ }` binds nothing.
+void ParserImpl::parseEnumStructPattern() {
+    const size_t m = mark();
+    bump();
+    {
+        Scope scope(*this, false);
+        while (cur_ == TK::Identifier && !panic_) {
+            bump();
+            if (eat(TK::Colon)) {
+                parsePattern();
+            }
+            if (cur_ != TK::Comma) {
+                break;
+            }
+            bump();
+        }
+    }
+    if (!panic_) {
+        expectListEnd(TK::RBrace);
+    }
+    close(m, NK::EnumStructPattern);
 }
 
 /// The `try` of ctrlExpr (reserved: the AST builder reports it as not part of the language).
@@ -916,7 +1015,7 @@ void ParserImpl::parseTry() {
 /// loopState : identDef '=' logicalOrExpr
 /// loopFor : 'for' identDef 'in' logicalOrExpr
 /// loopWhile : 'while' logicalOrExpr
-/// A loop is an expression with a state (design principles 2.10, written as 2.13 rules): each
+/// A loop is an expression with a state (design principles 3.10): each
 /// name of the state is declared once in the head with its first value, several separated by
 /// commas; the expression after `do` is evaluated once per round and its value is the state of
 /// the next round (a tuple when the state has several names); the value of the loop is the last

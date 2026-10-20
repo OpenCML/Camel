@@ -200,7 +200,7 @@ CONTRACT_CLASS = {
 LIBRARY_PRECONDITIONS = [
     {"prefix": "autodiff:", "library": "autodiff", "requires_pass": "std::macro",
      "precondition": "std::macro must run before grad / value_and_grad / vjp "
-                     "(docs/design-principles.cn.md section 4)"},
+                     "(docs/design-principles.cn.md section 9)"},
 ]
 _GENERIC_ERROR_HEAD = re.compile(r"^An error has occurred: ")
 # Outcomes a library precondition can show as (a diagnostic exists and names the library).

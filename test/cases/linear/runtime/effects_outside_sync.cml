@@ -1,6 +1,6 @@
 module effects_outside_sync
 
-// Effectful calls outside a `sync` block (docs/design-principles.cn.md 2.1, 2.3, 2.6;
+// Effectful calls outside a `sync` block (docs/design-principles.cn.md 3.1; docs/design-principles-log.cn.md 2.3, 2.6;
 // docs/technical/18_sync_control_semantics.md section 2.2). Only the lines marked KEPT are
 // printed, on every scheduler. All cases are the language rule except `nested`, which is an
 // open question (section 2.5 there) whose current behaviour is recorded here.

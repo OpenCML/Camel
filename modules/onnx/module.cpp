@@ -176,7 +176,7 @@ bool OnnxModule::load() {
     context_->registerExecutorFactory("onnx", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<OnnxExecutor>(ctx);
     });
-    // The purity of every operator (design principles 2.9). export_model writes a file;
+    // The purity of every operator (design principles 3.3). export_model writes a file;
     // supported_operators is declared with effects until someone has checked that it is not.
     camel::core::OperatorTable::instance().declare(
         "onnx",

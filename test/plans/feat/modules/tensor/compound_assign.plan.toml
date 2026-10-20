@@ -2,7 +2,7 @@ id = "modules.tensor.compound_assign"
 order = 364
 tier = "feat"
 tags = ["feat", "modules", "tensor", "assignment"]
-desc = "t += u on a tensor computes a new tensor and rebinds the variable; nothing is changed in place (design principles 2.10)"
+desc = "t += u on a tensor computes a new tensor and rebinds the variable; nothing is changed in place (design principles 4.2)"
 
 [[tests]]
 name = "tensor.compound_assign"
@@ -31,10 +31,10 @@ timeout_ms = 30000
 
 [[tests]]
 name = "tensor.compound_assign.inline"
-desc = "The same through std::inline."
+desc = "The same through std::opt::inline."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/compound_assign.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 expect_exit = 0
 expect_stdout_starts_with = "4.0 2.0\n2.0 2.0\n4.0 2.0\n2.0 2.0\n6.0 2.0\n18.0 2.0\n16.0 2.0\n8.0 2.0\n10.0 10.0 2.0\n"

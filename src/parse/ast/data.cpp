@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 03, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -154,6 +154,8 @@ std::string to_string(ReservedDataOp op) {
         return "()";
     case ReservedDataOp::Bind:
         return "<>";
+    case ReservedDataOp::Instantiate:
+        return "::<>";
     case ReservedDataOp::Comp:
         return "..";
     case ReservedDataOp::As:
@@ -197,6 +199,26 @@ const std::string FuncDataLoad::geneCode() const {
 }
 
 const std::string RefDataLoad::geneCode() const { return ref_.toString(); }
+
+const std::string EnumPatternLoad::geneCode() const {
+    std::string result = ref_.toString();
+    result += structShape_ ? "{" : "(";
+    for (size_t i = 0; i < fields_.size(); ++i) {
+        if (i > 0) {
+            result += ",";
+        }
+        if (structShape_) {
+            result += fields_[i].name;
+            if (fields_[i].binding != fields_[i].name) {
+                result += ":" + fields_[i].binding;
+            }
+        } else {
+            result += fields_[i].binding.empty() ? "_" : fields_[i].binding;
+        }
+    }
+    result += structShape_ ? "}" : ")";
+    return result;
+}
 
 } // namespace camel::parse::ast
 

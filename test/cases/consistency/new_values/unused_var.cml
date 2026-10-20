@@ -1,5 +1,5 @@
 /**
- * `append` written as a statement on a variable: it changes nothing (design principles 2.12), a
+ * `append` written as a statement on a variable: it changes nothing (design principles 11.3), a
  * compile-time error whose message gives the rebinding to write instead.
  */
 module unused_var

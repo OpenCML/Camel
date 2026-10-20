@@ -11,7 +11,7 @@ last one by the loss evaluated at the final parameters, which the model prints).
 ``--stateless`` selects the earlier protocol, in which every timed step starts
 from the same weights and discards its update: the **updates are not consumed**,
 so an optimizing pipeline may remove the update and the backward pass that feeds
-it (``std::opt::simplify`` does). Stateless timings are not training-step timings;
+it (``std::opt`` does). Stateless timings are not training-step timings;
 the protocol is kept for comparison with earlier results and to show that the
 reconciliation (reconcile_train.py) detects the removal.
 
@@ -91,7 +91,7 @@ CAMEL_CONFIGS: Dict[str, Tuple[str, ...]] = {
     "camel_fvm": ("std::macro", "std::fvm"),
     "camel_fuse_nvm": ("std::macro", "tensor::fuse", "std::nvm"),
     # Generic simplification first: pullback closures collapse into straight-line code.
-    "camel_opt_nvm": ("std::macro", "std::opt::simplify", "std::nvm"),
+    "camel_opt_nvm": ("std::macro", "std::opt", "std::nvm"),
 }
 TORCH_CONFIG = "torch_eager"
 ORT_CONFIG = "camel_export_ort"

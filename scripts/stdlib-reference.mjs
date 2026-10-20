@@ -17,7 +17,7 @@
 //       return 'protocol:operator'                 (the URI; `*` stands for any text, for a
 //   }                                               group of overloads that differ by type)
 //
-// A value a module exports (`math::pi`; design principles 2.13) is declared with its type and
+// A value a module exports (`math::pi`; design principles 10.1) is declared with its type and
 // a doc comment, and needs neither @pure nor a URI (it is not an operator):
 //
 //   /// What it is.
@@ -50,6 +50,9 @@ const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'regist
 const MODULES = [
     { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp' },
     { name: 'str', title: '`str`: strings', kind: 'cpp' },
+    { name: 'bytes', title: '`bytes`: immutable binary values and UTF-8 conversion', kind: 'cpp' },
+    { name: 'tree', title: '`tree`: parameter trees and checkpoints', kind: 'cpp' },
+    { name: 'tensor', title: '`tensor`: binary conversion', kind: 'cpp', only: ['from_bytes', 'to_bytes'] },
     { name: 'array', title: '`array`: arrays and higher-order functions', kind: 'camel' },
     { name: 'math', title: '`math`: numbers and bits', kind: 'cpp' },
     { name: 'statistics', title: '`statistics`', kind: 'cpp' },
@@ -263,7 +266,7 @@ function renderDoc() {
     out.push('     (stdlib/signatures/*.cml) or the comments of the library (stdlib/*.cml) and regenerate. -->')
     out.push('')
     out.push('The functions of the core standard library, by module. The boundary is the one the design')
-    out.push('principles draw (section 2.9): a primitive that touches the system or is sensitive to')
+    out.push('principles draw (section 10.5): a primitive that touches the system or is sensitive to')
     out.push('performance is an operator written in C++, an opaque node of the graph; logic composed from')
     out.push('primitives is written in Camel, a subgraph that passes can see into.')
     out.push('')
@@ -277,7 +280,7 @@ function renderDoc() {
     out.push('- **Pure** operators depend on their arguments only: a pass may evaluate a call ahead of time,')
     out.push('  merge two equal calls or drop an unused one. An operator **with effects** is left alone, and')
     out.push('  its call runs only when it is reachable from a `sync` block or its result is used (design')
-    out.push('  principles 2.1). Every operator of these modules declares which it is.')
+    out.push('  principles 3.1). Every operator of these modules declares which it is.')
     out.push('- **Failure**: a *fault* stops the program with a located diagnostic (an index out of range, an')
     out.push('  argument outside what the operator defines). An *error* is a value: the function returns')
     out.push('  `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is')
@@ -397,7 +400,9 @@ function verifyOps() {
         const registeredName = module.registered || module.name
         const file = `stdlib/signatures/${module.name}.cml`
         // The operators behind the language's own operators are registered under reserved names.
-        const ops = registered.filter((op) => op.module === registeredName && !op.name.startsWith('__'))
+        const ops = registered.filter(
+            (op) => op.module === registeredName && !op.name.startsWith('__') && (!module.only || module.only.includes(op.name)),
+        )
         if (ops.length === 0) {
             problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
             continue
@@ -420,7 +425,14 @@ function verifyOps() {
                 continue
             }
             checked++
+            // One operator is declared once per type it accepts (unions are retired), and the
+            // declarations of a name share one description: the doc comment is read with the
+            // first of them.
+            const firstEntry = sameName[0]
             for (const entry of matching) {
+                if (entry !== firstEntry) {
+                    continue
+                }
                 const declaredPure = entry.purity === 'pure'
                 if (entry.purity === null) {
                     problems.push(`${file}:${entry.line}: '${entry.name}' says neither @pure nor @effect`)
@@ -435,6 +447,9 @@ function verifyOps() {
             const hit = ops.some((op) => op.name === entry.name && uriMatches(entry.uri, op.uri))
             if (!hit) {
                 problems.push(`${file}:${entry.line}: '${entry.name}' (${entry.uri}) is declared but no such operator is registered`)
+            }
+            if (entries.find((each) => each.name === entry.name) !== entry) {
+                continue
             }
             if (entry.doc.length === 0) problems.push(`${file}:${entry.line}: '${entry.name}' has no description`)
             if (entry.examples.length === 0) problems.push(`${file}:${entry.line}: '${entry.name}' has no @example`)

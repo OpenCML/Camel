@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,6 +37,8 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/node_attrs.h"
+#include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
 #include "camel/core/type/typevar.h"
 
@@ -57,7 +59,7 @@ using graph_scope_ptr_t     = std::shared_ptr<graph_scope_t>;
 using decorated_scope_t     = Scope<std::string, compile_graph_ptr_t>;
 using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
 
-/// The graph builder of a program (design principles 2.11, "模块"; the graph model,
+/// The graph builder of a program (design principles 10.1, "模块"; the graph model,
 /// docs/design/graph-model/README.cn.md 3.9). One builder serves every module of the program:
 /// the functions of all modules are graphs of their own, and the values of the top level of
 /// every module are nodes of ONE root graph, `__root__`, whose exit is the call of the entry
@@ -157,7 +159,7 @@ class Builder {
     // The modules in the order they were declared.
     std::vector<ModuleUnit *> unitOrder_;
     // The full name of `name` of `unit`: `module::path::name`, without the module for the
-    // entry module (design principles 2.12: the module is left out where it is not needed).
+    // entry module (design principles 10.2: the module is left out where it is not needed).
     static std::string qualifiedName(const ModuleUnit &unit, const std::string &name);
     // The top-level functions of every module by their graphs.
     std::unordered_map<DraftGraphBuilder *, TopLevelDeclaration *> topLevelFunctions_;
@@ -172,7 +174,7 @@ class Builder {
     // Where the name being resolved is written: a diagnostic about what resolving it found
     // (a cycle, a late capture) is reported there.
     camel::source::origin_id_t refOrigin_ = camel::source::kInvalidOriginId;
-    // ---- Names (names.cpp; design principles 2.12) ----
+    // ---- Names (names.cpp; design principles 10.2) ----
     // The namespace path of the top-level declaration being built (`A::B` for `A::B::f`; for
     // a generic instance, its template's): a name written in it is looked up there first.
     std::vector<std::string> namespacePath_;
@@ -284,7 +286,7 @@ class Builder {
     bool waited_;
     bool synced_;
     bool varied_;
-    // The numeric permissions in force where the builder is (design principles 2.13): those of
+    // The numeric permissions in force where the builder is (design principles 7.5): those of
     // the nearest GCT EXEC, which already include every enclosing block and function
     // (GCT::Node::numericPermissions). Every OPER node made while they are in force gets them
     // (stampPermissions); a function's graph starts from those of its own body, whatever was
@@ -300,6 +302,46 @@ class Builder {
         }
         ~NumericPermissionScope() { current = outer; }
     };
+    // The node attributes in force where the builder is (camel/core/node_attrs.h): those
+    // decorators granted, as the program is built, to the functions
+    // and decorated blocks the builder is in, lexically: a function built from elsewhere (a
+    // top-level function referred to before its turn, an instance of a generic function)
+    // starts from what was in force where it is written. Stamped with the permissions
+    // (stampPermissions).
+    camel::core::attr::AttrSetId currentAttrs_ = camel::core::attr::kNoAttrs;
+    /// Sets currentAttrs_ for a scope and puts the previous value back at its end.
+    struct AttrScope {
+        camel::core::attr::AttrSetId &current;
+        camel::core::attr::AttrSetId outer;
+        AttrScope(camel::core::attr::AttrSetId &c, camel::core::attr::AttrSetId attrs)
+            : current(c), outer(c) {
+            current = attrs;
+        }
+        ~AttrScope() { current = outer; }
+    };
+    /// What the decorators of the function `func` (a FUNC with ANNO children) grant as the
+    /// program is built, and how many of them do: the innermost ones (written last) that
+    /// name an operator declared to grant an attribute, with constant with-arguments
+    /// (OperatorTable::grantOf), up to the first that does not. The others are applied when
+    /// the decorated function is made, as before.
+    std::pair<camel::core::attr::AttrSetId, size_t> staticGrantsOf(const GCT::node_ptr_t &func);
+    /// The attributes one decorator grants as the program is built; nullopt when it is not
+    /// such a decorator (see staticGrantsOf). Remembered per ANNO node.
+    std::optional<camel::core::attr::AttrSetId> staticGrantOf(const GCT::node_ptr_t &anno);
+    std::unordered_map<const GCT::Node *, std::optional<camel::core::attr::AttrSetId>>
+        staticGrants_;
+    /// The decorators of `func` that are applied to its function value (the ones
+    /// staticGrantsOf does not take), outermost first.
+    std::vector<GCT::node_ptr_t> appliedDecoratorsOf(const GCT::node_ptr_t &func);
+    /// A call of a decorated block (`@d { ... }`: a LINK of a FUNC with decoratedBlock()).
+    node_handle_t visitDecoratedBlock(const GCT::node_ptr_t &link, bool unused);
+    // The bodies whose value is dropped: a decorated block whose value nothing takes is a
+    // function whose value is dropped, as a plain block drops the value of its last statement.
+    std::unordered_set<const GCT::Node *> droppedBodies_;
+    std::unordered_set<const DraftGraphBuilder *> droppedGraphs_; // their graphs
+    // The graphs of decorated blocks: written as blocks, they are not functions a program
+    // declares, and get no declaration check (reportUndeclaredCapturedWrites).
+    std::unordered_set<const DraftGraphBuilder *> blockGraphs_;
     // Inside a `var` declaration: the names it binds are variables.
     bool declaresVariable_ = false;
 
@@ -453,7 +495,7 @@ class Builder {
     // port. What the graph does with it is not in its type, so the builder keeps a summary per
     // graph and consults it wherever the graph is called directly or entered as a branch arm:
     // the call or branch is then a use of each captured variable, and a write of those the
-    // graph writes (design principles 2.6: tracking of modifications is complete).
+    // graph writes (design principles 3.5: tracking of modifications is complete).
     struct CaptureSummary {
         // The captured variables (the origins of the capture ports that hold a cell), in
         // capture order.
@@ -492,7 +534,7 @@ class Builder {
         camel::source::origin_id_t origin;
         std::string name;
     };
-    // Dropped effects (design principles 2.1): outside a sync block an effectful expression
+    // Dropped effects (design principles 3.1): outside a sync block an effectful expression
     // whose result nothing uses is not connected to the graph's exit and does not run. That
     // is legal; the builder warns about it. Graphs whose exit depends on an effect, and the
     // graphs that are branch arms (reported through their branch, not as calls).
@@ -503,7 +545,7 @@ class Builder {
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
-    // ---- Generic functions (design principles 2.9) ----
+    // ---- Generic functions (design principles 5.5) ----
     //
     // A function whose signature binds type variables (`typeas T`) is a subgraph template:
     // no graph is built for its declaration. Each direct call binds the variables from the
@@ -535,6 +577,8 @@ class Builder {
         graph_scope_ptr_t graphScope;
         decorated_scope_ptr_t decoratedScope;
         std::shared_ptr<Scope<std::string, std::shared_ptr<GenericTemplate>>> templateScope;
+        // The node attributes in force where it was declared (currentAttrs_).
+        camel::core::attr::AttrSetId attrs = camel::core::attr::kNoAttrs;
         // The namespace and the `using namespace` in force where it was declared: its body
         // resolves its names as if it were built there.
         std::vector<std::string> namespacePath;
@@ -561,6 +605,15 @@ class Builder {
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
+    Type *expectedValueType_   = nullptr;
+    struct ExpectedValueScope {
+        Type *&current;
+        Type *outer;
+        ExpectedValueScope(Type *&slot, Type *expected)
+            : current(slot), outer(std::exchange(slot, expected)) {}
+        ~ExpectedValueScope() { current = outer; }
+    };
+    std::unordered_map<node_handle_t, camel::core::type::type_vec_t> explicitOperatorTypes_;
     std::unordered_map<node_handle_t, template_ptr_t> genericDrefs_;
     // The templates of functions written in place (anonymousTemplateOf): nothing else owns
     // them.
@@ -591,12 +644,13 @@ class Builder {
     compile_graph_ptr_t resolveGenericCall(
         const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
-        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
+        Type *expectedResult = nullptr);
     /// A function written in place whose type still holds a type variable (the element
     /// functions of a list comprehension): a template without a name, registered where it
     /// stands. Its marker node is what the name of a generic function gives.
     node_handle_t anonymousTemplateOf(const GCT::node_ptr_t &func);
-    // ---- A generic function where a function is expected (design principles 2.10) ----
+    // ---- A generic function where a function is expected (design principles 5.5) ----
     /// The instance of `tmpl` that is a function of type `expected` (whose return type may
     /// still be open), or nullptr with the reason in `why`: the parameter types of `expected`
     /// fix the type variables, and the instance must then have exactly those parameters.
@@ -619,6 +673,11 @@ class Builder {
         const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    // Type-directed tree intrinsics expand to ordinary accesses, calls and fills.
+    node_handle_t expandTreeCall(
+        const oper_group_ptr_t &ops, const std::vector<Argument> &with,
+        const std::vector<Argument> &norm, const GCT::node_ptr_t &call);
+    void registerTreeOrigin(node_handle_t node, const GCT::node_ptr_t &origin, const char *kind);
     compile_graph_ptr_t instantiateGeneric(
         const template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
         const GCT::node_ptr_t &call);
@@ -723,17 +782,18 @@ class Builder {
     // A function with the parameters of the operator `op` that calls it: what a library
     // operator named as a value (`xs->map<trim>`) stands for. Null when the operator has no
     // such function (it changes an argument in place).
-    compile_graph_ptr_t operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin);
+    compile_graph_ptr_t
+    operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin);
     // The one function of the name `node` (a DREF to several overloads or to an operator
     // group) that has exactly the parameters and the result of `expected`, as a value; null
     // when none or several do.
-    node_handle_t overloadValueFor(
-        node_handle_t node, FunctionType *expected, const GCT::node_ptr_t &origin);
+    node_handle_t
+    overloadValueFor(node_handle_t node, FunctionType *expected, const GCT::node_ptr_t &origin);
     // A function with the declared parameters of `target` that captures the names `target`
     // captured and calls it with them: what a function value of `target` refers to once the
     // captures of `target` have become with-parameters (createFuncDataNode).
     compile_graph_ptr_t forwardingGraphOf(const compile_graph_ptr_t &target);
-    /// `f<w>` used as a value (design principles 2.10): the function that calls `f` with the
+    /// `f<w>` used as a value (design principles 4.4): the function that calls `f` with the
     /// `with` arguments bound to `target` and takes the rest, as its function value. It is a
     /// closure: a graph of its own that captures the bound values, which enter it through
     /// ports like any captured name; no node kind is added. `expected`, when given, is the
@@ -745,7 +805,7 @@ class Builder {
         camel::core::type::FunctionType *expected = nullptr);
     /// `t += u` for a `t` of a module type without a compound-assignment operator of its
     /// own (a tensor): the new value is computed and the variable bound to it, `t = t + u`
-    /// (design principles 2.10). `group` is the operator group of the compound assignment
+    /// (design principles 4.2). `group` is the operator group of the compound assignment
     /// and `operands` its two operands, already built. Returns nullptr when the form does
     /// not apply.
     node_handle_t compoundAssignmentByRebinding(
@@ -754,8 +814,8 @@ class Builder {
     /// An error at `call` when the conversion `group` (`int`, `i32`, `float`, ...) is given
     /// a literal that does not fit the type (LiteralOutOfRange, LiteralStaticCastFailed).
     void rejectLiteralConversion(
-        const std::string &group, FunctionType *funcType,
-        const std::vector<Argument> &operands, const GCT::node_ptr_t &call);
+        const std::string &group, FunctionType *funcType, const std::vector<Argument> &operands,
+        const GCT::node_ptr_t &call);
     /// An error at `origin` when `node` still carries `with` arguments no partial
     /// application could be made of (PartialApplicationRefused): the binding is never
     /// dropped without a word.
@@ -845,9 +905,11 @@ class Builder {
     node_handle_t visitWaitNode(const GCT::node_ptr_t &gct);
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
+    node_handle_t visitTypeApplication(const GCT::node_ptr_t &gct);
+    FunctionType *signatureForArgumentContext(node_handle_t target) const;
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
-    /// A loop (design principles 2.10, 2.12, 2.13; camel/runtime/loop.h): the first values and
+    /// A loop (design principles 3.10; camel/runtime/loop.h): the first values and
     /// the array where the loop is, a graph for the condition and one for the body, and one
     /// LOOP node calling them. The two graphs share one capture table (captureTwins_).
     node_handle_t visitLoopNode(const GCT::node_ptr_t &gct);
@@ -855,14 +917,14 @@ class Builder {
     /// names of its Norm ports are declared in it, and its result is the value of the block.
     void buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec);
     /// The condition and the body graph of a loop capture the same values in the same order
-    /// (design principles 2.12: one capture table): a capture made into one is made into the
+    /// (design principles 3.10: one capture table): a capture made into one is made into the
     /// other (captureInto).
     std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> captureTwins_;
     /// How many loops each graph has, for the names of their graphs (`f.loop2.body`).
     std::unordered_map<DraftGraphBuilder *, size_t> loopCounts_;
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
     /// `gct`, or, when `arms` is given, are those graphs in order (built by buildArmGraph).
-    /// No arm is added to those the program wrote (design principles 2.10).
+    /// No arm is added to those the program wrote (design principles 3.7).
     /// `valueless` (with `arms`): the branch is an `if` without `else`, whose join takes no
     /// value from its arms.
     node_handle_t buildBranch(
@@ -873,10 +935,10 @@ class Builder {
     void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
     /// The subgraph of one branch arm. Its body is the block `exec`, or what `body` builds
     /// (called inside the arm's scope) when given; `exec` then only locates the arm.
-    compile_graph_ptr_t buildArmGraph(
-        const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {});
+    compile_graph_ptr_t
+    buildArmGraph(const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {});
 
-    // ---- The tagged forms `T?` and `T!` (design principles 2.9;
+    // ---- The tagged forms `T?` and `T!` (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md). Each construct below is a branch on
     // the one-bit tag of a value; nothing here adds a node kind. ----
     /// `a ?? b`, `a !! b`, `x ?-> f`.
@@ -884,7 +946,37 @@ class Builder {
     /// `match x { case null => ..  case v => .. }` and `case error e` over a tagged `x`.
     node_handle_t visitTaggedMatch(
         const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::TupleType *type);
-    // ---- Conditions (design principles 2.11, 2.12). `&&` and `||` are branches; a `T?` can
+    // ---- The enum (design principles 5.3). A value is a tag and the data of its variant; a
+    // `match` reads the tag and takes the fields out in the arm of their variant. Nothing here
+    // adds a node kind: the builder inserts the ordinary operators of operators/enum.h. ----
+    /// The enum type a type name denotes: the declaration's own instance when the name is
+    /// written without arguments. nullptr when the name denotes no enum.
+    camel::core::type::EnumType *enumTypeOfName(const Reference &name);
+    /// The declaration, variant and tag that the written variant `Shape::Rect` names. False
+    /// when the name is not a qualified name at all; an enum name whose variant does not
+    /// exist is reported here.
+    bool enumVariantOfName(
+        const std::string &written, const GCT::node_ptr_t &origin,
+        camel::core::type::EnumType *&type, size_t &tag);
+    /// `Shape::Circle(1.0)`, `Shape::Rect { w: 1.0, h: 2.0 }`, `Shape::Empty`.
+    node_handle_t visitEnumConstruction(
+        const GCT::node_ptr_t &gct, camel::core::type::EnumType *type, size_t tag);
+    /// `match e { case Shape::Circle(r) => ... }`.
+    node_handle_t visitEnumMatch(
+        const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::EnumType *type);
+    /// A call of the compiler's own operator `op` over the given GCT operands (a DREF of the
+    /// operator and the operands), built like any call.
+    /// A call the graph makes itself (`__enum_make__` and its like): `typeArgument` is given as
+    /// `f::<T>`, for an operator whose result type is decided by a type the program does not
+    /// write. The operands are GCT nodes; the call is lowered as a written one would be.
+    node_handle_t applyInternalOperator(
+        const char *op, camel::core::type::Type *typeArgument,
+        const std::vector<GCT::node_ptr_t> &operands, const GCT::node_ptr_t &origin);
+    /// The type of a node whose value is of enum type: its result slot is of that type too
+    /// (the operator's placeholder type is not what the value is kept as; a slot of a type
+    /// the collector does not trace would hide the value's references from it).
+
+    // ---- Conditions (design principles 3.8). `&&` and `||` are branches; a `T?` can
     // be compared with `null`; and where such a comparison is the condition (or an operand
     // `&&` joins in it), the name is a `T` in the arm that excludes null. Each is the
     // BRCH/JOIN pair the equivalent `if` or `match` gives: nothing here adds a node kind. ----
@@ -893,21 +985,21 @@ class Builder {
     node_handle_t visitConditionBrchNode(const GCT::node_ptr_t &gct);
     /// `x == null` / `x != null` (either order) where `x` is a `T?`: the test of its tag, a
     /// `bool`. Where `x` has a type that is never null, the constant result of the test, with
-    /// a warning (NullTestNeverNull; design principles 2.13). nullptr when the call `gct` of
+    /// a warning (NullTestNeverNull; design principles 3.8). nullptr when the call `gct` of
     /// the operator group `group` is not that.
     node_handle_t nullComparison(
-        const std::string &group, const GCT::node_ptr_t &gct,
-        const std::vector<Argument> &operands, const camel::core::type::type_vec_t &types);
+        const std::string &group, const GCT::node_ptr_t &gct, const std::vector<Argument> &operands,
+        const camel::core::type::type_vec_t &types);
     /// The values a narrowing `if` binds its names to in the arm that excludes null: the name
     /// `x` in the then arm of `if x != null then ...` stands for one of these (design
-    /// principles 2.11, 2.12). A lookup that finds one of these nodes found a narrowed name;
+    /// principles 3.8). A lookup that finds one of these nodes found a narrowed name;
     /// a declaration that shadows the name finds another node.
     std::unordered_set<node_handle_t> narrowedValues_;
     /// Whether `expr` is a name narrowed to a `T` by an `if` around it (see narrowedValues_).
     bool isNarrowedName(const GCT::node_ptr_t &expr);
     /// `subject`, the value of the narrowed name `expr`, put back into `T?` so that a
     /// construct written for a `T?` (`??`, a `match` with `case null`) applies to it, with a
-    /// warning that the name is known not to be null (KnownNotNull; design principles 2.13).
+    /// warning that the name is known not to be null (KnownNotNull; design principles 3.8).
     /// `construct` names the construct in the warning.
     node_handle_t reopenNarrowedName(
         const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
@@ -919,7 +1011,7 @@ class Builder {
     /// Values dropped on purpose by `let _ = e`.
     std::unordered_set<node_handle_t> discardedValues_;
 
-    // ---- Operator overloads of the program (design principles 2.12) ----------------------
+    // ---- Operator overloads of the program (design principles 10.2) ----------------------
     //
     // `func operator +(a: V, b: V): V` declares a function under the operator's reserved name
     // (`__add__`). Unlike every other name, an operator does not take the first layer that has
@@ -942,7 +1034,7 @@ class Builder {
     /// set. A DREF of an operator without any is an ordinary DREF to the operator group.
     std::unordered_map<node_handle_t, OperatorOverloads> operatorOverloads_;
     /// The `!=` operators whose overloads (in operatorOverloads_) are those of `==`: an
-    /// overload of `==` gives `!=`, the negation of its result (design principles 2.13).
+    /// overload of `==` gives `!=`, the negation of its result (design principles 4.3).
     std::unordered_set<node_handle_t> negatedEqualities_;
     /// The generic overloads of an operator declared in this module, each with the scope it
     /// was declared in (visible from that scope and the scopes inside it).
@@ -973,7 +1065,8 @@ class Builder {
     /// Whether the generic overload `tmpl` accepts arguments of the types `normTypes`: its type
     /// variables bind and every argument then fits its parameter (resolveGenericCall without
     /// the diagnostics).
-    bool genericOperatorAccepts(const template_ptr_t &tmpl, const camel::core::type::type_vec_t &normTypes);
+    bool genericOperatorAccepts(
+        const template_ptr_t &tmpl, const camel::core::type::type_vec_t &normTypes);
     /// OperatorOverloadConflict when the overload `funcType` of the operator `group` takes
     /// parameter types a built-in, C++ module or imported overload of it takes.
     void rejectOperatorConflict(
@@ -985,7 +1078,7 @@ class Builder {
     /// True when the program has an overload of the operator `group` visible here.
     bool hasProgramOperatorOverloads(const std::string &group);
 
-    // ---- Collections are not changed in place (design principles 2.12) --------------------
+    // ---- Collections are not changed in place (design principles 11.3) --------------------
 
     /// The statement of the block being built whose value nothing takes: every statement but
     /// the last (which is the block's value), while it is visited. A call that is this
@@ -1000,7 +1093,7 @@ class Builder {
     /// `xs = xs->op<w...>` (or `xs = op<w...>(xs)`) as the statement `gct` of a sync block,
     /// `xs` a variable holding an array and `op` an operator of a module that declares an
     /// in-place form for the overload the call resolves to (OperatorTable::setInPlaceForm;
-    /// design principles 2.13: `xs = xs->sort`). The same rebinding, written
+    /// design principles 4.3: `xs = xs->sort`). The same rebinding, written
     /// `:op/assn_owned(xs, <in-place form><w...>(:var/take(xs)))`, which works on the
     /// variable's own array when nothing else refers to it and on a copy otherwise
     /// (__builtin__var_take__). Returns nullptr when `gct` is not that form; the statement
@@ -1050,14 +1143,14 @@ class Builder {
     node_handle_t
     applyTagOperator(const char *op, const std::string &name, const GCT::node_ptr_t &origin);
     /// A CAST of `value` to `target`, made by the compiler (no conversion rule is consulted).
-    node_handle_t castNodeTo(
-        node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
-    /// `node` where a value of type `target` is expected (design principles 2.10): `node`
+    node_handle_t
+    castNodeTo(node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// `node` where a value of type `target` is expected (design principles 5.5): `node`
     /// itself when its type is assignable; otherwise the value put into `T?` / `T!` (one
     /// CAST per level), `null` as a `T?`, or the empty literal `[]` given the element type of
     /// `target`. nullptr when the value does not enter (camel::core::type::entersImplicitly).
-    node_handle_t coerceTo(
-        node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    node_handle_t
+    coerceTo(node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// The same at the exit of a branch arm already built: what `arm` gives enters `target`.
     void coerceArmExit(
         const compile_graph_ptr_t &arm, camel::core::type::Type *target,

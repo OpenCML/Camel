@@ -48,7 +48,7 @@ bool SysModule::load() {
     if (loaded_)
         return true;
     context_->registerExecutorFactory("sys", [ctx = context_]() { return createSysExecutor(ctx); });
-    // The purity of every operator (design principles 2.9).
+    // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
         "sys",
         {

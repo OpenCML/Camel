@@ -1,7 +1,7 @@
 /**
- * A constant expression that can only fault is not folded (design principles 2.9), also when the
+ * A constant expression that can only fault is not folded (design principles 3.9), also when the
  * run reaches it: the division by zero is reported with its position when the program runs,
- * after "before" was printed, exactly as without passes. std::opt::fold and std::opt::simplify
+ * after "before" was printed, exactly as without passes. std::opt::fold and std::opt
  * add one warning at the same position before the run.
  */
 module fold_constant_fault_reached

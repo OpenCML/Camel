@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,6 +40,7 @@
 #include "camel/core/error/diagnostics/range.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
+#include "camel/core/type/enum.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/install_layout.h"
 #include "core/module/entity_internal.h"
@@ -71,6 +72,7 @@ namespace {
 struct RawFact {
     enum class Kind : uint8_t {
         TypeExpression,
+        TypeDeclared,
         ValueDeclared,
         ExpressionTyped,
         ValueReferenced,
@@ -111,6 +113,10 @@ class Recorder : public camel::compile::SemanticRecorder {
     }
     void expressionTyped(origin_id_t expr, Type *type) override {
         facts.push_back({.kind = RawFact::Kind::ExpressionTyped, .at = expr, .type = type});
+    }
+    void typeDeclared(origin_id_t decl, const std::string &name, Type *type) override {
+        facts.push_back(
+            {.kind = RawFact::Kind::TypeDeclared, .at = decl, .type = type, .name = name});
     }
     void valueReferenced(
         origin_id_t ref, const std::string &name, origin_id_t decl, Type *type) override {
@@ -290,6 +296,21 @@ class ModelBuilder {
             fields.clear();
         }
         model_->types_[id].fields = std::move(fields);
+        // The variants of an enum: what a `Shape::` completion offers, and no field can are
+        // also the fields of a struct. `EnumDecl::variants()` is what was written, so the
+        // detail of `Option<T>`'s `Some` reads `Some(T)`.
+        std::vector<std::pair<std::string, std::string>> variants;
+        try {
+            if (type->code() == camel::core::type::EnumType::typeCode()) {
+                auto *et = static_cast<camel::core::type::EnumType *>(type);
+                for (const auto &variant : et->decl()->variants()) {
+                    variants.emplace_back(variant.name, variant.signature());
+                }
+            }
+        } catch (...) {
+            variants.clear();
+        }
+        model_->types_[id].variants = std::move(variants);
         return id;
     }
     uint32_t internText(const std::string &text) {
@@ -666,6 +687,11 @@ class ModelBuilder {
                     addUnique(file.declFacts[*decl].types, typeId(fact.type));
                 }
                 break;
+            case RawFact::Kind::TypeDeclared:
+                if (auto decl = findDecl(*where, fact.name); decl && fact.type != nullptr) {
+                    addUnique(file.declFacts[*decl].types, typeId(fact.type));
+                }
+                break;
             case RawFact::Kind::ValueReferenced:
                 if (auto ref = findRef(*where)) {
                     RefFacts &rf = file.refFacts[*ref];
@@ -805,13 +831,13 @@ class ModelBuilder {
                 ext.signatures.push_back(sourceSpelling(graph->funcType()->toString()));
             }
         } else if (entity.isValue()) {
-            // A constant a C++ module exports (`math::pi`; design principles 2.13).
+            // A constant a C++ module exports (`math::pi`; design principles 10.1).
             ext.kind = ExternalName::Kind::Value;
             if (const auto &value = entity.value(); value && value->type() != nullptr) {
                 ext.signatures.push_back(sourceSpelling(value->type()->toString()));
             }
         } else if (EntityAccess::isNode(entity)) {
-            // An exported value (design principles 2.11): a node of the program's root graph,
+            // An exported value (design principles 10.1): a node of the program's root graph,
             // there once a module has used the value.
             ext.kind = ExternalName::Kind::Value;
             auto *value =
@@ -864,7 +890,19 @@ class ModelBuilder {
                     facts.importedMacro      = ext->macro;
                     facts.importedSignatures = ext->signatures;
                     facts.imported           = ext->definitions;
-                    declared                 = true;
+                    if (isType) {
+                        if (auto type = module.getImportedType(ref);
+                            type.has_value() && *type != nullptr) {
+                            if (auto *enumType = camel::core::type::asEnumTypeOrPrototype(*type)) {
+                                for (const auto &variant : enumType->decl()->variants()) {
+                                    facts.importedVariants.emplace_back(
+                                        variant.name,
+                                        variant.signature());
+                                }
+                            }
+                        }
+                    }
+                    declared = true;
                 }
             }
             if (!declared) {
@@ -1002,6 +1040,9 @@ class ModelBuilder {
                     facts.importedType       = oldFacts.importedType;
                     facts.importedMacro      = oldFacts.importedMacro;
                 }
+                if (facts.importedVariants.empty()) {
+                    facts.importedVariants = oldFacts.importedVariants;
+                }
             }
         }
         // A file that does not parse has no imports processed: keep what was importable.
@@ -1029,7 +1070,8 @@ class ModelBuilder {
         for (const auto &[name, field] : info.fields) {
             fields.emplace_back(name, copyType(from, field));
         }
-        model_->types_[mine].fields = std::move(fields);
+        model_->types_[mine].fields   = std::move(fields);
+        model_->types_[mine].variants = info.variants;
         return mine;
     }
 };

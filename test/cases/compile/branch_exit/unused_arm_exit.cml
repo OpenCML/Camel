@@ -51,7 +51,7 @@ func in_block(a: int): int {
 }
 
 // `return null` used to be how an arm was given no value, and was exempt. An `if` without
-// `else` needs no such thing (design principles 2.10), so it is reported like any other.
+// `else` needs no such thing (design principles 3.7), so it is reported like any other.
 func no_value(a: int): int sync {
     var total = 0
     if a > 0 then sync {

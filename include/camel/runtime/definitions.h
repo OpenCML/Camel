@@ -19,7 +19,7 @@
 
 /*
  * The definition graphs of operators (docs/design/op-semantics, section 9; design principles
- * 2.13: "a definition graph is normative").
+ * 7.1: "a definition graph is normative").
  *
  * An operator's module declares a definition (camel/core/operator_semantics.h, Definition;
  * OperatorTable::declareDefinition): a function written in Camel, exported by a library

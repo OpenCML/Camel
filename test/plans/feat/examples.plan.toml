@@ -224,4 +224,4 @@ desc = "The second command of the header: the program is translated without bein
 case = "../../../examples/ml/export_onnx.cml"
 golden = "golden/examples/ml_export_onnx_translate.txt"
 backends = false
-args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]

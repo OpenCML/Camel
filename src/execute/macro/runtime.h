@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -69,13 +69,12 @@ class MacroEvaluator {
 
     std::optional<MacroEvalResult> tryEvaluate(const MacroCandidate &candidate, std::ostream &os);
 
-    /// Failures are collected per round of the pass: a call that fails in one round may
-    /// evaluate in a later one (another expansion made it evaluable), so only the failures of
-    /// the last round, in which nothing changed any more, are final.
-    void beginRound() { failures_.clear(); }
+    /// An evaluator belongs to one rewrite round. Only failures from the final round,
+    /// in which nothing changes any more, are reported: another expansion can make a
+    /// previously unsuccessful call evaluable.
     /// Reports the failures of the current round as RuntimeDiag::MacroEvaluationFailed errors
     /// at the call, with the reason, in the runtime diagnostics: a failed evaluation rejects
-    /// the program (design principles 2.7 and 3). An argument that is not a
+    /// the program (design principles 8). An argument that is not a
     /// constant is not a failure and is never reported here.
     void reportFailures();
 
@@ -126,6 +125,12 @@ class MacroEvaluator {
         const std::function<void(camel::core::context::Frame *, camel::runtime::GCGraph *)>
             &fillArgs,
         bool requireMacroGraph);
+    /// Runs the native operator `op` (the operator `oper`) with its arguments. The call has a
+    /// function-call scope of its own (camel/execute/function_call.h): an operator that calls
+    /// graphs calls them in this evaluator, with its depth and its stack check; any other masks
+    /// the scope of whatever runs outside (design: native subgraph call, item 7).
+    slot_t callNativeOperator(
+        operator_t op, camel::core::OperId oper, ArgsView &withView, ArgsView &normView);
     slot_t executeGraph(camel::core::context::Frame *frame, camel::runtime::GCGraph *runtimeGraph);
     /// The LOOP node `node` of `graph` run in `frame` (camel/runtime/loop.h), round by round:
     /// the loop is not a recursion, so it takes no depth, only kMaxMacroLoopRounds rounds.

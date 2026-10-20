@@ -129,10 +129,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "mutable_reference.inline.nvm"
-desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: std::inline on NodeVM."
+desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: std::opt::inline on NodeVM."
 kind = "behavior"
 case = "../../../cases/linear/nvm/var.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -161,10 +161,10 @@ timeout_ms = 4000
 
 [[tests]]
 name = "mutable_reference.simplify_cse.nvm"
-desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: std::opt::simplify std::opt::cse (used to exit 1)."
+desc = "A write to a var parameter is read by the caller after the call (0 before, 1 after), on: std::opt std::opt::cse (used to exit 1)."
 kind = "behavior"
 case = "../../../cases/linear/nvm/var.cml"
-args = ["${case}", "std::opt::simplify", "std::opt::cse", "std::nvm"]
+args = ["${case}", "std::opt", "std::opt::cse", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -241,10 +241,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "var_params.inline.fvm"
-desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: std::inline on FastVM."
+desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: std::opt::inline on FastVM."
 kind = "behavior"
 case = "../../../cases/linear/nvm/var_params.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -289,10 +289,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "var_params.simplify_cse.jit"
-desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: std::opt::simplify std::opt::cse on the JIT."
+desc = "var parameters are passed by reference through direct, nested and indirect calls, tuple replacement and a hot loop, on: std::opt std::opt::cse on the JIT."
 kind = "behavior"
 case = "../../../cases/linear/nvm/var_params.cml"
-args = ["${case}", "std::opt::simplify", "std::opt::cse", "std::jit"]
+args = ["${case}", "std::opt", "std::opt::cse", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

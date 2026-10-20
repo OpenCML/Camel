@@ -1,5 +1,5 @@
 /**
- * What std::jit compiles when a function has a `var` parameter (after std::inline, which the JIT
+ * What std::jit compiles when a function has a `var` parameter (after std::opt::inline, which the JIT
  * needs for any function with a branch: it compiles self-recursive graphs only).
  *   down   passes its `var` parameter on: compiled. (With write-back at return it was excluded
  *          and overflowed the recursion limit.)

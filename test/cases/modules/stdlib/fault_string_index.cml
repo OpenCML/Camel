@@ -1,0 +1,8 @@
+module fault_string_index
+
+func main(): int sync {
+    println('before')
+    println('中文'[2])
+    println('not reached')
+    return 0
+}

@@ -1,6 +1,6 @@
 /**
  * The empty array literal `[]` takes its element type from where it stands (design
- * principles 2.10): a declared type, a parameter, the other arm of a branch, the left side
+ * principles 3.8): a declared type, a parameter, the other arm of a branch, the left side
  * of `??` / `!!`, a declared return type, `as`.
  */
 module empty_array

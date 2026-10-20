@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -98,6 +98,19 @@ void requireKnownPasses(
  * Unknown names are skipped.
  */
 std::optional<size_t> firstConsumingPass(
+    const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
+
+/**
+ * True when the first pass of the list that consumes the graph is a translation pass: the list
+ * produces a translated artefact (a dump, generated code, ...) and the program is never
+ * executed. False when no pass consumes the graph (the fallback then runs it) or when the first
+ * consumer is a scheduling pass. Unknown names are skipped: a module pass that the program does
+ * not load cannot be a translation of it.
+ *
+ * A caller decides with this whether the entry module must define `main`: translation passes
+ * work on library modules too, execution does not.
+ */
+bool passListTranslatesProgram(
     const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
 
 /**

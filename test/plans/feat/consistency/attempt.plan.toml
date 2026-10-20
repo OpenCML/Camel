@@ -2,7 +2,7 @@ id = "consistency.attempt"
 order = 355
 tier = "feat"
 tags = ["feat", "consistency", "runtime", "faults", "isolation"]
-desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of external resources when a run ends (design principles 2.9; docs/technical/33_fault_isolation.md)"
+desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of external resources when a run ends (design principles 3.9; docs/technical/33_fault_isolation.md)"
 
 # A fault raised inside the call `attempt` makes becomes, at the `attempt`, an error value
 # (kind: the name of the fault's diagnostic; message; location). Unless an entry says otherwise
@@ -88,11 +88,11 @@ golden = "golden/attempt_compiled.txt"
 [[tests]]
 name = "attempt.compiled.inline_jit"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-desc = "With std::inline before std::jit the recursive callee is compiled as a native self-recursion; the log shows that it was compiled."
+desc = "With std::opt::inline before std::jit the recursive callee is compiled as a native self-recursion; the log shows that it was compiled."
 kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
-args = ["-vv", "${case}", "std::inline", "std::jit"]
+args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
 expect_output_contains = ["compiled & cached graph 'depth'", "MaxRecursionDepthExceeded at compiled.cml:13:65", "DivisionByZero at compiled.cml:12:53"]
 verify_script = """
 assert(input.normalized.stdout.trimEnd().endsWith('-29200\nend'), JSON.stringify(input.normalized.stdout.slice(-200)))
@@ -123,9 +123,9 @@ golden = "golden/attempt_library.txt"
 
 [[tests]]
 name = "attempt.library.inline_opt"
-desc = "The same through std::inline std::opt: the library functions are inlined into the closures, the boundary stays."
+desc = "The same through std::opt::inline std::opt: the library functions are inlined into the closures, the boundary stays."
 case = "../../../cases/consistency/attempt/library.cml"
-args = ["${case}", "std::inline", "std::opt", "${backend}"]
+args = ["${case}", "std::opt::inline", "std::opt", "${backend}"]
 golden = "golden/attempt_library.txt"
 
 # --- the program goes on -------------------------------------------------------------------
@@ -180,7 +180,7 @@ assert(input.normalized.stdout === '8328\nerror DivisionByZero: Attempted divisi
 
 [[tests]]
 name = "attempt.siblings"
-desc = "Design principles 2.10: one element of a map inside a boundary faults. Elements that started run to their end, elements that did not start do not start, and the error value is given only after all that started have ended: every 'start' but the faulting element's has its 'end' before 'isolated'. When every element faults, the error is the fault of element 0 (attempt.lowest_index)."
+desc = "Design principles 3.6: one element of a map inside a boundary faults. Elements that started run to their end, elements that did not start do not start, and the error value is given only after all that started have ended: every 'start' but the faulting element's has its 'end' before 'isolated'. When every element faults, the error is the fault of element 0 (attempt.lowest_index)."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/siblings.cml"
 backends_agree = ["exit_code"]
@@ -280,9 +280,9 @@ golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
 name = "attempt.pipeline.inline"
-desc = "std::inline: the callees are small and called once; the fault stays inside the boundary."
+desc = "std::opt::inline: the callees are small and called once; the fault stays inside the boundary."
 case = "../../../cases/consistency/attempt/pipelines.cml"
-args = ["${case}", "std::inline", "${backend}"]
+args = ["${case}", "std::opt::inline", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
@@ -294,9 +294,9 @@ golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
 name = "attempt.pipeline.simplify"
-desc = "std::opt::simplify. It specialises a callee on the constant 0 and warns that the division always faults (not folded, 2.9); the warning is switched off here, the output is the same."
+desc = "std::opt. It specialises a callee on the constant 0 and warns that the division always faults (not folded, 3.9); the warning is switched off here, the output is the same."
 case = "../../../cases/consistency/attempt/pipelines.cml"
-args = ["-Wno-constant-expression-faults", "${case}", "std::opt::simplify", "${backend}"]
+args = ["-Wno-constant-expression-faults", "${case}", "std::opt", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
@@ -322,23 +322,23 @@ golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
 name = "attempt.pipeline.inline_opt"
-desc = "std::inline std::opt."
+desc = "std::opt::inline std::opt."
 case = "../../../cases/consistency/attempt/pipelines.cml"
-args = ["${case}", "std::inline", "std::opt", "${backend}"]
+args = ["${case}", "std::opt::inline", "std::opt", "${backend}"]
 golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
 name = "attempt.pipeline.places_opt"
-desc = "The places program (closures, higher-order operators, a tail-recursive loop) through std::inline std::opt."
+desc = "The places program (closures, higher-order operators, a tail-recursive loop) through std::opt::inline std::opt."
 case = "../../../cases/consistency/attempt/places.cml"
-args = ["${case}", "std::inline", "std::opt", "${backend}"]
+args = ["${case}", "std::opt::inline", "std::opt", "${backend}"]
 golden = "golden/attempt_places.txt"
 
 [[tests]]
 name = "attempt.pipeline.nested_opt"
-desc = "The nested program through std::inline std::opt."
+desc = "The nested program through std::opt::inline std::opt."
 case = "../../../cases/consistency/attempt/nested.cml"
-args = ["${case}", "std::inline", "std::opt", "${backend}"]
+args = ["${case}", "std::opt::inline", "std::opt", "${backend}"]
 golden = "golden/attempt_nested.txt"
 
 # --- other libraries ----------------------------------------------------------------------
@@ -360,8 +360,7 @@ desc = "onnx::export refuses the operator, at the `attempt`, and names it."
 kind = "negative"
 backends = false
 case = "../../../cases/consistency/attempt/refuse_translate.cml"
-args = ["${case}", "onnx::export"]
-envs = ["CAMEL_ONNX_OUT=tmp/test/consistency/attempt_refused.onnx"]
+args = ["${case}", 'onnx::export(out="tmp/test/consistency/attempt_refused.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 11

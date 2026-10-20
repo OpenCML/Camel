@@ -13,13 +13,13 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
  * The declared semantics of the tensor operators (camel/core/operator_semantics.h,
- * docs/design/op-semantics sections 6.2 and 12, design principles 2.13), in one table so that
+ * docs/design/op-semantics sections 6.2 and 12, design principles 7.1), in one table so that
  * every declaration can be read next to the others and checked against the kernels.
  *
  * Phase 1 declares the numeric part of the operators a compiler of tensor graphs (Tiles) meets
@@ -41,6 +41,9 @@
 #include "indexing.h"
 #include "op_def.h"
 
+#include "../type.h"
+
+#include <bit>
 #include <string>
 #include <unordered_map>
 
@@ -99,11 +102,11 @@ OperatorSemantics bounded(float ulp, SpecialValues specials, std::string algorit
 
 // The permissions a chain of additions or multiplications can use: regroup or reorder it
 // (reassociate), fuse a multiply into the next add (contract), compute at another precision.
-constexpr PermissionMask kArith   = kReassociate | kContract | kChangePrecision | kFiniteMath;
+constexpr PermissionMask kArith = kReassociate | kContract | kChangePrecision | kFiniteMath;
 // A reduction in a declared accumulator type, in ascending order.
-constexpr PermissionMask kReduce  = kReassociate | kChangePrecision | kFiniteMath;
+constexpr PermissionMask kReduce = kReassociate | kChangePrecision | kFiniteMath;
 // One correctly rounded operation that has an approximate counterpart (division, square root).
-constexpr PermissionMask kApprox  = kApproxMath | kChangePrecision | kFiniteMath;
+constexpr PermissionMask kApprox = kApproxMath | kChangePrecision | kFiniteMath;
 
 const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
     static const std::unordered_map<std::string_view, OperatorSemantics> table = [] {
@@ -226,9 +229,15 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
                 kReassociate | kChangePrecision | kFiniteMath,
                 "per output element: acc = +0, then acc = fma(a[i][k], b[k][j], acc) for k in "
                 "ascending order, every fused multiply-add rounded once in f32 (design "
-                "principles 2.13); contract has nothing to add"));
+                "principles 7.2); contract has nothing to add"));
 
         // ---- Layout: moves, no arithmetic ----
+        t.emplace("to_bytes", layout("row-major payload bits encoded in little-endian byte order"));
+        for (const char *name : {"from_bytes_f32", "from_bytes_i64", "from_bytes_bool"}) {
+            t.emplace(
+                name,
+                layout("little-endian payload bits decoded exactly into row-major storage"));
+        }
         t.emplace("reshape", layout("the elements in row-major order, in a new shape"));
         t.emplace("flatten", layout("the elements in row-major order, as one axis"));
         t.emplace("unsqueeze", layout("the elements unchanged, with an axis of extent 1 added"));
@@ -244,11 +253,47 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
 
 } // namespace
 
+namespace {
+
+/// The binary laws of the elementwise arithmetic, over float32 elements (the case the
+/// declarations describe): the same laws as the scalar `+`, `-`, `*` hold for each element, so
+/// an algebraic rewrite that works on the declared laws treats a tensor expression and a scalar
+/// one alike. Integer elements are left out: the kernels' integer contract is not declared
+/// here as exactly associative.
+std::optional<BinaryAlgebra> binaryLaws(std::string_view name) {
+    constexpr std::string_view sum = "tensor:add";
+    BinaryLaw law{.element = TypeCode::Float32};
+    if (name == "add") {
+        law.commutative = true;
+        law.neutralBits = std::bit_cast<uint32_t>(-0.0f);
+    } else if (name == "subtract") {
+        law.subtractionOf = std::string(sum);
+        law.neutralBits   = 0;
+    } else if (name == "multiply") {
+        law.commutative     = true;
+        law.neutralBits     = std::bit_cast<uint32_t>(1.0f);
+        law.distributesOver = std::string(sum);
+    } else {
+        return std::nullopt;
+    }
+    BinaryAlgebra algebra{.laws = {law}, .elementwise = true};
+    algebra.elementOf = [](const camel::core::type::Type *type) -> std::optional<TypeCode> {
+        if (const TensorType *tensor = asTensorType(type)) {
+            return tensor->dtype();
+        }
+        return std::nullopt;
+    };
+    return algebra;
+}
+
+} // namespace
+
 void attachSemantics(std::vector<OpDef> &defs) {
     const auto &table = declarations();
     for (OpDef &def : defs) {
         if (auto it = table.find(def.name); it != table.end()) {
-            def.semantics = it->second;
+            def.semantics         = it->second;
+            def.semantics->binary = binaryLaws(def.name);
             attachIndexing(def);
         }
     }

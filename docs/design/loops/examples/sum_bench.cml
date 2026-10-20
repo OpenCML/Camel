@@ -1,6 +1,6 @@
 /**
  * One loop, three ways it can be written today, timed separately.
- *   camel sum_bench.cml std::fvm        (and std::nvm, std::jit, std::inline std::jit, std::tf)
+ *   camel sum_bench.cml std::fvm        (and std::nvm, std::jit, std::opt::inline std::jit, std::tf)
  */
 module sum_bench
 import { now } from time

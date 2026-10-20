@@ -1,0 +1,79 @@
+module checkpoint_roundtrip
+import { Tensor, new, zeros, to_bytes, sqrt } from tensor
+import { from_array, to_array } from bytes
+import { save_tree, load_tree, tree_paths, tree_leaves } from tree
+import { sha256 } from crypto
+
+type Params = { w: Tensor<f32>, odd: Tensor<int>, empty: Tensor<f32> }
+type State = {
+    params: Params, m: Tensor<f32>, v: Tensor<f32>, ema: Tensor<f32>,
+    step: int, seed: int, cursor: (int, int), note: string, raw: Bytes,
+    enabled: bool, gain: f32, scale: float
+}
+func initial(): State {
+    return {
+        params: {
+            w: new([1.0, -2.0]), odd: new([9007199254740993, -2]),
+            empty: zeros([2, 0])
+        },
+        m: zeros([2]), v: zeros([2]), ema: new([1.0, -2.0]),
+        step: 0, seed: 20261019, cursor: (3, 17), note: '中文 checkpoint',
+        raw: from_array([0, 255, 128, 1]), enabled: true, gain: f32(-0.0), scale: -0.0
+    }
+}
+func update(s: State): State {
+    let g = s.params.w * 0.25 + 0.125
+    let m = s.m * 0.9 + g * 0.1
+    let v = s.v * 0.999 + g * g * 0.001
+    let p = s.params.w - m / (sqrt(v) + 0.00000001) * 0.001
+    return {
+        params: { w: p, odd: s.params.odd, empty: s.params.empty }, m: m, v: v,
+        ema: s.ema * 0.999 + p * 0.001, step: s.step + 1, seed: s.seed,
+        cursor: (s.cursor.0, s.cursor.1 + 16), note: s.note, raw: s.raw,
+        enabled: s.enabled, gain: s.gain, scale: s.scale
+    }
+}
+func advance(s: State, count: int): State {
+    return loop state = s for i in range(0, count) do update(state)
+}
+func show(s: State): int sync {
+    println(s.step)
+    println(sha256(to_bytes(s.params.w)))
+    println(sha256(to_bytes(s.m)))
+    println(sha256(to_bytes(s.v)))
+    println(sha256(to_bytes(s.ema)))
+    println(to_array(to_bytes(s.params.odd)))
+    println(to_array(to_bytes(s.params.empty)))
+    println((s.seed, s.cursor, s.note, to_array(s.raw), s.enabled))
+    println(to_array(to_bytes(new([float(s.gain), s.scale]))))
+    return 0
+}
+func main(mode: int, dir: string): int sync {
+    return if mode == 0 then sync {
+        let s = advance(initial(), 3)
+        save_tree(dir, s, 'dataset-v1')
+        return show(load_tree::<State>(dir, 'dataset-v1') !! initial())
+    } else if mode == 1 then sync {
+        let restored: State! = load_tree(dir)
+        return show(restored !! initial())
+    } else if mode == 2 then sync {
+        let s = load_tree::<State>(dir) !! initial()
+        return show(advance(s, 7))
+    } else if mode == 3 then show(advance(initial(), 10))
+    else if mode == 4 then sync {
+        // A failed load must remain an error at the program boundary.
+        let restored = load_tree::<State>(dir)
+        return match restored {
+            case error e => sync { println(e); return 19 }
+            case s => show(s)
+        }
+    } else if mode == 5 then sync {
+        let s = load_tree::<{ params: { w: Tensor<int> } }>(dir)
+        let _ = println(s)
+        return 0
+    } else if mode == 6 then sync {
+        // The names in a checkpoint are the paths tree_paths gives.
+        println(tree_leaves(tree_paths(initial())))
+        return 0
+    } else 2
+}

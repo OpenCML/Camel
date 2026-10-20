@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::runtime {
@@ -63,23 +64,6 @@ std::unordered_map<OperQueryKey, type::FunctionType *, OperQueryKeyHash> &operQu
     static auto *memo =
         new std::unordered_map<OperQueryKey, type::FunctionType *, OperQueryKeyHash>();
     return *memo;
-}
-
-/// The function type an OPER's overload has for the types its arguments have now, or nullptr
-/// when the overload is unknown or rejects them.
-type::FunctionType *operFuncType(const GraphDraft &draft, gc_node_ref_t id, std::string_view uri) {
-    type::type_vec_t with, norm;
-    for (auto [inputs, types] :
-         {std::pair{draft.withInputsOf(id), &with}, std::pair{draft.normInputsOf(id), &norm}}) {
-        for (gc_node_ref_t in : inputs) {
-            const DraftNodeHeader *h = draft.header(in);
-            if (!h || !h->dataType) {
-                return nullptr;
-            }
-            types->push_back(h->dataType);
-        }
-    }
-    return operatorOverloadType(uri, with, norm);
 }
 
 bool isVarParam(const type::FunctionType *funcType, bool isWith, size_t index) {
@@ -118,7 +102,7 @@ type::FunctionType *operatorOverloadType(
     return operQueryMemo().emplace(std::move(key), answer).first->second;
 }
 
-bool isVarArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, size_t index) {
+bool isWrittenArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, size_t index) {
     const DraftNodeHeader *h = draft.header(user);
     if (!h) {
         return false;
@@ -126,11 +110,9 @@ bool isVarArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, siz
     switch (h->kind) {
     case GCNodeKind::Oper: {
         const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(user).data());
-        if (camel::core::OperatorTable::instance().isPure(body->oper)) {
-            return false;
-        }
-        const type::FunctionType *funcType = operFuncType(draft, user, body->uri());
-        return funcType ? isVarParam(funcType, isWith, index) : true;
+        // The operator's resource declaration is the truth (design principles 3.3); its
+        // signature's `var` parameters are checked against it when it is registered.
+        return camel::core::OperatorTable::instance().writesOperand(body->oper, isWith, index);
     }
     case GCNodeKind::Func: {
         const GCGraph *callee =
@@ -170,9 +152,10 @@ bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id) {
         }
         id = draft.normInputsOf(id).back();
     }
-    // Every user of that slot, through the GATEs that forward it. The graph is acyclic, so the
-    // walk ends without a visited set (a GATE reached twice is only looked at twice).
+    // Every user of that slot, through the GATEs that forward it. A GATE reached along two
+    // paths is looked at once: a shared DAG of GATEs would otherwise cost a walk per path.
     std::vector<gc_node_ref_t> work{id};
+    std::unordered_set<gc_node_ref_t> seen{id};
     while (!work.empty()) {
         const gc_node_ref_t n = work.back();
         work.pop_back();
@@ -186,12 +169,14 @@ bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id) {
                     continue;
                 }
                 if (h->kind == GCNodeKind::Gate) {
-                    work.push_back(user);
+                    if (seen.insert(user).second) {
+                        work.push_back(user);
+                    }
                     continue;
                 }
                 const auto inputs = isWith ? draft.withInputsOf(user) : draft.normInputsOf(user);
                 for (size_t i = 0; i < inputs.size(); ++i) {
-                    if (inputs[i] == n && isVarArgument(draft, user, isWith, i)) {
+                    if (inputs[i] == n && isWrittenArgument(draft, user, isWith, i)) {
                         return true;
                     }
                 }
@@ -199,6 +184,44 @@ bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id) {
         }
     }
     return false;
+}
+
+WrittenSlots::WrittenSlots(const GraphDraft &draft) : written_(draft.nodeSlotCount(), false) {
+    // GATEs share the slot of the value they forward: union them, mark the slots written
+    // through any argument, and read the answer per node.
+    std::vector<gc_node_ref_t> parent(written_.size());
+    for (gc_node_ref_t id = 0; id < parent.size(); ++id) {
+        parent[id] = id;
+    }
+    const auto root = [&](gc_node_ref_t id) {
+        while (parent[id] != id) {
+            parent[id] = parent[parent[id]];
+            id         = parent[id];
+        }
+        return id;
+    };
+    for (gc_node_ref_t id = 0; id < parent.size(); ++id) {
+        const auto *h = draft.header(id);
+        if (h && h->kind == GCNodeKind::Gate && !draft.normInputsOf(id).empty()) {
+            parent[root(id)] = root(draft.normInputsOf(id).back());
+        }
+    }
+    for (gc_node_ref_t id = 0; id < parent.size(); ++id) {
+        if (!draft.header(id)) {
+            continue;
+        }
+        for (const bool isWith : {false, true}) {
+            const auto inputs = isWith ? draft.withInputsOf(id) : draft.normInputsOf(id);
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                if (isWrittenArgument(draft, id, isWith, i)) {
+                    written_[root(inputs[i])] = true;
+                }
+            }
+        }
+    }
+    for (gc_node_ref_t id = 0; id < parent.size(); ++id) {
+        written_[id] = written_[root(id)];
+    }
 }
 
 } // namespace camel::runtime

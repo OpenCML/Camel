@@ -1,51 +1,30 @@
 /**
- * The str module, by code point. A string is bytes and need not be valid UTF-8, so the
- * operators that decode return `T!`; an index out of range is a fault as everywhere.
+ * The str module, code points as numbers. A string is always valid UTF-8 (design principles
+ * 11.1): `codepoints` cannot fail, `from_codepoints` returns `string!` for a number that is
+ * not a code point.
  */
 module str_chars
 
-import { bytes, from_bytes, is_valid_utf8, codepoints, from_codepoints, char_count, char_at, char_substr } from str
+import { bytes, from_bytes, substr, codepoints, from_codepoints } from str
 
 func main(): int sync {
-    let s = 'h€😀é'        // 1 + 3 + 4 + 2 bytes
-    println(len(s), char_count(s) !! -1)
-    println(codepoints(s) !! [-1])
-    println(codepoints('') !! [-1], char_count('') !! -1)
+    let s = 'h€😀é'        // 1 + 3 + 4 + 2 bytes, 4 characters
+    println(len(s), len(bytes(s)))
+    println(codepoints(s))
+    println(codepoints(''), len(''))
     println(from_codepoints([104, 8364, 128512, 233]) !! 'bad')
     println(len(from_codepoints([0, 127, 128, 2047, 2048, 65535, 65536, 1114111]) !! 'bad'))
-    println(codepoints(from_codepoints([0, 127, 128, 2047, 2048, 65535, 65536, 1114111]) !! '') !! [-1])
-    println(s->char_at<0> !! '?', s->char_at<1> !! '?', s->char_at<2> !! '?', s->char_at<3> !! '?')
-    println(s->char_substr<1, 2> !! '?', s->char_substr<0, 4> !! '?')
-    println(len(s->char_substr<4, 0> !! '?'), len(''->char_substr<0, 0> !! '?'))
+    println(codepoints(from_codepoints([0, 127, 128, 2047, 2048, 65535, 65536, 1114111]) !! ''))
+    println(s[0], s[1], s[2], s[3])
+    println(s->substr<1, 2>, s->substr<0, 4>)
+    println(len(s->substr<4, 0>), len(''->substr<0, 0>))
 
-    // is_valid_utf8
-    println(is_valid_utf8(''), is_valid_utf8('plain'), is_valid_utf8(s))
-    let stray = from_bytes([104, 128])                 // a continuation byte alone
-    let cut = from_bytes([226, 130])                   // the first two bytes of '€'
-    let overlong = from_bytes([192, 175])              // '/' in two bytes
-    let surrogate = from_bytes([237, 160, 128])        // U+D800
-    let beyond = from_bytes([244, 144, 128, 128])      // U+110000
-    let ff = from_bytes([255])
-    println(is_valid_utf8(stray), is_valid_utf8(cut), is_valid_utf8(overlong), is_valid_utf8(surrogate), is_valid_utf8(beyond), is_valid_utf8(ff))
+    // not a code point: an error value
+    println(from_codepoints([55296]) !! 'surrogate')
+    println(from_codepoints([1114112]) !! 'beyond')
+    println(from_codepoints([-1]) !! 'negative')
 
-    // decoding a string that is not UTF-8 is an error value, not a fault
-    println(codepoints(stray))
-    println(char_count(cut))
-    println(cut->char_at<0>)
-    println(overlong->char_substr<0, 1>)
-    println(codepoints(surrogate) !! [-1], char_count(beyond) !! -1, ff->char_at<0> !! '?')
-    let failed = codepoints(stray)
-    println(match failed {
-        case error err => err.kind + ' / ' + err.message + ' / ' + err.location
-        case v => 'no error'
-    })
-
-    // a number that is not a code point cannot be encoded
-    println(from_codepoints([55296]))
-    println(from_codepoints([104, 1114112]) !! 'bad', from_codepoints([-1]) !! 'bad')
-    println(len(from_codepoints(tail([0])) !! 'bad'))
-
-    // the bytes are still there
-    println(bytes(stray), len(cut))
+    // what from_bytes accepts: valid UTF-8 only
+    println(from_bytes([226, 130, 172]), from_bytes(bytes('h€😀é')) == 'h€😀é')
     return 0
 }

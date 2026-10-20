@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.2.13"
+#define VERSION "0.2.14"
 
 #include <string>
 #include <vector>
@@ -90,6 +90,7 @@ extern int maxThreads;
 /// option is absent (camel/execute/limits.h; the environment variables are read there).
 extern size_t maxRecursionDepth;
 extern size_t maxMacroDepth;
+extern size_t maxMacroRounds; // --max-macro-rounds
 } // namespace Run
 
 namespace Check {

@@ -1,0 +1,26 @@
+module bytes_values
+import { from_array, to_array, encode, decode, size, concat } from bytes
+import { read_bytes, write_bytes, read_chunk, replace, file_size } from fs
+import { sha256 } from crypto
+import { get_env } from sys
+import { tree_map } from tree
+func count(b: Bytes): int { return size(b) }
+func main(): int sync {
+    let path = get_env('TEMP') + '/camel-bytes-values.bin'
+    let binary = from_array([0, 65, 0, 255, 13, 10, 128, 0])
+    write_bytes(path, binary)
+    println(to_array(read_bytes(path)))
+    println(to_array(read_chunk(path, 1, 6)))
+    println(size(read_chunk(path, 100, 4)))
+    println(sha256(read_bytes(path)))
+    println(decode(from_array([255])) !! 'invalid UTF-8')
+    println(decode(encode('中文 UTF-8')) !! 'unexpected decode failure')
+    println(to_array(encode(decode(from_array([65, 0, 66])) !! '')))
+    replace(path, concat(encode('ok:'), binary))
+    println(file_size(path))
+    println(to_array(read_bytes(path)))
+    println(tree_map<count>({ raw: binary, more: (encode('abc'), binary) }))
+    replace(path, from_array(range(0, 0)))
+    println(file_size(path))
+    return 0
+}

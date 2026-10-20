@@ -13,12 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * The built-in collection types `Map<K, V>` and `Set<T>` (design principles 2.9; design in
+ * The built-in collection types `Map<K, V>` and `Set<T>` (design principles 11.3; design in
  * docs/technical/31_map_and_set.md).
  *
  * Both are defined by the core and use the OtherType mechanism: every backend, the collector,
@@ -42,7 +42,7 @@ namespace camel::core::type {
 
 /**
  * Why `type` cannot be the key of a map or the element of a set; empty when it can.
- * Design principles 2.10 (key types): allowed are int, i32, bool, string and tuples of allowed
+ * Design principles 11.3 (key types): allowed are int, i32, bool, string and tuples of allowed
  * types. A type variable is allowed: the check is made again when it has been replaced.
  */
 std::string collectionKeyProblem(Type *type);
@@ -74,7 +74,7 @@ class CollectionType : public OtherType {
     CastSafety castSafetyFrom(Type *sourceType) const override;
     slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
     bool assignableFrom(Type *sourceType) const override;
-    OtherType *
+    Type *
     cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const override;
 
   protected:

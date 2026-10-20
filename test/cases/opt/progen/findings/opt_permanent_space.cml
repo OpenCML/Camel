@@ -1,13 +1,13 @@
 /**
  * progen finding F34 (unbounded growth: a query that allocates, not a graph that grows).
- *   `std::specialize std::opt` (and `std::specialize std::opt::simplify`) ends with
+ *   `std::opt::specialize std::opt` (and `std::opt::specialize std::opt`) ends with
  *   `Permanent space exhausted (32 MB of types and layouts)` on this program, whose `main` does
  *   not even call the functions. The graphs stay small (11 graphs, 33 inlined calls); the space
  *   goes to `operFuncType` (src/runtime/draft_writes.cpp), which resolves an operator's overload,
  *   and so allocates a function type in the space that is never freed, every time
  *   `isVarArgument` is asked about a user of a value (171,810 times before the limit on the
  *   unreduced program, all from the specialization probe of the rewrite engine).
- * Pipeline: std::specialize std::opt std::nvm
+ * Pipeline: std::opt::specialize std::opt std::nvm
  * Expected output: (nothing)
  * Actual: REFUSED_UNLOCATED RuntimeDiag::PassInternalError: Pass 'std::opt' failed with an
  *   internal error: Permanent space exhausted (32 MB of types and layouts), no position, exit 1.

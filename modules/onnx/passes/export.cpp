@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,6 +37,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/pass/params.h"
 #include "camel/passes/opt/config.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
@@ -60,9 +61,8 @@ using camel::runtime::GCNodeKind;
 
 namespace {
 
-constexpr const char *kPassName     = "onnx::export";
-constexpr const char *kRequestUri   = "onnx:export_model";
-constexpr const char *kOutputEnvVar = "CAMEL_ONNX_OUT";
+constexpr const char *kPassName   = "onnx::export";
+constexpr const char *kRequestUri = "onnx:export_model";
 
 /// Why the pass does not translate, and the node it is about. A refusal that is about no
 /// particular node leaves `origin` invalid; apply() then reports it at the export_model call
@@ -76,7 +76,7 @@ struct Refusal {
 struct Request {
     uint64_t origin = camel::source::kInvalidOriginId; // the call, for refusals about it
     ::Function *fn  = nullptr; // constant function value (the closure template when built by FILL)
-    GCGraph *graph = nullptr;
+    GCGraph *graph  = nullptr;
     std::vector<Example> captures;
     std::vector<Example> examples;
     std::string path;
@@ -106,8 +106,8 @@ std::optional<Example> constantOf(const GCGraph *g, gc_node_ref_t ref) {
     if (n->kind != GCNodeKind::Data || n->dataIndex >= 0) {
         return std::nullopt;
     }
-    const auto index      = static_cast<size_t>(-n->dataIndex);
-    core::type::Type *ty  = g->staticDataType()->typeAt(index);
+    const auto index     = static_cast<size_t>(-n->dataIndex);
+    core::type::Type *ty = g->staticDataType()->typeAt(index);
     return Example{g->staticArea()->get<slot_t>(index), ty ? ty : n->dataType()};
 }
 
@@ -133,8 +133,7 @@ uint64_t argOrigin(const GCGraph *g, gc_node_ref_t node, gc_node_ref_t arg) {
 
 /// Reads argument `index` of the request `node` as a constant; refuses when the preceding
 /// passes did not reduce it to one. The pass does not execute the program to obtain it.
-Example
-constantArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::string_view what) {
+Example constantArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::string_view what) {
     const gc_node_ref_t arg = g->normInputsOf(node)[index];
     if (auto value = constantOf(g, arg)) {
         return *value;
@@ -143,7 +142,7 @@ constantArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::string_view
         argOrigin(g, node, arg),
         std::format(
             "the {} of onnx.export_model is {}, not a constant of the graph; onnx::export "
-            "does not run the program: run std::opt::simplify before it so that it folds, or "
+            "does not run the program: run std::opt before it so that it folds, or "
             "build it from constants only",
             what,
             describeNode(g, arg))};
@@ -161,7 +160,7 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
             throw Refusal{
                 argOrigin(g, node, arg),
                 "the function argument of onnx.export_model is not a constant of the graph; "
-                "run std::opt::simplify before onnx::export"};
+                "run std::opt before onnx::export"};
         }
         auto *fn         = rtdata::fromSlot<::Function *>(templ->value);
         request.fn       = fn;
@@ -180,7 +179,7 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
                     std::format(
                         "the function passed to onnx.export_model captures {}, not a constant "
                         "of the graph; onnx::export does not run the "
-                        "program: run std::opt::simplify before it so that it folds, or pass "
+                        "program: run std::opt before it so that it folds, or pass "
                         "the value as a function argument",
                         describeNode(g, refs[k]))};
             }
@@ -202,7 +201,7 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
     request.graph       = fn ? fn->graph() : nullptr;
 }
 
-Request readRequest(const GCGraph *g, gc_node_ref_t node) {
+Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out) {
     Request request;
     request.origin  = originNear(g, node);
     const auto args = g->normInputsOf(node);
@@ -224,7 +223,7 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node) {
         }
     }
 
-    if (const char *out = std::getenv(kOutputEnvVar); out && *out) {
+    if (!out.empty()) {
         request.path = out;
     } else if (const auto path = constantOf(g, args[2])) {
         request.path = rtdata::fromSlot<::String *>(path->value)->toString();
@@ -233,10 +232,9 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node) {
             argOrigin(g, node, args[2]),
             std::format(
                 "the output path of onnx.export_model is {}, not a constant of the graph; "
-                "set the environment variable {} to the model file, or write the path as a "
-                "string literal",
-                describeNode(g, args[2]),
-                kOutputEnvVar)};
+                "name the model file with the parameter out of the pass "
+                "(onnx::export(out=\"model.onnx\")), or write the path as a string literal",
+                describeNode(g, args[2]))};
     }
     if (args.size() > 3) {
         const Example axes = constantArg(g, node, 3, "dynamic_axes argument");
@@ -295,33 +293,36 @@ std::string locationOf(const core::context::Context &ctx, uint64_t origin) {
 /// Reads the request `node` of the entry graph. A request the pass cannot read because it is
 /// made in the arm of a branch decided at run time is refused at that branch: what the arm
 /// computes is not a constant of the graph (it waits for the branch), and that, not the
-/// argument the reading stumbled on, is what the program has to change.
-Request readEntryRequest(const core::context::Context &ctx, GCGraph *g, gc_node_ref_t node) {
-    try {
-        return readRequest(g, node);
-    } catch (const Refusal &) {
-        const auto brch = runtimeBranchOver(g, node);
-        if (!brch) {
-            throw;
-        }
-        const auto cond            = g->normInputsOf(*brch);
-        const std::string location = locationOf(ctx, originNear(g, node));
-        uint64_t origin            = originNear(g, *brch);
-        if (origin == camel::source::kInvalidOriginId) {
-            origin = originNear(g, node);
-        }
-        throw Refusal{
-            origin,
-            std::format(
-                "the onnx.export_model call{} is made in an arm of this branch, and the "
-                "condition of the branch{} is not known at compile time; onnx::export does not "
-                "run the program, so it cannot tell whether the request is made, and what the "
-                "arm computes is not a constant of the graph; write the export_model call "
-                "outside the branch, or make the condition a constant",
-                location.empty() ? std::string() : " at " + location,
-                cond.empty() ? std::string()
-                             : std::format(" ({})", describeNode(g, cond.front())))};
+/// argument the reading stumbled on, is what the program has to change. A refusal about the
+/// request's own target (the function cannot be exported at all) is more specific and is kept.
+Request readEntryRequest(
+    const core::context::Context &ctx, GCGraph *g, gc_node_ref_t node, const std::string &out) {
+    // A refusal about the request's own target (the function cannot be exported at all) is more
+    // specific than the branch it sits in, so it propagates as it is.
+    const Request request = readRequest(g, node, out);
+    // Whether the arm runs is decided at run time: the pass cannot tell whether the request is
+    // made, so a readable request in such an arm is refused too. Its arguments are constants of
+    // the arm, not of the graph, and would otherwise look like a request made unconditionally.
+    const auto brch = runtimeBranchOver(g, node);
+    if (!brch) {
+        return request;
     }
+    const auto cond            = g->normInputsOf(*brch);
+    const std::string location = locationOf(ctx, originNear(g, node));
+    uint64_t origin            = originNear(g, *brch);
+    if (origin == camel::source::kInvalidOriginId) {
+        origin = originNear(g, node);
+    }
+    throw Refusal{
+        origin,
+        std::format(
+            "the onnx.export_model call{} is made in an arm of this branch, and the "
+            "condition of the branch{} is not known at compile time; onnx::export does not "
+            "run the program, so it cannot tell whether the request is made, and what the "
+            "arm computes is not a constant of the graph; write the export_model call "
+            "outside the branch, or make the condition a constant",
+            location.empty() ? std::string() : " at " + location,
+            cond.empty() ? std::string() : std::format(" ({})", describeNode(g, cond.front())))};
 }
 
 /// The function a call node of `g` calls, when it is statically known.
@@ -460,7 +461,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
     const auto report =
         std::static_pointer_cast<const InlineReport>(ctx.passFact(kInlineReportFactKey));
     if (!report) {
-        return "run std::opt::simplify before onnx::export (after std::macro when the program "
+        return "run std::opt before onnx::export (after std::macro when the program "
                "uses macros such as grad)";
     }
     const GCGraph *callee    = calleeGraphOf(root, call);
@@ -552,7 +553,8 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
 /// the other way to export: the entry graph itself is translated (see apply). A program that
 /// does make a request, in a function its entry graph still calls (nothing was inlined), shows
 /// none here: that is a missing simplification.
-std::vector<Request> collectRequests(const core::context::Context &ctx, GCGraph *root) {
+std::vector<Request>
+collectRequests(const core::context::Context &ctx, GCGraph *root, const std::string &out) {
     std::vector<Request> requests;
     std::optional<gc_node_ref_t> firstCall;
     for (auto it = root->nodes().begin(); it != root->nodes().end(); ++it) {
@@ -561,7 +563,7 @@ std::vector<Request> collectRequests(const core::context::Context &ctx, GCGraph 
             continue;
         }
         if (isRequest(root, it.ref())) {
-            requests.push_back(readEntryRequest(ctx, root, it.ref()));
+            requests.push_back(readEntryRequest(ctx, root, it.ref(), out));
         } else if ((n->kind == GCNodeKind::Func || n->kind == GCNodeKind::Call) && !firstCall) {
             firstCall = it.ref();
         }
@@ -594,7 +596,7 @@ void refuseUnexpandedMacros(const GCGraph *g) {
                 originNear(g, it.ref()),
                 std::format(
                     "macro operator '{}' is not expanded; run std::macro (then "
-                    "std::opt::simplify) before onnx::export",
+                    "std::opt) before onnx::export",
                     g->nodeBodyAs<camel::runtime::GCOperBody>(it.ref())->uri())};
         }
     }
@@ -612,7 +614,7 @@ Model translate(core::context::Context &ctx, const Request &request) {
     } catch (const ExportError &e) {
         std::string message = e.what();
         if (e.kind() == ExportError::Kind::CallRemains) {
-            message += "; onnx::export inlines what std::opt::simplify left once the shapes "
+            message += "; onnx::export inlines what std::opt left once the shapes "
                        "of the examples are known, so this call is one no simplification "
                        "removes (run std::macro before the pass when the program uses macros "
                        "such as grad)";
@@ -626,16 +628,15 @@ Model translate(core::context::Context &ctx, const Request &request) {
 }
 
 /// The export of a program that makes no request: the computation of `main` is the model.
-void exportEntry(core::context::Context &ctx, GCGraph *root, std::ostream &os) {
-    const char *out = std::getenv(kOutputEnvVar);
-    if (!out || !*out) {
+void exportEntry(
+    core::context::Context &ctx, GCGraph *root, std::ostream &os, const std::string &out) {
+    if (out.empty()) {
         throw Refusal{
             camel::source::kInvalidOriginId,
             std::format(
                 "the program contains no onnx.export_model(fn, example, path) call, so "
-                "onnx::export translates 'main' itself, and the model file is not named: set "
-                "the environment variable {} to it",
-                kOutputEnvVar)};
+                "onnx::export translates 'main' itself, and the model file is not named: give "
+                "it as the parameter out, onnx::export(out=\"model.onnx\")")};
     }
     for (GCGraph *g : camel::runtime::collectReachableGraphs(root)) {
         if (g != nullptr) {
@@ -648,7 +649,7 @@ void exportEntry(core::context::Context &ctx, GCGraph *root, std::ostream &os) {
     } catch (const ExportError &e) {
         std::string message = e.what();
         if (e.kind() == ExportError::Kind::CallRemains) {
-            message += "; onnx::export inlines what std::opt::simplify left, so this call is "
+            message += "; onnx::export inlines what std::opt left, so this call is "
                        "one no simplification removes (run std::macro before the pass when "
                        "the program uses macros such as grad)";
         }
@@ -673,19 +674,18 @@ void exportEntry(core::context::Context &ctx, GCGraph *root, std::ostream &os) {
 GCGraph *OnnxExportPass::apply(GCGraph *graph, std::ostream &os) {
     try {
         // Every request is translated before any file is written: a refusal leaves no model.
-        const std::vector<Request> requests = collectRequests(*context_, graph);
+        const std::vector<Request> requests = collectRequests(*context_, graph, out_);
         if (requests.empty()) {
-            exportEntry(*context_, graph, os);
+            exportEntry(*context_, graph, os, out_);
             return nullptr;
         }
-        if (requests.size() > 1 && std::getenv(kOutputEnvVar) && *std::getenv(kOutputEnvVar)) {
+        if (requests.size() > 1 && !out_.empty()) {
             // Reported at the second call: the first one is what the file name stands for.
             throw Refusal{
                 requests[1].origin,
                 std::format(
-                    "{} names one model file but the entry graph contains {} "
+                    "the parameter out names one model file but the entry graph contains {} "
                     "onnx.export_model calls",
-                    kOutputEnvVar,
                     requests.size())};
         }
         std::vector<Model> models;
@@ -721,9 +721,18 @@ GCGraph *OnnxExportPass::apply(GCGraph *graph, std::ostream &os) {
 }
 
 void registerOnnxPasses() {
-    registerModulePass(kPassName, [](const core::context::context_ptr_t &ctx) {
-        return std::make_unique<OnnxExportPass>(ctx);
-    });
+    PassDescriptor descriptor;
+    descriptor.doc    = "translate the program to an ONNX model";
+    descriptor.params = {PassParam{
+        "out",
+        PassParamType::String,
+        std::string(),
+        "the model file; overrides the path argument of onnx.export_model (then exactly one "
+        "call is allowed) and names the file when the program makes no request"}};
+    descriptor.make   = [](const core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<OnnxExportPass>(ctx, args.getString("out"));
+    };
+    registerModulePass(kPassName, std::move(descriptor));
 }
 
 } // namespace camel::onnx::passes

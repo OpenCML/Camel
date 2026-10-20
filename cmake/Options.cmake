@@ -75,7 +75,7 @@ message(STATUS "CAMEL_ENABLE_PYTHON=${CAMEL_ENABLE_PYTHON}")
 # Consumed by modules/tensor/CMakeLists.txt; OFF uses the builtin GEMM kernels.
 option(
     CAMEL_TENSOR_BLAS
-    "Use a system CBLAS (find_package(BLAS)) for tensor GEMM instead of the builtin kernels"
+    "Link a system CBLAS (find_package(BLAS)) for a matmul granted reassociate and change_precision (tensor:matmul_blas); every other GEMM stays on the canonical builtin kernels"
     OFF
 )
 message(STATUS "CAMEL_TENSOR_BLAS=${CAMEL_TENSOR_BLAS}")

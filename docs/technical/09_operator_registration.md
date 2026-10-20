@@ -141,7 +141,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 ### 3.5 模块导出的值
 
-C++ 模块也可以导出值（设计原则 2.13）：在构造函数里 `exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi))`（`Module::exportValue`，公开接口 `include/camel/core/module/module.h`）。程序写 `math::pi`（或 `import { pi } from math` 后写 `pi`），不带括号；用到的地方就是这个常量，与写一个字面量相同：图上是使用处所在的图里的一个 `DATA` 节点，没有 root 上的节点，也不需要捕获。能导出的是能作为图中常量的数据（标量、字符串以及它们组成的复合数据），类型就是数据的类型。同一个名字只能导出一样东西：一个值与一个算子组不能同名。
+C++ 模块也可以导出值（设计原则 10.1）：在构造函数里 `exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi))`（`Module::exportValue`，公开接口 `include/camel/core/module/module.h`）。程序写 `math::pi`（或 `import { pi } from math` 后写 `pi`），不带括号；用到的地方就是这个常量，与写一个字面量相同：图上是使用处所在的图里的一个 `DATA` 节点，没有 root 上的节点，也不需要捕获。能导出的是能作为图中常量的数据（标量、字符串以及它们组成的复合数据），类型就是数据的类型。同一个名字只能导出一样东西：一个值与一个算子组不能同名。
 
 ## 4. 语义性质（纯度）注册
 
@@ -167,7 +167,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 登记发生在模块加载时：
 
-- 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`src/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get` 登记为 `stateOnly`；`io/`、`profiler/` 不登记。`append`、`extend` 返回新数组，登记为纯（设计原则 2.12）；`:op/assn_append`（写成语句的 `acc = acc->append<v>`）属于 `op/assn` 族，不纯。
+- 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`src/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get` 登记为 `stateOnly`；`io/`、`profiler/` 不登记。`append`、`extend` 返回新数组，登记为纯（设计原则 11.3）；`:op/assn_append`（写成语句的 `acc = acc->append<v>`）属于 `op/assn` 族，不纯。
 - `.cmo` 模块：在 `load()` 中直接调用 `OperatorTable::instance().set(uri, traits)`。例如 `modules/math/module.cpp` 把 `getMathOpsMap()` 中的全部算子登记为纯。
 
 另有两处按 URI 或按值类型登记的信息，供需要的模块使用：
@@ -217,6 +217,8 @@ traits 之外，算子表的每一项可以带一份只读、带版本的语义�
 
 1. 在 `modules/<name>/` 下建立模块目录，`CMakeLists.txt` 中 `include` `modules/camel_module.cmake` 并调用 `add_camel_module(NAME <name>)`。默认源文件为 `executor.cpp`、`module.cpp`、`operators.cpp`，可用 `SOURCES` 指定；输出为 `<name>.cmo`。
 2. 该 CMake 函数会自动编入 `modules/camel_module_abi.cpp`，由它导出 `camel_module_abi_version()`。加载器（`loadCmoModule`，`include/camel/core/module/dynamic.h`）先比对 `CAMEL_MODULE_ABI_VERSION`，不一致则拒绝加载。
+
+`ArgsView::resultType()` 提供本次单态调用的静态结果布局，供 `tree::load_tree::<T>` 等仅凭输入类型无法确定返回布局的原生算子使用。它不是一个运行时类型值，也不属于 `with` 或普通实参。节点、字节码/JIT 和并行调度器，以及标准库的原生常量求值入口，在调用前设置该元数据；自行构造 `ArgsView` 的宿主也必须为此类算子设置它。该字段改变 C++ 对象布局，模块 ABI 已升至 3，旧模块须与核心一起重建。算子不能跨调用保存实参中的堆对象裸指针。
 3. 实现并导出 `extern "C" Module *camel_module_create(Context *ctx)`，返回新建的模块对象，所有权交给运行时。
 4. 在模块构造函数中用 `exportEntity()` 导出各 `OperatorGroup`（需要时用 `exportType()` 导出类型），URI 使用 `<name>:suffix` 格式。
 5. 在 `load()` 中调用 `registerExecutorFactory("<name>", factory)`，factory 创建持有 suffix → `operator_t` 映射的 Executor；并在此登记纯算子的 `OperatorTraits`。
@@ -240,7 +242,7 @@ traits 之外，算子表的每一项可以带一份只读、带版本的语义�
 
 ## 7. 纯度声明的规则与检查
 
-设计原则 2.9：算子的纯度必须声明；没有声明的算子按有副作用对待（少优化，不会算错）。
+设计原则 3.3：算子的纯度必须声明；没有声明的算子按有副作用对待（少优化，不会算错）。
 
 - 模块在 `load()` 里为**每一个**算子声明，有副作用的也要写出来：
 

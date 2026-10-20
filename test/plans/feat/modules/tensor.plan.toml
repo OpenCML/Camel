@@ -4,6 +4,83 @@ tier = "feat"
 tags = ["feat", "modules", "tensor"]
 
 [[tests]]
+name = "binary_roundtrip"
+desc = "Typed and context-inferred binary decoding preserves storage bits, including NaN payloads and subnormals."
+kind = "behavior"
+case = "../../../cases/modules/tensor/binary_roundtrip.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+const floats = '[0, 0, 128, 63, 0, 0, 32, 192, 0, 0, 0, 0, 0, 0, 0, 128]'
+assert(lines.length === 10 && [0, 1, 2, 9].every(i => lines[i] === floats), 'float bits, inference or typed function value changed')
+assert(lines[3] === '-1.5', 'parameter-context inference failed')
+assert(lines[4] === '[1, 0, 0, 0, 0, 0, 32, 0, 254, 255, 255, 255, 255, 255, 255, 255]', 'int64 bits changed')
+assert(lines[5] === '[1, 0, 1]' && lines[6] === '0', 'bool or empty decode failed')
+assert(lines[7] === '[1, 0, 128, 127, 1, 0, 192, 127, 0, 0, 128, 127, 1, 0, 0, 0]', 'NaN payload, infinity or subnormal bits changed')
+assert(lines[8] === '[0, 0, 128, 63]', 'scalar tensor decode failed')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "binary_payload_length"
+desc = "Binary decoding rejects a byte count that does not match dtype and shape."
+kind = "negative"
+case = "../../../cases/modules/tensor/binary_length_error.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_output_contains = ["payload has 3 bytes", "require 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "binary_bool_encoding"
+desc = "Binary bool storage must use the canonical byte values 0 and 1."
+kind = "negative"
+case = "../../../cases/modules/tensor/binary_bool_error.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["must contain only 0 or 1 at byte 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "binary_shape_overflow"
+desc = "The binary tensor shape cannot overflow its byte count before allocation."
+kind = "negative"
+case = "../../../cases/modules/tensor/binary_overflow_error.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
+expect_output_contains = ["byte count overflows the address space"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "binary_bytes"
+desc = "Little-endian tensor payloads preserve f32 signed zero, exact int64, bool, empty and view data."
+kind = "behavior"
+case = "../../../cases/modules/tensor/binary_bytes.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+const floats = '[0, 0, 128, 63, 0, 0, 32, 192, 0, 0, 0, 0, 0, 0, 0, 128]'
+assert(lines[0] === floats && lines[4] === floats, 'float payload or view changed bits')
+assert(lines[1] === '[1, 0, 0, 0, 0, 0, 32, 0, 254, 255, 255, 255, 255, 255, 255, 255]', 'int64 payload lost precision')
+assert(lines[2] === '[1, 0, 1]' && lines[3] === '0', 'bool or empty payload changed')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
 name = "broadcast_ops"
 desc = "NumPy-style broadcasting across arithmetic, comparison, where, cast, relu, and maximum."
 kind = "behavior"
@@ -302,7 +379,7 @@ assert(values.length === 2 && values.every(x => x === 0), 'broadcast gradient mu
 """
 timeout_ms = 10000
 
-# --- the numeric contract (design principles 2.13) -------------------------------------------
+# --- the numeric contract (design principles 7) -------------------------------------------
 
 [[tests]]
 name = "numeric_contract"
@@ -383,7 +460,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "int64_sum_exact"
-desc = "The sum of an int64 tensor accumulates exactly in int64 and wraps on overflow (design principles 2.10, 2.14): 2^53 + 1 + 1 + 1 is 9007199254740995 by axis and 9007199254740996.0 (the exact sum rounded once) in full, where an f64 accumulator gave 9007199254740992.0; INT64_MAX + 1 wraps to INT64_MIN in the full sum too (it used to come out positive)."
+desc = "The sum of an int64 tensor accumulates exactly in int64 and wraps on overflow (design principles 5.1, 7.7): 2^53 + 1 + 1 + 1 is 9007199254740995 by axis and 9007199254740996.0 (the exact sum rounded once) in full, where an f64 accumulator gave 9007199254740992.0; INT64_MAX + 1 wraps to INT64_MIN in the full sum too (it used to come out positive)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/int64_sum.cml"
 args = ["${case}", "${backend}"]
@@ -394,7 +471,7 @@ expect_stdout_exact = "9007199254740996.0\n3002399751580332.0\ntensor(9007199254
 
 [[tests]]
 name = "argmax_ieee"
-desc = "argmax and argmin compare by IEEE 754-2019 maximum and minimum (design principles 2.14): the first of equal extremes, the first NaN when there is one (for both), +0 above -0 (argmax of [-0, +0, -0, +0] is 1, argmin 0), integers by value."
+desc = "argmax and argmin compare by IEEE 754-2019 maximum and minimum (design principles 3.10): the first of equal extremes, the first NaN when there is one (for both), +0 above -0 (argmax of [-0, +0, -0, +0] is 1, argmin 0), integers by value."
 kind = "behavior"
 case = "../../../cases/modules/tensor/argmax_ieee.cml"
 args = ["${case}", "${backend}"]

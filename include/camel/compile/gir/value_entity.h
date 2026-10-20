@@ -19,7 +19,7 @@
 
 /*
  * A value exported by a module written in Camel, as the module's export table holds it
- * (design principles 2.11; docs/design/graph-model/README.cn.md 3.9.1). The value is a node of
+ * (design principles 10.1; docs/design/graph-model/README.cn.md 3.9.1). The value is a node of
  * the program's root graph; the export is made when the module is declared, before the node
  * exists, so the entity names the value and the graph builder makes the node when a module
  * first uses it. Owned by the program's graph builder, which outlives the export tables.

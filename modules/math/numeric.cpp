@@ -21,7 +21,7 @@
  * The elementary functions, the constants, integer helpers and the bit operations of the
  * `math` module. All are primitives written in C++ and pure.
  *
- * Numeric types are not converted implicitly (design principles 2.7): a function over floats
+ * Numeric types are not converted implicitly (design principles 5.1): a function over floats
  * takes `f32` or `float` and returns the type it was given; a function of two arguments takes
  * two arguments of one type.
  *
@@ -92,7 +92,7 @@ CAMEL_MATH_FN2(hypot)
 
 // ---- min, max, clamp, sign: the four numeric types ----
 
-// min and max are IEEE 754-2019 minimum and maximum (design principles 2.13), as the tensor
+// min and max are IEEE 754-2019 minimum and maximum (design principles 7.7), as the tensor
 // operators are (modules/tensor/kernels/minmax.h): a NaN argument gives the canonical quiet
 // NaN, whichever side it is on, and -0 is below +0 (std::min and std::max depend on the order
 // for both). Equal floats are identical except for the sign of zero, which decides between them.
@@ -192,7 +192,7 @@ slot_t __math_is_inf__(ArgsView &, ArgsView &norm, Context &) {
 }
 
 // The constants (`pi`, `e`, `inf`, `nan`) are values the module exports, not operators: see
-// MathModule::MathModule (design principles 2.13).
+// MathModule::MathModule (design principles 10.1).
 
 // ---- gcd, lcm ----
 //

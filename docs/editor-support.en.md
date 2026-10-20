@@ -54,15 +54,15 @@ The extension looks for `camel-ls` in this order: the setting `camel.server.path
 |---------|--------------|
 | `Camel: Restart Language Server` | Stops `camel-ls` and starts it again. |
 | `Camel: Show Graph of Current Function` | Shows the graph of the function under the cursor as Graphviz DOT in a read-only document beside the editor; refreshed when the file is saved. A Graphviz preview extension can render it. |
-| `Camel: Run Current File with Passes…` | Asks for a pass sequence (for example `std::inline std::fvm`) and runs `camel <file> <passes>` in the integrated terminal. |
+| `Camel: Run Current File with Passes…` | Asks for a pass sequence (for example `std::opt::inline std::fvm`) and runs `camel <file> <passes>` in the integrated terminal. |
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
 | `camel.server.path` | `""` | Path of `camel-ls`. |
 | `camel.path` | `""` | Path of `camel`. |
 | `camel.debugger.path` | `""` | Path of `camel-db`, started as `camel-db --dap` for a debug session. |
-| `camel.graph.passes` | `[]` | Passes applied before the graph is printed, for example `["std::inline"]`. |
-| `camel.run.passes` | `["std::inline", "std::fvm"]` | Pass sequence proposed the first time a file is run. |
+| `camel.graph.passes` | `[]` | Passes applied before the graph is printed, for example `["std::opt::inline"]`. |
+| `camel.run.passes` | `["std::opt::inline", "std::fvm"]` | Pass sequence proposed the first time a file is run. |
 | `camel.trace.server` | `off` | Logs the protocol messages (`messages` or `verbose`). |
 
 See [`editors/vscode/README.md`](../editors/vscode/README.md) for details.
@@ -77,7 +77,7 @@ See [`editors/vscode/README.md`](../editors/vscode/README.md) for details.
 | Diagnostics (push) | `textDocument/publishDiagnostics` | Implemented. Published when a document is opened or changed, for clients that do not announce pull diagnostics (pushing to a client that pulls would show every problem twice); `initializationOptions.diagnostics` = `"push"`, `"pull"` or `"both"` overrides. |
 | Diagnostics (pull) | `textDocument/diagnostic` | Implemented. Code, catalog name, suggestion and notes in `data`, secondary locations as `relatedInformation`. |
 | Incremental sync | `textDocument/didChange` (incremental) | Implemented (range edits, UTF-16 positions). |
-| Hover | `textDocument/hover` | Implemented: declaration as written, types in source spelling, comment lines above a declaration, instances of a generic function and the instance or overload a call resolved to, fields, literals, library signatures, the `--explain` entry of a diagnostic under the cursor. A member of a namespace is shown by its full name, `func Tools::inc(x: int): int` (design principles 2.13); so are the outline and completion. |
+| Hover | `textDocument/hover` | Implemented: declaration as written, types in source spelling, comment lines above a declaration, instances of a generic function and the instance or overload a call resolved to, fields, literals, library signatures, the `--explain` entry of a diagnostic under the cursor. A member of a namespace is shown by its full name, `func Tools::inc(x: int): int` (design principles 10.2); so are the outline and completion. |
 | Go to definition | `textDocument/definition` | Implemented: locals, parameters, functions (the overload a call chose), type aliases, type variables, imported names across files. Not for library functions implemented in C++. |
 | Find references | `textDocument/references` | Implemented within one program: the open file and the modules it imports. |
 | Document highlight | `textDocument/documentHighlight` | Implemented. |
@@ -116,7 +116,7 @@ Parameters:
 {
   "textDocument": { "uri": "file:///path/to/file.cml" },
   "position": { "line": 7, "character": 10 },
-  "passes": ["std::inline"]
+  "passes": ["std::opt::inline"]
 }
 ```
 
@@ -127,7 +127,7 @@ Result:
 ```json
 {
   "function": "fib",
-  "passes": ["std::inline"],
+  "passes": ["std::opt::inline"],
   "text": "digraph GraphIR { ... }",
   "diagnostics": ""
 }

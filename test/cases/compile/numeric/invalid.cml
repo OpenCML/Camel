@@ -1,12 +1,9 @@
 /**
  * Annotations that are not accepted: an unknown permission, an annotation other than
- * @numeric with names in parentheses, an empty @numeric(), and a decorator on a block.
+ * @numeric with names in parentheses, and an empty @numeric(). (A decorator on a block is
+ * accepted since language reference 7.6: compile/decorators.)
  */
 module invalid
-
-func twice(f: (x: int) => int): (x: int) => int {
-    return (x: int) => f(f(x))
-}
 
 @numeric(reassociate, fast)
 func a(x: float): float { return x * 2.0 }
@@ -16,13 +13,6 @@ func b(x: float): float { return x * 2.0 }
 
 @numeric()
 func c(x: float): float { return x * 2.0 }
-
-func d(x: float): float {
-    @twice
-    {
-        return x * 2.0
-    }
-}
 
 func main(): int sync {
     return 0

@@ -18,7 +18,7 @@
  */
 
 /*
- * `T?`, `T!` and the error value in the programs std::cpp writes (design principles 2.9:
+ * `T?`, `T!` and the error value in the programs std::cpp writes (design principles 3.9:
  * two built-in forms, each with one bit of tag; an error value is a fixed structure of kind,
  * message and the position where it was made).
  *
@@ -101,7 +101,7 @@ template <typename T> class Fallible {
 };
 
 /// A failed value of one `T!` as a failed value of another (`x ?-> f` passes the error on,
-/// design principles 2.9). Only applied to a failed value.
+/// design principles 3.9). Only applied to a failed value.
 template <typename To, typename From> To retag(const From &from) {
     return To::failure(from.error());
 }

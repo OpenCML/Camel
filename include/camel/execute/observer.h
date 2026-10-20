@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -59,12 +59,12 @@ enum class InstructionEffect : uint8_t {
 };
 
 struct InstructionSite {
-    size_t pc                          = 0;
-    core::context::Frame *frame        = nullptr;
-    camel::source::origin_id_t origin  = camel::source::kInvalidOriginId;
+    size_t pc                         = 0;
+    core::context::Frame *frame       = nullptr;
+    camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
     /// The frame slot the instruction writes its result to; 0 when it writes none.
-    int32_t resultSlot                 = 0;
-    InstructionEffect effect           = InstructionEffect::None;
+    int32_t resultSlot       = 0;
+    InstructionEffect effect = InstructionEffect::None;
 };
 
 class ExecutionObserver {
@@ -93,6 +93,13 @@ class ExecutionObserver {
     /// released. `isolated`: the fault is inside a fault-isolation boundary and will become
     /// an error value there; otherwise it ends the program.
     virtual void faultRaised(const core::error::RuntimeFault &fault, bool isolated) = 0;
+
+    /// Whether the observer shows the condition and the body of a loop as the frames they are.
+    /// A scheduler that runs loops as the tail recursion they mean (std::fvm and std::jit, by
+    /// default: it is the faster way) runs the program's own LOOP nodes instead, so that the
+    /// frames exist to be shown. A loop gives the same results either way; this is the one
+    /// place the observer changes how a program is run, and it says so.
+    virtual bool wantsLoopFrames() const { return true; }
 };
 
 /// The installed observer, or null.

@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 13, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,8 +48,8 @@ enum class TypeStorageKind : unsigned {
     Tuple,      // TupleType, including variable cells, `T?` / `T!` and frame layouts
     Struct,     // StructType
     Function,   // FunctionType (parameter names inline)
-    Union,      // UnionType
     Collection, // MapType, SetType
+    Enum,       // EnumType
     TypeVar,    // TypeVarType, TypeFunctionType (compile time only)
     Params,     // parameter arrays of module-defined (Other) types
     Count,

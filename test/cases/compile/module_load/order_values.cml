@@ -1,5 +1,5 @@
 // Top-level declarations do not depend on the order they are written in (design principles
-// 2.12): a value uses values written after it, a function uses a value written after it, a
+// 10.1): a value uses values written after it, a function uses a value written after it, a
 // function without a declared return type is called before it is written.
 let area = pi * r * r
 let pi = 3.14159

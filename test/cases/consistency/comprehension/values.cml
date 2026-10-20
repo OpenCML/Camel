@@ -1,5 +1,5 @@
 /**
- * `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>` (design principles 2.10):
+ * `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>` (design principles 4.2):
  * `x` has the element type of `xs`, the condition may be left out, and nothing is promised
  * about the order in which the elements are computed.
  */

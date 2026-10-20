@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -163,8 +163,8 @@ OperatorRule identity() {
 
 /// A conversion that can fault (cast.cpp, camel/core/numeric_convert.h): `rt::fn<To>(x,
 /// "target", site)`; the report has three values (numeric_convert.h names them).
-OperatorRule checkedConversion(const char *function, const char *to, const char *target,
-                               RuntimeDiag kind) {
+OperatorRule
+checkedConversion(const char *function, const char *to, const char *target, RuntimeDiag kind) {
     return {
         [function, to, target, kind](OperatorCall &c) -> std::optional<std::string> {
             return std::format(
@@ -258,7 +258,7 @@ Rules buildRules() {
     r[":op/eq"] = infix("==");
     r[":op/ne"] = infix("!=");
 
-    // ---- Booleans: `&` and `|` evaluate both sides (design principles 2.11); here both
+    // ---- Booleans: `&` and `|` evaluate both sides (design principles 4.2); here both
     // operands are values already, so && and || compute the same.
     r[":op/not"] = prefix("!");
     r[":op/and"] = infix("&&");
@@ -277,16 +277,22 @@ Rules buildRules() {
     r[":op/itod"] = cast("double");
     r[":op/ltod"] = cast("double");
     r[":op/ftod"] = cast("double");
-    r[":op/ltoi"] = checkedConversion("narrow", "int32_t", "i32", RuntimeDiag::ConversionOutOfRange);
-    r[":op/ftoi"] = checkedConversion("truncate", "int32_t", "i32", RuntimeDiag::ConversionOutOfRange);
-    r[":op/dtoi"] = checkedConversion("truncate", "int32_t", "i32", RuntimeDiag::ConversionOutOfRange);
-    r[":op/ftol"] = checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
-    r[":op/dtol"] = checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
+    r[":op/ltoi"] =
+        checkedConversion("narrow", "int32_t", "i32", RuntimeDiag::ConversionOutOfRange);
+    r[":op/ftoi"] =
+        checkedConversion("truncate", "int32_t", "i32", RuntimeDiag::ConversionOutOfRange);
+    r[":op/dtoi"] =
+        checkedConversion("truncate", "int32_t", "i32", RuntimeDiag::ConversionOutOfRange);
+    r[":op/ftol"] =
+        checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
+    r[":op/dtol"] =
+        checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
     r[":op/stoi"] =
         checkedConversion("integerFromText", "int32_t", "i32", RuntimeDiag::InvalidNumberText);
     r[":op/stol"] =
         checkedConversion("integerFromText", "int64_t", "int", RuntimeDiag::InvalidNumberText);
-    r[":op/stof"] = checkedConversion("floatFromText", "float", "f32", RuntimeDiag::InvalidNumberText);
+    r[":op/stof"] =
+        checkedConversion("floatFromText", "float", "f32", RuntimeDiag::InvalidNumberText);
     r[":op/stod"] =
         checkedConversion("floatFromText", "double", "float", RuntimeDiag::InvalidNumberText);
     for (const char *t : {"i", "l", "f", "d", "a"}) {
@@ -294,10 +300,10 @@ Rules buildRules() {
     }
 
     // ---- Strings (ops.cpp __builtin__add_ss__, __builtin__idx__; struct.cpp) ----
-    r[":op/add_s"]             = infix("+");
-    r[":struct/len_str"]       = runtimeFunction("length");
-    r[":op/idx_str"]           = faultingFunction("byteAt", RuntimeDiag::IndexOutOfRange, 3);
-    r[":str/join"]             = withArgument("join");
+    r[":op/add_s"]            = infix("+");
+    r[":struct/len_str"]      = runtimeFunction("length");
+    r[":op/idx_str"]          = faultingFunction("charAt", RuntimeDiag::IndexOutOfRange, 3);
+    r[":str/join"]            = withArgument("join");
     r[":struct/contains_str"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             return std::format("rt::contains({}, {})", c.norm(0).text, c.with(0).text);
@@ -330,15 +336,15 @@ Rules buildRules() {
     };
 
     // ---- Arrays (struct.cpp, ops.cpp __builtin__idx__) ----
-    r[":op/idx_arr"]         = faultingFunction("at", RuntimeDiag::IndexOutOfRange, 3);
-    r[":struct/len_arr"]     = runtimeFunction("length");
-    r[":struct/head_arr"]    = faultingFunction("head", RuntimeDiag::IndexOutOfRange, 3);
-    r[":struct/tail_arr"]    = runtimeFunction("tail");
-    r[":struct/concat_arr"]  = runtimeFunction("concat");
-    r[":struct/append_arr"]  = withArgument("append");
-    r[":struct/extend_arr"]  = withArgument("concat");
+    r[":op/idx_arr"]          = faultingFunction("at", RuntimeDiag::IndexOutOfRange, 3);
+    r[":struct/len_arr"]      = runtimeFunction("length");
+    r[":struct/head_arr"]     = faultingFunction("head", RuntimeDiag::IndexOutOfRange, 3);
+    r[":struct/tail_arr"]     = runtimeFunction("tail");
+    r[":struct/concat_arr"]   = runtimeFunction("concat");
+    r[":struct/append_arr"]   = withArgument("append");
+    r[":struct/extend_arr"]   = withArgument("concat");
     r[":struct/contains_arr"] = withArgument("contains");
-    r[":struct/zip"] = {
+    r[":struct/zip"]          = {
         [](OperatorCall &c) -> std::optional<std::string> {
             std::string args;
             for (size_t i = 0; i < c.normCount(); ++i) {
@@ -381,7 +387,7 @@ Rules buildRules() {
     r[":op/tag_is_error"]    = method("failed");
     r[":op/tag_error_value"] = method("value");
     r[":op/tag_error_info"]  = method("error");
-    r[":op/tag_throw"] = {
+    r[":op/tag_throw"]       = {
         [](OperatorCall &c) -> std::optional<std::string> {
             return std::format("{}::failure({})", c.cppType(c.resultType()), c.norm(0).text);
         },
@@ -392,8 +398,8 @@ Rules buildRules() {
     r[":op/parse_float"] = runtimeFunction("parseFloat", false);
 
     // ---- Modules with a standalone translation ----
-    r["time:now"]    = runtimeFunction("now", false);
-    r["sys:get_env"] = runtimeFunction("getEnv", false);
+    r["time:now"]         = runtimeFunction("now", false);
+    r["sys:get_env"]      = runtimeFunction("getEnv", false);
     r["statistics:mean"]  = runtimeFunction("statisticsMean");
     r["statistics:stdev"] = runtimeFunction("statisticsStdev");
     // random draws as modules/random does, through camel/utils/random.h (standalone/random.h).
@@ -404,7 +410,7 @@ Rules buildRules() {
     r["rand:choice"]  = faultingFunction("randomChoice", RuntimeDiag::InvalidArgument, 2);
     r["rand:sample"]  = faultingFunction("randomSample", RuntimeDiag::InvalidArgument, 2);
     r["rand:shuffle"] = runtimeFunction("randomShuffle", false);
-    r["math:sqrt"]   = cmath("sqrt", true);
+    r["math:sqrt"]    = cmath("sqrt", true);
     for (const char *t : {"i", "l"}) {
         r[std::format("math:abs_{}", t)] = cmath("abs");
     }
@@ -425,6 +431,47 @@ Rules buildRules() {
             false,
         };
     }
+    // ---- Enums (:enum/make, :enum/tag, :enum/field; the type carries the construction) ----
+    // The tag of a construction and the tag and index of a field read are constants of the
+    // program, so the first and second are template arguments of the generated helpers.
+    r[":enum/make"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const Type *result = c.resultType();
+            if (result == nullptr || c.normCount() == 0) {
+                return std::nullopt;
+            }
+            const std::string type = c.cppType(result);
+            if (type.empty() || type == "void") {
+                return std::nullopt;
+            }
+            std::string fields;
+            for (size_t i = 1; i < c.normCount(); ++i) {
+                fields += (i > 1 ? ", " : "") + c.norm(i).text;
+            }
+            return std::format("{}::make<{}>({})", type, c.norm(0).text, fields);
+        },
+        true,
+    };
+    r[":enum/tag"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            return std::format("rt::enumTag({})", c.norm(0).text);
+        },
+        true,
+    };
+    r[":enum/field"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            if (c.normCount() != 3) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::enumField<{}, {}>({})",
+                c.norm(0).text,
+                c.norm(1).text,
+                c.norm(2).text);
+        },
+        true,
+    };
+
     return r;
 }
 

@@ -918,7 +918,7 @@ tool = "python"
 case = "../../cases/modules/tiles/module_lease.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed", "tiles resources: cross-thread drain, release and context restoration passed", "tiles precision: subnormals, rounding and explicit FMA bits passed", "tiles scalar device: 9728 typed host/CUDA results matched"]
+expect_stdout_contains = ["tiles scalar i64 device: 2312 exact payload, cast and comparison results matched", "tiles module lease: eviction, launch and teardown passed", "tiles resources: cross-thread drain, release and context restoration passed", "tiles precision: subnormals, rounding and explicit FMA bits passed", "tiles scalar device: 9728 typed host/CUDA results matched"]
 timeout_ms = 60000
 
 [[tests]]
@@ -938,7 +938,7 @@ tool = "python"
 case = "../../cases/modules/tiles/numeric_permissions.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::fvm: numeric permission boundaries", "std::jit: numeric permission boundaries", "std::inline std::fvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
+expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::fvm: numeric permission boundaries", "std::jit: numeric permission boundaries", "std::opt::inline std::fvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
 timeout_ms = 180000
 
 [[tests]]
@@ -1129,3 +1129,76 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["Transcendental declared ULP bounds: four schedulers PASS"]
 timeout_ms = 60000
+
+[[tests]]
+name = "static_loop_device"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/loop_device.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: LOOP", "std::fvm: LOOP", "std::jit: LOOP", "std::prl: LOOP"]
+timeout_ms = 180000
+
+[[tests]]
+name = "loop_boundaries_faults_permissions"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/loop_checks.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: LOOP CPU boundaries", "std::fvm: LOOP CPU boundaries", "std::jit: LOOP CPU boundaries", "std::prl: LOOP CPU boundaries", "neighboring GPU regions preserved PASS"]
+timeout_ms = 180000
+
+[[tests]]
+name = "multi_state_loop_device"
+kind = "behavior"
+
+tool = "python"
+case = "../../cases/modules/tiles/loop_multi_device.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: multi-state LOOP", "std::fvm: multi-state LOOP", "std::jit: multi-state LOOP", "std::prl: multi-state LOOP"]
+timeout_ms = 180000
+
+[[tests]]
+name = "multi_state_loop_boundaries"
+kind = "behavior"
+
+tool = "python"
+case = "../../cases/modules/tiles/loop_multi_boundaries.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: multi-state LOOP", "std::fvm: multi-state LOOP", "std::jit: multi-state LOOP", "std::prl: multi-state LOOP", "Multi-state LOOP graph: one region, selected downloads and CPU neighbor regions PASS"]
+timeout_ms = 180000
+
+[[tests]]
+name = "core_view_maps"
+kind = "behavior"
+
+tool = "python"
+case = "../../cases/modules/tiles/core_views.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: core views exact bits", "std::fvm: core views exact bits", "std::jit: core views exact bits", "std::prl: core views exact bits"]
+timeout_ms = 180000
+
+[[tests]]
+name = "async_native_submissions"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/async_submission.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["tiles async chain: distinct streams, exact bits, identities and empty outputs passed", "tiles async faults: two identity consumers preserve ancestor failures passed", "tiles async ownership: empty consumers, eviction, early drop and cross-thread cleanup passed", "tiles async failures: event creation and record errors drain before releasing owners passed", "tiles async observers: concurrent ready and wait preserve results and faults passed", "tiles async staging: over 32 MiB distinct-stream transfer matches every output bit passed", "tiles async submit: concurrent same-source inputs and cache publication passed", "tiles pool: rounding, best fit, caps and trim counters passed", "tiles pool: device and pinned byte budgets passed", "tiles pool: uncached policy releases every block immediately passed", "tiles pool: pinned/device address reuse with verified payloads passed", "tiles pool: shared aliases keep a drained block out of the idle list passed", "tiles pool: cross-thread teardown restored the caller context passed", "tiles pool: concurrent workers never shared an active block passed", "tiles pool: backend isolation and non-owning idle entries passed", "tiles pool: OOM trim-and-retry-once and non-OOM rejection passed", "tiles pool: failed drain disables reuse and abandons outstanding blocks passed", "tiles pool: failed context activation disables reuse and abandons outstanding blocks passed", "tiles pool: shared-backend reuse, aliases and logical bounds passed"]
+timeout_ms = 120000
+
+[[tests]]
+name = "async_public_completion"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/async_execution.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: async public exact bits, completed results and eager faults PASS", "std::fvm: async public exact bits, completed results and eager faults PASS", "std::jit: async public exact bits, completed results and eager faults PASS", "std::prl: async public exact bits, completed results and eager faults PASS"]
+timeout_ms = 180000

@@ -4,13 +4,16 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Interned device storage types preserve the host tensor's static refinements.
 #include "tiles/device.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/tree.h"
 #include "modules/tensor/type.h"
 #include <mutex>
 #include <unordered_map>
@@ -24,7 +27,8 @@ TypeCode DeviceType::typeCode() {
 DeviceType::DeviceType(Type *host)
     : OtherType(typeCode(), 1, copyParams(std::span<Type *const>(&host, 1))) {}
 DeviceType *DeviceType::get(Type *host) {
-    if (!tensor::asTensorType(host) && host->code() != TypeCode::Float64)
+    if (!tensor::asTensorType(host) && host->code() != TypeCode::Float64 &&
+        host->code() != TypeCode::TypeVar)
         throw std::runtime_error("Device requires a tensor or float type");
     static std::mutex mutex;
     static std::unordered_map<Type *, DeviceType *> types;
@@ -65,11 +69,36 @@ slot_t DeviceType::castSlotFrom(slot_t value, Type *other) const {
     return value;
 }
 bool DeviceType::typeArguments() const { return true; }
-OtherType *DeviceType::cloneWithParams(std::span<Type *const> params) const {
-    if (params.size() != 1 ||
-        (!tensor::asTensorType(params[0]) && params[0]->code() != TypeCode::Float64))
+namespace {
+// `Device<T>` over a tree is a tree of `Device` leaves; what a tree and a path are comes from
+// core::type::tree (design principles 13.5).
+Type *distributeDevice(Type *host, const std::string &path, std::string &error) {
+    return core::type::tree::mapLeaves(
+        host,
+        [&](const std::string &leafPath, Type *leaf) -> Type * {
+            if (tensor::asTensorType(leaf) || leaf->code() == TypeCode::Float64 ||
+                leaf->code() == TypeCode::TypeVar)
+                return DeviceType::get(leaf);
+            error = "Device leaf '" + core::type::tree::displayPath(leafPath) +
+                    "' has unsupported type " + leaf->toString() + "; expected a tensor or float";
+            return nullptr;
+        },
+        path);
+}
+} // namespace
+Type *DeviceType::cloneWithParams(std::span<Type *const> params) const {
+    if (params.size() != 1)
         return nullptr;
-    return get(params[0]);
+    std::string error;
+    return distributeDevice(params[0], "", error);
+}
+Type *
+DeviceType::cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const {
+    if (arguments.size() != 1 || !arguments[0].type) {
+        error = "Device takes exactly one type argument";
+        return nullptr;
+    }
+    return distributeDevice(arguments[0].type, "", error);
 }
 const DeviceType *asDeviceType(const Type *type) {
     return type && type->code() == DeviceType::typeCode() ? static_cast<const DeviceType *>(type)

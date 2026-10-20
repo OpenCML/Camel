@@ -1,6 +1,6 @@
 /**
  * A recursion over a step count read from a shape, with a tensor accumulator.
- * std::opt::simplify unrolls it: a specialized `run` whose exit GATE only
+ * std::opt unrolls it: a specialized `run` whose exit GATE only
  * waits on its parameters and on gated constants is inlined as the tail of a
  * branch arm. Its control inputs disappear with the parameters, and a GATE
  * that anchors an arm is not dissolved, so the rewrite used to commit a GATE

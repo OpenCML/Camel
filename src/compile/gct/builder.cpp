@@ -13,20 +13,22 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include <exception>
 #include "builder.h"
+#include <exception>
 
 #include "camel/compile/semantic_recorder.h"
-#include "camel/core/module/userdef.h"
-#include "camel/core/operator_names.h"
 #include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
+#include "camel/core/module/userdef.h"
+#include "camel/core/operator_names.h"
+#include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
@@ -270,7 +272,7 @@ Builder::TypePositionGuard::TypePositionGuard(Builder &builder, TypePosition pos
 Builder::TypePositionGuard::~TypePositionGuard() { builder.typePosition_ = saved; }
 
 void Builder::reportAnyType(const AST::node_ptr_t &ast) {
-    // Design principles 2.11, 2.12: every value has a definite type after compilation, and
+    // Design principles 5.10: every value has a definite type after compilation, and
     // `any` is refused wherever a recommended form exists. Each position has one.
     const char *instead = "";
     switch (typePosition_) {
@@ -315,9 +317,11 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("float"), Type::Float64());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
+    // The type of binary data (design principles 11.1), a built-in name like `string`.
+    typeScope_->insert(Reference("Bytes"), camel::core::type::BytesType::get());
     // No `any`: see reportAnyType.
     typeScope_->insert(Reference("void"), Type::Void());
-    // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 2.9).
+    // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 11.3).
     typeScope_->insert(Reference("Map"), MapType::prototype());
     typeScope_->insert(Reference("Set"), SetType::prototype());
 }
@@ -328,8 +332,8 @@ Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 // A literal that could not be converted to the type its position asks for: out of the range
 // of a narrower numeric type (`let b: i32 = 3000000000`), or not convertible at all.
 template <typename Diags, typename Range>
-static void reportLiteralCastFailure(
-    Diags &diags, const Range &range, const data_ptr_t &data, Type *type) {
+static void
+reportLiteralCastFailure(Diags &diags, const Range &range, const data_ptr_t &data, Type *type) {
     if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
         diags->of(SemanticDiag::LiteralOutOfRange)
             .at(range)
@@ -356,13 +360,12 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     // for the modules that import this one back (see below).
     exportedRefs_.clear();
     if (!exportOptNode->empty()) {
-        for (const Reference &ref :
-             exportOptNode->front()->loadAs<AST::ExportLoad>()->getRefs()) {
+        for (const Reference &ref : exportOptNode->front()->loadAs<AST::ExportLoad>()->getRefs()) {
             exportedRefs_.insert(ref.toString());
         }
     }
 
-    // Loading in steps (design principles 2.11: modules may import each other; the graph
+    // Loading in steps (design principles 10.1: modules may import each other; the graph
     // model, 3.9.4). First every import is bound: the modules are found, nothing of them is
     // compiled. Then the module declares its types, compiling an imported module only when one
     // of its types is named. Then the imported modules are compiled as far as their
@@ -385,7 +388,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     node_ptr_t root = makeExec();
 
     // The namespaces the module declares, and the `using namespace` of its top level, which
-    // apply to the whole module whatever their position (design principles 2.12).
+    // apply to the whole module whatever their position (design principles 10.2).
     ownNamespaces_.clear();
     namespacePath_.clear();
     usingFrames_.clear();
@@ -432,13 +435,14 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
             usings           = load->scopeUsings();
             if (load->stmtType() == AST::StmtType::Func) {
                 // An operator is named without its namespaces (it belongs to the module,
-                // design principles 2.13); it is still lowered in the block it is written in.
+                // design principles 4.3); it is still lowered in the block it is written in.
                 const auto &func = stmt->loadAs<AST::FuncDeclLoad>();
                 path = func->operatorSymbol().empty() ? func->ref().paths() : func->declaredIn();
             } else if (load->stmtType() == AST::StmtType::Type) {
                 path = stmt->loadAs<AST::TypeDeclLoad>()->ref().paths();
-            } else if (load->stmtType() == AST::StmtType::Data &&
-                       !stmt->loadAs<AST::DataDeclLoad>()->refs().empty()) {
+            } else if (
+                load->stmtType() == AST::StmtType::Data &&
+                !stmt->loadAs<AST::DataDeclLoad>()->refs().empty()) {
                 path = stmt->loadAs<AST::DataDeclLoad>()->refs().front().paths();
             }
         }
@@ -595,10 +599,9 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     const auto &fullPath = load->getPath();
     const auto &refs     = load->refs();
     // `from m::N`: the module `m`, and the namespace `N` of it the names are taken from
-    // (design principles 2.12).
-    const size_t nsAt = fullPath.find("::");
-    const std::string path =
-        nsAt == std::string::npos ? fullPath : fullPath.substr(0, nsAt);
+    // (design principles 10.2).
+    const size_t nsAt      = fullPath.find("::");
+    const std::string path = nsAt == std::string::npos ? fullPath : fullPath.substr(0, nsAt);
     std::vector<std::string> nsPath;
     if (nsAt != std::string::npos) {
         const Reference ns(fullPath.substr(nsAt + 2));
@@ -645,8 +648,8 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
-    // A module importing itself: allowed, and it has no effect (design principles 2.13). Its
-    // names are its own already (with or without its own name in front, 2.12); the import
+    // A module importing itself: allowed, and it has no effect (design principles 10.1). Its
+    // names are its own already (with or without its own name in front, 10.2); the import
     // binds nothing, and records no import a cycle could be made of.
     if (mod == module_) {
         LEAVE("ImportDecl");
@@ -664,7 +667,7 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     // in name/operator resolution after a normal import.
     if (refs.empty()) {
         module_->importDefaultRefsFromMod(mod);
-        // `import m` binds `m`, `import m as x` binds `x` (design principles 2.12), `import
+        // `import m` binds `m`, `import m as x` binds `x` (design principles 10.2), `import
         // m::N` binds `N` to that namespace of the module.
         if (nsPath.empty()) {
             const Reference localNamespace =
@@ -762,7 +765,7 @@ node_ptr_t Builder::visitExport(const AST::node_ptr_t &ast) {
 node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     ENTER("Stmt");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type");
-    const auto &stmt = ast->loadAs<AST::StmtLoad>();
+    const auto &stmt    = ast->loadAs<AST::StmtLoad>();
     node_ptr_t stmtNode = nullptr;
 
     switch (stmt->stmtType()) {
@@ -1052,7 +1055,7 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(ast->size() - 1);
     const auto &declLoad     = ast->loadAs<AST::FuncDeclLoad>();
     if (!declLoad->operatorSymbol().empty()) {
-        // `func operator +(a: V, b: V): V` (design principles 2.12): the function of the
+        // `func operator +(a: V, b: V): V` (design principles 4.3): the function of the
         // operator's reserved name, which the parser and the AST builder chose.
         checkOperatorDeclaration(declLoad->operatorSymbol(), funcDataNode, ast);
     } else if (!validateIdent(funcDataNode->loadAs<AST::FuncDataLoad>()->ref().ident())) {
@@ -1064,8 +1067,8 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
         diags_->of(SemanticDiag::ReservedIdentifier).at(ast->load()->tokenRange()).commit();
         throw BuildAbortException();
     }
-    funcDeclPending_         = true;
-    node_ptr_t funcNode      = visitFuncData(funcDataNode);
+    funcDeclPending_    = true;
+    node_ptr_t funcNode = visitFuncData(funcDataNode);
 
     // Decorator annotations are lowered to ANNO nodes attached after FUNC payload.
     // Each ANNO node owns one lowered GCT expression (currently lowered from funcAnno -> Data).
@@ -1118,7 +1121,11 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         ~InProgress() { context.leaveTypeDeclaration(); }
     } inProgress{*context_, module_.get(), typeLoad->ref().toString()};
     TypePositionGuard position(*this, TypePosition::TypeDeclaration);
-    if (typeLoad->params().empty()) {
+    if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
+        // The name is in scope before the variants are read, so that a variant field can hold
+        // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
+        type = declareEnumType(typeNode, typeLoad.get());
+    } else if (typeLoad->params().empty()) {
         type = visitType(typeNode);
     } else {
         // A type function (`type Pair<T> = (T, T)`): the right-hand side is an ordinary type
@@ -1131,23 +1138,7 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             ~TypeScopeGuard() { self.typeScope_ = outer; }
         } typeScopeGuard{*this, typeScope_};
         pushScope();
-        for (const string &param : typeLoad->params()) {
-            const Reference paramRef(param);
-            if (typeScope_->has(paramRef, false)) {
-                diags_->of(SemanticDiag::DuplicateParameter)
-                    .at(ast->load()->tokenRange())
-                    .commit(param);
-                throw BuildAbortException();
-            }
-            if (typeScope_->get(paramRef).has_value() ||
-                module_->getImportedType(paramRef).has_value()) {
-                diags_->of(SemanticDiag::TypeFunctionArguments)
-                    .at(ast->load()->tokenRange())
-                    .commit(typeName, "its parameter '" + param + "' already denotes a type here");
-                throw BuildAbortException();
-            }
-            typeScope_->insert(paramRef, TypeVarType::create(param, false));
-        }
+        bindTypeParameters(typeLoad.get(), ast, typeName);
         type = TypeFunctionType::create(typeName, typeLoad->params(), visitType(typeNode));
     }
     // A program's own `Map` or `Set` takes the place of the built-in collection type of that
@@ -1157,6 +1148,9 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         typeScope_->erase(typeLoad->ref(), false);
     }
     typeScope_->insert(typeLoad->ref(), type);
+    if (auto *recorder = context_ ? context_->semanticRecorder() : nullptr) {
+        recorder->typeDeclared(ast->load()->origin(), typeLoad->ref().toString(), type);
+    }
     if (exportedRefs_.contains(typeLoad->ref().toString())) {
         // Exported at once: a module that imports this one back may need it before this one
         // is through (see visitModule).
@@ -1168,6 +1162,108 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     return declNode;
 }
 
+void Builder::bindTypeParameters(
+    const AST::TypeDeclLoad *decl, const AST::node_ptr_t &ast, const std::string &name) {
+    for (const string &param : decl->params()) {
+        const Reference paramRef(param);
+        if (typeScope_->has(paramRef, false)) {
+            diags_->of(SemanticDiag::DuplicateParameter)
+                .at(ast->load()->tokenRange())
+                .commit(param);
+            throw BuildAbortException();
+        }
+        if (typeScope_->get(paramRef).has_value() ||
+            module_->getImportedType(paramRef).has_value()) {
+            diags_->of(SemanticDiag::TypeFunctionArguments)
+                .at(ast->load()->tokenRange())
+                .commit(name, "its parameter '" + param + "' already denotes a type here");
+            throw BuildAbortException();
+        }
+        typeScope_->insert(paramRef, TypeVarType::create(param, false));
+    }
+}
+
+Type *Builder::declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl) {
+    const string name                    = decl->ref().toString();
+    const auto enumLoad                  = ast->loadAs<AST::EnumTypeLoad>();
+    EnumDecl *declaration                = EnumDecl::create(name, decl->params());
+    const bool generic                   = !decl->params().empty();
+    scope_ptr_t<Reference, Type *> outer = typeScope_;
+    if (generic) {
+        pushScope();
+        bindTypeParameters(decl, ast, name);
+    }
+    Type *result;
+    if (!generic) {
+        // Without parameters the declaration has one instance, which is the type itself; its
+        // name denotes it from here on.
+        EnumType *instance = declaration->prototype();
+        typeScope_->insert(decl->ref(), instance);
+        declaration->define(buildEnumVariants(ast, instance));
+        result = instance;
+    } else {
+        // The written field types are those of the instance whose arguments are the parameters
+        // themselves; a use `Name<int>` replaces them (as `type Pair<T> = (T, T)` does).
+        std::vector<Type *> parameters;
+        parameters.reserve(decl->params().size());
+        for (const string &param : decl->params()) {
+            parameters.push_back(TypeVarType::create(param, false));
+        }
+        EnumType *body = EnumType::get(declaration, parameters);
+        Type *function = TypeFunctionType::create(name, decl->params(), body);
+        typeScope_->insert(decl->ref(), function);
+        declaration->define(buildEnumVariants(ast, body));
+        result = function;
+    }
+    if (generic) {
+        typeScope_ = outer;
+    }
+    return result;
+}
+
+std::vector<EnumVariant>
+Builder::buildEnumVariants(const AST::node_ptr_t &ast, const EnumType *instance) {
+    const auto enumLoad = ast->loadAs<AST::EnumTypeLoad>();
+    ASSERT(
+        enumLoad->variants().size() == ast->size(),
+        "Every variant of an enum has one node with its field types");
+    std::vector<EnumVariant> variants;
+    variants.reserve(enumLoad->variants().size());
+    std::unordered_set<string> variantNames;
+    for (size_t i = 0; i < enumLoad->variants().size(); ++i) {
+        const AST::EnumVariantDecl &written = enumLoad->variants()[i];
+        EnumVariant variant;
+        variant.name  = written.name;
+        variant.shape = written.shape == AST::EnumVariantShape::Tuple    ? VariantShape::Tuple
+                        : written.shape == AST::EnumVariantShape::Struct ? VariantShape::Struct
+                                                                         : VariantShape::Unit;
+        const auto fieldTypes = ast->atAs<AST::RepeatedLoad>(i);
+        if (!variantNames.insert(variant.name).second) {
+            diags_->of(SemanticDiag::DuplicateEnumVariant)
+                .at(fieldTypes->load()->tokenRange())
+                .commit(variant.name, instance->decl()->name());
+            throw BuildAbortException();
+        }
+        variant.fieldNames = written.fieldNames;
+        std::unordered_set<string> fieldNames;
+        for (const auto &field : *fieldTypes) {
+            variant.fieldTypes.push_back(visitType(field));
+        }
+        if (variant.shape == VariantShape::Struct) {
+            for (const string &fieldName : variant.fieldNames) {
+                if (!fieldNames.insert(fieldName).second) {
+                    diags_->of(SemanticDiag::DuplicateEnumField)
+                        .at(fieldTypes->load()->tokenRange())
+                        .commit(fieldName, variant.name, instance->decl()->name());
+                    throw BuildAbortException();
+                }
+            }
+        }
+        variants.push_back(std::move(variant));
+    }
+    return variants;
+}
+
 /*
 UsingNamespace(Ref ref) ;
 */
@@ -1176,7 +1272,7 @@ node_ptr_t Builder::visitUsingNamespaceDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for UsingNamespace");
     const auto &load = ast->loadAs<AST::UsingNamespaceLoad>();
     // It applies to the block it is written in (visitStmtBlock, visitModule), and what it
-    // names is found where a name is used (design principles 2.12); here it is only checked.
+    // names is found where a name is used (design principles 10.2); here it is only checked.
     if (!usableNamespace(load->ref())) {
         diags_->of(SemanticDiag::UnresolvedReference)
             .at(ast->load()->tokenRange())
@@ -1208,7 +1304,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
 
     // Create an ExitLoad node to represent the exit statement. `throw` is an exit as well:
     // it returns the failed form of the function's declared `T!` (the graph builder checks).
-    const bool isThrow = ast->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Throw;
+    const bool isThrow  = ast->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Throw;
     node_ptr_t exitNode = tree_->makeExit(isThrow ? ExitType::Throw : ExitType::Return);
     reportExitInUnusedArm(ast, isThrow);
 
@@ -1263,15 +1359,14 @@ void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
         return;
     }
     // `return null` and a bare `return` are reported like any other: an arm needs no value
-    // to compile (design principles 2.10: an `if` without `else` has none, and its arm may
+    // to compile (design principles 3.7: an `if` without `else` has none, and its arm may
     // be of any type), so one written there was most likely meant to leave the function.
     // One report per statement: the arm of `case a | b` is lowered once for each pattern.
     const auto range = exit->load()->tokenRange();
     if (!reportedExits_.insert({range.start, range.end}).second) {
         return;
     }
-    const bool isMatch =
-        ctrl->loadAs<AST::DataLoad>()->dataType() == AST::DataType::MatchExpr;
+    const bool isMatch  = ctrl->loadAs<AST::DataLoad>()->dataType() == AST::DataType::MatchExpr;
     const char *keyword = isThrow ? "throw" : "return";
     const char *branch  = isMatch ? "match" : "if";
     diags_->of(SemanticDiag::ExitInUnusedBranch)
@@ -1292,17 +1387,45 @@ node_ptr_t Builder::makeExec(bool synced, bool operands) {
 /*
 StmtBlock(bool sync) : Stmt* stmts ;
 */
-node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
+node_ptr_t Builder::visitDecoratedBlock(const AST::node_ptr_t &ast) {
+    ENTER("DecoratedBlock");
+    node_ptr_t execNode = visitStmtBlock(ast, false);
+    FunctionTypeFactory factory; // no parameters; the result is the block's value
+    FunctionType *type  = factory.buildOpen();
+    node_ptr_t typeNode = tree_->makeType(type, type->implMark());
+    node_ptr_t funcNode = tree_->makeFunc("");
+    funcNode->setDecoratedBlock();
+    *funcNode << typeNode << execNode;
+    for (const auto &annoAst : *ast->atAs<AST::RepeatedLoad>(1)) {
+        ASSERT(annoAst->type() == AST::LoadType::Data, "A decorator should lower to AST Data.");
+        node_ptr_t annoNode = tree_->makeAnno();
+        *annoNode << visitData(annoAst);
+        *funcNode << annoNode;
+    }
+    node_ptr_t linkNode = tree_->makeLink(0);
+    *linkNode << funcNode;
+    setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.block.type");
+    setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.block.func");
+    setOriginFromAst(context_, linkNode, ast, camel::source::OriginKind::GctNode, "gct.block.call");
+    LEAVE("DecoratedBlock");
+    return linkNode;
+}
+
+node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) {
     ENTER("StmtBlock");
     // Ensure the AST node is of the expected type (Stmt)
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for StmtBlock");
+    if (decorators && ast->size() > 1) {
+        LEAVE("StmtBlock");
+        return visitDecoratedBlock(ast);
+    }
 
     // Extract the statement block load and create an ExecLoad node
     // The ExecLoad node represents the execution of the statement block
     const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
     if (stmtBlock->waited()) {
         // `wait { ... }`: the grammar takes it and the mark was dropped. `wait` is defined
-        // for one expression (design principles 2.6); what it means for a block is not.
+        // for one expression (design principles log 2.6); what it means for a block is not.
         diags_->of(SemanticDiag::ConstructNotSupported)
             .at(ast->load()->tokenRange())
             .commit(
@@ -1324,7 +1447,7 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
     // Push a new scope for the statement block
     pushScope();
     // The `using namespace` written in the block apply to the whole block, and to it only
-    // (design principles 2.12).
+    // (design principles 10.2).
     std::vector<Reference> blockUsings;
     for (const auto &stmt : *ast->atAs<AST::RepeatedLoad>(0)) {
         if (stmt->type() == AST::LoadType::Stmt &&
@@ -1360,9 +1483,8 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
         const auto stmtType   = stmt->loadAs<AST::StmtLoad>()->stmtType();
         valueUse_.unusedCtrl  = nullptr;
         valueUse_.blockUnused = false;
-        valueUse_.stmtExpr    = stmtType == AST::StmtType::Expr && stmt->size() > 0
-                                    ? stmt->at(0).get()
-                                    : nullptr;
+        valueUse_.stmtExpr =
+            stmtType == AST::StmtType::Expr && stmt->size() > 0 ? stmt->at(0).get() : nullptr;
         if (stmtUnused && stmtType == AST::StmtType::Expr && stmt->size() > 0) {
             // An `if` / `match` written as a statement whose value nothing takes.
             const auto &expr = stmt->at(0);
@@ -1396,7 +1518,7 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
 node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     ENTER("Data");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for visitData");
-    const auto &data = ast->loadAs<AST::DataLoad>();
+    const auto &data    = ast->loadAs<AST::DataLoad>();
     node_ptr_t dataNode = nullptr;
 
     switch (data->dataType()) {
@@ -1444,7 +1566,7 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     }
     if (data->waited() && data->dataType() != AST::DataType::BinaryExpr &&
         data->dataType() != AST::DataType::ReservedExpr) {
-        // `wait` orders the one expression after it (design principles 2.6). Only an operator
+        // `wait` orders the one expression after it (design principles log 2.6). Only an operator
         // expression, an assignment, a call, an access or a binding is lowered with the mark;
         // on anything else (a name, a literal, a unary operator, a lambda) the mark was
         // dropped without a word. What it should order there has not been decided.
@@ -1579,58 +1701,16 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
-    case AST::BinaryDataOp::Assign: {
-        opNode = tree_->makeDRef("__assn__");
-    } break;
-    case AST::BinaryDataOp::AssignAdd: {
-        opNode = tree_->makeDRef("__assn_add__");
-    } break;
-    case AST::BinaryDataOp::AssignSub: {
-        opNode = tree_->makeDRef("__assn_sub__");
-    } break;
-    case AST::BinaryDataOp::AssignMul: {
-        opNode = tree_->makeDRef("__assn_mul__");
-    } break;
-    case AST::BinaryDataOp::AssignDiv: {
-        opNode = tree_->makeDRef("__assn_div__");
-    } break;
-    case AST::BinaryDataOp::AssignMod: {
-        opNode = tree_->makeDRef("__assn_mod__");
-    } break;
-    case AST::BinaryDataOp::AssignMat: {
-        opNode = tree_->makeDRef("__assn_mat__");
-    } break;
-    case AST::BinaryDataOp::AssignExp: {
-        opNode = tree_->makeDRef("__assn_pow__");
-    } break;
-    case AST::BinaryDataOp::AssignAnd: {
-        opNode = tree_->makeDRef("__assn_and__");
-    } break;
-    case AST::BinaryDataOp::AssignOr: {
-        opNode = tree_->makeDRef("__assn_or__");
-    } break;
     case AST::BinaryDataOp::LogicalOr:
     case AST::BinaryDataOp::LogicalAnd: {
-        // `||` and `&&` are branches, not operators (design principles 2.11).
+        // `||` and `&&` are branches, not operators (design principles 4.2).
         node_ptr_t res = visitLogicalExpr(ast);
         LEAVE("BinaryExpr");
         return res;
     }
-    case AST::BinaryDataOp::Or: {
-        opNode = tree_->makeDRef("__or__");
-    } break;
-    case AST::BinaryDataOp::And: {
-        opNode = tree_->makeDRef("__and__");
-    } break;
-    case AST::BinaryDataOp::Eq: {
-        opNode = tree_->makeDRef("__eq__");
-    } break;
-    case AST::BinaryDataOp::Neq: {
-        opNode = tree_->makeDRef("__neq__");
-    } break;
     case AST::BinaryDataOp::StrictEq:
     case AST::BinaryDataOp::StrictNeq: {
-        // Design principles 2.10: `===` is not supported for now (and `!==` with it). It
+        // Design principles 4.1: `===` is not supported for now (and `!==` with it). It
         // used to compile and compared objects, so two equal string literals were unequal.
         // Located at the whole comparison (the range of the node itself is its right side).
         auto range  = ast->load()->tokenRange();
@@ -1643,46 +1723,15 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 "with '==' and '!='");
         throw BuildAbortException();
     }
-    case AST::BinaryDataOp::Less: {
-        opNode = tree_->makeDRef("__lt__");
+    default: {
+        // Every other operator is a call of the group the table of operator_names.cpp gives
+        // its symbol: plain, compound assignment and `=` alike.
+        const auto group = camel::core::binaryOperatorGroup(AST::to_string(binaryExpr->op()));
+        ASSERT(group.has_value(), "Unknown binary operation");
+        if (!group)
+            return nullptr;
+        opNode = tree_->makeDRef(std::string(*group));
     } break;
-    case AST::BinaryDataOp::LessEq: {
-        opNode = tree_->makeDRef("__le__");
-    } break;
-    case AST::BinaryDataOp::Greater: {
-        opNode = tree_->makeDRef("__gt__");
-    } break;
-    case AST::BinaryDataOp::GreaterEq: {
-        opNode = tree_->makeDRef("__ge__");
-    } break;
-    case AST::BinaryDataOp::Add: {
-        opNode = tree_->makeDRef("__add__");
-    } break;
-    case AST::BinaryDataOp::Sub: {
-        opNode = tree_->makeDRef("__sub__");
-    } break;
-    case AST::BinaryDataOp::Mul: {
-        opNode = tree_->makeDRef("__mul__");
-    } break;
-    case AST::BinaryDataOp::Div: {
-        opNode = tree_->makeDRef("__div__");
-    } break;
-    case AST::BinaryDataOp::Mod: {
-        opNode = tree_->makeDRef("__mod__");
-    } break;
-    case AST::BinaryDataOp::Mat: {
-        opNode = tree_->makeDRef("__mat__");
-    } break;
-    case AST::BinaryDataOp::Pow: {
-        opNode = tree_->makeDRef("__pow__");
-    } break;
-    case AST::BinaryDataOp::Index: {
-        opNode = tree_->makeDRef("__idx__");
-    } break;
-    default:
-        // If the operator is unknown, assert and return nullptr
-        ASSERT(false, "Unknown binary operation");
-        return nullptr;
     }
     auto binaryAstBundle = astSemantic(context_, ast);
     setOriginFromOrigin(
@@ -1843,7 +1892,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::NullThen:
     case AST::ReservedDataOp::ErrorThen: {
         // `a ?? b` / `a !! b`: a branch on the tag of `a` whose first arm is `b` (design
-        // principles 2.9). The graph builder knows the types; it adds the arm that takes the
+        // principles 3.9). The graph builder knows the types; it adds the arm that takes the
         // value out of `a`.
         const bool onNull = reservedExpr->op() == AST::ReservedDataOp::NullThen;
         res               = tree_->makeBrch(onNull ? BranchKind::NullThen : BranchKind::ErrorThen);
@@ -1889,8 +1938,8 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         int32_t argSlot                                      = 0;
         // `x ?-> f`: the receiver is marked (NotNullThen). The call becomes the arm of a
         // branch on the tag of `x`, taken when `x` has not failed, and receives the value
-        // taken out of `x` under a reserved name (design principles 2.9).
-        node_ptr_t passedNode       = nullptr;
+        // taken out of `x` under a reserved name (design principles 3.8).
+        node_ptr_t passedNode        = nullptr;
         AST::node_ptr_t passOperator = nullptr;
         for (auto &argNode : *argsNode) {
             node_ptr_t gctArg   = nullptr;
@@ -1949,6 +1998,28 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             *brchNode << passedNode << caseNode;
             res = brchNode;
         }
+    } break;
+
+    case AST::ReservedDataOp::Instantiate: {
+        res = tree_->makeTypeApplication();
+        *res << visitData(lhsASTNode);
+        for (const auto &argument : *ast->atAs<AST::RepeatedLoad>(1)) {
+            if (argument->type() == AST::LoadType::NamedType) {
+                // `A = int`: the name as a constant, then the type (design principles 5.9).
+                const auto &named = argument->loadAs<AST::NamedTypeLoad>();
+                *res << tree_->makeData(std::make_shared<StringData>(named->getRef().toString()));
+                *res << tree_->makeType(visitType(argument->at(0)), ImplMark::Graph);
+                continue;
+            }
+            Type *type = visitType(argument);
+            *res << tree_->makeType(type, ImplMark::Graph);
+        }
+        setOriginFromAst(
+            context_,
+            res,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.type_application");
     } break;
 
     case AST::ReservedDataOp::Bind: {
@@ -2161,7 +2232,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     // Whether this `if` is a statement whose value nothing takes: its arms are then lowered
     // as arms of an unused branch (see ValueUse).
     const bool valueUnused = std::exchange(valueUse_.unusedCtrl, nullptr) == ast.get();
-    // Design principles 2.10: an `if` without `else` has no value, so it can only stand as
+    // Design principles 3.7: an `if` without `else` has no value, so it can only stand as
     // a statement. (As the last statement of a block it gives the block no value either;
     // what then expects one reports the missing value by the type.)
     const bool isStatement = std::exchange(valueUse_.stmtExpr, nullptr) == ast.get();
@@ -2182,8 +2253,8 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     // Process the "then" block and attach it as the "True" case
     const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
     enterArmOf(ast, valueUnused);
-    node_ptr_t thenNode   = visitStmtBlock(thenBlock);
-    node_ptr_t trueCase   = tree_->makeCase(CaseType::True);
+    node_ptr_t thenNode = visitStmtBlock(thenBlock);
+    node_ptr_t trueCase = tree_->makeCase(CaseType::True);
     setOriginFromOrigin(
         context_,
         trueCase,
@@ -2248,21 +2319,21 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
 /*
 LoopExpr(state, binder) : Repeated Data inits, Optional Data sequence, Optional Data condition,
                           StmtBlock body ;
-A loop (design principles 2.10, 2.13) becomes one LOOP node (camel/compile/gct/node.h,
+A loop (design principles 3.10) becomes one LOOP node (camel/compile/gct/node.h,
 Node::loopKind): the first values and the sequence are expressions where the loop is; the
 condition and the body are scopes of their own, the way the arms of an `if` are, each with
-the numeric permissions in force here (2.13: a loop body written in a block or a function
+the numeric permissions in force here (7.5: a loop body written in a block or a function
 under @numeric is part of it). The names of the state and of the element are declared by the
 graph builder, which gives the condition and the body their own graphs.
 */
 node_ptr_t Builder::visitLoopExpr(const AST::node_ptr_t &ast) {
     ENTER("LoopExpr");
-    const auto &load = ast->loadAs<AST::LoopExprLoad>();
+    const auto &load    = ast->loadAs<AST::LoopExprLoad>();
     const auto &condAst = ast->optAtAs<AST::DataLoad>(2);
     const bool hasFor   = load->hasFor();
-    const auto kind     = hasFor ? (condAst ? camel::core::LoopKind::ForWhile
-                                            : camel::core::LoopKind::For)
-                                 : camel::core::LoopKind::While;
+    const auto kind = hasFor
+                          ? (condAst ? camel::core::LoopKind::ForWhile : camel::core::LoopKind::For)
+                          : camel::core::LoopKind::While;
     std::vector<std::string> state;
     for (const Reference &name : load->state()) {
         state.push_back(name.toString());
@@ -2309,26 +2380,25 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Data)
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchExpr");
 
-    // Extract the match expression load and the reference for the condition
-    const auto &matchExprLoad = ast->loadAs<AST::MatchExprLoad>();
-    const Reference &matchRef = matchExprLoad->ref();
-
+    // The subject is any expression, evaluated once before the cases; a name among them is
+    // read here, once, and the arms read the value through the branch.
+    const auto &subjectAst = ast->atAs<AST::DataLoad>(0);
     const bool valueUnused = std::exchange(valueUse_.unusedCtrl, nullptr) == ast.get();
     const ValueUseScope valueUseScope(*this);
 
-    // Create a reference node for the condition and a branch node for the match expression
-    node_ptr_t dRefNode = tree_->makeDRef(matchRef); // condition node
-    node_ptr_t brchNode = tree_->makeBrch();
+    node_ptr_t subjectNode = visitData(subjectAst);
+    node_ptr_t brchNode    = tree_->makeBrch();
     setOriginFromOrigin(
         context_,
-        dRefNode,
+        subjectNode,
         findSemanticOrigin(
             astSemantic(context_, ast),
             camel::source::SemanticRole::BranchCondition),
         camel::source::OriginKind::GctNode,
         "gct.match.scrutinee");
     setOriginFromAst(context_, brchNode, ast, camel::source::OriginKind::GctNode, "gct.match");
-    *brchNode << dRefNode;
+    *brchNode << subjectNode;
+    const node_ptr_t dRefNode = subjectNode;
 
     std::vector<camel::source::SemanticPart> parts = {
         semanticPart(
@@ -2339,20 +2409,41 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     };
     std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(dRefNode)};
 
-    for (const auto &aCaseNode : *ast->atAs<AST::RepeatedLoad>(0)) {
+    for (const auto &aCaseNode : *ast->atAs<AST::RepeatedLoad>(1)) {
         // Handle a value case
         const auto &caseLoadType = aCaseNode->front()->type();
         node_ptr_t gCaseNode     = nullptr;
 
         if (caseLoadType == AST::LoadType::Data &&
+            aCaseNode->front()->loadAs<AST::DataLoad>()->dataType() == AST::DataType::EnumPattern) {
+            // `case Shape::Rect { w, h }`: the variant is written by its name and the fields
+            // the pattern binds; the graph builder resolves it against the enum matched.
+            const auto &pattern = aCaseNode->front()->loadAs<AST::EnumPatternLoad>();
+            std::vector<std::string> fields, bindings;
+            for (const AST::EnumPatternField &field : pattern->fields()) {
+                fields.push_back(field.name);
+                bindings.push_back(field.binding);
+            }
+            gCaseNode = tree_->makeEnumCase(
+                pattern->ref().toString(),
+                fields,
+                bindings,
+                pattern->structShape());
+            enterArmOf(ast, valueUnused);
+            node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
+            *gCaseNode << caseExprNode;
+        } else if (
+            caseLoadType == AST::LoadType::Data &&
             aCaseNode->front()->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Ref) {
             // `case v` / `case error e`: the fixed patterns over a `T?` / `T!` (design
-            // principles 2.9). The graph builder, which knows the scrutinee's type, binds
+            // principles 3.8). The graph builder, which knows the scrutinee's type, binds
             // the name in the arm or reports the pattern.
-            const auto &pattern = aCaseNode->front();
-            const bool isError  = pattern->size() > 0;
-            const std::string name =
-                (isError ? pattern->front() : pattern)->loadAs<AST::RefDataLoad>()->ref().toString();
+            const auto &pattern    = aCaseNode->front();
+            const bool isError     = pattern->size() > 0;
+            const std::string name = (isError ? pattern->front() : pattern)
+                                         ->loadAs<AST::RefDataLoad>()
+                                         ->ref()
+                                         .toString();
             gCaseNode = tree_->makeCase(isError ? CaseType::Error : CaseType::Bind, name);
             enterArmOf(ast, valueUnused);
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
@@ -2442,7 +2533,15 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     case LiteralType::String: {
         // Decode escaped characters in the string and create a StringData object
         std::string decoded = decodeEscapes(str);
-        data                = tt::as_shared<Data>(make_shared<StringData>(decoded));
+        // A string is always valid UTF-8 (design principles 11.1); `'\xE4'` alone is not.
+        // Write the character itself or `\u{4E2D}`; a byte sequence is a `Bytes` value.
+        if (!camel::utf8::isValid(decoded)) {
+            diags_->of(SemanticDiag::InvalidLiteral)
+                .at(ast->load()->tokenRange())
+                .commit("string (not valid UTF-8; use \\u{...} or the character itself)", str);
+            throw BuildAbortException();
+        }
+        data = tt::as_shared<Data>(make_shared<StringData>(decoded));
     } break;
     case LiteralType::FString: {
         // FString (formatted string) is not supported
@@ -2543,7 +2642,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     node_ptr_t execNode = makeExec(false, true);
 
     // `[1, null, 3]`: a `null` among other elements makes the array one of `T?` (design
-    // principles 2.10), whose elements are put into that form when the program runs. Which
+    // principles 3.8), whose elements are put into that form when the program runs. Which
     // `T` is known to the GIR builder only, so every element is left to it as a computed one
     // (visitDataNode joins their types and adds the CASTs).
     const auto &items   = ast->atAs<AST::RepeatedLoad>(0);
@@ -2564,7 +2663,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
             factory.add(refData);
             continue;
         }
-        auto [data, _]      = extractData(dataNode, execNode, dangling);
+        auto [data, _] = extractData(dataNode, execNode, dangling);
         try {
             factory.add(data);
         } catch (Diagnostic &d) {
@@ -2668,7 +2767,7 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
     }
     // Any other expression: an annotation CAST (see the declaration). An expression of the
     // declared type used to be refused here as "dynamic type casting" (`var acc: V = p`
-    // with `p: V`); converting a value to its own type does nothing (design principles 2.12).
+    // with `p: V`); converting a value to its own type does nothing (design principles 5.1).
     node_ptr_t castNode = tree_->makeCast(type, true);
     *castNode << value;
     setOriginFromAst(context_, castNode, ast, camel::source::OriginKind::GctNode, "gct.cast");
@@ -2683,7 +2782,7 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
         ast->atAs<AST::RepeatedLoad>(0)->size() == 0) {
         return visitData(ast);
     }
-    // Design principles 2.10: the elements of an array literal are a position where a value
+    // Design principles 3.8: the elements of an array literal are a position where a value
     // enters `T?` / `T!` when the element type is known, as it is here. Each element is the
     // value under a CAST to the element type (the conversion an annotated `let` writes), so
     // the array is built from computed elements of exactly that type.
@@ -2740,8 +2839,8 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
             diags_->of(SemanticDiag::DuplicateDictKey).at(namedPair->tokenRange()).commit(name);
             throw BuildAbortException();
         }
-        node_ptr_t dataNode   = visitData(child->atAs<AST::DataLoad>(0));
-        auto [data, _]        = extractData(dataNode, execNode, dangling);
+        node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
+        auto [data, _]      = extractData(dataNode, execNode, dangling);
         factory.add(name, data);
     }
 
@@ -2822,13 +2921,16 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         }
     }
     if (!declaredTypeVars_.empty()) {
-        // Every variable needs a position in an argument type to take its type from.
+        // A variable must survive type construction in an argument or result position.
         std::vector<std::string> bindable;
         for (Type *param : funcType->withTypesSpan()) {
             collectBindableTypeVars(param, bindable);
         }
         for (Type *param : funcType->normTypesSpan()) {
             collectBindableTypeVars(param, bindable);
+        }
+        if (funcType->hasExitType()) {
+            collectBindableTypeVars(funcType->exitType(), bindable);
         }
         for (const std::string &name : declaredTypeVars_) {
             if (std::find(bindable.begin(), bindable.end(), name) == bindable.end()) {
@@ -2940,6 +3042,16 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Ref:
         res = visitRefType(ast);
         break;
+    case AST::TypeType::Enum:
+        // An enum is declared, not written where a value of it is expected: its variants are
+        // names of the module (`type Shape = enum {...}`), and a use is that name.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit(
+                "enum { ... }",
+                "an enum is declared in a type declaration, 'type Shape = enum { ... }', and "
+                "its type is written by the name it declares");
+        throw BuildAbortException();
     default:
         throw std::runtime_error("Unknown type type");
     }
@@ -2984,7 +3096,7 @@ Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
     Type *payload       = visitType(ast->atAs<AST::TypeLoad>(0));
     const bool fallible = ast->loadAs<AST::NullableTypeLoad>()->fallible();
     // The same mark twice (`T??`, `T!!`) adds nothing a program could tell apart; `T?!` and
-    // `T!?` are allowed (design principles 2.10).
+    // `T!?` are allowed (design principles 3.8).
     if (TupleType *inner = asTagged(payload); inner && inner->isFallible() == fallible) {
         diags_->of(SemanticDiag::TaggedTypeNesting)
             .at(ast->load()->tokenRange())
@@ -3023,10 +3135,11 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     // Handle different type operations based on the TypeOp enumeration
     switch (op) {
     case AST::TypeOp::Union: {
-        // Handle union types (e.g., T | U)
-        const auto &lhsType = visitType(ast->atAs<AST::TypeLoad>(0));
-        const auto &rhsType = visitType(ast->atAs<AST::TypeLoad>(1));
-        res                 = UnionType::create(lhsType, rhsType);
+        // `A | B` is retired: a value has one type, and a value that is one of several named
+        // cases is an enum (design principles 5.3). The AST keeps the form so that the
+        // program is told so, instead of failing to parse.
+        diags_->of(SemanticDiag::UnionTypeRetired).at(ast->load()->tokenRange()).commit();
+        throw BuildAbortException();
     } break;
 
     case AST::TypeOp::Inter: {
@@ -3065,9 +3178,9 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::TypeOp::ErrorThen: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
+        diags_->of(SemanticDiag::ReservedTypeQuestionRetired)
             .at(ast->load()->tokenRange())
-            .commit("TypeOp::ErrorThen (a.k.a. T ? U)");
+            .commit();
         throw BuildAbortException();
     } break;
 
@@ -3190,9 +3303,8 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     // Extract the function type load from the AST node
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
-    // The signature of a function declaration may bind type variables among its parameters
-    // (`typeas T`), not in its return type. In a function type written inside such a
-    // parameter both positions bind: `f: (x: T) => typeas U`.
+    // A declaration binds variables in its parameters or return type (design principles
+    // 5.9). Return-only variables come from the expected type or explicit ::<T> arguments.
     const bool signature = std::exchange(declSignature_, false);
     const bool open      = std::exchange(openSignature_, false);
     struct FlagGuard {
@@ -3312,11 +3424,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         factory.addNormArg(name, type, isVar);
     }
 
-    // The return type comes after the parameters: it may name the type variables they bind.
+    // The return type may name existing variables or bind return-only ones.
     const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
     if (exitTypeNode) {
         if (signature) {
-            typeasAllowed_    = false;
+            typeasAllowed_    = true;
             inDeclReturnType_ = true;
         }
         TypePositionGuard position(*this, TypePosition::ReturnType);
@@ -3381,7 +3493,7 @@ void Builder::rejectDuplicateLiteralKeys(
         if (!entry || !entry->resolved() || entry->raw().size() != 2 || !entry->raw()[0]) {
             continue;
         }
-        const data_ptr_t &key = entry->raw()[0];
+        const data_ptr_t &key             = entry->raw()[0];
         std::vector<data_ptr_t> &sameText = seen[key->toString()];
         for (const data_ptr_t &earlier : sameText) {
             if (earlier->equals(key)) {
@@ -3570,7 +3682,7 @@ void Builder::rejectTypeCycle(
 
 Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     const std::string written = ref.toString();
-    // The module's own name may qualify its names (design principles 2.12).
+    // The module's own name may qualify its names (design principles 10.2).
     std::string own = written;
     for (const std::string &self : {module_->name(), module_->declaredName()}) {
         if (!self.empty() && own.starts_with(self + "::")) {
@@ -3612,7 +3724,7 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
         for (const Reference &using_ : frame) {
             const std::string prefixed = using_.toString() + "::" + written;
             Type *type                 = nullptr;
-            // The full name of the candidate, for AmbiguousName (design principles 2.13).
+            // The full name of the candidate, for AmbiguousName (design principles 10.2).
             std::string shown = prefixed;
             for (size_t depth = namespacePath_.size() + 1; depth-- > 0 && type == nullptr;) {
                 std::string candidate;
@@ -3625,7 +3737,8 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
                 }
             }
             if (type == nullptr) {
-                if (auto imported = module_->getImportedType(Reference(prefixed), ImportLayer::Named)) {
+                if (auto imported =
+                        module_->getImportedType(Reference(prefixed), ImportLayer::Named)) {
                     type = imported.value();
                     if (const auto source =
                             module_->importedSource(Reference(prefixed), ImportLayer::Named)) {
@@ -3633,8 +3746,9 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
                     }
                 }
             }
-            if (type != nullptr &&
-                std::ranges::none_of(viaUsing, [&](const auto &have) { return have.second == type; })) {
+            if (type != nullptr && std::ranges::none_of(viaUsing, [&](const auto &have) {
+                    return have.second == type;
+                })) {
                 viaUsing.emplace_back(shown, type);
             }
         }
@@ -3663,9 +3777,7 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
         // `any` is no longer a type: say so rather than that the name is unknown.
         reportAnyType(ast);
     }
-    diags_->of(SemanticDiag::UnresolvedTypeReference)
-        .at(ast->load()->tokenRange())
-        .commit(written);
+    diags_->of(SemanticDiag::UnresolvedTypeReference).at(ast->load()->tokenRange()).commit(written);
     throw BuildAbortException();
 }
 } // namespace camel::compile::gct

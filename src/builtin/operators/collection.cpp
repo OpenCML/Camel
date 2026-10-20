@@ -69,7 +69,7 @@ slot_t lookup(const Table *table, slot_t key, const MapType *type) {
 }
 
 /// Argument `index` of those that configure an operation (the key, the value). A program
-/// writes them as `with` arguments, `put<k, v>(m)` (design principles 2.10: the one calling
+/// writes them as `with` arguments, `put<k, v>(m)` (design principles 11.4: the one calling
 /// form); the other branch only serves a caller inside the runtime that passes them after
 /// the collection.
 slot_t configArg(ArgsView &with, ArgsView &norm, size_t index) {
@@ -181,7 +181,7 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
     // An operation on one collection configured by `count` arguments: the collection is the
     // ordinary argument and what configures the operation is written in angle brackets,
     // `put<k, v>(m)` or `m->put<k, v>`, the one calling form of the standard library (design
-    // principles 2.10). `fn` is handed the collection's type and the configuring types.
+    // principles 11.4). `fn` is handed the collection's type and the configuring types.
     using keyed_fn = std::function<optional<Type *>(Type *coll, const type_vec_t &config)>;
     const auto keyed = [](size_t count, const char *signature, keyed_fn fn) {
         return DynamicFuncTypeResolver::create(

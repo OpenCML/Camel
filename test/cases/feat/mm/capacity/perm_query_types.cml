@@ -1,6 +1,6 @@
 /**
  * A program whose rewrite filled the permanent space (types and layouts) although neither the
- * program nor its graphs grew: under `std::specialize std::opt` the rewrites ask, for every
+ * program nor its graphs grew: under `std::opt::specialize std::opt` the rewrites ask, for every
  * user of every value and again after every inlined call, whether an argument is passed to a
  * var parameter; each question resolved the operator's overload, and each resolution left a
  * new function type in the permanent space, which never releases (1.4 million types, more than

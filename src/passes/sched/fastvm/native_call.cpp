@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -20,6 +20,8 @@ slot_t FastVMSchedPass::invokeNativeOperator(const Bytecode &bc, ctx::Frame &fra
     const data_arr_t normalArgs = bc.nargs();
     ctx::FrameArgsView withView(frame, withArgs);
     ctx::FrameArgsView normalView(frame, normalArgs);
+    withView.setResultType(frame.typeAt<type::Type>(bc.result));
+    normalView.setResultType(withView.resultType());
     camel::execute::FunctionInvoker invoker;
     if (camel::core::OperatorTable::instance().callsGraphs(oper)) {
         invoker =

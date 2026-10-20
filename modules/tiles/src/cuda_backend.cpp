@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -13,6 +13,7 @@
 #include "tiles/internal/capability.h"
 
 #include <memory>
+#include <mutex>
 #include <vector>
 #ifdef CAMEL_TILES_CUDA
 #include <algorithm>
@@ -140,16 +141,19 @@ Api::Api()
     cuMemcpyHtoD      = driver.symbol<decltype(&::cuMemcpyHtoD)>(TILES_STR(cuMemcpyHtoD));
     cuMemcpyHtoDAsync = driver.symbol<decltype(&::cuMemcpyHtoDAsync)>(TILES_STR(cuMemcpyHtoDAsync));
     cuMemcpyDtoH      = driver.symbol<decltype(&::cuMemcpyDtoH)>(TILES_STR(cuMemcpyDtoH));
+    cuMemcpyDtoHAsync = driver.symbol<decltype(&::cuMemcpyDtoHAsync)>(TILES_STR(cuMemcpyDtoHAsync));
     cuStreamCreate    = driver.symbol<decltype(&::cuStreamCreate)>(TILES_STR(cuStreamCreate));
     cuStreamSynchronize =
         driver.symbol<decltype(&::cuStreamSynchronize)>(TILES_STR(cuStreamSynchronize));
-    cuStreamDestroy = driver.symbol<decltype(&::cuStreamDestroy)>(TILES_STR(cuStreamDestroy));
-    cuLaunchKernel  = driver.symbol<decltype(&::cuLaunchKernel)>(TILES_STR(cuLaunchKernel));
-    cuEventCreate   = driver.symbol<decltype(&::cuEventCreate)>(TILES_STR(cuEventCreate));
-    cuEventDestroy  = driver.symbol<decltype(&::cuEventDestroy)>(TILES_STR(cuEventDestroy));
-    cuEventRecord   = driver.symbol<decltype(&::cuEventRecord)>(TILES_STR(cuEventRecord));
+    cuStreamDestroy   = driver.symbol<decltype(&::cuStreamDestroy)>(TILES_STR(cuStreamDestroy));
+    cuStreamWaitEvent = driver.symbol<decltype(&::cuStreamWaitEvent)>(TILES_STR(cuStreamWaitEvent));
+    cuLaunchKernel    = driver.symbol<decltype(&::cuLaunchKernel)>(TILES_STR(cuLaunchKernel));
+    cuEventCreate     = driver.symbol<decltype(&::cuEventCreate)>(TILES_STR(cuEventCreate));
+    cuEventDestroy    = driver.symbol<decltype(&::cuEventDestroy)>(TILES_STR(cuEventDestroy));
+    cuEventRecord     = driver.symbol<decltype(&::cuEventRecord)>(TILES_STR(cuEventRecord));
     cuEventSynchronize =
         driver.symbol<decltype(&::cuEventSynchronize)>(TILES_STR(cuEventSynchronize));
+    cuEventQuery = driver.symbol<decltype(&::cuEventQuery)>(TILES_STR(cuEventQuery));
     cuEventElapsedTime =
         driver.symbol<decltype(&::cuEventElapsedTime)>(TILES_STR(cuEventElapsedTime));
     nvrtcCreateProgram  = rtc.symbol<decltype(&::nvrtcCreateProgram)>("nvrtcCreateProgram");
@@ -188,7 +192,9 @@ Current::~Current() {
     CUcontext popped;
     api.cuCtxPopCurrent(&popped);
 }
-Backend::Backend() {
+Backend::Backend(MemoryPolicy policy)
+    : devicePool_(api, PoolKind::Device, policy.device),
+      hostPool_(api, PoolKind::Host, policy.host) {
     const auto initialized = api.cuInit(0);
     if (initialized == CUDA_ERROR_NO_DEVICE)
         throw BackendUnavailable("no CUDA device is available");
@@ -217,6 +223,8 @@ Backend::Backend() {
         throw std::runtime_error("NVRTC does not support this GPU architecture");
     architecture = "--gpu-architecture=compute_" + std::to_string(target);
     api.check(api.cuDevicePrimaryCtxRetain(&context, device), "retain CUDA context");
+    devicePool_.bindContext(context);
+    hostPool_.bindContext(context);
 }
 Compiled::Compiled(
     Api &api, CUcontext context, const std::string &source, const std::vector<std::string> &options)
@@ -231,10 +239,25 @@ Compiled::~Compiled() {
 ModuleLease::ModuleLease(std::shared_ptr<Backend> backend, std::shared_ptr<Compiled> compiled)
     : backend(std::move(backend)), compiled(std::move(compiled)) {}
 Backend::~Backend() {
+    // Free pooled idle blocks while the primary context is still valid. Pool
+    // slots hold no Backend reference, so nothing here can extend this object's
+    // lifetime; active leases have already dropped their references.
+    devicePool_.trim();
+    hostPool_.trim();
     if (context) {
         cache.clear();
         api.cuDevicePrimaryCtxRelease(device);
     }
+}
+MemoryPool &Backend::pool(PoolKind kind) noexcept {
+    return kind == PoolKind::Device ? devicePool_ : hostPool_;
+}
+void Backend::disableReuse() noexcept {
+    // Stop reuse on both pools before any owner drops a lease share, so a block
+    // that may still be the target of pending work is abandoned rather than
+    // cached or freed.
+    devicePool_.disableReuse();
+    hostPool_.disableReuse();
 }
 std::vector<std::string> Backend::compileOptions() const {
     // These are language defaults, not permissions to relax numerical semantics.
@@ -246,17 +269,32 @@ std::vector<std::string> Backend::compileOptions() const {
         "--prec-sqrt=true",
         "--ftz=false"};
 }
+bool Backend::cached(const std::string &source) {
+    const auto options = compileOptions();
+    std::lock_guard lock(mutex);
+    return std::any_of(cache.begin(), cache.end(), [&](const auto &entry) {
+        return entry->source == source && entry->options == options;
+    });
+}
 ModuleLease Backend::module(const std::string &source) {
     const auto options = compileOptions();
     // Device, context and NVRTC library are fixed for this backend's lifetime.
-    // Compare the exact compiler arguments as well as the source text.
-    for (size_t i = 0; i < cache.size(); ++i) {
-        if (cache[i]->source != source || cache[i]->options != options)
-            continue;
-        auto found = cache[i];
-        // Refresh recency; execution leases survive removal of the cache reference.
-        std::rotate(cache.begin() + i, cache.begin() + i + 1, cache.end());
-        return {shared_from_this(), std::move(found)};
+    // Hold the cache lock only for lookup/publication, never for compilation or
+    // execution. Each caller activates its context on its own thread.
+    auto find = [&]() -> std::shared_ptr<Compiled> {
+        for (size_t i = 0; i < cache.size(); ++i) {
+            if (cache[i]->source != source || cache[i]->options != options)
+                continue;
+            auto found = cache[i];
+            std::rotate(cache.begin() + i, cache.begin() + i + 1, cache.end());
+            return found;
+        }
+        return {};
+    };
+    {
+        std::lock_guard lock(mutex);
+        if (auto found = find())
+            return {shared_from_this(), std::move(found)};
     }
     nvrtcProgram program = nullptr;
     api.check(
@@ -285,10 +323,20 @@ ModuleLease Backend::module(const std::string &source) {
     std::string ptx(size, '\0');
     api.check(api.nvrtcGetPTX(program, ptx.data()), "get PTX");
     auto compiled = std::make_shared<Compiled>(api, context, source, options);
+    Current current(api, context);
     api.check(api.cuModuleLoadData(&compiled->module, ptx.data()), "load PTX");
-    cache.push_back(compiled);
-    if (cache.size() > 32) {
-        cache.pop_front();
+    std::shared_ptr<Compiled> evicted;
+    {
+        std::lock_guard lock(mutex);
+        // Concurrent misses may compile the same source. Publish only one entry;
+        // release duplicate/evicted modules after dropping the cache mutex.
+        if (auto found = find())
+            return {shared_from_this(), std::move(found)};
+        cache.push_back(compiled);
+        if (cache.size() > 32) {
+            evicted = std::move(cache.front());
+            cache.pop_front();
+        }
     }
     return {shared_from_this(), std::move(compiled)};
 }

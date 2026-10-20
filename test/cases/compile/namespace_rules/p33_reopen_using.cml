@@ -1,4 +1,4 @@
-// Design principles 2.13: reopening a namespace block does not carry the `using` of an
+// Design principles 10.2: reopening a namespace block does not carry the `using` of an
 // earlier block of it. The first block may use `inc` unqualified; the second may not.
 import lib
 

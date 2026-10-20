@@ -12,11 +12,11 @@ trim_end [  hi] 4
 trim empty [] 0
 trim blank [] 0
 trim none [hi] 2
-trim nbsp [ x ] 5
+trim nbsp [ x ] 3
 upper [HELLO, WORLD 123] 16
 lower [hello, world 123] 16
-upper non-ascii [HéLLO üNï STRAßE] 20
-lower non-ascii [hÉllo ÜnÏ] 12
+upper non-ascii [HéLLO üNï STRAßE] 16
+lower non-ascii [hÉllo ÜnÏ] 9
 upper empty [] 0
 replace [a+b+c] 5
 replace none [abc] 3
@@ -27,12 +27,14 @@ replace empty subject [] 0
 replace non-ascii [hello] 5
 2 3 -1
 0 0 -1
-3 -1
+2 -1
 substr [ell] 3
 substr all [hello] 5
 substr empty at end [] 0
 substr empty [] 0
-substr one byte of é [1] 1
+substr one char of é [2] 1
+substr non-ascii [€l] 2
+substr 4-byte [a😀] 2
 true true false true
 true true false false
 repeat [ababab] 6
@@ -41,7 +43,9 @@ repeat empty [] 0
 [104, 195, 169] [] 3
 from_bytes [hi] 2
 from_bytes empty [] 0
-round trip [héllo €] 10
-3 [255, 0, 104]
+round trip [héllo €] 7
+3 [104, 0, 105]
+中 1
 h o 1
-[195] [169]
+true 文 2 1 [195, 169]
+😀 4

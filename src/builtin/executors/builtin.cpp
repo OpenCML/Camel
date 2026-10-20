@@ -13,14 +13,14 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "builtin.h"
-#include "camel/execute/fault_isolation.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/utils/log.h"
 
 using namespace camel::core::error;
@@ -28,7 +28,10 @@ using namespace camel::core::context;
 using namespace camel::core::rtdata;
 
 #include "../operators/cast.h"
+#include "../operators/collection.h"
+#include "../operators/enum.h"
 #include "../operators/graph.h"
+#include "../operators/higher_order.h"
 #include "../operators/io.h"
 #include "../operators/macro.h"
 #include "../operators/ops.h"
@@ -36,7 +39,6 @@ using namespace camel::core::rtdata;
 #include "../operators/profiler.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
-#include "../operators/collection.h"
 #include "../operators/tagged.h"
 #include "camel/core/operator_traits.h"
 
@@ -237,6 +239,16 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // struct
         {"struct/len_str", __len_str__},
         {"struct/len_arr", __len_arr__},
+        // The higher-order operators: the one implementation of what they mean, by the
+        // function-call service. Schedulers that run a shape of call faster by the operator's
+        // declaration (OperatorSemantics::elementCalls) do; the macro evaluator runs these.
+        {"mark/map_arr", __map_arr__},
+        {"mark/apply_arr", __map_arr__},
+        {"mark/filter_arr", __filter_arr__},
+        {"mark/reduce_arr", __reduce_arr__},
+        {"mark/unordered_reduce_arr", __reduce_arr__},
+        {"mark/foreach_arr", __foreach_arr__},
+        {"mark/unordered_foreach_arr", __foreach_arr__},
 
         {"struct/zip", __zip__},
 
@@ -280,6 +292,11 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/parse_int", __parse_int__},
         {"op/parse_float", __parse_float__},
 
+        // The enum (operators/enum.h). All are under enum/: pure.
+        {"enum/make", __enum_make__},
+        {"enum/tag", __enum_tag__},
+        {"enum/field", __enum_field__},
+
         // Map and Set (operators/collection.h). All are under coll/: pure.
         {"coll/map_idx", __coll_map_idx__},
         {"coll/map_get", __coll_map_get__},
@@ -309,7 +326,7 @@ void registerBuiltinOperatorTraits() {
     // Pure: conversions, arithmetic, comparisons, logic, and indexing (everything under op/
     // except the assignment family, which writes a variable), plus the string and array
     // helpers, none of which changes its arguments: `append` and `extend` return a new array
-    // (design principles 2.12). io/, profiler/ and input are effectful.
+    // (design principles 11.3). io/, profiler/ and input are effectful.
     static const std::unordered_set<std::string_view> kPureHelpers = {
         "str/format",
         "str/join",
@@ -335,15 +352,15 @@ void registerBuiltinOperatorTraits() {
         "op/add_i", "op/add_l", "op/add_f", "op/add_d", "op/sub_i", "op/sub_l", "op/sub_f",
         "op/sub_d", "op/lt_i",  "op/lt_l",  "op/lt_f",  "op/lt_d",  "op/le_i",  "op/le_l",
         "op/le_f",  "op/le_d",  "op/gt_i",  "op/gt_l",  "op/gt_f",  "op/gt_d",  "op/ge_i",
-        "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",
-        "graph/original",
+        "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",   "graph/original",
     };
     auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
         // Every operator over Map and Set (coll/) returns a new value and changes nothing.
-        const bool pure = (key.starts_with("op/") && !key.starts_with("op/assn")) ||
-                          key.starts_with("coll/") || kPureHelpers.contains(key);
+        const bool pure = (key.starts_with("op/") && !storesIntoCell(key)) ||
+                          key.starts_with("coll/") || key.starts_with("enum/") ||
+                          kPureHelpers.contains(key);
         // Declared either way: an operator without a declaration is treated the same as one
         // declared to have effects, but only a declaration says that somebody looked.
         registry.set(
@@ -353,11 +370,14 @@ void registerBuiltinOperatorTraits() {
     // The higher-order operators and function composition run a function the program passes
     // in: what they do is what that function does, and the passes that look at them look at
     // that function. exit and sleep are the os module's and are built in as well.
-    for (const char *uri : {":mark/map_arr",
-                            ":mark/apply_arr",
-                            ":mark/filter_arr",
-                            ":mark/reduce_arr",
-                            ":mark/foreach_arr"}) {
+    for (const char *uri :
+         {":mark/map_arr",
+          ":mark/apply_arr",
+          ":mark/filter_arr",
+          ":mark/reduce_arr",
+          ":mark/foreach_arr",
+          ":mark/unordered_reduce_arr",
+          ":mark/unordered_foreach_arr"}) {
         registry.set(uri, {.pure = false, .callsGraphs = true});
     }
     // The fault-isolation node calls the function it is given, and its result depends on
@@ -371,6 +391,16 @@ void registerBuiltinOperatorTraits() {
     registry.set(":var/get", {.stateOnly = true});
     registry.set(":var/peek", {.stateOnly = true});
     registry.set(":var/take", {.stateOnly = true});
+    // What the compiler does at a call because of the operator (design principles log 2.17).
+    registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
+    registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});
+    registry.declareCallSpec(":mark/unordered_foreach_arr", {.discardsCallbackResult = true});
+    for (const char *uri : {":io/print", ":io/println"}) {
+        registry.declareCallSpec(uri, {.formatWithArg = 0, .checkFormat = checkFormatPattern});
+    }
+    registry.declareCallSpec(
+        ":str/format",
+        {.formatNormArg = 0, .checkFormat = checkFormatPattern});
     declareBuiltinOperatorSemantics();
     std::vector<std::string_view> names;
     for (const auto &[name, op] : getOpsImplMap()) {

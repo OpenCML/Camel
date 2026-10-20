@@ -382,7 +382,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "render.runtime_json"
-desc = "Text that is not JSON: decode gives an error value (design principles 2.13; it was the fault JsonDecodeFailed), with the position in the text and its beginning; unhandled at the exit of a main that declares Json!."
+desc = "Text that is not JSON: decode gives an error value (design principles 11.2; it was the fault JsonDecodeFailed), with the position in the text and its beginning; unhandled at the exit of a main that declares Json!."
 kind = "snapshot"
 case = "../../../cases/compile/diag_render/runtime_json.cml"
 args = ["--error-format", "text", "${case}"]
@@ -463,7 +463,7 @@ name = "render.werror_no_position"
 desc = "-Werror makes the command-line warning about passes that never run an error; it has no source position, so no excerpt is drawn, and the program is not run."
 kind = "snapshot"
 case = "../../../cases/compile/diag_render/werror_no_position.cml"
-args = ["--error-format", "text", "-Werror", "${case}", "std::nvm", "std::inline"]
+args = ["--error-format", "text", "-Werror", "${case}", "std::nvm", "std::opt::inline"]
 expect_exit = 1
 snapshot_stream = "stderr"
 snapshot_compare = "text_exact"

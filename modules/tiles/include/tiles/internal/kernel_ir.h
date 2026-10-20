@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 16, 2026
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 18, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,13 +24,14 @@ struct Launch;
 struct Node;
 } // namespace camel::tiles
 namespace camel::tiles::kernel {
-enum class MemorySpace { Global, Shared };
+enum class MemorySpace { Global, Shared, Constant };
 struct Buffer {
     MemorySpace space;
     ScalarType type;
     size_t slot; // Global: the Program node; shared: local identity.
     size_t extent;
     bool writable;
+    std::vector<ScalarValue> constants; // Typed immutable static table, no float staging.
 };
 struct IndexBinding {
     std::string name;
@@ -101,6 +102,8 @@ bool canonicalAxisReduction(const Program &program, const Node &node);
 bool canonicalPointwise(const Program &program, const Node &node);
 void validateMatmulContract(const Program &program, const Node &node);
 KernelBody scalarBody(const Program &program, Launch &launch);
+KernelBody loopBody(const Program &program, Launch &launch);
+void validateLoopRegion(const Program &program, const Node &node);
 KernelBody parallelMaxBody(const Program &program, Launch &launch);
 KernelBody serialBody(const Program &program, Launch &launch);
 KernelBody matmulBody(const Program &program, Launch &launch);

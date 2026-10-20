@@ -1,5 +1,5 @@
 /**
- * An `if` without `else` has no value (design principles 2.10): its arm may be of any type
+ * An `if` without `else` has no value (design principles 3.7): its arm may be of any type
  * and what the arm gives is dropped. On the graph it is a branch with two arms, the one not
  * written being empty; the arm written is evaluated like any arm.
  */
@@ -9,7 +9,7 @@ func noisy(debug: bool, x: int): int sync {
     // an arm that is a call with a value (println gives its argument)
     if debug then println('checking')
     // a block arm whose last expression has a value (a name: a dropped call of a pure
-    // operator such as `x * 2` is UnusedPureResult, design principles 2.12)
+    // operator such as `x * 2` is UnusedPureResult, design principles 11.3)
     if x > 2 then sync { println('big'); x }
     // an arm of yet another type; not taken here
     if x > 100 then 'huge'

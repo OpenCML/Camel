@@ -44,7 +44,7 @@ bool ThisModule::load() {
     context_->registerExecutorFactory("this", [ctx = context_]() {
         return createThisExecutor(ctx);
     });
-    // The purity of every operator (design principles 2.9).
+    // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
         "this",
         {

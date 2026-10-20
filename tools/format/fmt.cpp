@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 17, 2024
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -345,7 +345,7 @@ blockStmt  : WAIT? stmtBlock | funcAnno+ stmtBlock ;
 any Formatter::visitBlockStmt(cst::BlockStmt context) {
     string result;
     // `@numeric(...)` on a block: each annotation on a line of its own, at the start of a line
-    // (design principles 2.11: a line that starts with '@' annotates what follows).
+    // (design principles 4.1: a line that starts with '@' annotates what follows).
     for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
         result += any_cast<string>(visitFuncAnno(funcAnno)) + lineEnd();
     }
@@ -471,7 +471,7 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
     }
 
     // An operator overload is written `func operator +(...)`: the word, one space, the symbol
-    // and the parameters right after it (design principles 2.12; the notation is provisional).
+    // and the parameters right after it (design principles 4.3; the notation is provisional).
     if (const auto operatorName = context->get<cst::OperatorName>()) {
         result +=
             "func operator " + operatorName->text().substr(std::string_view("operator").size());
@@ -795,8 +795,15 @@ pattern
 */
 any Formatter::visitPattern(cst::Pattern context) {
     if (context->get<cst::IdentRef>()) {
-        // `error e`: the bound name is part of the pattern.
+        // `error e`: the bound name is part of the pattern. A variant path may carry the
+        // field patterns of the variant: `Shape::Circle(r)`, `Shape::Rect { w, h }`.
         string result = any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
+        if (const auto tuple = context->get<cst::EnumTuplePattern>()) {
+            return result + any_cast<string>(visitEnumTuplePattern(tuple));
+        }
+        if (const auto record = context->get<cst::EnumStructPattern>()) {
+            return result + any_cast<string>(visitEnumStructPattern(record));
+        }
         if (context->get<cst::IdentDef>()) {
             result += " " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
         }
@@ -851,7 +858,7 @@ any Formatter::visitCatchClause(cst::CatchClause context) {
 /*
 ctrlExpr
     : IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
-    | MATCH identRef '{' matchCase+ '}'
+    | MATCH logicalOrExpr '{' matchCase+ '}'
     | TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
     ;
 */
@@ -875,8 +882,8 @@ any Formatter::visitCtrlExpr(syn::Node context) {
         return result;
         break;
     }
-    case 2: // MATCH identRef '{' matchCase+ '}'
-        return "match " + any_cast<string>(visitIdentRef(context->get<cst::IdentRef>())) + " {" +
+    case 2: // MATCH logicalOrExpr '{' matchCase+ '}'
+        return "match " + any_cast<string>(visitExpr(context->expr())) + " {" +
                formatList(
                    vec(context->all<cst::MatchCase>()),
                    context,
@@ -1285,12 +1292,120 @@ any Formatter::visitStructType(cst::StructType context) {
 }
 
 /*
+enumType
+    : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
+    ;
+*/
+any Formatter::visitEnumType(cst::EnumType context) {
+    const auto variants = vec(context->all<cst::EnumVariant>());
+    return "enum {" + formatList(variants, context, ", ", ",", PaddingNL | PaddingSP | PushScope) +
+           "}";
+}
+
+/*
+enumVariant
+    : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
+    ;
+*/
+any Formatter::visitEnumVariant(cst::EnumVariant context) {
+    string result = any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (const auto types = context->get<cst::TypeList>()) {
+        result += "(" + any_cast<string>(visitTypeList(types)) + ")";
+    } else {
+        const auto fields = vec(context->all<cst::EnumField>());
+        if (!fields.empty()) {
+            result += " {" +
+                      formatList(fields, context, ", ", ",", PaddingNL | PaddingSP | PushScope) +
+                      "}";
+        }
+    }
+    return result;
+}
+
+/*
+enumField
+    : identDef ':' typeExpr
+    ;
+*/
+any Formatter::visitEnumField(cst::EnumField context) {
+    return any_cast<string>(visitIdentDef(context->get<cst::IdentDef>())) + ": " +
+           any_cast<string>(visitType(context->type()));
+}
+
+/*
+enumTuplePattern
+    : '(' (pattern (',' pattern)*)? ','? ')'
+    ;
+*/
+any Formatter::visitEnumTuplePattern(cst::EnumTuplePattern context) {
+    return "(" + formatList(vec(context->all<cst::Pattern>()), context, ", ", ",", 0) +
+           (hasTrailingComma(context) ? "," : "") + ")";
+}
+
+/*
+enumStructPattern
+    : '{' (IDENTIFIER (':' pattern)? ','?)* '}'
+    ;
+*/
+any Formatter::visitEnumStructPattern(cst::EnumStructPattern context) {
+    string body;
+    bool first = true;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        const auto child = context->child(i);
+        if (!child.isToken() || child.token()->kind() != TK::Identifier) {
+            continue;
+        }
+        if (!first) {
+            body += ", ";
+        }
+        first = false;
+        body += child.text();
+        // The pattern after the colon renames or takes the field apart.
+        if (i + 1 < context->childCount() && context->child(i + 1).isNode()) {
+            body += ": " + any_cast<string>(visit(context->child(i + 1).node()));
+            ++i;
+        }
+    }
+    if (body.empty()) {
+        return " {}";
+    }
+    return " { " + body + (hasTrailingComma(context) ? "," : "") + " }";
+}
+
+/*
 typeList
     : typeExpr (',' typeExpr)*
     ;
 */
 any Formatter::visitTypeList(cst::TypeList context) {
     return formatList(vec(context->types()), context, ", ", ",", PaddingNL | PushScope);
+}
+
+/*
+typeArguments
+    : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
+    ;
+*/
+any Formatter::visitTypeArguments(cst::TypeArguments context) {
+    string result = "::<";
+    if (const auto types = context->get<cst::TypeList>()) {
+        result += any_cast<string>(visitTypeList(types));
+    } else {
+        const auto named = vec(context->all<cst::NamedTypeArgument>());
+        result += formatList(named, context, ", ", ",", PaddingNL | PushScope);
+    }
+    result += hasTrailingComma(context) ? "," : "";
+    return result + ">";
+}
+
+/*
+namedTypeArgument
+    : IDENTIFIER '=' typeExpr
+    ;
+*/
+any Formatter::visitNamedTypeArgument(cst::NamedTypeArgument context) {
+    return context->tok(TK::Identifier)->text() + " = " +
+           any_cast<string>(visitType(context->type()));
 }
 
 /*
@@ -1449,8 +1564,15 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(SpecType)
         CAMEL_FORMAT(ConstData)
         CAMEL_FORMAT(StructType)
+        CAMEL_FORMAT(EnumType)
+        CAMEL_FORMAT(EnumVariant)
+        CAMEL_FORMAT(EnumField)
+        CAMEL_FORMAT(EnumTuplePattern)
+        CAMEL_FORMAT(EnumStructPattern)
         CAMEL_FORMAT(TupleType)
         CAMEL_FORMAT(FuncType)
+        CAMEL_FORMAT(TypeArguments)
+        CAMEL_FORMAT(NamedTypeArgument)
 #undef CAMEL_FORMAT
     case NK::IfExpr:
     case NK::MatchExpr:

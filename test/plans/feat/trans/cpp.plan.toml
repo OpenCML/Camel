@@ -51,7 +51,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 1
-expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'scale' returns a value of type 'Tensor'; std::cpp translates numbers, bool, string, arrays, tuples, structs, T?, T!, functions and var variables of these, and void"]
+expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'scale' returns a value of type 'Tensor'; std::cpp translates numbers, bool, string, enums, arrays, tuples, structs, T?, T!, functions and var variables of these, and void"]
 expect_output_not_contains = ["internal error", "node#", "non-bridgeable", ":?:?:", "#include"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -76,3 +76,15 @@ assert(d.range.start.line === 9 && d.range.start.character === 0 && d.range.end.
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "enum_types"
+desc = "An enum is translated as a struct of its own: a tag and a std::variant payload struct per variant, with make<Tag>, get<Tag, Index> and an appendText that writes it as the interpreter does; :enum/tag and :enum/field become rt::enumTag and rt::enumField. The program itself is built and run by agree_with_fvm."
+kind = "behavior"
+case = "../../../cases/consistency/values/enums.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["struct Shape {", "std::variant<std::monostate, Circle, Rect, Empty> value;", "Shape::make<", "rt::enumField<", "out += \"Shape::Circle\";"]
+expect_output_not_contains = ["camel/core/", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

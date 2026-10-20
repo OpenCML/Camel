@@ -101,7 +101,7 @@ bool UserDefinedModule::compile(CompileStage till) {
     }
     if (compiling_) {
         // Asked for while it is being compiled: a module it imports imports it back (design
-        // principles 2.11 allows that). It has what it has declared so far; the rest of it is
+        // principles 10.1 allows that). It has what it has declared so far; the rest of it is
         // there before any function body of the program is built.
         return true;
     }

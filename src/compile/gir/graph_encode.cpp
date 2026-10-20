@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -43,6 +43,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/runtime/capacity.h"
+#include "camel/runtime/control.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 #include "runtime/graph_build.h"
@@ -360,7 +361,8 @@ class EncodeSession {
             return it->second;
         }
         if (!graph->stableId().empty()) {
-            if (auto it = preparedByStableId_.find(graph->stableId()); it != preparedByStableId_.end()) {
+            if (auto it = preparedByStableId_.find(graph->stableId());
+                it != preparedByStableId_.end()) {
                 return it->second;
             }
         }
@@ -458,6 +460,7 @@ class EncodeSession {
                 .runtimeFlags = header->runtimeFlags,
                 .origin       = header->origin,
                 .permissions  = header->permissions,
+                .attrs        = header->attrs,
             };
             std::vector<std::byte> payloadStorage;
 
@@ -471,8 +474,9 @@ class EncodeSession {
             case GCNodeKind::Loop: {
                 // The graphs are patched in once every runtime graph has its place
                 // (patchPreparedFuncPayloads), as for a FUNC node.
-                payloadStorage = toPayloadBytes(*reinterpret_cast<const camel::runtime::GCLoopBody *>(
-                    graph->draft().payloadOf(sourceId).data()));
+                payloadStorage =
+                    toPayloadBytes(*reinterpret_cast<const camel::runtime::GCLoopBody *>(
+                        graph->draft().payloadOf(sourceId).data()));
             } break;
             case GCNodeKind::Oper:
                 payloadStorage = toOperPayloadBytes(graph->operTarget(sourceId));
@@ -612,6 +616,9 @@ class EncodeSession {
                 graph->draft().returnKind());
         }
 
+        // Later statements may make an earlier control edge redundant. Clean up once before
+        // freezing, with a smaller work cap than the explicit optimization stage.
+        camel::runtime::reduceControlDependencies(*prepared.draft, 8192);
         try {
             prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
         } catch (const camel::runtime::GraphCapacityError &e) {
@@ -627,8 +634,8 @@ class EncodeSession {
 
     void preallocateRuntimeGraphs() {
         for (auto &prepared : prepared_) {
-            const auto &deps                    = prepared.source->dependencyGraphs();
-            const auto &subs                    = prepared.source->subGraphs();
+            const auto &deps                          = prepared.source->dependencyGraphs();
+            const auto &subs                          = prepared.source->subGraphs();
             const std::vector<graph_ptr_t> staticRefs = staticGraphRefsOf(prepared.source);
             std::vector<GCGraph *> depPtrs(deps.size(), nullptr);
             std::vector<GCGraph *> subPtrs(subs.size(), nullptr);

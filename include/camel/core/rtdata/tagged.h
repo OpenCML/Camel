@@ -18,7 +18,7 @@
  */
 
 /*
- * Run-time side of the two tagged forms `T?` and `T!` (design principles 2.9; layout in
+ * Run-time side of the two tagged forms `T?` and `T!` (design principles 3.8; layout in
  * docs/technical/29_nullable_and_fallible_values.md).
  *
  * A value of either form is an ordinary Tuple object (or the null slot); which form a slot

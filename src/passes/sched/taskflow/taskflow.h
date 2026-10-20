@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 16, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -279,8 +279,28 @@ class TaskflowGcRegion {
 
 class TaskflowBytecodeHandoff;
 
+/// Settings of a run of std::taskflow, the parameters of the pass (`std::tf(linear=true)`).
+struct TaskflowOptions {
+    /// Evaluate every graph node by node (the behaviour between commit 1559559a and the restore
+    /// of graph-level tasks). For comparison and diagnosis.
+    bool linear = false;
+    /// Fan every unordered higher-order call out, not only those worth it by measurement.
+    bool fanOutAll = false;
+    /// Print the decision for every graph and the reason when a graph stays node by node.
+    bool diag = false;
+    /// Hand graphs that need no parallelism to the bytecode interpreter; off: every graph is
+    /// evaluated by the scheduler itself.
+    bool bytecode = true;
+    /// 1: print the task graphs and collections of the run when it ends; 2: also one line per
+    /// collection.
+    int gcStats = 0;
+};
+
 class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
   public:
+    void setOptions(const TaskflowOptions &options) { options_ = options; }
+    const TaskflowOptions &options() const { return options_; }
+
     /// `max_concurrent_tasks` = 0: the thread limit of the context (`-t`), else the number of
     /// hardware threads.
     // Constructor and destructor are out of line (handoff.cpp): the pass owns a
@@ -438,6 +458,12 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // per-thread plan caches of planFor; never 0.
     uint64_t planEpoch_ = nextPlanEpoch();
     static uint64_t nextPlanEpoch();
+    // Graphs obtained during execution (notably graph-reading native operators' CPU
+    // callbacks) can still contain LOOP. The context owns and traces the detached
+    // lowered copies; this run only remembers their immutable graph identities.
+    std::mutex loweringMutex_;
+    std::unordered_map<camel::runtime::GCGraph *, camel::runtime::GCGraph *> executionGraphs_;
+    camel::runtime::GCGraph *executionGraph(camel::runtime::GCGraph *graph);
     // The fault domain of everything outside a fault-isolation boundary. A failure in it ends
     // the run.
     TaskflowFaultDomain rootDomain_;
@@ -445,7 +471,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         return thread.faultDomain ? *thread.faultDomain : rootDomain_;
     }
     // What a failure stops, for a fault that is isolated and for one that ends the run alike
-    // (design principles 2.10): tasks that have started run to their end (with everything
+    // (design principles 3.6): tasks that have started run to their end (with everything
     // they start), tasks that have not started do not start, and whoever started the flow
     // waits for all that started before the failure goes on. There is no preemption and no
     // flag polled by running code: a scope skips its remaining chains (FlowInstance::failed),
@@ -461,7 +487,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // Describes `fault` at node `nodeRef` of `graph` (at the graph when the node has no source
     // position) and throws the diagnostic. Nothing is recorded here: element functions that
     // run concurrently can fault together, and of their faults the one of the smallest
-    // element index is reported (design principles 2.10; ElementFaults), by the outer index
+    // element index is reported (design principles 3.6; ElementFaults), by the outer index
     // first for nested operators. The fault that arrives at the entry of the run is recorded
     // there; the one that arrives at a fault-isolation node becomes its error value.
     [[noreturn]] void raiseFault(
@@ -472,8 +498,8 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     void requireCallRoom(
         TaskflowGcGate::ThreadState &thread, camel::runtime::GCGraph *callerGraph,
         camel::runtime::gc_node_ref_t callNode);
-    // CAMEL_TF_LINEAR=1: evaluate every graph node by node (the behaviour between commit
-    // 1559559a and the restore of graph-level tasks). For comparison and diagnosis.
+    TaskflowOptions options_;
+    // options_.linear for the run in progress.
     bool forceLinear_ = false;
 
     // ---- Granularity ----------------------------------------------------------------------
@@ -504,7 +530,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
 
     // ---- Bytecode hand-off (handoff.h, handoff.cpp) ---------------------------------------
     //
-    // Design principles 2.11: the parallel scheduler hands subgraphs that have nothing to
+    // Design principles 9.10: the parallel scheduler hands subgraphs that have nothing to
     // parallelise to the bytecode interpreter. Walking a graph node by node costs 4 to 6 times
     // what its bytecode costs, and where no two things can run at once that is all the
     // scheduler adds.
@@ -589,6 +615,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
         uint32_t depth                     = 0;
         TaskflowFaultDomain *domain        = nullptr;
+        /// The operator declares that the calls on different elements do not depend on one
+        /// another (OperatorSemantics::elementCalls): they may run at once. Without it they
+        /// run in order on the calling thread.
+        bool independent = false;
     };
     // Calls the function value held in slot `funcIdx` of `funcFrame` (its graph is
     // `targetGraph`, with plan `targetPlan`) on the calling thread: `fillArgs(span)` reads the
@@ -614,6 +644,11 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     slot_t executeLinearNode(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
         const GraphPlan *plan = nullptr);
+    /// Runs a marked operator by the way its declaration says it calls its function; the value of
+    /// `attempt` (which the scheduler runs itself), nullopt for the others (their result is in
+    /// the node's slot).
+    std::optional<slot_t> runMarkedOperator(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     slot_t executeLinearMarkedOperator(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
 

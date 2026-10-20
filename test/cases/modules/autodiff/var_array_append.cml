@@ -1,6 +1,6 @@
 /**
  * A differentiated function that grows an array variable with `acc = acc->append<v>` (the
- * in-place `:op/assn_append`, design principles 2.12) and reads it (`len(parts)`, a read that
+ * in-place `:op/assn_append`, design principles 11.3) and reads it (`len(parts)`, a read that
  * leaves the variable's mark set). The array holds plain numbers: no gradient flows through
  * it, so the gradient is that of the tensor term only, and the values are those of the plain
  * call. Expected output:

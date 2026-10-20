@@ -162,6 +162,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         LinePosition activationLine;
         /// The activation has not run a located node yet (function breakpoints, 3.3).
         bool awaitingEntry = false;
+        bool atEntry = false; // the current instruction is the first located one of this activation
     };
 
     struct Step {
@@ -315,7 +316,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     std::function<void(const json *)> stopListener_;
 
     std::atomic<uint64_t> configVersion_{1};
-    /// `frames`: true for "functions" (the default, design principles 2.11), false for
+    /// `frames`: true for "functions" (the default, design principles 12.1), false for
     /// "subgraphs". Read by the program's thread when it presents a frame or starts a step.
     std::atomic<bool> foldFrames_{true};
     std::atomic<bool> pauseRequested_{false};

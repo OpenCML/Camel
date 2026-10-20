@@ -32,13 +32,13 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 | `p.x` | Struct field. A field that does not exist is the compile-time error `SemanticDiag::InvalidAccessIndex` |
 | `t.0` | Tuple member; the index is a literal, and out of range is a compile-time error |
 | `xs[i]` | Array element. Out of range (including negative) is the fault `RuntimeDiag::IndexOutOfRange` |
-| `m[k]` | Map lookup; the type is `V?` ([3.5](03_data_model.md#35-maps-and-sets)) |
+| `m[k]` | Map lookup; the type is `V?` ([3.6](03_data_model.md#36-maps-and-sets)) |
 | `mod::name` | Qualified name |
 
 - `.` cannot be used on an array (`xs.1` is `SemanticDiag::TypeNotIndexable`).
 - A subscript directly follows the expression being accessed, with no whitespace.
 - The slice forms `xs[a:b]` and `xs[a:b:c]` are reserved, not implemented: there is no dedicated diagnostic for them, and the compiler reports `SemanticDiag::NoMatchingFunction`, as "the subscript operator has no overload that accepts these arguments". Use `xs->slice<a, b>`.
-- **String subscripts are by byte**: `s[i]` is the `i`-th byte, and the result is a string containing just that one byte; an out-of-range subscript is likewise a fault. A single byte of a multi-byte character is not valid UTF-8 text by itself; to read by character use `char_at` and `codepoints` of the `str` module (see the [standard library reference](../../stdlib-reference.md)). Whether the result of a subscript is a one-byte string or a number is behaviour of the current implementation, not yet decided.
+- **String subscripts are by code point**: `s[i]` is the `i`-th code point, and the result is a string containing just that one character (`'中文'[0]` is `'中'`); an out-of-range subscript is likewise a fault. For the numbers use `codepoints` of the `str` module (see the [standard library reference](../../stdlib-reference.md)).
 
 ## 6.4 Calls
 
@@ -147,7 +147,7 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
 **Two places where mistakes are easy:**
 
 - `^` binds one level tighter than `*` and `/` and associates from right to left: `2 * 3 ^ 2` is `18`, and `2 ^ 3 ^ 2` is `2 ^ (3 ^ 2)`, that is `512`.
-- Unary `-` binds less tightly than `^` and more tightly than `->` and the other binary operators, before a literal as before a name: `-n ^ 2` is `-(n ^ 2)`, `-2 ^ 2` is `-4` (for `4` write `(-2) ^ 2`); `-n->f` is `(-n)->f`; `-a * b` is `(-a) * b`. The right operand of `^` may carry a sign: `2.0 ^ -1.0`. `!` and `~` are at the level of the unary `-` (design principles 2.12): `!x->f` is `(!x)->f` and `!a ^ b` is `!(a ^ b)`; to negate the result of a chain write `!(xs->empty)`.
+- Unary `-` binds less tightly than `^` and more tightly than `->` and the other binary operators, before a literal as before a name: `-n ^ 2` is `-(n ^ 2)`, `-2 ^ 2` is `-4` (for `4` write `(-2) ^ 2`); `-n->f` is `(-n)->f`; `-a * b` is `(-a) * b`. The right operand of `^` may carry a sign: `2.0 ^ -1.0`. `!` and `~` are at the level of the unary `-` (design principles 4.2): `!x->f` is `(!x)->f` and `!a ^ b` is `!(a ^ b)`; to negate the result of a chain write `!(xs->empty)`.
 
 ### 6.7.2 Logic
 
@@ -186,7 +186,7 @@ false
   - Float elements follow the rules of floats: an array that holds a `nan` does not equal itself, and `[0.0] == [-0.0]`.
   - A `T?` or `T!` by itself (not inside an array, tuple or struct) still has no `==`; open it first with `??`, `!!` or `match`.
 - **`x == null` and `x != null`** are defined for an `x` of type `T?`, in either order, and give a `bool`: the test of the tag of `x`, not a comparison of two values (the same node `??` branches on). It is an ordinary expression: `let has = x != null`. A nullable function value is compared with `null` the same way. A value that is never null (an `int`, a `T!`, a name already narrowed to a `T`) may be compared with `null` too: the result is fixed (`==` is always `false`, `!=` always `true`), the compiler warns (`SemanticDiag::NullTestNeverNull`), and the value itself is not evaluated. Two `T?` values compared with each other stay `SemanticDiag::NoMatchingFunction`; two function values cannot be compared.
-- `<`, `>`, `<=`, `>=`: numbers and `string` (by byte). Comparisons cannot be chained: `1 < 2 < 3` is a type error.
+- `<`, `>`, `<=`, `>=`: numbers and `string` (in code point order). Comparisons cannot be chained: `1 < 2 < 3` is a type error.
 - `===` and `!==` are not supported for now: the lexer knows the two tokens, and writing one is a located compile-time error, `SemanticDiag::ConstructNotSupported`. Compare values with `==` and `!=`.
 
 ### 6.7.4 Type conversion `as`
@@ -289,8 +289,8 @@ match name {
 }
 ```
 
-- What is matched must be a **name** (a variable or a parameter), not an arbitrary expression; bind it with `let` first.
-- A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **Each pattern must be a value the type of the matched value accepts** (design principles 2.13): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
+- What is matched may be any expression (`match f(x) { ... }`), not only a name.
+- A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **Each pattern must be a value the type of the matched value accepts** (design principles 3.7): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
 - The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`.
 
 ```cml
@@ -341,15 +341,17 @@ func main(): int sync {
 
 A missing case, an extra case or a literal case mixed in is `SemanticDiag::TaggedMatchCases`.
 
-**A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Two shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, and a `match` on a `T?` or `T!` with the fixed patterns above. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
+**Patterns on an `enum`.** When the matched value is an enum, a pattern names one of its variants ([3.5](03_data_model.md#35-enums)): `case Shape::Circle(r)`, `case Shape::Rect { w, h }`, `case Shape::Empty`, `case _`. A tuple variant gives every position; a struct variant writes the fields it binds (it may rename and abbreviate); a variant without data is its bare name. Naming every variant means no `case _` is needed; a missing variant without `case _` is `SemanticDiag::EnumMatchNotExhaustive`, whose diagnostic lists the missing variants; a variant written twice warns (`EnumVariantCaseRepeated`), and a case after `case _` warns (`MatchCaseAfterWildcard`). The first version has no nested patterns (a pattern in the position of a field) and says "not supported yet" (`ConstructNotSupported`).
 
-Tuple patterns, struct patterns, and identifier patterns on values of ordinary types (`case n => ...`) are reserved, not implemented (`SemanticDiag::ConstructNotSupported`); use an `if` chain, or take the members first and then match.
+**A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Three shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, a `match` on a `T?` or `T!` with the fixed patterns above, and a `match` on an enum that names every variant. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
+
+Tuple patterns, struct patterns, and identifier patterns on values of ordinary types (`case n => ...`) are reserved, not implemented (`SemanticDiag::ConstructNotSupported`); use an `if` chain, or take the members first and then match. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
 
 `try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph): writing it gives `SemanticDiag::TryCatchNotInLanguage`. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 
 ### 6.8.3 `loop`
 
-A loop is an expression with a state (design principles 2.10, 2.13). The state is written in the head of the loop: each name is declared once with its first value. The expression after `do` is the body; its value is the state of the next round, and the value of the whole loop is the last state.
+A loop is an expression with a state (design principles 3.10). The state is written in the head of the loop: each name is declared once with its first value. The expression after `do` is the body; its value is the state of the next round, and the value of the whole loop is the last state.
 
 ```
 loop name = init (, name = init)* (for name in array)? (while condition)? do expression
@@ -367,12 +369,12 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 - **No `break` and no `continue`**: ending early is written as the `while` condition, skipping the rest of a round as an `if`.
 - **Scope.** The first values and the array are evaluated once, where the loop is, and do not see the names of the head; the condition sees the names of the state, the body those and the name of `for`. A name of the head is given once (`SemanticDiag::LoopNameRepeated`). The condition and the body see the names around the loop (a `var` is read anew in every round).
 - **After `do`** comes an expression, read as after `then`: `{ x: 1 }` is a struct, `{ 5 }` and `sync { ... }` are blocks. A `return` in such a block ends the block with the next state; it does not leave the function.
-- **Effects.** Whether the body is a sync block is up to the body (2.4). Written `do sync { println(x); acc + x }`, its effects run in order every round. A loop in a block that is not a sync block, whose value nothing uses, does not run, with `EffectNotExecuted`, as for an unused call.
+- **Effects.** Whether the body is a sync block is up to the body (3.2). Written `do sync { println(x); acc + x }`, its effects run in order every round. A loop in a block that is not a sync block, whose value nothing uses, does not run, with `EffectNotExecuted`, as for an unused call.
 - **Order and depth.** The rounds run strictly one after the other. A loop is not a recursion: no number of rounds takes call depth, `--max-recursion-depth` does not count them, and a loop that does not end runs on.
-- **Numeric permissions.** `@numeric(...)` on a function or a block covers the bodies and conditions of the loops written in it (2.13).
+- **Numeric permissions.** `@numeric(...)` on a function or a block covers the bodies and conditions of the loops written in it (7.5).
 - `loop`, `while`, `do`, `for` and `in` are keywords.
 
-On the graph a loop is one `LOOP` node in the graph it is written in; the condition and the body are a subgraph each, sharing one table of captured values (design principles 2.12; `docs/design/graph-model` 3.5).
+On the graph a loop is one `LOOP` node in the graph it is written in; the condition and the body are a subgraph each, sharing one table of captured values (design principles 3.10; `docs/design/graph-model` 3.5).
 
 ## 6.9 Lambdas and function types
 
@@ -453,7 +455,7 @@ If the element function of `foreach` is to produce side effects, its body must b
 
 ## 6.11 Assignment and `wait`
 
-- `x = e`, `x += e` and so on are expressions whose value is the value assigned. The target must be a `var` variable or a `var` parameter itself ([3.6](03_data_model.md#36-let-var-and-references)).
+- `x = e`, `x += e` and so on are expressions whose value is the value assigned. The target must be a `var` variable or a `var` parameter itself ([3.7](03_data_model.md#37-let-var-and-references)).
 - Types for which compound assignment is available:
 
   | Operator | Types |

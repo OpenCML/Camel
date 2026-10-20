@@ -1,11 +1,12 @@
 # The Generational Collector as an Option: Report
 
 Run-time values can be reclaimed by one of two collectors, chosen per process: `mark-sweep`
-(the default, objects keep their address) and `generational` (`--gc generational` or
-`CAMEL_GC=generational`: young objects are copied). This note records what had to be fixed
+(objects keep their address; the default of releases up to v0.2.8) and `generational` (young
+objects are copied; the default since v0.2.9). This note records what had to be fixed
 before the generational collector could be offered, what was tested, what was measured against
-mark-sweep, what it costs, and what is known to be wrong. Its last section is for the language
-author: whether the generational collector should become the default is his decision.
+mark-sweep, what it costs, and what is known to be wrong. Section 7 records the question that
+was put to the language author at the time; it is superseded by the ruling of 2026-10-15 that
+made the generational collector the default.
 
 How to use the switch and its settings is in `docs/cli.md` ("The collector"); what C++ code
 must observe is in `36_gc_handle_rules.md`; the allocation domains are described in
@@ -36,7 +37,7 @@ and only the comparison between the two collectors within one row means anything
 - Two defects that exist with both collectors were met while measuring: a reference held in
   a slot typed `any` was not seen by the collector, and allocation in the mark-sweep collector
   can stall after a sweep (both in section 6.4). The first was far easier to hit with the
-  generational collector and is gone (`any` is removed, design principles 2.12); the second
+  generational collector and is gone (`any` is removed, design principles 5.10); the second
   does not occur with it.
 
 ## 2. What the option is
@@ -205,7 +206,7 @@ one-minute load average before and after the benchmark. "ratio" is generational 
 mark-sweep on the medians. A minor collection that precedes a major one is counted in the stop
 of the major one.
 
-`std::jit` is `std::inline std::jit`; the tensor programs run after `std::macro`. `std::prl`
+`std::jit` is `std::opt::inline std::jit`; the tensor programs run after `std::macro`. `std::prl`
 uses all 18 threads, so the load after a `prl` row is in part its own. Rows marked (9) were
 measured a second time with nine rounds at a lower load, and that measurement is shown.
 
@@ -311,8 +312,8 @@ code reads an object constant from the static area of its graph each time it use
 is a root the collector updates in place) instead of containing its address, and graphs that
 need the runtime are compiled as framed code (`07_jit_architecture.md`, 17.4). Over the
 repository's programs the same graphs are compiled under both collectors, and
-`jit_const(36)` under `std::inline std::jit` takes 0.101 s with the generational collector
-against 0.102 s with mark-sweep (2.74 s on `std::inline std::fvm`). What follows is the state
+`jit_const(36)` under `std::opt::inline std::jit` takes 0.101 s with the generational collector
+against 0.102 s with mark-sweep (2.74 s on `std::opt::inline std::fvm`). What follows is the state
 this report measured.
 
 With the generational collector a graph whose static area holds an object constant (a string
@@ -326,7 +327,7 @@ arguments; the others need arguments or are meant to fail):
 | Passes | Programs with a compiled graph (mark-sweep / generational) | Graphs compiled | Graphs lost | Programs that lose one |
 |---|---|---|---|---|
 | `std::jit` | 38 / 36 | 93 / 84 | 9 | 4: `linear/nvm/lambda.cml`, `linear/nvm/render.cml`, `consistency/values/match_values.cml`, `para/core/unordered_foreach_smoke.cml` |
-| `std::inline std::jit` | 26 / 26 | 38 / 38 | 0 | 0 |
+| `std::opt::inline std::jit` | 26 / 26 | 38 / 38 | 0 | 0 |
 
 The new check refuses 71 (14 after inlining) graphs in all, but all except the 9 are graphs
 that the compiler refuses for another reason with mark-sweep too (an operator call, a call of
@@ -339,8 +340,8 @@ that returns a string constant.
 
 | Benchmark | mark-sweep s | generational s | ratio | Load |
 |---|---|---|---|---|
-| jit_const(36), `std::inline std::jit` | 0.100 [0.096, 0.116] | 2.09 [2.02, 2.26] | 21 | 17 / 17 |
-| jit_const(36), `std::inline std::fvm` | 2.50 [2.10, 4.75] | 2.53 [1.97, 3.09] | 1.01 | 16 / 17 |
+| jit_const(36), `std::opt::inline std::jit` | 0.100 [0.096, 0.116] | 2.09 [2.02, 2.26] | 21 | 17 / 17 |
+| jit_const(36), `std::opt::inline std::fvm` | 2.50 [2.10, 4.75] | 2.53 [1.97, 3.09] | 1.01 | 16 / 17 |
 
 Removing the restriction needs either stack maps or constants loaded through a table that the
 collector updates; neither was attempted.
@@ -370,7 +371,7 @@ a module outside it has been checked by nobody.
 ### 6.4 Known problems, not fixed
 
 **A reference in a slot typed `any` is invisible to the collector (both collectors).** Fixed
-since by removing `any` (design principles 2.12; `docs/design/any-typing/README.cn.md`): no
+since by removing `any` (design principles 5.10; `docs/design/any-typing/README.cn.md`): no
 type on a committed graph is undetermined, and `json.decode` gives a `Json`, an object that
 describes itself and is traced through the types its kinds fix. The program below no longer
 compiles (`d as string[]`); written with `decode_as` or the `Json` accessors it is correct in
@@ -453,6 +454,11 @@ a snapshot taken before the rebase. Its results were not used here.
 
 ## 7. Should it be the default?
 
+**Superseded (2026-10-15).** The language author made the generational collector the default
+(`d270689c`, released in v0.2.9); `--gc mark-sweep` keeps the other one. The section below is
+the question as it was put at the time and the answer the measurements argued for, kept as the
+record of the comparison; it is not the current setting.
+
 The facts, from the sections above:
 
 1. Correctness on the test set is equal: both pass, and the generational collector passes the
@@ -463,7 +469,7 @@ The facts, from the sections above:
 3. For data that is built and kept it is 10 to 45 % slower and is stopped two to three times
    as long in total; the longest single stop is about the same.
 4. For tensor work and for code that does not allocate there is no measured difference.
-5. (Superseded since, see 6.1.) `std::jit` loses 9 of 93 compiled graphs in the test programs (none after `std::inline`),
+5. (Superseded since, see 6.1.) `std::jit` loses 9 of 93 compiled graphs in the test programs (none after `std::opt::inline`),
    and a hot function that returns or uses an object constant can lose a factor of 20.
 6. The `any` defect turned from "wrong only under stress" into "wrong output, exit code 0" in
    a ten-line program that uses `json.decode` (6.4). Closed: `any` is removed.
@@ -475,13 +481,13 @@ Recommendation: **not yet; keep mark-sweep as the default for now and make the s
 two things are settled.**
 
 - The `any` question (6.4, and section 9 of the handle rules). Settled by design principles
-  2.12 and closed: `any` is removed and `json.decode` gives a self-describing `Json`, so no
+  5.10 and closed: `any` is removed and `json.decode` gives a self-describing `Json`, so no
   slot holds a reference the collector cannot trace.
 - A run on the other platforms the project supports, Windows at least, with the default test
   set in both modes.
 
 Neither the JIT restriction nor the cost for long-lived data is a reason to wait in itself:
-the first costs nothing after `std::inline` in the programs examined and has a known remedy,
+the first costs nothing after `std::opt::inline` in the programs examined and has a known remedy,
 the second is the ordinary price of a copying young generation (a lower
 `CAMEL_GC_PROMOTION_AGE` should reduce it; that was not measured). The measurements argue for the switch once the two points above are
 closed, and the stall of the mark-sweep allocator argues for not staying with it indefinitely.

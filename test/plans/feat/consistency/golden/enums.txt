@@ -1,0 +1,12 @@
+3.14159
+6.0
+0.0
+Shape::Circle(1.0)
+Shape::Rect { w: 2.0, h: 3.0 }
+Shape::Empty
+true
+false
+true
+Slot::Full(Shape::Rect { w: 2.0, h: 3.0 })
+true
+false

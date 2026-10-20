@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2026
- * Updated: Oct. 06, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,31 +22,32 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
-#include "camel/core/module/module.h"
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/module/module.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/source/manager.h"
-#include "camel/utils/number_text.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_types.h"
+#include "camel/utils/number_text.h"
+#include "camel/utils/utf8.h"
 
 #include <charconv>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <memory>
-#include <sstream>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -247,9 +248,10 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
         return rooted(rtdata::toSlot<bool>(text == "true"), declared);
     }
     case TypeCode::String:
-        return rooted(
-            rtdata::toSlot<::String *>(::String::from(text, mm::autoSpace())),
-            declared);
+        if (!camel::utf8::isValid(text)) {
+            refuse("it is not valid UTF-8 (a string is always valid UTF-8)");
+        }
+        return rooted(rtdata::toSlot<::String *>(::String::from(text, mm::autoSpace())), declared);
     case TypeCode::Struct:
     case TypeCode::Tuple:
         return loadAggregate(text, declared, "", what);
@@ -311,8 +313,8 @@ void saveValue(slot_t value, Type *valueType, const std::string &path, const std
             const std::string key =
                 isStruct ? std::string(static_cast<type::StructType *>(valueType)->fieldName(i))
                          : std::to_string(i);
-            Type *fieldType = isStruct ? static_cast<type::StructType *>(valueType)->typeAt(i)
-                                       : static_cast<type::TupleType *>(valueType)->typeAt(i);
+            Type *fieldType    = isStruct ? static_cast<type::StructType *>(valueType)->typeAt(i)
+                                          : static_cast<type::TupleType *>(valueType)->typeAt(i);
             const slot_t field = isStruct ? rtdata::fromSlot<::Struct *>(value)->get<slot_t>(i)
                                           : rtdata::fromSlot<::Tuple *>(value)->get<slot_t>(i);
             const std::string leaf = top ? leafRoot + "/" + key : path + "." + key;
@@ -377,7 +379,7 @@ void registerEntryResultSaver(TypeCode code, EntryResultSaver saver) {
 
 namespace {
 
-/// An error value nobody handled reached the exit of `main` (design principles 2.10): it is
+/// An error value nobody handled reached the exit of `main` (design principles 3.9): it is
 /// reported on standard error as a diagnostic, in the format the command line chose, located
 /// where the error value says it was made (`file:line:column`, the file name without its
 /// directory; an error made by an operator names the operator instead and has no position).
@@ -459,67 +461,68 @@ void writeEntryResultTo(
     const core::context::context_ptr_t &context, std::string path, bool jsonDiagnostics) {
     // The context owns the handler: it must not own the context in turn.
     core::context::Context *ctx = context.get();
-    context->setEntryResultHandler([ctx, path = std::move(path), jsonDiagnostics](
-                                       GCGraph *graph, slot_t value) {
-        std::string why;
-        try {
-            // Only a `main` that declares its return type has a result (design principles
-            // 2.10). The value an undeclared one happens to end with (that of its last
-            // statement, `println('a')` giving 'a') is neither printed nor written.
-            // An error value such a body ends with is not reported at run time either:
-            // nothing takes it, which the compiler warns about (UnusedFallibleValue,
-            // design principles 2.11).
-            const bool declared = ctx->entryResultDeclared();
-            Type *resultType =
-                declared && graph && graph->funcType() && graph->funcType()->hasExitType()
-                    ? graph->funcType()->exitType()
-                    : nullptr;
-            if (type::TupleType *fallible = type::asFallible(resultType)) {
-                if (rtdata::isErrorValue(value)) {
-                    // The exit code is non-zero (Context::captureProcessExitCode).
-                    reportUnhandledError(*ctx, value, jsonDiagnostics);
+    context->setEntryResultHandler(
+        [ctx, path = std::move(path), jsonDiagnostics](GCGraph *graph, slot_t value) {
+            std::string why;
+            try {
+                // Only a `main` that declares its return type has a result (design principles
+                // 9.8). The value an undeclared one happens to end with (that of its last
+                // statement, `println('a')` giving 'a') is neither printed nor written.
+                // An error value such a body ends with is not reported at run time either:
+                // nothing takes it, which the compiler warns about (UnusedFallibleValue,
+                // design principles 3.9).
+                const bool declared = ctx->entryResultDeclared();
+                Type *resultType =
+                    declared && graph && graph->funcType() && graph->funcType()->hasExitType()
+                        ? graph->funcType()->exitType()
+                        : nullptr;
+                if (type::TupleType *fallible = type::asFallible(resultType)) {
+                    if (rtdata::isErrorValue(value)) {
+                        // The exit code is non-zero (Context::captureProcessExitCode).
+                        reportUnhandledError(*ctx, value, jsonDiagnostics);
+                        return;
+                    }
+                    value      = rtdata::falliblePayload(value);
+                    resultType = fallible->payloadType();
+                }
+                const bool none = !resultType || resultType->code() == TypeCode::Void;
+                // The types the process exit code is derived from
+                // (Context::captureProcessExitCode).
+                const bool exitCode = !none && (resultType->code() == TypeCode::Int32 ||
+                                                resultType->code() == TypeCode::Int64 ||
+                                                resultType->code() == TypeCode::Bool ||
+                                                resultType->code() == TypeCode::Byte);
+                if (path.empty()) {
+                    if (!none && !exitCode) {
+                        // One piece, like a println: the program's own output is complete by now.
+                        std::ostringstream text;
+                        rtdata::printSlot(text, value, resultType);
+                        text << '\n';
+                        std::cout << text.str();
+                        std::cout.flush();
+                    }
                     return;
                 }
-                value      = rtdata::falliblePayload(value);
-                resultType = fallible->payloadType();
-            }
-            const bool none = !resultType || resultType->code() == TypeCode::Void;
-            // The types the process exit code is derived from (Context::captureProcessExitCode).
-            const bool exitCode =
-                !none &&
-                (resultType->code() == TypeCode::Int32 || resultType->code() == TypeCode::Int64 ||
-                 resultType->code() == TypeCode::Bool || resultType->code() == TypeCode::Byte);
-            if (path.empty()) {
-                if (!none && !exitCode) {
-                    // One piece, like a println: the program's own output is complete by now.
-                    std::ostringstream text;
-                    rtdata::printSlot(text, value, resultType);
-                    text << '\n';
-                    std::cout << text.str();
-                    std::cout.flush();
+                if (none) {
+                    why = declared ? "'main' returns no value"
+                                   : "'main' declares no return type, so the value of its body is "
+                                     "not the result of the program";
+                } else {
+                    saveValue(value, resultType, path, "");
+                    return;
                 }
-                return;
+            } catch (const camel::core::error::Diagnostic &diagnostic) {
+                why = diagnostic.message;
+            } catch (const std::exception &e) {
+                why = e.what();
             }
-            if (none) {
-                why = declared ? "'main' returns no value"
-                               : "'main' declares no return type, so the value of its body is "
-                                 "not the result of the program";
-            } else {
-                saveValue(value, resultType, path, "");
-                return;
+            auto diag = ctx->rtmDiags()->of(RuntimeDiag::EntryResultNotWritten);
+            if (const uint64_t origin = entryFunctionOrigin(*ctx);
+                origin != camel::source::kInvalidOriginId) {
+                diag.atOrigin(origin);
             }
-        } catch (const camel::core::error::Diagnostic &diagnostic) {
-            why = diagnostic.message;
-        } catch (const std::exception &e) {
-            why = e.what();
-        }
-        auto diag = ctx->rtmDiags()->of(RuntimeDiag::EntryResultNotWritten);
-        if (const uint64_t origin = entryFunctionOrigin(*ctx);
-            origin != camel::source::kInvalidOriginId) {
-            diag.atOrigin(origin);
-        }
-        diag.commit(path, why);
-    });
+            diag.commit(path, why);
+        });
 }
 
 uint64_t entryFunctionOrigin(const core::context::Context &context) {
@@ -605,18 +608,18 @@ GCGraph *bindEntryArguments(
     for (size_t i = 0; i < withCount + root->normPorts().size(); ++i) {
         const bool isWith = i < withCount;
         const size_t k    = isWith ? i : i - withCount;
-        const bool known  =
+        const bool known =
             funcType && (isWith ? k < funcType->withTypesCount() : k < funcType->normTypesCount());
-        formals.push_back(Formal{
-            .name   = portNameOf(root, i),
-            .port   = isWith ? root->withPorts()[k] : root->normPorts()[k],
-            .isWith = isWith,
-            .isVar  = known && (isWith ? funcType->withIsVarAt(k) : funcType->normIsVarAt(k)),
-            .type =
-                known
-                    ? (isWith ? funcType->withTypeAt(k) : funcType->normTypeAt(k))
-                    : root->node(isWith ? root->withPorts()[k] : root->normPorts()[k])->dataType(),
-        });
+        formals.push_back(
+            Formal{
+                .name   = portNameOf(root, i),
+                .port   = isWith ? root->withPorts()[k] : root->normPorts()[k],
+                .isWith = isWith,
+                .isVar  = known && (isWith ? funcType->withIsVarAt(k) : funcType->normIsVarAt(k)),
+                .type   = known ? (isWith ? funcType->withTypeAt(k) : funcType->normTypeAt(k))
+                                : root->node(isWith ? root->withPorts()[k] : root->normPorts()[k])
+                                      ->dataType(),
+            });
     }
     std::string known;
     for (const Formal &formal : formals) {
@@ -636,11 +639,10 @@ GCGraph *bindEntryArguments(
         if (!formal) {
             return invalid(
                 argument.name,
-                formals.empty()
-                    ? std::string("'main' takes no parameters")
-                    : std::format(
-                          "'main' has no parameter of that name (its parameters: {})",
-                          known));
+                formals.empty() ? std::string("'main' takes no parameters")
+                                : std::format(
+                                      "'main' has no parameter of that name (its parameters: {})",
+                                      known));
         }
         if (!seen.insert(argument.name).second) {
             return invalid(argument.name, "the argument is given more than once");
@@ -669,9 +671,9 @@ GCGraph *bindEntryArguments(
     camel::runtime::RuntimeGraphDraftSession session(context, root);
     camel::runtime::GraphDraft &draft = session.rootDraft();
     for (auto &[formal, loaded] : bound) {
-        const gc_node_ref_t port  = draft.draftIdOfSourceRef(formal->port);
-        const slot_t value        = loaded.slot();
-        const gc_node_ref_t node  =
+        const gc_node_ref_t port = draft.draftIdOfSourceRef(formal->port);
+        const slot_t value       = loaded.slot();
+        const gc_node_ref_t node =
             draft.materializeStaticValue(value, loaded.type, camel::runtime::kGCNodeFlagConstant);
         draft.replaceAllValueUses(port, node);
         if (formal->isWith) {

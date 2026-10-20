@@ -24,7 +24,7 @@
  *
  * The shadow stack of debug_core.cpp has a frame per activation of a graph, as the schedulers
  * run them. The arm of a branch is a graph of its own, so a function that branches is, on that
- * stack, its own frame plus a frame per arm it entered. Design principles 2.11: the debugger
+ * stack, its own frame plus a frame per arm it entered. Design principles 12.1: the debugger
  * shows the arms as part of the frame of the function they are written in, and can show the
  * real subgraphs instead. So every shadow frame belongs to an *activation*:
  *
@@ -217,6 +217,38 @@ json DebugCore::frameJson(const Chain &chain, bool top) {
     }
     j["name"] = name;
     j["top"]  = top;
+    if (top) {
+        // A bounded, immutable snapshot for graph clients. Use declared parameter ports,
+        // not every local of an arm; no variable handles survive a resume.
+        j["activation"]           = f.activation;
+        j["entry"]                = f.atEntry;
+        const GraphInfo *function = f.function != nullptr ? f.function : f.info;
+        j["functionId"]           = function->stableId;
+        std::unordered_set<std::string> parameters;
+        const auto addParameter = [&](gc_node_ref_t ref) {
+            if (function->capturePorts.count(ref) == 0) {
+                if (const NodeInfo *node = function->node(ref))
+                    parameters.insert(node->label);
+            }
+        };
+        for (auto ref : function->graph->withPorts())
+            addParameter(ref);
+        for (auto ref : function->graph->normPorts())
+            addParameter(ref);
+        json arguments = json::array();
+        for (const Variable &v : localsOf(chain)) {
+            if (parameters.erase(v.name) == 0)
+                continue;
+            const Rendered value = v.evaluated ? render(v.view, 120) : Rendered{};
+            arguments.push_back(
+                json{
+                    {"name", v.name},
+                    {"value", v.evaluated ? value.value : v.note},
+                    {"type", v.evaluated ? value.type : typeText(v.view.type)},
+                    {"evaluated", v.evaluated}});
+        }
+        j["arguments"] = std::move(arguments);
+    }
     if (f.node != nullptr) {
         j["node"] = json{
             {"ref", f.node->ref},

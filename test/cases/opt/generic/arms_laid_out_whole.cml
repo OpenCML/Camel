@@ -4,7 +4,7 @@
  * branch is replaced by the taken arm, which leaves the JOIN of the enclosing branch (`0 >= 2`)
  * waiting on nodes inside its second arm. The execution order used to visit those first: the
  * first half of the second arm, then the whole first arm, then the rest of the second arm. Under
- * std::opt::simplify the second arm then ran into the first one: "base" was printed twice on
+ * std::opt the second arm then ran into the first one: "base" was printed twice on
  * NodeVM and Taskflow (exit 0), and FastVM and the JIT left the arm before its value was computed
  * (a located RuntimeError, or the wrong number).
  *

@@ -23,7 +23,7 @@ func main(): int sync {
 }
 ```
 
-**An unused result of a pure operation is an error.** When a statement is a call of an operator declared pure (`xs->append<5>`, `sort(xs)`, `a + b`) and its value is not used (it is not the last statement of its block, or the block's value is dropped: a body declared `: void`, an element function written in place for `foreach`, the arm of an `if` without `else`, a block written as a statement), it does nothing: such an operator returns a new value and changes none of its arguments (design principles 2.12). This is the compile-time error `SemanticDiag::UnusedPureResult`; when `xs` is a variable, the diagnostic suggests the rebinding `xs = xs->append<5>` ([3.6](03_data_model.md#36-let-var-and-references)).
+**An unused result of a pure operation is an error.** When a statement is a call of an operator declared pure (`xs->append<5>`, `sort(xs)`, `a + b`) and its value is not used (it is not the last statement of its block, or the block's value is dropped: a body declared `: void`, an element function written in place for `foreach`, the arm of an `if` without `else`, a block written as a statement), it does nothing: such an operator returns a new value and changes none of its arguments (design principles 11.3). This is the compile-time error `SemanticDiag::UnusedPureResult`; when `xs` is a variable, the diagnostic suggests the rebinding `xs = xs->append<5>` ([3.7](03_data_model.md#37-let-var-and-references)).
 
 Using the value means taking it apart with `!!`, `?->` or `match`, passing it on, or returning it. To drop it on purpose write `let _ = ...` ([7.2](#72-let-and-var)). The same warning is given for what the arm of an `if` without `else` gives, and for the value a `main` **without a declared return type** ends with: only a `main` that declares its return type has a result ([4.1](04_execution_model.md#41-program-and-entry)), so an error value at the end of an undeclared one goes nowhere. Outside a sync block there is nothing to warn about: a value nothing uses is not evaluated at all. The warning can be turned off with `-Wno-unused-fallible-value`.
 
@@ -194,14 +194,14 @@ func main(): int sync {
 ```
 
 - **Can be overloaded**: the binary `+` `-` `*` `/` `%` `^` `@` `==` `<` `<=` `>` `>=` `&` `|`, indexing `[]` (the indexed value and at least one index), and the unary `-` `!` `~`. `-` with one parameter is negation, with two subtraction.
-- **Overloading `==` gives `!=`** (design principles 2.13): an `a != b` that uses that overload of `==` is `!(a == b)`, so the two cannot disagree. The overload must return a `bool`, otherwise the `!=` that uses it is `SemanticDiag::OperatorOverloadInvalid`. `!=` cannot be overloaded by itself (`SemanticDiag::OperatorNotOverloadable`).
+- **Overloading `==` gives `!=`** (design principles 4.3): an `a != b` that uses that overload of `==` is `!(a == b)`, so the two cannot disagree. The overload must return a `bool`, otherwise the `!=` that uses it is `SemanticDiag::OperatorOverloadInvalid`. `!=` cannot be overloaded by itself (`SemanticDiag::OperatorNotOverloadable`).
 - **Cannot be overloaded**: `&&`, `||` (branches), `??`, `!!`, `?->` (branches on a null or an error), `->` (passes a value to a function), `..`, `as`, assignment, `!=` (it follows `==`), and `===`, `!==`. Declaring one is `SemanticDiag::OperatorNotOverloadable`, with the reason. A compound assignment has no overload of its own: `a += b` is `a = a + b` and follows the overload of `+`.
 - An operator with the wrong number of parameters, with with-parameters or with a `var` parameter is `SemanticDiag::OperatorOverloadInvalid`. A generic overload writes `typeas` in a parameter's type (`func operator +(a: (typeas T)[], b: T[]): T[]`), not in angle brackets: angle brackets are with-parameters.
-- **The overloads of every layer form one set.** Every other name takes the nearest layer only (local > this module > imported > built-in); operators are the exception (design principles 2.12): the overloads of this module, those exported by imported modules, and the built-in and C++ module ones are one set, and a call takes the one that accepts its operands.
-- **The more specific overload wins** (design principles 2.13). "More specific" means: an overload of the program whose parameter types are exactly the operands' types (without a value entering `T?` or `T!`), while every other one that accepts the operands takes them only as members of a family of types: a built-in or C++ module operator whose type rule accepts several types (comparing arrays, tuples and structs by content, arithmetic over tensors), or a generic overload. The call then takes the program's overload. So a struct can have an equality of its own: `func operator ==(a: V, b: V): bool` makes `p == q` (both `V`) call it instead of comparing by content; other struct types are still compared by content. A built-in operator declared for exactly those types (`int + int`, `float == float`) is as specific: declaring such an overload is `SemanticDiag::OperatorOverloadConflict`.
+- **The overloads of every layer form one set.** Every other name takes the nearest layer only (local > this module > imported > built-in); operators are the exception (design principles 10.2): the overloads of this module, those exported by imported modules, and the built-in and C++ module ones are one set, and a call takes the one that accepts its operands.
+- **The more specific overload wins** (design principles 4.3). "More specific" means: an overload of the program whose parameter types are exactly the operands' types (without a value entering `T?` or `T!`), while every other one that accepts the operands takes them only as members of a family of types: a built-in or C++ module operator whose type rule accepts several types (comparing arrays, tuples and structs by content, arithmetic over tensors), or a generic overload. The call then takes the program's overload. So a struct can have an equality of its own: `func operator ==(a: V, b: V): bool` makes `p == q` (both `V`) call it instead of comparing by content; other struct types are still compared by content. A built-in operator declared for exactly those types (`int + int`, `float == float`) is as specific: declaring such an overload is `SemanticDiag::OperatorOverloadConflict`.
 - Otherwise two that accept the operands are `SemanticDiag::AmbiguousOperatorCall`, which lists them (two generic overloads, or two modules each giving one for the same parameter types); two overloads with the same parameter types in one module are `SemanticDiag::Redeclaration`.
 - **Export**: `export func operator +(...)`. Importing a module (`import { V } from m`, or `import m`) brings all the operator overloads it exports, as for the operators of a C++ module; they are not, and cannot be, imported by name.
-- **An operator declared in a namespace block belongs to the module** (design principles 2.13): its name carries no namespace (an operator has no name to qualify), it is exported and joins the overloads as one declared at the top level does, and its signature and body look names up in the block, so they may use the block's types without a prefix.
+- **An operator declared in a namespace block belongs to the module** (design principles 4.3): its name carries no namespace (an operator has no name to qualify), it is exported and joins the overloads as one declared at the top level does, and its signature and body look names up in the block, so they may use the block's types without a prefix.
 - On the graph an operator overload is an ordinary function call. Names of the form `__x__` remain reserved; programs do not write them.
 
 ## 7.5 Generic functions
@@ -238,7 +238,8 @@ func main(): int sync {
 - A generic function is a **subgraph template**. Each call with a set of concrete types instantiates a subgraph in which all types are concrete (the same set of types is instantiated only once; in `std::rgir` one can see subgraphs named `first<int>` and `first<string>`). The graph contains only concrete types, and no type information is needed at run time.
 - **A type variable takes its type from the arguments.** First the type of the argument at its `typeas` position; when the argument there says nothing (it is `null`, or a generic function that is itself waiting for its types), the type found at another occurrence. The constraints of all arguments are collected before any is checked: every parameter is then checked against its type with the variables replaced, without implicit conversion (except that a value enters a `T?`/`T!` parameter, see [3.4](03_data_model.md)). `pick(true, 1, 2.5)` is an error (`T` is bound to `int`); a variable that cannot be determined is a compile-time error, and the diagnostic says which.
 - `typeas` can appear in these positions: array elements, tuple elements, struct fields, the parameters and return value of a function type, the inner type of `T?`/`T!`, the arguments of `Map`/`Set` and of type functions. It cannot appear in a union type, nor as an argument of a module type.
-- `typeas` can only be written in the parameters (including the `with` parameters) of a function declaration. A type variable must be bound before it is used (in the order written, `with` parameters first); binding the same variable twice, or giving it the name of an existing type, is an error.
+- `typeas` can appear in the parameters (including `with` parameters) or result type of a function declaration. A variable must be declared before use (`with` parameters first); declaring it twice or using an existing type name is an error.
+- A result-only variable is inferred from an expected type: `let xs: int[] = empty()`, a known parameter type, or a declared return position. Without sufficient context, provide explicit type arguments: `empty::<int>()`. Types follow their first occurrence in the signature (`with` parameters first) or can be given by name, which does not depend on position: `pair::<A = int, B = string>(..)`. One list is all positional or all named, never mixed; by name every type variable must be given, and a wrong or repeated name is a compile-time error; built-in operators take their type arguments by position only. Type arguments are consumed at compile time. Value context arguments remain `f<w>`; combine them as `f::<T><w>(x)`. An explicit instance can also be a function value: `let f = id::<int>`.
 - **The function body is checked at instantiation.** Type errors in the function body are reported at instantiation; the diagnostic gives the position of the error in the function body and states which instance it is and which call instantiated it. A generic function that is never called is not checked.
 - Recursive generic functions can be used (the return type must be written out). A function that switches to a larger type at every recursion cannot terminate instantiation, and an error is reported when the nesting reaches 8 levels.
 - `T` can be used in the function body: the parameter types of a lambda, `let z: T = 0`, `e as T`.
@@ -315,9 +316,35 @@ func main(): int sync {
 
 A call of an annotated function is checked against the parameters of the function the annotation returns. Annotated functions can take part in overloading.
 
+An annotation may also stand before a block. The block is then a function of no parameters, passed to the annotation, and the function the annotation returns is called right where the block is written. Otherwise the block behaves as without the annotation: its names are not visible after it, a `return` in it gives the block's value, and when nothing takes its value, its statements run only as a block without the annotation would run them ([7.8](#78-blocks)).
+
+```cml
+func doubled(f: () => int): () => int {
+    return () => f() * 2
+}
+
+func next_doubled(x: int): int {
+    @doubled
+    {
+        return x + 1
+    }
+}
+
+func main(): int sync {
+    println(next_doubled(4))    // (4 + 1) * 2
+    return 0
+}
+```
+
+```text
+10
+```
+
+A library can declare an annotation that **grants an attribute** to the code it is written on, instead of wrapping it: written with constant arguments, it is applied as the graph is built, and the nodes of that function or block (with the branch arms, loop bodies and lambdas written in it, not the functions they call) carry the attribute, which passes and back ends of that library read; the library declares the kind of the attribute's values and how they combine and merge (`camel/core/node_attrs.h`). Such an annotation does not change what the code computes.
+
 ### 7.6.1 `@numeric`: numeric permissions
 
-`@numeric(permission, ...)` before a function declaration or a block grants that code permissions to change floating-point results (design principles 2.13). It is not a decorator: it does not change the function's value, it only relaxes the canonical algorithm ([3.2.1](03_data_model.md#321-the-numeric-contract-of-floating-point)).
+`@numeric(permission, ...)` before a function declaration or a block grants that code permissions to change floating-point results (design principles 7.5). It is not a decorator: it does not change the function's value, it only relaxes the canonical algorithm ([3.2.1](03_data_model.md#321-the-numeric-contract-of-floating-point)).
 
 | Permission | Allows |
 |---|---|
@@ -349,7 +376,7 @@ func norm(x: float, y: float): float {
 - **A permission allows, it never requires.** The CPU back ends (`std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::cpp`) always give the canonical results; later back ends (Tiles, for example) may use other algorithms on the nodes that have a permission.
 - There is no module-wide default and no command-line or pipeline switch; a back end's entry point (such as `tiles.run`) takes no permissions.
 - The permissions are recorded on every node of the graph: `std::rgir` and `std::gir` show `numeric="..."` on the nodes that have any, `camel inspect -a` and `-c` on the blocks. Common-subexpression merging and tensor fusion do not merge nodes with different permissions.
-- An unknown permission, another name followed by parentheses (`@foo(x)`), an empty `@numeric()` and a decorator written on a block are compile-time errors, `SemanticDiag::InvalidAnnotation`.
+- An unknown permission, another name followed by parentheses (`@foo(x)`) and an empty `@numeric()` are compile-time errors, `SemanticDiag::InvalidAnnotation`.
 
 ## 7.7 Type declarations
 
@@ -399,7 +426,7 @@ id
 - It can be `export`ed, and is used in another module as `module::Pair<int>`.
 - The angle brackets of a module type (such as `Tensor<f32, const [2, 3]>`) are interpreted by the type itself, and the arguments can be types or `const data`.
 
-The parts of type expressions that are reserved and not implemented: the type operations `&`, `\`, `+`, `-`, `^`, and `typeof`, `keyof`, `name of T`, `T ? U` (`SemanticDiag::FeatureNotSupported` or a syntax error); their meaning is not yet decided. A union type `A | B` can be written, but values of the member types cannot actually enter it (an `int` cannot be passed to a parameter of type `int | string`), and it has no practical use at present. `enum` is a reserved word with no corresponding syntax.
+The parts of type expressions that are reserved and not implemented: the type operations `&`, `\`, `+`, `-`, `^`, and `typeof`, `keyof`, `name of T` (`SemanticDiag::FeatureNotSupported` or a syntax error); their meaning is not yet decided. `T ? U` is retired (`SemanticDiag::ReservedTypeQuestionRetired`), and so is the union type `A | B`: a value that is one of several possibilities is an `enum` (`SemanticDiag::UnionTypeRetired`; see [3.5](03_data_model.md#35-enums)).
 
 ## 7.8 Blocks
 

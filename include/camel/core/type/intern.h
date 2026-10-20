@@ -37,7 +37,7 @@
  * What is interned:
  *  - tuple types (TupleType::create), frame and static-area layouts among them, and array
  *    types (ArrayType::create). Converting a value to its own type is legal and does nothing
- *    (design principles 2.12, question Q11 of the design), so `v as T` between two of them
+ *    (design principles 5.1, question Q11 of the design), so `v as T` between two of them
  *    is decided by their structure, never by which object each is, and sharing equal types
  *    changes no program's meaning;
  *  - struct types (StructType);

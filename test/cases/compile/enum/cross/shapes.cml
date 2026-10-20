@@ -1,0 +1,24 @@
+module shapes
+
+export type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+export type Option<T> = enum { Some(T), None }
+
+export func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+        case Shape::Rect { w, h } => w * h
+        case Shape::Empty => 0.0
+    }
+}
+
+export func unwrapOr(o: Option<int>, fallback: int): int {
+    return match o {
+        case Option::Some(v) => v
+        case Option::None => fallback
+    }
+}

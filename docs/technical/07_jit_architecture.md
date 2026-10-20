@@ -503,7 +503,7 @@ jg  .recurse
 
 ## 11. 性能特征
 
-### 11.1 fib(30) 基准测试（std::inline std::jit）
+### 11.1 fib(30) 基准测试（std::opt::inline std::jit）
 
 | 优化阶段 | 耗时 | 每次调用开销 | 关键改进 |
 |---------|------|-------------|---------|
@@ -578,14 +578,14 @@ jg  .recurse
 ### 13.1 MIR Dump
 
 ```bash
-camel fib.cml std::inline std::mir    # 输出优化后的 MIR（带 VReg）
-camel fib.cml std::inline std::rmir   # 输出原始 MIR（优化前）
+camel fib.cml std::opt::inline std::mir    # 输出优化后的 MIR（带 VReg）
+camel fib.cml std::opt::inline std::rmir   # 输出原始 MIR（优化前）
 ```
 
 ### 13.2 ASM Dump
 
 ```bash
-camel fib.cml std::inline std::asm    # 输出 x64 汇编（含偏移和指令注释）
+camel fib.cml std::opt::inline std::asm    # 输出 x64 汇编（含偏移和指令注释）
 ```
 
 输出格式：`[offset]  instruction  ; annotation`。C++ wrapper 从 offset 0 开始，JIT body 从 `jitEntryOffset`（包装器之后）开始。
@@ -739,12 +739,12 @@ SysV 下的序列是 `push rdi; mov rsi, r13; mov edx, pc; mov rax, helper; call
 - **无帧代码**把帧放在机器栈上、值放在寄存器里，回收器看不见也不会更新它们；它在进入到返回之间不调用任何东西、不轮询，所以那期间不会回收。分配器拒绝在它之下到达安全点：`mm::detail::nativeCodeDepth` 只在 `invokeOwnedJitFrame` 进入无帧代码的那次调用前后计数；有帧代码走 `runFramedJit`，不在其中。
 - **有帧代码**的安全点与解释器的在同样的位置（`FUNC` / `TAIL` / `CALL`、高阶算子的每个元素、自尾调用的轮询），都在驱动循环或解释器里，此时它已经 `ret`。帧池的帧是已注册的根，回收器按帧布局扫描并就地更新；在辅助函数调用、离开点与轮询处没有值活在寄存器或机器栈上（寄存器分配拒绝跨过它们的值，之后代码重新读帧），所以这些位置上它的"栈映射"是空的。
 - **由此得出的结论（原 `DESIGN-QUESTION(jit-safepoint-under-framed-code)`）**：自己会到达安全点的算子（调用 Camel 函数的 C++ 算子；标准库的高阶算子是 `SCHD`，不在此列）经 `jitHelperOper` 调用时，机器栈上有它上面的有帧代码。这是允许的：那段代码不持有回收器需要看见或更新的东西。"编译出的代码之下不得有安全点"是关于无帧代码的规则。
-- **对象常量。** 回收器移动对象时（`--gc generational`），两种代码都不含对象的地址：对象常量在每次使用时从图的静态区读取，静态区是回收器就地更新的根（`36_gc_handle_rules.md` 第 5 节）。标记-清除下无帧代码仍把它当作立即数。唯一的例外是自调用或自尾调用在多于 4 个（经寄存器传递的上限）实参里传一个对象常量：那些实参作为立即数拷贝，这样的图在分代下编译成有帧代码（`collectRuntimeConstructs` 的 `object-constant-arg`）；在 17.5 的程序里没有出现。此前分代模式下含对象常量的图一律留给解释器，`test/cases/perf/gc/jit_const.cml`（返回字符串常量的双递归）因此慢 21 倍（`37_generational_gc_report.md` 6.1）；现在 `jit_const(36)` 在 `std::inline std::jit` 下标记-清除 102 毫秒、分代 101 毫秒，同一程序分代下的 `std::inline std::fvm` 是 2742 毫秒（各 5 轮中位数，2026-10-14）。
+- **对象常量。** 回收器移动对象时（`--gc generational`），两种代码都不含对象的地址：对象常量在每次使用时从图的静态区读取，静态区是回收器就地更新的根（`36_gc_handle_rules.md` 第 5 节）。标记-清除下无帧代码仍把它当作立即数。唯一的例外是自调用或自尾调用在多于 4 个（经寄存器传递的上限）实参里传一个对象常量：那些实参作为立即数拷贝，这样的图在分代下编译成有帧代码（`collectRuntimeConstructs` 的 `object-constant-arg`）；在 17.5 的程序里没有出现。此前分代模式下含对象常量的图一律留给解释器，`test/cases/perf/gc/jit_const.cml`（返回字符串常量的双递归）因此慢 21 倍（`37_generational_gc_report.md` 6.1）；现在 `jit_const(36)` 在 `std::opt::inline std::jit` 下标记-清除 102 毫秒、分代 101 毫秒，同一程序分代下的 `std::opt::inline std::fvm` 是 2742 毫秒（各 5 轮中位数，2026-10-14）。
 - 验证：`test/plans/feat/linear/jit_framed.plan.toml` 的 `gc_stress` 用例每第 7 个（循环用例每个）安全点回收并校验堆；`*.moving` 用例在安全点投毒（`CAMEL_GC_POISON=1`：每个安全点移动全部年轻对象并毒化原处）下、且每张图第一次调用就编译时运行；完整测试集在两种回收器下各跑一遍，随机程序也在两种回收器与投毒下跑过（17.7）。
 
 ### 17.5 覆盖面统计
 
-`CAMEL_FVM_STATS=<文件>` 让 `std::fvm` / `std::jit` 在结束时写出每张图的字节码数、解释器执行了其中多少条、JIT 的结论与原因（`fastvm_stats.cpp`）。`test/tools/jitcov/jitcov.py` 用它对一批程序在三条流水线下各跑 `std::fvm` 与 `std::jit`，汇总成表：
+`std::fvm(stats="<文件>")`（或 `std::jit(stats=...)`）让 `std::fvm` / `std::jit` 在结束时写出每张图的字节码数、解释器执行了其中多少条、JIT 的结论与原因（`fastvm_stats.cpp`）。`test/tools/jitcov/jitcov.py` 用它对一批程序在三条流水线下各跑 `std::fvm` 与 `std::jit`，汇总成表：
 
 ```
 python3 test/tools/jitcov/jitcov.py --timeout 60 --out DIR      # 仓库里全部 .cml
@@ -756,16 +756,16 @@ python3 test/tools/jitcov/jitcov.py --progen 1-300              # 随机程序
 | 程序 | 流水线 | 图数（改前 → 改后） | 已编译：改前 | 已编译：改后（无帧 + 有帧） | 被拒绝：改前 → 改后 | 不经解释器执行的字节码：改前 → 改后 |
 |---|---|---|---|---|---|---|
 | test/cases | `std::jit` | 5881 → 6162 | 120（2.0%） | 956（15.5%；130 + 826） | 4919 → 0 | 0.0% → 98.0% |
-| test/cases | `std::inline std::jit` | 5889 → 6162 | 69（1.2%） | 404（6.6%；71 + 333） | 4759 → 0 | 47.5% → 97.7% |
+| test/cases | `std::opt::inline std::jit` | 5889 → 6162 | 69（1.2%） | 404（6.6%；71 + 333） | 4759 → 0 | 47.5% → 97.7% |
 | test/cases | `std::opt std::jit` | 6527 → 6826 | 59（0.9%） | 342（5.0%；61 + 281） | 5252 → 0 | 37.5% → 97.7% |
 | examples | `std::jit` | 623 → 637 | 17（2.7%） | 126（19.8%；17 + 109） | 581 → 0 | 0.0% → 99.9% |
-| examples | `std::inline std::jit` | 623 → 637 | 2（0.3%） | 17（2.7%；2 + 15） | 575 → 0 | 98.6% → 99.9% |
+| examples | `std::opt::inline std::jit` | 623 → 637 | 2（0.3%） | 17（2.7%；2 + 15） | 575 → 0 | 98.6% → 99.9% |
 | examples | `std::opt std::jit` | 639 → 653 | 2（0.3%） | 18（2.8%；2 + 16） | 589 → 0 | 98.6% → 99.9% |
 | tutorial | `std::jit` | 169 → 171 | 2（1.2%） | 18（10.5%；2 + 16） | 132 → 0 | 0.0% → 99.9% |
-| tutorial | `std::inline std::jit` | 169 → 171 | 5（3.0%） | 6（3.5%；5 + 1） | 126 → 0 | 21.3% → 99.9% |
+| tutorial | `std::opt::inline std::jit` | 169 → 171 | 5（3.0%） | 6（3.5%；5 + 1） | 126 → 0 | 21.3% → 99.9% |
 | tutorial | `std::opt std::jit` | 173 → 175 | 3（1.7%） | 4（2.3%；3 + 1） | 127 → 0 | 21.3% → 99.9% |
 | benchmarks | `std::jit` | 342 → 342 | 0 | 38（11.1%；0 + 38） | 334 → 0 | 0.0% → 54.6% |
-| benchmarks | `std::inline std::jit` | 342 → 342 | 0 | 37（10.8%；0 + 37） | 334 → 0 | 0.0% → 54.1% |
+| benchmarks | `std::opt::inline std::jit` | 342 → 342 | 0 | 37（10.8%；0 + 37） | 334 → 0 | 0.0% → 54.1% |
 | benchmarks | `std::opt std::jit` | 443 → 443 | 0 | 33（7.4%；0 + 33） | 435 → 0 | 0.0% → 39.6% |
 
 "不经解释器执行的字节码"是 `1 - 解释器在 std::jit 下执行的条数 / 在 std::fvm 下执行的条数`；驱动循环替有帧代码执行的调用不计入解释器。`benchmarks` 下能出记录的程序只执行几千条字节码，大部分图只进入一次。
@@ -775,13 +775,13 @@ python3 test/tools/jitcov/jitcov.py --progen 1-300              # 随机程序
 | 程序 | 流水线 | 已编译：标记-清除（无帧 + 有帧） | 已编译：分代（无帧 + 有帧） | 不经解释器执行的字节码（两者相同） |
 |---|---|---|---|---|
 | test/cases | `std::jit` | 992（136 + 856） | 1000（136 + 864） | 96.5% |
-| test/cases | `std::inline std::jit` | 420（77 + 343） | 421（77 + 344） | 96.1% |
+| test/cases | `std::opt::inline std::jit` | 420（77 + 343） | 421（77 + 344） | 96.1% |
 | test/cases | `std::opt std::jit` | 348（65 + 283） | 348（65 + 283） | 96.0% |
 | examples | `std::jit` | 126（17 + 109） | 126（17 + 109） | 99.9% |
-| examples | `std::inline std::jit` | 17（2 + 15） | 17（2 + 15） | 99.9% |
+| examples | `std::opt::inline std::jit` | 17（2 + 15） | 17（2 + 15） | 99.9% |
 | tutorial | `std::jit` | 18（2 + 16） | 18（2 + 16） | 99.9% |
 | benchmarks | `std::jit` | 67（0 + 67） | 67（0 + 67） | 98.5% |
-| benchmarks | `std::inline std::jit` | 44（2 + 42） | 44（2 + 42） | 98.1% |
+| benchmarks | `std::opt::inline std::jit` | 44（2 + 42） | 44（2 + 42） | 98.1% |
 
 分代一列多出的几张图来自多出记录的两个程序。需要运行时的构造（标记-清除，`std::jit`，5520 张图）按图数是 `OPER` 45.0%、没有静态区 25.8%、`FILL` 24.6%、`CALL` 20.5%、跨图 `FUNC` 20.4%，按执行量是跨图 `TAIL` 70.4%、没有静态区 14.1%、跨图 `FUNC` 13.1%、`OPER` 11.4%，与 2026-10-13 的分布相同。
 
@@ -801,13 +801,13 @@ python3 test/tools/jitcov/jitcov.py --progen 1-300              # 随机程序
 | `COPY` | 86（1.7%） | 0.0% | 3 | 0.0% |
 | match 的 `BRCH` / `JOIN` | 34 / 9 | 0.0% | 0 | 0.0% |
 
-按图数最多的是算子（出现最多的是 `:io/println`、张量算子、`:str/format`、`:op/idx_str`、`:var/get`），按执行量最多的是跨图的尾调用与调用：不经 `std::inline` 时分支的每个臂是一张单独的图，循环的每一轮都要跨图。`std::inline std::jit` 下按权重排第一的是 `OPER`（19.2%）。改后这些构造不再拒绝图，同一张表在工具的输出里变成"哪些构造使图成为有帧代码"，分布与上表相同（改后 `std::jit` 下 5172 张图需要运行时，被拒绝的 0 张）。
+按图数最多的是算子（出现最多的是 `:io/println`、张量算子、`:str/format`、`:op/idx_str`、`:var/get`），按执行量最多的是跨图的尾调用与调用：不经 `std::opt::inline` 时分支的每个臂是一张单独的图，循环的每一轮都要跨图。`std::opt::inline std::jit` 下按权重排第一的是 `OPER`（19.2%）。改后这些构造不再拒绝图，同一张表在工具的输出里变成"哪些构造使图成为有帧代码"，分布与上表相同（改后 `std::jit` 下 5172 张图需要运行时，被拒绝的 0 张）。
 
 ### 17.6 性能
 
-`test/tools/jitcov/workloads.cml` 有九个负载，`test/tools/jitcov/bench.py` 交替运行各个变体并报告最小值与中位数。下表是 2026-10-14 在 Linux x86-64 上（主干 v0.2.9 之上）各 7 轮的中位数（毫秒，含进程启动与编译；`/proc/loadavg` 的一分钟值在 9.3 到 12.1 之间，机器上有别的任务，数值只说明量级）。"不编译"是 `std::jit` 加 `CAMEL_JIT_HOT_THRESHOLD=1000000000`：同一个解释器、同一套热度记账，但没有图被编译。
+`test/tools/jitcov/workloads.cml` 有九个负载，`test/tools/jitcov/bench.py` 交替运行各个变体并报告最小值与中位数。下表是 2026-10-14 在 Linux x86-64 上（主干 v0.2.9 之上）各 7 轮的中位数（毫秒，含进程启动与编译；`/proc/loadavg` 的一分钟值在 9.3 到 12.1 之间，机器上有别的任务，数值只说明量级）。"不编译"是 `std::jit` 加参数 `hot_threshold=1000000000`：同一个解释器、同一套热度记账，但没有图被编译。
 
-| 负载 | `std::fvm` | `std::jit` | `std::jit`，不编译 | `std::inline std::fvm` | `std::inline std::jit` | 分代：`std::inline std::fvm` | 分代：`std::inline std::jit` |
+| 负载 | `std::fvm` | `std::jit` | `std::jit`，不编译 | `std::opt::inline std::fvm` | `std::opt::inline std::jit` | 分代：`std::opt::inline std::fvm` | 分代：`std::opt::inline std::jit` |
 |---|---|---|---|---|---|---|---|
 | `fib`（N=30） | 152.0 | 176.9 | 183.4 | 136.9 | 30.5 | 133.5 | 32.5 |
 | `collatz`（60000） | 729.9 | 700.9 | 866.7 | 454.6 | 169.5 | 468.0 | 174.8 |
@@ -819,17 +819,17 @@ python3 test/tools/jitcov/jitcov.py --progen 1-300              # 随机程序
 | `hof`（600000） | 128.4 | 128.8 | 138.3 | 133.8 | 137.6 | 118.8 | 114.3 |
 | `float`（3000000） | 339.0 | 321.3 | 436.7 | 247.2 | 142.7 | 263.3 | 130.6 |
 
-`std::inline` 之后编译出的代码在两种回收器下都不比 `std::fvm` 慢（`hof` 在噪声之内），`fib`、`collatz`、`calls`、`float` 快 1.7 到 4.5 倍。不经 `std::inline` 时七个负载与 `std::fvm` 相差在一成之内或更快，**`fib` 与 `calls` 慢约 16% 与 32%**。
+`std::opt::inline` 之后编译出的代码在两种回收器下都不比 `std::fvm` 慢（`hof` 在噪声之内），`fib`、`collatz`、`calls`、`float` 快 1.7 到 4.5 倍。不经 `std::opt::inline` 时七个负载与 `std::fvm` 相差在一成之内或更快，**`fib` 与 `calls` 慢约 16% 与 32%**。
 
 **原因不在编译出的代码里。** "不编译"一列与 `std::jit` 一列在这两个负载上几乎相同（183 对 177、441 对 450），都比 `std::fvm` 慢：慢在 `std::jit` 下的解释器自己的调用路径（每次调用的热度计数与调用目标的查询 `materializeCallTarget`、`invokeCallOrJit` 等），只有无帧代码时就已如此（改动前各一次的测量：`fib(27)` 83 对 61 毫秒，`calls` 161 对 132 毫秒）。在其余七个负载上编译出的代码把这份开销挣了回来；这两个负载几乎只做跨图调用，每次调用在有帧代码里是一次离开与再进入，挣回的很少。有帧代码每次离开再进入要过两次包装器；把有帧图之间的调用做成"辅助函数完成压栈与取帧、代码直接跳到被调方 body"可以去掉这两次包装器；解释器一侧的记账可以在目标编译失败或已编译后不再进行。两者都没有做。
 
 ### 17.7 验证
 
-- `test/plans/feat/linear/jit_framed.plan.toml`：数值、故障（算子的故障、编译代码自己检查的除零、递归超限，各有隔离与不隔离两种）、三十万轮的循环、每个安全点都回收，在四个后端与 `std::inline std::jit` 上一致，并断言函数确实被编译成了预期的那种代码。
+- `test/plans/feat/linear/jit_framed.plan.toml`：数值、故障（算子的故障、编译代码自己检查的除零、递归超限，各有隔离与不隔离两种）、三十万轮的循环、每个安全点都回收，在四个后端与 `std::opt::inline std::jit` 上一致，并断言函数确实被编译成了预期的那种代码。
 - 随机程序（`test/tools/progen`，参考求值器独立于各后端）：`progen.py diff --matrix full --backends jit`（25 种重写序列各接 `std::jit`，加不带遍的运行，每个程序 26 格）。种子 20001–20300：7800 格，7790 格与参考一致，10 格是合法的拒绝（`MacroEvaluationFailed`），没有坏格。加 `CAMEL_JIT_HOT_THRESHOLD=0`、种子 21001–21400：10400 格，10369 格一致，5 格合法拒绝，26 格是同一个程序（种子 21364）在全部 26 格上的 `IndexOutOfRange`，包括不带遍的节点虚拟机，所以与 JIT 无关：程序里是 `false && xs[2].0`，参考求值器对 `&&` 短路，而实现先求了右边。
-- `test/tools/jitcov/deep_recursion.sh`：上限 100000 与 1000000、递归 50000 与 900000 层、机器栈 256 KiB 到 8 MiB、`std::nvm` / `std::fvm` / `std::jit` / `std::prl` 及其与 `std::inline`、`std::opt` 的组合、直接递归、经函数值、在 `map` 元素里、在 `attempt` 里，共 256 次运行：96 次算完，160 次给出带位置的 `MaxRecursionDepthExceeded`，没有一次以信号结束。
+- `test/tools/jitcov/deep_recursion.sh`：上限 100000 与 1000000、递归 50000 与 900000 层、机器栈 256 KiB 到 8 MiB、`std::nvm` / `std::fvm` / `std::jit` / `std::prl` 及其与 `std::opt::inline`、`std::opt` 的组合、直接递归、经函数值、在 `map` 元素里、在 `attempt` 里，共 256 次运行：96 次算完，160 次给出带位置的 `MaxRecursionDepthExceeded`，没有一次以信号结束。
 - 2026-10-14（主干 v0.2.9 之上）：完整默认测试集在标记-清除下 4418 个中 4413 个通过，5 个因机器负载超时（都不经 JIT：`unordered_foreach_smoke.nvm`、`export_tree_recursion`、三个 `gc.collection_trees_tiny_*_young_nvm`），单独重跑全部通过；`CAMEL_GC=generational` 下 4418 个全部通过。默认测试集本身含安全点投毒的扫测（`mm.gc_poison_sweep`）。随机程序（生成器 VERSION 3，全矩阵 101 格）：种子 30001–30150 标记-清除 15150 格、30151–30300 分代 15150 格，全部与参考一致；种子 30301–30400 在投毒且第一次调用即编译下跑 `std::jit` 的 26 格，2600 格全部一致。`deep_recursion.sh` 在两种回收器下各 256 次，没有一次以信号结束。
-- `CAMEL_JIT_HOT_THRESHOLD=0` 让图在第一次调用时就编译（默认是同一调用点的第二次），用于让短程序也跑在编译出的代码上。
+- `std::jit(hot_threshold=0)` 让图在第一次调用时就编译（默认是同一调用点的第二次），用于让短程序也跑在编译出的代码上。
 - 调试器下 `std::jit` 按 `std::fvm` 运行（`35_debugger.md`）。带观察者钩子的解释循环（`inspectvm.cpp`）不把尾调用交给编译出的代码，驱动循环在有观察者时经 `call()` 运行解释的被调方，所以钩子不会被绕过。
 
 ### 17.8 没有做的

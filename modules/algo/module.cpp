@@ -146,12 +146,12 @@ bool AlgoModule::load() {
     context_->registerExecutorFactory("algo", [ctx = context_]() {
         return createAlgoExecutor(ctx);
     });
-    // The purity of every operator (design principles 2.9).
+    // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
         "algo",
         {
             // Return a new array: no operator changes its argument (design principles
-            // 2.12). Only one name per operation is kept (2.13: `sort`, not `sorted`).
+            // 11.3). Only one name per operation is kept (11.3: `sort`, not `sorted`).
             {"sort", true},
             {"insert_sort", true},
             {"quick_sort", true},
@@ -161,7 +161,7 @@ bool AlgoModule::load() {
             {"unique", true},
             {"argsort", true},
         });
-    // The in-place forms of the sorting operators (design principles 2.13): `xs = xs->sort`
+    // The in-place forms of the sorting operators (design principles 11.3): `xs = xs->sort`
     // sorts the variable's own array when nothing else refers to it (Builder::
     // inPlaceRebindingOf). Each changes the array it is given, so it is not pure; what it
     // changes is the program's own variable, so it has no effect outside the program.

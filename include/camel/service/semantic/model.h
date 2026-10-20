@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -80,6 +80,9 @@ struct TypeInfo {
     /// Struct fields, or tuple elements named "0", "1", ...: name and index into the model's
     /// types.
     std::vector<std::pair<std::string, uint32_t>> fields;
+    /// Enum variants: their name and how they are written (`Circle(float)`,
+    /// `Rect { w: float, h: float }`, `Empty`). Empty for every other type.
+    std::vector<std::pair<std::string, std::string>> variants;
 };
 
 struct Location {
@@ -117,6 +120,10 @@ struct DeclFacts {
     bool importedType     = false;
     bool importedMacro    = false;
     std::vector<std::string> importedSignatures;
+    /// An imported enum: its variants, as the declaring module wrote them (name, how it is
+    /// written). Kept here so that the completion of `Shape::` still offers them in a text
+    /// that no longer compiles.
+    std::vector<std::pair<std::string, std::string>> importedVariants;
 };
 
 /// What the compiler reported about one reference of the syntactic index.
@@ -165,7 +172,7 @@ struct FileModel {
     /// compiler names as the callee and the type the call resolved to.
     std::vector<std::pair<Range, uint32_t>> operatorCalls;
     /// The operator calls among them that took an overload the program declared
-    /// (`func operator +`, design principles 2.12): the range and that declaration, for
+    /// (`func operator +`, design principles 4.3): the range and that declaration, for
     /// going to the definition from the operator.
     std::vector<std::pair<Range, Location>> operatorTargets;
     bool parsed   = false; // the file has no syntax error

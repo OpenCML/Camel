@@ -2,7 +2,7 @@
  * finding F35 ((other) wrong value after a rewrite), found by hand, not by progen. Specialization
  *   bound the constant under an `as` conversion to the parameter without converting it: the
  *   integer 7 passed as `i as float` reached the callee as the float with the bits of 7.
- * Pipeline: std::opt std::nvm (also std::opt::simplify and std::specialize)
+ * Pipeline: std::opt std::nvm (also std::opt and std::opt::specialize)
  * Expected output: 7.5, 17.25, 10.75 (three lines)
  * Actual: 0.5, -1.75, 7.75 (node VM; the second line differs between schedulers)
  */

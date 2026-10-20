@@ -24,9 +24,9 @@
  *
  * Each call of the element function is a call like any other: it counts as one more open call,
  * checked at the operator's site (core.h, call()). `map` and `filter` run the elements in order;
- * the language promises no order between them (design principles 2.7), so this is one of the
+ * the language promises no order between them (design principles 3.6), so this is one of the
  * orders it allows, and a fault in an element is reported for the first element that faults,
- * as 2.10 asks of a parallel `map`.
+ * as 3.6 asks of a parallel `map`.
  */
 
 #pragma once
@@ -86,7 +86,7 @@ void foreach(Depth depth, const Site &site, const Array<T> &xs, const F &f) {
     }
 }
 
-/// `attempt(f, args...)` (:mark/isolate, design principles 2.9): the call of `f` in which a
+/// `attempt(f, args...)` (:mark/isolate, design principles 3.9): the call of `f` in which a
 /// fault becomes the failed value of the result, with the fault's kind, message and location
 /// (src/execute/fault_isolation.cpp). The call counts like any other, checked outside the
 /// boundary: a recursion limit reached by the call itself is not isolated. `exit` passes
@@ -110,7 +110,7 @@ Fallible<R> attempt(Depth depth, const Site &site, const F &f, A &&...args) {
     }
 }
 
-/// An error value nobody handled reached the exit of `main` (design principles 2.10): the
+/// An error value nobody handled reached the exit of `main` (design principles 3.9): the
 /// report of `site` (rendered without a position) with the error's kind and message, and the
 /// position the error records; on standard error, after the output. Gives the exit code 1.
 inline int unhandled(const Site &site, const Error &error) {

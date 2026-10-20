@@ -567,7 +567,7 @@ class Adapter {
         }
         if (command == "setFunctionBreakpoints") {
             // By the full name of a function, or without its module when only one module has
-            // it (design principles 2.12); the program stops at the first line it executes.
+            // it (design principles 10.2); the program stops at the first line it executes.
             json names = json::array();
             if (auto b = args.find("breakpoints"); b != args.end() && b->is_array()) {
                 for (const json &bp : *b) {
@@ -953,7 +953,7 @@ class Adapter {
         }
         stepByNode_ = stepBy == "node";
         // How the stack shows the arms of branches: folded into the frame of their function
-        // (the default, design principles 2.11), or as the subgraphs they are.
+        // (the default, design principles 12.1), or as the subgraphs they are.
         const std::string frames = args.value("frames", "functions");
         if (frames != "functions" && frames != "subgraphs") {
             fail("launch: \"frames\" is \"functions\" or \"subgraphs\".");

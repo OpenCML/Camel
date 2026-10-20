@@ -53,7 +53,7 @@ namespace camel::core::context {
 namespace {
 
 /// The exit code the value returned by the entry graph stands for. Only a declared return
-/// type makes the value the program's result (design principles 2.10). Under `T!` a value
+/// type makes the value the program's result (design principles 9.8). Under `T!` a value
 /// that has not failed counts as its `T`; a failed one is an error nobody handled, and the
 /// program ends with a non-zero code (who reports it: camel/execute/entry_args.h).
 int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result, bool declared) {
@@ -374,7 +374,7 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         if (it != modules_.end()) {
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in cache.", name));
             // Also a module being compiled right now: modules may import each other (design
-            // principles 2.11). Its declarations are complete before any function body of the
+            // principles 10.1). Its declarations are complete before any function body of the
             // program is built.
             return it->second;
         }
@@ -407,7 +407,7 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
                         .commit(name, "failed to compile or load module from " + module->path());
                 }
             }
-            // The purity of an operator must be declared (design principles 2.9). A module
+            // The purity of an operator must be declared (design principles 3.3). A module
             // that leaves it out still works, with its operators treated as having side
             // effects; it is told so. The modules of this repository are held to it by a
             // test (test/plans/feat/modules/stdlib_registry.plan.toml).
@@ -685,7 +685,7 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     }
     // The file of the entry module (which is registered under no module name): the entry
     // itself, not a second copy of it. A module may import itself, to no effect (design
-    // principles 2.13), and another module may import the entry back.
+    // principles 10.1), and another module may import the entry back.
     if (mainModule_ && !mainModule_->path().empty()) {
         std::error_code ec;
         if (fs::equivalent(path, mainModule_->path(), ec) && !ec) {

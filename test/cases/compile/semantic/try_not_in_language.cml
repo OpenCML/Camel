@@ -1,5 +1,5 @@
 /**
- * `try` / `catch` / `finally` are not part of the language (design principles 2.9). The whole
+ * `try` / `catch` / `finally` are not part of the language (design principles 3.9). The whole
  * expression is a compile-time error located at `try` (line 9) that names what replaces it.
  */
 module try_not_in_language

@@ -81,8 +81,13 @@ one definition.
   B, ldb, beta, C, ldc)`, with two backends:
   - `builtin`: cache-blocked, packed, compiler-vectorized, parallel over row
     blocks. Always available, no external dependency.
-  - `cblas`: forwards to `cblas_sgemm` / `cblas_dgemm`. Enabled by the CMake
-    option `CAMEL_TENSOR_BLAS` when `find_package(BLAS)` succeeds.
+  - `cblas`: forwards to `cblas_sgemm`. Enabled by the CMake option
+    `CAMEL_TENSOR_BLAS` when `find_package(BLAS)` succeeds. A BLAS orders
+    the accumulation its own way, so it does not follow matmul's canonical
+    algorithm (design principles 7.1): every operator uses the builtin GEMM,
+    and only `tensor:matmul_blas` calls the BLAS. `tensor::fuse` puts it in
+    place of a matmul whose node was granted both `reassociate` and
+    `change_precision` (`@numeric(...)`).
 - Convolution is im2col + GEMM. Pooling, normalization, and reductions are
   typed loops over contiguous NCHW buffers.
 
@@ -228,7 +233,7 @@ Write rule shared by `fold` and `cse`: a node passed to a `var` parameter is not
 one value. It is a variable's cell (created by `:var/new`, read by `:var/get`,
 stored into by `:op/assn*`; see doc 18 section 8.1) or an object an operator
 changes in place (a module operator with a `var` parameter; no built-in or
-standard-library operator does that since design principles 2.12). `isWrittenInPlace`
+standard-library operator does that since design principles 11.3). `isWrittenInPlace`
 (`include/camel/runtime/draft_writes.h`) answers this from the callee's
 signature (operator overload, FUNC target, CALL callee type), through GATEs. A
 written node is never replaced by a constant or by another node, a tuple
@@ -356,7 +361,7 @@ Driven by the four benchmark models:
 | Group | Operators |
 |---|---|
 | Elementwise | add, subtract, multiply, divide, pow, neg, abs, sqrt, rsqrt, exp, log, relu, gelu, sigmoid, tanh, where, cast |
-| Reduction | sum, mean, max, argmax (all with `axis` and `keepdims`) |
+| Reduction | sum, mean, max, min, argmax, argmin (all with `axis` and `keepdims`) |
 | Linear algebra | matmul (batched, broadcasting), linear (matmul + bias) |
 | Shape | reshape, flatten, transpose/permute, concat, slice, squeeze/unsqueeze |
 | NN | softmax, log_softmax (any axis), conv2d (stride, padding), max_pool2d, avg_pool2d, layer_norm, batch_norm (inference), dropout (identity at inference), embedding |
@@ -405,7 +410,8 @@ Decisions recorded here because they change semantics outside the module:
   ("Tensor shape mismatch in '<op>': <detail>") instead of generic runtime errors.
 - **GEMM dispatch.** The builtin GEMM is compiled twice (portable, AVX2+FMA) and
   selected by a runtime CPU check, so portable builds still use wide vectors.
-  `CAMEL_TENSOR_BLAS=ON` forwards to a system CBLAS instead.
+  `CAMEL_TENSOR_BLAS=ON` adds a system CBLAS, used only by a matmul granted
+  `reassociate` and `change_precision` (after `tensor::fuse`).
 - **Operator semantics generalized** (all within the previous behavior for the
   old supported cases): arithmetic and comparison broadcast fully; matmul
   supports batched and vector operands; reductions take any axis and optional

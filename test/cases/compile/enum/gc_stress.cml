@@ -1,0 +1,49 @@
+// An enum value is a run-time object that holds its fields; the collector must trace them
+// (docs/design-principles.cn.md 5.3). Many values are built, dropped and read back, under
+// both collectors (`--gc generational` and `--gc mark-sweep`), and the checksums stay the same.
+
+type Box = enum {
+    Empty,
+    One(int),
+    Two { left: Box, right: Box },
+}
+
+func weight(b: Box): int {
+    return match b {
+        case Box::Empty => 0
+        case Box::One(n) => n
+        case Box::Two { left, right } => 1 + weight(left) + weight(right)
+    }
+}
+
+func build(depth: int): Box {
+    return if depth <= 0 then {
+        Box::Empty
+    } else if depth == 1 then {
+        Box::One(depth)
+    } else {
+        Box::Two {
+            left: build(depth - 1),
+            right: build(depth - 2),
+        }
+    }
+}
+func main(): void sync {
+    var total = 0
+    let _ = loop i = 0 while i < 12 do sync {
+        wait total += weight(build(i))
+        i + 1
+    }
+    println(total)
+    // Dropped values: the collector reclaims what no longer has a reader.
+    var dropped = 0
+    let _ = loop i = 0 while i < 2000 do sync {
+        let b = Box::Two { left: Box::One(i), right: Box::Empty }
+        wait dropped += weight(b)
+        i + 1
+    }
+    println(dropped)
+    let kept = Box::Two { left: Box::One(3), right: Box::One(4) }
+    println(kept)
+    println(weight(kept))
+}

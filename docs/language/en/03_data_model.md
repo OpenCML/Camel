@@ -22,11 +22,12 @@ Every expression has a definite type at compile time; the graph contains only co
 | Function | `(x: T) => R` | See [6.9](06_expressions.md#69-lambdas-and-function-types) |
 | May be null | `T?` | See 3.4 |
 | May fail | `T!` | See 3.4 |
-| Map, set | `Map<K, V>`, `Set<T>` | See 3.5 |
+| Map, set | `Map<K, V>`, `Set<T>` | See 3.6 |
+| Enum | `Shape`, `Option<int>` | See 3.5 |
 | No value | `void` | Return type of a function that returns no value; its only value prints as `null` |
 | Module types | e.g. `Tensor`, `Tensor<f32, const [2, 3]>` | Introduced by modules; the arguments in angle brackets are interpreted by the type itself |
 
-There is no type `any`: after compilation every value has a definite type (design principles 2.11, 2.12). Writing `any` in any type position is the compile-time error `SemanticDiag::AnyNotAllowed`, whose message gives the form recommended for that position:
+There is no type `any`: after compilation every value has a definite type (design principles 5.10). Writing `any` in any type position is the compile-time error `SemanticDiag::AnyNotAllowed`, whose message gives the form recommended for that position:
 
 | What one meant to write | Write instead |
 |---|---|
@@ -36,7 +37,7 @@ There is no type `any`: after compilation every value has a definite type (desig
 | `e as any` | nothing: the value keeps its own type |
 | values of different types side by side (`any[]`, `(int, any)`) | a tuple or a struct: `(int, string)`, `{ id: int, name: string }` |
 | JSON of a known shape | `json::decode_as(text, shape)`, whose result is a `T!` |
-| JSON of an unknown shape | `json::decode(text)` gives a `Json!`: an error value `JsonParseError` when the text is not JSON (not a fault, design principles 2.13), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 2.13). For a known shape use `decode_as`, whose target type is given by a shape value for now |
+| JSON of an unknown shape | `json::decode(text)` gives a `Json!`: an error value `JsonParseError` when the text is not JSON (not a fault, design principles 11.2), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2). For a known shape use `decode_as`, whose target type is given by a shape value for now |
 
 The `T` and `U...` in the signatures of the standard library (as in `println: (x: T, ...rest: U...) => T`) are a notation of the reference only: these operators check their arguments with type rules, and the graph holds concrete types only.
 
@@ -74,7 +75,7 @@ type Pair<T> = (T, T)
 
 ### 3.2.1 The numeric contract of floating point
 
-The result of floating-point arithmetic is fixed by a **canonical algorithm**, not by the implementation of some machine (design principles 2.13):
+The result of floating-point arithmetic is fixed by a **canonical algorithm**, not by the implementation of some machine (design principles 7.1):
 
 - Addition, subtraction, multiplication, division and square root are each rounded correctly as IEEE 754 says, strictly in the order written, and `a * b + c` is not contracted into one fused multiply-add. Within this scope every back end and every device gives the same bits.
 - **`max` and `min` are IEEE 754-2019 `maximum` and `minimum`**: a NaN on either side gives NaN, and `-0` is below `+0`, whichever side each value is on. This holds for `math::max`/`math::min`, the tensor `maximum`/`minimum`, the `max`/`min` reductions along an axis, max pooling and the maximum inside `softmax`. A maximum or minimum reduction gives the same bits in any order.
@@ -115,7 +116,7 @@ println(xs[0], len(xs), grid[0][1])
   | `zip(xs, ys)` | An array of `(x, y)` tuples; three or more arrays give tuples of that many elements (`zip(xs, ys, zs)`); the lengths must be equal |
   | `strs->join<sep>` | Joins a `string[]` into one string |
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
-  | `xs->append<v>`, `xs->extend<ys>` | A **new array** with `v` (or the elements of `ys`) at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.6) |
+  | `xs->append<v>`, `xs->extend<ys>` | A **new array** with `v` (or the elements of `ys`) at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.7) |
 
 - More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `any`, `all`, `count`, `sum`, `min`, `max`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
 
@@ -151,37 +152,37 @@ Struct types are compared by the names and types of their fields; `type` only gi
 
 ### 3.3.4 Strings
 
-A string is an immutable sequence of bytes; both length and subscripts are by byte. The built-in operations:
+A string is immutable text and is **always valid UTF-8**; length and subscripts count code points: `len('中文')` is 2 and `'中'[0]` is `'中'`. Binary data is the built-in type `Bytes` (a type name like `string`, not imported), converted explicitly: `bytes::encode`, `bytes::decode` (malformed UTF-8 gives an error value); making a string from invalid bytes, as in `str::from_bytes([255])`, is a fault right there. The built-in operations:
 
 | Form | Result |
 |---|---|
-| `len(s)` | Number of bytes |
-| `s->contains<sub>` | Whether `sub` occurs in `s` (bytes are compared); the empty string always does: `'hello'->contains<'ell'>` is `true`. Written like `contains` on an array |
+| `len(s)` | Number of code points |
+| `s->contains<sub>` | Whether `sub` occurs in `s` (compared byte by byte, which gives the same result as by code point); the empty string always does: `'hello'->contains<'ell'>` is `true`. Written like `contains` on an array |
 | `a + b` | Concatenation |
-| `==`, `!=`, `<`, `>`, `<=`, `>=` | Byte-by-byte comparison; a proper prefix comes first |
+| `==`, `!=`, `<`, `>`, `<=`, `>=` | Comparison in code point order (the same as UTF-8 byte order); a proper prefix comes first |
 | `string(x)`, `int(s)`, `float(s)`, `parse_int(s)`, `parse_float(s)` | Conversion, see 3.2 |
 | `fmt->format<a, b, ...>` | Formatting: `{}` takes the arguments in order; `{:.2f}`, `{:5d}`, `{:.17g}` and the like specify a format; too few arguments is a fault |
 | `strs->join<sep>` | Joins an array of strings |
-| `s[i]` | The `i`-th byte; the result is a string containing just that one byte; an out-of-range subscript is a fault |
+| `s[i]` | The `i`-th code point; the result is a string containing just that one character; an out-of-range subscript is a fault |
 
-The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): by byte, `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr`, `starts_with`, `ends_with`, `repeat`, `bytes`; by code point, `char_count`, `char_at`, `char_substr`, `codepoints`, `from_codepoints`.
+The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr` (index and length in code points), `starts_with`, `ends_with`, `repeat`, `bytes`, `from_bytes`, `codepoints`, `from_codepoints`.
 
 ```cml
-import { split, trim, to_upper, char_count } from str
+import { split, trim, to_upper } from str
 
 func main(): int sync {
     println('a, b ,c'->split<','>->map<(w: string): string => trim(w)>)
-    println('héllo'->to_upper, len('héllo'), char_count('héllo'), 'hello'[1])
+    println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
     return 0
 }
 ```
 
 ```text
 [a, b, c]
-HéLLO 6 5 e
+HéLLO 5 é e
 ```
 
-Whether the result of `s[i]` is a one-byte string or a number is behaviour of the current implementation, not yet decided.
+The result of `s[i]` is a one-character string, not a number; use `str::codepoints` for the numbers. In a string literal the escape `\xHH` can only build valid UTF-8 (`'\xE4\xB8\xAD'` is `'中'`; `'\xE4'` alone is a compile-time error); `\u{4E2D}` writes a code point directly.
 
 ### 3.3.5 Values that cannot be compared
 
@@ -239,9 +240,56 @@ Rules:
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
 
-**Behaviour of the current implementation, not yet decided**: `?->` is defined for `T!` only; a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`. The relation between the earlier reserved notation `T ? U` and `T!` is undecided, and using it is a compile-time error (`SemanticDiag::FeatureNotSupported`).
+**Behaviour of the current implementation, not yet decided**: `?->` is defined for `T!` only; a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`.
 
-## 3.5 Maps and sets
+The earlier reserved notation `T ? U` is retired: `?` is only the nullable mark, the special reading of `T ?` followed by a type is gone, and writing it gives `SemanticDiag::ReservedTypeQuestionRetired`.
+
+## 3.5 Enums
+
+An `enum` is a **nominal type**: a value is exactly one of the variants the declaration lists, and a variant carries no data, a tuple or a struct. Two enums with the same shape are still different types.
+
+```cml
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+type Option<T> = enum { Some(T), None }
+type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
+```
+
+**Declaration.** `type Name = enum { variant, ... }`; a trailing comma is optional. A variant has one of three shapes: `Empty` (no data), `Circle(float)` (one or more positional fields), `Rect { w: float, h: float }` (named fields, separated by `,`). A variant name occurs once in its enum (`DuplicateEnumVariant`), and a field name occurs once in a struct variant (`DuplicateEnumField`). The type may take parameters (`Option<T>`), a field type may name the enum itself (`Tree<T>`) or another enum, and `enum` is a keyword, so it cannot be a name.
+
+**Construction.** A variant is written after the type name, qualified with `::`: `Shape::Circle(1.0)`, `Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`. A struct variant takes every field it declares, in any order; a tuple variant takes its fields by position. A variant without data is the value itself, with no parentheses. The value has type `Shape`; the arguments of a generic instance are inferred from the field arguments (`Option::Some(42)` is `Option<int>`), or, when they cannot be (`Option::None`), from the type the position expects (`let x: Option<int> = Option::None`, an argument position, a return type), and failing both is a compile-time error (`EnumTypeArgumentNotInferred`). A field argument must have the declared type (`EnumFieldTypeMismatch`), and the number and names of the fields must agree with the declaration (`EnumVariantFieldCount`, `EnumConstructionMismatch`). Automatic wrapping into a field follows the usual rule: an `int` does not become a `float` by itself.
+
+**`match`.** An enum is taken apart by `match`; its fields are never read directly (`b.w` is `EnumFieldAccess`, and the diagnostic shows the `match`):
+
+```cml
+func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+        case Shape::Rect { w, h } => w * h
+        case Shape::Empty => 0.0
+    }
+}
+```
+
+- A tuple variant's pattern gives every position, with `_` for a field it does not need (`case Shape::Circle(_)`); a struct variant's pattern writes the fields it binds, ignores the others, may rename (`{ w: width }`) and may abbreviate (`{ w }` binds a variable of that name); a variant without data is just its name (`case Shape::Empty`); `case _` matches every remaining value.
+- **Exhaustiveness**: naming all variants means no `case _` is needed; a missing variant without `case _` is the compile-time error `EnumMatchNotExhaustive`, whose diagnostic lists the missing variants. A variant already covered by an earlier case is a warning (`EnumVariantCaseRepeated`), and a case after `case _` is never taken and warns (`MatchCaseAfterWildcard`).
+- A pattern names a variant of the type being matched: a wrong prefix (`Shape::`) or a wrong variant name is `EnumPatternMismatch`, which lists the variants of that type.
+- **The first version has no nested patterns**: a pattern in the position of a field, such as `case Shape::Circle(0.0)`, gives "not supported yet" (`ConstructNotSupported`) and asks for a name or `_` per field, matched inside the arm.
+- The subject may be any expression, including a call that returns an enum; the arms unify as in the existing `match` ([6.8.2](06_expressions.md#682-match)).
+
+**Equality and printing.** Two values of the same enum instance can be compared with `==` and `!=`: the variant first, then each field in declaration order; when a field type cannot be compared, the enum cannot either (a compile-time error). Printing writes the source form: `Shape::Circle(1.0)`, `Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`; a generic instance does not print its type arguments (`Option::Some(42)`, not `Option::Some<int>(42)`).
+
+**Generics.** `Option<int>` and `Option<float>` are different types with different values. A field type may use the parameters again: `type Pair<A, B> = enum { Both(A, B), Neither }`, and `Pair<int, string>`'s `Both` takes an `int` and a `string`.
+
+**On the graph.** No node kind is added: construction stores a tag and the data, `match` reads the tag, branches on it and takes the data out in the arm, as for `T?` and `T!`. Reading the tag and a field are ordinary internal operators (`__enum_tag__`, `__enum_field__`), and the schedulers do not special-case them by name. `std::nvm`, `std::fvm`, `std::jit`, `std::prl` and `std::macro` all support enums; `std::cpp`, ONNX export and autodiff refuse one with a located diagnostic for now.
+
+**Retired.** `A | B` in a type position is retired: a value has one type, and a value that is one of several possibilities is an enum (`SemanticDiag::UnionTypeRetired`; `|` remains the logical or). `T ? U` is retired as well (`SemanticDiag::ReservedTypeQuestionRetired`).
+
+## 3.6 Maps and sets
 
 `Map<K, V>` and `Set<T>` are built-in types and need no `import`. There is no dedicated literal; construct them from an array with `as`:
 
@@ -320,7 +368,7 @@ func main(): int sync {
 
 For the implementation and trade-offs see [technical document 31](../../technical/31_map_and_set.md).
 
-## 3.6 `let`, `var` and references
+## 3.7 `let`, `var` and references
 
 - `let` introduces an immutable name, `var` a mutable variable. The same name cannot be declared twice in the same scope (`SemanticDiag::Redeclaration`).
 - **Only a whole variable can be assigned to.** Fields and elements are not assignable: `p.x = 5` and `xs[0] = 5` are the compile-time error `SemanticDiag::AssignmentTargetNotVariable`. Give the variable a new value: `p = { x: 5, y: p.y }`.
@@ -350,10 +398,10 @@ func main(): int sync {
 
 Camel favours immutability: `var` and assignment are only an opening left for convenience and should be used as little as possible.
 
-**The operators of the standard library return new values and do not change their arguments** (design principles 2.12): `append`, `extend`, `apply`, the `sort` of the `algo` module and the others; after `let ys = xs->append<5>`, `xs` is unchanged. To "append to a variable" write `acc = acc->append<5>`, as with `x = x + 1`; there is no separate explicit in-place operator.
+**The operators of the standard library return new values and do not change their arguments** (design principles 11.3): `append`, `extend`, `apply`, the `sort` of the `algo` module and the others; after `let ys = xs->append<5>`, `xs` is unchanged. To "append to a variable" write `acc = acc->append<5>`, as with `x = x + 1`; there is no separate explicit in-place operator.
 
 - **An unused result of a pure operation is a compile-time error** (`SemanticDiag::UnusedPureResult`): `xs->append<5>` written as a statement does nothing, and the diagnostic suggests `xs = xs->append<5>` (when `xs` is not a variable, it suggests using the result, or `let _ = ...` to drop it on purpose). "Pure operation" means an operator declared pure in the operator table (the built-in operators and those of C++ modules; `camel inspect --ops` lists the purity) written as a statement whose value nothing takes; calls of the program's own functions are not covered. The last statement of a block is the value of the block: it is not reported when that value is used (returned, bound, passed on); where the block's value is dropped (a body declared `: void`, an element function written in place for `foreach`, the arm of an `if` without `else`, a block written as a statement), its last statement is reported as well.
 - **Appending in place is an implementation detail, not part of the meaning.** When `acc = acc->append<v>` is a statement, `acc` is a variable and `append` is the built-in one, the compiler writes it with another implementation of the same rebinding: the array is grown where it is when the variable is the only reference to it (nothing has read `acc` since the previous in-place append), and copied (with room to grow) otherwise. So appending in a loop stays linear. A read of `acc` in between whose value may be kept (`let snap = acc`, passing it to a function, an element that is itself an array) makes the next append copy, and `snap` keeps its value; a read whose value only goes to operations that cannot keep the array (`len(acc)`, a numeric element `acc[i]`, a comparison, `format`), in a sync block and before the next write, leaves the in-place append as it is.
-- **`xs = xs->sort` likewise** (design principles 2.13): `sort` returns a new array, and returning a new value versus changing in place is no longer told apart by two names (there is no `sorted`, and no explicit in-place sort). When `xs = xs->sort` (or `xs = sort(xs)`, `merge_sort` and the others) is a statement of a sync block and `xs` a variable, the array is sorted where it is when the variable is its only holder, and copied first otherwise; a value kept before (`let before = xs`) keeps its value. This is an implementation detail, enabled by an operator declaring an in-place form (`OperatorTable::setInPlaceForm`), which no program writes or sees. Tensors have explicit in-place operators (2.10); arrays do not.
+- **`xs = xs->sort` likewise** (design principles 11.3): `sort` returns a new array, and returning a new value versus changing in place is no longer told apart by two names (there is no `sorted`, and no explicit in-place sort). When `xs = xs->sort` (or `xs = sort(xs)`, `merge_sort` and the others) is a statement of a sync block and `xs` a variable, the array is sorted where it is when the variable is its only holder, and copied first otherwise; a value kept before (`let before = xs`) keeps its value. This is an implementation detail, enabled by an operator declaring an in-place form (`OperatorTable::setInPlaceForm`), which no program writes or sees. Tensors have explicit in-place operators (11.3); arrays do not.
 
 For the relation between assignment and `wait` see [4.4](04_execution_model.md#44-var-references-and-wait).

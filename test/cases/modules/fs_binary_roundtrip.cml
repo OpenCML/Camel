@@ -1,0 +1,14 @@
+// Embedded NUL and high bytes must survive the binary-mode file APIs.
+module fs_binary_roundtrip
+import { write_bytes, read_bytes, read_chunk, file_size } from fs
+import { to_array, from_array } from bytes
+import { get_env } from sys
+func main(): int sync {
+    let path = get_env('TEMP') + '/camel-fs-binary-roundtrip.bin'
+    let payload = from_array([0, 65, 0, 255, 13, 10, 128, 0])
+    write_bytes(path, payload)
+    let whole = to_array(read_bytes(path))
+    let middle = to_array(read_chunk(path, 1, 6))
+    println('binary size={} whole={} middle={}'->format<file_size(path), whole, middle>)
+    return if file_size(path) == 8 && len(whole) == 8 && len(middle) == 6 then 0 else 1
+}

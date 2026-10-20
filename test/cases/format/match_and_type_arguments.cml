@@ -1,0 +1,35 @@
+module match_and_type_arguments
+
+// The subject of a match is an expression, and an arm may be a literal or an enum pattern;
+// the type arguments of a call are positional or named. Both used to make camel-format fail.
+
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+        case Shape::Rect { w, h } => w * h
+        case Shape::Empty => 0.0
+    }
+}
+
+func id(x: typeas T): T {
+    return x
+}
+
+func pair(a: typeas A, b: typeas B): (A, B) {
+    return (a, b)
+}
+
+func main(): int {
+    let one = match 1 + 1 {
+        case 1 => 10
+        case _ => 20
+    }
+    println(one, id::<int>(1), pair::<A = int, B = string>(1, "s"), area(Shape::Empty))
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,6 +39,7 @@
 #include "camel/init.h"
 #include "camel/parse/parse.h"
 
+#include <exception>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -128,8 +129,15 @@ int main(int argc, char **argv) {
     }
     const std::string mode = args[0];
     if (mode == "dump" && args.size() == 2) {
-        std::cout << parsecheck::parseText(args[1], parsecheck::readFile(args[1])).dump;
-        return 0;
+        try {
+            std::cout << parsecheck::parseText(args[1], parsecheck::readFile(args[1])).dump;
+            return 0;
+        } catch (const std::exception &e) {
+            // Name the file that the front end could not read, and fail: a crash would say
+            // nothing about which file it was.
+            std::cerr << "error " << args[1] << ": " << e.what() << "\n";
+            return 1;
+        }
     }
     if (mode == "hashes" && args.size() == 2) {
         return parsecheck::runHashes(parsecheck::readList(args[1]));

@@ -8,7 +8,7 @@ In particular, before any `develop` -> `main` release merge, you must confirm th
 - Anyone, human or AI, who changes semantics, passes, schedulers, the exporter or autodiff must read `docs/design-principles.cn.md` first (English translation: `docs/design-principles.en.md`; the Chinese file is authoritative).
 - It is normative: when it conflicts with the code, with other documents or with a test result, it prevails, and the conflict is recorded as a defect or a to-do. Do not change semantics to make a test pass.
 - Questions it lists as undecided, or does not cover, go to the language author. Do not decide them ad hoc.
-- Its section 5 lists misreadings that have actually happened; check your change against them.
+- Its section 14 lists misreadings that have actually happened; check your change against them.
 
 ## Core Rules
 - Runtime shell: Windows PowerShell.
@@ -57,6 +57,8 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 ## Pass Execution Model
 - Canonical syntax: `camel xxx.cml pass1 pass2 ...`
 - `std::nvm` is the fallback pass when no pass is specified or when specified passes complete without yielding an empty graph.
+- Pass settings are pass parameters, not environment variables: `name(key=value, ...)` with constant values (`std::opt(safe_fp=true)`, `std::fvm(native_loop=true)`, `std::tf(bytecode=false)`, `onnx::export(out="m.onnx")`); quote them in a shell. A pass declares its parameters in a `PassDescriptor` (`include/camel/execute/pass/params.h`); see `docs/cli.md`, "Pass parameters".
+- `std::` is for the core's own passes; a module's passes use the module's name (`tiles::compile`) and the module registers them and their short aliases (`registerModulePass`, `registerPassAlias`). The pipeline is composed explicitly: importing a module never adds a pass, and a library whose pass is a precondition diagnoses the missing pass and names it.
 
 ## Test Execution
 - Main entry: `node scripts/test.js`
@@ -88,7 +90,7 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 | `std::nvm` | Scheduling pass: executes on the node VM linearly, then returns an empty graph |
 | `std::fvm` | Scheduling pass: high-performance bytecode VM, returns an empty graph |
 | `std::jit` | Scheduling pass: JIT-enabled bytecode VM, returns an empty graph |
-| `std::inline` | Optimization pass: inlines small functions into larger graphs to reduce call overhead; returns an optimized graph |
+| `std::opt::inline` | Optimization pass: inlines small functions into larger graphs to reduce call overhead; returns an optimized graph |
 
 ### Graph Inspection Preference
 - Prefer `std::gir` when inspecting graphs in terminal output, snapshots intended for AI review, or structural debugging where visual styling is noise.
@@ -98,7 +100,7 @@ node test\tools\run-tests.mjs --update-golden test\plans\smoke\core.plan.toml
 ```powershell
 camel fib.cml std::rgir
 camel fib.cml std::gir
-camel fib.cml std::inline std::fvm
+camel fib.cml std::opt::inline std::fvm
 ```
 
 ## Priority

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 19, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -120,6 +120,7 @@ DraftNodeInit makeInitFromNode(const DraftNode *node) {
     init.runtimeFlags = node->header.runtimeFlags;
     init.origin       = node->header.origin;
     init.permissions  = node->header.permissions;
+    init.attrs        = node->header.attrs;
     init.payload      = DraftNodeView::payload(node);
     init.normInputs   = DraftNodeView::normInputs(node);
     init.withInputs   = DraftNodeView::withInputs(node);
@@ -151,6 +152,7 @@ void initializeNodeStorage(
     draftNode->header.runtimeFlags   = init.runtimeFlags;
     draftNode->header.origin         = init.origin;
     draftNode->header.permissions    = init.permissions;
+    draftNode->header.attrs          = init.attrs;
     draftNode->header.storageCls     = storageClass;
 
     if (capacityBytes != 0) {
@@ -683,6 +685,7 @@ DraftNode *GraphDraft::createDecodedNode(
     draftNode->header.runtimeFlags     = sourceNode->flags;
     draftNode->header.origin           = graph->nodeOrigin(sourceRef);
     draftNode->header.permissions      = graph->nodePermissions(sourceRef);
+    draftNode->header.attrs            = graph->nodeAttrs(sourceRef);
     draftNode->header.storageCls       = storageClass;
 
     if (sourceNode->kind == GCNodeKind::Brch) {
@@ -734,14 +737,14 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
         "Decode begin for graph '{}' with {} nodes.",
         graph->name(),
         graph->nodeCount());
-    auto draft              = std::make_unique<GraphDraft>();
-    draft->funcType_        = graph->funcType();
+    auto draft       = std::make_unique<GraphDraft>();
+    draft->funcType_ = graph->funcType();
     draft->captureNames_.assign(graph->captureNames().begin(), graph->captureNames().end());
     if (const auto *layout = graph->runtimeDataType()) {
         draft->setRuntimeSlotTypes(layout->types());
     }
-    draft->closureType_     = const_cast<camel::core::type::TupleType *>(graph->closureType());
-    draft->returnKind_      = graph->returnKind();
+    draft->closureType_ = const_cast<camel::core::type::TupleType *>(graph->closureType());
+    draft->returnKind_  = graph->returnKind();
     draft->staticSlots_.assign(graph->staticSlots().begin(), graph->staticSlots().end());
     if (const auto *staticType = graph->staticDataType()) {
         draft->staticSlotTypes_.assign(staticType->types().begin(), staticType->types().end());
@@ -832,6 +835,7 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
             .runtimeFlags = init.runtimeFlags,
             .origin       = init.origin,
             .permissions  = init.permissions,
+            .attrs        = init.attrs,
             .payload      = payloadCopy,
             .normInputs   = normInputsCopy,
             .withInputs   = withInputsCopy,
@@ -951,6 +955,17 @@ void GraphDraft::setNodePermissions(gc_node_ref_t id, uint8_t permissions) {
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set the permissions of a missing draft node.");
     draftNode->header.permissions = permissions;
+}
+
+uint32_t GraphDraft::nodeAttrs(gc_node_ref_t id) const {
+    const DraftNodeHeader *h = header(id);
+    return h ? h->attrs : 0;
+}
+
+void GraphDraft::setNodeAttrs(gc_node_ref_t id, uint32_t attrs) {
+    DraftNode *draftNode = node(id);
+    ASSERT(draftNode != nullptr, "Cannot set the attributes of a missing draft node.");
+    draftNode->header.attrs = attrs;
 }
 
 void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {

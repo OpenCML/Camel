@@ -2,7 +2,92 @@ id = "compile.generics"
 order = 323
 tier = "feat"
 tags = ["feat", "compile", "generics", "types"]
-desc = "Generic functions bound with `typeas` (one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 2.9."
+desc = "Generic functions bound with `typeas` (one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 5.6."
+
+[[tests]]
+name = "explicit_type_arguments"
+desc = "Explicit ::<T>, combination with value contexts, function values and result inference from declarations/parameters/returns."
+kind = "behavior"
+case = "../../../cases/compile/generic_explicit_types.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const wanted = ['7', 'typed', '[5, 5, 5]', '9', '0', '0', '0', '0', '0', '(4, pair)']
+assert(input.normalized.stdout.trim() === wanted.join(String.fromCharCode(10)), 'explicit instantiation or contextual result inference changed')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_arguments_preserve_tag_rules"
+desc = "Explicit instantiation enforces the same repeated-tag restrictions as inferred generic calls."
+kind = "negative"
+case = "../../../cases/compile/generic_explicit_nullable_error.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedTypeNesting"
+expect_output_contains = ["int??", "marks 'int' twice"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_arguments_by_name"
+desc = "Explicit type arguments by position (order of first appearance in the signature) or by name `A = int`, in any order (design principles 5.9)."
+kind = "behavior"
+case = "../../../cases/compile/generic_explicit_named.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "(1, s)\n(1, s)\n(1, s)\n2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_argument_unknown_name"
+desc = "A named type argument that is not a type parameter of the function."
+kind = "negative"
+case = "../../../cases/compile/generic_explicit_named_unknown.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_output_contains = ["'U' is not a type parameter of second"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_argument_missing_name"
+desc = "Named type arguments must give every type parameter."
+kind = "negative"
+case = "../../../cases/compile/generic_explicit_named_missing.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_output_contains = ["type parameter 'B' is not given"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_arguments_not_mixed"
+desc = "Positional and named type arguments cannot be mixed: a syntax error."
+kind = "negative"
+case = "../../../cases/compile/generic_explicit_mixed.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_type_argument_arity"
+desc = "A type application reports an incorrect number of type arguments before runtime."
+kind = "negative"
+case = "../../../cases/compile/generic_explicit_arity_error.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_output_contains = ["expected 1 type argument(s), got 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
 
 [[tests]]
 name = "basic"
@@ -466,10 +551,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_nvm"
-desc = "The same generic program gives the same result through `std::inline std::nvm`."
+desc = "The same generic program gives the same result through `std::opt::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/generics/pipelines.cml"
-args = ["${case}", "std::inline", "std::nvm"]
+args = ["${case}", "std::opt::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -497,10 +582,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_fvm"
-desc = "The same generic program gives the same result through `std::inline std::fvm`."
+desc = "The same generic program gives the same result through `std::opt::inline std::fvm`."
 kind = "behavior"
 case = "../../../cases/compile/generics/pipelines.cml"
-args = ["${case}", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -528,10 +613,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_jit"
-desc = "The same generic program gives the same result through `std::inline std::jit`."
+desc = "The same generic program gives the same result through `std::opt::inline std::jit`."
 kind = "behavior"
 case = "../../../cases/compile/generics/pipelines.cml"
-args = ["${case}", "std::inline", "std::jit"]
+args = ["${case}", "std::opt::inline", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -559,10 +644,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.opt_inline_fvm"
-desc = "The same generic program gives the same result through `std::opt std::inline std::fvm`."
+desc = "The same generic program gives the same result through `std::opt std::opt::inline std::fvm`."
 kind = "behavior"
 case = "../../../cases/compile/generics/pipelines.cml"
-args = ["${case}", "std::opt", "std::inline", "std::fvm"]
+args = ["${case}", "std::opt", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -760,16 +845,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "typeas_in_return_type"
-desc = "`typeas` in the return type of a declaration: there is no argument to take the type from."
+name = "return_type_without_context"
+desc = "A return-only type variable is valid but this call has neither an expected result nor explicit type arguments."
 kind = "negative"
 case = "../../../cases/compile/generics/err_typeas_return.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TypeVariableNotAllowed"
-expect_diagnostic_line = 3
-expect_diagnostic_column = 27
-expect_output_contains = ["a return type has no argument to take the type from"]
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 17
+expect_output_contains = ["cannot be determined", "make::<...>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -830,22 +915,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "typeas_in_union"
-desc = "`typeas` inside a union cannot be bound from an argument type."
-kind = "negative"
-case = "../../../cases/compile/generics/err_union.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TypeVariableNotBindable"
-expect_diagnostic_line = 3
-expect_diagnostic_column = 1
-expect_output_contains = ["The type variable 'T' of 'f' can never be bound"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
 name = "generic_as_value"
-desc = "A generic function bound to a name without a type: nothing fixes its type variables (design principles 2.10; where a position does, see consistency/generic_values.plan.toml)."
+desc = "A generic function bound to a name without a type: nothing fixes its type variables (design principles 5.5; where a position does, see consistency/generic_values.plan.toml)."
 kind = "negative"
 case = "../../../cases/compile/generics/err_as_value.cml"
 args = ["${case}"]
@@ -923,7 +994,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "generic_exported_instances"
-desc = "One instance per set of types in the whole program (design principles 2.11): rev<int> is one graph, though two modules call it, named with the module that declares it (2.12)."
+desc = "One instance per set of types in the whole program (design principles 2.1): rev<int> is one graph, though two modules call it, named with the module that declares it (10.2)."
 kind = "behavior"
 case = "../../../cases/compile/generics/export_use.cml"
 args = ["${case}", "std::rgir"]
@@ -953,7 +1024,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "generic_exported_capture"
-desc = "The body of an imported generic function uses a top-level value of its own module: one instance per set of types in the whole program, under the one root graph (design principles 2.11)."
+desc = "The body of an imported generic function uses a top-level value of its own module: one instance per set of types in the whole program, under the one root graph (design principles 10.1)."
 kind = "behavior"
 case = "../../../cases/compile/generics/err_export_capture.cml"
 args = ["${case}"]

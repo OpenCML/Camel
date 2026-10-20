@@ -23,7 +23,7 @@
 | [13_macro_system_progress.md](13_macro_system_progress.md) | 宏系统重构阶段性进展、风险与后续路线 |
 | [14_funcnode_runtime_convergence.md](14_funcnode_runtime_convergence.md) | FuncNode 运行时收敛方案与迁移要点 |
 | [15_gir_graph_gc_milestone.md](15_gir_graph_gc_milestone.md) | GIR Graph 垃圾回收里程碑与阶段成果 |
-| [16_inline_rewrite_algorithm.md](16_inline_rewrite_algorithm.md) | `std::inline` 重写算法、SCC 调度、Graph API 协作与不变量 |
+| [16_inline_rewrite_algorithm.md](16_inline_rewrite_algorithm.md) | `std::opt::inline` 重写算法、SCC 调度、Graph API 协作与不变量 |
 | [17_graph_rewrite_api_contracts.md](17_graph_rewrite_api_contracts.md) | Graph 重写 API 契约：事务边界、可写域、内联入口规则与验证器约束 |
 | [18_sync_control_semantics.md](18_sync_control_semantics.md) | 同步控制语义解读：`BRCH/JOIN/GATE` 分工、`EXIT` 锚点规则与后端契约 |
 | [19_tail_call_optimization.md](19_tail_call_optimization.md) | 尾调用优化（TCO）：以 NodeVM 为主的机制说明（拓扑、判据、帧与尾调路径）；附录含 FastVM 对照 |
@@ -50,6 +50,7 @@
 | [39_loops.md](39_loops.md) | Loops: the `do` form, the AST and GCT nodes, the LOOP node and its capture twins, storage and checks, `LoopView`, how each back end runs it (native on nvm and in the macro evaluator, the private lowering to tail recursion on fvm/jit by default and on prl and cpp, a native fvm instruction under a debugger, refusals in ONNX and autodiff), the recursion limit, timings |
 | [40_graph_facts.md](40_graph_facts.md) | Graph facts: the three classes of information, kinds and their registration (`core.*`; `tiles.*` reserved to Tiles), the store and its stamps (lineage and serial standing in for GraphId and Revision), how rewrites make facts stale, the core's kinds, `camel inspect --facts`, the persistence hooks; and how operators that read graphs see the program's own graphs |
 | [41_resources_and_definitions.md](41_resources_and_definitions.md) | Resources and definition graphs of operators: what an operator touches (variables, objects, foreign objects, ambient state; regions; modes; the result's aliasing), its registration and checks, the declarations of today (variables, assignments, I/O, generators, Tiles), the per-node query, footprints, aliasing, conflicts and orderings for a scheduler, `core.resources`; definition graphs: declaring, building (a library compiled on its own, pinned graphs, the checks, recursion, content hash), expanding, the tensor definitions and the tests against the kernels |
+| [42_enums.md](42_enums.md) | Enums (`type E = enum { ... }`): the three variant shapes, construction with a qualified variant, `match` as a tag test and field extraction, generics and recursion, the type/decl/instance split and interning, the run-time `Variant` object and how the collectors trace it, printing and equality by content, the four schedulers and the translation passes that refuse an enum, and the retirement of `A \| B` and `T ? U` |
 | [nn-autograd.md](nn-autograd.md) | `nn` / `tensor` 自动求导架构：`nn.apply_gradients` 的图合成、helper 调用与参数别名、公共 API、内置 VJP 覆盖范围与已知限制 |
 | [jit/README.md](jit/README.md) | FastVM JIT 实现级注解的目录索引 |
 | [jit/bytecode-to-asm.md](jit/bytecode-to-asm.md) | JIT 字节码到机器码翻译注解：槽模型、调用约定、逐条字节码经 MIR（V* 虚拟寄存器）与寄存器分配生成 x64 汇编 |

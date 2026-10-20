@@ -1,6 +1,6 @@
 /**
  * An overload of the program that is more specific than the built-in operator is preferred
- * (design principles 2.13): `==` on a struct is the built-in comparison by content, which
+ * (design principles 4.3): `==` on a struct is the built-in comparison by content, which
  * takes any struct; an overload for exactly `V` takes `V` only, so it is the one called. An
  * overload of `==` gives `!=`: `a != b` is `!(a == b)` with that overload.
  */

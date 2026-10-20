@@ -66,10 +66,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.scalars_simplify"
-desc = "The same program after std::opt::simplify (then the default scheduler) and after std::macro std::opt::simplify under std::fvm: the rewriting passes accept an entry graph whose main has parameters."
+desc = "The same program after std::opt (then the default scheduler) and after std::macro std::opt under std::fvm: the rewriting passes accept an entry graph whose main has parameters."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
-args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::opt::simplify"]
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::opt"]
 expect_exit = 4
 expect_stdout_contains = ["hi 3 0.5 true"]
 expect_output_not_contains = ["Error"]
@@ -78,10 +78,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.scalars_macro_simplify_fvm"
-desc = "std::macro std::opt::simplify std::fvm on the same program."
+desc = "std::macro std::opt std::fvm on the same program."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
-args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::macro", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::macro", "std::opt", "std::fvm"]
 expect_exit = 4
 expect_stdout_contains = ["hi 3 0.5 true"]
 expect_output_not_contains = ["Error"]
@@ -287,10 +287,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.with_parameters_fvm"
-desc = "The same under std::macro std::opt::simplify std::fvm."
+desc = "The same under std::macro std::opt std::fvm."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/with_params.cml"
-args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy", "--arg", "b=test/cases/compile/entry_args/b.npy", "std::macro", "std::opt::simplify", "std::fvm"]
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "--arg", "w=test/cases/compile/entry_args/w.npy", "--arg", "b=test/cases/compile/entry_args/b.npy", "std::macro", "std::opt", "std::fvm"]
 expect_exit = 0
 expect_output_not_contains = ["Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -343,7 +343,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "entry_args.cpp_bound"
-desc = "std::cpp translates a main with parameters (design principles 2.13): values bound with --arg when it translates are constants of the program."
+desc = "std::cpp translates a main with parameters (design principles 10.6): values bound with --arg when it translates are constants of the program."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::cpp"]
@@ -355,7 +355,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.cpp_open"
-desc = "Parameters left open are read by the generated program from its command line, --arg name=value as camel takes them, each by its declared type (design principles 2.13). That the program's output and reports agree with camel's is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
+desc = "Parameters left open are read by the generated program from its command line, --arg name=value as camel takes them, each by its declared type (design principles 10.6). That the program's output and reports agree with camel's is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "std::cpp"]

@@ -1,8 +1,8 @@
 /**
  * progen finding F23 ((other) crash after a rewrite). Segmentation fault after
- *   `std::opt::simplify`: a branch with sync arms (one declares an unused variable) whose value a
+ *   `std::opt`: a branch with sync arms (one declares an unused variable) whose value a
  *   later `reduce` element function reads.
- * Pipeline: std::opt::simplify std::nvm
+ * Pipeline: std::opt std::nvm
  * Expected output: (nothing)
  * Actual: CRASH
  * Reduced by test/tools/progen from seed 34 (generator version 1, all features).

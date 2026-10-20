@@ -1,0 +1,129 @@
+// Multiple state values share one recurrence and update simultaneously.
+module tiles_loop_multi_device
+import { Tensor, load_npy, save_npy } from tensor
+import { run, run_device, download, source, inspect, benchmark } from tiles
+import { get_env } from sys
+
+func scalar_swap(a: float, b: float): (float, float) {
+    return loop x = a, y = b for k in [1, 2, 3] do (y, x)
+}
+func fibonacci(a: float, b: float): (float, float) {
+    return loop x = a, y = b for k in [1, 2, 3, 4, 5] do (y, x + y)
+}
+func rotate(a: float, b: float, c: float): (float, float, float) {
+    return loop x = a, y = b, z = c for k in [1, 2] do (y, z, x)
+}
+func recurrence(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>) {
+    return loop x = a, y = b for k in [1, 2, 3] do (y, x + y)
+}
+func first(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return recurrence(a, b).0 }
+func second(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return recurrence(a, b).1 }
+func reordered(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>, Tensor<f32>) {
+    let pair = recurrence(a, b)
+    return (pair.1, pair.0, pair.1)
+}
+func captured(a: Tensor<f32>, b: Tensor<f32>, bias: Tensor<f32>): (Tensor<f32>, Tensor<f32>) {
+    return loop x = a, y = b for k in [1, 2, 3] do (y + bias, x + bias + bias)
+}
+func swap(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>) {
+    return loop x = a, y = b for k in [1, 2, 3] do (y, x)
+}
+func empty(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>) {
+    let domain: int[] = []
+    return loop x = a, y = b for k in domain do (y, x + y)
+}
+func rounding(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>) {
+    return loop x = a, y = b for k in [1, 2, 3] do (x + y, y)
+}
+func strict_madd(x: Tensor<f32>, a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return x * a + b }
+@numeric(contract)
+func permissions(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>) {
+    return loop x = a, y = a for k in [1] do (strict_madd(x, a, b), y * a + b)
+}
+func strict_projection(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return permissions(a, b).0 }
+@numeric(contract)
+func permitted_madd(x: Tensor<f32>, a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return x * a + b }
+func permission_one(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+    let pair = loop x = a, y = a for k in [1] do (y, permitted_madd(y, a, b))
+    return pair.0
+}
+func permission_two(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+    let pair = loop x = a, y = a for k in [1, 2] do (y, permitted_madd(y, a, b))
+    return pair.0
+}
+func permission_empty(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+    let domain: int[] = []
+    let pair = loop x = a, y = a for k in domain do (y, permitted_madd(y, a, b))
+    return pair.0
+}
+func main(): int sync {
+    let folder = get_env('TILES_TEST_OUT')
+    let a = load_npy(folder + '/a.npy') as Tensor<f32>
+    let b = load_npy(folder + '/b.npy') as Tensor<f32>
+    let c = load_npy(folder + '/c.npy') as Tensor<f32>
+    println('VALUES')
+    println(scalar_swap(2.0, 7.0), run<scalar_swap>((2.0, 7.0)))
+    println(fibonacci(0.0, 1.0), run<fibonacci>((0.0, 1.0)))
+    println(rotate(2.0, 7.0, 11.0), run<rotate>((2.0, 7.0, 11.0)))
+    let cpu = recurrence(a, b)
+    let gpu = run<recurrence>((a, b))
+    save_npy(cpu.0, folder + '/cpu0.npy')
+    save_npy(cpu.1, folder + '/cpu1.npy')
+    save_npy(gpu.0, folder + '/gpu0.npy')
+    save_npy(gpu.1, folder + '/gpu1.npy')
+    let resident = run_device<recurrence>((a, b))
+    save_npy(download(resident.0), folder + '/resident0.npy')
+    save_npy(download(resident.1), folder + '/resident1.npy')
+    save_npy(run<first>((a, b)), folder + '/first.npy')
+    save_npy(run<second>((a, b)), folder + '/second.npy')
+    let order = run<reordered>((a, b))
+    save_npy(order.0, folder + '/order0.npy')
+    save_npy(order.1, folder + '/order1.npy')
+    save_npy(order.2, folder + '/order2.npy')
+    let cap0 = captured(a, b, c)
+    let cap1 = captured(b, c, a)
+    let d0 = run<captured>((a, b, c))
+    let d1 = run<captured>((b, c, a))
+    let d2 = run<captured>((a, b, c))
+    save_npy(cap0.0, folder + '/capcpu0.npy')
+    save_npy(cap0.1, folder + '/capcpu1.npy')
+    save_npy(cap1.0, folder + '/capcpu2.npy')
+    save_npy(cap1.1, folder + '/capcpu3.npy')
+    save_npy(d0.0, folder + '/capgpu0.npy')
+    save_npy(d0.1, folder + '/capgpu1.npy')
+    save_npy(d1.0, folder + '/capgpu2.npy')
+    save_npy(d1.1, folder + '/capgpu3.npy')
+    save_npy(d2.0, folder + '/capgpu4.npy')
+    save_npy(d2.1, folder + '/capgpu5.npy')
+    let sw = run<swap>((a, b))
+    let em = run<empty>((a, b))
+    save_npy(sw.0, folder + '/swap0.npy')
+    save_npy(sw.1, folder + '/swap1.npy')
+    save_npy(em.0, folder + '/empty0.npy')
+    save_npy(em.1, folder + '/empty1.npy')
+    let rounded = run<rounding>((a, b))
+    save_npy(rounded.0, folder + '/rounded.npy')
+    println('SCALAR_INSPECT')
+    println(inspect<fibonacci>((0.0, 1.0)))
+    println('PAIR_INSPECT')
+    println(inspect<recurrence>((a, b)))
+    println('FIRST_INSPECT')
+    println(inspect<first>((a, b)))
+    println('ORDER_INSPECT')
+    println(inspect<reordered>((a, b)))
+    println('PAIR_SOURCE')
+    println(source<recurrence>((a, b)))
+    println('PERMISSIONS_SOURCE')
+    println(source<permissions>((a, b)))
+    println('PERMISSIONS_BENCHMARK')
+    println(benchmark<permissions>((c, c)))
+    println('PROJECTION_BENCHMARK')
+    println(benchmark<strict_projection>((c, c)))
+    println('ONE_BENCHMARK')
+    println(benchmark<permission_one>((c, c)))
+    println('TWO_BENCHMARK')
+    println(benchmark<permission_two>((c, c)))
+    println('EMPTY_BENCHMARK')
+    println(benchmark<permission_empty>((c, c)))
+    return 0
+}
