@@ -427,26 +427,24 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.grad_refused"
-desc = "grad of a function with a loop is refused at the loop (line 7)."
-kind = "negative"
-case = "../../../cases/loops/grad_refused.cml"
-args = ["-E", "short", "${case}", "std::macro"]
-expect_exit = 1
-expect_diagnostic_line = 7
-expect_output_contains = ["cannot differentiate through a 'loop' expression yet"]
+name = "loops.grad_through_loop"
+desc = "grad of a function with a loop: the forward loop keeps each round's residuals in its collection slots and the reverse pass runs a loop over them, so f(x) = x⁴ at 2 gives 16 and 32."
+kind = "behavior"
+case = "../../../cases/loops/grad_through_loop.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "16.0\n32.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.grad_refused_lowered"
-desc = "grad run by std::fvm without std::macro: the back end lowered the loop in its private copy, but grad reads the program's own graph (OperatorTraits::inspectsGraphs) and refuses the loop at line 7 as std::nvm does."
-kind = "negative"
-case = "../../../cases/loops/grad_refused.cml"
-args = ["-E", "short", "${case}", "std::fvm"]
-expect_exit = 1
-expect_diagnostic_line = 7
-expect_output_contains = ["cannot differentiate through a 'loop' expression yet"]
+name = "loops.grad_through_loop_lowered"
+desc = "The same gradient run by std::fvm, which lowers loops in its private copy while grad reads the program's own graph: the tape is collected by the loop node and the reverse pass is a LOOP node of its own."
+kind = "behavior"
+case = "../../../cases/loops/grad_through_loop.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "16.0\n32.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
