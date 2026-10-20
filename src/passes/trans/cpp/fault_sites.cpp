@@ -57,7 +57,7 @@ uint64_t graphOriginOf(const camel::core::context::Context &context, const GCGra
         return camel::source::kInvalidOriginId;
     }
     if (const auto source = context.sourceContext()) {
-        const auto origin = source->debugMap().graphOrigin(graph->stableId());
+        const auto origin = source->debugMap().graphOrigin(graph->id());
         if (origin != camel::source::kInvalidOriginId) {
             return origin;
         }

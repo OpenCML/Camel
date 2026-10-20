@@ -34,7 +34,9 @@ using namespace camel::core::context;
 using namespace camel::jit;
 #endif
 
-camel::runtime::GCGraph *JitAsmDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+JitAsmDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
 #if ENABLE_FASTVM_JIT
     auto linked = compileAndLink(
         context_,

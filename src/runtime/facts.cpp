@@ -23,7 +23,7 @@
  * The registry is process-wide and append-only: a kind is never removed, so a KindId and the
  * KindInfo it names stay valid until the process exits (records live in a deque).
  *
- * The store keeps, per (kind, lineage of the first anchor's graph, first anchor's node), the
+ * The store keeps, per (kind, GraphId of the first anchor's graph, first anchor's node), the
  * facts stored there (several when the further anchors differ). Every read checks the stamp
  * against the graphs the reader passes; a stale fact is erased under the same lock.
  */
@@ -208,10 +208,10 @@ std::string factJson(
     const std::vector<const GCGraph *> graphs = graphsOf(anchors);
     for (size_t i = 0; i < graphs.size(); ++i) {
         out += std::format(
-            "{}{{\"graph\":{},\"serial\":{}}}",
+            "{}{{\"graph\":{},\"revision\":{}}}",
             i ? "," : "",
             jsonString(graphs[i]->name()),
-            graphs[i]->serial());
+            closureRevision(const_cast<GCGraph *>(graphs[i])));
     }
     out += std::format("],\"epoch\":{},\"target\":{}", stamp->declarationEpoch, stamp->targetHash);
     if (kind.dependency == Dependency::Cone) {
@@ -220,11 +220,11 @@ std::string factJson(
     return out + "}}";
 }
 
-std::vector<std::pair<uint64_t, gc_node_ref_t>> anchorKeys(std::span<const Anchor> anchors) {
-    std::vector<std::pair<uint64_t, gc_node_ref_t>> keys;
+std::vector<std::pair<GraphId, gc_node_ref_t>> anchorKeys(std::span<const Anchor> anchors) {
+    std::vector<std::pair<GraphId, gc_node_ref_t>> keys;
     keys.reserve(anchors.size());
     for (const Anchor &anchor : anchors) {
-        keys.emplace_back(anchor.graph->lineage(), anchor.node);
+        keys.emplace_back(anchor.graph->id(), anchor.node);
     }
     return keys;
 }
@@ -294,7 +294,7 @@ std::string_view statusName(Status status) {
 // ---- Store ---------------------------------------------------------------------------------
 
 size_t FactStore::KeyHash::operator()(const Key &key) const {
-    size_t seed = std::hash<uint64_t>{}(key.lineage);
+    size_t seed = std::hash<GraphId>{}(key.graph);
     seed ^= std::hash<uint32_t>{}(key.kind) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
     seed ^= std::hash<uint32_t>{}(key.node) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
     return seed;
@@ -313,7 +313,7 @@ void FactStore::checkType(KindId kind, const std::type_info &type) {
 Stamp FactStore::stampNow(const KindInfo &kind, std::span<const Anchor> anchors, uint64_t targetHash) {
     Stamp stamp;
     for (const GCGraph *graph : graphsOf(anchors)) {
-        stamp.graphs.emplace_back(graph->lineage(), graph->serial());
+        stamp.graphs.emplace_back(graph->id(), closureRevision(const_cast<GCGraph *>(graph)));
     }
     stamp.declarationEpoch =
         kind.readsDeclarations ? camel::core::OperatorTable::instance().declarationEpoch() : 0;
@@ -326,7 +326,7 @@ FactStore::Entry *
 FactStore::find(KindId kind, std::span<const Anchor> anchors, uint64_t targetHash, Status &status) {
     const KindInfo &info = kindInfo(kind);
     status               = Status::Absent;
-    auto bucket = entries_.find(Key{kind, anchors[0].graph->lineage(), anchors[0].node});
+    auto bucket          = entries_.find(Key{kind, anchors[0].graph->id(), anchors[0].node});
     if (bucket == entries_.end()) {
         return nullptr;
     }
@@ -342,7 +342,8 @@ FactStore::find(KindId kind, std::span<const Anchor> anchors, uint64_t targetHas
     bool revisions = graphs.size() == it->stamp.graphs.size();
     for (size_t i = 0; revisions && i < graphs.size(); ++i) {
         revisions = it->stamp.graphs[i] ==
-                    std::pair<uint64_t, uint64_t>(graphs[i]->lineage(), graphs[i]->serial());
+                    std::pair<GraphId, uint64_t>(
+                        graphs[i]->id(), closureRevision(const_cast<GCGraph *>(graphs[i])));
     }
     const bool epoch =
         !info.readsDeclarations ||
@@ -387,7 +388,7 @@ void FactStore::putValue(
     }
     Stamp stamp = stampNow(info, anchors, targetHash);
     std::lock_guard lock(mutex_);
-    auto &list      = entries_[Key{kind, anchors[0].graph->lineage(), anchors[0].node}];
+    auto &list      = entries_[Key{kind, anchors[0].graph->id(), anchors[0].node}];
     const auto keys = anchorKeys(anchors);
     auto it = std::find_if(list.begin(), list.end(), [&](const Entry &e) { return e.anchors == keys; });
     if (it == list.end()) {
@@ -474,7 +475,7 @@ void FactStore::invalidate(KindId kind, std::span<const Anchor> anchors) {
     const KindInfo &info = kindInfo(kind);
     checkAnchors(info, anchors);
     std::lock_guard lock(mutex_);
-    auto bucket = entries_.find(Key{kind, anchors[0].graph->lineage(), anchors[0].node});
+    auto bucket = entries_.find(Key{kind, anchors[0].graph->id(), anchors[0].node});
     if (bucket == entries_.end()) {
         return;
     }
@@ -487,7 +488,7 @@ void FactStore::invalidate(KindId kind, std::span<const Anchor> anchors) {
 
 void FactStore::invalidateGraph(const GCGraph *graph) {
     std::lock_guard lock(mutex_);
-    std::erase_if(entries_, [&](const auto &item) { return item.first.lineage == graph->lineage(); });
+    std::erase_if(entries_, [&](const auto &item) { return item.first.graph == graph->id(); });
 }
 
 void FactStore::clear() {
@@ -557,9 +558,9 @@ void computeFacts(FactStore &store, GCGraph *root) {
 
 void dumpFacts(FactStore &store, GCGraph *root, std::ostream &os) {
     const std::vector<GCGraph *> graphs = collectReachableGraphs(root);
-    std::unordered_map<uint64_t, const GCGraph *> byLineage;
+    std::unordered_map<GraphId, const GCGraph *> byId;
     for (const GCGraph *graph : graphs) {
-        byLineage.emplace(graph->lineage(), graph);
+        byId.emplace(graph->id(), graph);
     }
 
     // The stored facts about these graphs whose stamps hold for them.
@@ -568,9 +569,9 @@ void dumpFacts(FactStore &store, GCGraph *root, std::ostream &os) {
     for (const StoredFact &fact : stored) {
         const KindInfo &info = kindInfo(fact.kind);
         std::vector<Anchor> anchors;
-        for (const auto &[lineage, node] : fact.anchors) {
-            auto it = byLineage.find(lineage);
-            if (it == byLineage.end()) {
+        for (const auto &[id, node] : fact.anchors) {
+            auto it = byId.find(id);
+            if (it == byId.end()) {
                 break;
             }
             anchors.push_back(Anchor{it->second, node});

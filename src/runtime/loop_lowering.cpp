@@ -447,7 +447,7 @@ void replaceLoop(GraphDraft &draft, const LoopShape &loop, GCGraph *rec) {
     }
 
     const DraftNodeHeader *header = draft.header(id);
-    const GCFuncBody body{.calleeGraph = rec};
+    const GCFuncRef body{.ref = draft.payloadGraphIndexOf(rec)};
     std::vector<std::byte> payload(sizeof(body));
     std::memcpy(payload.data(), &body, sizeof(body));
     const std::vector<gc_node_ref_t> ctrl(
@@ -504,7 +504,7 @@ std::vector<gc_node_ref_t> throughOriginals(
  * (OperatorTraits::inspectsGraphs: Tiles compiling a function, an export) must see the program
  * as it was written, not this private lowering (op-semantics 11.4). Every operand of function
  * type of such an operator is passed through `:graph/original`, which takes a function value
- * of the copy back to the program's graph it was copied from (GCGraph::originalGraph; the
+ * of the copy back to the program's graph it was copied from (Program::original; the
  * commit records it). The new node takes the operator's origin.
  */
 void handOriginalsToGraphReaders(RuntimeGraphDraftSession &session) {
@@ -565,12 +565,17 @@ bool programHasLoops(GCGraph *root) {
     return found;
 }
 
-GCGraph *
-lowerLoopsToTailRecursion(const camel::core::context::context_ptr_t &context, GCGraph *root) {
-    if (root == nullptr || !programHasLoops(root)) {
-        return root;
+const Program *lowerLoopsToTailRecursion(
+    const camel::core::context::context_ptr_t &context, const Program *program) {
+    return lowerLoopsToTailRecursion(context, program, program ? program->root() : nullptr);
+}
+
+const Program *lowerLoopsToTailRecursion(
+    const camel::core::context::context_ptr_t &context, const Program *program, GCGraph *root) {
+    if (program == nullptr || root == nullptr || !programHasLoops(root)) {
+        return program;
     }
-    RuntimeGraphDraftSession session(context, root);
+    RuntimeGraphDraftSession session(context, program, root);
     std::vector<LoopShape> loops;
     for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
         for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
@@ -592,11 +597,10 @@ lowerLoopsToTailRecursion(const camel::core::context::context_ptr_t &context, GC
         if (base.ends_with(".body")) {
             base.resize(base.size() - 5);
         }
-        const std::string id = loop.body->stableId() + "$lowered";
         Members m{
-            .rec  = group.reserve(id + ".rec", base + ".rec", base + ".rec"),
-            .next = group.reserve(id + ".next", base + ".next", base + ".next"),
-            .done = group.reserve(id + ".done", base + ".done", base + ".done"),
+            .rec  = group.reserve(base + ".rec", base + ".rec"),
+            .next = group.reserve(base + ".next", base + ".next"),
+            .done = group.reserve(base + ".done", base + ".done"),
         };
         group.define(m.rec, buildRec(loop, m.next, m.done));
         group.define(m.next, buildNext(loop, m.rec));

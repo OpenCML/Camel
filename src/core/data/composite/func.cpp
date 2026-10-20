@@ -19,23 +19,35 @@
 
 #include "camel/core/data/composite/func.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 using namespace std;
 using namespace camel::core::data;
 using namespace camel::core::type;
 
-FunctionData::FunctionData(camel::runtime::GCGraph *graph, std::vector<std::string> closureRefs)
-    : CompositeData(graph ? graph->funcType() : nullptr), graph_(graph),
-      closureRefs_(std::move(closureRefs)) {}
+FunctionData::FunctionData(
+    const camel::runtime::Program *program, camel::runtime::GraphId graph,
+    std::vector<std::string> closureRefs)
+    : CompositeData(program && program->graph(graph) ? program->graph(graph)->funcType() : nullptr),
+      program_(program), graphId_(graph), closureRefs_(std::move(closureRefs)) {}
 
-func_ptr_t
-FunctionData::create(camel::runtime::GCGraph *graph, std::vector<std::string> closureRefs) {
-    ASSERT(graph != nullptr, "FunctionData requires a runtime graph.");
-    ASSERT(graph->funcType() != nullptr, "Graph must have a function type for FunctionData.");
-    return std::make_shared<FunctionData>(graph, std::move(closureRefs));
+func_ptr_t FunctionData::create(
+    const camel::runtime::Program *program, camel::runtime::GraphId graph,
+    std::vector<std::string> closureRefs) {
+    ASSERT(
+        program != nullptr && program->graph(graph) != nullptr,
+        "FunctionData requires a runtime graph.");
+    ASSERT(
+        program->graph(graph)->funcType() != nullptr,
+        "Graph must have a function type for FunctionData.");
+    return std::make_shared<FunctionData>(program, graph, std::move(closureRefs));
 }
 
-std::string FunctionData::name() const { return graph_ ? graph_->name() : "<null>"; }
+camel::runtime::GCGraph *FunctionData::graph() const {
+    return program_ ? program_->graph(graphId_) : nullptr;
+}
+
+std::string FunctionData::name() const { return graph() ? graph()->name() : "<null>"; }
 
 FunctionType *FunctionData::funcType() const { return tt::as_ptr<FunctionType>(type_); }
 
@@ -67,7 +79,7 @@ void FunctionData::resolve(const data_vec_t &dataList) {
 bool FunctionData::equals(const data_ptr_t &other) const { return true; }
 
 data_ptr_t FunctionData::clone(bool deep) const {
-    auto cloned = std::make_shared<FunctionData>(graph_, closureRefs_);
+    auto cloned = std::make_shared<FunctionData>(program_, graphId_, closureRefs_);
     if (deep) {
         cloned->closure_.reserve(closure_.size());
         for (const auto &elem : closure_) {

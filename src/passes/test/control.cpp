@@ -235,7 +235,8 @@ void forwardingGateConsumers() {
 }
 } // namespace
 
-camel::runtime::GCGraph *ControlTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+ControlTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     chainAndBudget();
     mandatoryDataPaths();
     conditionalDataIsNotMandatory();
@@ -245,5 +246,5 @@ camel::runtime::GCGraph *ControlTestPass::apply(camel::runtime::GCGraph *graph, 
     denseDataChain();
     forwardingGateConsumers();
     os << "CONTROL topology, budgets, branches, dense chain: PASS\n";
-    return graph;
+    return program;
 }

@@ -50,14 +50,21 @@
 
 #include "camel/core/context/context.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 namespace camel::runtime {
 
 /// True when a LOOP node is reachable from `root`.
 bool programHasLoops(GCGraph *root);
 
-/// The program of `root` with every LOOP node replaced by a call of a tail-recursive graph
-/// (see the file comment): a detached copy, or `root` itself when it has no loop.
-GCGraph *lowerLoopsToTailRecursion(const camel::core::context::context_ptr_t &context, GCGraph *root);
+/// `program` with every LOOP node replaced by a call of a tail-recursive graph (see the file
+/// comment): a detached copy, or `program` itself when it has no loop.
+const Program *lowerLoopsToTailRecursion(
+    const camel::core::context::context_ptr_t &context, const Program *program);
+
+/// The same for the graphs reachable from `root`, a graph of `program`: the copy is rooted at
+/// the copy of `root`.
+const Program *lowerLoopsToTailRecursion(
+    const camel::core::context::context_ptr_t &context, const Program *program, GCGraph *root);
 
 } // namespace camel::runtime

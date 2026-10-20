@@ -191,8 +191,8 @@ std::optional<type::Type *> nodeResultType(const GraphDraft &draft, gc_node_ref_
         return first;
     }
     case GCNodeKind::Func: {
-        const auto *body = reinterpret_cast<const GCFuncBody *>(draft.payloadOf(id).data());
-        const auto *callee = body->calleeGraph ? body->calleeGraph->funcType() : nullptr;
+        const GCGraph *calleeGraph = draft.calleeGraphOf(id);
+        const auto *callee         = calleeGraph ? calleeGraph->funcType() : nullptr;
         if (!callee || !callee->hasExitType()) {
             return std::nullopt;
         }

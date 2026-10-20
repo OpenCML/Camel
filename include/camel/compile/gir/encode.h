@@ -30,12 +30,20 @@
 #include "types.h"
 
 namespace camel::runtime {
-class GCGraph;
+class Program;
+class GraphIdAllocator;
 }
 
 namespace camel::compile::gir {
 
 const void *compileGraphOpaque(const graph_ptr_t &graph);
-camel::runtime::GCGraph *encodeToRuntimeGraph(const graph_ptr_t &rootGraph);
+/// Encodes the graphs reachable from `rootGraph` into runtime graphs and binds them in
+/// `program`, with the entry as its root. A runtime graph has the GraphId of the compile graph it
+/// comes from; with `freshIds` it takes a new one from there instead, for a second encoding of
+/// compile graphs that a program holds already (the definition graphs of operators), so that
+/// one program never holds two graphs of an id.
+void encodeToRuntimeProgram(
+    const graph_ptr_t &rootGraph, camel::runtime::Program &program,
+    camel::runtime::GraphIdAllocator *freshIds = nullptr);
 
 } // namespace camel::compile::gir

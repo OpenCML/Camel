@@ -59,8 +59,8 @@
 
 `DebugMap` 是 debugger/运行时的快速索引层，不直接存源码区间，只存：
 
-- `graph stableId -> OriginId`
-- `node stableId -> OriginId`
+- `GraphId -> OriginId`
+- `node entity id -> OriginId`
 - `bytecode pc -> OriginId`
 
 这样 debugger 和 runtime 可以先定位到执行实体，再反查 `OriginId -> primarySpan -> line/column`。
@@ -135,8 +135,8 @@
 当前实现里：
 
 - `deriveGirOrigin(...)` 从 `gct->load()->origin()` 继续派生 `OriginId(stage=GIR, kind=...)`
-- `registerGraphOrigin(...)` 把 graph stableId 映射到 origin
-- `registerNodeOrigin(...)` 把 node stableId 映射到 origin
+- `registerGraphOrigin(...)` 把 `GraphId` 映射到 origin
+- `registerNodeOrigin(...)` 把 node 实体 id 映射到 origin
 
 这一步同样默认继承上游 `primarySpan`，因此 GIR 节点最终显示给 debugger 的源码区间，本质上仍是它上游 GCT 节点的主区间。
 
@@ -151,8 +151,8 @@
 
 当前做法是：
 
-- FastVM 编译 bytecode 时，把 `node stableId -> OriginId` 转成 `pc -> OriginId`
-- FastVM / NodeVM 执行时，把当前 `pc` 或 `node stableId` 写入 `SourceContext.currentRuntimeOrigin`
+- FastVM 编译 bytecode 时，把 `node 实体 id -> OriginId` 转成 `pc -> OriginId`
+- FastVM / NodeVM 执行时，把当前 `pc` 或 node 实体 id 写入 `SourceContext.currentRuntimeOrigin`
 - `DiagnosticBuilder::commit(...)` 若没有显式 `.at(...)`，会回退使用当前 runtime origin
 
 因此运行时错误现在也可以自动落到当前执行点的源码来源上。

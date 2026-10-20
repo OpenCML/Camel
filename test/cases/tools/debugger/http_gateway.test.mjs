@@ -55,7 +55,7 @@ await runTest(async (t) => {
     checkEq(paused?.lastAlloc?.phase, 'gir_node', 'the pause is a node pause')
     checkEq(paused?.lastAlloc?.origin, callDouble.originId, 'at the node of the breakpoint')
     const mainGraph = paused?.lastAlloc?.graphId
-    check(String(mainGraph).startsWith('main'), 'in the graph of main', paused?.lastAlloc)
+    checkEq(String(mainGraph), String(mainId), 'in the graph of main (the GraphId of the compiled graph)')
 
     // ---- node steps ------------------------------------------------------------------
     // Step in: the next node the scheduler runs, in whichever graph.
@@ -63,7 +63,7 @@ await runTest(async (t) => {
     await gw.post('/api/step', { target: task })
     let stepped = await gw.waitTask(task, (x) => x.paused && x.lastAlloc?.nodeId !== before)
     check(stepped, 'a step pauses at another node', await gw.task(task))
-    check(String(stepped?.lastAlloc?.graphId).startsWith('double'), 'step in enters the callee graph', stepped?.lastAlloc)
+    checkEq(String(stepped?.lastAlloc?.graphId), String(callDouble.funcGraphId), 'step in enters the callee graph')
 
     // Step over, constrained to the graph of main: runs the rest of the callee.
     await gw.post('/api/step', { target: task, graphId: mainGraph })

@@ -93,8 +93,9 @@ std::string label(const rt::GCGraph &graph, rt::gc_node_ref_t ref) {
 
 } // namespace
 
-camel::runtime::GCGraph *
-ResourcesTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     OperatorTable &table = OperatorTable::instance();
 
     // ---- Registration (design 4.4, check 5): each declaration below breaks one rule. ----
@@ -267,5 +268,5 @@ ResourcesTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
             os << "\n";
         }
     }
-    return graph;
+    return program;
 }

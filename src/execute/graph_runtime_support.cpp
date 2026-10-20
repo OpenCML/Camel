@@ -848,7 +848,7 @@ void fillFrameForDirectInvoke(
     if (callerGraph == nullptr) {
         throw std::runtime_error("Caller runtime graph is null in runtime direct invoke binding.");
     }
-    auto *targetGraph = dest->runtimeGraph();
+    auto *targetGraph = dest->graph();
     if (targetGraph == nullptr) {
         throw std::runtime_error(
             "Destination frame is missing runtime graph in runtime direct invoke binding.");
@@ -946,7 +946,7 @@ void fillFrameForIndirectCall(
     if (callerGraph == nullptr) {
         throw std::runtime_error("Caller runtime graph is null in runtime indirect call binding.");
     }
-    auto *targetGraph = dest->runtimeGraph();
+    auto *targetGraph = dest->graph();
     if (targetGraph == nullptr) {
         throw std::runtime_error(
             "Destination frame is missing runtime graph in runtime indirect call binding.");

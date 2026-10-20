@@ -38,8 +38,8 @@ namespace camel::runtime {
 
 class GraphDraft;
 
+/// The graph's cold data: its names and the names it captures.
 struct GCGraphDebugRecord {
-    std::string stableId;
     std::string mangledName;
     std::string name;
     // The names the graph captures, in the order it captured them (GCGraph::captureNames).
@@ -92,13 +92,20 @@ struct GCGraphPayloadArena {
     GCReturnKind returnKind  = GCReturnKind::None;
 };
 
-GCGraphDebugRecord *
-createGraphDebugRecord(std::string stableId, std::string mangledName, std::string name);
+GCGraphDebugRecord *createGraphDebugRecord(std::string mangledName, std::string name);
 
-/// Records the cold data of `draft` in `record`: the names it captures. (The source origins of
-/// its nodes are a column of the frozen graph, written with the records.) Every encoding of a
-/// draft calls it, so that nothing of the draft's debug data is lost on a commit.
+/// Records the cold data of `draft` in `record`: the names it captures and how it was derived.
+/// (The source origins of its nodes are a column of the frozen graph, written with the records.)
+/// Every encoding of a draft calls it, so that nothing of the draft's debug data is lost on a
+/// commit.
 void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft);
+
+/// How a graph was derived, besides what its nodes say (GCGraph::typeSpecializationRoot,
+/// GCGraph::flags).
+struct GCGraphDerivation {
+    GraphId typeSpecializationRoot = kInvalidGraphId;
+    uint8_t flags                  = 0;
+};
 
 /// The frame layout of a graph being built: the slot types, slot 0 included, or nullopt for a
 /// graph without one. The encoder builds the layout inside the graph's block
@@ -112,7 +119,8 @@ struct GCGraphBuildAccess {
         std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots);
 
     static GCGraph *constructInPlace(
-        void *memory, size_t bytes, GCGraphDebugRecord *debugRecord,
+        void *memory, size_t bytes, GraphId id, const GCGraphDerivation &derivation,
+        GCGraphDebugRecord *debugRecord,
         camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
         camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
         GCGraph *outerGraph, std::span<GCGraph *const> dependencies,
@@ -122,28 +130,19 @@ struct GCGraphBuildAccess {
         std::span<const slot_t> staticSlots);
 
     static GCGraph *create(
-        GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
-        const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
+        GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord,
+        camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
         camel::core::type::TupleType *closureType, GCGraph *outerGraph,
         std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
         std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
         const std::function<void(GCGraphPayloadArena &)> &emitPayload,
         std::span<const slot_t> staticSlots);
 
-    /// Records that `copy` is a private copy of `source` (GCGraph::originalGraph): the original
-    /// of `source` when it is a copy itself, else `source`. Set by a detached commit before
-    /// anything can see `copy`.
-    static void setOriginal(GCGraph *copy, GCGraph *source) {
-        copy->originalGraph_ = source->originalGraph_ ? source->originalGraph_ : source;
-    }
-
-    /// Makes `copy`, a commit's encoding of `source`, the same graph to the fact store
-    /// (GCGraph::lineage) and, when the commit did not change it, the same revision
-    /// (GCGraph::serial). Set before anything can see `copy`.
-    static void inheritIdentity(GCGraph *copy, const GCGraph *source, bool changed) {
-        copy->lineage_ = source->lineage_;
+    /// Makes `copy`, a commit's encoding of `source`, have the revision of `source` when the
+    /// commit did not change it (GCGraph::revision). Set before anything can see `copy`.
+    static void inheritRevision(GCGraph *copy, const GCGraph *source, bool changed) {
         if (!changed) {
-            copy->serial_ = source->serial_;
+            copy->revision_ = source->revision_;
         }
     }
 };

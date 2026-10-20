@@ -956,29 +956,33 @@ size_t dceDraft(GraphDraft &draft) {
 
 } // namespace
 
-GCGraph *ConstantFoldPass::apply(GCGraph *graph, std::ostream &) {
+const camel::runtime::Program *
+ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) {
     std::deque<camel::core::mm::RootHandle> roots;
-    return rewriteReachableGraphs(context_, graph, "std::opt::fold", [&](GraphDraft &draft) {
+    return rewriteReachableGraphs(context_, program, "std::opt::fold", [&](GraphDraft &draft) {
         return foldDraft(draft, *context_, roots);
     });
 }
 
-GCGraph *CommonSubexpressionPass::apply(GCGraph *graph, std::ostream &) {
-    return rewriteReachableGraphs(context_, graph, "std::opt::cse", cseDraft);
+const camel::runtime::Program *
+CommonSubexpressionPass::apply(const camel::runtime::Program *program, std::ostream &) {
+    return rewriteReachableGraphs(context_, program, "std::opt::cse", cseDraft);
 }
 
-GCGraph *DeadCodePass::apply(GCGraph *graph, std::ostream &) {
-    return rewriteReachableGraphs(context_, graph, "std::opt::dce", dceDraft);
+const camel::runtime::Program *
+DeadCodePass::apply(const camel::runtime::Program *program, std::ostream &) {
+    return rewriteReachableGraphs(context_, program, "std::opt::dce", dceDraft);
 }
 
-GCGraph *ControlReductionPass::apply(GCGraph *graph, std::ostream &) {
-    return rewriteReachableGraphs(context_, graph, "std::opt::ctrl", [](GraphDraft &draft) {
+const camel::runtime::Program *
+ControlReductionPass::apply(const camel::runtime::Program *program, std::ostream &) {
+    return rewriteReachableGraphs(context_, program, "std::opt::ctrl", [](GraphDraft &draft) {
         return camel::runtime::reduceControlDependencies(draft);
     });
 }
 
-GCGraph *simplifyGraph(
-    const camel::core::context::context_ptr_t &context, GCGraph *graph,
+const camel::runtime::Program *simplifyGraph(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds) {
     // One growth budget for all rounds: each round unrolls a recursion with constant arguments
     // one level further, so a budget per round would only be reached after maxRounds of them.
@@ -987,38 +991,38 @@ GCGraph *simplifyGraph(
     if (!config.growthSpentNodes) {
         config.growthSpentNodes = &growthSpent;
     }
-    const auto finish = [&](GCGraph *result) {
+    const auto finish = [&](const camel::runtime::Program *result) {
         return rewriteReachableGraphs(context, result, "std::opt::ctrl", [](GraphDraft &draft) {
             return camel::runtime::reduceControlDependencies(draft);
         });
     };
     for (size_t round = 0; round < maxRounds; ++round) {
         bool optChanged = false;
-        graph           = applyOptimizeRewritePass(context, graph, os, config, &optChanged);
+        program         = applyOptimizeRewritePass(context, program, os, config, &optChanged);
         std::deque<camel::core::mm::RootHandle> roots;
         size_t folded = 0, merged = 0, simplified = 0, removed = 0;
-        graph = rewriteReachableGraphs(
+        program = rewriteReachableGraphs(
             context,
-            graph,
+            program,
             "std::opt::fold",
             [&](GraphDraft &draft) { return foldDraft(draft, *context, roots); },
             &folded);
-        graph = rewriteReachableGraphs(context, graph, "std::opt::cse", cseDraft, &merged);
-        graph = rewriteReachableGraphs(
+        program = rewriteReachableGraphs(context, program, "std::opt::cse", cseDraft, &merged);
+        program = rewriteReachableGraphs(
             context,
-            graph,
+            program,
             "std::opt::algebra",
             [&](GraphDraft &draft) { return algebraDraft(draft, config.safeFloatingPoint); },
             &simplified);
-        graph = rewriteReachableGraphs(context, graph, "std::opt::dce", dceDraft, &removed);
+        program = rewriteReachableGraphs(context, program, "std::opt::dce", dceDraft, &removed);
         if (!optChanged && folded == 0 && merged == 0 && simplified == 0 && removed == 0) {
             CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
-            return finish(graph);
+            return finish(program);
         }
     }
     CAMEL_LOG_WARN_S(
         "Opt",
         "std::opt: still changing after {} rounds (a recursion of non-static depth?)",
         maxRounds);
-    return finish(graph);
+    return finish(program);
 }

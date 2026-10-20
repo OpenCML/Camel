@@ -21,8 +21,8 @@
 
 #include "engine.h"
 
-camel::runtime::GCGraph *
-InlineRewritePass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+InlineRewritePass::apply(const camel::runtime::Program *program, std::ostream &os) {
     OptimizeRewriteConfig config{
         .enableDevirtualization = false,
         .enableSpecialization   = false,
@@ -30,5 +30,5 @@ InlineRewritePass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
         .growthBudget           = growthBudget_,
         .inlineConfig           = config_,
     };
-    return applyOptimizeRewritePass(context_, graph, os, config);
+    return applyOptimizeRewritePass(context_, program, os, config);
 }

@@ -1655,6 +1655,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             factory.addNormArg(gct->loopStateName(j), stateTypes[j], false);
         }
         return createCompileGraph(
+            context_->graphIds().allocate(),
             factory.build(),
             currGraph_,
             std::format("{}.{}", graphBase, role));

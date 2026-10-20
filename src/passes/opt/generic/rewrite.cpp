@@ -226,10 +226,11 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     draft.eraseNode(id);
 }
 
-GCGraph *rewriteReachableGraphs(
-    const camel::core::context::context_ptr_t &context, GCGraph *graph, std::string_view passName,
-    const std::function<size_t(GraphDraft &)> &rewrite, size_t *rewrites) {
-    camel::runtime::RuntimeGraphDraftSession session(context, graph);
+const camel::runtime::Program *rewriteReachableGraphs(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
+    size_t *rewrites) {
+    camel::runtime::RuntimeGraphDraftSession session(context, program);
     size_t total = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
         total += rewrite(session.edit(g));
@@ -239,7 +240,7 @@ GCGraph *rewriteReachableGraphs(
         *rewrites = total;
     }
     if (total == 0) {
-        return graph;
+        return program;
     }
     return session.commit();
 }

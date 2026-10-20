@@ -55,7 +55,8 @@ class OnnxExportPass : public GraphTranslatePass {
     explicit OnnxExportPass(const camel::core::context::context_ptr_t &ctx, std::string out = {})
         : GraphTranslatePass(ctx), out_(std::move(out)) {}
 
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
     std::string out_; // the parameter `out`; empty: not given

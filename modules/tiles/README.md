@@ -66,7 +66,7 @@ Static regions now generate their launch plans and CUDA source from parameter ty
 when outlined, without allocating placeholder input tensors or initializing CUDA.
 The core context's process-local `tiles.compiled_region` target fact associates the
 owned template with the extracted callee graph. Re-encoding an unchanged callee
-preserves its lineage and revision, so the actual runtime call reads the same fact.
+preserves its GraphId and revision, so the actual runtime call reads the same fact.
 Each call copies the template and binds fresh inputs through an explicit parameter
 map; it does not extract the graph, infer shapes, instantiate operators or plan
 fusion again. Constants are retained separately from invocation bindings. Input
@@ -86,7 +86,7 @@ clear or another fact reader dropping a stale entry cannot permanently disable
 reuse. General `run` specialization does not infer eligibility from a cache miss.
 
 Templates live until replacement, explicit fact invalidation/clear, or destruction
-of their execution context. Replacing a revision reuses its lineage's fact entry.
+of their execution context. Replacing a revision reuses its graph's fact entry.
 The source LRU remains bounded separately; the graph-fact store has no LRU, so
 repeated construction of distinct decorated graphs in one long-lived context can
 retain additional templates until that context or its facts are released.

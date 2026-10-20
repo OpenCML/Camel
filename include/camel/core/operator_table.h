@@ -151,7 +151,7 @@ struct OperatorTraits {
     /// op-semantics 11.4), also on a back end that runs a private, lowered copy of the program:
     /// lowerLoopsToTailRecursion (camel/runtime/loop_lowering.h) passes each of its operands of
     /// function type through `:graph/original`, which takes a function value of the copy back
-    /// to the program's graph it was copied from (GCGraph::originalGraph).
+    /// to the program's graph it was copied from (Program::original).
     bool inspectsGraphs = false;
 };
 

@@ -35,7 +35,7 @@ using namespace camel::jit;
 #endif
 
 #if ENABLE_FASTVM_JIT
-static camel::runtime::GCGraph *applyMirDump(
+static const camel::runtime::Program *applyMirDump(
     const context_ptr_t &context, camel::runtime::GCGraph *graph, std::ostream &os, bool slotOnly) {
     auto linked = compileAndLink(
         context,
@@ -117,7 +117,9 @@ static camel::runtime::GCGraph *applyMirDump(
 }
 #endif
 
-camel::runtime::GCGraph *JitRmirDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+JitRmirDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
 #if ENABLE_FASTVM_JIT
     return applyMirDump(context_, graph, os, true);
 #else
@@ -127,7 +129,9 @@ camel::runtime::GCGraph *JitRmirDumpPass::apply(camel::runtime::GCGraph *graph, 
 #endif
 }
 
-camel::runtime::GCGraph *JitMirDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+JitMirDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
 #if ENABLE_FASTVM_JIT
     return applyMirDump(context_, graph, os, false);
 #else

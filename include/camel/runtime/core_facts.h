@@ -53,7 +53,7 @@
  *                                 relates to them, what it allocates, whether it has an external
  *                                 effect. Only at the nodes that touch something. Reads
  *                                 declarations; reads the graphs a FUNC, CALL or LOOP runs (the
- *                                 anchor's serial covers them).
+ *                                 anchor's revision covers them).
  *
  * The prefix `tiles.` is reserved to the module tiles (facts.h, registerKind): its analyses
  * register their own kinds and store them with their target's hash (class iii).

@@ -37,6 +37,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/fact_persist.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 #include "core/module/entity_internal.h"
 
@@ -261,13 +262,14 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
                 d.function,
                 d.params.size()));
     }
-    GCGraph *graph = camel::compile::gir::encodeToRuntimeGraph(function);
+    // Kept for as long as the context, refused or not: nothing else owns them.
+    Program *program = context_.reserveProgram();
+    camel::compile::gir::encodeToRuntimeProgram(function, *program, &context_.graphIds());
+    context_.pinRuntimeProgram(program);
+    GCGraph *graph = program->root();
     if (graph == nullptr) {
         return refuse(std::format("'{}::{}' could not be encoded", d.module, d.function));
     }
-    // Kept for as long as the context, refused or not: nothing else owns them.
-    const std::vector<GCGraph *> closure = collectReachableGraphs(graph);
-    context_.pinRuntimeGraphs(closure);
 
     // The signature (design 9.2): the operator's operands are the function's ordinary
     // parameters; nothing else is bound.

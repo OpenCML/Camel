@@ -230,9 +230,7 @@ std::vector<gc_node_ref_t> orderingOf(const GraphDraft &draft, gc_node_ref_t nod
 }
 
 gc_node_ref_t funcCallee(const GraphDraft &draft, gc_node_ref_t node, GCGraph **callee) {
-    const auto payload = draft.payloadOf(node);
-    ASSERT(payload.size_bytes() >= sizeof(rt::GCFuncBody), "autodiff: FUNC payload missing.");
-    *callee = reinterpret_cast<const rt::GCFuncBody *>(payload.data())->calleeGraph;
+    *callee = draft.calleeGraphOf(node);
     return node;
 }
 
@@ -308,9 +306,10 @@ gc_node_ref_t addAggregate(GraphDraft &draft, Type *type, std::span<const gc_nod
 
 /// A closure of `graph` (a graph key of the current group) capturing `captures`.
 gc_node_ref_t addClosure(
-    GraphDraft &draft, GCGraph *graph, FunctionType *type, TupleType *closureType,
-    std::span<const gc_node_ref_t> captures) {
-    auto *function             = ::Function::create(graph, closureType, mm::autoSpace());
+    rt::GraphDraftGroup &group, GraphDraft &draft, GCGraph *graph, FunctionType *type,
+    TupleType *closureType, std::span<const gc_node_ref_t> captures) {
+    auto *function =
+        ::Function::create(group.program(), group.idOf(graph), closureType, mm::autoSpace());
     const gc_node_ref_t source = draft.materializeStaticValue(toSlot<::Function *>(function), type);
     return addFill(draft, type, rt::GCFillKind::FunctionClosure, source, captures);
 }
@@ -828,8 +827,10 @@ class Backward final : public VjpBuilder {
 
 class Engine {
   public:
-    Engine(const camel::core::context::context_ptr_t &context, GCGraph *function)
-        : context_(context), group_(context), inlining_(context, function),
+    Engine(
+        const camel::core::context::context_ptr_t &context, const rt::Program *program,
+        GCGraph *function)
+        : context_(context), group_(context), inlining_(context, program, function),
           outerSource_(currentSource) {
         currentSource = context ? context->sourceContext() : nullptr;
     }
@@ -1094,8 +1095,7 @@ void ForwardRewrite::run() {
 }
 
 void ForwardRewrite::retarget(gc_node_ref_t func, const PullbackPlan &plan) {
-    auto payload                                                    = draft_.mutablePayloadOf(func);
-    reinterpret_cast<rt::GCFuncBody *>(payload.data())->calleeGraph = plan.forward;
+    draft_.setCalleeGraph(func, plan.forward);
     draft_.setNodeDataType(func, plan.forwardValueType);
     draft_.setNodeDataIndex(func, draft_.allocateRuntimeSlot(plan.forwardValueType));
 }
@@ -1530,9 +1530,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     std::vector<Type *> valueTypes = bodyPlan.stateTypes;
     valueTypes.insert(valueTypes.end(), bodyPlan.collectionTypes.begin(), bodyPlan.collectionTypes.end());
     Type *const valueType = TupleType::create(valueTypes);
-    rt::GCLoopBody *const payload =
-        reinterpret_cast<rt::GCLoopBody *>(draft_.mutablePayloadOf(loop).data());
-    payload->bodyGraph = bodyPlan.graphs.forward;
+    draft_.setLoopGraphs(loop, draft_.loopGraphsOf(loop).condGraph, bodyPlan.graphs.forward);
     draft_.setLoopCollectionCount(loop, static_cast<uint32_t>(bodyPlan.collectionTypes.size()));
     draft_.setNodeDataType(loop, valueType);
     draft_.setNodeDataIndex(loop, draft_.allocateRuntimeSlot(valueType));
@@ -1610,14 +1608,13 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // They are reserved (not encoded) now; the group re-points the graph references their payloads
     // hold when it encodes them, as it does for every member the transformation adds.
     const std::string key = bodyPlan.name + ".reverse";
-    GCGraph *const condKey = engine_.group().reserve(
-        "autodiff.loop/" + key + ".cond", "autodiff.loop/" + key + ".cond", key + ".cond");
+    GCGraph *const condKey =
+        engine_.group().reserve("autodiff.loop/" + key + ".cond", key + ".cond");
     engine_.group().define(condKey, buildReverseCond(reverse));
-    GCGraph *const bodyKey = engine_.group().reserve(
-        "autodiff.loop/" + key + ".body", "autodiff.loop/" + key + ".body", key + ".body");
+    GCGraph *const bodyKey =
+        engine_.group().reserve("autodiff.loop/" + key + ".body", key + ".body");
     engine_.group().define(bodyKey, buildReverseBody(reverse));
-    GCGraph *const closureKey = engine_.group().reserve(
-        "autodiff.loop/" + key, "autodiff.loop/" + key, key);
+    GCGraph *const closureKey = engine_.group().reserve("autodiff.loop/" + key, key);
     // What the reverse pass captures, in order: the tape, then the captures whose gradient it
     // starts from zero.
     std::vector<Type *> closureTypes = bodyPlan.collectionTypes;
@@ -1636,7 +1633,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
         closureKey,
         buildReverseClosure(reverse, closureType, condKey, bodyKey, captures));
     const gc_node_ref_t pullback =
-        addClosure(draft_, closureKey, site.pullbackType, closureType, captures);
+        addClosure(engine_.group(), draft_, closureKey, site.pullbackType, closureType, captures);
     // The site: the loop's value is `state`; its gradient is the gradient of the loop's value.
     CallSite recorded;
     recorded.pullback = pullback;
@@ -1850,10 +1847,17 @@ void ForwardRewrite::rewriteClosureCall(
         if (function == nullptr) {
             return nullptr;
         }
-        GCGraph *graph =
-            buildGradientGraph(engine_.context(), function->graph(), oper == kValueAndGrad);
+        const GradientGraph gradient = buildGradientGraph(
+            engine_.context(),
+            function->program(),
+            function->graph(),
+            oper == kValueAndGrad);
         // The gradient reads the same captured values as f.
-        result = ::Function::create(graph, function->tupleType(), mm::autoSpace());
+        result = ::Function::create(
+            gradient.program,
+            gradient.graph->id(),
+            function->tupleType(),
+            mm::autoSpace());
         if (::Tuple *closure = function->tuple()) {
             for (size_t i = 0; i < closure->size(); ++i) {
                 result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), function->tupleType());
@@ -2833,14 +2837,8 @@ std::vector<gc_node_ref_t> Backward::finishCaptures() {
 PullbackPlan Engine::reserve(const std::string &name, const PullbackPlan &types) {
     PullbackPlan plan = types;
     const auto suffix = uniqueSuffix();
-    plan.forward      = group_.reserve(
-        "autodiff.fwd/" + name + suffix,
-        "autodiff.fwd/" + name + suffix,
-        name + ".fwd");
-    plan.pullback = group_.reserve(
-        "autodiff.pb/" + name + suffix,
-        "autodiff.pb/" + name + suffix,
-        name + ".pb");
+    plan.forward      = group_.reserve("autodiff.fwd/" + name + suffix, name + ".fwd");
+    plan.pullback     = group_.reserve("autodiff.pb/" + name + suffix, name + ".pb");
     return plan;
 }
 
@@ -2992,7 +2990,7 @@ void Engine::build(Pending &pending) {
     pullback->setClosureType(closureType);
 
     const gc_node_ref_t closure =
-        addClosure(forward, plan.pullback, plan.pullbackType, closureType, captures);
+        addClosure(group_, forward, plan.pullback, plan.pullbackType, closureType, captures);
     const std::array<gc_node_ref_t, 2> pair{value, closure};
     setResult(forward, addAggregate(forward, plan.forwardValueType, pair));
     pruneUnreachable(forward);
@@ -3202,7 +3200,6 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
 
     const std::string suffix = uniqueSuffix();
     GCGraph *key             = group_.reserve(
-        "autodiff.grad/" + function->stableId() + suffix,
         "autodiff.grad/" + function->mangledName() + suffix,
         "grad(" + function->name() + ")");
     group_.define(key, std::move(draft));
@@ -3282,10 +3279,12 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
     return signature;
 }
 
-GCGraph *buildGradientGraph(
-    const camel::core::context::context_ptr_t &context, GCGraph *function, bool withValue) {
-    Engine engine(context, function);
-    return engine.gradient(function, withValue);
+GradientGraph buildGradientGraph(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    GCGraph *function, bool withValue) {
+    Engine engine(context, program, function);
+    GCGraph *graph = engine.gradient(function, withValue);
+    return {engine.group().program(), graph};
 }
 
 } // namespace camel::autodiff

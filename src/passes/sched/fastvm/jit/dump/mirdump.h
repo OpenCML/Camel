@@ -31,8 +31,8 @@ class JitRmirDumpPass : public RuntimeGraphTranslatePass {
   public:
     JitRmirDumpPass(const ctx::context_ptr_t &ctx) : RuntimeGraphTranslatePass(ctx) {}
     virtual ~JitRmirDumpPass() = default;
-    virtual camel::runtime::GCGraph *
-    apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    virtual const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
 /**
@@ -43,6 +43,6 @@ class JitMirDumpPass : public RuntimeGraphTranslatePass {
   public:
     JitMirDumpPass(const ctx::context_ptr_t &ctx) : RuntimeGraphTranslatePass(ctx) {}
     virtual ~JitMirDumpPass() = default;
-    virtual camel::runtime::GCGraph *
-    apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    virtual const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };

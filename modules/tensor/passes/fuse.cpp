@@ -236,8 +236,9 @@ size_t useLibraryGemm(GraphDraft &draft) {
 
 } // namespace
 
-GCGraph *TensorFusePass::apply(GCGraph *graph, std::ostream &) {
-    RuntimeGraphDraftSession session(context_, graph);
+const camel::runtime::Program *
+TensorFusePass::apply(const camel::runtime::Program *program, std::ostream &) {
+    RuntimeGraphDraftSession session(context_, program);
     size_t fusedCount = 0, libraryCount = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
         GraphDraft &draft = session.edit(g);
@@ -253,10 +254,9 @@ GCGraph *TensorFusePass::apply(GCGraph *graph, std::ostream &) {
         fusedCount,
         libraryCount);
     if (fusedCount == 0 && libraryCount == 0) {
-        return graph;
+        return program;
     }
-    session.commit();
-    return context_->runtimeRootGraph();
+    return session.commit();
 }
 
 namespace {
@@ -268,14 +268,15 @@ class ParamEchoTestPass : public GraphIRPass {
     ParamEchoTestPass(const core::context::context_ptr_t &ctx, PassArgs args)
         : GraphIRPass(ctx), args_(std::move(args)) {}
 
-    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
         os << std::format(
             "test_echo: n={} ratio={} label={} flag={}\n",
             args_.getInt("n"),
             args_.getFloat("ratio"),
             args_.getString("label"),
             args_.getBool("flag"));
-        return graph;
+        return program;
     }
 
   private:

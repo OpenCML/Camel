@@ -381,19 +381,15 @@ inline void setNodeMacro(node_handle_t node, bool enabled) {
     nodeDraftOf(node)->setNodeRuntimeFlags(nodeIdOf(node), flags);
 }
 
-inline std::string makeCompileGraphStableId(const std::string &name) {
-    static std::atomic<uint64_t> seq = 1;
-    return std::format("{}_{}", name.empty() ? "g" : name, seq++);
-}
-
 inline compile_graph_ptr_t createCompileGraph(
-    FunctionType *funcType, const compile_graph_ptr_t &outer, std::string name = "") {
+    runtime::GraphId id, FunctionType *funcType, const compile_graph_ptr_t &outer,
+    std::string name = "") {
     auto graph = std::make_shared<DraftGraphBuilder>(funcType ? funcType : FunctionType::create());
+    graph->draft().setId(id);
     if (name.empty()) {
-        name = std::format("__{}__", makeCompileGraphStableId(""));
+        name = std::format("__g_{}__", runtime::toValue(id));
     }
     graph->setName(std::move(name));
-    graph->setStableId(makeCompileGraphStableId(graph->name()));
     if (outer) {
         graph->setOuterGraph(outer);
         outer->addSubGraph(graph);
@@ -616,9 +612,9 @@ inline void registerGraphOrigin(
     auto origin =
         deriveGirOrigin(context, gct, camel::source::OriginKind::Graph, label, mergedInputs);
     if (origin != camel::source::kInvalidOriginId) {
-        sourceContext->debugMap().registerGraphOrigin(graph->stableId(), origin);
+        sourceContext->debugMap().registerGraphOrigin(graph->graphId(), origin);
         sourceContext->registerGirGraphSemantic(
-            graph->stableId(),
+            graph->graphId(),
             makeGirSemanticBundle(
                 origin,
                 context,
@@ -696,7 +692,7 @@ inline void bindGraphScopedFuncNodeDebug(
     if (nodeDraftOf(node)->nodeOrigin(nodeIdOf(node)) == 0) {
         nodeDraftOf(node)->setNodeOrigin(nodeIdOf(node), graphOrigin);
     }
-    if (const auto *graphSemantic = sc->girGraphSemantic(graph->stableId())) {
+    if (const auto *graphSemantic = sc->girGraphSemantic(graph->graphId())) {
         sc->bindGirNodeDraftDebug(draftDebugKey(node), graphOrigin, *graphSemantic);
     } else {
         camel::source::SemanticBundle bundle;

@@ -25,8 +25,8 @@ slot_t invokeOriginal(ArgsView &, ArgsView &norm, camel::core::context::Context 
 }
 } // namespace
 
-camel::runtime::GCGraph *
-NativeCallbackTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
+const camel::runtime::Program *
+NativeCallbackTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
     namespace rt       = camel::runtime;
     constexpr auto uri = "test:native_callback";
     camel::core::OperatorTable::instance().set(
@@ -40,7 +40,7 @@ NativeCallbackTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
                 context,
                 std::unordered_map<std::string, operator_t>{{"native_callback", &invokeOriginal}});
         });
-    rt::RuntimeGraphDraftSession session(context_, graph);
+    rt::RuntimeGraphDraftSession session(context_, program);
     bool changed = false;
     for (auto *owner : session.collectReachableRuntimeGraphs()) {
         for (rt::gc_node_ref_t id = 0; id < owner->nodeCount(); ++id) {
@@ -72,5 +72,5 @@ NativeCallbackTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
             changed = true;
         }
     }
-    return changed ? session.commit() : graph;
+    return changed ? session.commit() : program;
 }

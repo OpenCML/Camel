@@ -24,8 +24,11 @@
 
 #include <new>
 
+#include "camel/runtime/graph_id.h"
+
 namespace camel::runtime {
 class GCGraph;
+class Program;
 } // namespace camel::runtime
 
 namespace rtdata = camel::core::rtdata;
@@ -36,15 +39,19 @@ class Function : public rtdata::Object {
     Function(const Function &)            = delete;
     Function &operator=(const Function &) = delete;
 
+    /// A function value of the graph `graph` of `program` with an empty closure of the layout
+    /// `tupleType`.
     static Function *create(
-        camel::runtime::GCGraph *graph, const type::Type *tupleType,
-        camel::core::mm::IAllocator &allocator);
+        const camel::runtime::Program *program, camel::runtime::GraphId graph,
+        const type::Type *tupleType, camel::core::mm::IAllocator &allocator);
 
-    // Runtime identity always flows through the materialized GCGraph carrier.
-    camel::runtime::GCGraph *graph() const { return runtimeGraph_; }
-    camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
-    bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
-    void setRuntimeGraph(camel::runtime::GCGraph *graph);
+    /// The graph the function value is of: the version `program()` holds of the graph
+    /// `graphId()`. Two function values are of the same graph when their ids are equal.
+    camel::runtime::GCGraph *graph() const;
+    camel::runtime::GraphId graphId() const { return graphId_; }
+    const camel::runtime::Program *program() const { return program_; }
+    /// Makes the function value one of the graph `graph` of `program`.
+    void rebind(const camel::runtime::Program *program, camel::runtime::GraphId graph);
     Tuple *tuple() { return closure_; }
     const Tuple *tuple() const { return closure_; }
 
@@ -60,7 +67,7 @@ class Function : public rtdata::Object {
 
         const Function *fnOther = reinterpret_cast<const Function *>(other);
 
-        if (runtimeGraph_ != fnOther->runtimeGraph_)
+        if (graphId_ != fnOther->graphId_)
             return false;
 
         const type::TupleType *tupleTypePtr = tupleType();
@@ -79,7 +86,7 @@ class Function : public rtdata::Object {
         if (!mem)
             throw std::bad_alloc();
 
-        Function *fnNew = new (mem) Function(runtimeGraph_, tupleType_);
+        Function *fnNew = new (mem) Function(program_, graphId_, tupleType_);
 
         if (closure_) {
             const type::TupleType *tupleTypePtr = tupleType();
@@ -95,18 +102,21 @@ class Function : public rtdata::Object {
     virtual void print(std::ostream &os, const type::Type *type) const override;
 
     virtual void onMoved() override {
-        // Graph pointers are non-owning metadata references. Closure objects are
-        // updated through updateRefs when the GC relocates traced objects.
+        // The program is a non-owning reference. Closure objects are updated through
+        // updateRefs when the GC relocates traced objects.
     }
 
     virtual void
     updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override;
 
   private:
-    explicit Function(camel::runtime::GCGraph *runtimeGraph, const type::TupleType *tupleType)
-        : runtimeGraph_(runtimeGraph), closure_(nullptr), tupleType_(tupleType) {}
+    Function(
+        const camel::runtime::Program *program, camel::runtime::GraphId graph,
+        const type::TupleType *tupleType)
+        : program_(program), graphId_(graph), closure_(nullptr), tupleType_(tupleType) {}
 
-    camel::runtime::GCGraph *runtimeGraph_;
+    const camel::runtime::Program *program_;
+    camel::runtime::GraphId graphId_;
     Tuple *closure_;
     const type::TupleType *tupleType_ = nullptr;
 };

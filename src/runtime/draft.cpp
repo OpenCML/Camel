@@ -40,6 +40,7 @@
 #include <cstring>
 #include <limits>
 #include <ranges>
+#include <format>
 #include <stdexcept>
 
 namespace camel::runtime {
@@ -630,12 +631,6 @@ size_t GraphDraft::payloadBytesForSourceNode(const GCGraph *graph, gc_node_ref_t
     if (sourceNode->kind == GCNodeKind::Brch) {
         return sizeof(DraftBrchPayload) + graph->branchArmsOf(sourceRef).size_bytes();
     }
-    if (sourceNode->kind == GCNodeKind::Func) {
-        return sizeof(GCFuncBody); // the callee itself, not the frozen index (see decode)
-    }
-    if (sourceNode->kind == GCNodeKind::Loop) {
-        return sizeof(GCLoopBody); // the two graphs themselves, as for a FUNC
-    }
     return graph->nodePayloadBytes(sourceRef).size();
 }
 
@@ -698,12 +693,6 @@ DraftNode *GraphDraft::createDecodedNode(
             armBytes[i].head = translateNodeRef(sourceArms[i].head, sourceToDraft);
             armBytes[i].tail = translateNodeRef(sourceArms[i].tail, sourceToDraft);
         }
-    } else if (sourceNode->kind == GCNodeKind::Func) {
-        // A frozen FUNC names its callee by reference-table index; a draft holds the callee.
-        *DraftNodeView::payloadAs<GCFuncBody>(draftNode) =
-            GCFuncBody{.calleeGraph = graph->directCalleeGraphOf(sourceRef)};
-    } else if (sourceNode->kind == GCNodeKind::Loop) {
-        *DraftNodeView::payloadAs<GCLoopBody>(draftNode) = loopBodyOf(*graph, sourceRef);
     } else if (const auto body = graph->nodePayloadBytes(sourceRef); !body.empty()) {
         std::memcpy(DraftNodeView::payload(draftNode).data(), body.data(), body.size());
         if (sourceNode->kind == GCNodeKind::Join) {
@@ -735,6 +724,9 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
         graph->name(),
         graph->nodeCount());
     auto draft       = std::make_unique<GraphDraft>();
+    draft->id_       = graph->id();
+    draft->typeSpecializationRoot_ = graph->typeSpecializationRoot();
+    draft->flags_                  = graph->flags();
     draft->funcType_ = graph->funcType();
     draft->captureNames_.assign(graph->captureNames().begin(), graph->captureNames().end());
     if (const auto *layout = graph->runtimeDataType()) {
@@ -749,6 +741,10 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
         draft->staticSlotTypes_.clear();
     }
     // Views of the reference table by role, built once each.
+    draft->payloadGraphs_.assign(graph->refs().begin(), graph->refs().end());
+    for (uint32_t i = 0; i < draft->payloadGraphs_.size(); ++i) {
+        draft->payloadGraphIndex_.emplace(draft->payloadGraphs_[i], i);
+    }
     draft->dependencies_    = graph->dependencies();
     draft->subGraphs_       = graph->subGraphs();
     draft->staticGraphRefs_ = graph->staticGraphRefs();
@@ -1359,6 +1355,61 @@ void GraphDraft::addCaptureName(std::string_view name) {
     captureNames_.push_back(camel::core::internSymbol(name));
 }
 
+uint32_t GraphDraft::payloadGraphIndexOf(GCGraph *graph) {
+    if (graph == nullptr) {
+        return kNoLoopGraph;
+    }
+    const auto [it, added] =
+        payloadGraphIndex_.emplace(graph, static_cast<uint32_t>(payloadGraphs_.size()));
+    if (added) {
+        payloadGraphs_.push_back(graph);
+    }
+    return it->second;
+}
+
+GCGraph *GraphDraft::payloadGraphAt(uint32_t index) const {
+    if (index == kNoLoopGraph) {
+        return nullptr;
+    }
+    if (index >= payloadGraphs_.size()) {
+        throw std::runtime_error(
+            std::format("A payload names graph {} of {} in the reference table.", index, payloadGraphs_.size()));
+    }
+    return payloadGraphs_[index];
+}
+
+GCGraph *GraphDraft::calleeGraphOf(gc_node_ref_t id) const {
+    const DraftNode *draftNode = node(id);
+    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
+    return payloadGraphAt(DraftNodeView::payloadAs<GCFuncRef>(draftNode)->ref);
+}
+
+void GraphDraft::setCalleeGraph(gc_node_ref_t id, GCGraph *callee) {
+    DraftNode *draftNode = node(id);
+    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
+    DraftNodeView::payloadAs<GCFuncRef>(draftNode)->ref = payloadGraphIndexOf(callee);
+}
+
+GCLoopBody GraphDraft::loopGraphsOf(gc_node_ref_t id) const {
+    const DraftNode *draftNode = node(id);
+    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop, "Not a LOOP node.");
+    const auto *ref = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
+    return GCLoopBody{
+        .condGraph       = payloadGraphAt(ref->condRef),
+        .bodyGraph       = payloadGraphAt(ref->bodyRef),
+        .kind            = ref->kind,
+        .collectionCount = ref->collectionCount,
+    };
+}
+
+void GraphDraft::setLoopGraphs(gc_node_ref_t id, GCGraph *cond, GCGraph *body) {
+    DraftNode *draftNode = node(id);
+    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop, "Not a LOOP node.");
+    auto *ref    = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
+    ref->condRef = payloadGraphIndexOf(cond);
+    ref->bodyRef = payloadGraphIndexOf(body);
+}
+
 void GraphDraft::addStaticGraphRef(GCGraph *graph) {
     if (graph && std::find(staticGraphRefs_.begin(), staticGraphRefs_.end(), graph) ==
                      staticGraphRefs_.end()) {
@@ -1366,9 +1417,8 @@ void GraphDraft::addStaticGraphRef(GCGraph *graph) {
     }
 }
 
-GCGraph *GraphDraft::encode(
-    const std::string &stableId, const std::string &mangledName, const std::string &name) const {
-    auto *debugRecord = createGraphDebugRecord(stableId, mangledName, name);
+GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &name) const {
+    auto *debugRecord = createGraphDebugRecord(mangledName, name);
     recordDraftDebugData(debugRecord, *this);
     camel::core::type::TupleType *staticDataType = nullptr;
     if (!staticSlotTypes_.empty()) {
@@ -1376,7 +1426,10 @@ GCGraph *GraphDraft::encode(
     }
     const auto payloadShape = describeDraftNativePayload(*this);
 
+    ASSERT(isValid(id_), "Encoding a graph draft requires its GraphId.");
     return GCGraphBuildAccess::create(
+        id_,
+        GCGraphDerivation{typeSpecializationRoot_, flags_},
         debugRecord,
         funcType_,
         frameSlotTypes(),

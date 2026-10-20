@@ -60,7 +60,6 @@ struct ExecutionSiteHint {
     camel::runtime::GCGraph *runtimeGraph   = nullptr;
     size_t pc                               = 0;
     camel::source::origin_id_t cachedOrigin = camel::source::kInvalidOriginId;
-    std::string stableId;
 };
 
 struct ExecutionSite {
@@ -68,7 +67,6 @@ struct ExecutionSite {
     camel::runtime::GCGraph *runtimeGraph   = nullptr;
     size_t pc                               = 0;
     camel::source::origin_id_t cachedOrigin = camel::source::kInvalidOriginId;
-    std::string stableId;
     std::thread::id threadId = std::this_thread::get_id();
     size_t frameDepth        = 0;
     std::string taskLabel;

@@ -10,7 +10,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "registry_and_store"
-desc = "test::facts: each registration rule rejects one kind (owner prefix, core. and tiles. reserved to their owners, print, class (i) needs compute, class (iii) is never persisted, encode with decode, Cone needs its hash, the same key as another kind); tiles may register tiles.*. Typed access, scopes, a GraphContent fact read from the graph and not storable, a Target fact needs and checks its hash, a cross-graph fact, the validator. A commit that asks to edit main without changing it keeps its serial and its facts; one that changes main makes the facts on main and on the root (which refers to it) stale, keeps those on f, and revalidates a Cone fact whose node did not change; a new declaration makes the facts that read declarations stale and keeps the others; invalidation."
+desc = "test::facts: each registration rule rejects one kind (owner prefix, core. and tiles. reserved to their owners, print, class (i) needs compute, class (iii) is never persisted, encode with decode, Cone needs its hash, the same key as another kind); tiles may register tiles.*. Typed access, scopes, a GraphContent fact read from the graph and not storable, a Target fact needs and checks its hash, a cross-graph fact, the validator. A commit that asks to edit main without changing it keeps its revision and its facts; one that changes main makes the facts on main and on the root (which refers to it) stale, keeps those on f, and revalidates a Cone fact whose node did not change; a new declaration makes the facts that read declarations stale and keeps the others; invalidation. Every graph keeps its GraphId across the commits."
 kind = "behavior"
 case = "../../../cases/facts/two_functions.cml"
 args = ["${case}", "test::facts"]
@@ -43,8 +43,9 @@ for (const l of [
   "FACTS content is the graph's", 'FACTS target_same valid', 'FACTS target_other stale',
   'FACTS cross_graph valid', 'FACTS cross_graph_other_anchors absent',
   'FACTS verify_wrong differs', 'FACTS verify_right equal',
-  'FACTS unchanged_serial_main kept', 'FACTS unchanged_main valid',
-  'FACTS lineage_main kept', 'FACTS serial_main new', 'FACTS serial_f kept', 'FACTS serial_root new',
+  'FACTS unchanged_revision_main kept', 'FACTS unchanged_main valid',
+  'FACTS id_main kept', 'FACTS id_f kept', 'FACTS id_root kept',
+  'FACTS revision_main new', 'FACTS revision_f kept', 'FACTS revision_root kept',
   'FACTS after_commit_main stale', 'FACTS after_commit_root stale', 'FACTS after_commit_f valid',
   'FACTS after_commit_cross_graph stale', 'FACTS after_commit_cone revalidated',
   'FACTS after_declaration_reads_declarations stale', 'FACTS after_declaration_reads_none valid',
@@ -120,7 +121,7 @@ for (const l of [
   '60.0',
 ]) line(l)
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
-assert(!out.includes('shared lineage'), 'one graph per lineage')
+assert(!out.includes('shared id'), 'one graph per GraphId')
 }
 """
 

@@ -79,19 +79,6 @@ camel::source::origin_id_t resolveOriginFromSite(
 
     const auto &debugMap = sourceContext->debugMap();
 
-    if (!site.stableId.empty()) {
-        if (site.kind == ExecutionSiteKind::Node || site.kind == ExecutionSiteKind::TaskNode) {
-            auto origin = debugMap.nodeOrigin(site.stableId);
-            if (origin != camel::source::kInvalidOriginId) {
-                return origin;
-            }
-        }
-        auto graphOrigin = debugMap.graphOrigin(site.stableId);
-        if (graphOrigin != camel::source::kInvalidOriginId) {
-            return graphOrigin;
-        }
-    }
-
     if (site.kind == ExecutionSiteKind::BytecodePc || site.kind == ExecutionSiteKind::JitPc) {
         auto origin = debugMap.pcOrigin(site.pc);
         if (origin != camel::source::kInvalidOriginId) {

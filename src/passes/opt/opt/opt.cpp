@@ -21,7 +21,7 @@
 
 #include "camel/passes/opt/generic.h"
 
-camel::runtime::GCGraph *
-OptimizeRewritePass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
-    return simplifyGraph(context_, graph, config_, os);
+const camel::runtime::Program *
+OptimizeRewritePass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    return simplifyGraph(context_, program, config_, os);
 }

@@ -53,6 +53,7 @@ class Function;
 
 namespace camel::runtime {
 class GCGraph;
+class Program;
 }
 
 namespace camel::onnx {
@@ -117,6 +118,7 @@ Model translateFunction(
  * left as it is. Throws ExportError.
  */
 Model translateEntryGraph(
-    core::context::Context &ctx, camel::runtime::GCGraph *root, const ExportOptions &options = {});
+    core::context::Context &ctx, const camel::runtime::Program *program,
+    const ExportOptions &options = {});
 
 } // namespace camel::onnx

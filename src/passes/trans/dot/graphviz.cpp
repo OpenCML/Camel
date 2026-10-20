@@ -654,7 +654,9 @@ std::string dumpCompactRuntimeGraph(camel::runtime::GCGraph *graph, const contex
     return pass.dumpDot(graph);
 }
 
-camel::runtime::GCGraph *GraphVizDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+GraphVizDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     os << dumpGraph(graph);
     return nullptr;
 }

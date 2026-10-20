@@ -55,7 +55,8 @@ void Builder::ensureRootGraph() {
     if (rootGraph_) {
         return;
     }
-    rootGraph_ = createCompileGraph(FunctionType::create(), nullptr, "__root__");
+    rootGraph_ = createCompileGraph(
+        context_->graphIds().allocate(), FunctionType::create(), nullptr, "__root__");
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
         rootGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
             sourceContext.get());
@@ -74,14 +75,12 @@ void Builder::buildEntryCall() {
         // program as a whole (a translation pass that finds nothing to translate): it
         // shares the origin of `main`, also after passes have inlined `main` into it.
         if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
-            const auto mainOrigin = sourceContext->debugMap().graphOrigin(entryGraph->stableId());
+            const auto mainOrigin = sourceContext->debugMap().graphOrigin(entryGraph->graphId());
             if (mainOrigin != camel::source::kInvalidOriginId) {
-                sourceContext->debugMap().registerGraphOrigin(rootGraph_->stableId(), mainOrigin);
-                // Also under a fixed key: the entry graph is rewritten (and renamed) by
-                // passes, the question "where is main" outlives that.
-                sourceContext->debugMap().registerGraphOrigin(
-                    camel::execute::kEntryFunctionOriginKey,
-                    mainOrigin);
+                sourceContext->debugMap().registerGraphOrigin(rootGraph_->graphId(), mainOrigin);
+                // Also as the origin of the entry function: the entry graph is rewritten (and
+                // renamed) by passes, the question "where is main" outlives that.
+                sourceContext->debugMap().registerEntryOrigin(mainOrigin);
             }
         }
         // `main` is a function like any other: its parameters are the inputs of the
@@ -150,7 +149,7 @@ compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::strin
     std::string scopeName = name;
     if (name.empty()) {
         const bool atRoot = currGraph_ == rootGraph_;
-        currGraph_        = createCompileGraph(funcType, currGraph_);
+        currGraph_        = createCompileGraph(context_->graphIds().allocate(), funcType, currGraph_);
         if (atRoot) {
             rootSubGraphOwners_[currGraph_.get()] = unit_;
         }
@@ -170,7 +169,7 @@ compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::strin
             }
         }
         if (!found) {
-            found = createCompileGraph(funcType, currGraph_, name);
+            found = createCompileGraph(context_->graphIds().allocate(), funcType, currGraph_, name);
             insertGraph(name, found);
             if (currGraph_ == rootGraph_) {
                 rootSubGraphOwners_[found.get()] = unit_;
@@ -299,7 +298,7 @@ node_handle_t Builder::resolveNodeByRef(const std::string &name) {
         }
         auto sourceContext = context_ ? context_->sourceContext() : nullptr;
         auto origin        = (sourceContext && currGraph_)
-                                 ? sourceContext->debugMap().graphOrigin(currGraph_->stableId())
+                                 ? sourceContext->debugMap().graphOrigin(currGraph_->graphId())
                                  : camel::source::kInvalidOriginId;
         diags_->of(SemanticDiag::UnresolvedReference).atOrigin(origin).commit(name);
         throw BuildAbortException();
@@ -332,7 +331,7 @@ void Builder::recordDeclaration(
     recorder_->valueBound(
         origin,
         name,
-        currGraph_ ? currGraph_->stableId() : std::string(),
+        currGraph_ ? currGraph_->graphId() : runtime::kInvalidGraphId,
         nodeDraftOf(node)->nodeOrigin(nodeIdOf(node)),
         nodeTypeOf(node),
         isVariable(node));
@@ -562,7 +561,7 @@ void Builder::buildFuncBody(
         unit_->builtFunctions.push_back({graph.get(), gct->origin(), name});
         unit_->builtBodies.push_back(graph);
         if (recorder_) {
-            recorder_->functionBuilt(gct->origin(), name, graph->stableId(), funcType);
+            recorder_->functionBuilt(gct->origin(), name, graph->graphId(), funcType);
         }
     } catch (const camel::core::mm::MemoryExhausted &e) {
         // Say which function was being compiled; the allocator does not know.

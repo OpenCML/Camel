@@ -70,7 +70,7 @@
 
 ### 2.5 图优化与 Pass
 
-- **GraphIRPass**（`execute/base.h`）：对 GIR 做只读或改写，接口为 `apply(graph, os)`。
+- **GraphIRPass**（`execute/base.h`）：对 GIR 做只读或改写，接口为 `const Program *apply(const Program *program, std::ostream &os)`。`Program`（`runtime/program.h`）是程序快照：`GraphId` 到该图当前版本的表，`program->root()` 是入口图。遍收到前一遍留下的程序，不改写就返回收到的 `program`，改写就开一个 `RuntimeGraphDraftSession(context_, program)`、返回 `session.commit()`（新的 `Program`），消费了程序（调度、翻译）返回 `nullptr`。遍不得在 `commit()` 之后继续使用旧 `Program` 的图；函数值（`::Function`）以（`Program`，`GraphId`）指向图，用 `function->graph()` 取图；新建图须先向 `context->graphIds()` 取 `GraphId`（`GraphDraft::setId`）。没有兼容层：旧的 `GCGraph *apply(GCGraph *, ...)` 已删除。
 - **GraphSchedulePass**（`execute/sched.h`）：调度类 Pass，将图转化为可执行形式（线性序列或并行 DAG）。
 - 内置 Pass 在 `builtin/passes/`：例如 trans（dot 可视化、topo-node-seq）、sched（linear、parallel）。
 - 通过 `camel inspect -P --pass-until <n>` 可执行到指定图优化阶段。

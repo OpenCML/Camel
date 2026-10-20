@@ -35,6 +35,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/mm/alloc/growable.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/program.h"
 
 #include <cstdint>
 #include <memory>
@@ -49,7 +50,6 @@ namespace camel::runtime {
 
 struct RuntimeDraftIdentity {
     GCGraph *sourceGraph = nullptr;
-    std::string stableId;
     std::string mangledName;
     std::string name;
 };
@@ -99,12 +99,9 @@ class GraphSpaceExhausted : public camel::core::mm::MemoryExhausted {
     std::string graph_;
 };
 
-/// Suffix tag of a specialization that binds no value and only refines parameter types
-/// (`loop$tspec3`): the stable id up to the first such tag names the function it derives from.
+/// Suffix tag of the name of a specialization that binds no value and only refines parameter
+/// types (`loop$tspec3`); GCGraph::typeSpecializationRoot records what it derives from.
 inline constexpr std::string_view kTypeSpecializationTag = "tspec";
-
-/// The stable id of the function a (possibly type-specialized) graph derives from.
-std::string typeSpecializationRoot(std::string_view stableId);
 
 struct RuntimeSpecializationKeyHasher {
     size_t operator()(const RuntimeSpecializationKey &key) const;
@@ -112,9 +109,16 @@ struct RuntimeSpecializationKeyHasher {
 
 class RuntimeGraphDraftSession {
   public:
+    /// A session over the graphs reachable from the root of `program`.
     RuntimeGraphDraftSession(
-        const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot);
+        const camel::core::context::context_ptr_t &context, const Program *program);
+    /// A session over the graphs reachable from `runtimeRoot`, a graph of `program`.
+    RuntimeGraphDraftSession(
+        const camel::core::context::context_ptr_t &context, const Program *program,
+        GCGraph *runtimeRoot);
 
+    /// The program the session rewrites; after a commit, the program it produced.
+    const Program *program() const { return program_; }
     GCGraph *runtimeRoot() const { return runtimeRoot_; }
     /// The context of the program the session rewrites.
     const camel::core::context::context_ptr_t &context() const { return context_; }
@@ -129,17 +133,17 @@ class RuntimeGraphDraftSession {
     GCGraph *findSpecialization(const RuntimeSpecializationKey &key) const;
     void rememberSpecialization(RuntimeSpecializationKey key, GCGraph *graph);
 
-    /// Type-only specializations (see kTypeSpecializationTag) of the function `rootStableId`
-    /// that the program holds: those reachable when first asked, plus those noted since.
-    size_t typeSpecializationCount(const std::string &rootStableId);
-    void noteTypeSpecialization(const std::string &rootStableId);
+    /// Type-only specializations (see kTypeSpecializationTag) of the function `root` that the
+    /// program holds: those reachable when first asked, plus those noted since.
+    size_t typeSpecializationCount(GraphId root);
+    void noteTypeSpecialization(GraphId root);
 
     std::vector<GCGraph *> collectReachableRuntimeGraphs() const;
-    /// Encodes the edited closure and returns its root. A session over the program's root
-    /// replaces the program with it; with `detached` (a back end's private rewrite, such as
-    /// lowering loops before it runs) the program is left as it is and the new graphs are kept
-    /// alive as detached graphs (Context::trackDetachedRuntimeGraphs).
-    GCGraph *commit(bool detached = false);
+    /// Encodes the edited closure into a new program and returns it. A session over the
+    /// program's root installs it as the program of the context; with `detached` (a back end's
+    /// private rewrite, such as lowering loops before it runs) the program is left as it is and
+    /// the new program is kept alive as a detached one (Context::trackDetachedRuntimeProgram).
+    const Program *commit(bool detached = false);
 
   private:
     struct DraftEntry {
@@ -149,19 +153,17 @@ class RuntimeGraphDraftSession {
 
     GraphDraft &ensureDraft(GCGraph *graph);
     std::vector<GCGraph *> collectCommitClosure() const;
-    /// The graphs of `closure` whose copy gets a new revision (GCGraph::serial): edited, or
-    /// referring at any depth to an edited one.
-    std::unordered_set<GCGraph *> changedGraphs(const std::vector<GCGraph *> &closure) const;
 
     camel::core::context::context_ptr_t context_;
-    GCGraph *runtimeRoot_ = nullptr;
+    const Program *program_ = nullptr;
+    GCGraph *runtimeRoot_   = nullptr;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
     /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself.
     /// The commit drops those it encodes back to the same content (sameContent).
     std::unordered_set<GCGraph *> edited_;
     std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
         specializationCache_;
-    std::unordered_map<std::string, size_t> typeSpecializationCounts_;
+    std::unordered_map<GraphId, size_t> typeSpecializationCounts_;
     bool typeSpecializationCountsReady_ = false;
 };
 
@@ -179,7 +181,7 @@ class GraphDraftGroup {
     GraphDraftGroup &operator=(const GraphDraftGroup &) = delete;
 
     /// Reserves a member with an empty draft and returns its key.
-    GCGraph *reserve(std::string stableId, std::string mangledName, std::string name);
+    GCGraph *reserve(std::string mangledName, std::string name);
     /// The draft of a member.
     GraphDraft &draft(GCGraph *key);
     /// Replaces the draft of a member.
@@ -189,10 +191,17 @@ class GraphDraftGroup {
     void encode();
     /// The graph encoded for `key`.
     GCGraph *encoded(GCGraph *key) const;
+    /// The program of the members, the first one reserved as its root. A function value of a
+    /// member made before encode() names its graph in it by the member's id (idOf); the graph
+    /// is the member's key until the group is encoded.
+    const Program *program() const { return program_; }
+    /// The id the graph of the member `key` has.
+    GraphId idOf(GCGraph *key) const { return member(key).id; }
 
   private:
     struct Member {
         RuntimeDraftIdentity identity;
+        GraphId id = kInvalidGraphId;
         std::unique_ptr<GraphDraft> draft;
         GCGraph *encoded = nullptr;
         std::byte keyStorage{};
@@ -204,7 +213,8 @@ class GraphDraftGroup {
     camel::core::context::context_ptr_t context_;
     std::unordered_map<GCGraph *, std::unique_ptr<Member>> members_;
     std::vector<GCGraph *> order_;
-    bool encoded_ = false;
+    Program *program_ = nullptr;
+    bool encoded_     = false;
 };
 
 } // namespace camel::runtime
