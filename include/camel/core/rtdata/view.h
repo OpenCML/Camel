@@ -29,6 +29,7 @@
 
 #include <cstddef>
 #include <cstring>
+#include <string_view>
 
 namespace camel::core::type {
 struct DataLayout;
@@ -38,25 +39,13 @@ namespace camel::core::rtdata {
 
 class Object;
 
+/// A complex number read from the compact bytes of an element. Declared here rather than
+/// inline because making the box allocates, and the leaf read of every other type does not.
+slot_t readPureComplex(const std::byte *bytes, camel::core::type::TypeCode code);
+
 /// The view of one compact pure-data aggregate element at `bytes`; `stride` is the element
 /// size of the array the element came from (the layout size for a nested field). Returns the
 /// view as a slot.
-/// The slot data of a real (non-view) Struct/Tuple. Both headers are one pointer plus two
-/// uint32 fields, so data begins after that; this lets the array store path bulk-copy a
-/// slot-shaped element without knowing which of the two classes it has.
-inline const slot_t *aggregateSlots(slot_t value) {
-    return reinterpret_cast<const slot_t *>(
-        reinterpret_cast<const std::byte *>(fromSlot<const void *>(value)) +
-        sizeof(void *) + 2 * sizeof(uint32_t));
-}
-
-/// Whether a Struct/Tuple slot is a compact-element view (high bit of its size field).
-inline bool isAggregateView(slot_t value) {
-    const auto *bytes = reinterpret_cast<const std::byte *>(fromSlot<const void *>(value));
-    uint32_t size     = 0;
-    std::memcpy(&size, bytes + sizeof(void *), sizeof(size));
-    return (size & 0x80000000u) != 0;
-}
 slot_t pureViewOf(
     const std::byte *bytes, const camel::core::type::Type *type,
     const camel::core::type::DataLayout *layout, size_t stride);
@@ -90,10 +79,35 @@ inline slot_t readPureScalar(const std::byte *bytes, camel::core::type::TypeCode
         const uint8_t value = *reinterpret_cast<const uint8_t *>(bytes);
         return toSlot(value);
     }
+    case camel::core::type::TypeCode::Complex64:
+    case camel::core::type::TypeCode::Complex128:
+        return readPureComplex(bytes, code);
     default:
         return NullSlot;
     }
 }
+
+/**
+ * Whether `slot`, whose static type is `type`, is a compact element view: a Struct/Tuple whose
+ * size field carries the view flag. This check is always compiled: it is the detector behind
+ * the debug-only store guard and the block/view self-tests.
+ */
+bool isViewSlot(slot_t slot, const camel::core::type::Type *type);
+
+/**
+ * The debug-only guard at a store boundary: a view must have been materialised before a value
+ * is stored (design principles 10.5; H28 review item 1). Compiled out in release builds; the
+ * always-compiled detector above is what the self-test exercises.
+ */
+void assertStoredValueIsNotView(
+    slot_t slot, const camel::core::type::Type *type, std::string_view where);
+
+#if defined(NDEBUG)
+#define CAMEL_ASSERT_NOT_VIEW(slot, type, where) ((void)0)
+#else
+#define CAMEL_ASSERT_NOT_VIEW(slot, type, where)                                             \
+    ::camel::core::rtdata::assertStoredValueIsNotView((slot), (type), (where))
+#endif
 
 /// Materialises a view into a real Struct/Tuple, and returns any other slot unchanged. Only a
 /// compact pure-data aggregate can be a view; the value is allocated in the auto space.

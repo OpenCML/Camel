@@ -191,6 +191,8 @@ PassParamValue evalLiteral(const Literal &lit) {
         }
     case LiteralType::FString:
         throw EvalError{"formatted strings are not constants"};
+    case LiteralType::Imaginary:
+        throw EvalError{"a complex number is not a parameter value"};
     case LiteralType::Null:
         throw EvalError{"null is not a parameter value"};
     }

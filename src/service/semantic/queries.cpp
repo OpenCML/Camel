@@ -179,6 +179,8 @@ const std::vector<std::string> &builtinTypeNames() {
         "i64",
         "f32",
         "f64",
+        "c64",
+        "c128",
         "Bytes",
         "Map",
         "Set"};

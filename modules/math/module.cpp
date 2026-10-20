@@ -75,6 +75,39 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                  StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32())},
                 {"math:abs_d",
                  StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64())},
+                {"math:abs_c",
+                 StaticFuncTypeResolver::create({}, {{Type::Complex64(), false}}, Type::Float32())},
+                {"math:abs_z",
+                 StaticFuncTypeResolver::create(
+                     {}, {{Type::Complex128(), false}}, Type::Float64())},
+            }),
+        OperatorGroup::create(
+            "re",
+            {
+                {"math:re_c",
+                 StaticFuncTypeResolver::create({}, {{Type::Complex64(), false}}, Type::Float32())},
+                {"math:re_z",
+                 StaticFuncTypeResolver::create(
+                     {}, {{Type::Complex128(), false}}, Type::Float64())},
+            }),
+        OperatorGroup::create(
+            "im",
+            {
+                {"math:im_c",
+                 StaticFuncTypeResolver::create({}, {{Type::Complex64(), false}}, Type::Float32())},
+                {"math:im_z",
+                 StaticFuncTypeResolver::create(
+                     {}, {{Type::Complex128(), false}}, Type::Float64())},
+            }),
+        OperatorGroup::create(
+            "conj",
+            {
+                {"math:conj_c",
+                 StaticFuncTypeResolver::create(
+                     {}, {{Type::Complex64(), false}}, Type::Complex64())},
+                {"math:conj_z",
+                 StaticFuncTypeResolver::create(
+                     {}, {{Type::Complex128(), false}}, Type::Complex128())},
             }),
         OperatorGroup::create(
             "exp",
@@ -83,6 +116,12 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                  StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32())},
                 {"math:exp_d",
                  StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64())},
+                {"math:exp_c",
+                 StaticFuncTypeResolver::create(
+                     {}, {{Type::Complex64(), false}}, Type::Complex64())},
+                {"math:exp_z",
+                 StaticFuncTypeResolver::create(
+                     {}, {{Type::Complex128(), false}}, Type::Complex128())},
             }),
         OperatorGroup::create(
             "round",

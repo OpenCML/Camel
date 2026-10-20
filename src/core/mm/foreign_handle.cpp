@@ -20,6 +20,7 @@
 #include "camel/core/mm/foreign_handle.h"
 
 #include "camel/core/rtdata/foreign.h"
+#include "camel/core/rtdata/view.h"
 
 #include <stdexcept>
 #include <utility>
@@ -33,6 +34,9 @@ ForeignRootedHandle::ForeignRootedHandle(
     GenerationalAllocatorWithGC &allocator, rtdata::Object *object, const type::Type *type,
     std::string name)
     : root_(allocator, object, type, name.empty() ? "ForeignRootedHandle" : std::move(name)) {
+    // A handle outlives the read that produced the object (H28 review item 1): a compact
+    // element view cannot be handed to native code, which may keep it.
+    CAMEL_ASSERT_NOT_VIEW(rtdata::toSlot(object), type, "a foreign rooted handle");
     rtdata::noteForeignRootedHandleCreated();
 }
 
@@ -42,6 +46,7 @@ ForeignPinnedHandle::ForeignPinnedHandle(
     GenerationalAllocatorWithGC &allocator, rtdata::Object *object, const type::Type *type,
     std::string name)
     : root_(allocator, object, type, name.empty() ? "ForeignPinnedHandle" : std::move(name)) {
+    CAMEL_ASSERT_NOT_VIEW(rtdata::toSlot(object), type, "a foreign pinned handle");
     if (object && !allocator.isObjectAddressStable(object)) {
         throw std::runtime_error(
             "foreign pinned handle requires an object in a non-moving allocation region");

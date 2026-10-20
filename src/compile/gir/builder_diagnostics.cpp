@@ -713,7 +713,7 @@ void Builder::rejectLiteralConversion(
     const std::string &group, FunctionType *funcType, const std::vector<Argument> &operands,
     const GCT::node_ptr_t &call) {
     static const std::unordered_set<std::string> kConversions =
-        {"int", "i64", "i32", "float", "f64", "f32"};
+        {"int", "i64", "i32", "float", "f64", "f32", "c64", "c128"};
     if (!kConversions.contains(group) || operands.size() != 1 || funcType == nullptr ||
         !funcType->hasExitType() || operands[0].expr->type() != GCT::NodeKind::DATA) {
         return;

@@ -18,6 +18,7 @@
 #include "camel/core/rtdata/view.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/pure.h"
@@ -25,6 +26,7 @@
 
 #include <array>
 #include <cstring>
+#include <format>
 
 namespace camel::core::rtdata {
 
@@ -135,6 +137,53 @@ slot_t materializeIfView(slot_t value, const type::Type *type) {
         return toSlot(materializeAggregate(object->viewData()->bytes, type, mm::autoSpace()));
     }
     return value;
+}
+
+slot_t readPureComplex(const std::byte *bytes, type::TypeCode code) {
+    if (code == type::TypeCode::Complex64) {
+        float real = 0.0f, imaginary = 0.0f;
+        std::memcpy(&real, bytes, sizeof(real));
+        std::memcpy(&imaginary, bytes + sizeof(real), sizeof(imaginary));
+        return toSlot(Complex::create(real, imaginary, code, mm::autoSpace()));
+    }
+    ASSERT(code == type::TypeCode::Complex128, "A complex code is c64 or c128");
+    double real = 0.0, imaginary = 0.0;
+    std::memcpy(&real, bytes, sizeof(real));
+    std::memcpy(&imaginary, bytes + sizeof(real), sizeof(imaginary));
+    return toSlot(Complex::create(real, imaginary, code, mm::autoSpace()));
+}
+
+bool isViewSlot(slot_t slot, const type::Type *type) {
+    if (slot == NullSlot || type == nullptr) {
+        return false;
+    }
+    if (type->code() == type::TypeCode::Struct) {
+        const auto *object = fromSlot<const Struct *>(slot);
+        return object != nullptr && object->isView();
+    }
+    if (type->code() == type::TypeCode::Tuple) {
+        const auto *object = fromSlot<const Tuple *>(slot);
+        return object != nullptr && object->isView();
+    }
+    return false;
+}
+
+void assertStoredValueIsNotView(slot_t slot, const type::Type *type, std::string_view where) {
+#ifndef NDEBUG
+    if (isViewSlot(slot, type)) {
+        ASSERT(
+            false,
+            std::format(
+                "A compact element view escaped into {} ({}). A view is tied to the thread-local "
+                "view ring and must be materialised before it is stored.",
+                where,
+                type != nullptr ? type->toString() : "unknown"));
+    }
+#else
+    (void)slot;
+    (void)type;
+    (void)where;
+#endif
 }
 
 } // namespace camel::core::rtdata

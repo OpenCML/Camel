@@ -72,6 +72,10 @@ class Struct : public rtdata::Object {
             reinterpret_cast<const std::byte *>(this) - sizeof(ViewData));
     }
 
+    /// Where the slot data of a real struct begins: the end of this header. The array store
+    /// path asks this instead of computing the header layout itself (aggregate.h).
+    static constexpr size_t slotDataOffset() noexcept { return sizeof(Struct); }
+
     size_t size() const { return size_ & ~kViewFlag; }
 
     bool has(std::string_view name, const type::Type *type) const {
@@ -130,6 +134,8 @@ class Struct : public rtdata::Object {
             fieldType->code() == type::TypeCode::Tuple) {
             slot = rtdata::materializeIfView(slot, fieldType);
         }
+        // Debug builds: after materialisation, a view reaching the slot is an escape.
+        CAMEL_ASSERT_NOT_VIEW(slot, fieldType, "struct field");
         camel::core::mm::writeBarrier(this, structType, slot, fieldType);
         data_[index] = slot;
     }
@@ -315,3 +321,7 @@ class Struct : public rtdata::Object {
     uint32_t size_;
     slot_t data_[]; // Flexible array member.
 };
+
+static_assert(
+    alignof(Struct) == alignof(slot_t),
+    "Struct alignment must be a slot's: aggregateSlots reads slots at the data offset.");

@@ -23,6 +23,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/string.h"
 
 namespace mm = camel::core::mm;
@@ -34,6 +35,7 @@ using namespace camel::core::rtdata;
 
 using namespace camel::core::error;
 #include <cmath>
+#include <complex>
 #include <sstream>
 
 slot_t __math_abs__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -46,6 +48,15 @@ slot_t __math_abs__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return toSlot(std::fabs(norm.get<Float32>(0)));
     case TypeCode::Float64:
         return toSlot(std::fabs(norm.get<Float64>(0)));
+    case TypeCode::Complex64: {
+        // |a + bi| = hypot(a, b), in the width of the parts (f32 for c64).
+        const Complex *z = norm.get<Complex *>(0);
+        return toSlot(static_cast<Float32>(std::hypot(z->realF(), z->imaginaryF())));
+    }
+    case TypeCode::Complex128: {
+        const Complex *z = norm.get<Complex *>(0);
+        return toSlot(std::hypot(z->real(), z->imaginary()));
+    }
     default:
         throwRuntimeFault(
             RuntimeDiag::OperandTypeUnsupported,
@@ -61,6 +72,18 @@ slot_t __math_exp__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return toSlot(std::exp(norm.get<Float32>(0)));
     case TypeCode::Float64:
         return toSlot(std::exp(norm.get<Float64>(0)));
+    case TypeCode::Complex64: {
+        const Complex *z = norm.get<Complex *>(0);
+        const auto r     = std::exp(std::complex<float>{z->realF(), z->imaginaryF()});
+        return toSlot(
+            Complex::create(r.real(), r.imag(), TypeCode::Complex64, mm::autoSpace()));
+    }
+    case TypeCode::Complex128: {
+        const Complex *z = norm.get<Complex *>(0);
+        const auto r     = std::exp(std::complex<double>{z->real(), z->imaginary()});
+        return toSlot(
+            Complex::create(r.real(), r.imag(), TypeCode::Complex128, mm::autoSpace()));
+    }
     default:
         throwRuntimeFault(
             RuntimeDiag::OperandTypeUnsupported,
@@ -68,6 +91,33 @@ slot_t __math_exp__(ArgsView &with, ArgsView &norm, Context &ctx) {
             typeCodeToString(norm.code(0)),
             "a float or a double");
     }
+}
+
+slot_t __math_re__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const Complex *z = norm.get<Complex *>(0);
+    if (norm.code(0) == TypeCode::Complex64) {
+        return toSlot(z->realF());
+    }
+    return toSlot(z->real());
+}
+
+slot_t __math_im__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const Complex *z = norm.get<Complex *>(0);
+    if (norm.code(0) == TypeCode::Complex64) {
+        return toSlot(z->imaginaryF());
+    }
+    return toSlot(z->imaginary());
+}
+
+slot_t __math_conj__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const Complex *z    = norm.get<Complex *>(0);
+    const TypeCode code = norm.code(0);
+    if (code == TypeCode::Complex64) {
+        return toSlot(Complex::create(
+            z->realF(), -z->imaginaryF(), TypeCode::Complex64, mm::autoSpace()));
+    }
+    return toSlot(
+        Complex::create(z->real(), -z->imaginary(), TypeCode::Complex128, mm::autoSpace()));
 }
 
 slot_t __math_round__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -194,12 +244,17 @@ std::unordered_map<std::string, operator_t> getMathOpsMap() {
     std::unordered_map<std::string, operator_t> ops = getMathNumericOpsMap();
     ops.merge(std::unordered_map<std::string, operator_t>{
         {"abs_i", __math_abs__},     {"abs_l", __math_abs__},     {"abs_f", __math_abs__},
-        {"abs_d", __math_abs__},     {"exp_f", __math_exp__},     {"exp_d", __math_exp__},
+        {"abs_d", __math_abs__},     {"abs_c", __math_abs__},     {"abs_z", __math_abs__},
+        {"exp_f", __math_exp__},     {"exp_d", __math_exp__},     {"exp_c", __math_exp__},
+        {"exp_z", __math_exp__},
         {"round_f", __math_round__}, {"round_d", __math_round__}, {"ceil_f", __math_ceil__},
         {"ceil_d", __math_ceil__},   {"floor_f", __math_floor__}, {"floor_d", __math_floor__},
         {"bin_i", __math_bin__},     {"bin_l", __math_bin__},     {"oct_i", __math_oct__},
         {"oct_l", __math_oct__},     {"hex_i", __math_hex__},     {"hex_l", __math_hex__},
         {"sqrt", __math_sqrt__},
+        {"re_c", __math_re__},   {"re_z", __math_re__},
+        {"im_c", __math_im__},   {"im_z", __math_im__},
+        {"conj_c", __math_conj__}, {"conj_z", __math_conj__},
     });
     return ops;
 }
