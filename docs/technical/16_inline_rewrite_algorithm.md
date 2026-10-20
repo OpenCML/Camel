@@ -384,9 +384,9 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 
 内联受以下上限约束（`include/camel/passes/opt/config.h`、`src/passes/opt/inline/engine.cpp`）：
 
-- `OptimizeRewriteConfig::growthBudgetNodes`（默认 `kDefaultGrowthBudgetNodes`，可由环境变量
-  `CAMEL_OPT_GROWTH_BUDGET` 覆盖）：特化与内联在整个程序上可复制的节点总数。每次内联按被调图中
-  除 `DATA/PORT` 外的节点数计入；
+- `OptimizeRewriteConfig::growthBudget`（`nodes` 默认 `kDefaultGrowthBudgetNodes`，由遍的参数
+  `growth_budget` 设置；`written`、`passName` 供后续遍解释预算）：特化与内联在整个程序上可复制的
+  节点总数。每次内联按被调图中除 `DATA/PORT` 外的节点数计入；
 - `InlineRewriteConfig::maxOwnerNodes`（默认 `kMaxInlineOwnerNodes`）：内联后调用方图的节点数上限；
 - `InlineRewriteConfig::duplicationBudgetNodes`：非小子图的无环被调图有多个调用点时，
   全部内联所重复的代码量上限（见 §6.1）；

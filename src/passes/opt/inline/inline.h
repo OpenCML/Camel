@@ -25,8 +25,9 @@
 class InlineRewritePass : public RuntimeGraphRewritePass {
   public:
     InlineRewritePass(
-        const camel::core::context::context_ptr_t &ctx, const InlineRewriteConfig &config = {})
-        : RuntimeGraphRewritePass(ctx), config_(config) {};
+        const camel::core::context::context_ptr_t &ctx, const InlineRewriteConfig &config = {},
+        const GrowthBudget &growthBudget = {})
+        : RuntimeGraphRewritePass(ctx), config_(config), growthBudget_(growthBudget) {};
     virtual ~InlineRewritePass() = default;
 
     virtual camel::runtime::GCGraph *
@@ -34,4 +35,5 @@ class InlineRewritePass : public RuntimeGraphRewritePass {
 
   private:
     InlineRewriteConfig config_{};
+    GrowthBudget growthBudget_{};
 };

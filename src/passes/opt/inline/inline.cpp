@@ -27,6 +27,7 @@ InlineRewritePass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
         .enableDevirtualization = false,
         .enableSpecialization   = false,
         .enableInlining         = true,
+        .growthBudget           = growthBudget_,
         .inlineConfig           = config_,
     };
     return applyOptimizeRewritePass(context_, graph, os, config);

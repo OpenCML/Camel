@@ -24,6 +24,7 @@
 camel::runtime::GCGraph *
 SpecializeRewritePass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     OptimizeRewriteConfig config{};
+    config.growthBudget           = growthBudget_;
     config.enableDevirtualization = false;
     config.enableSpecialization   = true;
     config.enableInlining         = false;

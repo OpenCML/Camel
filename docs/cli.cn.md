@@ -144,12 +144,13 @@
 | 遍 | 参数（默认值） |
 | --- | --- |
 | `std::opt`、`std::opt::algebra` | `safe_fp: bool = false`（严格等价的浮点算式；设计原则 7.4） |
+| `std::opt`、`std::opt::inline`（及 `::small` / `::arm` / `::hybrid`）、`std::opt::specialize`、`std::opt::devirtualize` | `growth_budget: int = 4096`（特化和内联可复制的节点数；用完后剩下的调用仍是调用；0 表示不再复制；`std::opt` 的所有轮次共用一个预算） |
 | `std::fvm`、`std::jit` | `native_loop: bool = false`（程序自己的 LOOP 节点原生运行，而不是降为尾递归；调试器下总是如此），`stats: string = ""`（把本次运行每张图的字节码数与执行计数追加写入该文件） |
 | `std::jit` | `hot_threshold: int = 1`（同一调用点调用多少次后编译一张图；0 表示第一次调用就编译） |
 | `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行） |
 | `onnx::export` | `out: string = ""`（模型文件；见下） |
 
-仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，资源上限与回收器（`CAMEL_GC*`、`CAMEL_*_SPACE_*`、`CAMEL_MAX_RECURSION_DEPTH`），诊断用的追踪与统计（`CAMEL_EFFECT_TRACE`、`CAMEL_TYPE_STATS`、`CAMEL_STARTUP_PROFILE`），`CAMEL_ENABLE_TEST_PASSES`（决定测试遍是否存在，供测试用），以及 `CAMEL_OPT_GROWTH_BUDGET`（重写引擎的预算，ONNX 导出器内部也在用；以后改为 `std::opt` 的参数）。
+仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，资源上限与回收器（`CAMEL_GC*`、`CAMEL_*_SPACE_*`、`CAMEL_MAX_RECURSION_DEPTH`），诊断用的追踪与统计（`CAMEL_EFFECT_TRACE`、`CAMEL_TYPE_STATS`、`CAMEL_STARTUP_PROFILE`），以及 `CAMEL_ENABLE_TEST_PASSES`（决定测试遍是否存在，供测试用）。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。
 
 ### 模块的遍
 
@@ -204,7 +205,7 @@
 - **导出什么** 在程序里声明，用的就是运行期导出的那次调用：`onnx.export_model(fn, example, path[, dynamic_axes[, target]])`。这个遍在前面各遍留下的入口图里查找这次调用，并在那里读取它的实参，所以到那时它们必须是图中的常量：函数（闭包可以捕获常量）、示例输入（它们的 dtype 和形状成为模型输入）、`dynamic_axes` 和 `target`。`dynamic_axes` 作用于每一个张量实参，不能单独指定其中某一个：只有一个张量实参时，它的第 0 轴是符号尺寸 `batch`；有多个时（权重与数据一起传入），每个实参得到自己的符号尺寸（`<input>_dim0`），因此不对它们是否相等作任何断言。以结构体传入的参数永远不是动态的。只在运行期存在的值（随机初始权重、加载的文件）对遍不可用；这样的程序用 `camel m.cml` 导出，由它运行 `export_model`。
 - **写到哪里**：如果给了参数 `out` 就写到那里（此时要求恰好有一次 `export_model` 调用），否则写到这次调用的 `path` 实参，它必须是字符串字面量（遍不对 `get_env(...)` 求值）。
 - **这个遍自己做什么**：它把示例的类型（dtype 和形状）绑定到函数的参数上，重新推断节点类型，然后用只有导出才知道的两件事完成对函数私有副本的化简：示例的形状（形状运算被折叠，以形状为界的递归被展开），以及把依赖数据的分支的梯度拆成每个分支臂一次调用，这只对从不执行该图的使用者成立。这与 `export_model` 所做的化简相同，所以两个入口接受相同的函数并写出等价的模型。这个遍不展开宏（那是它之前的 `std::macro` 的事），并且仍然需要在它之前运行 `std::opt`：只有 `main` 被内联进入口图之后，导出请求才可见。
-- **拒绝**：如果图还需要上述某一步（入口图仍然调用 `main`、`grad` 之类的宏算子没有展开、函数里还留有不是尾递归的调用：深度取决于模型输入的尾递归导出为 ONNX `Loop`），或者含有 ONNX 无法表达的东西（非纯算子、没有下降规则的算子），这个遍不写任何文件，以非零状态退出，诊断为 `RuntimeDiag::TranslationRefused`（`0x0400000B`，阶段 `pass:onnx::export`）；消息指出应当运行的遍。每次拒绝都有源码位置：有肇事节点时是该节点；`export_model` 调用写在条件在编译期未知的分支的某个分支臂里时是该分支（`if get_env('MODE') == ... then export_model(...)`：这个遍不运行程序，无法判断请求是否发出；消息给出这次调用的位置）；针对整个请求的拒绝定位在 `export_model` 调用（动态轴越界、未知的 target、示例的个数、结果不是张量、模型文件无法写出；给了参数 `out` 而有多次调用时是第二次调用）；看不到调用时（入口图仍然调用 `main`，请求在它里面），或者拒绝针对的是作为模型的 `main` 时（参数没有形状、没有给参数 `out`），定位在入口函数 `main`。内联器已经运行却仍然看不到调用时，消息说明内联器为什么留下了请求所在的那次调用：它的增长预算用尽（消息给出预算、它是默认值还是由 `CAMEL_OPT_GROWTH_BUDGET` 设置、已经花掉多少、这次调用需要多少，并指出要调高的变量），或者发出请求的函数会到达一个递归并且不小，或者它是递归的，或者它太大而无法复制到各调用点。只有在没有任何做内联的遍运行过时，消息才要求运行 `std::opt`。非纯算子只要能从函数的结果到达就会被拒绝，不论经由数据边还是控制边，也不论是否在它调用的函数内部：`sync` 函数里的一条 `println` 语句在该 `println` 处被拒绝，而不是从模型里漏掉。`onnx.export_model` 做同样的检查。
+- **拒绝**：如果图还需要上述某一步（入口图仍然调用 `main`、`grad` 之类的宏算子没有展开、函数里还留有不是尾递归的调用：深度取决于模型输入的尾递归导出为 ONNX `Loop`），或者含有 ONNX 无法表达的东西（非纯算子、没有下降规则的算子），这个遍不写任何文件，以非零状态退出，诊断为 `RuntimeDiag::TranslationRefused`（`0x0400000B`，阶段 `pass:onnx::export`）；消息指出应当运行的遍。每次拒绝都有源码位置：有肇事节点时是该节点；`export_model` 调用写在条件在编译期未知的分支的某个分支臂里时是该分支（`if get_env('MODE') == ... then export_model(...)`：这个遍不运行程序，无法判断请求是否发出；消息给出这次调用的位置）；针对整个请求的拒绝定位在 `export_model` 调用（动态轴越界、未知的 target、示例的个数、结果不是张量、模型文件无法写出；给了参数 `out` 而有多次调用时是第二次调用）；看不到调用时（入口图仍然调用 `main`，请求在它里面），或者拒绝针对的是作为模型的 `main` 时（参数没有形状、没有给参数 `out`），定位在入口函数 `main`。内联器已经运行却仍然看不到调用时，消息说明内联器为什么留下了请求所在的那次调用：它的增长预算用尽（消息给出预算、它是默认值还是由 `growth_budget` 参数设置、已经花掉多少、这次调用需要多少，并指出要调高哪个遍的哪个参数），或者发出请求的函数会到达一个递归并且不小，或者它是递归的，或者它太大而无法复制到各调用点。只有在没有任何做内联的遍运行过时，消息才要求运行 `std::opt`。非纯算子只要能从函数的结果到达就会被拒绝，不论经由数据边还是控制边，也不论是否在它调用的函数内部：`sync` 函数里的一条 `println` 语句在该 `println` 处被拒绝，而不是从模型里漏掉。`onnx.export_model` 做同样的检查。
 
 **没有 `export_model` 调用的程序：`main` 就是模型。** 只做计算的程序用同样的遍组合导出，程序里不必为导出写任何东西（连 `import onnx` 也不必：写出遍的名字就会加载模块）：
 
@@ -282,7 +283,7 @@
 
 | 上限 | 值 | 可调 | 到达时 |
 |---|---|---|---|
-| `std::opt::inline`、`std::opt::specialize`、`std::opt` 的增长（特化和内联复制的节点；`std::opt` 的所有轮次共用一个预算） | 4096 个节点 | `CAMEL_OPT_GROWTH_BUDGET=<nodes>` | 不再特化或内联；剩下的调用仍是调用。带 `-v` 时有日志 |
+| `std::opt::inline`、`std::opt::specialize`、`std::opt::devirtualize`、`std::opt` 的增长（特化和内联复制的节点；`std::opt` 的所有轮次共用一个预算） | 4096 个节点 | 遍的参数 `growth_budget=<nodes>`，如 `std::opt(growth_budget=8192)`、`std::opt::inline(growth_budget=0)` | 不再特化或内联；剩下的调用仍是调用。带 `-v` 时有日志 |
 | `std::opt::inline` 向其中内联的图的大小 | 4096 个节点 | 否 | 这次调用不内联 |
 | `std::opt` 的轮数 | 16 | 否 | 程序按现状传下去。带 `-v` 时有日志 |
 | 同一个递归函数的仅类型特化（张量实参的形状在递归的每一层都变化） | 8 | 否 | 这次调用保留它的被调用者 |
@@ -318,7 +319,7 @@
 
 其他标为“否”的上限是编译期常量（`generic.h`、内联器的配置）；它们没有命令行选项，也没有 `.opencmlrc` 键（`.opencmlrc` 只配置遍列表）。
 
-`std::opt` 对实参是常量的递归每轮展开一层（`fib(15)` 会变成它的整棵调用树）；让它停下的是增长预算。`onnx.export_model` 化简它所导出的函数时不受增长预算和内联大小上限约束，因为导出必须得到直线代码；通过 `std::opt onnx::export` 导出的流水线则受它们约束，对大模型可能需要调高 `CAMEL_OPT_GROWTH_BUDGET`（此时导出遍以 `TranslationRefused` 拒绝，而不是写出不完整的模型，拒绝消息给出预算的名字、它的值和变量）。
+`std::opt` 对实参是常量的递归每轮展开一层（`fib(15)` 会变成它的整棵调用树）；让它停下的是增长预算。`onnx.export_model` 化简它所导出的函数时不受增长预算和内联大小上限约束，因为导出必须得到直线代码；通过 `std::opt onnx::export` 导出的流水线则受它们约束，对大模型可能需要在做内联的那个遍上调高 `growth_budget`，例如 `std::opt(growth_budget=8192)`（此时导出遍以 `TranslationRefused` 拒绝，而不是写出不完整的模型，拒绝消息给出预算、它的值、设置它的遍和参数）。
 
 ---
 
