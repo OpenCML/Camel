@@ -5,14 +5,15 @@
  */
 module loop_grad_product
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 
-func f(w: float): float {
+with <w: float>
+func f(): float {
     return loop acc = 1.0 for k in [1, 2, 3] do acc * w
 }
 
 func main(): int sync {
-    let vg = value_and_grad(f)(2.0)
+    let vg = with_grad(f)<2.0>()
     'loop_grad_product vg={}'->format<vg>->println
     return 0
 }

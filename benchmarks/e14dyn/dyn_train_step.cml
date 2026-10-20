@@ -1,6 +1,6 @@
 /**
  * E14/T7 probe: the export_train_step.cml 2-layer MLP training step
- * (value_and_grad + sgd) exported with dynamic_axes = [0].
+ * (with_grad + sgd) exported with dynamic_axes = [0].
  * One graph must serve any batch; per-batch specialized exports and Camel
  * native runs are the numeric references.
  *
@@ -17,7 +17,7 @@
 module dyn_train_step
 
 import { Tensor, relu, mean, sum, reshape, shape, load_npy } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { export_model } from onnx
 import { get_env } from sys
@@ -43,12 +43,12 @@ func loss_summean(x: Tensor): float {
 }
 
 func step_mean(m: Mlp, x: Tensor): (float, Mlp) {
-    let vg = value_and_grad(loss_mean)<m>(x)
+    let vg = with_grad(loss_mean)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
 func step_summean(m: Mlp, x: Tensor): (float, Mlp) {
-    let vg = value_and_grad(loss_summean)<m>(x)
+    let vg = with_grad(loss_summean)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 

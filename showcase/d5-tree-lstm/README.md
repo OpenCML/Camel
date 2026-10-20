@@ -3,7 +3,7 @@
 A four-leaf syntactic tree: leaves are words, internal nodes combine their two children with a
 Tree-LSTM cell, and the root hidden state goes through a linear layer to "positive/negative".
 The example is here for **recursion over an `enum` tree**: `forward` calls itself, the tree is an
-`enum` value, and `value_and_grad` still returns the gradient of the whole parameter tree.
+`enum` value, and `with_grad` still returns the gradient of the whole parameter tree.
 
 The label is not a plain sum of the four word polarities: it is the **XOR of the left and the
 right subtree polarity**.  The same four words give different labels depending on how they are
@@ -87,11 +87,12 @@ Trees have variable shape.  Batching would either pad to a fixed shape or use ro
 step to make "recursion + autodiff" clear; throughput is not the goal.  Once `t[idx]` from
 H21-1 lands, a batch can be assembled as an array of trees and the loop shape does not change.
 
-### The future spelling
+### Differentiation spelling
 
-Design principles 9.9 / H21-3 will make the model an ordinary first parameter:
-`value_and_grad(loss)(params, tree, target)`, with no `with <p: Params>`.  Until H21-3 lands the
-example keeps the `with` form, and the README and the report say so.
+Design principles 9.9 (H21 item 3 was withdrawn; see H25): `with <p: Params>` is the final
+spelling, and `with_grad(loss)<p>(tree, target)` differentiates the whole parameter tree,
+returning a gradient tree of the same type; the tree input is data.  The example binds
+`with_grad(loss)` outside the loop.
 
 ## Problems found
 

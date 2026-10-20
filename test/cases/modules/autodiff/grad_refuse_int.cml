@@ -1,12 +1,13 @@
-/** Refused: the first normal parameter is an int, which has no tangent (grad differentiates it, 9.9). */
+/** Refused: the first `with` parameter is an int, which has no tangent (9.9). */
 module grad_refuse_int
 import { grad } from autodiff
 
-func twice(n: int): float {
-    return float(n) * 2.0
+with <n: int>
+func twice(x: float): float {
+    return float(n) * 2.0 * x
 }
 
 func main(): int sync {
-    println(grad(twice)(3))
+    println(grad(twice)<3>(2.0))
     return 0
 }

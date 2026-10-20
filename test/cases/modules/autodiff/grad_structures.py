@@ -129,7 +129,7 @@ class Gen:
             kinds.append(stage.__name__[6:])
             v = stage(v)
         name = f"loss{self.index}"
-        camel = "".join(self.helpers_c) + f"func {name}(b: Tensor): float {{\n" + "\n".join(self.body_c) + f"\n    return sum({v})\n}}\n"
+        camel = "".join(self.helpers_c) + f"with <b: Tensor>\nfunc {name}(): float {{\n" + "\n".join(self.body_c) + f"\n    return sum({v})\n}}\n"
         python = "".join(self.helpers_p) + f"def {name}(b):\n" + "\n".join(self.body_p) + f"\n    return float({v}.sum())\n"
         return camel, python, kinds
 
@@ -160,7 +160,7 @@ def main() -> int:
                 "import { Tensor, mean, reshape, save_npy, sigmoid, sum, tanh } from tensor\n"
                 "import { grad } from autodiff\n\n" + "\n".join(camel) + "\nfunc main(): int sync {\n"
                 "    let x = reshape([0.3, -0.2, 0.7], [3])\n"
-                + "".join(f"    save_npy(grad(loss{j})(x), 'g{k}_{j}.npy')\n" for j in range(args.losses))
+                + "".join(f"    save_npy(grad(loss{j})<x>(), 'g{k}_{j}.npy')\n" for j in range(args.losses))
                 + "    return 0\n}\n")
             (work / f"p{k}.cml").write_text(source, encoding="utf-8")
             (work / f"p{k}.py").write_text("\n".join(python), encoding="utf-8")

@@ -1,14 +1,11 @@
 /**
- * GRU-lite fixed unroll trained with autodiff through repeated helper calls: value_and_grad of
- * the sequence loss gives a GruLite-shaped gradient, one sgd step lowers the loss, and a
- * recursive train loop repeats the step.
- *
- * The model is the first normal parameter of the loss (9.9); the helpers take it as a normal
- * parameter too.
+ * GRU-lite fixed unroll trained with autodiff through repeated with-context helper calls:
+ * with_grad of the sequence loss gives a GruLite-shaped gradient, one sgd step lowers the
+ * loss, and a recursive train loop repeats the step.
  */
 module gru_lite
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, ones, shape, sigmoid, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
@@ -23,13 +20,15 @@ type GruLite = {
     by: Tensor
 }
 
-func gru_cell(model: GruLite, x: Tensor, h: Tensor): Tensor {
+with <model: GruLite>
+func gru_cell(x: Tensor, h: Tensor): Tensor {
     let z = sigmoid((x @ model.wxz) + (h @ model.whz) + model.bz)
     let n = tanh((x @ model.wxn) + (h @ model.whn) + model.bn)
     return (z * n) + ((ones([1, 2]) - z) * h)
 }
 
-func predict(model: GruLite, h: Tensor): Tensor {
+with <model: GruLite>
+func predict(h: Tensor): Tensor {
     return (h @ model.why) + model.by
 }
 
@@ -39,11 +38,12 @@ func mse_loss(pred: Tensor, target: Tensor): float {
     return sum(squared) / float(shape(pred)[0])
 }
 
-func sequence_loss(model: GruLite, x0: Tensor, x1: Tensor, target: Tensor): float {
+with <model: GruLite>
+func sequence_loss(x0: Tensor, x1: Tensor, target: Tensor): float {
     let h0 = zeros([1, 2])
-    let h1 = gru_cell(model, x0, h0)
-    let h2 = gru_cell(model, x1, h1)
-    let pred = predict(model, h2)
+    let h1 = gru_cell<model>(x0, h0)
+    let h2 = gru_cell<model>(x1, h1)
+    let pred = predict<model>(h2)
     return mse_loss(pred, target)
 }
 
@@ -61,7 +61,7 @@ func init(): GruLite {
 }
 
 func train(model: GruLite, x0: Tensor, x1: Tensor, target: Tensor, steps: int): GruLite {
-    return if steps == 0 then model else train(sgd(model, grad(sequence_loss)(model, x0, x1, target), 0.05), x0, x1, target, steps - 1)
+    return if steps == 0 then model else train(sgd(model, grad(sequence_loss)<model>(x0, x1, target), 0.05), x0, x1, target, steps - 1)
 }
 
 func main(): int sync {
@@ -70,12 +70,12 @@ func main(): int sync {
     let x1 = full([1, 2], 0.5)
     let target = full([1, 1], 1.0)
 
-    let before = sequence_loss(model, x0, x1, target)
-    let vg = value_and_grad(sequence_loss)(model, x0, x1, target)
+    let before = sequence_loss<model>(x0, x1, target)
+    let vg = with_grad(sequence_loss)<model>(x0, x1, target)
     let stepped = sgd(model, vg.1, 0.05)
-    let after = sequence_loss(stepped, x0, x1, target)
+    let after = sequence_loss<stepped>(x0, x1, target)
     let trained = train(model, x0, x1, target, 10)
-    let after_train = sequence_loss(trained, x0, x1, target)
+    let after_train = sequence_loss<trained>(x0, x1, target)
 
     'gru_lite metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
     'gru_lite wxz={}'->format<stepped.wxz>->println

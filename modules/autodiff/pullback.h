@@ -61,24 +61,25 @@ namespace camel::autodiff {
 namespace type = camel::core::type;
 
 /// What grad(f) differentiates and returns. The differential form differentiates f's **first
-/// normal parameter** (design principles 9.9, like JAX); the other normal parameters are data
-/// and f's `with` parameters are configuration, not differentiated. The gradient is shaped like
-/// that first parameter.
+/// `with` parameter** (the model's weights, design principles 9.9); the other `with` parameters
+/// are constants and the ordinary parameters are data. The gradient is shaped like that first
+/// `with` parameter.
 struct GradientSignature {
     type::Type *gradientType = nullptr;
-    /// Type of grad(f), or of value_and_grad(f) whose result is (value, gradient).
+    /// Type of grad(f), or of with_grad(f) whose result is (value, gradient).
     type::FunctionType *functionType = nullptr;
 };
 
-/// Why f cannot be differentiated: not returning a float, no normal parameter, a `var` first
-/// parameter, or a first parameter whose type has no tangent. Empty when it can be.
+/// Why f cannot be differentiated: its result is not a float, it has no `with` parameter, its
+/// first `with` parameter is a `var`, or that parameter's type has no tangent. Empty when it can
+/// be differentiated.
 std::string differentiationRefusal(type::FunctionType *function);
 
-/// The signature of grad(f) (or value_and_grad(f)), or nullopt when f cannot be differentiated
+/// The signature of grad(f) (or with_grad(f)), or nullopt when f cannot be differentiated
 /// (see differentiationRefusal).
 std::optional<GradientSignature> gradientSignature(type::FunctionType *function, bool withValue);
 
-/// Builds the graph of grad(f) (or value_and_grad(f)) for the graph of f.
+/// Builds the graph of grad(f) (or with_grad(f)) for the graph of f.
 camel::runtime::GCGraph *buildGradientGraph(
     const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *function,
     bool withValue);

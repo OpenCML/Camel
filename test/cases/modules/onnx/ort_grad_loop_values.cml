@@ -6,50 +6,52 @@
  * The export unrolls it into paired Loops. Run by ort_grad_loop_values.py: w.npy and x.npy are
  * read from the working directory, the native values are saved there, and the step is exported
  * when ONNX_OUT is set.
- *
- * The model is the first normal parameter of each loss (9.9); the recursions thread it as a
- * normal parameter too.
  */
 module ort_grad_loop_values
 import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from sys
 
 type P = { w: Tensor }
 
 // A: (state, counter) as a tuple; the loss reads the state only.
-func walk(m: P, h: Tensor, k: int): (Tensor, int) {
-    return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk(m, tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
+with <m: P>
+func walk(h: Tensor, k: int): (Tensor, int) {
+    return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
-func loss_a(m: P, x: Tensor): float {
-    let (h, k) = walk(m, x, 0)
+with <m: P>
+func loss_a(x: Tensor): float {
+    let (h, k) = walk<m>(x, 0)
     return sum(h * h)
 }
 
 // B: the counter enters the loss as a number (it has no derivative).
-func loss_b(m: P, x: Tensor): float {
-    let (h, k) = walk(m, x, 0)
+with <m: P>
+func loss_b(x: Tensor): float {
+    let (h, k) = walk<m>(x, 0)
     return sum(h * h) * (1.0 + 0.5 * float(k))
 }
 
 // C: the same as a struct.
 type Run = { state: Tensor, steps: int }
 
-func walk_c(m: P, h: Tensor, k: int): Run {
-    return if k >= 6 || sum(h * h) < 1.0 then { state: h, steps: k } else walk_c(m, tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
+with <m: P>
+func walk_c(h: Tensor, k: int): Run {
+    return if k >= 6 || sum(h * h) < 1.0 then { state: h, steps: k } else walk_c<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
-func loss_c(m: P, x: Tensor): float {
-    let r = walk_c(m, x, 0)
+with <m: P>
+func loss_c(x: Tensor): float {
+    let r = walk_c<m>(x, 0)
     return sum(r.state)
 }
 
 // D: four carried values, three of them differentiable (two tensors and a float).
-func walk_d(m: P, h: Tensor, k: int, acc: Tensor, e: float): (Tensor, int, Tensor, float) {
-    return if k >= 6 || sum(h * h) < 1.0 then (h, k, acc, e) else walk_d(
-        m,
+with <m: P>
+func walk_d(h: Tensor, k: int, acc: Tensor, e: float): (Tensor, int, Tensor, float) {
+    return if k >= 6 || sum(h * h) < 1.0 then (h, k, acc, e) else walk_d<m>(
         tanh(h @ m.w) * 0.3 + h * 0.6,
         k + 1,
         acc + h * h,
@@ -57,19 +59,20 @@ func walk_d(m: P, h: Tensor, k: int, acc: Tensor, e: float): (Tensor, int, Tenso
     )
 }
 
-func loss_d(m: P, x: Tensor): float {
-    let r = walk_d(m, x, 0, x * 0.0, 0.25)
+with <m: P>
+func loss_d(x: Tensor): float {
+    let r = walk_d<m>(x, 0, x * 0.0, 0.25)
     return sum(r.0) + sum(r.2) * 0.1 + r.3 * 0.3
 }
 
 // The counter as an output of the model, next to the value and the gradient.
 func step(w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, int) {
     let m = { w: w }
-    let a = value_and_grad(loss_a)(m, x)
-    let b = value_and_grad(loss_b)(m, x)
-    let c = value_and_grad(loss_c)(m, x)
-    let d = value_and_grad(loss_d)(m, x)
-    let (h, k) = walk(m, x, 0)
+    let a = with_grad(loss_a)<m>(x)
+    let b = with_grad(loss_b)<m>(x)
+    let c = with_grad(loss_c)<m>(x)
+    let d = with_grad(loss_d)<m>(x)
+    let (h, k) = walk<m>(x, 0)
     return (
         reshape([a.0], [1]), a.1.w, reshape([b.0], [1]), b.1.w,
         reshape([c.0], [1]), c.1.w, reshape([d.0], [1]), d.1.w, k

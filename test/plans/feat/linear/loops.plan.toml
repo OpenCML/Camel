@@ -489,8 +489,8 @@ case = "../../../cases/loops/refuse_loop_no_channel.cml"
 args = ["-E", "short", "${case}", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 7
-expect_output_contains = ["has no gradient channel", "refuse_loop_no_channel.cml:7:13"]
+expect_diagnostic_line = 8
+expect_output_contains = ["has no gradient channel", "refuse_loop_no_channel.cml:8:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -502,8 +502,8 @@ case = "../../../cases/loops/refuse_loop_no_channel.cml"
 args = ["-E", "short", "${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 7
-expect_output_contains = ["has no gradient channel", "refuse_loop_no_channel.cml:7:13"]
+expect_diagnostic_line = 8
+expect_output_contains = ["has no gradient channel", "refuse_loop_no_channel.cml:8:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 

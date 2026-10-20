@@ -11,9 +11,8 @@ They are registered directly, not through a historical chain of aliases.
 | `std::agir` | Annotated compact DOT | `gir` plus node roles and a legend |
 | `std::argir` | Annotated rich DOT | `rgir` plus role styling and a legend |
 
-`r` means **rich**, and `a` means **annotated**. The retired `dot`, `rdot`, `graphviz`,
-`readable_graphviz`, `annotated_graphviz` and `readable_annotated_graphviz` pass names are not
-accepted. Pass-dump snapshots use `.gir.dot` for compact DOT.
+`r` means **rich**, and `a` means **annotated**. Pass-dump snapshots use `.gir.dot` for compact
+DOT.
 
 ## JSON version 1
 

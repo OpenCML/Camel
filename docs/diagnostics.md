@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-170 diagnostics: 153 errors, 17 warnings.
+169 diagnostics: 152 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -129,8 +129,6 @@ prints one entry.
 | `0x03000134` | [SemanticDiag::EnumPatternMismatch](#enumpatternmismatch) | Error |
 | `0x03000135` | [SemanticDiag::EnumMatchNotExhaustive](#enummatchnotexhaustive) | Error |
 | `0x03000136` | [SemanticDiag::EnumFieldAccess](#enumfieldaccess) | Error |
-| `0x03000137` | [SemanticDiag::UnionTypeRetired](#uniontyperetired) | Error |
-| `0x03000138` | [SemanticDiag::ReservedTypeQuestionRetired](#reservedtypequestionretired) | Error |
 | `0x03000139` | [SemanticDiag::EnumTypeArgumentNotInferred](#enumtypeargumentnotinferred) | Error |
 | `0x0300013A` | [SemanticDiag::EnumFieldTypeMismatch](#enumfieldtypemismatch) | Error |
 | `0x0300013B` | [SemanticDiag::EnumConstructionMismatch](#enumconstructionmismatch) | Error |
@@ -139,6 +137,7 @@ prints one entry.
 | `0x03000142` | [SemanticDiag::DimensionNameAlreadyBound](#dimensionnamealreadybound) | Error |
 | `0x03000143` | [SemanticDiag::DimensionMismatch](#dimensionmismatch) | Error |
 | `0x03000144` | [SemanticDiag::InvalidExtentExpression](#invalidextentexpression) | Error |
+| `0x03000150` | [SemanticDiag::NotDifferentiable](#notdifferentiable) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -3222,65 +3221,6 @@ func main(): void sync {
 }
 ```
 
-### UnionTypeRetired
-
-`0x03000137` · Error · `SemanticDiag::UnionTypeRetired`
-
-**Message**
-
-```text
-The union type is retired: a value has one type, and no value enters 'A | B'.
-```
-
-**Help**
-
-```text
-When a value is one of several named cases, declare an enum: 'type T = enum { A(i32), B(string) }'. '|' remains the logical or.
-```
-
-**Example** (`test/cases/compile/enum/retired_union.cml`, run as `camel -E short test/cases/compile/enum/retired_union.cml`)
-
-```camel
-// `A | B` is retired: a value has one type (design principles 5.3). When a value is one of
-// several named cases, that is an enum.
-
-type IntOrFloat = int | float
-
-func main(): void sync {
-    println(1)
-}
-```
-
-### ReservedTypeQuestionRetired
-
-`0x03000138` · Error · `SemanticDiag::ReservedTypeQuestionRetired`
-
-**Message**
-
-```text
-The reserved form 'T ? U' is retired: '?' is only the nullable mark, as in 'T?'.
-```
-
-**Help**
-
-```text
-Write 'T?' for a value that may be null and 'T!' for one that may have failed.
-```
-
-**Example** (`test/cases/compile/enum/retired_question.cml`, run as `camel -E short test/cases/compile/enum/retired_question.cml`)
-
-```camel
-// `T ? U` is retired: `?` only marks a nullable value, as in `T?` (design principles 3.9).
-
-func f(x: int ? float): int {
-    return 1
-}
-
-func main(): void sync {
-    println(f(1))
-}
-```
-
 ### EnumTypeArgumentNotInferred
 
 `0x03000139` · Error · `SemanticDiag::EnumTypeArgumentNotInferred`
@@ -3495,6 +3435,38 @@ Each extent is an integer, a dimension name bound by the signature, or a linear 
 ```
 
 *No example: no test small enough to show raises it.*
+
+### NotDifferentiable
+
+`0x03000150` · Error · `SemanticDiag::NotDifferentiable`
+
+**Message**
+
+```text
+The function cannot be differentiated: {0}.
+```
+
+**Help**
+
+```text
+grad and with_grad differentiate the first `with` parameter of a function that returns a float (design principles 9.9). Weights are `with` parameters; the remaining `with` parameters are constants and the ordinary parameters are data. Give the function a `with` parameter of a differentiable type, or wrap the value to differentiate in a lambda that makes it the first `with` parameter.
+```
+
+**Example** (`test/cases/modules/autodiff/grad_refuse_no_with.cml`, run as `camel test/cases/modules/autodiff/grad_refuse_no_with.cml std::macro`)
+
+```camel
+module grad_refuse_no_with
+import { grad } from autodiff
+
+func ordinary(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    println(grad(ordinary)(2.0))
+    return 0
+}
+```
 
 ### VarParamInAsyncFunction
 
@@ -3927,20 +3899,23 @@ import { grad } from autodiff
 // The value to differentiate flows through a map (x is stored in it and read back), and
 // there is no derivative rule for an operator over a collection: `grad` refuses and names
 // the operator. A map that does not depend on x is a constant to `grad` and is no obstacle.
+// x is the first `with` parameter of each function.
 
-func through_map(x: float): float {
+with <x: float>
+func through_map(): float {
     let m = [(1, x)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
-func beside_map(x: float): float {
+with <x: float>
+func beside_map(): float {
     let m = [(1, 2.0)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
 func main(): int sync {
-    println(grad(beside_map)(3.0))
-    println(grad(through_map)(3.0))
+    println(grad(beside_map)<3.0>())
+    println(grad(through_map)<3.0>())
     return 0
 }
 ```
@@ -4287,20 +4262,23 @@ import { grad } from autodiff
 // The value to differentiate flows through a map (x is stored in it and read back), and
 // there is no derivative rule for an operator over a collection: `grad` refuses and names
 // the operator. A map that does not depend on x is a constant to `grad` and is no obstacle.
+// x is the first `with` parameter of each function.
 
-func through_map(x: float): float {
+with <x: float>
+func through_map(): float {
     let m = [(1, x)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
-func beside_map(x: float): float {
+with <x: float>
+func beside_map(): float {
     let m = [(1, 2.0)] as Map<int, float>
     return m->get_or<1, 0.0> * x
 }
 
 func main(): int sync {
-    println(grad(beside_map)(3.0))
-    println(grad(through_map)(3.0))
+    println(grad(beside_map)<3.0>())
+    println(grad(through_map)<3.0>())
     return 0
 }
 ```

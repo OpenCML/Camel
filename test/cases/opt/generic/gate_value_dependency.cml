@@ -4,7 +4,8 @@ module gate_value_dependency
 import { seed, rand } from random
 import { grad } from autodiff
 
-func square(x: float): float { return x * x }
+with <x: float>
+func square(): float { return x * x }
 
 func hold(x: float): float sync {
     println('held')
@@ -14,7 +15,7 @@ func hold(x: float): float sync {
 func main(): int sync {
     seed(42)
     let x = rand()
-    let y = grad(square)(x)
+    let y = grad(square)<x>()
     let held = hold(x)
     println('middle')
     println(y)

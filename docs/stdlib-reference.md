@@ -13,8 +13,8 @@ How to read an entry:
 - **Signature**: `name: <with-parameters> (parameters) => result`. The value a function works
   on is its ordinary parameter and what configures it is a with-parameter, so calls chain:
   `s->trim->split<','>`, `xs->filter<p>->sort_by<key>`. `int` is the 64-bit integer and `float`
-  the 64-bit float; `i32` and `f32` are the 32-bit ones. `A | B` in a parameter means one
-  overload per type; numeric types are never converted implicitly.
+  the 64-bit float; `i32` and `f32` are the 32-bit ones; numeric types are never converted
+  implicitly.
 - **Pure** operators depend on their arguments only: a pass may evaluate a call ahead of time,
   merge two equal calls or drop an unused one. An operator **with effects** is left alone, and
   its call runs only when it is reachable from a `sync` block or its result is used (design

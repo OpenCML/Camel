@@ -1838,528 +1838,528 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.default"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: default (no pass)."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: default (no pass)."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.fvm"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::fvm."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::fvm."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.jit"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::jit."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::jit."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.tf"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::tf."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::tf."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.inline"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::inline."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::inline."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.specialize"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::specialize."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::specialize."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.devirtualize"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::devirtualize."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::devirtualize."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.fold"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::fold."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::fold."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.cse"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::cse."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::cse."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.dce"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::dce."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::dce."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.opt"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.simplify"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_inline"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt::inline."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::inline."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_specialize"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt::specialize."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::specialize."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_devirtualize"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt::devirtualize."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::devirtualize."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_fold"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt::fold."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::fold."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_cse"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt::cse."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::cse."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_dce"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt::dce."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::dce."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_opt"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_simplify"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.all_6"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.all_macro_9"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.opt_fvm"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt std::fvm."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt std::fvm."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.opt_jit"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt std::jit."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt std::jit."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.opt_tf"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt std::tf."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt std::tf."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.inline_fvm"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::inline std::fvm."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::inline std::fvm."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.inline_jit"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::inline std::jit."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::inline std::jit."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::inline", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.inline_tf"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::inline std::tf."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::inline std::tf."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::inline", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.specialize_jit"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt::specialize std::jit."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::specialize std::jit."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt::specialize", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.simplify_jit"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::opt std::jit."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt std::jit."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_opt_jit"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt std::jit."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt std::jit."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_opt_tf"
-desc = "A write to a var parameter of a function called through value_and_grad reaches the caller's variable. Pipeline: std::macro std::opt std::tf."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt std::tf."
 kind = "behavior"
-case = "../../../cases/modules/autodiff/var_through_value_and_grad.cml"
+case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
 args = ["${case}", "std::macro", "std::opt", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | with_grad: value 2.0 cnt 2 | with_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2924,7 +2924,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'plain call: value 1.0 sum(acc) 3.0 | value_and_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 sum(acc) 3.0 | with_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2940,7 +2940,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'plain call: value 1.0 sum(acc) 3.0 | value_and_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 sum(acc) 3.0 | with_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2956,7 +2956,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'plain call: value 1.0 sum(acc) 3.0 | value_and_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 sum(acc) 3.0 | with_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2972,7 +2972,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'plain call: value 1.0 sum(acc) 3.0 | value_and_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 sum(acc) 3.0 | with_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -3641,6 +3641,6 @@ args = ["${case}", "std::macro", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "plain call: value 3.0\nvalue_and_grad: value 3.0 grad 3.0\n"
+expect_stdout = "plain call: value 3.0\nwith_grad: value 3.0 grad 3.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

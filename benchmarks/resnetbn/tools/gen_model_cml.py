@@ -49,7 +49,7 @@ def main():
 module resnetbn
 
 import { Tensor, relu, mean, flatten } from tensor
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { conv2d, batch_norm_train, sgd, save_params } from nn
 import { get_env } from sys
 import { export_model } from onnx
@@ -125,7 +125,7 @@ func loss(x: Tensor, s: BnStats): float {
 }
 
 func train_step(m: Resnet, s: BnStats, x: Tensor): float sync {
-    let vg = value_and_grad(loss)<m>(x, s)
+    let vg = with_grad(loss)<m>(x, s)
     let next = sgd(m, vg.1, 0.01)
     return vg.0
 }
@@ -133,7 +133,7 @@ func train_step(m: Resnet, s: BnStats, x: Tensor): float sync {
 /// The training step as a function of the parameters, the input and the running
 /// statistics: the loss, the updated parameters and the updated statistics.
 func step(m: Resnet, x: Tensor, s: BnStats): (float, Resnet, BnStats) {
-    let vg = value_and_grad(loss)<m>(x, s)
+    let vg = with_grad(loss)<m>(x, s)
     let r = forward<m>(x, s)
     return (vg.0, sgd(m, vg.1, 0.01), r.1)
 }

@@ -9,17 +9,20 @@ import { sgd } from nn
 
 type Linear = { weight: Tensor }
 
-// Mean squared error of the model on (X, y). The model is the first normal parameter, so
-// `grad` differentiates it; the data follows and is not differentiated.
-func mse_loss(layer: Linear, X: Tensor, y: Tensor): float {
+// Mean squared error of the model on (X, y). The model is the first `with`
+// parameter, so `grad` differentiates it; the targets are captured `with` data and stay
+// constant.
+with <layer: Linear, y: Tensor>
+func mse_loss(X: Tensor): float {
     let errors = X @ layer.weight - y
     return sum(errors * errors) / float(shape(X)[0])
 }
 
 func train(layer: Linear, X: Tensor, y: Tensor, rate: float, steps: int): Linear {
-    let gradient = grad(mse_loss)(layer, X, y)     // Linear-shaped: one gradient, the model's
+    let loss_grad = grad(mse_loss)
+    let grads = loss_grad<layer, y>(X)       // a Linear: the gradient of the first `with` parameter
     return if steps == 0 then layer
-        else train(sgd(layer, gradient, rate), X, y, rate, steps - 1)
+        else train(sgd(layer, grads, rate), X, y, rate, steps - 1)
 }
 
 func init(): Linear {
@@ -32,11 +35,11 @@ func main(): int sync {
     let y = reshape([2.0, -1.0, 1.0, 3.0], [4, 1])
     let start = init()
 
-    println(format<mse_loss(start, X, y)>('loss before training: {:.4f}'))
+    println(format<mse_loss<start, y>(X)>('loss before training: {:.4f}'))
     let after10 = train(start, X, y, 0.1, 10)
-    println(format<mse_loss(after10, X, y)>('loss after 10 steps:  {:.4f}'))
+    println(format<mse_loss<after10, y>(X)>('loss after 10 steps:  {:.4f}'))
     let after200 = train(start, X, y, 0.1, 200)
-    println(format<mse_loss(after200, X, y)>('loss after 200 steps: {:.4f}'))
+    println(format<mse_loss<after200, y>(X)>('loss after 200 steps: {:.4f}'))
     println(after200.weight)
     return 0
 }

@@ -7,9 +7,10 @@
 module grad_through_as
 
 import { Tensor, abs, reshape, sum } from tensor
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 
-func loss(x: Tensor): float {
+with <x: Tensor>
+func loss(): float {
     let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) as Tensor<f32, const [2, 3]>
     let y = (x * x) as Tensor<f32, const [2, 3]>
     let z = y as Tensor<f32, const [-1, 3]>
@@ -25,9 +26,9 @@ func report(name: string, g: Tensor, x: Tensor): int sync {
 
 func main(): int sync {
     let x = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0], [2, 3]) as Tensor<f32, const [2, 3]>
-    report('grad', grad(loss)(x), x)
-    let (v, g) = value_and_grad(loss)(x)
-    report('value_and_grad', g, x)
+    report('grad', grad(loss)<x>(), x)
+    let (v, g) = with_grad(loss)<x>()
+    report('with_grad', g, x)
     println('value {}'->format<v>)
     return 0
 }

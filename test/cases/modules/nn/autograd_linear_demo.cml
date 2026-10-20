@@ -1,8 +1,7 @@
 /**
- * Demonstrates autodiff gradient descent for a linear MSE loss: the model is the loss's first
- * normal parameter, so `grad` returns one Linear-shaped gradient (not a tuple), which is fed to
- * sgd, and a recursive train loop repeats the step. The targets are data: the second normal
- * parameter is not differentiated.
+ * Demonstrates autodiff gradient descent for a linear MSE loss whose first `with` parameter is
+ * the Linear model: grad returns one Linear-shaped gradient, fed to sgd; the targets are also
+ * captured `with` data and stay constant. A recursive train loop repeats the step.
  */
 module autograd_linear_demo
 
@@ -14,7 +13,8 @@ type Linear = {
     weight: Tensor
 }
 
-func mse_loss(layer: Linear, X: Tensor, y: Tensor): float {
+with <layer: Linear, y: Tensor>
+func mse_loss(X: Tensor): float {
     let pred = X @ layer.weight
     let errors = pred - y
     let squared = errors * errors
@@ -27,8 +27,9 @@ func init(): Linear {
 }
 
 func train(layer: Linear, X: Tensor, y: Tensor, steps: int): Linear {
-    let gradient = grad(mse_loss)(layer, X, y)
-    return if steps == 0 then layer else train(sgd(layer, gradient, 0.01), X, y, steps - 1)
+    let loss_grad = grad(mse_loss)
+    let grads = loss_grad<layer, y>(X)
+    return if steps == 0 then layer else train(sgd(layer, grads, 0.01), X, y, steps - 1)
 }
 
 func main(): int sync {
@@ -36,16 +37,16 @@ func main(): int sync {
     let y = ones([4, 1])
     let layer = init()
 
-    let gradient = grad(mse_loss)(layer, X, y)
-    let before = mse_loss(layer, X, y)
-    let stepped = sgd(layer, gradient, 0.01)
-    let after = mse_loss(stepped, X, y)
+    let grads = grad(mse_loss)<layer, y>(X)
+    let before = mse_loss<layer, y>(X)
+    let stepped = sgd(layer, grads, 0.01)
+    let after = mse_loss<stepped, y>(X)
     let trained = train(layer, X, y, 10)
-    let after_train = mse_loss(trained, X, y)
+    let after_train = mse_loss<trained, y>(X)
 
     'autograd_linear_demo metrics before={} after={} train10={}'->format<before, after, after_train>->println
     'autograd_linear_demo w0={}'->format<layer.weight>->println
     'autograd_linear_demo w1={}'->format<stepped.weight>->println
-    'autograd_linear_demo weight_grad={}'->format<gradient.weight>->println
+    'autograd_linear_demo weight_grad={}'->format<grads.weight>->println
     return 0
 }

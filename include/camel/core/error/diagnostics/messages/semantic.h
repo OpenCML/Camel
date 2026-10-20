@@ -137,15 +137,15 @@ enum class SemanticDiag : uint32_t {
     LoopConditionNotBool    = 0x000123,
     LoopNameRepeated        = 0x000124,
     // Rulings of 2026-10-19 (design principles log 2.13): the nominal enum, 0x130 and up.
-    DuplicateEnumVariant        = 0x000130,
-    DuplicateEnumField          = 0x000131,
-    EnumVariantNeedsFields      = 0x000132,
-    EnumVariantFieldCount       = 0x000133,
-    EnumPatternMismatch         = 0x000134,
-    EnumMatchNotExhaustive      = 0x000135,
-    EnumFieldAccess             = 0x000136,
-    UnionTypeRetired            = 0x000137,
-    ReservedTypeQuestionRetired = 0x000138,
+    DuplicateEnumVariant   = 0x000130,
+    DuplicateEnumField     = 0x000131,
+    EnumVariantNeedsFields = 0x000132,
+    EnumVariantFieldCount  = 0x000133,
+    EnumPatternMismatch    = 0x000134,
+    EnumMatchNotExhaustive = 0x000135,
+    EnumFieldAccess        = 0x000136,
+    // 0x137 and 0x138 reported the retired forms `A | B` and `T ? U`; the parser no longer reads
+    // either, so they are gone and their codes are not reused.
     EnumTypeArgumentNotInferred = 0x000139,
     EnumFieldTypeMismatch       = 0x00013A,
     EnumConstructionMismatch    = 0x00013B,
@@ -155,6 +155,8 @@ enum class SemanticDiag : uint32_t {
     DimensionNameAlreadyBound = 0x000142,
     DimensionMismatch         = 0x000143,
     InvalidExtentExpression   = 0x000144,
+    // Automatic differentiation (design principles 9.9): 0x150 and up.
+    NotDifferentiable = 0x000150,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

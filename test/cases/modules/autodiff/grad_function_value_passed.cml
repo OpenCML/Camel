@@ -9,12 +9,13 @@ func call0(f: () => float): float {
     return f()
 }
 
-func loss(x: float): float {
+with <x: float>
+func loss(): float {
     let g = if x > 0.0 then (): float => x * x else (): float => x
     return call0(g) + x
 }
 
 func main(): int sync {
-    println(grad(loss)(3.0))
+    println(grad(loss)<3.0>())
     return 0
 }

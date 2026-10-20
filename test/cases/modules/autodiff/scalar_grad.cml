@@ -1,28 +1,34 @@
 /**
- * Verifies grad and value_and_grad on straight-line scalar code with helper calls: each
+ * Verifies grad and with_grad on straight-line scalar code with helper calls: each
  * operator's rule, accumulation over repeated uses, and float32/float64 conversions.
+ *
+ * The differentiated value is the first `with` parameter (a weight, 9.9); ordinary
+ * parameters are data and stay constant.
  */
 module scalar_grad
 
-import { grad, value_and_grad, stop_gradient } from autodiff
+import { grad, with_grad, stop_gradient } from autodiff
 
 func sq(x: float): float {
     return x * x
 }
 
-func f(x: float, y: float): float {
+// d/dx (x^2 * y + x / y - y) = 2xy + 1/y.
+with <x: float>
+func f(y: float): float {
     return sq(x) * y + x / y - y
 }
 
-func g(x: float): float {
-    // x used three times; the stopped branch contributes nothing.
+// x used three times; the stopped branch contributes nothing.
+with <x: float>
+func g(): float {
     return x * x * x + stop_gradient(x * 10.0)
 }
 
 func main(): int sync {
-    let df = grad(f)(3.0, 2.0)
-    let vg = value_and_grad(f)(3.0, 2.0)
-    let dg = grad(g)(2.0)
+    let df = grad(f)<3.0>(2.0)
+    let vg = with_grad(f)<3.0>(2.0)
+    let dg = grad(g)<2.0>()
     'scalar_grad df={} vg={} dg={}'->format<df, vg, dg>->println
     return 0
 }

@@ -1,0 +1,69 @@
+/**
+ * `grad(f)` and `with_grad(f)` differentiate the first `with` parameter of `f` (9.9); the
+ * remaining `with` parameters are constants and the ordinary parameters are data. The gradient
+ * has the shape of the first `with` parameter: a float, a struct of the same shape, or a tensor
+ * of the same shape. `with_grad` returns `(value, gradient)`.
+ *
+ * Differentiating a value that is not the first `with` parameter needs a lambda that makes it
+ * the first `with` parameter (an adversarial example, a target, a second weight).
+ */
+module grad_first_with_parameter
+
+import { grad, with_grad } from autodiff
+import { Tensor, reshape, sum } from tensor
+
+// d/dx (x*y + x) = y + 1.
+with <x: float>
+func weighted(y: float): float {
+    return x * y + x
+}
+
+type Point = { a: float, b: float }
+
+// The gradient is a Point: (y, 1).
+with <p: Point>
+func point_loss(y: float): float {
+    return p.a * y + p.b
+}
+
+// The gradient is a tensor of the weight's shape: x.
+with <w: Tensor>
+func dot(x: Tensor): float {
+    return sum(w * x)
+}
+
+// `k` is the first `with` parameter and is differentiated; `x` is a second `with` parameter
+// and stays constant.
+with <k: float, x: float>
+func scaled(): float {
+    return k * x * 2.0
+}
+
+func main(): int sync {
+    let gx = grad(weighted)<3.0>(2.0)
+    let vg = with_grad(weighted)<3.0>(2.0)
+
+    // Differentiating the data: reorder it to the first `with` parameter with a lambda.
+    let gy = grad(<y: float> (x: float): float => x * y + x)<2.0>(3.0)
+    // A lambda is a function of its own; its first `with` parameter is differentiated.
+    let gl = grad(<z: float> (x: float): float => weighted<z>(x))<3.0>(2.0)
+
+    let p = { a: 2.0, b: 3.0 }
+    let pg = grad(point_loss)<p>(4.0)
+    let pvg = with_grad(point_loss)<p>(4.0)
+
+    let w = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([4.0, 5.0, 6.0], [3])
+    let wg = grad(dot)<w>(x)
+    let wvg = with_grad(dot)<w>(x)
+
+    // `x` is the second `with` parameter: reorder it with a lambda to differentiate it.
+    let sk = grad(scaled)<2.0, 3.0>()
+    let sx = grad(<x: float> (k: float): float => scaled<k, x>())<3.0>(2.0)
+
+    'grad_first_with_parameter gx={} vg={} gy={} gl={}'->format<gx, vg, gy, gl>->println
+    'grad_first_with_parameter pg={} pvg={}'->format<pg, pvg>->println
+    'grad_first_with_parameter wg={} wvg={}'->format<wg, wvg>->println
+    'grad_first_with_parameter sk={} sx={}'->format<sk, sx>->println
+    return 0
+}

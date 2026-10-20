@@ -15,11 +15,12 @@ func sq(x: float): float {
     return x * x
 }
 
-func h(x: float): float {
+with <x: float>
+func h(): float {
     return sq(x) + 3.0 * sq(x + 1.0)
 }
 
 func main(x: float): int sync {
-    'collapse_runtime dh={}'->format<grad(h)(x)>->println
+    'collapse_runtime dh={}'->format<grad(h)<x>()>->println
     return 0
 }

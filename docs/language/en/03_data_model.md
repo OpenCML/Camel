@@ -243,8 +243,6 @@ Rules:
 
 **Behaviour of the current implementation, not yet decided**: `?->` is defined for `T!` only; a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`.
 
-The earlier reserved notation `T ? U` is retired: `?` is only the nullable mark, the special reading of `T ?` followed by a type is gone, and writing it gives `SemanticDiag::ReservedTypeQuestionRetired`.
-
 ## 3.5 Enums
 
 An `enum` is a **nominal type**: a value is exactly one of the variants the declaration lists, and a variant carries no data, a tuple or a struct. Two enums with the same shape are still different types.
@@ -288,8 +286,6 @@ func area(s: Shape): float {
 **Generics.** `Option<int>` and `Option<float>` are different types with different values. A field type may use the parameters again: `type Pair<A, B> = enum { Both(A, B), Neither }`, and `Pair<int, string>`'s `Both` takes an `int` and a `string`.
 
 **On the graph.** No node kind is added: construction stores a tag and the data, `match` reads the tag, branches on it and takes the data out in the arm, as for `T?` and `T!`. Reading the tag and a field are ordinary internal operators (`__enum_tag__`, `__enum_field__`), and the schedulers do not special-case them by name. `std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::macro` and `std::cpp` all support enums; ONNX export and autodiff refuse one with a located diagnostic for now.
-
-**Retired.** `A | B` in a type position is retired: a value has one type, and a value that is one of several possibilities is an enum (`SemanticDiag::UnionTypeRetired`; `|` remains the logical or). `T ? U` is retired as well (`SemanticDiag::ReservedTypeQuestionRetired`).
 
 ## 3.6 Maps and sets
 

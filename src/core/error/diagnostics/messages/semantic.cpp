@@ -991,26 +991,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::UnionTypeRetired,
-            {
-                "UnionTypeRetired",
-                "The union type is retired: a value has one type, and no value enters "
-                "'A | B'.",
-                "When a value is one of several named cases, declare an enum: "
-                "'type T = enum {{ A(i32), B(string) }}'. '|' remains the logical or.",
-            },
-        },
-        {
-            SemanticDiag::ReservedTypeQuestionRetired,
-            {
-                "ReservedTypeQuestionRetired",
-                "The reserved form 'T ? U' is retired: '?' is only the nullable mark, as in "
-                "'T?'.",
-                "Write 'T?' for a value that may be null and 'T!' for one that may have "
-                "failed.",
-            },
-        },
-        {
             SemanticDiag::EnumFieldTypeMismatch,
             {
                 "EnumFieldTypeMismatch",
@@ -1091,6 +1071,19 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Each extent is an integer, a dimension name bound by the signature, or a linear "
                 "expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is "
                 "not linear is unknown.",
+            },
+        },
+        {
+            SemanticDiag::NotDifferentiable,
+            {
+                "NotDifferentiable",
+                "The function cannot be differentiated: {0}.",
+                "grad and with_grad differentiate the first `with` parameter of a function "
+                "that returns a float (design principles 9.9). Weights are `with` parameters; "
+                "the remaining `with` parameters are constants and the ordinary parameters are "
+                "data. Give the function a `with` parameter of a differentiable type, or wrap "
+                "the value to differentiate in a lambda that makes it the first `with` "
+                "parameter.",
             },
         },
         {

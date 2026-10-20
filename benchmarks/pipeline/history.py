@@ -23,7 +23,7 @@ import classify  # noqa: E402
 
 STEPS = [
     ("v1", "first classification: effect events compared as (operator, payload hash)"),
-    ("v1+macro-ops", "macro operators (autodiff:grad, value_and_grad, vjp) left out of the effect sequence"),
+    ("v1+macro-ops", "macro operators (autodiff:grad, with_grad, vjp) left out of the effect sequence"),
     ("v2", "payload hashes no longer compared (only flagged)"),
     ("v2+tolerance", "printed floats compared with tolerance 1e-5 (plan C-3)"),
     ("v3", "non-zero exit without a structured diagnostic becomes ERROR_NO_DIAGNOSTIC"),

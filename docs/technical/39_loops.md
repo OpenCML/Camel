@@ -207,7 +207,7 @@ for a source graph cannot be paired with a lowered graph's frame layout.
 
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
 function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
-`inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `value_and_grad`) declares
+`inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `with_grad`) declares
 `OperatorTraits::inspectsGraphs`. The lowering passes every operand of function type of such an
 operator through `:graph/original` (`src/builtin/operators/graph.h`), which turns a function
 value of the private copy into the same function over the program's graph it was copied from

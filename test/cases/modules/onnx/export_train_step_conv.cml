@@ -7,7 +7,7 @@
 module export_train_step_conv
 
 import { Tensor, relu, mean, reshape, flatten, new } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { conv2d, max_pool2d, sgd } from nn
 import { export_model } from onnx
 import { get_env } from sys
@@ -18,7 +18,8 @@ type Cnn = {
     fc_w: Tensor, fc_b: Tensor
 }
 
-func loss(m: Cnn, x: Tensor): float {
+with <m: Cnn>
+func loss(x: Tensor): float {
     let c1 = relu(conv2d(x, m.conv1_w, m.conv1_b, 1, 1))
     let c2 = max_pool2d(relu(conv2d(c1, m.conv2_w, m.conv2_b)), 2)
     let y = flatten(c2) @ m.fc_w + m.fc_b
@@ -26,7 +27,7 @@ func loss(m: Cnn, x: Tensor): float {
 }
 
 func step(m: Cnn, x: Tensor): (float, Cnn) {
-    let vg = value_and_grad(loss)(m, x)
+    let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 

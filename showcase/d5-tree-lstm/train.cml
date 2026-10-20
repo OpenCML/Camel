@@ -2,7 +2,7 @@
 //
 // Each sentence is a binary tree of four leaves.  A leaf is a one-hot word vector; an internal
 // node combines its two children with the usual Tree-LSTM gates.  The recursion is the point:
-// `forward` calls itself on the children, the tree is an `enum`, and `value_and_grad` still
+// `forward` calls itself on the children, the tree is an `enum`, and `with_grad` still
 // produces the gradient of the whole parameter tree.  Sentiment is the sign of the summed leaf
 // polarities, so the label depends on the tree, not on a bag of words.
 //
@@ -13,7 +13,7 @@ module d5_tree_lstm
 
 // == imports ==
 import { Tensor, argmax, load_npy, numel, reshape, set_num_threads, shape, sigmoid, slice, sum, tanh, zeros } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { now } from time
 
@@ -143,13 +143,14 @@ func main(data: string, steps: int, lr: float, log_every: int, threads: int): in
     // One sample per step; the sample index wraps around the shuffled file.  The tree is built
     // from a contiguous slice of the one-hot rows, so no row selection operator is needed.
     let started = now()
+    let loss_with_grad = with_grad(loss)
     let (trained, optimizer) = loop p = initial, opt = adam_state(initial), step = 0
         while step < steps
         do sync {
             let index = step % train_n
             let sample = slice(train_words, 0, index, index + 1)
             let target = slice(train_labels, 0, index, index + 1)
-            let (value, gradient) = value_and_grad(loss)<p>(tree_at(sample), target)
+            let (value, gradient) = loss_with_grad<p>(tree_at(sample), target)
             if step % log_every == 0 then {
                 `d5 step=${step} loss=${value:.9f}`->println
             }

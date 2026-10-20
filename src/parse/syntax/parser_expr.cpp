@@ -322,10 +322,7 @@ void ParserImpl::parseUnary() {
     parseLink();
     if ((cur_ == TK::KwAs || cur_ == TK::KwIs) && !panic_) {
         bump();
-        const bool outer = castType_;
-        castType_        = true;
         parseType();
-        castType_ = outer;
         close(m, NK::CastExpr);
     }
 }
@@ -1096,9 +1093,7 @@ void ParserImpl::parseCatchClause() {
     bump();
     parseIdentDef();
     if (!panic_ && expect(TK::Colon)) {
-        typeBeforeBlock_ = true;
         parseType();
-        typeBeforeBlock_ = false;
         if (!panic_) {
             parseStmtBlock();
         }

@@ -15,4 +15,4 @@ name = "effect"
 env = ["MODE=effect", "ONNX_OUT={tmp}/noisy.onnx"]
 exit = 1
 diagnostic = "RuntimeDiag::RuntimeError"
-output_contains = ["impure operator 'tensor:randn' cannot be exported", "07_export_integrity/program.cml:31:16)"]
+output_contains = ["impure operator 'tensor:randn' cannot be exported", "07_export_integrity/program.cml:33:16)"]

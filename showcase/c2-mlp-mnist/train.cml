@@ -1,7 +1,7 @@
 // C2 — an MLP trained on MNIST, written as a parameter tree.
 //
 // The model is a struct of four tensors, so the starting weights, the gradient and the
-// optimizer state are all values of the same type: `value_and_grad` gives a gradient of the
+// optimizer state are all values of the same type: `with_grad` gives a gradient of the
 // model type and `adam` consumes it without the program naming a leaf.  The whole training
 // run is one `loop`, the evaluation is one call, and the checkpoint is `save_tree`.
 //
@@ -15,7 +15,7 @@ module c2_mlp_mnist
 
 // == imports ==
 import { Tensor, abs, argmax, load_npy, numel, relu, set_num_threads, shape, slice, sum } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { load_tree, save_tree, tree_map, tree_paths, tree_reduce } from tree
 import { read_text } from fs
@@ -33,16 +33,18 @@ type Mlp = {
 
 // == model ==
 // x: [batch, 784] -> hidden: [batch, 128] -> logits: [batch, 10].
-func logits(m: Mlp, x: Tensor): Tensor {
+with <m: Mlp>
+func logits(x: Tensor): Tensor {
     let hidden = relu(x @ m.w1 + m.b1)
     return hidden @ m.w2 + m.b2
 }
 
 // == loss ==
 // The training loss of one minibatch.  Its `with` parameter is the whole parameter tree,
-// so `value_and_grad` gives back a tree of the same shape.  The targets are one-hot rows.
-func loss(m: Mlp, x: Tensor, targets: Tensor): float {
-    return softmax_cross_entropy(logits(m, x), targets)
+// so `with_grad` gives back a tree of the same shape.  The targets are one-hot rows.
+with <m: Mlp>
+func loss(x: Tensor, targets: Tensor): float {
+    return softmax_cross_entropy(logits<m>(x), targets)
 }
 
 // == data ==
@@ -60,7 +62,7 @@ func load_model(data: string): Mlp {
 // == evaluate ==
 // Validation: the loss over all rows at once and the fraction classified correctly.
 func evaluate(m: Mlp, x: Tensor, targets: Tensor): (float, float) {
-    let value = logits(m, x)
+    let value = logits<m>(x)
     let correct = sum(argmax(value, 1) == argmax(targets, 1))
     return (softmax_cross_entropy(value, targets), float(correct) / float(shape(x)[0]))
 }
@@ -90,13 +92,14 @@ func main(
     // One loop carries the model, the optimizer state and the step number.  The batches
     // are contiguous slices of the shuffled file, so a step needs no shuffling machinery.
     let started = now()
+    let loss_with_grad = with_grad(loss)
     let (trained, state) = loop m = model, opt = adam_state(model), step = 0
         while step < steps
         do sync {
             let start = (step % batches) * batch
             let x = slice(train_x, 0, start, start + batch)
             let y = slice(train_targets, 0, start, start + batch)
-            let (value, gradient) = value_and_grad(loss)(m, x, y)
+            let (value, gradient) = loss_with_grad<m>(x, y)
             let next = adam(m, gradient, opt, lr)
             if step % log_every == 0 then {
                 `c2 step=${step} loss=${value:.9f}`->println

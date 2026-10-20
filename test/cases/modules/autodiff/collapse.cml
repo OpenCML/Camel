@@ -12,7 +12,8 @@ func sq(x: float): float {
     return x * x
 }
 
-func h(x: float): float {
+with <x: float>
+func h(): float {
     return sq(x) + 3.0 * sq(x + 1.0)
 }
 
@@ -20,6 +21,6 @@ func main(): int sync {
     // The condition runs at runtime, but equal arm values allow callers to fold the gradient.
     // The generated grad(h) subgraph itself remains general over its parameter.
     let x = if get_env('CAMEL_COLLAPSE_X') == '' then 2.0 else 2.0
-    'collapse dh={}'->format<grad(h)(x)>->println
+    'collapse dh={}'->format<grad(h)<x>()>->println
     return 0
 }

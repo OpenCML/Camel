@@ -1,6 +1,6 @@
 """The gradient of a data-dependent loop, exported as paired ONNX Loops.
 
-ort_grad_loop.cml (value_and_grad of two losses over a tail-recursive loop, one with a
+ort_grad_loop.cml (with_grad of two losses over a tail-recursive loop, one with a
 data-dependent branch in the loop body) is exported once. For inputs that give loop lengths 0, 1
 and more and take both arms of the body's branch, the value and the gradient computed by ONNX
 Runtime must match (a) Camel's native run of the same step and (b) a reverse sweep written in

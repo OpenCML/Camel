@@ -67,7 +67,7 @@
 | `optim` | 优化器（Optax 式：`init`、`update` 两个纯函数）：`sgd`、`adam`、`adamw`、学习率调度；用 Camel 写在 `tree` 上 |
 | `data` | 数据集、加载、打乱、分批、预取（基于流） |
 | `tree` | 参数树（泛型第一期后改为 Camel 写）与检查点 |
-| `autodiff` | `grad`、`value_and_grad`、`vjp`、`stop_gradient` |
+| `autodiff` | `grad`、`with_grad`、`vjp`、`stop_gradient` |
 | `onnx`、`tiles` | 导出、GPU |
 | `arrow` | Arrow C 数据接口、Parquet、Arrow IPC |
 | `python`、`pyplot` | 互操作 |

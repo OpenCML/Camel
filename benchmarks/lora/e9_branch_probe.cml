@@ -7,7 +7,7 @@
 module e9_branch_probe
 
 import { Tensor, relu, mean, reshape } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd } from nn
 import { get_env } from sys
 import { export_model } from onnx
@@ -30,12 +30,12 @@ func loss_n(x: Tensor): float {
 }
 
 func step_b(m: Mlp, x: Tensor): (float, Mlp) {
-    let vg = value_and_grad(loss_b)<m>(x)
+    let vg = with_grad(loss_b)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
 func step_n(m: Mlp, x: Tensor): (float, Mlp) {
-    let vg = value_and_grad(loss_n)<m>(x)
+    let vg = with_grad(loss_n)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 

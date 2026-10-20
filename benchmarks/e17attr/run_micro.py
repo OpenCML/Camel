@@ -4,7 +4,7 @@ For every GEMM shape of mlp_big / lenet_big's fc layers and every conv shape of
 lenet_big, times one layer's forward and forward+backward kernels on both sides,
 interleaved per trial, 4 threads, fresh processes:
 
-  camel side: e17attr/micro.cml (value_and_grad step of a one-layer function)
+  camel side: e17attr/micro.cml (with_grad step of a one-layer function)
   under std::macro std::nvm with CAMEL_TENSOR_OPSTATS=1; kernel us/call comes
   from the op-stats table (one call site per op, no shape aggregation).
 
