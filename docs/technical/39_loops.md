@@ -44,9 +44,11 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
 
 `Builder::visitLoopNode` (`src/compile/gir/builder.cpp`):
 
-1. The first values and the array are built where the loop is; they do not see the names of
+1. The first values and the sequence are built where the loop is; they do not see the names of
    the head. Their types are the state types; `null` and `[]` give none
-   (`LoopStateWithoutType`); the sequence must be an array (`LoopSequenceNotArray`).
+   (`LoopStateWithoutType`). A sequence that is not an array (a string, a map, a tensor) is
+   turned into its array of elements by the `__iter__` operator the sequence's type resolves,
+   and any other type is `LoopSequenceNotIterable`; see section 2a.
 2. The condition graph and the body graph (`f.loopN.cond`, `f.loopN.body`) are created with
    their ports (the state; the body the element first) before either is built, and are
    registered as **capture twins** (`captureTwins_`): `captureInto` makes every capture made
@@ -75,6 +77,35 @@ enumeration and reachability know it. Every commit checks the payload (I12/I13) 
 ```
 N2A [label="LOOP while cond=main.loop2.cond body=main.loop2.body", type="LOOP", ...];
 ```
+
+## 2a. The elements of a string, a map and a tensor
+
+`for x in xs` takes the elements of an array, a string, a map or a tensor (design principles
+3.10, 11.1, 11.3). The builder keeps one form: a sequence that is not an array is converted to
+its array of elements once, where the loop is, by the compiler-internal operator group
+`__iter__`. The overload is chosen by the type of the sequence, as for any operator, so the
+builder names no type and each module owns its own elements:
+
+| Sequence | Operator | Elements | Order |
+| --- | --- | --- | --- |
+| `T[]` | none (already an array) | `T` | as written |
+| `string` | `:struct/iter_str` | `string` (one code point each, as `s[i]`) | code points |
+| `Map<K, V>` | `:coll/map_items` | `(K, V)` | keys ascending (11.3) |
+| `Tensor` | `tensor:iter` | sub-tensor with the first dimension dropped | first dimension |
+
+The tensor overload is default-imported by the tensor module (`__iter__` starts with `__`), so
+a program that imports `tensor` gets it without naming anything; a rank-0 tensor is rejected
+when its shape is known (and is a runtime fault otherwise), and a `Tensor` whose rank is
+unknown gives elements of type `Tensor`. A `Set` has no overload (it is not iterated by `for`
+today; the question is in the H4b report).
+
+The result is that the LOOP node's iterable port is always an array, and every consumer sees
+one form: `LoopView::iterable()` is the array of elements (an OPER node when a conversion was
+made), the element port has its element type (I18), `driveLoopRounds`
+(`include/camel/execute/loop_driver.h`) takes one element per round from it, and the lowering
+(`src/runtime/loop_lowering.cpp`) uses `:struct/len_arr` and `:op/idx_arr` on it. No back end
+has iteration code of its own, and `std::cpp` handles the string conversion (`rt::chars`)
+while maps and tensors stay untranslated types there.
 
 ## 3. Consumers: `camel/runtime/loop.h`
 
@@ -138,7 +169,9 @@ longer each write the round: `camel/execute/loop_driver.h` holds the order of a 
 condition first, then the next element, then the body), the ports a round binds
 (`bindLoopRound`: the element, the k values of the state, the captures) and what ends the loop;
 each interpreter supplies a frame and a call (`driveLoopRounds` is a template, so the services are
-inlined). Iterating over more than arrays will be one change there. The macro evaluator's limit on
+inlined). The driver takes one element of an array per round; the other sequences are turned
+into their array of elements before the loop starts (section 2a), so no second form reaches it.
+The macro evaluator's limit on
 the rounds of a loop is `--max-macro-rounds <n>` (else `CAMEL_MAX_MACRO_ROUNDS`; default
 1000000, 1 to 2^40), the way the nesting limit is `--max-macro-depth`.
 
@@ -176,6 +209,8 @@ body ends in a tuple FILL; and in their turn std::prl, std::cpp, ONNX and autodi
 
 `test/plans/feat/linear/loops.plan.toml` (shapes, effects, captures, nesting, edges, a million
 rounds under a recursion limit of 3, faults, passes, std::macro, dumps, the five diagnostics, the
-refusals), `parse.rulings` (syntax, AST, GCT, graph), `tools.debugger` `debugger.loop_frames`,
-three loop programs in `test/tools/cppexec/expect.txt`, and progen's `loop` feature (all forms,
-sync bodies with effects).
+refusals, and the iterables: `loops.iterate_string`, `loops.iterate_map`, `loops.iterate_tensor`,
+`loops.iterate_empty`, the `*.native_loop` and `.macro` forms, `loops.err_not_iterable`,
+`loops.err_tensor_rank0` and `loops.fault_tensor_rank0`), `parse.rulings` (syntax, AST, GCT, graph), `tools.debugger`
+`debugger.loop_frames`, four loop programs in `test/tools/cppexec/expect.txt` (one of them over a
+string), and progen's `loop` feature (all forms, sync bodies with effects).

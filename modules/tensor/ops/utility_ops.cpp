@@ -99,6 +99,43 @@ std::optional<Type *> indexInfer(const InferContext &ctx) {
     }
     return Type::Float64();
 }
+/// `for x in t`: the elements of a tensor along its first dimension, in order. A tensor of
+/// rank n >= 2 gives, for each i, the sub-tensor of shape shape[1:] that starts at row i (a
+/// view of the same buffer); a rank-1 tensor gives, for each i, the rank-0 sub-tensor at i.
+/// A rank-0 tensor has no first dimension: it is not iterable, which is an error when the
+/// shape is known and a fault otherwise.
+std::optional<Type *> iterInfer(const InferContext &ctx) {
+    const TensorFacts in = ctx.facts(0);
+    if (in.shape) {
+        if (in.shape->empty()) {
+            throw std::invalid_argument("a rank-0 tensor has no first dimension");
+        }
+        StaticShape row(in.shape->begin() + 1, in.shape->end());
+        return ArrayType::create(TensorType::get(in.dtype, row));
+    }
+    return ArrayType::create(TensorType::get(in.dtype, std::nullopt));
+}
+
+slot_t iterKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("iter", [&] {
+        TensorObject *t = tensorArg(norm, 0);
+        if (t->rank() == 0) {
+            throw std::invalid_argument("a rank-0 tensor has no first dimension");
+        }
+        const auto shape    = t->shapeSpan();
+        const uint64_t rows = static_cast<uint64_t>(shape[0]);
+        const StaticShape rowShape(shape.begin() + 1, shape.end());
+        const uint64_t inner = numelOf(rowShape);
+        auto *arrayType      = ArrayType::create(TensorType::get(t->dtype(), rowShape));
+        ::Array *result      = ::Array::create(mm::autoSpace(), static_cast<size_t>(rows));
+        for (uint64_t i = 0; i < rows; ++i) {
+            TensorObject *row = TensorObject::createView(t, rowShape, mm::autoSpace(), i * inner);
+            result->set<rtdata::Object *>(i, row, arrayType);
+        }
+        return camel::core::rtdata::toSlot(result);
+    });
+}
+
 std::optional<Type *> voidResult(const InferContext &) { return Type::Void(); }
 
 slot_t showKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -176,6 +213,15 @@ std::vector<OpDef> utilityOps() {
             .resultDoc = "float",
             .infer     = indexInfer,
             .kernel    = &idx2dKernel,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name      = "iter",
+            .exports   = {"__iter__"},
+            .params    = {{"t", ParamKind::Tensor}},
+            .resultDoc = "Tensor[]",
+            .infer     = iterInfer,
+            .kernel    = &iterKernel,
             .traits    = {}});
     defs.push_back(
         OpDef{

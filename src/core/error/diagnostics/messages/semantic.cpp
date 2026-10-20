@@ -816,13 +816,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::LoopSequenceNotArray,
+            SemanticDiag::LoopSequenceNotIterable,
             {
-                "LoopSequenceNotArray",
-                "'for' takes the elements of an array; '{0}' has type '{1}'.",
-                "A loop's 'for x in xs' visits the elements of the array xs in order (design "
-                "principles 3.10). 'range(a, b)' is the array of the integers from a to b; a "
-                "string, a map or a tensor is not iterated by 'for'.",
+                "LoopSequenceNotIterable",
+                "'for' takes the elements of an array, a string, a map or a tensor; '{0}' has "
+                "type '{1}'.",
+                "A loop's 'for x in xs' visits the elements of xs in order (design principles "
+                "3.10): the elements of an array; the code points of a string, each a "
+                "one-character string; the (key, value) pairs of a map, in key order (11.3); "
+                "and the sub-tensors of a tensor along its first dimension. 'range(a, b)' is "
+                "the array of the integers from a to b.",
             },
         },
         {

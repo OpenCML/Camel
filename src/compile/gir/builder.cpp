@@ -8214,10 +8214,39 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         const auto &expr = gct->loopSequence();
         sequence         = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
         Type *type       = valueTypeOf(nodeTypeOf(sequence));
-        if (type == nullptr || type->code() != TypeCode::Array) {
-            diags_->of(SemanticDiag::LoopSequenceNotArray)
+        // A `for` takes the elements of an array. A string, a map and a tensor give theirs
+        // through the `__iter__` operator their type declares (design principles 3.10, 11.1,
+        // 11.3): the code points of a string as one-character strings, the (key, value) pairs
+        // of a map in key order, and the sub-tensors of a tensor along its first dimension.
+        // The operator is resolved like any other, by the type of the sequence; the loop then
+        // iterates the array it gives, on every back end, with one driver.
+        if (type != nullptr && type->code() != TypeCode::Array) {
+            const std::vector<StaticArg> statics(1);
+            std::optional<oper_idx_ptr_t> elements;
+            if (const auto group = module_->getImportedEntity("__iter__");
+                group.has_value() && group->isOperGroup()) {
+                elements = group->operGroup()->resolve({}, {type}, statics, Modifier::None);
+            }
+            if (!elements.has_value()) {
+                diags_->of(SemanticDiag::LoopSequenceNotIterable)
+                    .atOrigin(expr->origin())
+                    .commit(sourceTextOf(expr), type->toString());
+                throw BuildAbortException();
+            }
+            node_handle_t array = currGraph_->addOperNode(*elements, 0);
+            stampPermissions(array);
+            registerNodeOrigin(context_, array, expr, "gir.loop.iter");
+            linkNodes(LinkType::Norm, sequence, array);
+            sequence = array;
+            type     = valueTypeOf(nodeTypeOf(sequence));
+            ASSERT(
+                type != nullptr && type->code() == TypeCode::Array,
+                "The elements of an iterable must be an array.");
+        }
+        if (type == nullptr) {
+            diags_->of(SemanticDiag::LoopSequenceNotIterable)
                 .atOrigin(expr->origin())
-                .commit(sourceTextOf(expr), type ? type->toString() : std::string("void"));
+                .commit(sourceTextOf(expr), std::string("void"));
             throw BuildAbortException();
         }
         elementType = tt::as_ptr<ArrayType>(type)->elemType();

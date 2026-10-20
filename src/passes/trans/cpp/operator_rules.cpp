@@ -303,6 +303,7 @@ Rules buildRules() {
     r[":op/add_s"]            = infix("+");
     r[":struct/len_str"]      = runtimeFunction("length");
     r[":op/idx_str"]          = faultingFunction("charAt", RuntimeDiag::IndexOutOfRange, 3);
+    r[":struct/iter_str"]     = runtimeFunction("chars");
     r[":str/join"]            = withArgument("join");
     r[":struct/contains_str"] = {
         [](OperatorCall &c) -> std::optional<std::string> {

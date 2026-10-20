@@ -238,6 +238,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // struct
         {"struct/len_str", __len_str__},
+        {"struct/iter_str", __iter_str__},
         {"struct/len_arr", __len_arr__},
         // The higher-order operators: the one implementation of what they mean, by the
         // function-call service. Schedulers that run a shape of call faster by the operator's
@@ -331,6 +332,7 @@ void registerBuiltinOperatorTraits() {
         "str/format",
         "str/join",
         "struct/len_str",
+        "struct/iter_str",
         "struct/len_arr",
         "struct/zip",
         "struct/head_arr",

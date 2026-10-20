@@ -40,6 +40,26 @@ slot_t __len_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(static_cast<Int64>(camel::utf8::count(s->view())));
 }
 
+slot_t __iter_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // The elements of a string are its code points, each one a one-character string, exactly
+    // as `s[i]` gives them (design principles 11.1). `for c in s` takes them in order.
+    String *s                   = norm.get<String *>(0);
+    const std::string_view text = s != nullptr ? s->view() : std::string_view();
+    auto *arrayType             = ArrayType::create(Type::String());
+    Array *result               = Array::create(mm::autoSpace(), camel::utf8::count(text));
+    size_t at                   = 0;
+    size_t index                = 0;
+    while (at < text.size()) {
+        const size_t start = at;
+        (void)camel::utf8::decodeOne(text, at);
+        result->set<String *>(
+            index++,
+            String::from(std::string(text.substr(start, at - start)), mm::autoSpace()),
+            arrayType);
+    }
+    return rtdata::toSlot(result);
+}
+
 slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr = norm.get<Array *>(0);
     return rtdata::toSlot(static_cast<Int64>(arr->size()));

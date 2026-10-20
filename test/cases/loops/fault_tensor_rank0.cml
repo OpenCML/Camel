@@ -1,0 +1,19 @@
+// A rank-0 tensor has no first dimension to iterate over. Here the shape reaches `reshape`
+// through a function parameter, so it is not a constant and the rank is unknown until the
+// loop takes the elements: the fault is reported at the loop's sequence, on the round-less
+// path that would otherwise give the initial state.
+module tensor_rank0_runtime
+
+import { Tensor, zeros, reshape } from tensor
+
+func toShape(t: Tensor, s: int[]): Tensor {
+    return reshape(t, s)
+}
+
+func main(): int sync {
+    let no: int[] = []
+    let s  = toShape(zeros([1]), no)
+    let n  = loop c = 0 for x in s do c + 1
+    println(n)
+    return 0
+}

@@ -1000,7 +1000,7 @@ func row_sums(rows: Tensor<f32>[]): (Tensor<f32>, int) {
 
 图模型 I13 已经要求"`LOOP` 的入边数与两张子图一致、子图的角色是 `LoopCond`/`LoopBody`"。本稿补上：
 
-- **I18 状态类型**：每个初值的类型可以赋给对应的状态类型；循环体的返回类型等于状态类型（k = 1 时是那个类型，k > 1 时是 k 元组）；条件图返回 `bool`；`For` 形式的元素端口类型等于被遍历数组的元素类型。
+- **I18 状态类型**：每个初值的类型可以赋给对应的状态类型；循环体的返回类型等于状态类型（k = 1 时是那个类型，k > 1 时是 k 元组）；条件图返回 `bool`；`For` 形式的元素端口类型等于被遍历数组的元素类型（序列不是数组时，循环所在处先把它转换成元素数组：字符串的码点、映射的键值对、张量的第一维子张量，见 `docs/technical/39_loops.md` 2a 节）。
 - **I19 子图接口**：条件图与循环体图的捕获端口个数、次序、类型都相同，并与节点的 `With` 输入一一对应；条件图的普通形参是 k 个状态；循环体图的普通形参是（元素）+ k 个状态。
 - **I20 效应摘要**：`LOOP` 节点的效应是两张子图摘要之并，加"可能故障"（迭代可能不终止，循环设计稿 4.8）；与图级摘要一起重新计算比对（I14）。
 
@@ -1027,7 +1027,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
     loop.kind();                 // While / For / ForWhile
     loop.stateCount();           // k；loop.stateType(j)；loop.valueType() 是状态或 k 元组
     // 外层图里的输入
-    loop.iterable();             // For/ForWhile：被遍历的数组（Norm 0）
+    loop.iterable();             // For/ForWhile：被遍历的元素数组（Norm 0；序列不是数组时为转换它的算子节点）
     loop.initialState(j);        // 第 j 个状态的初值
     loop.captures();             // With 输入，两张子图共用
     // 两张子图与端口的对应

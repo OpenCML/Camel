@@ -586,7 +586,7 @@ subgraph "abs" {
 | | |
 |---|---|
 | 语法元素 | `loop s = 初值, t = 初值 while 条件 do 循环体`、`loop s = 初值 for x in xs do 循环体`、`loop … for x in xs while 条件 do …`（设计原则 3.10 的 `do` 式） |
-| 输入 | `Norm`：`for` 形式第 0 条是被遍历的数组，然后是 k 个状态的初值；`With`：m 个捕获的值，条件图与循环体图共用这一份；`Ctrl`：顺序 |
+| 输入 | `Norm`：`for` 形式第 0 条是被遍历的元素数组（字符串、映射、张量在循环所在处先由 `__iter__` 算子转换成它，见 `docs/technical/39_loops.md` 2a 节），然后是 k 个状态的初值；`With`：m 个捕获的值，条件图与循环体图共用这一份；`Ctrl`：顺序 |
 | 负载 | `kind`：`While`、`For`、`ForWhile`；条件图与循环体图在图引用表里的下标（`For` 没有条件图） |
 | 条件图 | `role = LoopCond`；端口：k 个普通形参（状态）+ m 个捕获；返回 `bool` |
 | 循环体图 | `role = LoopBody`；端口：（`for` 形式多一个当前元素）+ k 个状态 + m 个捕获；返回下一轮的状态：k = 1 时是那个值，k > 1 时是 k 元组 |
