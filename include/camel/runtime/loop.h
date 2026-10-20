@@ -248,4 +248,14 @@ slot_t loopCollectedValue(const LoopView &loop, slot_t value, size_t c);
 /// computed from the nodes).
 void validateRuntimeLoopInterface(const GCGraph *graph, gc_node_ref_t node);
 
+/// Gives up the in-place write of a loop body's array state: every `:struct/append_arr_owned`
+/// in `body` (the form Builder::markLoopStateInPlace leaves, design principles 10.5) becomes the
+/// copying `:struct/append_arr`, and the count is returned.
+///
+/// A party that needs the loop's tape (its collection slots) calls this first: an in-place loop
+/// appends into one array, so every tape entry would be the same final array. This is a
+/// fallback, never a refusal — the program is legal in both forms — and it changes neither the
+/// loop's value nor its derivatives, only the allocations per round.
+size_t fallBackToCopyingAppend(GraphDraft &body);
+
 } // namespace camel::runtime

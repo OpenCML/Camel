@@ -1,8 +1,8 @@
 // H17 item 4: the old value of a loop state is not visible once the next round begins, so a
 // body that only ever appends to its state may write the state's array in place (design
-// principles 10.5), the same criterion as `t = t->relu`. `std::mem::buffers()` reads the buffer
+// principles 10.5), the same criterion as `t = t->relu`. `std::mem::blocks()` reads the block
 // counters between the operations, so the difference is visible from the language: growing to
-// 200 elements takes a handful of buffers in place, one per round when the array is copied.
+// 200 elements takes a handful of blocks in place, one per round when the array is copied.
 //
 // `grow` starts from a literal and only appends to the state: the loop takes a private copy of
 // the literal once and appends to it in place. `growFrom` starts from a parameter, an array the
@@ -52,30 +52,65 @@ func growConst(n: int): (int[], int) {
     return loop xs = [0], fixed = 9 while len(xs) < n do (xs->append<7>, 0)
 }
 
+// The criterion reads the value on the graph, not the way the source wrote it: a body that binds
+// the tuple to a name and returns the name returns the same value (`let r = …` then `r`) and is
+// written in place exactly like the tuple written in place; so is a name of a name. A tuple a
+// call returns is built by another graph, so it stays a copying append (cross-function, and a
+// loop state is only written in place when the graph returning it also builds it).
+func growNamed(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do sync {
+        let r = (xs->append<7>, rounds + 1)
+        r
+    }
+}
+
+func growNamedAlias(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do sync {
+        let step = (xs->append<7>, rounds + 1)
+        let r    = step
+        r
+    }
+}
+
+func stepOf(xs: int[], rounds: int): (int[], int) {
+    return (xs->append<7>, rounds + 1)
+}
+
+func growThroughCall(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do stepOf(xs, rounds)
+}
+
 func main(): int sync {
-    let before = std::mem::buffers()
+    let before = std::mem::blocks()
     let xs     = grow(200)
-    let mid    = std::mem::buffers()
+    let mid    = std::mem::blocks()
     let ys     = growFrom([0], 200)
-    let after  = std::mem::buffers()
+    let after  = std::mem::blocks()
     let again  = grow(3)
-    let beforeFor = std::mem::buffers()
+    let beforeFor = std::mem::blocks()
     let zs     = gather([1, 2, 3, 4, 5])
-    let afterFor  = std::mem::buffers()
-    let beforeMulti  = std::mem::buffers()
+    let afterFor  = std::mem::blocks()
+    let beforeMulti  = std::mem::blocks()
     let (ws, wr)     = growCounted(200)
-    let afterCounted = std::mem::buffers()
+    let afterCounted = std::mem::blocks()
     let (vr, vs)     = countAndGrow(200)
-    let afterSecond  = std::mem::buffers()
+    let afterSecond  = std::mem::blocks()
     let (ms, ns)     = growBoth(200)
-    let afterBoth    = std::mem::buffers()
+    let afterBoth    = std::mem::blocks()
     let (us, ur)     = growCountedFrom([0], 200)
-    let afterFrom    = std::mem::buffers()
+    let afterFrom    = std::mem::blocks()
     let (ps, pl)     = growAndPeek(200)
-    let afterPeek    = std::mem::buffers()
-    let beforeConst  = std::mem::buffers()
+    let afterPeek    = std::mem::blocks()
+    let beforeConst  = std::mem::blocks()
     let (cs, ck)     = growConst(200)
-    let afterConst   = std::mem::buffers()
+    let afterConst   = std::mem::blocks()
+    let beforeNamed  = std::mem::blocks()
+    let (gs, gr)     = growNamed(200)
+    let afterNamed   = std::mem::blocks()
+    let (hs, hr)     = growNamedAlias(200)
+    let afterNamedAlias = std::mem::blocks()
+    let (ks, kr)     = growThroughCall(200)
+    let afterCall    = std::mem::blocks()
     println(len(xs), len(ys), mid.allocs - before.allocs, after.allocs - mid.allocs)
     println(xs[0], xs[199], ys[0], ys[199], len(again), again[0], again[2])
     println(len(zs), afterFor.allocs - beforeFor.allocs, zs[0], zs[5])
@@ -89,5 +124,8 @@ func main(): int sync {
         afterFrom.allocs - afterBoth.allocs,
         afterPeek.allocs - afterFrom.allocs)
     println(len(cs), cs[0], cs[199], ck, afterConst.allocs - beforeConst.allocs)
+    println(len(gs), gs[0], gs[199], gr, afterNamed.allocs - beforeNamed.allocs)
+    println(len(hs), hs[0], hs[199], hr, afterNamedAlias.allocs - afterNamed.allocs)
+    println(len(ks), ks[0], ks[199], kr, afterCall.allocs - afterNamedAlias.allocs)
     return 0
 }

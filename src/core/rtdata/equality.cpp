@@ -55,6 +55,8 @@ bool isContentComparableImpl(const Type *type, std::vector<const Type *> &active
     case TypeCode::Bool:
     case TypeCode::Byte:
     case TypeCode::String:
+    case TypeCode::Complex64:
+    case TypeCode::Complex128:
         return true;
     case TypeCode::Array:
         return isContentComparableImpl(static_cast<const ArrayType *>(type)->elemType(), active);

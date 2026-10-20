@@ -523,6 +523,13 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                     ++k;
                 }
                 k = exponentEnd(k);
+                if (at(k) == 'i' && !isIdentPart(at(k + 1))) {
+                    // `4.5i`: an imaginary literal. The suffix belongs to the number only when
+                    // no identifier character follows, so `4if` stays `4` and `if`.
+                    emit(TokenKind::Imaginary, i, k + 1);
+                    i = k + 1;
+                    continue;
+                }
                 emit(TokenKind::Real, i, k);
                 i = k;
                 continue;
@@ -561,6 +568,13 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
             const size_t digitsEnd = end;
             end                    = exponentEnd(end);
             const bool decimal     = c != '0' || digitsEnd == i + 1;
+            if (decimal && at(end) == 'i' && !isIdentPart(at(end + 1))) {
+                // `4i`: an imaginary literal (a decimal number only; `0xFFi` is `0xFF` and the
+                // name `i`).
+                emit(TokenKind::Imaginary, i, end + 1);
+                i = end + 1;
+                continue;
+            }
             emit(end > digitsEnd && decimal ? TokenKind::Real : TokenKind::Integer, i, end);
             i = end;
             continue;

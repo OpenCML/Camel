@@ -901,6 +901,10 @@ std::string_view typeShortName(type::TypeCode code) {
         return "i64";
     case type::TypeCode::Bool:
         return "bool";
+    case type::TypeCode::Complex64:
+        return "c64";
+    case type::TypeCode::Complex128:
+        return "c128";
     case type::TypeCode::Void:
         return "any";
     default:

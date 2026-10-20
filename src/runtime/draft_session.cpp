@@ -28,7 +28,6 @@
  */
 
 #include "camel/runtime/draft_session.h"
-#include "camel/runtime/capacity.h"
 #include "camel/runtime/reachable.h"
 #include "runtime/graph_build.h"
 
@@ -580,20 +579,8 @@ uint64_t draftGraphOrigin(
     return origin != 0 ? origin : draft.firstNodeOrigin();
 }
 
-/// draftGraphBytes for the graph `identity`: a draft too large for one runtime graph is
-/// reported with the graph's name and a source position.
-size_t namedDraftGraphBytes(
-    const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
-    const GraphDraft &draft, const GCGraph *fallback) {
-    try {
-        return draftGraphBytes(context, draft, fallback);
-    } catch (const GraphCapacityError &e) {
-        throw e.inGraph(identity.name, draftGraphOrigin(context, identity, draft));
-    }
-}
-
 /// Room for the runtime graph of the draft `identity`. A graph space at its limit is reported
-/// with the graph's name and source position, like a draft that is too large.
+/// with the graph's name and source position.
 GCGraph *allocateGraph(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
     const GraphDraft &draft, size_t bytes) {
@@ -959,7 +946,7 @@ GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
     allocatedBytes.reserve(closure.size());
     for (GCGraph *graph : closure) {
         const DraftEntry &entry = *drafts_.at(graph);
-        const size_t bytes = namedDraftGraphBytes(context_, entry.identity, *entry.draft, graph);
+        const size_t bytes = draftGraphBytes(context_, *entry.draft, graph);
         rewritten.emplace(graph, allocateGraph(context_, entry.identity, *entry.draft, bytes));
         allocatedBytes.emplace(graph, bytes);
     }
@@ -1051,7 +1038,7 @@ void GraphDraftGroup::encode() {
     std::unordered_map<GCGraph *, size_t> bytes;
     for (GCGraph *key : order_) {
         const Member &m = member(key);
-        bytes.emplace(key, namedDraftGraphBytes(context_, m.identity, *m.draft, nullptr));
+        bytes.emplace(key, draftGraphBytes(context_, *m.draft, nullptr));
         rewritten.emplace(key, allocateGraph(context_, m.identity, *m.draft, bytes.at(key)));
     }
     // Graphs outside the group keep their identity.

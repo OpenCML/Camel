@@ -22,6 +22,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
@@ -35,6 +36,7 @@
 #include "camel/utils/utf8.h"
 
 #include <cmath>
+#include <complex>
 
 #include "camel/core/error/runtime.h"
 
@@ -54,6 +56,75 @@ Tuple *variableOf(ArgsView &norm) {
     ASSERT(cell != nullptr && cell->size() == 1, "Operand is not a variable.");
     return cell;
 }
+
+// ---- Complex numbers (c64, c128) ---------------------------------------------------------
+//
+// The arithmetic is the one of the two IEEE parts in the width of the value. A c64 operand is
+// kept in an object whose parts are exactly f32 values, so the float specialization computes
+// the same bits as an f32 operation. Division by the complex zero is a fault, like a float
+// division by zero (design principles 5.1).
+
+template <typename T> std::complex<T> asComplex(const Complex *value);
+
+template <> inline std::complex<float> asComplex(const Complex *value) {
+    return {value->realF(), value->imaginaryF()};
+}
+
+template <> inline std::complex<double> asComplex(const Complex *value) {
+    return {value->real(), value->imaginary()};
+}
+
+enum class ComplexOp { Add, Sub, Mul, Div };
+
+template <typename T>
+std::complex<T> complexCompute(const Complex *left, const Complex *right, ComplexOp op) {
+    const std::complex<T> a = asComplex<T>(left);
+    const std::complex<T> b = asComplex<T>(right);
+    switch (op) {
+    case ComplexOp::Add:
+        return a + b;
+    case ComplexOp::Sub:
+        return a - b;
+    case ComplexOp::Mul:
+        return a * b;
+    case ComplexOp::Div:
+        if (b == std::complex<T>{}) {
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);
+        }
+        return a / b;
+    }
+    return {};
+}
+
+template <typename T>
+slot_t complexBinary(ArgsView &norm, TypeCode code, ComplexOp op) {
+    const auto result = complexCompute<T>(
+        norm.get<Complex *>(0), norm.get<Complex *>(1), op);
+    return toSlot(Complex::create(
+        static_cast<double>(result.real()), static_cast<double>(result.imag()),
+        code, mm::autoSpace()));
+}
+
+template <typename T> slot_t complexNegate(ArgsView &norm, TypeCode code) {
+    const std::complex<T> value = asComplex<T>(norm.get<Complex *>(0));
+    return toSlot(Complex::create(
+        static_cast<double>(-value.real()), static_cast<double>(-value.imag()),
+        code, mm::autoSpace()));
+}
+
+template <typename T>
+slot_t complexAssign(ArgsView &norm, TypeCode code, ComplexOp op) {
+    Tuple *cell                = variableOf(norm);
+    const Complex *left        = cell->get<Complex *>(0);
+    const Complex *right       = norm.get<Complex *>(1);
+    const std::complex<T> result = complexCompute<T>(left, right, op);
+    const slot_t slot          = toSlot(Complex::create(
+        static_cast<double>(result.real()), static_cast<double>(result.imag()),
+        code, mm::autoSpace()));
+    cell->set<slot_t>(0, slot, static_cast<TupleType *>(norm.type(0)));
+    return slot;
+}
+
 } // namespace
 
 slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -536,6 +607,12 @@ slot_t __builtin__mul__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return toSlot(lhs * rhs);
     }
 
+    case TypeCode::Complex64:
+        return complexBinary<float>(norm, TypeCode::Complex64, ComplexOp::Mul);
+
+    case TypeCode::Complex128:
+        return complexBinary<double>(norm, TypeCode::Complex128, ComplexOp::Mul);
+
     default:
         throwRuntimeFault(
             RuntimeDiag::OperandTypeUnsupported,
@@ -583,6 +660,12 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
         return toSlot(camel::utils::quotient(lhs, rhs));
     }
+
+    case TypeCode::Complex64:
+        return complexBinary<float>(norm, TypeCode::Complex64, ComplexOp::Div);
+
+    case TypeCode::Complex128:
+        return complexBinary<double>(norm, TypeCode::Complex128, ComplexOp::Div);
 
     default:
         throwRuntimeFault(
@@ -771,6 +854,12 @@ slot_t __builtin__neg__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return toSlot(-v);
     }
 
+    case TypeCode::Complex64:
+        return complexNegate<float>(norm, TypeCode::Complex64);
+
+    case TypeCode::Complex128:
+        return complexNegate<double>(norm, TypeCode::Complex128);
+
     default:
         throwRuntimeFault(
             RuntimeDiag::OperandTypeUnsupported,
@@ -800,4 +889,62 @@ slot_t __builtin__inv__(ArgsView &with, ArgsView &norm, Context &ctx) {
             typeCodeToString(t),
             "an integer");
     }
+}
+
+// ---- The complex operators (suffix `c` is c64, `z` is c128) --------------------------------
+
+slot_t __builtin__add_cc__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexBinary<float>(norm, TypeCode::Complex64, ComplexOp::Add);
+}
+slot_t __builtin__add_zz__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexBinary<double>(norm, TypeCode::Complex128, ComplexOp::Add);
+}
+slot_t __builtin__sub_cc__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexBinary<float>(norm, TypeCode::Complex64, ComplexOp::Sub);
+}
+slot_t __builtin__sub_zz__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexBinary<double>(norm, TypeCode::Complex128, ComplexOp::Sub);
+}
+slot_t __builtin__mul_cc__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexBinary<float>(norm, TypeCode::Complex64, ComplexOp::Mul);
+}
+slot_t __builtin__mul_zz__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexBinary<double>(norm, TypeCode::Complex128, ComplexOp::Mul);
+}
+slot_t __builtin__div_cc__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexBinary<float>(norm, TypeCode::Complex64, ComplexOp::Div);
+}
+slot_t __builtin__div_zz__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexBinary<double>(norm, TypeCode::Complex128, ComplexOp::Div);
+}
+slot_t __builtin__neg_c__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexNegate<float>(norm, TypeCode::Complex64);
+}
+slot_t __builtin__neg_z__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexNegate<double>(norm, TypeCode::Complex128);
+}
+
+slot_t __builtin__assn_add_c__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexAssign<float>(norm, TypeCode::Complex64, ComplexOp::Add);
+}
+slot_t __builtin__assn_add_z__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexAssign<double>(norm, TypeCode::Complex128, ComplexOp::Add);
+}
+slot_t __builtin__assn_sub_c__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexAssign<float>(norm, TypeCode::Complex64, ComplexOp::Sub);
+}
+slot_t __builtin__assn_sub_z__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexAssign<double>(norm, TypeCode::Complex128, ComplexOp::Sub);
+}
+slot_t __builtin__assn_mul_c__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexAssign<float>(norm, TypeCode::Complex64, ComplexOp::Mul);
+}
+slot_t __builtin__assn_mul_z__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexAssign<double>(norm, TypeCode::Complex128, ComplexOp::Mul);
+}
+slot_t __builtin__assn_div_c__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexAssign<float>(norm, TypeCode::Complex64, ComplexOp::Div);
+}
+slot_t __builtin__assn_div_z__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexAssign<double>(norm, TypeCode::Complex128, ComplexOp::Div);
 }

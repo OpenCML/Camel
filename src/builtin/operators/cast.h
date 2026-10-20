@@ -51,3 +51,17 @@ slot_t __ftos__(ArgsView &with, ArgsView &norm, camel::core::context::Context &c
 slot_t __dtos__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __stos__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __atos__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+slot_t __itoc__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ltoc__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ftoc__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __dtoc__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ctoc__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ztoc__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+slot_t __itoz__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ltoz__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ftoz__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __dtoz__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ctoz__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __ztoz__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

@@ -33,6 +33,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
 
 [[tests]]
+name = "capacity.wide_graph"
+desc = "A graph has no size limit: one function of 30000 terms summed in a tree has 90000 nodes and 60000 frame slots (a runtime graph used to hold 65534 nodes and about 32766 slots) and compiles and runs on the node VM, the bytecode VM and the JIT, printing the sum the generator computed."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/scale/scale.py"
+args = ["${case}", "wide"]
+expect_exit = 0
+expect_stdout_contains = ["3 of 3 wide runs", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
 name = "capacity.f24_const_graphs"
 desc = "progen finding F24: 62 functions that each return a string literal. Each graph that owns a constant took a 256 KB block of the 16 MB meta space, so the 62nd did not fit and the program ended in std::bad_alloc before the first pass. Pipeline: the default pipeline."
 kind = "behavior"

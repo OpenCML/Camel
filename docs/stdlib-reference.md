@@ -31,13 +31,13 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
-| [built-in](#built-in-functions) | none | C++ | 47 |
+| [built-in](#built-in-functions) | none | C++ | 50 |
 | [str](#str) | `import { ... } from str` | C++ | 16 |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
 | [tree](#tree) | `import { ... } from tree` | C++ | 7 |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ | 2 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
-| [math](#math) | `import { ... } from math` | C++ | 45 |
+| [math](#math) | `import { ... } from math` | C++ | 48 |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
 | [algo](#algo) | `import { ... } from algo` | C++ | 8 |
 | [random](#random) | `import { ... } from random` | C++ | 10 |
@@ -57,6 +57,23 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 The operators behind the language's own operators (`+`, `==`, `[]`, `??`, assignment, ...) are
 registered under reserved names (`__add__`, ...) and are not listed here.
+
+### Memory
+
+Data blocks (design principles 10.5): the process-wide counters, read between two operations.
+
+#### `std::mem::blocks`
+
+```camel
+std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
+```
+
+The data-block counters: blocks allocated so far, freed so far, live now, and the bytes the
+live blocks hold. The call is not pure: it reports process state, so the optimizer must not
+fold, merge or drop it.
+
+- With effects: reads the process-wide data-block counters.
+- Example: `std::mem::blocks().live` gives `0 when no block is alive`
 
 ### Conversions
 
@@ -158,6 +175,39 @@ x as a 32-bit float.
 - Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not a number.
 - Example: `f32(0.5)` gives `0.5`
+
+#### `c64`
+
+```camel
+c64: (x: i32) => c64
+c64: (x: int) => c64
+c64: (x: f32) => c64
+c64: (x: float) => c64
+c64: (x: c64) => c64
+c64: (x: c128) => c64
+```
+
+x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
+keeps both parts as they are.
+
+- Pure.
+- Example: `c64(2)` gives `2+0i`
+
+#### `c128`
+
+```camel
+c128: (x: i32) => c128
+c128: (x: int) => c128
+c128: (x: f32) => c128
+c128: (x: float) => c128
+c128: (x: c64) => c128
+c128: (x: c128) => c128
+```
+
+x as a 128-bit complex number: the real part is x and the imaginary part is zero.
+
+- Pure.
+- Example: `c128(2)` gives `2+0i`
 
 #### `string`
 
@@ -1405,6 +1455,8 @@ abs: (x: i32) => i32
 abs: (x: int) => int
 abs: (x: f32) => f32
 abs: (x: float) => float
+abs: (x: c64) => f32
+abs: (x: c128) => float
 ```
 
 The absolute value. The smallest integer has no positive counterpart: its absolute value is
@@ -1412,6 +1464,42 @@ not defined.
 
 - Pure.
 - Example: `abs(-3)` gives `3`
+
+#### `re`
+
+```camel
+re: (x: c64) => f32
+re: (x: c128) => float
+```
+
+The real part of a complex number.
+
+- Pure.
+- Example: `re(3+4i)` gives `3.0`
+
+#### `im`
+
+```camel
+im: (x: c64) => f32
+im: (x: c128) => float
+```
+
+The imaginary part of a complex number.
+
+- Pure.
+- Example: `im(3+4i)` gives `4.0`
+
+#### `conj`
+
+```camel
+conj: (x: c64) => c64
+conj: (x: c128) => c128
+```
+
+The conjugate of a complex number: the imaginary part is negated.
+
+- Pure.
+- Example: `conj(3+4i)` gives `3-4i`
 
 #### `sqrt`
 
@@ -1432,6 +1520,8 @@ The square root. An integer argument is converted: i32 gives f32, int gives floa
 ```camel
 exp: (x: f32) => f32
 exp: (x: float) => float
+exp: (x: c64) => c64
+exp: (x: c128) => c128
 ```
 
 e raised to the power x.

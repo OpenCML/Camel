@@ -10,7 +10,7 @@
  */
 
 #include "camel/core/mm.h"
-#include "camel/core/array/buffer.h"
+#include "camel/core/mm/block.h"
 #include "camel/core/mm/alloc/header.h"
 #include "camel/core/rtdata/foreign.h"
 #include "nlohmann/json.hpp"
@@ -273,14 +273,14 @@ std::string snapshotToJson(bool detailed) {
              {"activeRootedHandles", foreignStats.activeRootedHandles},
              {"activePinnedHandles", foreignStats.activePinnedHandles},
          }},
-        {"buffers",
+        {"blocks",
          {
-             {"liveBytes", camel::core::array::bufferBytesLive()},
-             {"peakBytes", camel::core::array::bufferBytesPeak()},
-             {"liveCount", camel::core::array::bufferLiveCount()},
-             {"created", camel::core::array::bufferCreations()},
-             {"spaceUsedBytes", bufferSpace().usage().usedBytes},
-             {"spaceReservedBytes", bufferSpace().usage().reservedBytes},
+             {"liveBytes", camel::core::mm::blockBytesLive()},
+             {"peakBytes", camel::core::mm::blockBytesPeak()},
+             {"liveCount", camel::core::mm::blockLiveCount()},
+             {"created", camel::core::mm::blockCreations()},
+             {"spaceUsedBytes", blockSpace().usage().usedBytes},
+             {"spaceReservedBytes", blockSpace().usage().reservedBytes},
          }},
         {"summary",
          {
@@ -319,10 +319,10 @@ std::string summaryToText() {
     os << "  foreign: live=" << foreign.liveControlBlocks
        << " rooted=" << foreign.activeRootedHandles << " pinned=" << foreign.activePinnedHandles
        << " finalized=" << foreign.finalizedWrappers << "\n";
-    os << "  buffers: live=" << camel::core::array::bufferLiveCount()
-       << " bytes=" << camel::core::array::bufferBytesLive()
-       << " peak=" << camel::core::array::bufferBytesPeak()
-       << " created=" << camel::core::array::bufferCreations() << "\n";
+    os << "  blocks: live=" << camel::core::mm::blockLiveCount()
+       << " bytes=" << camel::core::mm::blockBytesLive()
+       << " peak=" << camel::core::mm::blockBytesPeak()
+       << " created=" << camel::core::mm::blockCreations() << "\n";
 
     const auto sources = autoSp.rootSourceDescriptions();
     if (!sources.empty()) {

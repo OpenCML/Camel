@@ -249,7 +249,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
     case runtime::GCNodeKind::Call: {
         const auto callee = withInputsOf(node);
-        return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->node(callee[0])));
+        return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->ref(callee[0])));
     }
     case runtime::GCNodeKind::Loop: {
         // Each round calls the condition and the body graph.
@@ -259,7 +259,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
     case runtime::GCNodeKind::Join: {
         for (draft_node_ref_t arm : withInputsOf(node)) {
-            node_handle_t armNode = nodeDraftOf(node)->node(arm);
+            node_handle_t armNode = nodeDraftOf(node)->ref(arm);
             if (nodeIsKind(armNode, runtime::GCNodeKind::Func)) {
                 const auto callee = calleeOf(armNode);
                 if (callee != nullptr && effectfulGraphs_.contains(callee.get())) {
@@ -323,7 +323,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     }
     std::vector<draft_node_ref_t> dropped;
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!draft.alive(id) || !isEffectNode(graph.get(), draft.node(id))) {
+        if (!draft.alive(id) || !isEffectNode(graph.get(), draft.ref(id))) {
             continue;
         }
         if (needed.contains(id)) {
@@ -367,7 +367,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         if (feedsDroppedEffect(id)) {
             continue;
         }
-        node_handle_t node = draft.node(id);
+        node_handle_t node = draft.ref(id);
         std::string subject;
         switch (nodeKindOf(node)) {
         case runtime::GCNodeKind::Oper: {
@@ -388,7 +388,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             subject = "The call";
             break;
         }
-        camel::source::origin_id_t origin = node->header.origin;
+        camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
         if (origin == camel::source::kInvalidOriginId && sourceContext) {
             origin = sourceContext->debugMap().graphOrigin(graph->stableId());
         }
@@ -405,7 +405,7 @@ void Builder::reportUnusedFallibleValues() {
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
     const auto warn =
         [&](const compile_graph_ptr_t &graph, node_handle_t node, Type *type, const char *remark) {
-            camel::source::origin_id_t origin = node->header.origin;
+            camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
             if (origin == camel::source::kInvalidOriginId && sourceContext) {
                 origin = sourceContext->debugMap().graphOrigin(graph->stableId());
             }
@@ -445,7 +445,7 @@ void Builder::reportUnusedFallibleValues() {
             return id == draft.exitNode() || id == draft.outputNode() || id == draft.returnNode();
         };
         if (graph.get() == undeclaredMain && draft.returnNode() != runtime::kInvalidNodeRef) {
-            node_handle_t value = draft.node(draft.returnNode());
+            node_handle_t value = draft.ref(draft.returnNode());
             if (TupleType *type = fallibleTypeOf(graph, value);
                 type != nullptr && !discardedValues_.contains(value)) {
                 warn(
@@ -460,7 +460,7 @@ void Builder::reportUnusedFallibleValues() {
             if (!draft.alive(id)) {
                 continue;
             }
-            node_handle_t node = draft.node(id);
+            node_handle_t node = draft.ref(id);
             switch (nodeKindOf(node)) {
             case runtime::GCNodeKind::Oper:
             case runtime::GCNodeKind::Func:
@@ -476,7 +476,7 @@ void Builder::reportUnusedFallibleValues() {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
                 // dropped where the arm ends.
                 for (draft_node_ref_t armId : draft.withInputsOf(id)) {
-                    node_handle_t arm   = draft.node(armId);
+                    node_handle_t arm   = draft.ref(armId);
                     const auto armGraph = nodeIsKind(arm, runtime::GCNodeKind::Func)
                                               ? graph->funcTarget(arm)
                                               : nullptr;
@@ -484,7 +484,7 @@ void Builder::reportUnusedFallibleValues() {
                         armGraph->draft().returnNode() == runtime::kInvalidNodeRef) {
                         continue;
                     }
-                    node_handle_t value = armGraph->draft().node(armGraph->draft().returnNode());
+                    node_handle_t value = armGraph->draft().ref(armGraph->draft().returnNode());
                     if (TupleType *type = fallibleTypeOf(armGraph, value);
                         type != nullptr && !discardedValues_.contains(value)) {
                         warn(armGraph, value, type, "");
@@ -600,7 +600,7 @@ void Builder::markNonRetainingReads() {
         bool found = false;
         for (draft_node_ref_t id = 0; !found && id < draft->nodeSlotCount(); ++id) {
             if (draft->alive(id)) {
-                node_handle_t node = draft->node(id);
+                node_handle_t node = draft->ref(id);
                 found              = mayWrite(node) && !chainedNodes_.contains(node);
             }
         }
@@ -624,7 +624,7 @@ void Builder::markNonRetainingReads() {
         size_t users              = 0;
         for (auto inputs : {normUsersOf(read), withUsersOf(read)}) {
             for (draft_node_ref_t userId : inputs) {
-                node_handle_t user = draft->node(userId);
+                node_handle_t user = draft->ref(userId);
                 ++users;
                 lastUser = std::max(lastUser, userId);
                 if (!nodeIsKind(user, runtime::GCNodeKind::Oper) || !chainedNodes_.contains(user) ||
@@ -638,12 +638,12 @@ void Builder::markNonRetainingReads() {
             continue;
         }
         for (draft_node_ref_t between = id + 1; !keeps && between < lastUser; ++between) {
-            keeps = draft->alive(between) && mayWrite(draft->node(between)); // condition 4
+            keeps = draft->alive(between) && mayWrite(draft->ref(between)); // condition 4
         }
         if (keeps || hasUnchainedWriter(draft)) {
             continue;
         }
-        node_handle_t cell = draft->node(normInputsOf(read).front());
+        node_handle_t cell = draft->ref(normInputsOf(read).front());
         const auto peek =
             peekGroup->operGroup()->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
         ASSERT(peek.has_value(), "__var_peek__ rejected a variable.");
@@ -713,7 +713,7 @@ void Builder::rejectLiteralConversion(
     const std::string &group, FunctionType *funcType, const std::vector<Argument> &operands,
     const GCT::node_ptr_t &call) {
     static const std::unordered_set<std::string> kConversions =
-        {"int", "i64", "i32", "float", "f64", "f32"};
+        {"int", "i64", "i32", "float", "f64", "f32", "c64", "c128"};
     if (!kConversions.contains(group) || operands.size() != 1 || funcType == nullptr ||
         !funcType->hasExitType() || operands[0].expr->type() != GCT::NodeKind::DATA) {
         return;

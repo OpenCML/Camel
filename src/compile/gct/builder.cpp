@@ -274,6 +274,8 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("f32"), Type::Float32());
     typeScope_->insert(Reference("f64"), Type::Float64());
     typeScope_->insert(Reference("float"), Type::Float64());
+    typeScope_->insert(Reference("c64"), Type::Complex64());
+    typeScope_->insert(Reference("c128"), Type::Complex128());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
     // The type of binary data (design principles 11.1), a built-in name like `string`.
@@ -2643,6 +2645,18 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         }
         exactValue = literal::Value::fromRealText(str);
     } break;
+    case LiteralType::Imaginary: {
+        // `4i`: the value is imaginary, the type is the default c128 until the context says
+        // otherwise (design principles 5.1).
+        exactValue = literal::Value::fromImaginaryText(str);
+        if (!exactValue.has_value()) {
+            diags_->of(SemanticDiag::InvalidLiteral)
+                .at(ast->load()->tokenRange())
+                .commit("imaginary number", str);
+            throw BuildAbortException();
+        }
+        data = *exactValue->toData(Type::Complex128());
+    } break;
     case LiteralType::Boolean: {
         // Handle boolean literals ("true" or "false")
         if (str == "true") {
@@ -2697,6 +2711,8 @@ static std::optional<literal::Kind> writtenNumberKind(const AST::node_ptr_t &ite
         return literal::Kind::Integer;
     case LiteralType::Real:
         return literal::Kind::Float;
+    case LiteralType::Imaginary:
+        return literal::Kind::Imaginary;
     default:
         return std::nullopt;
     }
@@ -2749,16 +2765,18 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
 
     // With no context to say which type they have, the number literals of one array take the
     // widest kind among them (design principles 5.1; as in Go): `[1, 2.0]` is a `float[]`.
-    // The order of the kinds is integer < decimal (< imaginary, once complex literals exist).
-    bool hasInteger = false, hasReal = false;
+    // The order of the kinds is integer < decimal < imaginary: a complex element widens every
+    // other number to c128, the default complex type.
+    bool hasInteger = false, hasReal = false, hasImaginary = false;
     for (const auto &item : *items) {
         if (const std::optional<literal::Kind> kind = writtenNumberKind(item);
             kind.has_value()) {
             hasInteger |= *kind == literal::Kind::Integer;
             hasReal |= *kind == literal::Kind::Float;
+            hasImaginary |= *kind == literal::Kind::Imaginary;
         }
     }
-    const bool widenToFloat = hasInteger && hasReal;
+    const bool widenToFloat = hasInteger && hasReal && !hasImaginary;
     // The values the elements were written as and their positions, in the order the data holds
     // them: the elements keep their exact values and their places until GIR decides the type
     // of the array (design principles 5.1).
@@ -2767,7 +2785,10 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
 
     for (const auto &item : *items) {
         node_ptr_t dataNode = visitData(item);
-        if (widenToFloat && writtenNumberKind(item) == literal::Kind::Integer) {
+        if (hasImaginary && writtenNumberKind(item) != literal::Kind::Imaginary) {
+            // An integer or decimal literal beside an imaginary one is a complex value.
+            dataNode = literalNodeInType(dataNode, Type::Complex128(), item);
+        } else if (widenToFloat && writtenNumberKind(item) == literal::Kind::Integer) {
             // An integer literal beside a decimal one is a value of the float type, exactly.
             dataNode = literalNodeInType(dataNode, Type::Float(), item);
         }
@@ -2912,11 +2933,29 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
         // 0.1` is the f32 nearest to one tenth, not the same double rounded twice, and `let x:
         // float = 1` is 1.0 (an integer literal takes the float type its context asks for).
         if (const literal::Value *exact = Tree::of(value)->literalValueOf(value);
-            exact != nullptr && type->isPrimitive() &&
+            exact != nullptr &&
+            (type->isPrimitive() || camel::core::type::isComplex(type->code())) &&
             (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64 ||
-             type->code() == TypeCode::Float32 || type->code() == TypeCode::Float64)) {
+             type->code() == TypeCode::Float32 || type->code() == TypeCode::Float64 ||
+             camel::core::type::isComplex(type->code()))) {
             if (auto converted = exact->toData(type); converted.has_value()) {
                 return tree_->makeData(*converted);
+            }
+            if (exact->hasImaginaryPart() && !camel::core::type::isComplex(type->code())) {
+                // A complex literal where a real type is declared: no implicit conversion
+                // (design principles 5.1). `re(z)` and `im(z)` are the explicit operations.
+                const camel::source::source_context_ptr_t sourceContext =
+                    context_ != nullptr ? context_->sourceContext() : nullptr;
+                std::string written = sourceTextAt(sourceContext, value->origin());
+                if (written.empty()) {
+                    written = exact->toString();
+                }
+                diags_->of(SemanticDiag::LiteralNotRepresentable)
+                    .at(ast->load()->tokenRange())
+                    .commit(
+                        written, type->toString(),
+                        "a complex value does not become a real one; use re() or im()");
+                throw BuildAbortException();
             }
             if (exact->kind() == literal::Kind::Float && isIntegerPrimitive(type)) {
                 // A float literal where an integer is asked for: not a range problem, but a

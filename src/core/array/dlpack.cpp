@@ -24,6 +24,7 @@
 #include "camel/core/array/dlpack.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/mm/block.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/assert.h"
 
@@ -33,6 +34,8 @@
 
 namespace camel::core::array {
 
+using camel::core::mm::Block;
+using camel::core::mm::BlockRelease;
 using camel::core::type::TypeCode;
 
 namespace {
@@ -51,6 +54,10 @@ DLDataType toDLPackType(TypeCode code) {
         return DLDataType{6, 8, 1};
     case TypeCode::Byte:
         return DLDataType{1, 8, 1};
+    case TypeCode::Complex64:
+        return DLDataType{5, 64, 1};
+    case TypeCode::Complex128:
+        return DLDataType{5, 128, 1};
     default:
         throw std::invalid_argument("Unsupported dtype for DLPack export");
     }
@@ -78,6 +85,12 @@ TypeCode fromDLPackType(const DLDataType &dtype) {
     if (dtype.code == 1 && dtype.bits == 8) {
         return TypeCode::Byte;
     }
+    if (dtype.code == 5 && dtype.bits == 64) {
+        return TypeCode::Complex64;
+    }
+    if (dtype.code == 5 && dtype.bits == 128) {
+        return TypeCode::Complex128;
+    }
     throw std::invalid_argument("Unsupported DLPack dtype");
 }
 
@@ -93,7 +106,7 @@ uint64_t numelOf(std::span<const int64_t> extents) {
 }
 
 struct ExportContext {
-    Buffer *buffer = nullptr;
+    Block *block   = nullptr;
     int64_t *shape = nullptr;
 };
 
@@ -103,8 +116,8 @@ void releaseExport(DLManagedTensor *self) {
     }
     auto *context = static_cast<ExportContext *>(self->manager_ctx);
     if (context != nullptr) {
-        if (context->buffer != nullptr) {
-            context->buffer->release();
+        if (context->block != nullptr) {
+            context->block->release();
         }
         delete[] context->shape;
         delete context;
@@ -130,15 +143,19 @@ void releaseImport(void *raw) noexcept {
 
 DLManagedTensor *toDLPack(Array *tensor) {
     ASSERT(tensor != nullptr, "Cannot export a null array");
-    ASSERT(tensor->isCompact(), "Only a compact numeric array can be exported through DLPack");
+    ASSERT(tensor->isCompact(), "Only a compact pure-data array can be exported through DLPack");
+    // DLPack has no dtype for a struct: an array of structs is left to the Arrow item.
+    ASSERT(
+        camel::core::type::isCompactElementType(tensor->dtype()),
+        "Only an array of numeric scalars can be exported through DLPack");
     // A view or an export needs a stable data address; an inline array is promoted (once).
-    tensor->ensureBuffer();
-    Buffer *buffer = tensor->buffer();
-    ASSERT(buffer != nullptr, "A buffer-backed array has a buffer");
+    tensor->ensureBlock();
+    Block *block = tensor->block();
+    ASSERT(block != nullptr, "A block-backed array has a block");
 
-    auto *context = new ExportContext();
-    context->buffer = buffer;
-    buffer->retain();
+    auto *context  = new ExportContext();
+    context->block = block;
+    block->retain();
     const size_t rank = tensor->rank();
     context->shape    = rank > 0 ? new int64_t[rank] : nullptr;
     for (size_t i = 0; i < rank; ++i) {
@@ -200,11 +217,11 @@ Array *fromDLPack(
         throw std::invalid_argument("DLPack tensor has no data");
     }
     auto *context  = new ImportContext{managed};
-    Buffer *buffer = Buffer::adoptExternal(
-        managed->dl_tensor.data, bytes, BufferRelease{&releaseImport, context});
-    Array *array = Array::wrap(allocator, arrayType, shape, buffer);
+    Block *block = Block::adoptExternal(
+        managed->dl_tensor.data, bytes, BlockRelease{&releaseImport, context});
+    Array *array = Array::wrap(allocator, arrayType, shape, block);
     // `wrap` retained it; the caller's reference is this one.
-    buffer->release();
+    block->release();
     return array;
 }
 

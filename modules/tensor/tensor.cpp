@@ -20,7 +20,7 @@
 /*
  * Tensor construction: a dtype and a shape map to an Array of the matching numeric element
  * type. There is no separate tensor object any more; a view is an Array view of the source's
- * buffer.
+ * block.
  */
 
 #include "tensor.h"

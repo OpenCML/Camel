@@ -125,6 +125,20 @@ std::span<std::byte> GraphDraft::mutablePayloadOf(DraftNode *draftNode) {
     return DraftNodeView::payload(draftNode);
 }
 
+void GraphDraft::retargetOperNode(gc_node_ref_t id, std::string_view uri) {
+    DraftNode *draftNode = node(id);
+    ASSERT(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Oper,
+        "Can only retarget an OPER node.");
+    std::span<std::byte> payload = mutablePayloadOf(draftNode);
+    ASSERT(payload.size() >= sizeof(GCOperBody), "OPER payload is too small.");
+    auto *body = reinterpret_cast<GCOperBody *>(payload.data());
+    // The operator is now named by its URI: whatever `op` the node resolved to belongs to the
+    // operator it ran before.
+    body->op   = nullptr;
+    body->oper = camel::core::OperatorTable::instance().intern(uri);
+}
+
 gc_node_ref_t GraphDraft::addDataNode(
     camel::core::type::Type *type, gc_slot_idx_t dataIndex, uint8_t runtimeFlags) {
     return addNode(

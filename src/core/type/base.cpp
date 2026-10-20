@@ -107,6 +107,10 @@ string typeCodeToString(TypeCode code) {
         return "void";
     case TypeCode::String:
         return "string";
+    case TypeCode::Complex64:
+        return "c64";
+    case TypeCode::Complex128:
+        return "c128";
     case TypeCode::Array:
         return "array";
     case TypeCode::Tuple:
@@ -155,6 +159,10 @@ std::string Type::mangle() const {
         return "v";
     case TypeCode::String:
         return "s";
+    case TypeCode::Complex64:
+        return "c64";
+    case TypeCode::Complex128:
+        return "c128";
     case TypeCode::Ref:
         return "r";
     case TypeCode::EnumHole:
@@ -502,6 +510,16 @@ Type *Type::Void() {
 
 Type *Type::String() {
     static Type *type = primitiveSingleton(TypeCode::String);
+    return type;
+}
+
+Type *Type::Complex64() {
+    static Type *type = primitiveSingleton(TypeCode::Complex64);
+    return type;
+}
+
+Type *Type::Complex128() {
+    static Type *type = primitiveSingleton(TypeCode::Complex128);
     return type;
 }
 

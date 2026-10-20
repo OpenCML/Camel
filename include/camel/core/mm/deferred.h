@@ -24,9 +24,9 @@
  * allocate (which needs the lock) or take a lock of its own (the Python GIL), so releasing an
  * external resource there would either deadlock or invert lock order. The collector therefore
  * only queue the release; the thread that reached the safepoint runs the queue once the
- * collection is over (see GenerationalAllocatorWithGC::safepoint). Numeric array buffers use
+ * collection is over (see GenerationalAllocatorWithGC::safepoint). Data blocks use
  * the same queue for the same reason: their finalizer runs under the allocator's lock, while the
- * release takes the buffer space's own lock.
+ * release takes the block space's own lock.
  */
 
 #pragma once
