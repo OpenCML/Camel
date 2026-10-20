@@ -212,7 +212,9 @@ node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_
     return drefNode;
 }
 
-bool Builder::genericOperatorAccepts(const template_ptr_t &tmpl, const type_vec_t &normTypes) {
+bool Builder::genericOperatorAccepts(
+    const template_ptr_t &tmpl, const std::vector<Argument> &normInputs,
+    const type_vec_t &normTypes) {
     FunctionType *signature = tmpl->funcType;
     if (signature->withTypesCount() != 0 || signature->normTypesCount() != normTypes.size()) {
         return false;
@@ -230,9 +232,20 @@ bool Builder::genericOperatorAccepts(const template_ptr_t &tmpl, const type_vec_
     }
     for (size_t i = 0; i < normTypes.size(); ++i) {
         Type *wanted = substituteTypeVars(signature->normTypeAt(i), bindings);
-        if (containsTypeVar(wanted) || !entersImplicitly(wanted, valueTypeOf(normTypes[i]))) {
+        if (containsTypeVar(wanted)) {
             return false;
         }
+        if (entersImplicitly(wanted, valueTypeOf(normTypes[i]))) {
+            continue;
+        }
+        // An argument that is an array or struct literal enters the parameter's type (design
+        // principles 5.1); resolveGenericCall makes the conversion once this template is the
+        // one the call means.
+        if (i < normInputs.size() &&
+            compositeLiteralEntersIn(normInputs[i].node, wanted, normInputs[i].expr)) {
+            continue;
+        }
+        return false;
     }
     return true;
 }
@@ -293,7 +306,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         }
         if (!entering) {
             for (const auto &tmpl : set.templates) {
-                if (genericOperatorAccepts(tmpl, normTypes)) {
+                if (genericOperatorAccepts(tmpl, normInputs, normTypes)) {
                     templates.push_back(tmpl);
                 }
             }
@@ -1355,6 +1368,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 value = literalValueOfExpr(inputs[i].expr);
             }
             if (value.has_value() && literal::kindEnters(*value, param)) {
+                entered[i] = param;
+                continue;
+            }
+            // An array or struct literal is a position with an expected type too (design
+            // principles 5.1): `pick([1.0])` with `xs: f32[]`, `norm({ x: 1.0 })` with a
+            // struct parameter. Its elements are converted once, from the values they were
+            // written as, when the callee is known (enterParameters, coerceTo); a literal that
+            // does not fit is refused there, and one that does not fit at all stays a name
+            // without a matching function.
+            if (i < inputs.size() &&
+                compositeLiteralEntersIn(inputs[i].node, param, inputs[i].expr)) {
                 entered[i] = param;
             }
         }

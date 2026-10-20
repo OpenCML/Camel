@@ -90,6 +90,96 @@ bool isNumericType(Type *type) {
             type->code() == TypeCode::Float32 || type->code() == TypeCode::Float64);
 }
 
+/// Whether the element `data` of a composite literal can be given `type`: the question
+/// compositeDataInType / literalElementInType answer while building the converted value, asked
+/// here without building it and without reporting. A value of a kind that enters the type is a
+/// fit even when the type cannot hold it (`3000000000` in an `i32`): that is a value the
+/// conversion refuses, with the value as written, once the callee is known.
+bool elementEntersIn(
+    const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin,
+    const literal::Value *written);
+
+/// Whether the composite literal `data` can be given `type`: the walk of compositeDataInType,
+/// unchanged, for the positions a literal may enter (design principles 5.1). The two must agree;
+/// a literal this accepts is converted by compositeDataInType, which reports what does not fit.
+bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin) {
+    if (data == nullptr || type == nullptr || asTagged(type) != nullptr) {
+        return false;
+    }
+    if (type->assignableFrom(data->type())) {
+        return true;
+    }
+    if (type->code() == TypeCode::Array && data->type()->code() == TypeCode::Array) {
+        Type *elemType   = tt::as_ptr<ArrayType>(type)->elemType();
+        const auto array = std::dynamic_pointer_cast<ArrayData>(data);
+        if (elemType == nullptr || array == nullptr) {
+            return false;
+        }
+        if (array->raw().empty()) {
+            // `[]`: the elements it does not have are the only thing its type leaves open.
+            return true;
+        }
+        const auto *written =
+            origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
+        for (size_t index = 0; index < array->raw().size(); ++index) {
+            const literal::Value *exact = nullptr;
+            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
+                exact = &*(*written)[index];
+            }
+            if (!elementEntersIn(array->raw()[index], elemType, origin, exact)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (type->code() == TypeCode::Struct && data->type()->code() == TypeCode::Struct) {
+        const auto *structType = tt::as_ptr<StructType>(type);
+        const auto object      = std::dynamic_pointer_cast<StructData>(data);
+        if (structType == nullptr || object == nullptr ||
+            object->raw().size() != structType->size()) {
+            return false;
+        }
+        const auto *written =
+            origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
+        size_t index = 0;
+        for (const auto &[name, value] : object->raw()) {
+            const std::optional<size_t> fieldIndex = structType->findField(name);
+            if (!fieldIndex.has_value()) {
+                return false;
+            }
+            const literal::Value *exact = nullptr;
+            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
+                exact = &*(*written)[index];
+            }
+            ++index;
+            if (!elementEntersIn(value, structType->typeAt(*fieldIndex), origin, exact)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+bool elementEntersIn(
+    const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin,
+    const literal::Value *written) {
+    if (data == nullptr || type == nullptr || asTagged(type) != nullptr) {
+        return false;
+    }
+    if (type->assignableFrom(data->type())) {
+        return true;
+    }
+    if (isComposite(data->type()->code())) {
+        return compositeEntersIn(data, type, origin);
+    }
+    const std::optional<literal::Value> fallback =
+        written == nullptr ? exactValueOfData(data) : std::nullopt;
+    const literal::Value *value = written != nullptr ? written : fallback ? &*fallback : nullptr;
+    return value != nullptr && isNumericType(type) && isNumericType(data->type()) &&
+           literal::kindEnters(*value, type);
+}
+
 } // namespace
 
 node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::node_ptr_t &origin) {
@@ -165,6 +255,25 @@ node_handle_t Builder::compositeLiteralInType(
     }
     registerNodeOrigin(context_, result, origin, "gir.data.literal");
     return result;
+}
+
+bool Builder::compositeLiteralEntersIn(
+    node_handle_t node, Type *target, const GCT::node_ptr_t &origin) {
+    if (origin == nullptr || target == nullptr || asTagged(target) != nullptr ||
+        origin->type() != GCT::NodeKind::DATA) {
+        return false;
+    }
+    // Only the constant the literal was lowered to, as in compositeLiteralInType: a value the
+    // program computes is not a literal, and a runtime slot's value is not one either.
+    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || node->header.dataIndex >= 0) {
+        return false;
+    }
+    const data_ptr_t &data = origin->data();
+    if (data == nullptr || !isComposite(data->type()->code()) ||
+        !tt::as_shared<CompositeData>(data)->resolved()) {
+        return false;
+    }
+    return compositeEntersIn(data, target, origin);
 }
 
 data_ptr_t Builder::compositeDataInType(

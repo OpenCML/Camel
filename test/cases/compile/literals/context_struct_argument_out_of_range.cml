@@ -1,0 +1,15 @@
+/**
+ * Handover H27b: the fields of a struct literal argument enter the field types of its
+ * parameter, so a field the field type cannot hold is refused once the callee is known
+ * (`LiteralNotRepresentable`), not left as a `{ x: float, y: float }` with no matching function.
+ */
+module literal_context_struct_argument_out_of_range
+
+type Point = { x: f32, y: f32 }
+
+func px(p: Point): f32 { return p.x }
+
+func main(): int sync {
+    println(px({ x: 1e40, y: 0.0 }))
+    return 0
+}
