@@ -59,11 +59,19 @@ struct InlineRewriteConfig {
     bool blockCallsToSccEntryCallees = true;
 };
 
-/// Nodes that specialization and inlining may add to a program (see
-/// OptimizeRewriteConfig::growthBudgetNodes). The environment variable CAMEL_OPT_GROWTH_BUDGET
-/// overrides it for every pass built on the rewrite engine.
+/// Nodes that specialization and inlining may add to a program (see GrowthBudget). It is the
+/// default of the `growth_budget` parameter every pass built on the rewrite engine declares.
 inline constexpr size_t kDefaultGrowthBudgetNodes = 4096;
-inline constexpr const char *kGrowthBudgetEnvVar  = "CAMEL_OPT_GROWTH_BUDGET";
+
+/// The growth budget of one pass built on the rewrite engine. `nodes` is what the pass may copy;
+/// `written` says the pipeline wrote the `growth_budget` parameter (as against the default), and
+/// `passName` is the pass that owns it. A later pass that has to explain a call the engine left
+/// (onnx::export) reads all three from InlineReport.
+struct GrowthBudget {
+    size_t nodes = kDefaultGrowthBudgetNodes;
+    bool written = false;
+    std::string passName;
+};
 
 /// Why the rewrite engine left a direct call as a call.
 enum class InlineDecline : uint8_t {
@@ -90,11 +98,12 @@ struct InlineDeclined {
 /// The graph a pass hands on does not show why a call in it is still a call; a pass that has to
 /// refuse such a graph (onnx::export: a request it cannot see) reads the reason here.
 struct InlineReport {
-    size_t growthBudget        = 0;
-    size_t growthSpent         = 0;
-    bool budgetFromEnvironment = false; // CAMEL_OPT_GROWTH_BUDGET set it
-    size_t maxOwnerNodes       = 0;
-    size_t smallNodes          = 0;       // InlineRewriteConfig::smallSubgraphMaxNonDataPortNodes
+    size_t growthBudget      = 0;
+    size_t growthSpent       = 0;
+    bool budgetFromParameter = false; // the pipeline wrote growth_budget
+    std::string passName;             // the pass that ran the engine (e.g. "std::opt")
+    size_t maxOwnerNodes     = 0;
+    size_t smallNodes        = 0; // InlineRewriteConfig::smallSubgraphMaxNonDataPortNodes
     std::vector<InlineDeclined> declined; // the calls examined in the engine's last round
 
     const InlineDeclined *find(std::string_view caller, std::string_view callee) const {
@@ -117,8 +126,9 @@ struct OptimizeRewriteConfig {
     /// (`fib(15)` becomes its whole call tree). Once the pass has copied this many nodes,
     /// nothing further is specialized or inlined and the remaining calls stay calls: the
     /// program means the same, it is only less unrolled. Copies that folding removes again
-    /// still count, so the bound is also a bound on the work of the pass.
-    size_t growthBudgetNodes = kDefaultGrowthBudgetNodes;
+    /// still count, so the bound is also a bound on the work of the pass. The pass declares it
+    /// as the `growth_budget` parameter (see GrowthBudget).
+    GrowthBudget growthBudget{};
     /// The nodes already copied, for a driver that runs the engine several times against one
     /// budget (std::opt). Null: each run of the engine has the whole budget.
     size_t *growthSpentNodes = nullptr;
