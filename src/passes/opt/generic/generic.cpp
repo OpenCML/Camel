@@ -959,26 +959,50 @@ size_t dceDraft(GraphDraft &draft) {
 const camel::runtime::Program *
 ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) {
     std::deque<camel::core::mm::RootHandle> roots;
-    return rewriteReachableGraphs(context_, program, "std::opt::fold", [&](GraphDraft &draft) {
-        return foldDraft(draft, *context_, roots);
-    });
+    return rewriteReachableGraphs(
+        context_,
+        program,
+        "std::opt::fold",
+        [&](GraphDraft &draft) { return foldDraft(draft, *context_, roots); },
+        nullptr,
+        nullptr,
+        mayFold);
 }
 
 const camel::runtime::Program *
 CommonSubexpressionPass::apply(const camel::runtime::Program *program, std::ostream &) {
-    return rewriteReachableGraphs(context_, program, "std::opt::cse", cseDraft);
+    return rewriteReachableGraphs(
+        context_,
+        program,
+        "std::opt::cse",
+        cseDraft,
+        nullptr,
+        nullptr,
+        mayMerge);
 }
 
 const camel::runtime::Program *
 DeadCodePass::apply(const camel::runtime::Program *program, std::ostream &) {
-    return rewriteReachableGraphs(context_, program, "std::opt::dce", dceDraft);
+    return rewriteReachableGraphs(
+        context_,
+        program,
+        "std::opt::dce",
+        dceDraft,
+        nullptr,
+        nullptr,
+        mayRemoveDead);
 }
 
 const camel::runtime::Program *
 ControlReductionPass::apply(const camel::runtime::Program *program, std::ostream &) {
-    return rewriteReachableGraphs(context_, program, "std::opt::ctrl", [](GraphDraft &draft) {
-        return camel::runtime::reduceControlDependencies(draft);
-    });
+    return rewriteReachableGraphs(
+        context_,
+        program,
+        "std::opt::ctrl",
+        [](GraphDraft &draft) { return camel::runtime::reduceControlDependencies(draft); },
+        nullptr,
+        nullptr,
+        mayReduceControl);
 }
 
 const camel::runtime::Program *simplifyGraph(
@@ -991,10 +1015,17 @@ const camel::runtime::Program *simplifyGraph(
     if (!config.growthSpentNodes) {
         config.growthSpentNodes = &growthSpent;
     }
+    RewriteMemo memo;
     const auto finish = [&](const camel::runtime::Program *result) {
-        return rewriteReachableGraphs(context, result, "std::opt::ctrl", [](GraphDraft &draft) {
-            return camel::runtime::reduceControlDependencies(draft);
-        });
+        return rewriteReachableGraphs(
+            context,
+            result,
+            "std::opt::ctrl",
+            [](GraphDraft &draft) { return camel::runtime::reduceControlDependencies(draft); },
+            nullptr,
+            &memo,
+            mayReduceControl,
+            config.checkScreens);
     };
     for (size_t round = 0; round < maxRounds; ++round) {
         bool optChanged = false;
@@ -1006,15 +1037,37 @@ const camel::runtime::Program *simplifyGraph(
             program,
             "std::opt::fold",
             [&](GraphDraft &draft) { return foldDraft(draft, *context, roots); },
-            &folded);
-        program = rewriteReachableGraphs(context, program, "std::opt::cse", cseDraft, &merged);
+            &folded,
+            &memo,
+            mayFold,
+            config.checkScreens);
+        program = rewriteReachableGraphs(
+            context,
+            program,
+            "std::opt::cse",
+            cseDraft,
+            &merged,
+            &memo,
+            mayMerge,
+            config.checkScreens);
         program = rewriteReachableGraphs(
             context,
             program,
             "std::opt::algebra",
             [&](GraphDraft &draft) { return algebraDraft(draft, config.safeFloatingPoint); },
-            &simplified);
-        program = rewriteReachableGraphs(context, program, "std::opt::dce", dceDraft, &removed);
+            &simplified,
+            &memo,
+            mayAlgebra,
+            config.checkScreens);
+        program = rewriteReachableGraphs(
+            context,
+            program,
+            "std::opt::dce",
+            dceDraft,
+            &removed,
+            &memo,
+            mayRemoveDead,
+            config.checkScreens);
         if (!optChanged && folded == 0 && merged == 0 && simplified == 0 && removed == 0) {
             CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
             return finish(program);

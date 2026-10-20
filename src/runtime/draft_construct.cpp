@@ -115,11 +115,13 @@ ensureValueSlot(GraphDraft &draft, camel::core::type::Type *type, gc_slot_idx_t 
 std::span<std::byte> GraphDraft::mutablePayloadOf(gc_node_ref_t id) {
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot get mutable payload view from a missing draft node.");
+    ++revision_;
     return DraftNodeView::payload(draftNode);
 }
 
 std::span<std::byte> GraphDraft::mutablePayloadOf(DraftNode *draftNode) {
     ASSERT(containsNode(draftNode), "Cannot get mutable payload view from a foreign draft node.");
+    ++revision_;
     return DraftNodeView::payload(draftNode);
 }
 
@@ -452,6 +454,7 @@ void GraphDraft::setLoopCollectionCount(gc_node_ref_t id, uint32_t count) {
 void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot rewrite a missing draft node.");
+    ++revision_;
 
     const std::vector<gc_node_ref_t> oldNormInputs(
         DraftNodeView::normInputs(draftNode).begin(),
@@ -478,7 +481,11 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     const uint64_t origin     = draftNode->header.origin;
     const uint8_t permissions = draftNode->header.permissions;
     const uint32_t attrs      = draftNode->header.attrs;
+    const GCNodeKind oldKind  = draftNode->header.kind;
     replaceNodeStorage(id, rebuildNode(id, init));
+    if (init.kind != oldKind) {
+        noteNodeKind(id, init.kind);
+    }
     if (init.origin == 0) {
         node(id)->header.origin = origin;
     }
