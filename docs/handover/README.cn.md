@@ -137,6 +137,7 @@
 2. 已改成 `loss(m, x, y)` 的示例、测试、库代码改回 `with` 写法；**benchmarks 不必改**（它们本来就是 `with` 写法）。
 3. C2 示例保持 `with <m: Mlp>`；H21 第 4 项重测时按此。
 4. 以 H25 记录；放在丁车道最前。
+5. **推荐写法（示例与文档统一）**：变换与调用分两步——循环外 `let loss_and_grad = value_and_grad(loss)`，循环内 `let (l, g) = loss_and_grad<m>(x, y)`。名字保持 `value_and_grad`。改回 `with` 写法时，示例按此风格写；H19 的《标准库约定》收录这条。
 
 ### 5.0 并行车道（2026-10-20）
 
