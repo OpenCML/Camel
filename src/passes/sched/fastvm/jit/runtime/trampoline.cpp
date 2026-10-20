@@ -631,6 +631,14 @@ slot_t jitHelperOper(slot_t *slots, void *ctx, size_t pc) {
                 vm->context(),
                 fault,
                 makePcExecutionSite(vm->context().sourceContext(), frame, pc));
+        } catch (const camel::core::mm::MemoryExhausted &e) {
+            // The exception is stored by runJitHelper and rethrown by the JIT; it carries the
+            // place the program asked for the memory.
+            throw e.during(
+                std::string(),
+                vm->context().sourceContext()
+                    ? vm->context().sourceContext()->debugMap().pcOrigin(pc)
+                    : camel::source::kInvalidOriginId);
         }
         frame->set(bc.result, result);
         return result;

@@ -33,6 +33,7 @@ using namespace camel::core::rtdata;
 #include "../operators/graph.h"
 #include "../operators/higher_order.h"
 #include "../operators/io.h"
+#include "../operators/loop.h"
 #include "../operators/macro.h"
 #include "../operators/ops.h"
 #include "../operators/other.h"
@@ -280,6 +281,10 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // Inserted by the runtime, never written by a program (operators/graph.h).
         {"graph/original", __graph_original__},
+
+        // Inserted by the loop lowering, never written by a program (operators/loop.h).
+        {"loop/collector", __loop_collector__},
+        {"loop/collect", __loop_collect__},
 
         // Tagged forms T? and T! (operators/tagged.h). All are under op/: pure.
         {"op/tag_is_null", __is_null__},
