@@ -617,6 +617,42 @@ validate(const IndexedInstance &instance, const OperatorSemantics *semantics) {
     if (auto problem = v.predicate(instance.output.valid)) {
         return problem;
     }
+    for (const OperandCheck &c : instance.checks) {
+        if (c.operand >= instance.norm.size()) {
+            return std::format("a check names operand {}, which the call does not have", c.operand);
+        }
+        if (c.param >= instance.domain.params.size()) {
+            return std::format(
+                "a check names parameter {}, which the domain does not have",
+                c.param);
+        }
+        const Param &p = instance.domain.params[c.param];
+        if (p.source != ParamSource::Runtime && p.source != ParamSource::Static) {
+            return std::format(
+                "a check reads the value of parameter '{}', which is not an argument",
+                p.name);
+        }
+        if (p.operand != c.operand) {
+            return std::format(
+                "a check on operand {} reads the value of parameter '{}', which comes from "
+                "another operand",
+                c.operand,
+                p.name);
+        }
+        if (c.lower == kNoExpr && c.upper == kNoExpr) {
+            return "a check bounds neither side of its operand's value";
+        }
+        for (ExprId bound : {c.lower, c.upper}) {
+            if (bound != kNoExpr) {
+                if (auto problem = v.expr(bound)) {
+                    return problem;
+                }
+                if (instance.exprs.mentionsDim(bound)) {
+                    return "a check's bound depends on a dim (it constrains parameters)";
+                }
+            }
+        }
+    }
     if (reduces && instance.output.mode == WriteMode::Unique) {
         return "a domain with a reduction dim writes each result element more than once, not "
                "uniquely";
@@ -788,6 +824,14 @@ std::string toString(const IndexedInstance &instance, const OperatorSemantics *s
     }
     if (!instance.domain.guard.empty()) {
         out += "guard    " + pr.predicate(instance.domain.guard) + "\n";
+    }
+    for (const OperandCheck &c : instance.checks) {
+        out += std::format(
+            "check    operand {} in [{}, {}] else {}\n",
+            c.operand,
+            pr.expr(c.lower),
+            pr.expr(c.upper),
+            onInvalidName(c.onInvalid));
     }
     for (size_t i = 0; i < instance.norm.size(); ++i) {
         out += std::format("norm {}   {}\n", i, accessText(pr, instance.norm[i]));

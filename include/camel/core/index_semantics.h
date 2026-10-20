@@ -41,6 +41,9 @@
  *   Write         the element of the result each point contributes to, and whether points
  *                 meet there (Unique, Combine by the instance's reduction law, or overwrite in
  *                 the domain's order)
+ *   Check         a value an operand must hold on entry (a slice bound within the axis, a
+ *                 gather index within the operand), the fault when it does not, and the
+ *                 expressions that state the legal interval (OperandCheck)
  *
  * A ReductionLaw (design section 7), declared with the operator's semantics, says how the
  * contributions that meet at one result coordinate combine: the operation, the accumulator
@@ -313,6 +316,24 @@ struct Write {
 /// No reduction law: IndexedInstance::law of an instance whose writes never meet.
 inline constexpr uint8_t kNoLaw = 0xFF;
 
+/**
+ * A check the operator performs on one operand's value when it is entered, before any element
+ * is read or written (design 4.2 FaultSpec, section 5.1): the value of `operand` must lie in
+ * [lower, upper]. The value itself is the parameter `param` of the domain (a Runtime parameter
+ * when the operand is a scalar argument known only when the program runs, a Static one when it
+ * is a constant). Bounds are expressions over the domain's parameters; kNoExpr is unbounded on
+ * that side. Failing the check is a fault under `onInvalid` (Fault: FaultKind::IndexOutOfRange)
+ * before any element is read or written. A consumer that cannot express a check in its own
+ * arithmetic must diagnose, not guess.
+ */
+struct OperandCheck {
+    uint8_t operand     = 0xFF; // the norm operand checked
+    uint8_t param       = 0xFF; // the domain parameter holding its value
+    ExprId lower        = kNoExpr;
+    ExprId upper        = kNoExpr;
+    OnInvalid onInvalid = OnInvalid::Fault;
+};
+
 /// The index semantics of one call of an operator.
 struct IndexedInstance {
     ExprPool exprs;
@@ -320,6 +341,8 @@ struct IndexedInstance {
     /// One access per operand, in the order of the call's arguments.
     std::vector<Access> norm, with;
     Write output;
+    /// The checks on operand values made on entry (slice bounds, gather indices, ...).
+    std::vector<OperandCheck> checks;
     /// Combine: the reduction law (OperatorSemantics::laws) that combines the contributions
     /// meeting at one result coordinate; kNoLaw otherwise.
     uint8_t law = kNoLaw;
