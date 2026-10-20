@@ -141,6 +141,7 @@ struct GCGraphBuildAccess {
 
     /// Makes `copy`, a commit's encoding of `source`, have the revision of `source` when the
     /// commit did not change it (GCGraph::revision). Set before anything can see `copy`.
+    static void addFlags(GCGraph *graph, uint8_t flags) { graph->flags_ |= flags; }
     static void inheritRevision(GCGraph *copy, const GCGraph *source, bool changed) {
         if (!changed) {
             copy->revision_ = source->revision_;

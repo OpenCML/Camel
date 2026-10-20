@@ -180,6 +180,21 @@ class RuntimeGraphDraftSession {
             graphs; // with the program of a function value
     };
     mutable std::unordered_map<GCGraph *, DraftRefs> draftRefs_;
+    /// Advanced by every draft of the session when what it refers to may have changed; a cell of
+    /// its own, so that the drafts keep pointing at it when the session is moved.
+    std::unique_ptr<uint64_t> refsEpoch_ = std::make_unique<uint64_t>(0);
+    /// The closure last collected, and the state of the session it was collected in.
+    struct ClosureCache {
+        bool valid     = false;
+        uint64_t epoch = 0;
+        uint64_t table = 0;
+        size_t drafts  = 0;
+        GCGraph *root  = nullptr;
+        std::vector<GCGraph *> graphs;
+    };
+    mutable ClosureCache closureCache_;
+    /// 1 at the id of a graph that has a draft: the closure walk asks for every graph.
+    mutable std::vector<uint8_t> draftedIds_;
     std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
         specializationCache_;
     std::unordered_map<GraphId, size_t> typeSpecializationCounts_;

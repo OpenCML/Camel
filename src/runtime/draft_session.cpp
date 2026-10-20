@@ -750,14 +750,7 @@ RuntimeGraphDraftSession::RuntimeGraphDraftSession(
 }
 
 void RuntimeGraphDraftSession::adoptProgram(const Program &program) const {
-    if (&program == work_.get()) {
-        return;
-    }
-    for (GCGraph *graph : program.graphs()) {
-        if (work_->graph(graph->id()) == nullptr) {
-            work_->bind(graph->id(), graph);
-        }
-    }
+    work_->adoptMissing(program);
 }
 
 void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
@@ -801,11 +794,17 @@ GraphDraft &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
             "Decoding runtime graph '{}' into editable draft.",
             graph->name());
         entry->draft = GraphDraft::decode(*work_, graph);
+        entry->draft->setRefsEpoch(refsEpoch_.get());
         CAMEL_LOG_INFO_S(
             "DraftSession",
             "Decoded runtime graph '{}' into editable draft.",
             graph->name());
         it->second = std::move(entry);
+        const size_t index = toValue(graph->id());
+        if (index >= draftedIds_.size()) {
+            draftedIds_.resize(index + 1, 0);
+        }
+        draftedIds_[index] = 1;
     }
     return *it->second->draft;
 }
@@ -855,12 +854,28 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
     if (!runtimeRoot_) {
         return closure;
     }
+    // The closure depends on what the drafts refer to and on the table the ids are read in:
+    // while neither changed it is the one collected last.
+    if (closureCache_.valid && closureCache_.epoch == *refsEpoch_ &&
+        closureCache_.table == work_->version() && closureCache_.drafts == drafts_.size() &&
+        closureCache_.root == runtimeRoot_) {
+        return closureCache_.graphs;
+    }
 
     // Breadth first: the closure is the graphs in the order they are first reached, and `closure`
     // itself is the queue.
-    camel::utils::PointerSet<GCGraph> visited(drafts_.size() + 64);
+    // (Marks by id: a table holds one version of each.)
+    std::vector<uint8_t> visited(work_->tableSize(), 0);
     const auto reach = [&](GCGraph *next) {
-        if (next && visited.insert(next)) {
+        if (next == nullptr) {
+            return;
+        }
+        const size_t index = toValue(next->id());
+        if (index >= visited.size()) {
+            visited.resize(index + 1, 0);
+        }
+        if (!visited[index]) {
+            visited[index] = 1;
             closure.push_back(next);
         }
     };
@@ -877,15 +892,27 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
     reach(runtimeRoot_);
     for (size_t head = 0; head < closure.size(); ++head) {
         GCGraph *graph = closure[head];
-        if (hasDraft(graph)) {
+        const size_t index = toValue(graph->id());
+        if (index < draftedIds_.size() && draftedIds_[index]) {
             for (const auto &[next, home] : draftRefs(graph)) {
-                reach(resolve(next, home));
+                GCGraph *r = resolve(next, home);
+                reach(r);
             }
         } else {
-            work_->traceGraphs(*graph, reach);
+            for (const GraphId next : graph->refs()) {
+                reach(work_->graph(next));
+            }
         }
     }
 
+    closureCache_ = ClosureCache{
+        .valid  = true,
+        .epoch  = *refsEpoch_,
+        .table  = work_->version(),
+        .drafts = drafts_.size(),
+        .root   = runtimeRoot_,
+        .graphs = closure,
+    };
     return closure;
 }
 
@@ -916,51 +943,193 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     const std::vector<GCGraph *> closure = collectCommitClosure();
     ASSERT(!closure.empty(), "Runtime draft commit received an empty closure.");
     for (GCGraph *graph : closure) {
-        // Rewrites may leave gates that wait on nothing; they are plain forwarding.
+        // Rewrites may leave gates that wait on nothing; they are plain forwarding. A graph
+        // nobody has edited since a commit looked at its gates is not decoded again.
+        const bool drafted = drafts_.contains(graph);
+        if (!drafted && (graph->flags() & kGraphFlagGatesDissolved)) {
+            continue;
+        }
         if (ensureDraft(graph).dissolveUnorderedGates() > 0) {
             edited_.insert(graph);
+        } else if (!drafted) {
+            GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
+            drafts_.erase(graph);
+            draftedIds_[toValue(graph->id())] = 0;
+            draftRefs_.erase(graph);
         }
     }
 
     GCGraph *oldRuntimeRoot = runtimeRoot_;
 
+    // The program after the commit holds every graph of the closure: the version it has now, or
+    // the one this commit makes of it. A graph names the others by id, so another graph's new
+    // version needs none of its own. A graph gets one when it was edited, when the program did
+    // not hold it, and when it holds a function value of a graph that got a new version (a
+    // function value names the program it resolves in, which must give that version).
     Program *committed = context_->reserveProgram();
-    GraphMap rewritten;
-    rewritten.reserve(closure.size());
+    for (GCGraph *graph : closure) {
+        committed->bind(graph->id(), graph);
+    }
+    std::unordered_map<GCGraph *, GCGraph *> fresh; // a graph -> the commit's encoding of it
     std::unordered_map<GCGraph *, size_t> allocatedBytes;
-    allocatedBytes.reserve(closure.size());
-    for (GCGraph *graph : closure) {
+    std::vector<GCGraph *> order; // the graphs encoded, in the order they were allocated
+    const auto allocate = [&](GCGraph *graph) {
+        ensureDraft(graph);
         const DraftEntry &entry = *drafts_.at(graph);
-        const size_t bytes = draftGraphBytes(context_, *entry.draft, graph);
-        rewritten.emplace(graph, allocateGraph(context_, entry.identity, *entry.draft, bytes));
+        const size_t bytes      = draftGraphBytes(context_, *entry.draft, graph);
+        GCGraph *copy           = allocateGraph(context_, entry.identity, *entry.draft, bytes);
+        fresh.emplace(graph, copy);
         allocatedBytes.emplace(graph, bytes);
-        committed->bind(entry.draft->id(), rewritten.at(graph));
-    }
-    committed->setRoot(rewritten.at(oldRuntimeRoot));
-    for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
-        GCGraph *graph   = *it;
-        rewritten[graph] = encodeDraftGraph(
+        order.push_back(graph);
+        committed->bind(graph->id(), copy);
+    };
+    const auto encode = [&](GCGraph *graph) {
+        const DraftEntry &entry = *drafts_.at(graph);
+        entry.draft->setFlags(entry.draft->flags() | kGraphFlagGatesDissolved);
+        encodeDraftGraph(
             context_,
-            drafts_.at(graph)->identity,
-            *drafts_.at(graph)->draft,
+            entry.identity,
+            *entry.draft,
             committed,
-            rewritten.at(graph),
+            fresh.at(graph),
             allocatedBytes.at(graph));
-        validateRuntimeGraphPayload(*committed, rewritten[graph]);
-    }
+    };
+    const auto heldBefore = [&](GCGraph *graph) { return program_->graph(graph->id()) == graph; };
+
+    std::vector<GCGraph *> first;
     for (GCGraph *graph : closure) {
-        validateRuntimeGraphCalls(*committed, rewritten.at(graph));
+        // A graph that was asked for editing and not changed is the graph it was.
+        if (heldBefore(graph) && edited_.contains(graph)) {
+            const auto draft = drafts_.find(graph);
+            if (draft != drafts_.end() && draft->second->draft->mutations() == 0) {
+                edited_.erase(graph);
+            }
+        }
+        if (!heldBefore(graph) || edited_.contains(graph)) {
+            first.push_back(graph);
+            allocate(graph);
+        }
+    }
+    for (auto it = first.rbegin(); it != first.rend(); ++it) {
+        encode(*it);
+    }
+
+    // The graphs that have a new version where the program had one. An edited graph encoded
+    // back to its own content is left as it is, unless it holds function values.
+    std::vector<GCGraph *> replaced;
+    for (GCGraph *graph : first) {
+        if (!heldBefore(graph)) {
+            continue;
+        }
+        GCGraph *copy = fresh.at(graph);
+        if (graph->staticGraphRefs().empty() && sameContent(*graph, *copy)) {
+            committed->bind(graph->id(), graph);
+            fresh.erase(graph);
+            GCGraphManager::release(copy);
+            edited_.erase(graph);
+            continue;
+        }
+        replaced.push_back(graph);
+    }
+    if (!replaced.empty()) {
+        // A function value names a graph in the program it was made in, and runs what that
+        // program holds of everything the graph calls. So a graph that holds a function value
+        // of a graph that reaches a new version (by calls or by function values) needs a new
+        // version too, which names the commit's program. The graphs that reach a new version
+        // are found backwards over the calls and the function values of the closure.
+        constexpr uint32_t kNone = UINT32_MAX;
+        uint32_t maxId           = 0;
+        for (GCGraph *graph : closure) {
+            maxId = std::max(maxId, static_cast<uint32_t>(toValue(graph->id())));
+        }
+        std::vector<uint32_t> indexOf(static_cast<size_t>(maxId) + 1, kNone);
+        for (size_t i = 0; i < closure.size(); ++i) {
+            indexOf[toValue(closure[i]->id())] = static_cast<uint32_t>(i);
+        }
+        const auto indexOfId = [&](GraphId id) {
+            return toValue(id) < indexOf.size() ? indexOf[toValue(id)] : kNone;
+        };
+        constexpr uint8_t kRoles = kGraphRefCallee | kGraphRefStatic;
+        std::vector<uint32_t> first(closure.size() + 1, 0), callers;
+        for (GCGraph *graph : closure) {
+            for (size_t r = 0; r < graph->refs().size(); ++r) {
+                if (graph->refRoles(r) & kRoles) {
+                    if (const uint32_t to = indexOfId(graph->refs()[r]); to != kNone) {
+                        ++first[to + 1];
+                    }
+                }
+            }
+        }
+        for (size_t i = 0; i < closure.size(); ++i) {
+            first[i + 1] += first[i];
+        }
+        callers.resize(first.back());
+        std::vector<uint32_t> fill(first.begin(), first.end() - 1);
+        for (size_t from = 0; from < closure.size(); ++from) {
+            const GCGraph *graph = closure[from];
+            for (size_t r = 0; r < graph->refs().size(); ++r) {
+                if (graph->refRoles(r) & kRoles) {
+                    if (const uint32_t to = indexOfId(graph->refs()[r]); to != kNone) {
+                        callers[fill[to]++] = static_cast<uint32_t>(from);
+                    }
+                }
+            }
+        }
+        std::vector<uint8_t> reaches(closure.size(), 0);
+        std::vector<uint32_t> work;
+        for (GCGraph *graph : replaced) {
+            const uint32_t at = indexOfId(graph->id());
+            if (at != kNone && !reaches[at]) {
+                reaches[at] = 1;
+                work.push_back(at);
+            }
+        }
+        while (!work.empty()) {
+            const uint32_t at = work.back();
+            work.pop_back();
+            for (uint32_t k = first[at]; k < first[at + 1]; ++k) {
+                if (!reaches[callers[k]]) {
+                    reaches[callers[k]] = 1;
+                    work.push_back(callers[k]);
+                }
+            }
+        }
+        for (GCGraph *holder : closure) {
+            if (fresh.contains(holder)) {
+                continue;
+            }
+            for (size_t r = 0; r < holder->refs().size(); ++r) {
+                if (!(holder->refRoles(r) & kGraphRefStatic)) {
+                    continue;
+                }
+                const uint32_t held = indexOfId(holder->refs()[r]);
+                if (held != kNone && reaches[held]) {
+                    allocate(holder);
+                    encode(holder);
+                    break;
+                }
+            }
+        }
+    }
+
+    for (GCGraph *graph : order) {
+        if (auto it = fresh.find(graph); it != fresh.end()) {
+            validateRuntimeGraphPayload(*committed, it->second);
+        }
+    }
+    for (GCGraph *graph : order) {
+        if (auto it = fresh.find(graph); it != fresh.end()) {
+            validateRuntimeGraphCalls(*committed, it->second);
+        }
     }
     // The copy is the same graph to the fact store; a new revision only for a graph that was
     // edited and not encoded back to the same content (what a graph refers to is the fact
     // engine's business: closureRevision).
-    std::erase_if(edited_, [&](GCGraph *graph) {
-        auto it = rewritten.find(graph);
-        return it != rewritten.end() && sameContent(*graph, *it->second);
-    });
-    for (GCGraph *graph : closure) {
-        GCGraphBuildAccess::inheritRevision(rewritten.at(graph), graph, edited_.contains(graph));
+    for (const auto &[graph, copy] : fresh) {
+        const bool changed = edited_.contains(graph) && !sameContent(*graph, *copy);
+        GCGraphBuildAccess::inheritRevision(copy, graph, changed);
     }
+    committed->setRoot(committed->graph(oldRuntimeRoot->id()));
 
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
@@ -975,9 +1144,11 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         program_ = committed;
         context_->trackDetachedRuntimeProgram(committed);
     }
-    runtimeRoot_ = rewritten.at(oldRuntimeRoot);
+    runtimeRoot_        = program_->root();
     work_        = std::make_unique<Program>(*program_);
+    closureCache_.valid = false;
     drafts_.clear();
+    draftedIds_.clear();
     draftRefs_.clear();
     edited_.clear();
     return program_;
@@ -990,6 +1161,7 @@ GraphDraftGroup::GraphDraftGroup(
     ASSERT(base != nullptr, "Graph draft group requires the program it is made over.");
     program_  = context_->reserveProgram();
     *program_ = *base;
+    program_->makeSatellite();
 }
 
 GraphDraftGroup::~GraphDraftGroup() = default;
@@ -1019,13 +1191,7 @@ void GraphDraftGroup::define(GraphId id, std::unique_ptr<GraphDraft> draft) {
     member(id).draft = std::move(draft);
 }
 
-void GraphDraftGroup::adopt(const Program &program) {
-    for (GCGraph *graph : program.graphs()) {
-        if (program_->graph(graph->id()) == nullptr) {
-            program_->bind(graph->id(), graph);
-        }
-    }
-}
+void GraphDraftGroup::adopt(const Program &program) { program_->adoptMissing(program); }
 
 void GraphDraftGroup::encode() {
     ASSERT(!encoded_, "Graph draft group was already encoded.");
@@ -1040,7 +1206,7 @@ void GraphDraftGroup::encode() {
     }
     // The members form a program with the graphs of the one the group is made over.
     for (GraphId id : order_) {
-        program_->bind(id, graphs.at(id));
+        program_->bindOwn(id, graphs.at(id));
     }
     if (!order_.empty()) {
         program_->setRoot(graphs.at(order_.front()));

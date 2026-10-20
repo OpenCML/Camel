@@ -115,6 +115,45 @@ class Program {
         return graphs;
     }
     size_t size() const { return count_; }
+    /// One more than the largest id the table has room for.
+    size_t tableSize() const { return byId_.size(); }
+    /// Advances with every bind: equal versions of one program mean the same table.
+    uint64_t version() const { return version_; }
+    /// A satellite is a program made outside a commit (makeProgram, a draft group): the graphs
+    /// of the program it was made over, so that every id resolves, and the ones it adds. Only
+    /// those it adds are its own; the others are the versions the base had then, which a later
+    /// commit may have replaced and freed. A program that is not a satellite owns all it holds.
+    bool owns(GraphId id) const {
+        if (!satellite_) {
+            return graph(id) != nullptr;
+        }
+        const size_t index = toValue(id);
+        return index < own_.size() && own_[index] != 0;
+    }
+    /// Binds `graph` as one the satellite adds.
+    void bindOwn(GraphId id, GCGraph *graph) {
+        satellite_ = true;
+        bind(id, graph);
+        const size_t index = toValue(id);
+        if (index >= own_.size()) {
+            own_.resize(index + 1, 0);
+        }
+        own_[index] = 1;
+    }
+    /// Makes the program a satellite of what it holds.
+    void makeSatellite() { satellite_ = true; }
+    /// Binds the graphs `other` owns that this program does not hold.
+    void adoptMissing(const Program &other) {
+        if (&other == this) {
+            return;
+        }
+        for (size_t index = 0; index < other.byId_.size(); ++index) {
+            const GraphId id = static_cast<GraphId>(index);
+            if (other.byId_[index] != nullptr && other.owns(id) && graph(id) == nullptr) {
+                bind(id, other.byId_[index]);
+            }
+        }
+    }
     /// The program this one is a private copy of, nullptr when it is not one. A back end that
     /// runs a rewritten copy of the program (lowerLoopsToTailRecursion, which commits its
     /// session detached) gets a program whose original is the program it rewrote, followed
@@ -125,6 +164,7 @@ class Program {
 
     /// Construction; see the file comment.
     void bind(GraphId id, GCGraph *graph) {
+        ++version_;
         const size_t index = toValue(id);
         if (index >= byId_.size()) {
             byId_.resize(index + 1, nullptr);
@@ -141,6 +181,9 @@ class Program {
 
   private:
     std::vector<GCGraph *> byId_; // indexed by the value of the GraphId; nullptr where absent
+    std::vector<uint8_t> own_;    // satellite: 1 where the graph is one it adds
+    bool satellite_          = false;
+    uint64_t version_        = 0;
     size_t count_            = 0;
     GCGraph *root_           = nullptr;
     const Program *original_ = nullptr;

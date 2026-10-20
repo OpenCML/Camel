@@ -58,8 +58,9 @@ const Program *makeProgram(
     if (base != nullptr) {
         *program = *base;
     }
+    program->makeSatellite();
     for (GCGraph *graph : graphs) {
-        program->bind(graph->id(), graph);
+        program->bindOwn(graph->id(), graph);
     }
     if (!graphs.empty()) {
         program->setRoot(graphs.front());
@@ -165,10 +166,11 @@ void GCGraphManager::trackDetached(const Program *program) {
 
 void GCGraphManager::releaseDetached() {
     std::lock_guard lock(mutex_);
-    const std::unordered_set<GCGraph *> owned(owned_.begin(), owned_.end());
+    // Programs share the graphs a commit left as they were: each is freed once.
+    std::unordered_set<GCGraph *> kept(owned_.begin(), owned_.end());
     for (const Program *program : detached_) {
         for (GCGraph *graph : program->graphs()) {
-            if (!owned.contains(graph)) { // else installed as part of the program since
+            if (kept.insert(graph).second) { // else installed as part of the program since
                 freeGraph(graph);
             }
         }

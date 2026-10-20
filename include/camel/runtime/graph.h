@@ -174,6 +174,10 @@ enum GCGraphFlag : uint8_t {
     /// The graph is a function that carries a vjp rule as its last closure value
     /// (autodiff::attachRule).
     kGraphFlagCarriesRule = 1 << 0,
+    /// A commit looked at the graph's gates: none waits on nothing (GraphDraft::
+    /// dissolveUnorderedGates). A graph without it is looked at by the next commit that
+    /// reaches it; a graph with it is left as it is unless it is edited.
+    kGraphFlagGatesDissolved = 1 << 1,
 };
 
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
@@ -712,6 +716,8 @@ class GCGraphManager {
     /// Roots `graphs`, which no Program of the manager owns (graphs a transform creates while
     /// the program runs), for as long as the manager.
     void retain(std::span<GCGraph *const> graphs);
+    /// Frees a graph no program holds (a commit's encoding it did not need).
+    static void release(GCGraph *graph) { freeGraph(graph); }
     /// The newest program of the manager that holds this version of `graph`, nullptr when none
     /// does. A version a commit left unchanged is held by the program before it too, and names
     /// the graphs it calls by id: what it calls is what the program it is read in holds. This
