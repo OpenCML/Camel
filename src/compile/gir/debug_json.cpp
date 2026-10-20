@@ -120,19 +120,18 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
     // Entity IDs are only assigned by the (currently unwired) sealing pass, so synthesize a
     // session-stable composite id: graph stableId + per-graph draft ref. This is the id the
     // debugger UI shows and can reference back via /api/gir-breakpoints stable-id matching.
-    std::string stableId =
-        header ? graph->nodeDebugEntityId(node) : std::format("dead:{}", static_cast<int>(nodeId));
-    if (stableId.empty() && header) {
-        stableId = std::format("{}:{}", graph->stableId(), static_cast<uint64_t>(nodeId));
-    }
+    const std::string stableId = header ? std::format("{}:{}", graph->stableId(), static_cast<uint64_t>(nodeId))
+                                        : std::format("dead:{}", static_cast<int>(nodeId));
     j["stableId"] = stableId;
     j["dataType"] = header && header->dataType ? header->dataType->toString() : "";
     if (header && header->kind == GCNodeKind::Port) {
         j["portName"] = graph->nodePortName(node);
     }
     if (header && header->kind == GCNodeKind::Accs) {
-        if (const auto *key = graph->tryNodeAccsKey(node)) {
-            j["accsKey"] = *key;
+        const auto *body = reinterpret_cast<const camel::runtime::GCAccsBody *>(
+            graph->draft().payloadOf(nodeId).data());
+        if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
+            j["accsKey"] = std::string(body->key());
         }
     }
     if (header && header->kind == GCNodeKind::Func) {
@@ -152,9 +151,7 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
         j["loopBodyGraphId"] = target.body->stableId();
     }
     if (auto *sourceContext = sourceContextForGraph(graph)) {
-        auto origin = sourceContext->resolveGirNodeOrigin(
-            draftDebugKey(nodeId),
-            graph->nodeDebugEntityId(node));
+        auto origin = sourceContext->resolveGirNodeOrigin(draftDebugKey(nodeId));
         j["originId"] = origin;
         // Resolve the origin to a source span so debugger clients can map nodes to editor
         // locations. Lines/characters are 0-based (LSP convention); DAP adapters convert.

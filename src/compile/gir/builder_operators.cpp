@@ -2070,9 +2070,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         linkNodes(LinkType::With, targetNode, invokeNode);
         std::vector<camel::source::origin_id_t> callInputs;
         if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
-            auto calleeOrigin = sourceContext->resolveGirNodeOrigin(
-                draftDebugKey(targetNode),
-                std::string(nodeDebugEntityIdOf(targetNode)));
+            auto calleeOrigin = sourceContext->resolveGirNodeOrigin(draftDebugKey(targetNode));
             if (calleeOrigin != camel::source::kInvalidOriginId) {
                 callInputs.push_back(calleeOrigin);
             }

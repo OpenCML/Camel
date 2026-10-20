@@ -106,7 +106,7 @@ void Builder::buildEntryCall() {
                 rootTypeFactory.addWithArg(name, type, isVar);
                 entryWithArgs.push_back(
                     rootGraph_
-                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, true, isVar));
+                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, true));
             }
             for (size_t i = 0; i < entryType->normTypesCount(); ++i) {
                 const std::string name = nameAt(entryType->withTypesCount() + i, "__n", i);
@@ -115,7 +115,7 @@ void Builder::buildEntryCall() {
                 rootTypeFactory.addNormArg(name, type, isVar);
                 entryNormArgs.push_back(
                     rootGraph_
-                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, false, isVar));
+                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, false));
             }
             rootGraph_->setFuncType(rootTypeFactory.build());
         }

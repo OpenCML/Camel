@@ -106,10 +106,6 @@ inline std::span<const draft_node_ref_t> ctrlUsersOf(node_handle_t node) {
     return nodeDraftOf(node)->ctrlUsersOf(node.id);
 }
 
-inline std::string_view nodeDebugEntityIdOf(node_handle_t node) {
-    return node ? nodeGraphOf(node)->nodeDebugEntityId(node) : std::string_view{};
-}
-
 inline bool nodeIsKind(node_handle_t node, runtime::GCNodeKind kind) {
     return node != nullptr && nodeKindOf(node) == kind;
 }

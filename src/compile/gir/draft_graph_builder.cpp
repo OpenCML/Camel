@@ -160,12 +160,11 @@ runtime::DraftNodeRef DraftGraphBuilder::addStaticDataNode(
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addPortNode(
-    camel::core::type::Type *type, std::string name, bool isWith, bool isVar) {
+    camel::core::type::Type *type, std::string name, bool isWith) {
     const auto slotIndex            = addRuntimeSlot(type);
     const runtime::gc_node_ref_t id = draft_->addPortNode(type, slotIndex);
     const auto node                 = ref(id);
     registerNodePortName(node, std::move(name));
-    registerPortVar(node, isVar);
     if (isWith) {
         draft_->appendWithPort(id);
     } else {
@@ -198,10 +197,7 @@ DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, uint32_t tupleInde
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, std::string key) {
-    const runtime::gc_node_ref_t id = draft_->addAccsNode(type, key);
-    const auto node                 = ref(id);
-    registerNodeAccsKey(node, std::move(key));
-    return node;
+    return ref(draft_->addAccsNode(type, key));
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addBrchNode(
@@ -341,38 +337,10 @@ void DraftGraphBuilder::eraseStaticGraphRef(const graph_ptr_t &graph) {
     std::erase(staticGraphRefs_, graph);
 }
 
-const std::string &DraftGraphBuilder::nodeDebugEntityId(runtime::DraftNodeRef node) const {
-    static const std::string kMissingDebugEntityId;
-    auto it = nodeDebugIds_.find(node.id);
-    if (it == nodeDebugIds_.end()) {
-        // Rewritten/decorated function values may synthesize intermediate nodes without a stable
-        // source debug entity. Source-origin recovery should degrade to "unknown" instead of
-        // returning an invalid map iterator in release builds.
-        return kMissingDebugEntityId;
-    }
-    return it->second;
-}
-
 const std::string &DraftGraphBuilder::nodePortName(runtime::DraftNodeRef node) const {
     auto it = nodePortNames_.find(node.id);
     ASSERT(it != nodePortNames_.end(), "DraftGraphBuilder node port name not found.");
     return it->second;
-}
-
-const std::string &DraftGraphBuilder::nodeAccsKey(runtime::DraftNodeRef node) const {
-    auto it = nodeAccsKeys_.find(node.id);
-    ASSERT(it != nodeAccsKeys_.end(), "DraftGraphBuilder node ACCS key not found.");
-    return it->second;
-}
-
-const std::string *DraftGraphBuilder::tryNodeAccsKey(runtime::DraftNodeRef node) const {
-    auto it = nodeAccsKeys_.find(node.id);
-    return it != nodeAccsKeys_.end() ? &it->second : nullptr;
-}
-
-bool DraftGraphBuilder::nodePortIsVar(runtime::DraftNodeRef node) const {
-    auto it = nodePortVars_.find(node.id);
-    return it != nodePortVars_.end() ? it->second : false;
 }
 
 const DraftGraphBuilder::FuncTarget &
@@ -395,20 +363,8 @@ const oper_idx_ptr_t &DraftGraphBuilder::operTarget(runtime::DraftNodeRef node) 
     return it->second;
 }
 
-void DraftGraphBuilder::setNodeDebugEntityId(runtime::DraftNodeRef node, std::string id) {
-    nodeDebugIds_[node.id] = std::move(id);
-}
-
 void DraftGraphBuilder::registerNodePortName(runtime::DraftNodeRef node, std::string name) {
     nodePortNames_[node.id] = std::move(name);
-}
-
-void DraftGraphBuilder::registerNodeAccsKey(runtime::DraftNodeRef node, std::string key) {
-    nodeAccsKeys_[node.id] = std::move(key);
-}
-
-void DraftGraphBuilder::registerPortVar(runtime::DraftNodeRef node, bool isVar) {
-    nodePortVars_[node.id] = isVar;
 }
 
 void DraftGraphBuilder::registerFuncTarget(runtime::DraftNodeRef node, FuncTarget target) {
@@ -427,10 +383,7 @@ void DraftGraphBuilder::registerOperTarget(runtime::DraftNodeRef node, oper_idx_
 }
 
 void DraftGraphBuilder::eraseNodeColdData(runtime::DraftNodeRef node) {
-    nodeDebugIds_.erase(node.id);
     nodePortNames_.erase(node.id);
-    nodeAccsKeys_.erase(node.id);
-    nodePortVars_.erase(node.id);
     funcTargets_.erase(node.id);
     loopTargets_.erase(node.id);
     drefTargets_.erase(node.id);

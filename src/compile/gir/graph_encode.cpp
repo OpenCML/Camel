@@ -134,15 +134,6 @@ template <typename Body> std::vector<std::byte> toPayloadBytes(const Body &body)
     return bytes;
 }
 
-std::vector<std::byte> toOperPayloadBytes(const oper_idx_ptr_t &oper) {
-    GCOperBody body{
-        .op       = nullptr,
-        .oper     = camel::core::OperatorTable::instance().intern(oper->uri()),
-        .reserved = 0,
-    };
-    return toPayloadBytes(body);
-}
-
 void collectCompileStaticGraphRefsRecursive(
     std::vector<graph_ptr_t> &refs, slot_t slot, Type *type,
     std::unordered_set<const Object *> &visited) {
@@ -477,9 +468,6 @@ class EncodeSession {
                     toPayloadBytes(*reinterpret_cast<const camel::runtime::GCLoopBody *>(
                         graph->draft().payloadOf(sourceId).data()));
             } break;
-            case GCNodeKind::Oper:
-                payloadStorage = toOperPayloadBytes(graph->operTarget(sourceId));
-                break;
             case GCNodeKind::Call:
                 payloadStorage.assign(
                     graph->draft().payloadOf(sourceId).begin(),

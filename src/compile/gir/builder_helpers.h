@@ -405,7 +405,7 @@ inline compile_graph_ptr_t createCompileGraph(
                                              : std::format("__w{}", i);
             const bool isVar           = funcType->withIsVarAt(i);
             Type *type                 = funcType->withTypeAt(i);
-            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, true, isVar);
+            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, true);
         }
         for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
             const size_t argIndex      = funcType->withTypesCount() + i;
@@ -414,7 +414,7 @@ inline compile_graph_ptr_t createCompileGraph(
                                              : std::format("__n{}", i);
             const bool isVar           = funcType->normIsVarAt(i);
             Type *type                 = funcType->normTypeAt(i);
-            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, false, isVar);
+            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, false);
         }
     }
     return graph;

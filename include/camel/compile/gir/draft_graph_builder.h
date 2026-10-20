@@ -111,7 +111,7 @@ class DraftGraphBuilder {
     runtime::DraftNodeRef addStaticDataNode(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType = nullptr);
     runtime::DraftNodeRef 
-    addPortNode(camel::core::type::Type *type, std::string name, bool isWith, bool isVar);
+    addPortNode(camel::core::type::Type *type, std::string name, bool isWith);
     runtime::DraftNodeRef addCastNode(camel::core::type::Type *type);
     runtime::DraftNodeRef addCopyNode(camel::core::type::Type *type);
     runtime::DraftNodeRef addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body);
@@ -150,25 +150,9 @@ class DraftGraphBuilder {
     const std::vector<graph_ptr_t> &subGraphs() const { return subGraphs_; }
     const std::vector<graph_ptr_t> &staticGraphRefs() const { return staticGraphRefs_; }
 
-    const std::string &nodeDebugEntityId(runtime::DraftNodeRef node) const;
-    const std::string &nodeDebugEntityId(runtime::gc_node_ref_t nodeId) const {
-        return nodeDebugEntityId(runtime::DraftNodeRef(draft_.get(), nodeId));
-    }
     const std::string &nodePortName(runtime::DraftNodeRef node) const;
     const std::string &nodePortName(runtime::gc_node_ref_t nodeId) const {
         return nodePortName(runtime::DraftNodeRef(draft_.get(), nodeId));
-    }
-    const std::string &nodeAccsKey(runtime::DraftNodeRef node) const;
-    const std::string &nodeAccsKey(runtime::gc_node_ref_t nodeId) const {
-        return nodeAccsKey(runtime::DraftNodeRef(draft_.get(), nodeId));
-    }
-    const std::string *tryNodeAccsKey(runtime::DraftNodeRef node) const;
-    const std::string *tryNodeAccsKey(runtime::gc_node_ref_t nodeId) const {
-        return tryNodeAccsKey(runtime::DraftNodeRef(draft_.get(), nodeId));
-    }
-    bool nodePortIsVar(runtime::DraftNodeRef node) const;
-    bool nodePortIsVar(runtime::gc_node_ref_t nodeId) const {
-        return nodePortIsVar(runtime::DraftNodeRef(draft_.get(), nodeId));
     }
     const FuncTarget &funcTarget(runtime::DraftNodeRef node) const;
     const FuncTarget &funcTarget(runtime::gc_node_ref_t nodeId) const {
@@ -186,21 +170,9 @@ class DraftGraphBuilder {
     const oper_idx_ptr_t &operTarget(runtime::gc_node_ref_t nodeId) const {
         return operTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
     }
-    void setNodeDebugEntityId(runtime::DraftNodeRef node, std::string id);
-    void setNodeDebugEntityId(runtime::gc_node_ref_t nodeId, std::string id) {
-        setNodeDebugEntityId(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(id));
-    }
     void registerNodePortName(runtime::DraftNodeRef node, std::string name);
     void registerNodePortName(runtime::gc_node_ref_t nodeId, std::string name) {
         registerNodePortName(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(name));
-    }
-    void registerNodeAccsKey(runtime::DraftNodeRef node, std::string key);
-    void registerNodeAccsKey(runtime::gc_node_ref_t nodeId, std::string key) {
-        registerNodeAccsKey(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(key));
-    }
-    void registerPortVar(runtime::DraftNodeRef node, bool isVar);
-    void registerPortVar(runtime::gc_node_ref_t nodeId, bool isVar) {
-        registerPortVar(runtime::DraftNodeRef(draft_.get(), nodeId), isVar);
     }
     void registerFuncTarget(runtime::DraftNodeRef node, FuncTarget target);
     void registerFuncTarget(runtime::gc_node_ref_t nodeId, FuncTarget target) {
@@ -236,10 +208,7 @@ class DraftGraphBuilder {
     graph_ptr_t outerGraph_;
     bool parameterized_ = false;
 
-    std::unordered_map<runtime::gc_node_ref_t, std::string> nodeDebugIds_;
     std::unordered_map<runtime::gc_node_ref_t, std::string> nodePortNames_;
-    std::unordered_map<runtime::gc_node_ref_t, std::string> nodeAccsKeys_;
-    std::unordered_map<runtime::gc_node_ref_t, bool> nodePortVars_;
     std::unordered_map<runtime::gc_node_ref_t, FuncTarget> funcTargets_;
     std::unordered_map<runtime::gc_node_ref_t, LoopTarget> loopTargets_;
     std::unordered_map<runtime::gc_node_ref_t, DrefTarget> drefTargets_;
