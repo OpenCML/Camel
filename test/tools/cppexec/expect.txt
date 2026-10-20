@@ -70,6 +70,8 @@ test/cases/consistency/new_values/peek.cml
 
 # Output of print / println with a format (design principles 10.6).
 # (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
+# A formatted string is the same tree as '...'->format<...>: the translator sees no difference.
+test/cases/trans/cpp/fstring.cml
 
 # The parameters of `main` from the command line, as camel reads them (design principles 10.6):
 # all given; none (the report of the missing ones); a value that is not of the declared type; an

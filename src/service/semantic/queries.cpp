@@ -1007,16 +1007,26 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
     std::vector<Completion> items;
     offset = std::min<uint32_t>(offset, static_cast<uint32_t>(file.text.size()));
 
-    // Nothing inside a comment or a string.
-    for (const TokenInfo &token : file.syntax.tokens) {
-        if (token.range.start < offset &&
-            offset < token.range.end + (token.channel == 3 ? 1u : 0u) &&
-            (token.channel >= 3 || isKind(token.type, TK::String) ||
-             isKind(token.type, TK::MultiStr) || isKind(token.type, TK::FString))) {
-            return items;
-        }
-        if (token.range.start > offset) {
+    // Nothing inside a comment or a string -- except an expression of a formatted string,
+    // which is Camel source.
+    bool inFStringExpression = false;
+    for (const Range &range : file.syntax.fstringExpressions) {
+        if (range.touches(offset)) {
+            inFStringExpression = true;
             break;
+        }
+    }
+    if (!inFStringExpression) {
+        for (const TokenInfo &token : file.syntax.tokens) {
+            if (token.range.start < offset &&
+                offset < token.range.end + (token.channel == 3 ? 1u : 0u) &&
+                (token.channel >= 3 || isKind(token.type, TK::String) ||
+                 isKind(token.type, TK::MultiStr) || isKind(token.type, TK::FString))) {
+                return items;
+            }
+            if (token.range.start > offset) {
+                break;
+            }
         }
     }
 

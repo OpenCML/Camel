@@ -32,6 +32,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "format.fstring_snapshot"
+desc = "A formatted string (backticks) is a single token: its text, interpolations included, is kept as written, while the code around it is formatted."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/fstring.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/fstring.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
 name = "format.options_snapshot"
 desc = "Applies quote preference and tab-size options through camel-format."
 kind = "snapshot"

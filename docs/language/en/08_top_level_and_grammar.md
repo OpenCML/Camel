@@ -251,7 +251,6 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Construct | Diagnostic given | Alternative today |
 |---|---|---|
 | Spread `[...xs, y]`, `{ ...p, x: 1 }`, `f(...args)` | `ConstructNotSupported` | `concat(xs, [y])`; write out the fields one by one |
-| Format string `` `x = {x}` `` | `ConstructNotSupported` | `'x = {}'->format<x>` |
 | `e is T` | `ConstructNotSupported` | None (there is no type information at run time) |
 | Non-null assertion `x!` | `ConstructNotSupported` | `x ?? default`, `match` |
 | `f ?.. g` | `ConstructNotSupported` | None |

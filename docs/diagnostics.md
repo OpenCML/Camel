@@ -549,7 +549,15 @@ The file ends in the middle of a construct{0}.
 Something opened earlier is not finished: check the last declaration of the file.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/fstring/bad_expr.cml`, run as `camel test/cases/compile/fstring/bad_expr.cml`)
+
+```camel
+module fstring_bad_expr
+func main(): int sync {
+    println(`value: ${1 +}`)
+    return 0
+}
+```
 
 ### ComparisonNeedsSpace
 
@@ -1367,12 +1375,12 @@ Invalid call to '{0}' with argument types {1}: {2}.
 The argument kinds match the operator's signature, but their statically known properties (such as tensor shapes or dtypes) are incompatible. Fix the arguments or relax their static types.
 ```
 
-**Example** (`test/cases/compile/format_string_checked.cml`, run as `camel test/cases/compile/format_string_checked.cml`)
+**Example** (`test/cases/compile/fstring/bad_spec.cml`, run as `camel test/cases/compile/fstring/bad_spec.cml`)
 
 ```camel
-module format_string_checked
+module fstring_bad_spec
 func main(): int sync {
-    println<'{} and {}'>(1)
+    println(`value: ${'text':d}`)
     return 0
 }
 ```

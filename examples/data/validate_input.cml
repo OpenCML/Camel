@@ -17,8 +17,8 @@ func to_months(age: int): int {
 
 func report(text: string, r: int!): string {
     return match r {
-        case error e => format<text, e.kind>('{:<6} -> error {}')
-        case v => format<text, v>('{:<6} -> {} months')
+        case error e => `${text:<6} -> error ${e.kind}`
+        case v => `${text:<6} -> ${v} months`
     }
 }
 

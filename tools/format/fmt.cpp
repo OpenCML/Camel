@@ -24,22 +24,6 @@
 
 using namespace std;
 
-inline std::string trim(const std::string &str) {
-    size_t first = str.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos) {
-        return "";
-    }
-    size_t last = str.find_last_not_of(" \t\r\n");
-    return str.substr(first, last - first + 1);
-}
-
-inline std::vector<std::string> regex_split(const std::string &input, const std::string &pattern) {
-    std::regex re(pattern);
-    std::sregex_token_iterator begin(input.begin(), input.end(), re, -1);
-    std::sregex_token_iterator end;
-    return {begin, end};
-}
-
 Formatter::Formatter(const syn::Tree &tree) : Formatter(tree, Options{}) {}
 
 Formatter::Formatter(const syn::Tree &tree, Options options) : tree(tree) {
@@ -75,32 +59,22 @@ void Formatter::configure(const Options &options) {
 }
 
 string Formatter::formatStringLiteral(const string &input, bool multiLine = false) {
-    char quoteChar = (quotePrefer == QuotePreference::Single) ? '\'' : '"';
-    const string slicedStr =
-        multiLine ? input.substr(3, input.size() - 6) : input.substr(1, input.size() - 2);
-
-    string procStr;
-
     if (multiLine) {
-        string trimmedStr = trim(slicedStr);
-        vector<string> lines;
-        for (const string &line : regex_split(trimmedStr, "\\r?\\n\\s*")) {
-            lines.push_back(trim(line));
-        }
-        for (size_t i = 0; i < lines.size(); i++) {
-            procStr += lines[i];
-            if (i != lines.size() - 1) {
-                procStr += lineEnd();
-            }
-        }
-    } else {
-        procStr = slicedStr;
+        // A triple-quoted string is raw text and that text is the value: trimming it, putting
+        // the delimiters on lines of their own or re-indenting it adds or removes newlines and
+        // spaces from what the program means (the format check caught it). Kept as written,
+        // like a string that holds both kinds of quotes.
+        return input;
     }
+    char quoteChar = (quotePrefer == QuotePreference::Single) ? '\'' : '"';
+    const string slicedStr = input.substr(1, input.size() - 2);
+
+    string procStr = slicedStr;
 
     bool hasSingleQuote = (slicedStr.find('\'') != string::npos);
     bool hasDoubleQuote = (slicedStr.find('"') != string::npos);
 
-    if (hasSingleQuote && hasDoubleQuote && !multiLine) {
+    if (hasSingleQuote && hasDoubleQuote) {
         // Both kinds of quotes: whichever delimits the string, the other is escaped in it
         // already. Kept as written (escaping again changed the text of the string).
         return input;
@@ -121,12 +95,7 @@ string Formatter::formatStringLiteral(const string &input, bool multiLine = fals
         procStr = escapedStr;
     }
 
-    if (multiLine) {
-        string multiQuote = string(3, quoteChar);
-        return multiQuote + lineEnd() + procStr + lineEnd() + multiQuote;
-    } else {
-        return quoteChar + procStr + quoteChar;
-    }
+    return quoteChar + procStr + quoteChar;
 }
 
 inline bool isMultiLine(syn::Node context) {

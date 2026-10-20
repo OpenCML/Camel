@@ -45,6 +45,11 @@ desc = "Operator overloads of the program (design principles 4.3): hover and def
 case = "../../../cases/tools/lsp/operators.test.mjs"
 
 [[tests]]
+name = "lsp.fstring"
+desc = "A formatted string is a string to the lexer but code inside `${...}`: hover on a local, a callee and a field, definition of a local declared outside the string, completion of the names in scope (design principles 11.5)."
+case = "../../../cases/tools/lsp/fstring.test.mjs"
+
+[[tests]]
 name = "lsp.namespaces"
 desc = "Namespace members by their full names (design principles 10.2): hover (functions, a nested namespace, a namespace written as a path, values), the outline, completion inside the namespace and after `N::` (labelled with the full name, written by the member's own)."
 case = "../../../cases/tools/lsp/namespaces.test.mjs"

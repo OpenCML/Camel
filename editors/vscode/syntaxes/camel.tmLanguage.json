@@ -114,14 +114,15 @@
           ]
         },
         {
-          "comment": "FSTRING. A token of the lexer; the compiler rejects it (formatted strings are not implemented), so no interpolation syntax is highlighted.",
+          "comment": "FSTRING, backticks. `${EXPR}` and `${EXPR:SPEC}` interpolate; `${` is opened only there, `\\${` is a literal '${' and any other brace is literal.",
           "name": "string.interpolated.backtick.camel",
           "begin": "`",
           "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.camel" } },
           "end": "`",
           "endCaptures": { "0": { "name": "punctuation.definition.string.end.camel" } },
           "patterns": [
-            { "include": "#string-escape" }
+            { "include": "#fstring-escape" },
+            { "include": "#fstring-interpolation" }
           ]
         }
       ]
@@ -145,6 +146,32 @@
           "name": "constant.character.escape.camel",
           "match": "\\\\(?!'''|\"\"\")(?:[ntrabfv\\\\\"']|0[0-7]{0,2}|x[0-9a-fA-F]{1,2})"
         }
+      ]
+    },
+    "fstring-escape": {
+      "comment": "`\\${` is the literal '${'; everywhere else a backslash escapes as in a string (`\\\\`, `\\``).",
+      "patterns": [
+        {
+          "name": "constant.character.escape.camel",
+          "match": "\\\\\\$\\{"
+        },
+        { "include": "#string-escape" }
+      ]
+    },
+    "fstring-interpolation": {
+      "comment": "An interpolation: an arbitrary Camel expression, and after a ':' the format specification (as `format` takes one). TextMate cannot balance braces, so a `}` inside a nested block or struct literal of the expression ends it early; the compiler has no such limit.",
+      "name": "meta.interpolation.camel",
+      "begin": "\\$\\{",
+      "beginCaptures": { "0": { "name": "punctuation.definition.interpolation.begin.camel" } },
+      "end": "\\}",
+      "endCaptures": { "0": { "name": "punctuation.definition.interpolation.end.camel" } },
+      "patterns": [
+        {
+          "name": "constant.other.placeholder.camel",
+          "comment": "A format specification starts with a colon, directly after the expression: it must begin with a specifier character, so the colon of a struct field written as `: x` is not one (TextMate cannot know the nesting).",
+          "match": ":(?=[<>=^+\\-0-9.#,])[^{}\"'`\\n]*(?=\\})"
+        },
+        { "include": "$self" }
       ]
     },
     "string-placeholder": {

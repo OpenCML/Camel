@@ -1,0 +1,14 @@
+module fstring_basic
+func main(): int sync {
+    let name = "Camel"
+    let n = 42
+    let pi = 3.5
+    println(`hello, ${name}!`)
+    println(`n = ${n}, twice = ${n * 2}`)
+    println(`pi = ${pi:.2f}`)
+    println(`expr: ${(1 + 2) * 3}`)
+    println(`nested: ${'<' + `inner ${n}` + '>'}`)
+    println(`braces { } are literal; \${not} interpolated`)
+    println(`a backtick \` and a brace { stay`)
+    return 0
+}

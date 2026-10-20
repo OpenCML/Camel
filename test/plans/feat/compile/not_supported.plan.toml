@@ -144,22 +144,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "not_supported.formatted_string"
-desc = "A backquoted formatted string is rejected at the literal; it used to be compiled as a plain string."
-kind = "negative"
-case = "../../../cases/compile/not_supported/formatted_string.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 13
-expect_output_contains = ["formatted strings are not implemented"]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
 name = "not_supported.of_type"
 desc = "`name of T` is rejected at the type, instead of an exception text without a position."
 kind = "negative"

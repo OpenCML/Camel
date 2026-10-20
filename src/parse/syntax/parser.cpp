@@ -32,6 +32,10 @@ Tree Parser::parse(std::string source) { return parse(Lexer::tokenize(std::move(
 
 Tree Parser::parse(TokenBuffer tokens) { return ParserImpl(std::move(tokens)).run(); }
 
+Tree Parser::parseExpression(TokenBuffer tokens) {
+    return ParserImpl(std::move(tokens)).runExpression();
+}
+
 // ---- Node access (cst.h) ----
 
 std::string Node::text() const {
@@ -132,6 +136,16 @@ ParserImpl::ParserImpl(TokenBuffer tokens) : tree_(std::move(tokens)) {
 
 Tree ParserImpl::run() {
     parseProgram();
+    tree_.root_ = stack_.empty() ? Tree::kNoNode : stack_.back();
+    return std::move(tree_);
+}
+
+Tree ParserImpl::runExpression() {
+    parseExpr();
+    // One expression is the whole input: anything after it is not part of the interpolation.
+    if (!panic_ && cur_ != TK::Eof) {
+        unexpected({});
+    }
     tree_.root_ = stack_.empty() ? Tree::kNoNode : stack_.back();
     return std::move(tree_);
 }

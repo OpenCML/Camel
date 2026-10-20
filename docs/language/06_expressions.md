@@ -25,6 +25,24 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 - **列表推导** `[e for x in xs if c]` 就是 `xs->filter<(x) => c>->map<(x) => e>`：`x` 的类型是 `xs` 的元素类型，`if c` 可以省略，结果是 `e` 的数组。图上与手写这两个调用完全相同（两个算子节点，各带一张元素函数的子图），所以它的性质也相同：元素之间没有顺序约定（并行调度器可以并发地算），`e`、`c` 里的副作用与 `map`、`filter` 的元素函数里的一样处理（[6.10](#610-高阶算子)）。可以嵌套，也可以出现在任何需要表达式的位置。`xs` 不是数组是 `SemanticDiag::ComprehensionSourceRefused`。
 - 展开 `...xs` 保留，尚未实现（`SemanticDiag::ConstructNotSupported`）。写成 `concat(xs, ys)`。
 
+### 6.2.1 格式化字符串
+
+反引号字符串 `` `...` `` 里的 `${表达式}` 是插值，可以带格式说明 `${表达式:格式说明}`（词法见 [2.5.3.1](02_lexical.md#2531-格式化字符串)）。它与 `'...'->format<...>` 是**同一棵树**：把 `${...}` 换成 `format` 的占位符（`{}` 或 `{:格式说明}`），把文字里的 `{`、`}` 写成 `{{`、`}}`，再以各插值表达式为 with 实参、以这段文字为普通实参调用 `format`。
+
+```cml
+let name = 'Camel'
+let n = 42
+println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
+println(`n = ${n}, twice = ${n * 2}`)
+println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+```
+
+- 插值表达式在它写的位置、按它所在的词法作用域求值；名字查找、类型检查、副作用与写在字符串外完全一样。它们是 `format` 的 with 实参，何时求值由依赖与副作用规则决定（[4.2](04_execution_model.md#42-按依赖求值)），与同一批表达式写在字符串外没有区别。
+- 格式说明与值的类型不符是**编译期**错误 `SemanticDiag::ArgumentsRejected`，位置指向那一处插值（与 `format` 对常量格式串的检查相同）。
+- 插值表达式的语法错误按它在文件里的位置报告，不会因为在一个字符串里而被吞掉。
+- 由于是同一棵树，所有执行方式（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）与 `std::cpp` 翻译看到的就是 `format` 调用，输出逐字节相同。
+- 格式化器不改变反引号字符串的内容（插值表达式也按原样保留）；要格式化插值里的代码，先把它写成 `format` 调用或单独一行。
+
 ## 6.3 访问与下标
 
 | 写法 | 含义 |
@@ -80,7 +98,7 @@ func main(): int sync {
         ->map<(x: int): int => x * x>
         ->filter<(x: int): bool => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
-    println('total = {}'->format<total>)
+    println(`total = ${total}`)
     return 0
 }
 ```

@@ -45,6 +45,8 @@ class ParserImpl {
   public:
     explicit ParserImpl(TokenBuffer tokens);
     Tree run();
+    /// One expression, to the end of the buffer (see Parser::parseExpression).
+    Tree runExpression();
 
   private:
     // ---- State ----

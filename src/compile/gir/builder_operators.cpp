@@ -1606,6 +1606,35 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         const type_vec_t &formatted =
                             patternInWith ? normInputTypes : withInputTypes;
                         if (const auto problem = callSpec->checkFormat(text, formatted)) {
+                            // A formatted string was lowered to this call: its pattern has one
+                            // placeholder per interpolation, so the specification that does
+                            // not fit is reported at the expression it was written for.
+                            const auto &arguments = patternInWith ? normInputs : withInputs;
+                            if (patterns[at].expr != nullptr &&
+                                patterns[at].expr->type() == GCT::NodeKind::DATA &&
+                                patterns[at].expr->fromFormattedString()) {
+                                const auto placeholders = formatPlaceholders(text);
+                                const size_t count =
+                                    std::min(placeholders.size(), arguments.size());
+                                for (size_t i = 0; i < count; ++i) {
+                                    if (arguments[i].expr == nullptr) {
+                                        continue;
+                                    }
+                                    const auto part = callSpec->checkFormat(
+                                        placeholders[i], type_vec_t{formatted[i]});
+                                    if (!part) {
+                                        continue;
+                                    }
+                                    diags_->of(SemanticDiag::ArgumentsRejected)
+                                        .atOrigin(arguments[i].expr->origin())
+                                        .commit(
+                                            ops->name(),
+                                            "format specifier '" + placeholders[i] +
+                                                "' of an interpolation",
+                                            *part);
+                                    throw BuildAbortException();
+                                }
+                            }
                             diags_->of(SemanticDiag::ArgumentsRejected)
                                 .atOrigin(patterns[at].expr->origin())
                                 .commit(

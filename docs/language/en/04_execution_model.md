@@ -34,7 +34,7 @@ A Camel program is a graph. This chapter explains how this graph is evaluated: e
 ```cml
 // camel greet.cml --arg name=Camel --arg times=2
 func main(name: string, times: int): int sync {
-    println('Hello, {}! x{}'->format<name, times>)
+    println(`Hello, ${name}! x${times}`)
     return 0
 }
 ```

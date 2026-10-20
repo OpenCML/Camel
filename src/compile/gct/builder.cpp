@@ -2628,6 +2628,11 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
 
     // Create a DataLoad node to represent the literal and return it
     node_ptr_t res = tree_->makeData(data);
+    if (value.type() == LiteralType::String && literal->fromFormattedString()) {
+        // The pattern of a formatted string: a format specification that does not fit its
+        // argument is reported at the interpolation (the GIR builder knows the types).
+        res->setFromFormattedString();
+    }
     LEAVE("Literal");
     return res;
 }
