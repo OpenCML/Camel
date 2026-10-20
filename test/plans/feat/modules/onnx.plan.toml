@@ -740,7 +740,7 @@ case = "../../../cases/modules/onnx/pass_export.py"
 args = ["${case}", "refuse"]
 skip_unless = ["${python}", "-c", "import json"]
 expect_exit = 0
-expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:84 file written: False", "onnx::export refuse: PASS"]
+expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:80 file written: False", "onnx::export refuse: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 

@@ -93,7 +93,7 @@ kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
 args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
-expect_output_contains = ["compiled & cached graph 'depth'", "MaxRecursionDepthExceeded at compiled.cml:13:65", "DivisionByZero at compiled.cml:12:53"]
+expect_output_contains = ["compiled & cached graph 'depth'", "MaxRecursionDepthExceeded at compiled.cml:13:60", "DivisionByZero at compiled.cml:12:53"]
 verify_script = """
 assert(input.normalized.stdout.trimEnd().endsWith('-29200\nend'), JSON.stringify(input.normalized.stdout.slice(-200)))
 """
