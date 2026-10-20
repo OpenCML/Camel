@@ -27,7 +27,7 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 
 ### 6.2.1 Formatted strings
 
-In a backquoted string `` `...` ``, `${expression}` interpolates, optionally with a format specification, `${expression:spec}` (the lexical rules are in [2.5.3.1](02_lexical.md#2531-formatted-strings)). It is **the same tree** as `'...'->format<...>`: each `${...}` becomes a placeholder of `format` (`{}` or `{:spec}`), a `{` or `}` of the literal text is written `{{` or `}}`, and `format` is called with the interpolated expressions as its with-arguments and that text as its ordinary argument.
+In a backquoted string `` `...` ``, `${expression}` interpolates, optionally with a format specification, `${expression:spec}` (the lexical rules are in [2.5.4.1](02_lexical.md#2541-formatted-strings)). It is **the same tree** as `'...'->format<...>`: each `${...}` becomes a placeholder of `format` (`{}` or `{:spec}`), a `{` or `}` of the literal text is written `{{` or `}}`, and `format` is called with the interpolated expressions as its with-arguments and that text as its ordinary argument.
 
 ```cml
 let name = 'Camel'

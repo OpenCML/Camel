@@ -54,6 +54,10 @@ DLDataType toDLPackType(TypeCode code) {
         return DLDataType{6, 8, 1};
     case TypeCode::Byte:
         return DLDataType{1, 8, 1};
+    case TypeCode::Complex64:
+        return DLDataType{5, 64, 1};
+    case TypeCode::Complex128:
+        return DLDataType{5, 128, 1};
     default:
         throw std::invalid_argument("Unsupported dtype for DLPack export");
     }
@@ -80,6 +84,12 @@ TypeCode fromDLPackType(const DLDataType &dtype) {
     }
     if (dtype.code == 1 && dtype.bits == 8) {
         return TypeCode::Byte;
+    }
+    if (dtype.code == 5 && dtype.bits == 64) {
+        return TypeCode::Complex64;
+    }
+    if (dtype.code == 5 && dtype.bits == 128) {
+        return TypeCode::Complex128;
     }
     throw std::invalid_argument("Unsupported DLPack dtype");
 }

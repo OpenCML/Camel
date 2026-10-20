@@ -32,12 +32,17 @@ namespace camel::core::type {
 
 namespace {
 
-const DataLayout kInt32{4, 4, false, TypeCode::Int32, 0, nullptr};
-const DataLayout kInt64{8, 8, false, TypeCode::Int64, 0, nullptr};
-const DataLayout kFloat32{4, 4, false, TypeCode::Float32, 0, nullptr};
-const DataLayout kFloat64{8, 8, false, TypeCode::Float64, 0, nullptr};
-const DataLayout kBool{1, 1, false, TypeCode::Bool, 0, nullptr};
-const DataLayout kByte{1, 1, false, TypeCode::Byte, 0, nullptr};
+const DataLayout kInt32{4, 4, false, TypeCode::Int32, 0, nullptr, true, false};
+const DataLayout kInt64{8, 8, false, TypeCode::Int64, 0, nullptr, true, false};
+const DataLayout kFloat32{4, 4, false, TypeCode::Float32, 0, nullptr, true, false};
+const DataLayout kFloat64{8, 8, false, TypeCode::Float64, 0, nullptr, true, false};
+const DataLayout kBool{1, 1, false, TypeCode::Bool, 0, nullptr, true, false};
+const DataLayout kByte{1, 1, false, TypeCode::Byte, 0, nullptr, true, false};
+// A complex number is pure data, but its compact bytes are two floating-point numbers, not the
+// bytes of a slot: it is not slot-resident. c64 is 8 bytes and would pass a size-only test;
+// the type-level flag is what keeps `{x: c64}` from taking the bulk-copy path.
+const DataLayout kComplex64{8, 4, false, TypeCode::Complex64, 0, nullptr, false, false};
+const DataLayout kComplex128{16, 8, false, TypeCode::Complex128, 0, nullptr, false, false};
 
 size_t alignUp(size_t value, size_t alignment) {
     return (value + alignment - 1) / alignment * alignment;
@@ -77,6 +82,8 @@ bool computePure(const Type *type) {
     case TypeCode::Float64:
     case TypeCode::Bool:
     case TypeCode::Byte:
+    case TypeCode::Complex64:
+    case TypeCode::Complex128:
         return true;
     case TypeCode::Struct:
     case TypeCode::Tuple: {
@@ -133,8 +140,12 @@ const DataLayout *computeLayout(const Type *type) {
                                 : static_cast<const TupleType *>(type)->typeAt(i);
         const DataLayout *fieldLayout = pureDataLayout(field);
         ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
-        slotShaped      = slotShaped && !fieldLayout->aggregate &&
-                     fieldLayout->size == sizeof(int64_t);
+        // Type-level, not size-level: a field takes part in the slot-shaped bulk copy only when
+        // its own bytes are a slot's bytes (slotResident) and it fills a slot exactly. A c64
+        // field is 8 bytes but is not slot-resident, so `{x: c64}` is not slot-shaped.
+        slotShaped      = slotShaped && fieldLayout->slotResident && !fieldLayout->aggregate &&
+                     fieldLayout->size == sizeof(int64_t) &&
+                     offset == i * sizeof(int64_t);
         offset          = alignUp(offset, fieldLayout->alignment);
         alignment       = std::max(alignment, fieldLayout->alignment);
         fieldOffsets[i] = offset;
@@ -167,8 +178,11 @@ const DataLayout *scalarDataLayout(TypeCode code) {
         return &kBool;
     case TypeCode::Byte:
         return &kByte;
+    case TypeCode::Complex64:
+        return &kComplex64;
+    case TypeCode::Complex128:
+        return &kComplex128;
     default:
-        // Adding a complex TypeCode here (and to computePure) is the one extension point.
         return nullptr;
     }
 }

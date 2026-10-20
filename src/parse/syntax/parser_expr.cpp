@@ -60,6 +60,7 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::Identifier:
     case TK::Integer:
     case TK::Real:
+    case TK::Imaginary:
     case TK::String:
     case TK::MultiStr:
     case TK::FString:
@@ -510,6 +511,7 @@ void ParserImpl::parsePrimary() {
         break;
     case TK::Integer:
     case TK::Real:
+    case TK::Imaginary:
     case TK::String:
     case TK::MultiStr:
     case TK::FString:

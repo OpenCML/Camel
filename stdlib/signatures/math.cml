@@ -48,6 +48,42 @@ inner func abs(x: f32): f32 {
 inner func abs(x: float): float {
     return 'math:abs_*'
 }
+inner func abs(x: c64): f32 {
+    return 'math:abs_*'
+}
+inner func abs(x: c128): float {
+    return 'math:abs_*'
+}
+
+/// The real part of a complex number.
+/// @pure
+/// @example re(3+4i)    // 3.0
+inner func re(x: c64): f32 {
+    return 'math:re_*'
+}
+inner func re(x: c128): float {
+    return 'math:re_*'
+}
+
+/// The imaginary part of a complex number.
+/// @pure
+/// @example im(3+4i)    // 4.0
+inner func im(x: c64): f32 {
+    return 'math:im_*'
+}
+inner func im(x: c128): float {
+    return 'math:im_*'
+}
+
+/// The conjugate of a complex number: the imaginary part is negated.
+/// @pure
+/// @example conj(3+4i)    // 3-4i
+inner func conj(x: c64): c64 {
+    return 'math:conj_*'
+}
+inner func conj(x: c128): c128 {
+    return 'math:conj_*'
+}
 
 /// The square root. An integer argument is converted: i32 gives f32, int gives float.
 /// @pure
@@ -72,6 +108,12 @@ inner func exp(x: f32): f32 {
     return 'math:exp_*'
 }
 inner func exp(x: float): float {
+    return 'math:exp_*'
+}
+inner func exp(x: c64): c64 {
+    return 'math:exp_*'
+}
+inner func exp(x: c128): c128 {
     return 'math:exp_*'
 }
 

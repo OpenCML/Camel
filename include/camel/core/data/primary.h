@@ -21,6 +21,7 @@
 
 #include "camel/core/data/base.h"
 #include "camel/utils/assert.h"
+#include "camel/utils/number_text.h"
 
 #include <cmath>
 #include <iomanip>
@@ -131,13 +132,88 @@ template <typename T> bool primaryFitsType(T value, type::TypeCode to) {
     return true;
 }
 
+/// The data of a complex literal (`c64` or `c128`): two IEEE parts. A c64 rounds both parts to
+/// f32 when it is made, so the stored value is exactly a c64 value.
+class ComplexData : public Data {
+  public:
+    ComplexData() = delete;
+    ComplexData(double real, double imaginary, type::Type *type) : Data(type) {
+        ASSERT(
+            camel::core::type::isComplex(type->code()),
+            "ComplexData needs a complex type");
+        if (type->code() == type::TypeCode::Complex64) {
+            real      = static_cast<float>(real);
+            imaginary = static_cast<float>(imaginary);
+        }
+        real_      = real;
+        imaginary_ = imaginary;
+    }
+
+    double real() const { return real_; }
+    double imaginary() const { return imaginary_; }
+
+    virtual bool equals(const data_ptr_t &other) const override {
+        const auto value = std::dynamic_pointer_cast<ComplexData>(other);
+        return value && type_->code() == value->type_->code() && real_ == value->real_ &&
+               imaginary_ == value->imaginary_;
+    }
+
+    virtual data_ptr_t clone(bool deep = false) const override {
+        (void)deep;
+        return std::make_shared<ComplexData>(real_, imaginary_, type_);
+    }
+
+    virtual const std::string toString() const override {
+        return type_->code() == type::TypeCode::Complex64
+                   ? camel::utils::complexText(
+                         static_cast<float>(real_), static_cast<float>(imaginary_))
+                   : camel::utils::complexText(real_, imaginary_);
+    }
+
+    virtual data_ptr_t convertTo(type::Type *type) override {
+        if (type->equals(type_)) {
+            return shared_from_this();
+        }
+        if (!camel::core::type::isComplex(type->code())) {
+            // A complex value does not become a real one by itself: `re(z)` and `im(z)` are
+            // the explicit operations (design principles 5.1, no implicit conversion).
+            return nullptr;
+        }
+        if (type->code() == type::TypeCode::Complex64 &&
+            !(primaryFitsType(real_, type::TypeCode::Float32) &&
+              primaryFitsType(imaginary_, type::TypeCode::Float32))) {
+            // A value a c64 cannot hold is not cut to it: the literal is reported instead.
+            return nullptr;
+        }
+        return std::make_shared<ComplexData>(real_, imaginary_, type);
+    }
+
+  private:
+    double real_      = 0.0;
+    double imaginary_ = 0.0;
+};
+
 // The range of a narrower primitive type, for the diagnostic of a literal it cannot hold; empty
 // when `data` converted to `type` is not such a case.
 inline std::string literalRangeViolation(const data_ptr_t &data, type::Type *type) {
-    if (!data || !type || !type->isPrimitive() || !data->type()->isPrimitive()) {
+    if (!data || !type) {
         return {};
     }
     const type::TypeCode from = data->type()->code(), to = type->code();
+    if (camel::core::type::isComplex(from)) {
+        if (to == type::TypeCode::Complex64) {
+            const auto value = std::dynamic_pointer_cast<ComplexData>(data);
+            if (value &&
+                !(primaryFitsType(value->real(), type::TypeCode::Float32) &&
+                  primaryFitsType(value->imaginary(), type::TypeCode::Float32))) {
+                return "each part at most about 3.4e38 in magnitude";
+            }
+        }
+        return {};
+    }
+    if (!type->isPrimitive() || !data->type()->isPrimitive()) {
+        return {};
+    }
     if (from == type::TypeCode::Int64 && to == type::TypeCode::Int32) {
         const auto value = std::dynamic_pointer_cast<PrimaryData<int64_t>>(data);
         if (value && !primaryFitsType(value->data(), to)) {
@@ -169,6 +245,16 @@ inline std::string literalValueText(const data_ptr_t &data) {
 template <typename T> data_ptr_t PrimaryData<T>::convertTo(type::Type *type) {
     if (type->equals(type_)) {
         return shared_from_this();
+    }
+    if (camel::core::type::isComplex(type->code())) {
+        // A real literal takes a complex type by widening: `let z: c64 = 2` is the value 2+0i.
+        if constexpr (
+            std::is_floating_point_v<T> ||
+            (std::is_integral_v<T> && !std::is_same_v<T, bool>)) {
+            return std::make_shared<ComplexData>(static_cast<double>(data_), 0.0, type);
+        } else {
+            return nullptr;
+        }
     }
     if (type->isPrimitive()) {
         type::TypeCode from = type_->code(), to = type->code();

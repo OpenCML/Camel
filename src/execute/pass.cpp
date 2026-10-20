@@ -27,6 +27,7 @@
 #include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
 #include "camel/core/process_exit.h"
+#include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
 #include "camel/passes/test/control.h"
@@ -266,6 +267,16 @@ class GcForeignResourcePass final : public GraphIRPass {
     GCGraph *apply(GCGraph *graph, std::ostream &os) override {
         camel::core::mm::debugRunForeignResourceSelfTest(camel::core::mm::autoSpace());
         os << "{\"ok\":true,\"kind\":\"gc.foreign_resource\"}\n";
+        return graph;
+    }
+};
+
+class GcViewsPass final : public GraphIRPass {
+  public:
+    explicit GcViewsPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        os << camel::core::rtdata::debugRunViewSelfTest() << '\n';
         return graph;
     }
 };
@@ -583,6 +594,7 @@ PassScopePtr initPassScope() {
                          {"config", def(PASS(GcConfigPass))},
                          {"summary", def(PASS(GcSummaryPass))},
                           {"blocks", def(PASS(GcBlocksPass))},
+                         {"views", def(PASS(GcViewsPass))},
                          {"remembered_set", def(PASS(GcRememberedSetPass))},
                          {"foreign_resource", def(PASS(GcForeignResourcePass))},
                          {"poison", def(PASS(GcPoisonPass))},
@@ -674,6 +686,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gcconfig", "std::gc::config"},
     {"std::gcsummary", "std::gc::summary"},
         {"std::gcblocks", "std::gc::blocks"},
+    {"std::gcviews", "std::gc::views"},
     {"std::gcremembered", "std::gc::remembered_set"},
     {"std::gcforeign", "std::gc::foreign_resource"},
     {"std::gcpoison", "std::gc::poison"},

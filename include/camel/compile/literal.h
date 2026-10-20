@@ -48,7 +48,15 @@
 
 namespace camel::compile::literal {
 
-enum class Kind : std::uint8_t { Integer, Float };
+enum class Kind : std::uint8_t {
+    Integer,
+    Float,
+    /// A literal written with an `i` suffix (`4i`): its imaginary part is the value, its real
+    /// part is zero.
+    Imaginary,
+    /// A value with both parts, from folding an expression that has an imaginary operand.
+    Complex,
+};
 
 class Value {
   public:
@@ -64,8 +72,13 @@ class Value {
     static std::optional<Value> fromIntegerText(std::string_view text);
     /// The value of the real literal `text` (with its sign), exactly as written.
     static std::optional<Value> fromRealText(std::string_view text);
+    /// The value of the imaginary literal `text` (`4i`, `-0.5i`): the body is read as a real,
+    /// its value becomes the imaginary part and the real part is zero.
+    static std::optional<Value> fromImaginaryText(std::string_view text);
 
     Kind kind() const { return kind_; }
+    /// True for a value with a nonzero imaginary part (or an imaginary literal of zero).
+    bool hasImaginaryPart() const;
     bool isZero() const;
     bool isNegative() const;
 
@@ -98,9 +111,12 @@ class Value {
     /// -1, 0 or 1 as this value is below, equal to or above `other`.
     int compare(const Value &other) const;
 
-  private:
+  /// The representation of an exact value: its real part and its imaginary part. Public so that
+    /// the folding helpers in literal.cpp can build one; a Value is still immutable.
     struct Rep;
     Value(Kind kind, std::shared_ptr<const Rep> rep);
+
+  private:
     Kind kind_ = Kind::Integer;
     std::shared_ptr<const Rep> rep_;
 };

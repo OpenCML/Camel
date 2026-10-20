@@ -116,6 +116,8 @@ class Tuple : public rtdata::Object {
             fieldType->code() == type::TypeCode::Tuple) {
             slot = rtdata::materializeIfView(slot, fieldType);
         }
+        // Debug builds: after materialisation, a view reaching the slot is an escape.
+        CAMEL_ASSERT_NOT_VIEW(slot, fieldType, "tuple field");
         camel::core::mm::writeBarrier(this, tupleType, slot, fieldType);
         data_[index] = slot;
     }
@@ -128,6 +130,9 @@ class Tuple : public rtdata::Object {
         ASSERT(!isView(), "A compact element view has no slot array");
         return data_;
     }
+
+    /// Where the slot data of a real tuple begins: the end of this header (aggregate.h).
+    static constexpr size_t slotDataOffset() noexcept { return sizeof(Tuple); }
 
     /// For a variable cell (TupleType::cell) only: whether the array in its slot is referred
     /// to by this cell and by nothing else, so that the variable may grow it in place (the
@@ -301,4 +306,8 @@ class Tuple : public rtdata::Object {
     slot_t data_[];
 };
 
-static_assert(sizeof(Tuple) == sizeof(void *) + 2 * sizeof(uint32_t), "Tuple header grew.");
+static_assert(
+    sizeof(Tuple) == Tuple::slotDataOffset(), "Tuple slot data starts after its header.");
+static_assert(
+    alignof(Tuple) == alignof(slot_t),
+    "Tuple alignment must be a slot's: aggregateSlots reads slots at the data offset.");

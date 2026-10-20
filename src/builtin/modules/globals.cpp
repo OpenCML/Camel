@@ -204,6 +204,70 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
+            "c64",
+            {
+                {
+                    ":op/itoc",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Complex64()),
+                },
+                {
+                    ":op/ltoc",
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Complex64()),
+                },
+                {
+                    ":op/ftoc",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Float32(), false}}, Type::Complex64()),
+                },
+                {
+                    ":op/dtoc",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Float64(), false}}, Type::Complex64()),
+                },
+                {
+                    ":op/ctoc",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Complex64(), false}}, Type::Complex64()),
+                },
+                {
+                    ":op/ztoc",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Complex128(), false}}, Type::Complex64()),
+                },
+            }),
+        OperatorGroup::create(
+            "c128",
+            {
+                {
+                    ":op/itoz",
+                    StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Complex128()),
+                },
+                {
+                    ":op/ltoz",
+                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Complex128()),
+                },
+                {
+                    ":op/ftoz",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Float32(), false}}, Type::Complex128()),
+                },
+                {
+                    ":op/dtoz",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Float64(), false}}, Type::Complex128()),
+                },
+                {
+                    ":op/ctoz",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Complex64(), false}}, Type::Complex128()),
+                },
+                {
+                    ":op/ztoz",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Complex128(), false}}, Type::Complex128()),
+                },
+            }),
+        OperatorGroup::create(
             "string",
             {
                 {
@@ -225,6 +289,16 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/stos",
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String()),
+                },
+                {
+                    ":op/ctos",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Complex64(), false}}, Type::String()),
+                },
+                {
+                    ":op/ztos",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Complex128(), false}}, Type::String()),
                 },
                 {
                     // Every other type: the text println writes for the value. A type rule,
@@ -457,6 +531,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), true}, {Type::String(), false}},
                         Type::String()),
                 },
+                {
+                    ":op/assn_add_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/assn_add_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
             }),
         OperatorGroup::create(
             "__assn_sub__",
@@ -488,6 +576,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
                         Type::Float64()),
+                },
+                {
+                    ":op/assn_sub_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/assn_sub_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Complex128(), false}},
+                        Type::Complex128()),
                 },
             }),
         OperatorGroup::create(
@@ -521,6 +623,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Float64(), true}, {Type::Float64(), false}},
                         Type::Float64()),
                 },
+                {
+                    ":op/assn_mul_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/assn_mul_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
             }),
         OperatorGroup::create(
             "__assn_div__",
@@ -552,6 +668,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
                         Type::Float64()),
+                },
+                {
+                    ":op/assn_div_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/assn_div_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Complex128(), false}},
+                        Type::Complex128()),
                 },
             }),
         OperatorGroup::create(
@@ -698,6 +828,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         Type::Bool()),
                 },
                 {
+                    ":op/eq_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/eq_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Bool()),
+                },
+                {
                     ":op/eq",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
@@ -767,6 +911,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), false}, {Type::String(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/ne_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/ne_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
                         Type::Bool()),
                 },
                 {
@@ -994,6 +1152,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::String()),
                 },
+                {
+                    ":op/add_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/add_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
             }),
         OperatorGroup::create(
             "__sub__",
@@ -1025,6 +1197,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::Float64(), false}, {Type::Float64(), false}},
                         Type::Float64()),
+                },
+                {
+                    ":op/sub_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/sub_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Complex128()),
                 },
             }),
         OperatorGroup::create(
@@ -1058,6 +1244,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Float64(), false}, {Type::Float64(), false}},
                         Type::Float64()),
                 },
+                {
+                    ":op/mul_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/mul_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
             }),
         OperatorGroup::create(
             "__div__",
@@ -1089,6 +1289,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::Float64(), false}, {Type::Float64(), false}},
                         Type::Float64()),
+                },
+                {
+                    ":op/div_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/div_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Complex128()),
                 },
             }),
         OperatorGroup::create(
@@ -1199,6 +1413,15 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/neg_d",
                     StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
+                },
+                {
+                    ":op/neg_c",
+                    StaticFuncTypeResolver::create({}, {{Type::Complex64(), false}}, Type::Complex64()),
+                },
+                {
+                    ":op/neg_z",
+                    StaticFuncTypeResolver::create(
+                        {}, {{Type::Complex128(), false}}, Type::Complex128()),
                 },
             }),
         OperatorGroup::create(

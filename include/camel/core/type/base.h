@@ -91,7 +91,14 @@ enum class TypeCode : uint32_t {
     // The argument of a pending enum instance that its value does not determine (`Option<_>`).
     // Compile time only: no value has this type.
     EnumHole = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x011),
-    Other    = makeTypeCode(TypeFlag::OtherType, 0x000),
+    // Complex numbers (design principles 5.1): two IEEE parts, `c64` (two f32) and `c128` (two
+    // f64). They are numbers, but not primitive in the encoding's sense: a value does not fit
+    // in one slot (c128 is 16 bytes, c64 needs a box so that a number is one kind of value),
+    // so the data object is GC-traced like a String. `isComplex` below is the predicate to
+    // ask instead of `isPrimitive`.
+    Complex64  = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x012),
+    Complex128 = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x013),
+    Other      = makeTypeCode(TypeFlag::OtherType, 0x000),
 };
 
 inline constexpr bool hasFlag(uint32_t code, TypeFlag flag) {
@@ -119,6 +126,13 @@ template <typename T> inline constexpr bool isGCTraced(T code) {
 
 template <typename T> inline constexpr bool isAuxiliary(T code) {
     return hasFlag(static_cast<uint32_t>(code), TypeFlag::Auxiliary);
+}
+
+/// A complex number type (`c64`, `c128`). Complex values are numbers but are boxed and
+/// GC-traced, so `isPrimitive` is false for them; every numeric test that must include them
+/// asks this.
+template <typename T> inline constexpr bool isComplex(T code) {
+    return code == TypeCode::Complex64 || code == TypeCode::Complex128;
 }
 
 enum class CastSafety {
@@ -216,6 +230,8 @@ class Type {
     static Type *Byte();
     static Type *Void();
     static Type *String();
+    static Type *Complex64();
+    static Type *Complex128();
     static Type *Ref();
 };
 
