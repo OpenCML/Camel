@@ -21,10 +21,13 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
 #include "camel/core/operator_traits.h"
 #include "executor.h"
+#include "key.h"
 #include "operators.h"
 
 #include <optional>
@@ -89,6 +92,27 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                           return std::nullopt;
                       return norm[0];
                   })}}),
+        // Keyed random is pure: no generator, no state, the same bits everywhere (13.5). A Key
+        // is the struct `{ hi: int, lo: int }` until nominal types (H5).
+        OperatorGroup::create(
+            "key",
+            {{"rand:key",
+              StaticFuncTypeResolver::create(
+                  {}, {{Type::Int64(), false}}, camel::random::keyType())}}),
+        OperatorGroup::create(
+            "split",
+            {{"rand:split",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{camel::random::keyType(), false}},
+                  TupleType::create({camel::random::keyType(), camel::random::keyType()}))}}),
+        OperatorGroup::create(
+            "permutation",
+            {{"rand:permutation",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{camel::random::keyType(), false}, {Type::Int64(), false}},
+                  ArrayType::create(Type::Int64()))}}),
     };
     return groups;
 }
@@ -97,6 +121,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
 RandomModule::RandomModule(context_ptr_t ctx) : BuiltinModule("random", ctx) {
     for (const auto &group : getOperatorGroups())
         exportEntity(group->name(), group);
+    exportType(Reference("Key"), camel::random::keyType());
 }
 
 module_ptr_t RandomModule::create(context_ptr_t ctx) { return std::make_shared<RandomModule>(ctx); }
@@ -118,6 +143,9 @@ bool RandomModule::load() {
             {"choice", false},
             {"sample", false},
             {"shuffle", false},
+            {"key", true},
+            {"split", true},
+            {"permutation", true},
         });
     // What each touches (docs/design/op-semantics 8): the module's generator. Its draws are
     // effects the program orders like any other (the operators are not pure).

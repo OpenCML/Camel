@@ -306,6 +306,116 @@ TensorObject *slice(
     return out;
 }
 
+TensorObject *
+take(const TensorObject *input, std::span<const int64_t> indices, mm::IAllocator &allocator) {
+    if (input->rank() < 1) {
+        throw std::invalid_argument("take expects a tensor with at least one dimension");
+    }
+    Shape outShape{static_cast<int64_t>(indices.size())};
+    outShape.insert(outShape.end(), input->shape() + 1, input->shape() + input->rank());
+    TensorObject *out = TensorObject::create(input->dtype(), outShape, allocator, false);
+    if (indices.empty()) {
+        return out;
+    }
+    const int64_t extent = input->dim(0);
+    const size_t rowBytes =
+        input->byteSize() / static_cast<size_t>(extent); // extent > 0 when an index exists
+    const std::byte *src = input->rawData();
+    std::byte *dst       = out->rawData();
+    for (size_t i = 0; i < indices.size(); ++i) {
+        const int64_t index = indices[i];
+        if (index < 0 || index >= extent) {
+            throw std::out_of_range("take index out of range");
+        }
+        std::memcpy(
+            dst + i * rowBytes,
+            src + static_cast<size_t>(index) * rowBytes,
+            rowBytes);
+    }
+    return out;
+}
+
+TensorObject *takeGrad(
+    const TensorObject *input, std::span<const int64_t> indices, const TensorObject *dy,
+    mm::IAllocator &allocator) {
+    if (input->rank() < 1) {
+        throw std::invalid_argument("take_grad expects a tensor with at least one dimension");
+    }
+    if (dy->rank() != input->rank() || dy->dim(0) != static_cast<int64_t>(indices.size())) {
+        throw ShapeError("take_grad expects a gradient shaped like the take result");
+    }
+    TensorObject *out = TensorObject::create(input->dtype(), input->shapeSpan(), allocator, true);
+    if (indices.empty()) {
+        return out;
+    }
+    const int64_t extent = input->dim(0);
+    const size_t rowBytes =
+        input->byteSize() / static_cast<size_t>(extent);
+    std::byte *dst = out->rawData();
+    const std::byte *src = dy->rawData();
+    // Repeated indices accumulate: each occurrence of a row adds its gradient into it.
+    const auto width = static_cast<int64_t>(rowBytes / elementSize(input->dtype()));
+    for (size_t i = 0; i < indices.size(); ++i) {
+        const int64_t index = indices[i];
+        if (index < 0 || index >= extent) {
+            throw std::out_of_range("take_grad index out of range");
+        }
+        std::byte *row = dst + static_cast<size_t>(index) * rowBytes;
+        const std::byte *part = src + i * rowBytes;
+        switch (input->dtype()) {
+        case TypeCode::Float32: {
+            auto *to = reinterpret_cast<float *>(row);
+            const auto *from = reinterpret_cast<const float *>(part);
+            for (int64_t k = 0; k < width; ++k) {
+                to[k] += from[k];
+            }
+            break;
+        }
+        case TypeCode::Int64: {
+            auto *to = reinterpret_cast<int64_t *>(row);
+            const auto *from = reinterpret_cast<const int64_t *>(part);
+            for (int64_t k = 0; k < width; ++k) {
+                to[k] += from[k];
+            }
+            break;
+        }
+        case TypeCode::Bool: {
+            // Boolean gradients are not meaningful; adding them keeps max/or semantics.
+            auto *to = reinterpret_cast<uint8_t *>(row);
+            const auto *from = reinterpret_cast<const uint8_t *>(part);
+            for (int64_t k = 0; k < width; ++k) {
+                to[k] = static_cast<uint8_t>(to[k] | from[k]);
+            }
+            break;
+        }
+        default:
+            throw std::invalid_argument("take_grad does not support this tensor dtype");
+        }
+    }
+    return out;
+}
+
+TensorObject *
+oneHot(std::span<const int64_t> labels, int64_t classes, mm::IAllocator &allocator) {
+    if (classes < 0) {
+        throw std::invalid_argument("one_hot classes must be non-negative");
+    }
+    TensorObject *out = TensorObject::create(
+        TypeCode::Float32,
+        Shape{static_cast<int64_t>(labels.size()), classes},
+        allocator,
+        true);
+    float *values = out->dataAs<float>();
+    for (size_t i = 0; i < labels.size(); ++i) {
+        const int64_t label = labels[i];
+        if (label < 0 || label >= classes) {
+            throw std::out_of_range("one_hot label out of range");
+        }
+        values[i * static_cast<size_t>(classes) + static_cast<size_t>(label)] = 1.0f;
+    }
+    return out;
+}
+
 TensorObject *arange(int64_t start, int64_t stop, int64_t step, mm::IAllocator &allocator) {
     if (step == 0) {
         throw std::invalid_argument("range step cannot be zero");

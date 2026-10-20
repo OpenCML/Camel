@@ -93,8 +93,8 @@ constructs them from the same `Parameter` object.
 | `grad(p: Parameter) -> Tensor` | Read accumulated gradient buffer. |
 | `apply_gradients(loss) -> step` | Build forward/backward/update training graph. |
 | `zero_grad(var p)` / `add_grad(var p, g)` / `sgd(var p, lr)` | Internal update primitives, still callable directly. |
-| `softmax_cross_entropy(logits: Tensor, target: Tensor) -> float` | Stable fused rank-2 classification loss over `[batch, classes]` logits and one-hot/distribution targets. |
-| `softmax_cross_entropy_grad(logits, target, dy) -> Tensor` | Fused logits-gradient primitive used by the VJP rule; callable for operator sanity checks. |
+| `softmax_cross_entropy(logits: Tensor, target: Tensor) -> float` | Stable fused rank-2 classification loss over `[batch, classes]` logits and one-hot/distribution targets. Overloaded on the target's type: an `int[]` or an integer-element `Tensor` (one class index per row) selects the integer-label form, with the same value and gradient. |
+| `softmax_cross_entropy_grad(logits, target, dy) -> Tensor` | Fused logits-gradient primitive used by the VJP rule; callable for operator sanity checks. The same two target forms as the loss. |
 | `embedding(table: Tensor, indices: Tensor) -> Tensor` | Rank-2 table gather with rank-1 int64 indices. |
 | `embedding_table_grad(table, indices, dy) -> Tensor` | Dense table-gradient primitive used by the embedding VJP; repeated indices accumulate into one row. |
 | `conv2d(input, kernel, bias) -> Tensor` | Valid CPU NCHW convolution for input `[N,C,H,W]`, kernel `[O,C,KH,KW]`, rank-1 bias `[O]`, stride 1, no padding. |
@@ -108,7 +108,11 @@ constructs them from the same `Parameter` object.
 `tensor` also exposes `sigmoid(t: Tensor) -> Tensor` and `tanh(t: Tensor) -> Tensor`
 for toy NN models. It also exposes row-wise rank-2 `softmax(t: Tensor) -> Tensor`
 and `softmax_grad(output, dy) -> Tensor` for tiny attention and operator sanity
-checks.
+checks. `take(t, indices)` gathers first-dimension rows (an `int[]` or a rank-1
+integer tensor; repeated indices kept) and its VJP is the internal
+`tensor:take_grad`, a scatter-add that accumulates repeated rows. `one_hot(labels,
+classes)` makes `[len(labels), classes]` f32 rows. See
+[43_rows_labels_and_keys.md](43_rows_labels_and_keys.md).
 
 ## 5. Builtin VJP Coverage
 
@@ -121,7 +125,8 @@ Registered builtin rules currently cover:
 | Reduction/shape | `tensor:sum`, `tensor:reshape` |
 | Numeric functions | `tensor:exp`, `tensor:log`, `tensor:sigmoid`, `tensor:tanh` |
 | Attention support | `tensor:softmax` row-wise rank-2 path |
-| Fused NN losses | `nn:softmax_cross_entropy` logits path |
+| Indexing | `tensor:take` (reverse is the internal `tensor:take_grad`, scatter-add with repeated rows accumulating) |
+| Fused NN losses | `nn:softmax_cross_entropy` logits path, for both the one-hot and the integer-label target forms (`nn:softmax_cross_entropy_labels`) |
 | Fused NN layers | `nn:embedding` table path |
 | Convolution | `nn:conv2d` input, kernel, and bias paths |
 | Scalar arithmetic | `:op/add_d`, `:op/sub_d`, `:op/mul_d`, `:op/div_d` numerator path |

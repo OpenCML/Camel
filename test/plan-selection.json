@@ -62,6 +62,11 @@
             "plans": ["feat/modules/tensor.plan.toml", "feat/modules/tensor", "feat/modules/autodiff.plan.toml"]
         },
         {
+            "comment": "Keyed random: the random plan and the signatures/reference that list it.",
+            "paths": ["modules/random/"],
+            "plans": ["feat/modules/random.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
             "comment": "Any other module.",
             "paths": ["modules/"],
             "plans": ["feat/modules"]

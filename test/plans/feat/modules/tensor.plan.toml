@@ -479,3 +479,64 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "tensor(      1, dtype=int64)\ntensor(      3, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      0, dtype=int64)\ntensor(      0, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      1, dtype=int64)\ntensor(      3, dtype=int64)\ntensor([      0,       0], dtype=int64)\ntensor([      1,       2], dtype=int64)\ntensor([[      0,       0,       1]], dtype=int64)\n"
+
+[[tests]]
+name = "take_one_hot"
+desc = "take gathers rows along the first dimension from an int[] and from a rank-1 int64 tensor, keeps repeated rows (the result is [len(indices)] + shape[1:], a copy), and its reverse scatters the rows back with repeated rows accumulating; one_hot makes [n, classes] f32 rows. The integer-label and one-hot forms of softmax cross entropy agree in value and gradient."
+kind = "behavior"
+case = "../../../cases/modules/tensor/take_ops.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["shape=[3, 3] sum=45.0", "take tensor shape=[2, 3] sum=42.0", "take int32 sum=42.0", "take empty shape=[0, 3]", "one_hot=tensor([[      0.,       1.,       0.],", "one_hot empty shape=[0, 3]", "diff=0.0 grad_diff=0.0", "take grad=tensor([[      2.,       2.,       2.],"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "take_out_of_range_is_compile_time"
+desc = "A constant row index outside the statically known first dimension is rejected at the call, with the index and the extent (design principles 3.9, 5.4)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/take_oob.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["index 4 is out of range for the first dimension of extent 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "take_negative_is_compile_time"
+desc = "A constant negative row index is a fault, not Python-style wrap-around (design principles 3.9, 5.4)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/take_negative.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["index -1 is out of range for the first dimension of extent 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "take_runtime_out_of_range"
+desc = "An index known only at run time faults with a located IndexOutOfRange at the take call; a negative index does not wrap."
+kind = "behavior"
+case = "../../../cases/modules/tensor/take_runtime_oob.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_stdout_contains = ["take runtime ok=tensor([[      3,       4,       5]], dtype=int64)", "RuntimeDiag::IndexOutOfRange", "Index -1 is out of range for the first dimension of the input tensor of length 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "one_hot_label_out_of_range"
+desc = "A class label outside [0, classes) is a located IndexOutOfRange at the one_hot call, with the class dimension and its length."
+kind = "behavior"
+case = "../../../cases/modules/tensor/one_hot_oob.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_stdout_contains = ["RuntimeDiag::IndexOutOfRange", "Index 3 is out of range for the class dimension of one_hot of length 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
