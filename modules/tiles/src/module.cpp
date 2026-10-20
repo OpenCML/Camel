@@ -118,7 +118,7 @@ slot_t runPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
             const auto &shape  = program->nodes[program->outputs.at(leaf++)].shape;
             const size_t count = elements(shape);
             auto *out =
-                tensor::TensorObject::create(TypeCode::Float32, shape, core::mm::autoSpace());
+                tensor::createTensor(TypeCode::Float32, shape, core::mm::autoSpace());
             if (count)
                 std::memcpy(out->rawData(), data.data() + offset, count * sizeof(float));
             offset += count * sizeof(float);
@@ -273,7 +273,7 @@ slot_t hostResidentValue(Type *hostType, slot_t value, bool retain) {
             return wrapDevice(
                 retainHostValue({}, DType::F64, std::as_bytes(std::span(&scalar, 1))));
         }
-        auto *tensor = td::fromSlot<tensor::TensorObject *>(value);
+        auto *tensor = td::fromSlot<tensor::Array *>(value);
         if (tensor->dtype() != TypeCode::Float32)
             throw std::runtime_error("host resident tensors require f32 elements");
         const auto shape = tensor->shapeVector();
@@ -295,7 +295,7 @@ slot_t hostResidentValue(Type *hostType, slot_t value, bool retain) {
     if (resident->dtype != DType::F32)
         throw std::runtime_error("resident tensor type mismatch");
     auto *tensor =
-        tensor::TensorObject::create(TypeCode::Float32, resident->shape, core::mm::autoSpace());
+        tensor::createTensor(TypeCode::Float32, resident->shape, core::mm::autoSpace());
     if (!data.empty())
         std::memcpy(tensor->rawData(), data.data(), data.size());
     return td::toSlot(tensor);

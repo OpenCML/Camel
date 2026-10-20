@@ -163,7 +163,7 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
         Type *elemType             = arrayType->elemType();
         json jarr = json::array();
         for (size_t i = 0; i < arr->size(); ++i) {
-            auto elem = camelToJson(elemType, arr->data()[i], ctx);
+            auto elem = camelToJson(elemType, arr->getSlot(i), ctx);
             if (!elem)
                 return std::nullopt;
             jarr.push_back(std::move(*elem));
@@ -738,7 +738,7 @@ slot_t __json_get__(ArgsView &with, ArgsView &norm, Context &) {
         if (index < 0 || static_cast<size_t>(index) >= elements->size()) {
             return jsonAccessorResult(arg, result, NullSlot);
         }
-        return jsonAccessorResult(arg, result, elements->data()[index]);
+        return jsonAccessorResult(arg, result, elements->getSlot(index));
     }
     if (arg.value->kind() != JsonValue::Kind::Object) {
         return jsonAccessorResult(arg, result, NullSlot);

@@ -1,0 +1,36 @@
+// Gradients of arrays through `loop` (design principles 9.9, 3.10):
+//   - an array captured by a loop and read by index accumulates each round's element gradient
+//     (the reverse of the read is a scatter-add);
+//   - an array loop state grows by `append`, and the reverse of one append is the gradient of
+//     the appended value plus the gradient of the array without its last element;
+//   - this holds for a struct array as well as for a numeric one, because the tangent of an
+//     array is the array of the elements' tangents.
+import { grad } from autodiff
+
+type P = { x: float, y: float }
+
+func capture(xs: float[]): float {
+    return loop acc = 0.0 for k in [0, 1, 2] do acc + xs[k]
+}
+
+func state(w: float): float {
+    let empty: float[] = []
+    let losses = loop acc = empty for x in [1.0, 2.0, 3.0] do acc->append<x * w>
+    return losses[0] + losses[1] + losses[2]
+}
+
+func state_struct(w: float): float {
+    let empty: P[] = []
+    let ps = loop acc = empty for i in [1, 2] do acc->append<{ x: (i as float) * w, y: 0.0 }>
+    return ps[0].x + ps[1].x
+}
+
+func main(): int sync {
+    println(capture([1.0, 2.0, 3.0]))
+    println(grad(capture)([1.0, 2.0, 3.0]))
+    println(state(2.0))
+    println(grad(state)(2.0))
+    println(state_struct(2.0))
+    println(grad(state_struct)(2.0))
+    return 0
+}

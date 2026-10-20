@@ -1,7 +1,8 @@
 /**
  * Verifies the refusal of a loop that iterates over an array which depends on a differentiated
- * parameter: the rounds would each have to carry the array's gradient, and an array has no
- * cotangent, so the diagnostic names the loop and the array rather than giving a wrong gradient.
+ * parameter: an array has a tangent, but the reverse pass has no per-round scatter of each element's
+ * gradient back into the iterated array, so the diagnostic names the loop and the array (and says to
+ * capture the array and read by index) rather than giving a wrong gradient.
  */
 module loop_grad_refuse_iterable
 

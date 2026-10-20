@@ -61,12 +61,15 @@ Table *fromArray(const Array *array, const type::CollectionType *type) {
     if (n == 0) {
         return newLeaf(0, type);
     }
-    // The key and the value of entry i of the source.
-    const slot_t *source = array->data();
-    const auto keyAt     = [&](size_t i) {
-        return map ? fromSlot<Tuple *>(source[i])->get<slot_t>(0) : source[i];
+    // The key and the value of entry i of the source. Read through getSlot: a numeric array is
+// compact and does not have one slot per element.
+    const auto keyAt = [&](size_t i) {
+        const slot_t source = array->getSlot(i);
+        return map ? fromSlot<Tuple *>(source)->get<slot_t>(0) : source;
     };
-    const auto valueAt = [&](size_t i) { return fromSlot<Tuple *>(source[i])->get<slot_t>(1); };
+    const auto valueAt = [&](size_t i) {
+        return fromSlot<Tuple *>(array->getSlot(i))->get<slot_t>(1);
+    };
 
     // The source positions in key order; equal keys stay in source order (stable), so the
     // last of a run of equal keys is the later entry, which is the one kept.
@@ -579,7 +582,7 @@ namespace {
 
 /// A new array of type `arrayType` holding the keys of `t`, or its values, in key order.
 Array *arrayOf(const Table *t, bool values, const type::ArrayType *arrayType) {
-    Array *result = Array::create(heap(), t->size());
+    Array *result = Array::create(heap(), arrayType, t->size());
     if (t->size() == 0) {
         return result;
     }
@@ -589,7 +592,9 @@ Array *arrayOf(const Table *t, bool values, const type::ArrayType *arrayType) {
         const slot_t *slots = values ? leaf->values() : leaf->keys();
         const size_t n      = leaf->size();
         if (!traced) {
-            std::memcpy(result->data() + at, slots, n * sizeof(slot_t));
+            for (size_t i = 0; i < n; ++i) {
+                result->setSlot(at + i, slots[i]);
+            }
         } else {
             for (size_t i = 0; i < n; ++i) {
                 result->set<slot_t>(at + i, slots[i], arrayType);
@@ -613,7 +618,7 @@ Array *values(const Table *t, const type::MapType *type) {
 Array *items(const Table *t, const type::MapType *type) {
     const type::TupleType *item  = type->itemType();
     const type::ArrayType *array = type->sourceArrayType();
-    Array *result                = Array::create(heap(), t->size());
+    Array *result                = Array::create(heap(), array, t->size());
     size_t at                    = 0;
     forEachLeaf(t, [&](const Table *leaf) {
         for (size_t i = 0; i < leaf->size(); ++i) {

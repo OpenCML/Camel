@@ -268,7 +268,7 @@ CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
 
 slot_t TensorType::castSlotFrom(slot_t value, Type *sourceType) const {
     (void)sourceType;
-    auto *tensor      = camel::core::rtdata::fromSlot<TensorObject *>(value);
+    auto *tensor      = camel::core::rtdata::fromSlot<Array *>(value);
     const auto refuse = [&](const std::string &what) {
         camel::core::error::throwRuntimeFault(
             camel::core::error::RuntimeDiag::RuntimeError,

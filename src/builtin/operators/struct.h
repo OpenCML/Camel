@@ -36,3 +36,12 @@ slot_t __append_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Cont
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __contains_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
+// Tangent arrays (design principles 9.9): the tangent of an array is the array of the tangents
+// of its elements. Inserted by autodiff into gradient graphs, never written by a program.
+slot_t __tangent_add_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __tangent_scatter_add_arr__(
+    ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __tangent_init_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __tangent_last_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

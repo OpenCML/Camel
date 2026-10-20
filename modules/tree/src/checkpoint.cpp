@@ -53,7 +53,7 @@ using namespace core::rtdata;
 using core::context::Context;
 namespace mm = core::mm;
 using Json   = nlohmann::json;
-using tensor::TensorObject;
+using tensor::Array;
 using utils::sha256Hex;
 
 // What a tree and a leaf are, and how a path is written: core::type::tree.
@@ -140,7 +140,7 @@ NativeNode snapshot(Type *type, slot_t value, const std::string &path, Checkpoin
     }
     std::string extension = ".txt";
     if (tag == "tensor") {
-        const auto t       = fromSlot<TensorObject *>(value);
+        const auto t       = fromSlot<Array *>(value);
         const auto bytes   = tensor::tensorToLittleEndian(t);
         node.payload       = tensor::encodeNpy(t->dtype(), t->shapeSpan(), bytes);
         node.spec["dtype"] = tensor::dtypeName(t->dtype());
@@ -321,8 +321,8 @@ slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
             throw std::invalid_argument(
                 "backend did not supply the static checkpoint result layout");
         // A save interrupted between its two renames leaves the complete previous checkpoint
-        // at `dir.previous`: read that instead of failing, and say so (the next save restores
-        // it before replacing it).
+        // in the hidden sibling `.<name>.ckpt-previous`: read that instead of failing, and say
+        // so (the next save restores it before replacing it).
         bool recovered           = false;
         const auto readDirectory = checkpointReadDirectory(directoryPath, recovered);
         if (recovered)

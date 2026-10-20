@@ -59,11 +59,11 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
         }
 
         if (elemType->code() == type::TypeCode::Array) {
-            ArrayInference child = inferArrayType(array->data()[0], elemType);
+            ArrayInference child = inferArrayType(array->getSlot(0), elemType);
             inferred.dtype       = child.dtype;
             inferred.shape.insert(inferred.shape.end(), child.shape.begin(), child.shape.end());
             for (size_t i = 1; i < array->size(); ++i) {
-                ArrayInference another = inferArrayType(array->data()[i], elemType);
+                ArrayInference another = inferArrayType(array->getSlot(i), elemType);
                 if (another.shape != child.shape || another.dtype != child.dtype) {
                     throw std::invalid_argument("Nested array shape or dtype mismatch");
                 }
@@ -81,11 +81,11 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
 }
 
 void flattenArray(
-    const Array *array, type::Type *valueType, TensorObject *tensor, uint64_t &offset) {
+    const Array *array, type::Type *valueType, Array *tensor, uint64_t &offset) {
     auto *arrayType      = static_cast<type::ArrayType *>(valueType);
     type::Type *elemType = arrayType->elemType();
     for (size_t i = 0; i < array->size(); ++i) {
-        slot_t value = array->data()[i];
+        slot_t value = array->getSlot(i);
         if (elemType->code() == type::TypeCode::Array) {
             auto *child = rtdata::fromSlot<Array *>(value);
             flattenArray(child, elemType, tensor, offset);
@@ -107,39 +107,6 @@ void flattenArray(
         }
     }
 }
-
-DLDataType toDLPackType(type::TypeCode dtype) {
-    switch (dtype) {
-    case type::TypeCode::Float32:
-        return DLDataType{2, 32, 1};
-    case type::TypeCode::Int64:
-        return DLDataType{0, 64, 1};
-    case type::TypeCode::Bool:
-        return DLDataType{6, 8, 1};
-    default:
-        throw std::invalid_argument("Unsupported dtype for DLPack export");
-    }
-}
-
-type::TypeCode fromDLPackType(const DLDataType &dtype) {
-    if (dtype.lanes != 1) {
-        throw std::invalid_argument("Only lanes=1 DLPack tensors are supported");
-    }
-    if (dtype.code == 2 && dtype.bits == 32) {
-        return type::TypeCode::Float32;
-    }
-    if (dtype.code == 0 && dtype.bits == 64) {
-        return type::TypeCode::Int64;
-    }
-    if (dtype.code == 6 && dtype.bits == 8) {
-        return type::TypeCode::Bool;
-    }
-    throw std::invalid_argument("Unsupported DLPack dtype");
-}
-struct DLPackCopyContext {
-    int64_t *shape;
-    void *data;
-};
 
 } // namespace
 
@@ -225,71 +192,35 @@ Shape parseShapeArray(const Array *shapeArray, const type::Type *shapeType) {
     return shape;
 }
 
-Array *makeShapeArray(const TensorObject *tensor, mm::IAllocator &allocator) {
-    Array *shape = Array::create(allocator, tensor->rank());
+Array *makeShapeArray(const Array *tensor, mm::IAllocator &allocator) {
+    Array *shape = Array::create(
+        allocator, type::ArrayType::create(type::Type::Int64()), tensor->rank());
     for (size_t i = 0; i < tensor->rank(); ++i) {
         shape->set(i, static_cast<rtdata::Int64>(tensor->dim(i)));
     }
     return shape;
 }
 
-TensorObject *tensorFromArray(slot_t slot, type::Type *valueType, mm::IAllocator &allocator) {
+Array *tensorFromArray(slot_t slot, type::Type *valueType, mm::IAllocator &allocator) {
     if (valueType->code() != type::TypeCode::Array) {
         throw std::invalid_argument("Only array values can be converted to Tensor");
     }
     ArrayInference inferred = inferArrayType(slot, valueType);
-    TensorObject *tensor = TensorObject::create(inferred.dtype, inferred.shape, allocator, false);
+    Array *tensor = createTensor(inferred.dtype, inferred.shape, allocator, false);
     auto *array          = rtdata::fromSlot<Array *>(slot);
     uint64_t index       = 0;
     flattenArray(array, valueType, tensor, index);
     return tensor;
 }
 
-DLManagedTensor *tensorToDLPackCopy(const TensorObject *tensor) {
-    auto *managed        = new DLManagedTensor{};
-    auto *ctx            = new DLPackCopyContext{};
-    ctx->shape           = new int64_t[tensor->rank()];
-    ctx->data            = ::operator new(tensor->byteSize());
-    managed->manager_ctx = ctx;
-    managed->deleter     = [](DLManagedTensor *self) {
-        if (!self) {
-            return;
-        }
-        auto *inner = static_cast<DLPackCopyContext *>(self->manager_ctx);
-        delete[] inner->shape;
-        ::operator delete(inner->data);
-        delete inner;
-        delete self;
-    };
-    std::memcpy(ctx->shape, tensor->shape(), tensor->rank() * sizeof(int64_t));
-    std::memcpy(ctx->data, tensor->rawData(), tensor->byteSize());
-    managed->dl_tensor.data        = ctx->data;
-    managed->dl_tensor.device      = DLDevice{kDLCPU, 0};
-    managed->dl_tensor.ndim        = static_cast<int32_t>(tensor->rank());
-    managed->dl_tensor.dtype       = toDLPackType(tensor->dtype());
-    managed->dl_tensor.shape       = ctx->shape;
-    managed->dl_tensor.strides     = nullptr;
-    managed->dl_tensor.byte_offset = 0;
-    return managed;
+DLManagedTensor *tensorToDLPackCopy(const Array *tensor) {
+    // Zero-copy now: the managed tensor keeps the array's buffer alive.
+    return camel::core::array::toDLPack(const_cast<Array *>(tensor));
 }
 
-TensorObject *tensorFromDLPackCopy(const DLManagedTensor *managed, mm::IAllocator &allocator) {
-    if (!managed) {
-        throw std::invalid_argument("Null DLPack tensor");
-    }
-    if (managed->dl_tensor.device.device_type != kDLCPU) {
-        throw std::invalid_argument("Only CPU DLPack tensors are supported");
-    }
-    if (managed->dl_tensor.strides != nullptr || managed->dl_tensor.byte_offset != 0) {
-        throw std::invalid_argument("Only contiguous DLPack tensors are supported");
-    }
-    type::TypeCode dtype = fromDLPackType(managed->dl_tensor.dtype);
-    std::vector<int64_t> shape(
-        managed->dl_tensor.shape,
-        managed->dl_tensor.shape + managed->dl_tensor.ndim);
-    TensorObject *tensor = TensorObject::create(dtype, shape, allocator, false);
-    std::memcpy(tensor->rawData(), managed->dl_tensor.data, tensor->byteSize());
-    return tensor;
+Array *tensorFromDLPackCopy(const DLManagedTensor *managed, mm::IAllocator &allocator) {
+    // Zero-copy now: the array adopts the producer's memory and releases it when it is gone.
+    return camel::core::array::fromDLPack(managed, allocator);
 }
 
 } // namespace camel::tensor

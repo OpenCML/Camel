@@ -14,6 +14,9 @@ const camel = path.join(runtime, 'bin', process.platform === 'win32' ? 'camel.ex
 const parent = fs.realpathSync(process.env.CAMEL_TEST_TMPDIR || os.tmpdir())
 const root = fs.mkdtempSync(path.join(parent, 'camel-checkpoint-'))
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
+// The previous checkpoint is a hidden sibling of the checkpoint, not the checkpoint itself:
+// `out/ckpt` keeps it at `out/.ckpt.ckpt-previous`.
+const previousOf = directory => path.join(path.dirname(directory), `.${path.basename(directory)}.ckpt-previous`)
 // Every file under a directory and its hash, to prove a failed save changed nothing.
 function snapshotTree(directory) {
     const entries = []
@@ -113,7 +116,7 @@ try {
         assert.notEqual(replacedOver, saved, `${pass}: saving over a checkpoint did not change it`)
         assert.equal(replacedOver, expectedReplacement, `${pass}: replacing a checkpoint mixed the old and new states`)
         assert.deepEqual(
-            fs.readdirSync(replaceDir).filter(name => name.includes('.pending-') || name.endsWith('.previous')),
+            fs.readdirSync(root).filter(name => name.includes('.pending-') || name.endsWith('.ckpt-previous')),
             [],
             `${pass}: a temporary or previous directory was left behind`
         )
@@ -165,26 +168,36 @@ try {
     const trailingSaved = invoke('checkpoint_roundtrip.cml', 'std::nvm', 0, `${trailing}${path.sep}`).stdout
     assert.equal(invoke('checkpoint_roundtrip.cml', 'std::nvm', 1, trailing).stdout, trailingSaved)
 
-    // An interrupted save between its two renames: the destination is missing and only
-    // `dir.previous` holds the complete old checkpoint. A load reads it (with a warning); the
-    // next save restores it, replaces it, and leaves neither the previous nor a temporary
-    // directory behind.
+    // An interrupted save between its two renames: the destination is missing and only the
+    // hidden `.<name>.ckpt-previous` sibling holds the complete old checkpoint. A load reads it
+    // (with a warning); the next save restores it, replaces it, and leaves neither the previous
+    // nor a temporary directory behind.
     const recovery = path.join(root, 'recovery')
     const recoverySaved = invoke('checkpoint_roundtrip.cml', 'std::nvm', 0, recovery).stdout
-    fs.renameSync(recovery, `${recovery}.previous`)
+    const previous = previousOf(recovery)
+    // A user directory that happens to be named like the old scheme is not this checkpoint's
+    // backup: only the hidden fixed-prefix sibling is read or removed.
+    const lookalike = `${recovery}.previous`
+    fs.mkdirSync(lookalike)
+    fs.writeFileSync(path.join(lookalike, 'user.txt'), 'user')
+    fs.renameSync(recovery, previous)
     const recoveredRead = invoke('checkpoint_roundtrip.cml', 'std::nvm', 1, recovery)
     assert.equal(recoveredRead.stdout, recoverySaved, 'reading the previous checkpoint changed the state')
     assert.match(recoveredRead.stderr, /previous checkpoint an interrupted save_tree left/)
     const recoveredSave = invoke('checkpoint_roundtrip.cml', 'std::nvm', 7, recovery).stdout
     assert.equal(recoveredSave, invoke('checkpoint_roundtrip.cml', 'std::nvm', 8, recovery).stdout)
-    assert(!fs.existsSync(`${recovery}.previous`))
+    assert(!fs.existsSync(previous))
+    assert.equal(fs.readFileSync(path.join(lookalike, 'user.txt'), 'utf8'), 'user')
     assert.equal(invoke('checkpoint_roundtrip.cml', 'std::nvm', 1, recovery).stdout, recoveredSave)
     // A previous directory left by a save whose cleanup failed is removed by the next save.
-    fs.mkdirSync(`${recovery}.previous`)
-    fs.writeFileSync(path.join(`${recovery}.previous`, 'stale.txt'), 'stale')
+    fs.mkdirSync(previous)
+    fs.writeFileSync(path.join(previous, 'stale.txt'), 'stale')
     assert.equal(invoke('checkpoint_roundtrip.cml', 'std::nvm', 7, recovery).stdout, recoveredSave)
-    assert(!fs.existsSync(`${recovery}.previous`))
-    assert.deepEqual(fs.readdirSync(recovery).filter(name => name.includes('.pending-') || name.endsWith('.previous')), [])
+    assert(!fs.existsSync(previous))
+    assert.deepEqual(
+        fs.readdirSync(root).filter(name => name.includes('.pending-') || name.endsWith('.ckpt-previous')),
+        []
+    )
 
     // A failure while writing the temporary directory leaves the old checkpoint exactly as it
     // was: the new checkpoint is never written into the destination. On a privileged POSIX
@@ -212,7 +225,7 @@ try {
         assert.deepEqual(snapshotTree(failing), failingBefore, 'a failed save changed the old checkpoint')
         assert.equal(invoke('checkpoint_roundtrip.cml', 'std::nvm', 1, failing).stdout, failingSaved)
         assert.deepEqual(
-            fs.readdirSync(failingParent).filter(name => name.includes('.pending-') || name.endsWith('.previous')),
+            fs.readdirSync(failingParent).filter(name => name.includes('.pending-') || name.endsWith('.ckpt-previous')),
             [],
             'a failed save left a temporary or previous directory behind'
         )

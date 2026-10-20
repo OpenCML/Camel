@@ -71,7 +71,7 @@ std::optional<Type *> newInfer(const InferContext &ctx) { return tensorOf(ctx.fa
 slot_t zerosKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("zeros", [&] {
         return wrap(
-            TensorObject::create(TypeCode::Float32, shapeArg(norm, 0), resultAllocator(), true));
+            createTensor(TypeCode::Float32, shapeArg(norm, 0), resultAllocator(), true));
     });
 }
 

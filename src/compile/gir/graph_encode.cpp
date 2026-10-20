@@ -755,7 +755,7 @@ class EncodeSession {
         case TypeCode::Array: {
             auto *array     = fromSlot<::Array *>(slot);
             auto *arrayType = static_cast<ArrayType *>(type);
-            auto *cloned    = ::Array::create(camel::core::mm::autoSpace(), array->size());
+            auto *cloned    = ::Array::create(camel::core::mm::autoSpace(), arrayType, array->size());
             objectCache.emplace(object, cloned);
             for (size_t i = 0; i < array->size(); ++i) {
                 cloned->set<slot_t>(

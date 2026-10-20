@@ -13,27 +13,24 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * The runtime tensor object.
+ * Tensor values are arrays (core/rtdata/array.h): the element type is the dtype and the shape
+ * is the array's extents, so a tensor's data is a compact numeric buffer with no separate
+ * tensor object. A tensor view is an Array view of the source's buffer; it keeps the buffer
+ * alive and shares it without a copy.
  *
- * A TensorObject is a single GC allocation holding its header, its shape, and
- * a contiguous row-major element buffer. A view (see createView) instead reads
- * the buffer of another tensor, its owner, with a shape of its own; that is its
- * only GC reference. Tensors are never written after they are built, so sharing
- * a buffer is unobservable. The collector can move either object; `onMoved` and
- * `updateRefs` re-derive the interior pointers.
- *
- * The per-element accessors (`getAsDouble`, ...) exist for printing and for
- * scalar reads. Kernels must use typed buffers through `dataAs<T>()`.
+ * This header keeps the tensor module's spellings (dtype, shape, numel, data accessors) and the
+ * constructors that map a dtype to the array's element type.
  */
 
 #pragma once
 
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
 #include "dtype.h"
 
@@ -48,6 +45,7 @@ namespace camel::tensor {
 namespace mm     = camel::core::mm;
 namespace rtdata = camel::core::rtdata;
 
+using ::Array;
 using Shape = std::vector<int64_t>;
 
 /**
@@ -64,79 +62,19 @@ class ShapeError : public std::invalid_argument {
 /// Product of all extents; 1 for a scalar (rank-0) shape.
 uint64_t numelOf(std::span<const int64_t> shape);
 
-class TensorObject : public rtdata::Object {
-  public:
-    TensorObject(const TensorObject &)            = delete;
-    TensorObject &operator=(const TensorObject &) = delete;
+/// Allocates a tensor. `dtype` may be any numeric scalar code; it is normalized to storage.
+Array *createTensor(
+    type::TypeCode dtype, std::span<const int64_t> shape, mm::IAllocator &allocator,
+    bool zeroInit = false);
 
-    /// Allocates a tensor. `dtype` may be any numeric scalar code; it is normalized to storage.
-    static TensorObject *create(
-        type::TypeCode dtype, std::span<const int64_t> shape, mm::IAllocator &allocator,
-        bool zeroInit = false);
-
-    /**
-     * A tensor with `source`'s elements and dtype and the given shape, starting at element
-     * `elementOffset` of `source` (which must leave at least the shape's element count).
-     * It shares `source`'s buffer instead of copying it. It keeps the buffer's owner alive.
-     * Only the collected heap (mm::autoSpace) can hold a view; for any other allocator this
-     * copies the elements.
-     */
-    static TensorObject *createView(
-        const TensorObject *source, std::span<const int64_t> shape, mm::IAllocator &allocator,
-        uint64_t elementOffset = 0);
-
-    /// True when this tensor reads another tensor's buffer.
-    bool isView() const { return owner_ != nullptr; }
-
-    size_t rank() const { return rank_; }
-    uint64_t numel() const { return numel_; }
-    type::TypeCode dtype() const { return dtype_; }
-    size_t byteSize() const { return byteSize_; }
-    const int64_t *shape() const { return shape_; }
-    std::span<const int64_t> shapeSpan() const { return {shape_, rank_}; }
-    Shape shapeVector() const { return Shape(shape_, shape_ + rank_); }
-    int64_t dim(size_t index) const;
-    const std::byte *rawData() const { return data_; }
-    std::byte *rawData() { return data_; }
-
-    template <typename T> T *dataAs() { return reinterpret_cast<T *>(data_); }
-    template <typename T> const T *dataAs() const { return reinterpret_cast<const T *>(data_); }
-
-    bool sameShape(const TensorObject *other) const;
-    double getAsDouble(uint64_t flatIndex) const;
-    int64_t getAsInt64(uint64_t flatIndex) const;
-    bool getAsBool(uint64_t flatIndex) const;
-    void setFromDouble(uint64_t flatIndex, double value);
-    void setFromInt64(uint64_t flatIndex, int64_t value);
-    void setFromBool(uint64_t flatIndex, bool value);
-
-    bool
-    equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override;
-    rtdata::Object *
-    clone(mm::IAllocator &allocator, const type::Type *type, bool deep = false) const override;
-    void print(std::ostream &os, const type::Type *type) const override;
-    void onMoved() override;
-    void updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override;
-
-  private:
-    TensorObject(type::TypeCode dtype, uint32_t rank, uint64_t numel, uint64_t byteSize);
-    void refreshPointers();
-    void printRecursive(
-        std::ostream &os, size_t dimIndex, uint64_t &flatIndex, const std::string &indent) const;
-    std::string formatElementToString(uint64_t flatIndex) const;
-
-    type::TypeCode dtype_;
-    uint32_t rank_;
-    uint64_t numel_;
-    uint64_t byteSize_;
-    int64_t *shape_;
-    std::byte *data_;
-    // A view: the tensor whose buffer it reads (never itself a view), and the buffer's offset
-    // from that tensor's address, so the pointer is re-derived by arithmetic alone when either
-    // object moves.
-    TensorObject *owner_ = nullptr;
-    size_t ownerDataOffset_ = 0;
-    std::byte storage_[];
-};
+/**
+ * A tensor with `source`'s elements and dtype and the given shape, starting at element
+ * `elementOffset` of `source` (which must leave at least the shape's element count).
+ * It shares `source`'s buffer instead of copying it. Only the collected heap (mm::autoSpace)
+ * can hold a view; for any other allocator this copies the elements.
+ */
+Array *viewTensor(
+    const Array *source, std::span<const int64_t> shape, mm::IAllocator &allocator,
+    uint64_t elementOffset = 0);
 
 } // namespace camel::tensor

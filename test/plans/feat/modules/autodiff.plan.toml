@@ -1463,13 +1463,13 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loop_grad_refuse_iterable"
-desc = "A loop that iterates over an array built from the differentiated parameter is refused at the loop: the rounds would each have to carry the array's gradient and an array has no cotangent. The diagnostic names the loop (line 12) and says what the loop does with the array."
+desc = "A loop that iterates over an array built from the differentiated parameter is refused at the loop: the reverse pass has no per-round scatter of each element's gradient back into the iterated array. The diagnostic names the loop (line 13), says what the loop does with the array, and tells the program to capture it and read by index instead."
 kind = "negative"
 case = "../../../cases/modules/autodiff/loop_grad_refuse_iterable.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
-expect_diagnostic_line = 12
-expect_output_contains = ["a 'loop' iterates over an array that depends on a differentiated parameter", "the loop cannot be differentiated"]
+expect_diagnostic_line = 13
+expect_output_contains = ["a 'loop' iterates over an array that depends on a differentiated parameter", "scattered back into the array", "Capture the array and read its elements by index"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -1480,32 +1480,30 @@ kind = "negative"
 case = "../../../cases/modules/autodiff/loop_grad_refuse_iterable.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 1
-expect_diagnostic_line = 12
-expect_output_contains = ["a 'loop' iterates over an array that depends on a differentiated parameter", "the loop cannot be differentiated"]
+expect_diagnostic_line = 13
+expect_output_contains = ["a 'loop' iterates over an array that depends on a differentiated parameter", "scattered back into the array", "Capture the array and read its elements by index"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_refuse_capture"
-desc = "A loop whose body reads an element of a captured array that depends on the differentiated parameter is refused at the loop and names the array's own position: the gradient would have to travel through every round and an array has no cotangent."
-kind = "negative"
+name = "loop_grad_capture_active"
+desc = "A loop whose body reads an element of a captured array that depends on the differentiated parameter: arrays have tangents (the array of their elements' tangents), so the read scatters each round's element gradient back into the capture. f(w) = ys[0] twice with ys = [w, 2.0] gives the gradient 2 (H22; this used to be refused as an array without a cotangent)."
+kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_refuse_capture.cml"
 args = ["${case}", "${run_nvm}"]
-expect_exit = 1
-expect_diagnostic_line = 12
-expect_output_contains = ["a 'loop' captures an array that depends on a differentiated parameter", "the loop cannot be differentiated"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_refuse_capture d=2.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_refuse_capture.macro"
-desc = "The same refusal when the loop is collected and run by std::macro: the captured array is refused at the loop, whichever executor would run the rounds."
-kind = "negative"
+name = "loop_grad_capture_active.macro"
+desc = "The same captured-array gradient when the loop is collected and run by std::macro."
+kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_refuse_capture.cml"
 args = ["${case}", "std::macro"]
-expect_exit = 1
-expect_diagnostic_line = 12
-expect_output_contains = ["a 'loop' captures an array that depends on a differentiated parameter", "the loop cannot be differentiated"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_refuse_capture d=2.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

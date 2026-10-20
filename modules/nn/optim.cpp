@@ -70,7 +70,9 @@ using camel::core::type::TupleType;
 using camel::core::type::Type;
 using camel::core::type::type_vec_t;
 using camel::core::type::TypeCode;
-using camel::tensor::TensorObject;
+using camel::tensor::Array;
+using camel::tensor::createTensor;
+using camel::tensor::viewTensor;
 
 // ---------------------------------------------------------------- tree walking
 
@@ -141,16 +143,16 @@ void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const L
 
 bool isTensorLeaf(Type *type) { return camel::tensor::asTensorType(type) != nullptr; }
 
-const TensorObject *floatTensor(slot_t slot) {
-    auto *t = fromSlot<TensorObject *>(slot);
+const Array *floatTensor(slot_t slot) {
+    auto *t = fromSlot<Array *>(slot);
     return t->dtype() == TypeCode::Float32 ? t : k::cast(t, TypeCode::Float32, mm::autoSpace());
 }
 
-TensorObject *newLike(const TensorObject *t) {
-    return TensorObject::create(TypeCode::Float32, t->shapeSpan(), mm::autoSpace());
+Array *newLike(const Array *t) {
+    return createTensor(TypeCode::Float32, t->shapeSpan(), mm::autoSpace());
 }
 
-void requireSameShape(const TensorObject *param, const TensorObject *grad, const char *op) {
+void requireSameShape(const Array *param, const Array *grad, const char *op) {
     if (!param->sameShape(grad)) {
         throw std::invalid_argument(
             std::format("{}: gradient shape differs from its parameter", op));
@@ -172,17 +174,17 @@ LeafUpdate sgdLeaf(double lr) {
             out[0] = floatSlot(type, floatValue(type, in[0]) - lr * floatValue(type, in[1]));
             return;
         }
-        const TensorObject *p = floatTensor(in[0]);
-        const TensorObject *g = floatTensor(in[1]);
+        const Array *p = floatTensor(in[0]);
+        const Array *g = floatTensor(in[1]);
         requireSameShape(p, g, "sgd");
-        TensorObject *next = newLike(p);
+        Array *next = newLike(p);
         const float *pp = p->dataAs<float>(), *pg = g->dataAs<float>();
         float *pn       = next->dataAs<float>();
         const auto rate = static_cast<float>(lr);
         for (uint64_t i = 0; i < p->numel(); ++i) {
             pn[i] = pp[i] - rate * pg[i];
         }
-        out[0] = toSlot<TensorObject *>(next);
+        out[0] = toSlot<Array *>(next);
     };
 }
 
@@ -217,14 +219,14 @@ LeafUpdate adamLeaf(const AdamConfig &c) {
             out[2] = floatSlot(type, nv);
             return;
         }
-        const TensorObject *p = floatTensor(in[0]);
-        const TensorObject *g = floatTensor(in[1]);
-        const TensorObject *m = floatTensor(in[2]);
-        const TensorObject *v = floatTensor(in[3]);
+        const Array *p = floatTensor(in[0]);
+        const Array *g = floatTensor(in[1]);
+        const Array *m = floatTensor(in[2]);
+        const Array *v = floatTensor(in[3]);
         requireSameShape(p, g, "adam");
         requireSameShape(p, m, "adam");
         requireSameShape(p, v, "adam");
-        TensorObject *np = newLike(p), *nm = newLike(p), *nv = newLike(p);
+        Array *np = newLike(p), *nm = newLike(p), *nv = newLike(p);
         const float *pp = p->dataAs<float>(), *pg = g->dataAs<float>();
         const float *pm = m->dataAs<float>(), *pv = v->dataAs<float>();
         float *op = np->dataAs<float>(), *om = nm->dataAs<float>(), *ov = nv->dataAs<float>();
@@ -235,9 +237,9 @@ LeafUpdate adamLeaf(const AdamConfig &c) {
             om[i] = static_cast<float>(b);
             ov[i] = static_cast<float>(d);
         }
-        out[0] = toSlot<TensorObject *>(np);
-        out[1] = toSlot<TensorObject *>(nm);
-        out[2] = toSlot<TensorObject *>(nv);
+        out[0] = toSlot<Array *>(np);
+        out[1] = toSlot<Array *>(nm);
+        out[2] = toSlot<Array *>(nv);
     };
 }
 
@@ -248,10 +250,10 @@ void zerosLeaf(Type *type, std::span<const slot_t> in, std::span<slot_t> out) {
         out[1] = out[2] = floatSlot(type, 0.0);
         return;
     }
-    const auto *p = fromSlot<TensorObject *>(in[0]);
+    const auto *p = fromSlot<Array *>(in[0]);
     for (size_t t = 1; t <= 2; ++t) {
-        out[t] = toSlot<TensorObject *>(
-            TensorObject::create(TypeCode::Float32, p->shapeSpan(), mm::autoSpace(), true));
+        out[t] = toSlot<Array *>(
+            createTensor(TypeCode::Float32, p->shapeSpan(), mm::autoSpace(), true));
     }
 }
 
@@ -346,7 +348,7 @@ slot_t adamKernel(ArgsView &, ArgsView &norm, Context &) {
 void saveLeaves(
     Type *type, slot_t value, const std::filesystem::path &dir, const std::string &path) {
     if (isTensorLeaf(type)) {
-        camel::tensor::saveNpy(fromSlot<TensorObject *>(value), dir / (path + ".npy"));
+        camel::tensor::saveNpy(fromSlot<Array *>(value), dir / (path + ".npy"));
         return;
     }
     if (!isAggregate(type)) {

@@ -42,18 +42,18 @@ namespace k = camel::tensor::kernels;
 
 namespace {
 
-TensorObject *likeArg(ArgsView &norm, size_t index) { return tensorArg(norm, index); }
+Array *likeArg(ArgsView &norm, size_t index) { return tensorArg(norm, index); }
 
 slot_t zerosLikeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("zeros_like", [&] {
-        const TensorObject *t = tensorArg(norm, 0);
+        const Array *t = tensorArg(norm, 0);
         return wrap(k::full(t->dtype(), t->shapeSpan(), 0.0, resultAllocator()));
     });
 }
 
 slot_t onesLikeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("ones_like", [&] {
-        const TensorObject *t = tensorArg(norm, 0);
+        const Array *t = tensorArg(norm, 0);
         return wrap(k::full(t->dtype(), t->shapeSpan(), 1.0, resultAllocator()));
     });
 }
@@ -64,7 +64,7 @@ slot_t numelKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t dimKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("dim", [&] {
-        const TensorObject *t = tensorArg(norm, 0);
+        const Array *t = tensorArg(norm, 0);
         const auto rank       = static_cast<int64_t>(t->rank());
         int64_t axis          = intArg(norm, 1);
         axis                  = axis < 0 ? axis + rank : axis;
@@ -148,9 +148,9 @@ slot_t sliceGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 template <bool Lhs> slot_t matmulGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel(Lhs ? "matmul_grad_lhs" : "matmul_grad_rhs", [&] {
-        const TensorObject *dy  = tensorArg(norm, 0);
-        const TensorObject *lhs = tensorArg(norm, 1);
-        const TensorObject *rhs = tensorArg(norm, 2);
+        const Array *dy  = tensorArg(norm, 0);
+        const Array *lhs = tensorArg(norm, 1);
+        const Array *rhs = tensorArg(norm, 2);
         return wrap(
             Lhs ? k::matmulGradLhs(dy, lhs, rhs, resultAllocator())
                 : k::matmulGradRhs(dy, lhs, rhs, resultAllocator()));
@@ -159,8 +159,8 @@ template <bool Lhs> slot_t matmulGradKernel(ArgsView &, ArgsView &norm, context:
 
 slot_t castLikeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("cast_like", [&] {
-        TensorObject *g          = tensorArg(norm, 0);
-        const TensorObject *like = likeArg(norm, 1);
+        Array *g          = tensorArg(norm, 0);
+        const Array *like = likeArg(norm, 1);
         return wrap(g->dtype() == like->dtype() ? g : k::cast(g, like->dtype(), resultAllocator()));
     });
 }

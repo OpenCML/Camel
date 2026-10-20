@@ -55,7 +55,7 @@ namespace k      = camel::tensor::kernels;
 using TensorType = camel::tensor::TensorType;
 using camel::tensor::kUnknownDim;
 using camel::tensor::StaticShape;
-using camel::tensor::TensorObject;
+using camel::tensor::Array;
 
 int64_t optInt(ArgsView &norm, size_t index, int64_t fallback) {
     return hasArg(norm, index) ? intArg(norm, index) : fallback;
@@ -92,7 +92,7 @@ std::vector<int64_t> labelArg(ArgsView &args, size_t index, std::string_view op)
         }
         return tensor::parseIntArray(args.get<::Array *>(index), type);
     }
-    const TensorObject *labels = tensorArg(args, index);
+    const Array *labels = tensorArg(args, index);
     if (labels->rank() != 1) {
         reportShapeError(op, "expects a rank-1 integer label tensor");
     }
@@ -358,17 +358,17 @@ slot_t batchNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 /// A (y, running_mean, running_var)-shaped triple holding `tensors`.
-slot_t tripleOf(TensorObject *first, TensorObject *second, TensorObject *third) {
+slot_t tripleOf(Array *first, Array *second, Array *third) {
     namespace mm          = camel::core::mm;
-    const auto tensorType = [](const TensorObject *t) -> Type * {
+    const auto tensorType = [](const Array *t) -> Type * {
         StaticShape shape(t->shapeSpan().begin(), t->shapeSpan().end());
         return TensorType::get(t->dtype(), std::move(shape));
     };
     TupleType *type = TupleType::create({tensorType(first), tensorType(second), tensorType(third)});
     auto *tuple     = ::Tuple::create(3, mm::autoSpace());
-    tuple->set<slot_t>(0, camel::core::rtdata::toSlot<TensorObject *>(first), type);
-    tuple->set<slot_t>(1, camel::core::rtdata::toSlot<TensorObject *>(second), type);
-    tuple->set<slot_t>(2, camel::core::rtdata::toSlot<TensorObject *>(third), type);
+    tuple->set<slot_t>(0, camel::core::rtdata::toSlot<Array *>(first), type);
+    tuple->set<slot_t>(1, camel::core::rtdata::toSlot<Array *>(second), type);
+    tuple->set<slot_t>(2, camel::core::rtdata::toSlot<Array *>(third), type);
     return camel::core::rtdata::toSlot<::Tuple *>(tuple);
 }
 
@@ -376,7 +376,7 @@ slot_t batchNormTrainKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("batch_norm_train", [&] {
         const double momentum = hasArg(norm, 5) ? numberArg(norm, 5) : 0.1;
         const double eps      = hasArg(norm, 6) ? numberArg(norm, 6) : 1e-5;
-        TensorObject *y, *mean, *var;
+        Array *y, *mean, *var;
         k::batchNormTrain(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
@@ -409,7 +409,7 @@ std::optional<Type *> batchNormTrainInfer(const InferContext &ctx) {
 slot_t batchNormTrainGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("batch_norm_train_grad", [&] {
         const double eps = hasArg(norm, 3) ? numberArg(norm, 3) : 1e-5;
-        TensorObject *dx, *dgamma, *dbeta;
+        Array *dx, *dgamma, *dbeta;
         k::batchNormTrainGrad(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
@@ -482,7 +482,7 @@ slot_t softmaxCrossEntropyGradKernel(ArgsView &, ArgsView &norm, context::Contex
 /// Checked before the labels kernels: a label outside [0, classes) is a located fault (design
 /// principles 3.9), and a label count that disagrees with the batch a shape error.
 void checkClassLabels(
-    const TensorObject *logits, const std::vector<int64_t> &labels, std::string_view op) {
+    const Array *logits, const std::vector<int64_t> &labels, std::string_view op) {
     if (logits->rank() != 2) {
         reportShapeError(op, "expects rank-2 logits [batch, classes]");
     }
@@ -504,7 +504,7 @@ void checkClassLabels(
 slot_t softmaxCrossEntropyLabelsKernel(ArgsView &, ArgsView &norm, context::Context &) {
     // The label checks are located faults of their own, not kernel failures (design principles
     // 3.9): they run outside runKernel, which maps exceptions to TensorDimensionMismatch.
-    const TensorObject *logits        = tensorArg(norm, 0);
+    const Array *logits        = tensorArg(norm, 0);
     const std::vector<int64_t> labels = labelArg(norm, 1, "softmax_cross_entropy");
     checkClassLabels(logits, labels, "softmax_cross_entropy");
     return runKernel("softmax_cross_entropy_labels", [&] {
@@ -513,7 +513,7 @@ slot_t softmaxCrossEntropyLabelsKernel(ArgsView &, ArgsView &norm, context::Cont
 }
 
 slot_t softmaxCrossEntropyLabelsGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const TensorObject *logits        = tensorArg(norm, 0);
+    const Array *logits        = tensorArg(norm, 0);
     const std::vector<int64_t> labels = labelArg(norm, 1, "softmax_cross_entropy_grad");
     checkClassLabels(logits, labels, "softmax_cross_entropy_grad");
     return runKernel("softmax_cross_entropy_labels_grad", [&] {

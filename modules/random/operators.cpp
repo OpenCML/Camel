@@ -103,28 +103,28 @@ static void shuffleArray(Array *arr) {
     size_t sz = arr->size();
     if (sz <= 1)
         return;
-    slot_t *data = arr->data();
     for (size_t i = sz - 1; i > 0; --i) {
         size_t j = g_rng() % (i + 1);
-        std::swap(data[i], data[j]);
+        const slot_t a = arr->getSlot(i);
+        arr->setSlot(i, arr->getSlot(j));
+        arr->setSlot(j, a);
     }
 }
 
-static Array *sampleArray(const Array *arr, int32_t n) {
+static Array *sampleArray(
+    const Array *arr, int32_t n, const camel::core::type::ArrayType *arrType) {
     if (n <= 0 || arr->size() == 0)
-        return Array::create(mm::autoSpace(), 0);
+        return Array::create(mm::autoSpace(), arrType, 0);
     size_t sz = arr->size();
     if ((size_t)n > sz)
         n = static_cast<int32_t>(sz);
-    Array *res        = Array::create(mm::autoSpace(), static_cast<size_t>(n));
-    slot_t *dst       = reinterpret_cast<slot_t *>(res->data());
-    const slot_t *src = reinterpret_cast<const slot_t *>(arr->data());
+    Array *res = Array::create(mm::autoSpace(), arrType, static_cast<size_t>(n));
     for (size_t i = 0; i < (size_t)n; ++i)
-        dst[i] = src[i];
+        res->setSlot(i, arr->getSlot(i));
     for (size_t i = n; i < sz; ++i) {
         size_t j = g_rng() % (i + 1);
         if (j < (size_t)n)
-            dst[j] = src[i];
+            res->setSlot(j, arr->getSlot(i));
     }
     return res;
 }
@@ -154,7 +154,10 @@ slot_t __rand_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
                 n,
                 arr->size()));
     }
-    return toSlot(sampleArray(arr, static_cast<int32_t>(n)));
+    return toSlot(sampleArray(
+        arr,
+        static_cast<int32_t>(n),
+        tt::as_ptr<camel::core::type::ArrayType>(norm.type(0))));
 }
 
 slot_t __rand_shuffle__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -190,7 +193,10 @@ slot_t __rand_permutation__(ArgsView &with, ArgsView &norm, Context &ctx) {
             std::format("the permutation length is {}; it must be non-negative", n));
     }
     const std::vector<int64_t> order = philox::permutation(key, static_cast<int64_t>(n));
-    Array *result                    = Array::create(mm::autoSpace(), order.size());
+    Array *result = Array::create(
+        mm::autoSpace(),
+        camel::core::type::ArrayType::create(camel::core::type::Type::Int64()),
+        order.size());
     for (size_t i = 0; i < order.size(); ++i) {
         result->set<Int64>(i, static_cast<Int64>(order[i]));
     }
