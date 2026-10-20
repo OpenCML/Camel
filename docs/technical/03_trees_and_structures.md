@@ -49,7 +49,7 @@
 
 ### 2.4 类型在 CST 中的形式
 
-- **TypeExpr** 常呈现为 **UnionType** → **InterType** → **DiffType** → **KeyUnionDiffType** → **KeyInterType** → **TypeUnit** → **ArrayType** → **SpecType** → **PrimaryType** → **IdentRef**（如 `int`）。
+- **TypeExpr** 常呈现为 **InterType** → **DiffType** → **KeyUnionDiffType** → **KeyInterType** → **TypeUnit** → **ArrayType** → **SpecType** → **PrimaryType** → **IdentRef**（如 `int`）。
 - 括号、冒号、关键字都会作为节点或叶子出现。
 
 ### 2.5 示例（hello.cml 的 CST 缩略）

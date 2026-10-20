@@ -134,13 +134,11 @@ FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 RefData(Ref ref) ;
 
 enum TypeOp {
-    Union,
     Inter,
     Diff,
     KeyUnion,
     KeyInter,
     KeyDiff,
-    ErrorThen,
     Specialize, // Type type, (Type | Data)* args
     TypeOf,
     TypeAs

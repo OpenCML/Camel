@@ -8,7 +8,7 @@
 module export_train_step_bn
 
 import { Tensor, relu, mean, reshape, flatten, new } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { conv2d, batch_norm_train, sgd } from nn
 import { export_model } from onnx
 import { get_env } from sys
@@ -37,7 +37,7 @@ func loss(x: Tensor, s: BnStats): float {
 }
 
 func step(m: CnnBn, s: BnStats, x: Tensor): (float, CnnBn, BnStats) {
-    let vg = value_and_grad(loss)<m>(x, s)
+    let vg = with_grad(loss)<m>(x, s)
     let r = forward<m>(x, s)
     return (vg.0, sgd(m, vg.1, 0.01), r.1)
 }

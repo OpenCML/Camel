@@ -5,7 +5,7 @@
  */
 module siamese_shared_encoder
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
@@ -59,7 +59,7 @@ func main(): int sync {
     let xb = full([1, 2], 0.5)
 
     let before = siamese_loss<model>(xa, xb)
-    let vg = value_and_grad(siamese_loss)<model>(xa, xb)
+    let vg = with_grad(siamese_loss)<model>(xa, xb)
     let stepped = sgd(model, vg.1, 0.2)
     let after = siamese_loss<stepped>(xa, xb)
     let trained = train(model, xa, xb, 10)

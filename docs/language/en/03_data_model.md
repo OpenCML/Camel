@@ -50,7 +50,7 @@ type Pair<T> = (T, T)
 
 ## 3.2 Numbers
 
-- **No implicit conversions.** `1 + 2.0`, `1 < 2.0` and mixing `i32` with `int` are all compile-time errors (`SemanticDiag::NoMatchingFunction`). Convert explicitly where needed.
+- **No implicit conversions between numbers.** Two *variables* of different types do not mix (`i32` with `int`, `int` with `float`), and `let y: float = n` with `n` an `int` is `SemanticDiag::DeclaredTypeMismatch`: both are compile-time errors (`SemanticDiag::NoMatchingFunction` for the former). Convert explicitly where needed. What moves with the context is a **literal**, not a variable: `1 + 2.0` is `1.0 + 2.0`, and the `1` in `let x: f32 = 1` is an `f32` (see the end of this section and design principles 5.1).
 - Conversion functions: `int(x)`, `i64(x)`, `i32(x)`, `float(x)`, `f64(x)`, `f32(x)`, `string(x)`.
 - `i64` and `f64` are only other spellings of `int` and `float`. Diagnostics, graphs (`std::rgir`, `inspect`) and editors always show `int` and `float`: an instance of a generic function is `first<int>`, not `first<i64>`.
 
@@ -66,9 +66,9 @@ type Pair<T> = (T, T)
   | `string(3.5)`, `string(2.0)` | `'3.5'`, `'2.0'`: the text `println` and a `{}` of `format` write, the shortest that reads back as the same number ([2.5.2](02_lexical.md#252-floating-point-numbers)); `float(string(x))` gives `x` back |
 
 - **A conversion whose argument is a literal is checked at compile time.** `int(1.0e30)` and `i32(5000000000)` are `SemanticDiag::LiteralOutOfRange`, `int('12abc')` is `SemanticDiag::LiteralStaticCastFailed`, as a literal declared with a type that cannot hold it is. With a computed argument the faults of the table above still happen at run time.
-- **A typed declaration gives a literal its type**: `let a: i32 = 3`, `let b: f32 = 0.1`. `as` is not used for conversions between numbers (`1 as float` is a compile-time error); use the conversion functions above.
+- **A literal takes its type from the context** (design principles 5.1): in order, the expected type (a typed `let`/`var`, a parameter, a return position), the type of the other operand of a binary operation or comparison, then the default type (`int` for integers, `float` for decimals and exponent forms). `let a: i32 = 3`, `let b: f32 = 0.1`, `f(3)` with `f(x: f32)`, and `x * 2` with `x: f32` all give `3`, `0.1` and `2` the target type. An operation between literals is computed with its exact value before it is put into the type: `0.1 + 0.2` is the double nearest to 0.3, `1 / 2` is `0` (integer division), `1.0 / 2` is `0.5`, and `9223372036854775807 + 1` does not fit an `int` and is `SemanticDiag::LiteralOutOfRange` (a run-time addition wraps around instead). `as` is not used for conversions between numbers (`1 as float` is a compile-time error); use the conversion functions above.
 - There is no `bool(x)`, and no conversion from `bool` to an integer; use a comparison to get a boolean (`n != 0`), and `if` to get an integer.
-- **Integer arithmetic wraps around without an error**: `9223372036854775807 + 1` gives `-9223372036854775808`. `i32(3000000000)` and `let b: i32 = 3000000000` give `-1294967296` (truncation to 32 bits).
+- **Integer arithmetic wraps around without an error**: `9223372036854775807 + 1` gives `-9223372036854775808`, but both numbers must be in variables for that (written between literals it is a compile-time error, see above). `i32(n)` truncates a computed `n` to 32 bits: `i32(3000000000)` gives `-1294967296`; as a literal it is `SemanticDiag::LiteralOutOfRange` (`let b: i32 = 3000000000` likewise).
 - **Integer division truncates towards zero**, and the remainder has the sign of the dividend: `7 / 2` is `3`, `-7 / 2` is `-3`, `-7 % 3` is `-1`. `%` is for integers only.
 - **A zero divisor is a fault** (`RuntimeDiag::DivisionByZero`), for integers and floating-point numbers alike: `1.0 / 0.0` does not give infinity. Floating-point overflow gives `inf`.
 - `^` is power: `7 ^ 2` is `49`, `2.0 ^ 0.5` is `1.41421`; a negative exponent on integers gives `0`.
@@ -237,13 +237,11 @@ Rules:
 - The two tags can be combined: `T?!`, `T!?`. The same one cannot be repeated. Positions such as array elements need parentheses: `(int?)[]`.
 - With generics: `(typeas T)?` binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
 - In `let x: int! = v` there must be a space between `!` and `=`.
-- Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
+- Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)`, `remove(path)` and `remove_dir(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
 
 **Behaviour of the current implementation, not yet decided**: `?->` is defined for `T!` only; a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`.
-
-The earlier reserved notation `T ? U` is retired: `?` is only the nullable mark, the special reading of `T ?` followed by a type is gone, and writing it gives `SemanticDiag::ReservedTypeQuestionRetired`.
 
 ## 3.5 Enums
 
@@ -288,8 +286,6 @@ func area(s: Shape): float {
 **Generics.** `Option<int>` and `Option<float>` are different types with different values. A field type may use the parameters again: `type Pair<A, B> = enum { Both(A, B), Neither }`, and `Pair<int, string>`'s `Both` takes an `int` and a `string`.
 
 **On the graph.** No node kind is added: construction stores a tag and the data, `match` reads the tag, branches on it and takes the data out in the arm, as for `T?` and `T!`. Reading the tag and a field are ordinary internal operators (`__enum_tag__`, `__enum_field__`), and the schedulers do not special-case them by name. `std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::macro` and `std::cpp` all support enums; ONNX export and autodiff refuse one with a located diagnostic for now.
-
-**Retired.** `A | B` in a type position is retired: a value has one type, and a value that is one of several possibilities is an enum (`SemanticDiag::UnionTypeRetired`; `|` remains the logical or). `T ? U` is retired as well (`SemanticDiag::ReservedTypeQuestionRetired`).
 
 ## 3.6 Maps and sets
 

@@ -9,7 +9,7 @@ tier = "fast"
 tool = "node"
 kind = "behavior"
 case = "selftest_probe.mjs"
-envs = ["SELFTEST_PROBE_LOG=tmp/selftest-serial.log"]
+# SELFTEST_PROBE_LOG comes from the self-test's environment (under its own scratch directory).
 expect_exit = 0
 normalizers = ["normalize_newlines"]
 

@@ -67,7 +67,8 @@ slot_t fromArrayKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 slot_t toArrayKernel(ArgsView &, ArgsView &norm, Context &) {
     const std::string bytes(norm.get<BytesObject *>(0)->view());
-    auto *out = ::Array::create(mm::autoSpace(), bytes.size());
+    auto *out = ::Array::create(
+        mm::autoSpace(), ArrayType::create(Type::Int64()), bytes.size());
     for (size_t i = 0; i < bytes.size(); ++i)
         out->set<int64_t>(i, static_cast<unsigned char>(bytes[i]));
     return toSlot(out);

@@ -1,0 +1,21 @@
+/**
+ * Verifies the refusal of a loop that iterates over an array which depends on a differentiated
+ * parameter: an array has a tangent, but the reverse pass has no per-round scatter of each element's
+ * gradient back into the iterated array, so the diagnostic names the loop and the array (and says to
+ * capture the array and read by index) rather than giving a wrong gradient.
+ */
+module loop_grad_refuse_iterable
+
+import { grad } from autodiff
+
+with <w: float>
+func f(): float {
+    let xs = [w, w * 2.0, w * 3.0]
+    return loop acc = 0.0 for x in xs do acc + x
+}
+
+func main(): int sync {
+    let d = grad(f)<2.0>()
+    'loop_grad_refuse_iterable d={}'->format<d>->println
+    return 0
+}

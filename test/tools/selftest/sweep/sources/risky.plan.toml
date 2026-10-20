@@ -1,0 +1,28 @@
+# Fixture of test/tools/selftest/run.mjs: a plan whose tags put it in the risk class of the
+# poison sweep, so the fast sample keeps three of its five tests. It is not under test/plans.
+id = "selftest.sweep.risky"
+order = 20
+tier = "fast"
+tags = ["selftest", "collections"]
+
+[defaults]
+kind = "behavior"
+case = "../probe.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "risky.1"
+
+[[tests]]
+name = "risky.2"
+
+[[tests]]
+name = "risky.3"
+
+[[tests]]
+name = "risky.4"
+
+[[tests]]
+name = "risky.5"

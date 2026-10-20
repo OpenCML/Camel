@@ -1,8 +1,0 @@
-// `A | B` is retired: a value has one type (design principles 5.3). When a value is one of
-// several named cases, that is an enum.
-
-type IntOrFloat = int | float
-
-func main(): void sync {
-    println(1)
-}

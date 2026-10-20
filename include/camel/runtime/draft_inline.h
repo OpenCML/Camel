@@ -67,7 +67,7 @@ bool devirtualizeStaticCallInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
     bool unwrapGatedCallee = false);
 
-/// Rewrites a CALL whose callee is projected out of a branch JOIN (the value_and_grad pullback
+/// Rewrites a CALL whose callee is projected out of a branch JOIN (the with_grad pullback
 /// shape: each arm packs (value, closure) into a tuple, the JOIN selects, and the closure is
 /// called indirectly) into one CALL per arm plus one JOIN per used projection: the call's
 /// result projections and the JOIN's other projections each select among the per-arm values.

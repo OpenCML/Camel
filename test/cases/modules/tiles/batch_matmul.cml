@@ -1,6 +1,6 @@
 module batch_matmul_checks
 import { Tensor, randn, seed, sum, mean, abs, reshape, shape, set_num_threads } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { run, source } from tiles
 
 type Pair = { a: Tensor<f32>, b: Tensor<f32> }
@@ -12,7 +12,7 @@ func loss(target: Tensor<f32>): float {
     return mean(e * e)
 }
 func derivative(w: Pair, target: Tensor<f32>): (float, Pair) {
-    return value_and_grad(loss)<w>(target)
+    return with_grad(loss)<w>(target)
 }
 func check(name: string, a: Tensor<f32>, b: Tensor<f32>, target: Tensor<f32>, run_gpu: bool): int sync {
     let w = pair(a, b)

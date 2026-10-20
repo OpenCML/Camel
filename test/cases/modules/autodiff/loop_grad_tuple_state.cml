@@ -1,0 +1,25 @@
+/**
+ * Verifies a loop with a two-value state, (round, accumulator): the round counter is an int, which
+ * has no tangent, so the reverse pass carries the gradient of the accumulator alone while the
+ * state keeps both values. Three rounds add 2·w each, so the gradient is 6.
+ */
+module loop_grad_tuple_state
+
+import { grad, with_grad } from autodiff
+
+with <w: float>
+func f(): float {
+    let (n, acc) = loop i = 1, acc = 0.0 while i <= 3 do (i + 1, acc + w * 2.0)
+    return acc
+}
+
+func rounds(): int {
+    let (n, acc) = loop i = 1, acc = 0 while i <= 3 do (i + 1, acc + i)
+    return n * 100 + acc
+}
+
+func main(): int sync {
+    let vg = with_grad(f)<2.0>()
+    'loop_grad_tuple_state vg={} rounds={}'->format<vg, rounds()>->println
+    return 0
+}

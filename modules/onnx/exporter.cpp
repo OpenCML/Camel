@@ -2287,7 +2287,7 @@ Value Evaluator::callClosure(
 void Evaluator::refuseLinear(const LinearFrame &f, std::string_view what) {
     // A condition on the function a recursion returns is reported at the recursive call, not
     // at the place where that function happens to be called (for a pullback: the
-    // value_and_grad expression). Without a position there, the caller's node locates it.
+    // with_grad expression). Without a position there, the caller's node locates it.
     const std::string graph = f.fn->name().substr(0, f.fn->name().find('$'));
     const std::string text =
         isSourceName(graph) ? std::format("in '{}': {}", graph, what) : std::string(what);
@@ -3247,7 +3247,7 @@ class InputBinder {
     std::pair<Value, type::Type *> bind(const Example &example, const std::string &name, bool top) {
         type::Type *ty = example.type;
         if (const auto *tensorType = tensor::asTensorType(ty); tensorType || isTensor(example)) {
-            const auto *t = rtdata::fromSlot<tensor::TensorObject *>(example.value);
+            const auto *t = rtdata::fromSlot<tensor::Array *>(example.value);
             tensor::StaticShape shape(t->shapeSpan().begin(), t->shapeSpan().end());
             std::vector<size_t> dynamic;
             if (top) {
@@ -3518,7 +3518,7 @@ bindInputs(Emitter &emitter, const ExportOptions &options, std::span<const Examp
             !(example.type && example.type->code() == tensor::TensorType::typeCode())) {
             continue;
         }
-        const auto *t = rtdata::fromSlot<tensor::TensorObject *>(example.value);
+        const auto *t = rtdata::fromSlot<tensor::Array *>(example.value);
         batched += t->shapeSpan().empty() ? 0 : 1;
     }
     const bool sharedBatch = batched <= 1;
@@ -3575,7 +3575,7 @@ GCGraph *
 simplifyFully(const core::context::context_ptr_t &context, GCGraph *root, std::ostream &log) {
     const OptimizeRewriteConfig config = exportRewriteConfig();
     constexpr size_t kMaxRounds        = kMaxExportRounds;
-    // Macros (grad, value_and_grad) expand once their arguments are constants, which
+    // Macros (grad, with_grad) expand once their arguments are constants, which
     // simplification may be what makes them.
     root = MacroRewritePass(context).apply(root, log);
     while (true) {
@@ -3601,7 +3601,7 @@ type::Type *exactTypeOf(slot_t value, type::Type *declared) {
         return declared;
     }
     if (declared->code() == tensor::TensorType::typeCode()) {
-        const auto *t = rtdata::fromSlot<tensor::TensorObject *>(value);
+        const auto *t = rtdata::fromSlot<tensor::Array *>(value);
         return tensor::TensorType::get(
             t->dtype(),
             tensor::StaticShape(t->shapeSpan().begin(), t->shapeSpan().end()));

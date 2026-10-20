@@ -2,34 +2,41 @@ module tiles_autodiff
 import { Tensor, reshape, sum, abs, zeros } from tensor
 import { grad } from autodiff
 import { run } from tiles
-func square(x: Tensor<f32>): float { return sum(x * x) }
-func rows(x: Tensor<f32>): float { let r = sum(x, 1); return sum(r * r) }
+// The differentiated value is the first `with` parameter; the derivative wrappers are ordinary
+// functions so that tiles::run can hand them a device argument.
+with <x: Tensor<f32>>
+func square(): float { return sum(x * x) }
+with <x: Tensor<f32>>
+func rows(): float { let r = sum(x, 1); return sum(r * r) }
 type Dense = { x: Tensor<f32>, w: Tensor<f32>, b: Tensor<f32> }
-func dense(p: Dense): float { let y = p.x @ p.w + p.b; return sum(y * y) }
+with <p: Dense>
+func dense(): float { let y = p.x @ p.w + p.b; return sum(y * y) }
 type Broadcast = { a: Tensor<f32>, b: Tensor<f32> }
-func broadcast_loss(p: Broadcast): float { return sum(p.a + p.b) }
-func weighted_loss(p: Broadcast): float { return sum(p.a * p.b) }
+with <p: Broadcast>
+func broadcast_loss(): float { return sum(p.a + p.b) }
+with <p: Broadcast>
+func weighted_loss(): float { return sum(p.a * p.b) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
-    let derivative = grad(square)
+    let derivative = (v: Tensor<f32>): Tensor<f32> => grad(square)<v>()
     let cpu = derivative(x)
     let gpu = run<derivative>(x)
     println(sum(abs(cpu - gpu)))
     println(sum(abs(gpu - x * 2.0)))
-    let row_grad = grad(rows)
+    let row_grad = (v: Tensor<f32>): Tensor<f32> => grad(rows)<v>()
     println(sum(abs(run<row_grad>(x) - row_grad(x))))
     let p = { x: x, w: reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [3, 2]), b: zeros([1, 2]) }
-    let dense_grad = grad(dense)
+    let dense_grad = (q: Dense): Dense => grad(dense)<q>()
     let dc = dense_grad(p)
     let dg = run<dense_grad>(p)
     println(sum(abs(dc.x - dg.x)) + sum(abs(dc.w - dg.w)) + sum(abs(dc.b - dg.b)))
-    let broad_grad = grad(broadcast_loss)
+    let broad_grad = (q: Broadcast): Broadcast => grad(broadcast_loss)<q>()
     let bp = { a: zeros([2, 1, 3]), b: zeros([1, 4, 1]) }
     let bg = run<broad_grad>(bp)
     let bc = broad_grad(bp)
     println(sum(abs(bg.a - bc.a)) + sum(abs(bg.b - bc.b)))
     println(sum(abs(bg.a - 4.0)) + sum(abs(bg.b - 6.0)))
-    let weighted_grad = grad(weighted_loss)
+    let weighted_grad = (q: Broadcast): Broadcast => grad(weighted_loss)<q>()
     let wp = { a: zeros([1, 2]), b: reshape([100000000.0, 100000000.0, 1.0, 1.0, -100000000.0, -100000000.0], [3, 2]) }
     let wg = run<weighted_grad>(wp)
     println(sum(abs(wg.a)))

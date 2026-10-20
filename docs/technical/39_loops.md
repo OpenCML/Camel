@@ -141,6 +141,39 @@ shape (the value when `k = 1`, the k-tuple when `k > 1`). `LoopView` exposes
 `loopCollectedValue`; the validation requires the value tuple to be the state types followed by
 the array types and the body's exit to be the state types followed by their element types.
 
+### 3.2 The tape of a differentiated loop
+
+autodiff (`modules/autodiff/pullback.cpp`) uses the collection slots as its tape
+(`docs/handover/reports/H4.md`, "H4d 第二步"). The rewrite decodes the loop's body graph and
+differentiates it as a function of the captures and the state, as it differentiates any other
+graph, keeping the values its pullback reads as *residual ports*: the operands of every rule, and
+for a call inside the body the callee's pullback closure. The body of the loop node becomes that
+graph's forward copy, returning `(next_state…, residual…)`, and `collectionCount` becomes the
+number of residual values. The tape is the collected arrays themselves: a round appends each
+residual in place (section 3.1), so the tape costs one array per value the pullback reads and no
+value is copied.
+
+The reverse pass is a second LOOP node of its own (`While`, `collectionCount = 0`), not a second
+loop driver. Its state is the round index `i` plus one gradient per state component and per capture
+that has one; its condition is `i >= 0`; its body reads the round's residuals with `:op/idx_arr`,
+calls the body's pullback graph `(dy, residual…) -> tangents`, chains the state gradient through
+the round, adds each capture's gradient, and decrements `i`. The first round therefore runs with
+`i = len(tape) - 1`, and a loop that ran no round leaves the state's gradient as the seed and every
+capture's gradient zero. A body whose pullback reads no residual still collects one constant `1` per
+round, so that the reverse pass knows how many rounds ran; that slot is not one of its inputs.
+`LoopDraftView` (`camel/runtime/loop.h`) is how the rewrite reads a decoded loop and writes the two
+it builds, the same accessors `LoopView` gives a consumer.
+
+An array has a tangent of its own: the array of its elements' tangents (design principles 9.9). A
+captured array that depends on a differentiated parameter therefore carries a gradient, and the
+reverse of reading `xs[i]` scatters the element's gradient into that array's gradient. An array
+whose elements have no tangent (e.g. `string[]`) has none, and reading it stops the gradient, as
+before. Iterating an array that depends on a differentiated parameter is still refused where it is
+written: the body receives one element per round, and the reverse pass has no per-round scatter of
+that element's gradient back into the iterated array. A loop whose value has no tangent but reads a
+differentiated value is refused at the loop, with its position, instead of being skipped: the
+contribution would be dropped without a sign of it.
+
 ## 4. Back ends
 
 | Consumer | How it runs a LOOP |
@@ -151,7 +184,7 @@ the array types and the body's exit to be the state types followed by their elem
 | `std::prl` | the private lowering at its entry and when a runtime callback supplies an original graph containing a loop |
 | `std::cpp` | the private lowering at its entry; the generated tail calls are loops |
 | ONNX export | refused where the loop is written (the LOOP to ONNX Loop translation is the next step) |
-| autodiff | refused where the loop is written (forward and backward loops are a later step) |
+| autodiff | differentiated through a synthesized reverse loop (section 3.2); the forward loop collects the tape |
 | debugger | the loop's graphs are arms of their function: folded into its frame by default |
 
 **The lowering** (`camel/runtime/loop_lowering.h`): per loop, three graphs,
@@ -174,14 +207,17 @@ for a source graph cannot be paired with a lowered graph's frame layout.
 
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
 function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
-`inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `value_and_grad`) declares
+`inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `with_grad`) declares
 `OperatorTraits::inspectsGraphs`. The lowering passes every operand of function type of such an
 operator through `:graph/original` (`src/builtin/operators/graph.h`), which turns a function
 value of the private copy into the same function over the program's graph it was copied from
 (`GCGraph::originalGraph()`, recorded by the detached commit; the closure is kept, a copy has its
-original's ports). So Tiles sees a function's LOOP, and grad and the ONNX export refuse it where
-it is written, on every back end (`modules.tiles` `loop_structure_*`, `linear.loops`
-`loops.grad_refused_lowered`, `loops.onnx_refused_lowered`).
+original's ports). So Tiles sees a function's LOOP, and the ONNX export refuses it where it is
+written, on every back end (`modules.tiles` `loop_structure_*`, `linear.loops`
+`loops.onnx_refused_lowered`). autodiff differentiates a function's own LOOP node instead of
+refusing it: the forward loop collects each round's residuals in its collection slots and the
+reverse pass is a loop over those arrays (section 3.2, `linear.loops`
+`loops.grad_through_loop_lowered`).
 
 **Recursion limit.** A round calls the condition and the body one level deep and returns before
 the next round; no number of rounds takes depth (`--max-recursion-depth 3` runs a million rounds
@@ -261,3 +297,14 @@ with the back ends' output compared; `std::macro` on the two-value loop of `macr
 thousand rounds of a `while` and a `for` loop with the tapes summarised by their lengths; and a
 tape that outgrows `CAMEL_GC_HEAP_LIMIT_MB`, which every executor reports as
 `RuntimeDiag::MemoryExhausted` at the loop's source line.
+
+`test/plans/feat/modules/autodiff.plan.toml` covers the differentiation through a loop (section
+3.2): a summation loop (one per round, every executor in agreement), a product loop (the product
+rule), an affine accumulator (the geometric series, so the state chain is checked), a two-value
+state, a nested loop (the inner pullback closure collected as one value of the outer tape), an
+empty loop (zero gradient), a captured array that does not depend on the parameter (the gradient
+stops at the read), and the two refusals — an iterated and a captured array that does depend on it
+— reported at the loop. `linear.loops` `loops.grad_through_loop` and
+`loops.grad_through_loop_lowered` are the source-level check under `std::macro` and `std::fvm` that
+a loop of the program's own graph is differentiated (they replace the two refusals that H4d 第一步
+left).

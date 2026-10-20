@@ -162,11 +162,3 @@ envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 0
 expect_output_not_contains = ["test_echo:"]
 
-[[tests]]
-name = "cli.no_module_passes_retired"
-desc = "The option that left out the passes imported modules used to join to the pipeline is gone with the mechanism (design principles 9.2): writing it is refused by name, with exit 1 and nothing running. The pipeline is composed explicitly instead."
-args = ["--no-module-passes", "${case}", "std::fvm"]
-expect_exit = 1
-expect_output_contains = ["Error: --no-module-passes was retired", "importing a module no longer adds a pass to the pipeline"]
-expect_output_not_contains = ["camel-ran-marker"]
-

@@ -101,7 +101,7 @@ slot_t sumAllKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 slot_t meanAllKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    TensorObject *t = tensorArg(norm, 0);
+    Array *t = tensorArg(norm, 0);
     // The definition (stdlib/tensor_definitions.cml) is sum(x) / (numel(x) as float): for a
     // tensor without elements that float division by zero faults, so the kernel raises the same
     // fault (design principles 7.1: a kernel agrees with its definition, faults included).

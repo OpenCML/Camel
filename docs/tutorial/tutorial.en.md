@@ -1043,21 +1043,22 @@ The export pass translates whatever it can translate, and where it cannot (the p
 
 ## 16. Taking gradients
 
-Automatic differentiation is a library built on top of the pass mechanism: `grad(f)` rewrites the graph of `f` into the graph of its derivative. [`examples/16_grad.cml`](examples/16_grad.cml):
+Automatic differentiation is a library built on top of the pass mechanism: `grad(f)` rewrites the graph of `f` into the graph of its derivative. The first `with` parameter of `f` is the weight it differentiates; ordinary parameters are data. [`examples/16_grad.cml`](examples/16_grad.cml):
 
 ```cml
 module grad_demo
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 
-func f(x: float, y: float): float {
+with <x: float>
+func f(y: float): float {
     return x * x * y + y
 }
 
 func main(): int sync {
-    println(f(3.0, 2.0))
-    println(grad(f)(3.0, 2.0))                 // (df/dx, df/dy) = (2xy, x^2 + 1)
-    println(value_and_grad(f)(3.0, 2.0))
+    println(f<3.0>(2.0))
+    println(grad(f)<3.0>(2.0))                 // df/dx = 2xy = 12
+    println(with_grad(f)<3.0>(2.0))            // (value, gradient) = (20, 12)
     return 0
 }
 ```
@@ -1068,13 +1069,15 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 
 ```text
 20
-(12, 10)
-(20, (12, 10))
+12
+(20, 12)
 ```
 
-- `grad(f)` returns a function that gives one partial derivative for each parameter of `f`.
+- `grad(f)` returns a function that differentiates the first `with` parameter of `f`; the remaining `with` parameters are constants and ordinary parameters are data.
+- To differentiate data (an adversarial example, say), make it a `with` parameter: `grad(<x: Tensor> (m: Model): float => loss(m, x))<x>`.
+- `with_grad(f)` returns the value together with the gradient. In a loop, bind the transform once and call it with the weights: `let loss_with_grad = with_grad(loss)`, then `let (l, g) = loss_with_grad<model>(x, y)` inside the loop.
 - `grad` is a macro operator. The `std::macro` in the pipeline expands it into the graph of the derivative before anything runs, and the optimisation passes after it can go on to optimise that graph. This is a precondition of this library, not a constraint of the language.
-- The function being differentiated is written as pure data flow with `let`; when a gradient would have to pass through reads and writes of a `var`, it is rejected outright.
+- The function being differentiated is written as pure data flow with `let`; when a gradient would have to pass through reads and writes of a `var`, it is rejected outright. When the first `with` parameter is a `var`, has no tangent, or the function has no `with` parameter, compilation fails with `SemanticDiag::NotDifferentiable` naming the reason.
 - One training step is "gradient + update": the weights of the model are written as `with` parameters, `grad(loss)<model>(x, y)` differentiates with respect to the weights, and `sgd` from the `nn` module gives the updated weights. For a complete example see [`examples/ml/train_linear.cml`](../../examples/ml/train_linear.cml).
 
 ## Where to go next

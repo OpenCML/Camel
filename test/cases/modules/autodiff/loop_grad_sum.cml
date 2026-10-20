@@ -1,0 +1,20 @@
+/**
+ * Verifies the gradient of a loop that adds a captured parameter once per round: the loop
+ * collects what the round's pullback reads, and the reverse pass adds what each round sends back
+ * to the captured value. Three rounds contribute one each, so the gradient is the round count.
+ */
+module loop_grad_sum
+
+import { grad, with_grad } from autodiff
+
+with <w: float>
+func f(): float {
+    return loop acc = 0.0 for k in [1, 2, 3] do acc + w
+}
+
+func main(): int sync {
+    let d  = grad(f)<2.0>()
+    let vg = with_grad(f)<2.0>()
+    'loop_grad_sum d={} vg={}'->format<d, vg>->println
+    return 0
+}

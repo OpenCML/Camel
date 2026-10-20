@@ -3,8 +3,9 @@
 // holds characters the process code page cannot express used to break `sys.basic`: Camel strings
 // are UTF-8 and guaranteed to be, while what the process hands the program (the command line, the
 // environment, the current directory, the module search paths) arrived as bytes of the code page.
-// This script builds such a world under tmp/test and compares the text the program prints with
-// the text the test itself wrote.
+// This script builds such a world under CAMEL_TEST_TMPDIR (the runner's per-test scratch
+// directory; tmp/test/unicode-paths on a direct run) and compares the text the program prints
+// with the text the test itself wrote.
 //
 // The names below are chosen against CP936 (the code page of the machine this was written on):
 // 中文 and Ω have a GBK code, 🐪 has none, so a program that survives them read its arguments,
@@ -20,7 +21,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
 const CASES = path.join(ROOT, 'test', 'cases', 'modules', 'std', 'sys', 'unicode')
-const RUN = path.join(ROOT, 'tmp', 'test', 'unicode-paths')
+const RUN = path.join(process.env.CAMEL_TEST_TMPDIR || path.join(ROOT, 'tmp', 'test'), 'unicode-paths')
 const home = process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest')
 const camel = path.join(home, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
 

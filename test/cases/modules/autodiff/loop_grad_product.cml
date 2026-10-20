@@ -1,0 +1,19 @@
+/**
+ * Verifies the gradient of a loop that multiplies a captured parameter once per round: the round's
+ * pullback sends back the product of the other rounds, so three rounds give the product rule
+ * (3 · w²) rather than the round count.
+ */
+module loop_grad_product
+
+import { grad, with_grad } from autodiff
+
+with <w: float>
+func f(): float {
+    return loop acc = 1.0 for k in [1, 2, 3] do acc * w
+}
+
+func main(): int sync {
+    let vg = with_grad(f)<2.0>()
+    'loop_grad_product vg={}'->format<vg>->println
+    return 0
+}

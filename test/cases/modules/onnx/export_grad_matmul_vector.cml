@@ -5,7 +5,7 @@
  */
 module export_grad_matmul_vector
 import { Tensor, reshape, sum, tanh } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from sys
 
@@ -22,7 +22,7 @@ func loss(x: Tensor): float {
 
 func step(w: Tensor, v: Tensor, x: Tensor): (Tensor, Tensor, Tensor) {
     let m = { w: w, v: v }
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     return (reshape([vg.0], [1]), vg.1.w, vg.1.v)
 }
 

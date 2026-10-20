@@ -776,9 +776,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     }
     parseParentParams();
     if (eat(TK::Colon)) {
-        typeBeforeBlock_ = true;
         parseType();
-        typeBeforeBlock_ = false;
     }
     if (!panic_) {
         parseStmtBlock();

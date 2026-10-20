@@ -9,7 +9,7 @@
  */
 module ort_grad_loop_values
 import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from sys
 
@@ -68,10 +68,10 @@ func loss_d(x: Tensor): float {
 // The counter as an output of the model, next to the value and the gradient.
 func step(w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, int) {
     let m = { w: w }
-    let a = value_and_grad(loss_a)<m>(x)
-    let b = value_and_grad(loss_b)<m>(x)
-    let c = value_and_grad(loss_c)<m>(x)
-    let d = value_and_grad(loss_d)<m>(x)
+    let a = with_grad(loss_a)<m>(x)
+    let b = with_grad(loss_b)<m>(x)
+    let c = with_grad(loss_c)<m>(x)
+    let d = with_grad(loss_d)<m>(x)
     let (h, k) = walk<m>(x, 0)
     return (
         reshape([a.0], [1]), a.1.w, reshape([b.0], [1]), b.1.w,

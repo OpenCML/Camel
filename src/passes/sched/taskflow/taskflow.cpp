@@ -2693,10 +2693,7 @@ void TaskflowExecSchedPass::mark_map_arr(GCGraph *graph, gc_node_ref_t nodeRef, 
     const size_t n     = arrayAt(frame, arrIdx)->size();
     auto *resultType   = frame->typeAt<ArrayType>(resIdx);
     {
-        Array *res = Array::create(camel::core::mm::autoSpace(), n);
-        for (size_t i = 0; i < n; ++i) {
-            res->set<slot_t>(i, NullSlot);
-        }
+        Array *res = Array::create(camel::core::mm::autoSpace(), resultType, n);
         // The result array is reachable from the node's slot from here on; each element stores
         // its value at its own position.
         frame->set(resIdx, res);
@@ -2751,8 +2748,8 @@ void TaskflowExecSchedPass::mark_filter_arr(GCGraph *graph, gc_node_ref_t nodeRe
 
     region.enter();
     Array *arr       = arrayAt(frame, arrIdx);
-    Array *filtered  = Array::create(camel::core::mm::autoSpace(), 0);
     auto *resultType = frame->typeAt<ArrayType>(dataIndexOf(graph, nodeRef));
+    Array *filtered  = Array::create(camel::core::mm::autoSpace(), resultType, 0);
     // Rooted before it grows: appending allocates.
     frame->set(dataIndexOf(graph, nodeRef), filtered);
     for (size_t i = 0; i < n; ++i) {

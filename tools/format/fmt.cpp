@@ -1139,34 +1139,23 @@ any Formatter::visitLiteral(cst::Literal context) {
 
 /*
 typeExpr
-    : unionType (('?' | '!')+ | '?' unionType)?
+    : interType ('?' | '!')*
     ;
 */
 any Formatter::visitTypeExpr(cst::TypeExpr context) {
     string result;
     result += any_cast<string>(visitType(context->type(0)));
-    if (context->types().size() > 1) {
-        result += " ? " + any_cast<string>(visitType(context->type(1)));
-    } else {
-        // Preserve distinct postfix tokens: adjacent equal marks would lex as
-        // the expression operators `??` or `!!` instead of two type suffixes.
-        for (size_t i = 1; i < context->childCount(); ++i) {
-            const auto mark = context->child(i)->text();
-            if (!result.empty() && !mark.empty() && result.back() == mark.front()) {
-                result += ' ';
-            }
-            result += mark;
+    // Preserve distinct postfix tokens: adjacent equal marks would lex as
+    // the expression operators `??` or `!!` instead of two type suffixes.
+    for (size_t i = 1; i < context->childCount(); ++i) {
+        const auto mark = context->child(i)->text();
+        if (!result.empty() && !mark.empty() && result.back() == mark.front()) {
+            result += ' ';
         }
+        result += mark;
     }
     return result;
 }
-
-/*
-unionType
-    : interType ('|' interType)*
-    ;
-*/
-any Formatter::visitUnionType(cst::UnionType context) { return formatBiOpsList(context, true); }
 
 /*
 interType
@@ -1523,7 +1512,6 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(TupleData)
         CAMEL_FORMAT(FuncData)
         CAMEL_FORMAT(TypeExpr)
-        CAMEL_FORMAT(UnionType)
         CAMEL_FORMAT(InterType)
         CAMEL_FORMAT(DiffType)
         CAMEL_FORMAT(KeyUnionDiffType)

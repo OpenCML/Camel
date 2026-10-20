@@ -28,18 +28,7 @@ namespace camel::parse::ast {
 
 enum class TypeType { Null, Expr, Array, Tuple, Struct, Func, Spec, Unit, Infer, Data, Ref, Enum };
 
-enum class TypeOp {
-    Union,
-    Inter,
-    Diff,
-    KeyUnion,
-    KeyInter,
-    KeyDiff,
-    ErrorThen,
-    Specialize,
-    TypeOf,
-    TypeAs
-};
+enum class TypeOp { Inter, Diff, KeyUnion, KeyInter, KeyDiff, Specialize, TypeOf, TypeAs };
 
 std::string to_string(TypeType type);
 std::string to_string(TypeOp op);

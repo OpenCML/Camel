@@ -52,7 +52,7 @@ type Pair<T> = (T, T)
 
 ## 3.2 数值
 
-- **不做隐式转换。** `1 + 2.0`、`1 < 2.0`、`i32` 与 `int` 混算都是编译期错误（`SemanticDiag::NoMatchingFunction`）。需要时显式转换。
+- **数值之间不做隐式转换。** 两个不同类型的*变量*混算（`i32` 与 `int`、`int` 与 `float`）是编译期错误（`SemanticDiag::NoMatchingFunction`），`let y: float = n`（`n` 是 `int`）也是（`SemanticDiag::DeclaredTypeMismatch`）。需要时显式转换。会跟着上下文动的是**字面量**，不是变量：`1 + 2.0` 是 `1.0 + 2.0`，`let x: f32 = 1` 里的 `1` 是 `f32`（见本节末与设计原则 5.1）。
 - 转换函数：`int(x)`、`i64(x)`、`i32(x)`、`float(x)`、`f64(x)`、`f32(x)`、`string(x)`。
 - `i64`、`f64` 只是 `int`、`float` 的另一种写法。诊断、图（`std::rgir`、`inspect`）与编辑器里显示的类型一律用 `int`、`float`：泛型实例叫 `first<int>`，不是 `first<i64>`。
 
@@ -68,9 +68,9 @@ type Pair<T> = (T, T)
   | `string(3.5)`、`string(2.0)` | `'3.5'`、`'2.0'`：与 `println` 和 `format` 的 `{}` 相同的文字，最短且读回来是同一个数（[2.5.2](02_lexical.md#252-浮点数)）；`float(string(x))` 得回 `x` |
 
 - **实参是字面量的转换在编译期检查。** `int(1.0e30)`、`i32(5000000000)` 是 `SemanticDiag::LiteralOutOfRange`，`int('12abc')` 是 `SemanticDiag::LiteralStaticCastFailed`，与给字面量声明一个放不下它的类型一样。实参是算出来的值时，上表里的故障仍然发生在运行期。
-- **带类型的声明给字面量定类型**：`let a: i32 = 3`、`let b: f32 = 0.1`。`as` 不用于数值之间的转换（`1 as float` 是编译期错误），用上面的转换函数。
+- **字面量按上下文取类型**（设计原则 5.1）：依次取期望的类型（带类型的 `let`/`var`、形参、返回位置）、二元运算或比较里另一个操作数的类型、默认类型（整数 `int`、小数与带指数的写法 `float`）。`let a: i32 = 3`、`let b: f32 = 0.1`、`f(3)` 在 `f(x: f32)` 里、`x * 2` 在 `x: f32` 时，`3`、`0.1`、`2` 都是目标类型。字面量之间的运算在编译期按精确值算完再放进类型：`0.1 + 0.2` 是离 0.3 最近的那个 double，`1 / 2` 是 `0`（整数除法），`1.0 / 2` 是 `0.5`，`9223372036854775807 + 1` 放不进 `int` 所以是 `SemanticDiag::LiteralOutOfRange`（运行时的加法则是回绕）。`as` 不用于数值之间的转换（`1 as float` 是编译期错误），用上面的转换函数。
 - 没有 `bool(x)`，也没有从 `bool` 到整数的转换；用比较得到布尔值（`n != 0`），用 `if` 得到整数。
-- **整数运算回绕，不报错**：`9223372036854775807 + 1` 得到 `-9223372036854775808`。`i32(3000000000)` 与 `let b: i32 = 3000000000` 得到 `-1294967296`（截断到 32 位）。
+- **整数运算回绕，不报错**：`9223372036854775807 + 1` 得到 `-9223372036854775808`，但那要两个数都在变量里（字面量之间这样写是编译期错误，见上）。`i32(n)` 对算出来的 `n` 截断到 32 位：`i32(3000000000)` 得到 `-1294967296`；写成字面量则是 `SemanticDiag::LiteralOutOfRange`（`let b: i32 = 3000000000` 同样）。
 - **整数除法向零截断**，余数与被除数同号：`7 / 2` 是 `3`，`-7 / 2` 是 `-3`，`-7 % 3` 是 `-1`。`%` 只用于整数。
 - **除数为零是故障**（`RuntimeDiag::DivisionByZero`），整数与浮点数都是：`1.0 / 0.0` 不会得到无穷大。浮点运算溢出得到 `inf`。
 - `^` 是乘方：`7 ^ 2` 是 `49`，`2.0 ^ 0.5` 是 `1.41421`；整数的负指数得到 `0`。
@@ -239,13 +239,11 @@ error DivByZero: the divisor is zero
 - 两种标记可以组合：`T?!`、`T!?`。同一种不能重复。数组元素等位置需要括号：`(int?)[]`。
 - 与泛型配合：`(typeas T)?` 从可空实参里绑定 `T`（[7.5](07_statements.md#75-泛型函数)）。
 - `let x: int! = v` 中 `!` 与 `=` 之间要有空格。
-- 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
+- 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`、`remove(path)`、`remove_dir(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
 
 **错误与故障是两回事。** 只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障：程序带位置终止，`!!` 接不住它（见 [4.6](04_execution_model.md#46-故障退出与资源上限)）。
 
 **当前实现的行为，尚待确定**：`?->` 只对 `T!` 有定义；`match` 对这两种值恰好两个分支；它们可以打印，但除了 `T?` 与 `null` 比较之外不能用 `==` 比较。
-
-早先预留的记号 `T ? U` 已退役：`?` 只是可空标记，`T ?` 后面接类型的那条特殊读法没有了，写它得到 `SemanticDiag::ReservedTypeQuestionRetired`。
 
 ## 3.5 枚举 `enum`
 
@@ -290,8 +288,6 @@ func area(s: Shape): float {
 **泛型。** `Option<int>` 与 `Option<float>` 是两个不同的类型，各是各的值。字段类型可以再用参数：`type Pair<A, B> = enum { Both(A, B), Neither }`，`Pair<int, string>` 的 `Both` 收一个 `int` 和一个 `string`。
 
 **图上。** 不增加节点种类：构造是"装入一个标签和数据"，`match` 是"取标签、按标签分支、在臂里取出数据"，与 `T?`、`T!` 相同。取标签与取字段是普通的内部算子（`__enum_tag__`、`__enum_field__`），调度器不对它们按名字特判。`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::macro` 与 `std::cpp` 都支持 `enum`；ONNX 导出与自动微分暂时给出带位置的拒绝。
-
-**已退役。** 类型位置上的 `A | B` 已退役：一个值只有一种类型，值是几种可能之一时写 `enum`（`SemanticDiag::UnionTypeRetired`，`|` 只留给逻辑或）；`T ? U` 同样退役（`SemanticDiag::ReservedTypeQuestionRetired`）。
 
 ## 3.6 映射与集合
 

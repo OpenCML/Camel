@@ -19,6 +19,8 @@
 
 #include "camel/core/rtdata/foreign.h"
 
+#include "camel/core/mm/deferred.h"
+
 #include <algorithm>
 #include <atomic>
 #include <mutex>
@@ -67,16 +69,9 @@ uint64_t loadCounter(const std::atomic<uint64_t> &value) {
     return value.load(std::memory_order_acquire);
 }
 
-// Control blocks of wrappers the collector found dead, waiting for runDeferredForeignReleases.
-struct DeferredReleases {
-    std::mutex mutex;
-    std::vector<ForeignResourceControlBlock *> blocks;
-    std::atomic<bool> pending{false};
-};
-
-DeferredReleases &deferredReleases() {
-    static auto *value = new DeferredReleases(); // Outlives every static destructor.
-    return *value;
+// The collector's deferred-release queue (mm/deferred.h) calls this after the collection.
+void releaseControlBlockAfterCollection(void *context) noexcept {
+    static_cast<ForeignResourceControlBlock *>(context)->releaseFromWrapperFinalizer();
 }
 
 } // namespace
@@ -294,32 +289,7 @@ void ForeignResourceObject::finalize() noexcept {
     if (!control) {
         return;
     }
-    auto &deferred = deferredReleases();
-    try {
-        std::lock_guard<std::mutex> lock(deferred.mutex);
-        deferred.blocks.push_back(control);
-        deferred.pending.store(true, std::memory_order_release);
-    } catch (...) {
-        // No memory for the queue entry: release in place rather than leak the resource.
-        control->releaseFromWrapperFinalizer();
-    }
-}
-
-size_t runDeferredForeignReleases() noexcept {
-    auto &deferred = deferredReleases();
-    if (!deferred.pending.load(std::memory_order_acquire)) {
-        return 0;
-    }
-    std::vector<ForeignResourceControlBlock *> blocks;
-    {
-        std::lock_guard<std::mutex> lock(deferred.mutex);
-        blocks.swap(deferred.blocks);
-        deferred.pending.store(false, std::memory_order_release);
-    }
-    for (ForeignResourceControlBlock *control : blocks) {
-        control->releaseFromWrapperFinalizer();
-    }
-    return blocks.size();
+    mm::deferRelease(&releaseControlBlockAfterCollection, control);
 }
 
 void ForeignResourceObject::updateRefs(

@@ -37,15 +37,15 @@ using namespace camel::core::rtdata;
 enum class SortAlgo { Insertion, Quick, Merge };
 
 template <typename T, typename Compare>
-static void insertionSortSlots(slot_t *vals, size_t n, Compare comp) {
+static void insertionSortSlots(T *vals, size_t n, Compare comp) {
     for (size_t i = 1; i < n; ++i) {
-        T key    = fromSlot<T>(vals[i]);
+        T key    = vals[i];
         size_t j = i;
-        while (j > 0 && comp(key, fromSlot<T>(vals[j - 1]))) {
+        while (j > 0 && comp(key, vals[j - 1])) {
             vals[j] = vals[j - 1];
             --j;
         }
-        vals[j] = toSlot(key);
+        vals[j] = key;
     }
 }
 
@@ -53,21 +53,21 @@ static void insertionSortSlots(slot_t *vals, size_t n, Compare comp) {
 /// ranges. Recursion only into the smaller part, so the depth stays logarithmic on sorted or
 /// constant input.
 template <typename T, typename Compare>
-static void quickSortSlots(slot_t *vals, ptrdiff_t left, ptrdiff_t right, Compare comp) {
+static void quickSortSlots(T *vals, ptrdiff_t left, ptrdiff_t right, Compare comp) {
     while (right - left >= 16) {
         const ptrdiff_t mid = left + (right - left) / 2;
-        if (comp(fromSlot<T>(vals[mid]), fromSlot<T>(vals[left])))
+        if (comp(vals[mid], vals[left]))
             std::swap(vals[mid], vals[left]);
-        if (comp(fromSlot<T>(vals[right]), fromSlot<T>(vals[left])))
+        if (comp(vals[right], vals[left]))
             std::swap(vals[right], vals[left]);
-        if (comp(fromSlot<T>(vals[right]), fromSlot<T>(vals[mid])))
+        if (comp(vals[right], vals[mid]))
             std::swap(vals[right], vals[mid]);
-        const T pivot = fromSlot<T>(vals[mid]);
+        const T pivot = vals[mid];
         ptrdiff_t i = left, j = right;
         while (i <= j) {
-            while (comp(fromSlot<T>(vals[i]), pivot))
+            while (comp(vals[i], pivot))
                 ++i;
-            while (comp(pivot, fromSlot<T>(vals[j])))
+            while (comp(pivot, vals[j]))
                 --j;
             if (i <= j) {
                 std::swap(vals[i], vals[j]);
@@ -89,7 +89,7 @@ static void quickSortSlots(slot_t *vals, ptrdiff_t left, ptrdiff_t right, Compar
 }
 
 template <typename T, typename Compare>
-static void mergeSortSlots(slot_t *vals, size_t n, Compare comp, slot_t *tmp) {
+static void mergeSortSlots(T *vals, size_t n, Compare comp, T *tmp) {
     if (n <= 1)
         return;
     size_t mid = n / 2;
@@ -97,7 +97,7 @@ static void mergeSortSlots(slot_t *vals, size_t n, Compare comp, slot_t *tmp) {
     mergeSortSlots<T>(vals + mid, n - mid, comp, tmp);
     size_t i = 0, j = mid, k = 0;
     while (i < mid && j < n) {
-        if (comp(fromSlot<T>(vals[i]), fromSlot<T>(vals[j])))
+        if (comp(vals[i], vals[j]))
             tmp[k++] = vals[i++];
         else
             tmp[k++] = vals[j++];
@@ -118,23 +118,26 @@ static void mergeSortSlots(slot_t *vals, size_t n, Compare comp, slot_t *tmp) {
 template <typename T>
 static Array *
 __doSortSlots__(Array *arr, SortAlgo algo, const ArrayType *arrType, bool inPlace, Context &ctx) {
-    size_t n      = arr->size();
-    Array *target = inPlace ? arr : static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
+    size_t n = arr->size();
+    // The in-place form is only taken when the buffer is unshared and writable; a view or an
+    // imported (external) buffer means someone else sees the old order.
+    Array *target =
+        (inPlace && arr->canWriteInPlace()) ? arr : static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
     if (n <= 1) {
         return target;
     }
-    slot_t *slots = target->data();
-    auto comp     = [](T a, T b) { return a < b; };
+    T *vals    = target->dataAs<T>();
+    auto comp  = [](T a, T b) { return a < b; };
     switch (algo) {
     case SortAlgo::Insertion:
-        insertionSortSlots<T>(slots, n, comp);
+        insertionSortSlots<T>(vals, n, comp);
         break;
     case SortAlgo::Quick:
-        quickSortSlots<T>(slots, 0, static_cast<ptrdiff_t>(n) - 1, comp);
+        quickSortSlots<T>(vals, 0, static_cast<ptrdiff_t>(n) - 1, comp);
         break;
     case SortAlgo::Merge: {
-        std::vector<slot_t> tmp(n);
-        mergeSortSlots<T>(slots, n, comp, tmp.data());
+        std::vector<T> tmp(n);
+        mergeSortSlots<T>(vals, n, comp, tmp.data());
         break;
     }
     default:
@@ -173,9 +176,11 @@ static Array *__doSortWithTypeCode__(
     return result;
 }
 
-template <typename T> static Array *__merge_sorted_arrays_slots__(Array *lhs, Array *rhs) {
+template <typename T>
+static Array *__merge_sorted_arrays_slots__(
+    Array *lhs, Array *rhs, const ArrayType *arrType) {
     size_t nL = lhs->size(), nR = rhs->size();
-    Array *result = Array::create(mm::autoSpace(), nL + nR);
+    Array *result = Array::create(mm::autoSpace(), arrType, nL + nR);
     size_t i = 0, j = 0, k = 0;
     while (i < nL && j < nR) {
         T a = lhs->get<T>(i), b = rhs->get<T>(j);
@@ -220,16 +225,16 @@ slot_t __algo_merge_sorted_arrays__(ArgsView &with, ArgsView &norm, Context &ctx
     Array *merged            = nullptr;
     switch (code) {
     case TypeCode::Int32:
-        merged = __merge_sorted_arrays_slots__<Int32>(lhs, rhs);
+        merged = __merge_sorted_arrays_slots__<Int32>(lhs, rhs, arrType);
         break;
     case TypeCode::Int64:
-        merged = __merge_sorted_arrays_slots__<Int64>(lhs, rhs);
+        merged = __merge_sorted_arrays_slots__<Int64>(lhs, rhs, arrType);
         break;
     case TypeCode::Float32:
-        merged = __merge_sorted_arrays_slots__<Float32>(lhs, rhs);
+        merged = __merge_sorted_arrays_slots__<Float32>(lhs, rhs, arrType);
         break;
     case TypeCode::Float64:
-        merged = __merge_sorted_arrays_slots__<Float64>(lhs, rhs);
+        merged = __merge_sorted_arrays_slots__<Float64>(lhs, rhs, arrType);
         break;
     default:
         throwRuntimeFault(

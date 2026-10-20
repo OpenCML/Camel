@@ -1,11 +1,11 @@
 /**
- * Demonstrates a with-context Linear model trained functionally: value_and_grad of a loss that
+ * Demonstrates a with-context Linear model trained functionally: with_grad of a loss that
  * calls a with-context helper yields the loss plus a Linear-shaped gradient, and one sgd step
  * returns the updated Linear.
  */
 module with_context_step_demo
 
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { Tensor, ones, shape, sum, zeros } from tensor
 import { sgd } from nn
 
@@ -36,7 +36,7 @@ func main(): int sync {
     let y = ones([4, 1])
 
     let before = mse_loss<layer>(X, y)
-    let vg = value_and_grad(mse_loss)<layer>(X, y)
+    let vg = with_grad(mse_loss)<layer>(X, y)
     let gradient = vg.1
     let trained = sgd(layer, gradient, 0.01)
     let after = mse_loss<trained>(X, y)

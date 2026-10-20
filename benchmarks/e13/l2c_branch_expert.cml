@@ -17,7 +17,7 @@
 module e13_l2c_branch_expert
 
 import { Tensor, relu, mean, reshape, save_npy } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from sys
 import { export_model } from onnx
@@ -35,7 +35,7 @@ func fwd(m: Moe, x: Tensor): float {
 }
 
 func step(m: Moe, x: Tensor): (float, Moe) {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 

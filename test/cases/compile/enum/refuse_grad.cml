@@ -1,6 +1,6 @@
 // autodiff: a value that depends on the differentiated parameter cannot be put into an enum
 // (its operators have no derivative rule); `grad` refuses where the value is built rather than
-// returning a wrong zero.
+// returning a wrong zero. The differentiated value is the first `with` parameter.
 
 import { grad } from autodiff
 
@@ -16,11 +16,12 @@ func area(s: Shape): float {
     }
 }
 
-func through_enum(x: float): float {
+with <x: float>
+func through_enum(): float {
     return area(Shape::Circle(x))
 }
 
 func main(): int sync {
-    println(grad(through_enum)(3.0))
+    println(grad(through_enum)<3.0>())
     return 0
 }

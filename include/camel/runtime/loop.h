@@ -175,6 +175,62 @@ class LoopView {
 /// The LOOP node `node` of `graph` (asserts that it is one).
 inline LoopView loopOf(const GCGraph &graph, gc_node_ref_t node) { return LoopView(graph, node); }
 
+class GraphDraft;
+
+/// The LOOP node `node` of a draft: what a graph producer (autodiff) reads while it rewrites the
+/// graph a LOOP node is in, before it is encoded. The same facts as LoopView, from the same
+/// layout: the draft holds the node's inputs and its value type, the node's payload holds the two
+/// graphs (camel/runtime/graph.h, GCLoopBody), and the graphs' own ports are read as LoopView
+/// reads them. One place, so a producer never re-derives the layout either.
+class LoopDraftView {
+  public:
+    /// The LOOP node `node` of `draft`; asserts that it is one.
+    LoopDraftView(const GraphDraft &draft, gc_node_ref_t node);
+
+    gc_node_ref_t node() const { return node_; }
+
+    LoopKind kind() const { return kind_; }
+    size_t stateCount() const { return stateCount_; }
+    size_t collectionCount() const { return collectionCount_; }
+    bool valueIsTuple() const { return stateCount_ > 1 || collectionCount_ != 0; }
+    /// The type of the loop's value in the draft.
+    camel::core::type::Type *valueType() const;
+    size_t valueComponentCount() const { return stateCount_ + collectionCount_; }
+    size_t stateValueIndex(size_t j) const { return j; }
+    size_t collectionValueIndex(size_t c) const { return stateCount_ + c; }
+    camel::core::type::Type *stateType(size_t j) const;
+    camel::core::type::Type *collectionArrayType(size_t c) const;
+    camel::core::type::Type *collectionElemType(size_t c) const;
+
+    std::optional<gc_node_ref_t> iterable() const;
+    gc_node_ref_t initialState(size_t j) const;
+    std::span<const gc_node_ref_t> captures() const;
+
+    GCGraph *condGraph() const { return cond_; }
+    GCGraph *bodyGraph() const { return body_; }
+
+    gc_node_ref_t condStateParam(size_t j) const;
+    std::optional<gc_node_ref_t> bodyElementParam() const;
+    gc_node_ref_t bodyStateParam(size_t j) const;
+    gc_node_ref_t condCapturePort(size_t c) const;
+    gc_node_ref_t bodyCapturePort(size_t c) const;
+
+    gc_node_ref_t nextState() const;
+    /// The type of the body graph's result (the state, or the state and the collected values).
+    camel::core::type::Type *bodyResultType() const;
+    size_t bodyStateResultIndex(size_t j) const { return j; }
+    size_t bodyCollectionResultIndex(size_t c) const { return stateCount_ + c; }
+
+  private:
+    const GraphDraft *draft_;
+    gc_node_ref_t node_;
+    LoopKind kind_;
+    size_t stateCount_;
+    size_t collectionCount_;
+    GCGraph *cond_;
+    GCGraph *body_;
+};
+
 /// Reads component `index` of a finished loop's value (the layout LoopView describes): the value
 /// itself for a loop that does not wrap it, else the tuple's component. One place so consumers
 /// such as autodiff never re-derive the layout.

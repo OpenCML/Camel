@@ -33,7 +33,7 @@
 | tree | 参数树与检查点 | 7 | tree_map/tree_reduce/tree_unzip/tree_leaves/tree_paths（类型导向的编译期内联）；save_tree/load_tree（真算子） | 10 / 0 | 不是空壳；见 2.6 |
 | tensor | 张量类型与算子；.npy 读写；二进制转换 | 约 60 个名字（含 `Tensor::` 限定副本）；signatures/tensor.cml 只登记 to_bytes/from_bytes | new/zeros/ones/full/eye/range/random/randn/seed/reshape/transpose/permute/concat/slice/where/cast/sum/mean/max/min/matmul/linear/softmax/log_softmax/layer_norm/relu/gelu/sigmoid/tanh/exp/log/sqrt/abs/pow/maximum/minimum、load_npy/save_npy/show/set_num_threads/gemm_backend | 299 / 39 | 大头在 C++（kernels/ops/passes）；运算符 `__add__` 等也由它导出 |
 | nn | 网络层、损失、优化器 | 约 19 + 类型 OptimizerState | conv2d/max_pool2d/avg_pool2d/batch_norm/batch_norm_train/embedding/softmax_cross_entropy 及各 `_grad`；sgd/adam_state/adam/save_params | 37 / 30 | 链接 tensor |
-| autodiff | 自动微分 | 4 | grad/value_and_grad/vjp/stop_gradient | 95 / 34 | |
+| autodiff | 自动微分 | 4 | grad/with_grad/vjp/stop_gradient | 95 / 34 | |
 | onnx | 导出 ONNX | 2 | export_model/supported_operators | 75 / 31 | 链接 tensor；export_matrix.md 由脚本生成 |
 | tiles | GPU/CUDA 区域编译（实验） | 约 12 + 类型 Device | run/run_device/upload/download/available/device/gpu/regions/inspect 等；`tiles::compile` 遍 | 72 / 0 | README 标明 experimental；协作线另一台机器 |
 | math | 常量与数值函数、位运算、进制 | 41 个函数 + 4 个常量（pi/e/inf/nan） | sqrt/exp/log*/三角双曲/floor/ceil/round/trunc/abs/sign/min/max/clamp/pow/hypot/gcd/lcm/is_nan/is_inf/bit_*/shl/shr/hex/bin/oct | 30 / 9 | 算子没有数值声明（评审第 15 条） |

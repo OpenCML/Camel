@@ -55,27 +55,27 @@ Shape reducedShape(std::span<const int64_t> shape, size_t axis, bool keepDims);
  * Reduces one axis. Result dtypes: Sum/Max/Min keep the input dtype (bool sums
  * become int64), Mean is float32, ArgMax and ArgMin are int64.
  */
-TensorObject *reduceAxis(
-    ReduceOp op, const TensorObject *input, int64_t axis, bool keepDims, mm::IAllocator &allocator);
+Array *reduceAxis(
+    ReduceOp op, const Array *input, int64_t axis, bool keepDims, mm::IAllocator &allocator);
 
 /// Sum of all elements as double: f32 elements accumulated in f64 in row-major order; int64
 /// and bool elements accumulated exactly in int64 (wrapping), converted to double once.
-double sumAll(const TensorObject *input);
+double sumAll(const Array *input);
 
 /// Softmax along `axis` (float32 result).
-TensorObject *softmax(const TensorObject *input, int64_t axis, mm::IAllocator &allocator);
+Array *softmax(const Array *input, int64_t axis, mm::IAllocator &allocator);
 /// Log-softmax along `axis` (float32 result).
-TensorObject *logSoftmax(const TensorObject *input, int64_t axis, mm::IAllocator &allocator);
+Array *logSoftmax(const Array *input, int64_t axis, mm::IAllocator &allocator);
 /// Backward of softmax along `axis`: dx = y * (dy - sum(dy * y, axis)).
-TensorObject *softmaxGrad(
-    const TensorObject *output, const TensorObject *dy, int64_t axis, mm::IAllocator &allocator);
+Array *softmaxGrad(
+    const Array *output, const Array *dy, int64_t axis, mm::IAllocator &allocator);
 
 /**
  * Layer normalization over the trailing dimensions covered by `gamma`/`beta`
  * (both shaped like the normalized suffix of `input`).
  */
-TensorObject *layerNorm(
-    const TensorObject *input, const TensorObject *gamma, const TensorObject *beta, double eps,
+Array *layerNorm(
+    const Array *input, const Array *gamma, const Array *beta, double eps,
     mm::IAllocator &allocator);
 
 } // namespace camel::tensor::kernels

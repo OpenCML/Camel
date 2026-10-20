@@ -39,7 +39,7 @@ using type::TypeCode;
 
 namespace {
 
-const TensorObject *asFloat(const TensorObject *t, mm::IAllocator &allocator) {
+const Array *asFloat(const Array *t, mm::IAllocator &allocator) {
     return t->dtype() == TypeCode::Float32 ? t : cast(t, TypeCode::Float32, allocator);
 }
 
@@ -98,15 +98,15 @@ void forEachBroadcast(std::span<const int64_t> big, const std::vector<int64_t> &
 
 } // namespace
 
-TensorObject *
-sumTo(const TensorObject *g, std::span<const int64_t> shape, mm::IAllocator &allocator) {
+Array *
+sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator) {
     if (g->shapeSpan().size() == shape.size() &&
         std::equal(shape.begin(), shape.end(), g->shapeSpan().begin())) {
-        return const_cast<TensorObject *>(g);
+        return const_cast<Array *>(g);
     }
-    const TensorObject *src = asFloat(g, allocator);
+    const Array *src = asFloat(g, allocator);
     const auto strides      = broadcastStrides(shape, src->shapeSpan(), "sum_to");
-    TensorObject *out       = TensorObject::create(TypeCode::Float32, shape, allocator, true);
+    Array *out       = createTensor(TypeCode::Float32, shape, allocator, true);
     const float *in         = src->dataAs<float>();
     float *acc              = out->dataAs<float>();
     const auto big          = src->shapeSpan();
@@ -145,23 +145,23 @@ sumTo(const TensorObject *g, std::span<const int64_t> shape, mm::IAllocator &all
     return out;
 }
 
-TensorObject *
-broadcastTo(const TensorObject *t, std::span<const int64_t> shape, mm::IAllocator &allocator) {
-    const TensorObject *src = asFloat(t, allocator);
+Array *
+broadcastTo(const Array *t, std::span<const int64_t> shape, mm::IAllocator &allocator) {
+    const Array *src = asFloat(t, allocator);
     const auto strides      = broadcastStrides(src->shapeSpan(), shape, "broadcast");
-    TensorObject *out       = TensorObject::create(TypeCode::Float32, shape, allocator);
+    Array *out       = createTensor(TypeCode::Float32, shape, allocator);
     const float *in         = src->dataAs<float>();
     float *dst              = out->dataAs<float>();
     forEachBroadcast(shape, strides, [&](uint64_t i, int64_t j) { dst[i] = in[j]; });
     return out;
 }
 
-TensorObject *fill(double value, std::span<const int64_t> shape, mm::IAllocator &allocator) {
+Array *fill(double value, std::span<const int64_t> shape, mm::IAllocator &allocator) {
     return full(TypeCode::Float32, shape, value, allocator);
 }
 
-TensorObject *expandAxis(
-    const TensorObject *g, std::span<const int64_t> shape, int64_t axis, bool keepDims,
+Array *expandAxis(
+    const Array *g, std::span<const int64_t> shape, int64_t axis, bool keepDims,
     mm::IAllocator &allocator) {
     const auto rank = static_cast<int64_t>(shape.size());
     const int64_t a = axis < 0 ? axis + rank : axis;
@@ -170,13 +170,13 @@ TensorObject *expandAxis(
     }
     Shape reduced(shape.begin(), shape.end());
     reduced[static_cast<size_t>(a)] = 1;
-    const TensorObject *kept        = keepDims ? g : reshape(g, reduced, allocator);
+    const Array *kept        = keepDims ? g : reshape(g, reduced, allocator);
     return broadcastTo(kept, shape, allocator);
 }
 
-TensorObject *geluGrad(const TensorObject *x, const TensorObject *dy, mm::IAllocator &allocator) {
-    const TensorObject *xs = asFloat(x, allocator);
-    const TensorObject *gs = asFloat(dy, allocator);
+Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
+    const Array *xs = asFloat(x, allocator);
+    const Array *gs = asFloat(dy, allocator);
     if (!xs->sameShape(gs)) {
         throw ShapeError("gelu gradient: dy shape differs from the input");
     }
@@ -186,7 +186,7 @@ TensorObject *geluGrad(const TensorObject *x, const TensorObject *dy, mm::IAlloc
     constexpr int64_t kGrain = 4096;
     const float *px          = xs->dataAs<float>();
     // tanh goes through the vectorized unary kernel; the polynomial parts vectorize as they are.
-    TensorObject *inner = TensorObject::create(TypeCode::Float32, xs->shapeSpan(), allocator);
+    Array *inner = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
     float *pu           = inner->dataAs<float>();
     parallelFor(n, kGrain, [&](int64_t begin, int64_t end) {
         for (int64_t i = begin; i < end; ++i) {
@@ -196,7 +196,7 @@ TensorObject *geluGrad(const TensorObject *x, const TensorObject *dy, mm::IAlloc
     });
     const float *pt   = unary(UnaryOp::Tanh, inner, allocator)->dataAs<float>();
     const float *pg   = gs->dataAs<float>();
-    TensorObject *out = TensorObject::create(TypeCode::Float32, xs->shapeSpan(), allocator);
+    Array *out = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
     float *po         = out->dataAs<float>();
     parallelFor(n, kGrain, [&](int64_t begin, int64_t end) {
         for (int64_t i = begin; i < end; ++i) {
@@ -209,13 +209,13 @@ TensorObject *geluGrad(const TensorObject *x, const TensorObject *dy, mm::IAlloc
     return out;
 }
 
-TensorObject *erfGrad(const TensorObject *x, const TensorObject *dy, mm::IAllocator &allocator) {
-    const TensorObject *xs = asFloat(x, allocator);
-    const TensorObject *gs = asFloat(dy, allocator);
+Array *erfGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
+    const Array *xs = asFloat(x, allocator);
+    const Array *gs = asFloat(dy, allocator);
     if (!xs->sameShape(gs)) {
         throw ShapeError("erf gradient: dy shape differs from the input");
     }
-    TensorObject *out      = TensorObject::create(TypeCode::Float32, xs->shapeSpan(), allocator);
+    Array *out      = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
     const float *px        = xs->dataAs<float>();
     const float *pg        = gs->dataAs<float>();
     float *po              = out->dataAs<float>();
@@ -226,12 +226,12 @@ TensorObject *erfGrad(const TensorObject *x, const TensorObject *dy, mm::IAlloca
     return out;
 }
 
-TensorObject *layerNormGrad(
-    const TensorObject *x, const TensorObject *gamma, const TensorObject *dy, double eps,
+Array *layerNormGrad(
+    const Array *x, const Array *gamma, const Array *dy, double eps,
     LayerNormGrad which, mm::IAllocator &allocator) {
-    const TensorObject *xs = asFloat(x, allocator);
-    const TensorObject *ws = asFloat(gamma, allocator);
-    const TensorObject *gs = asFloat(dy, allocator);
+    const Array *xs = asFloat(x, allocator);
+    const Array *ws = asFloat(gamma, allocator);
+    const Array *gs = asFloat(dy, allocator);
     if (!xs->sameShape(gs)) {
         throw ShapeError("layer_norm gradient: dy shape differs from the input");
     }
@@ -242,7 +242,7 @@ TensorObject *layerNormGrad(
     const float *pg  = gs->dataAs<float>();
 
     if (which == LayerNormGrad::Input) {
-        TensorObject *out = TensorObject::create(TypeCode::Float32, xs->shapeSpan(), allocator);
+        Array *out = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
         float *po         = out->dataAs<float>();
         parallelFor(rows, 16, [&](int64_t begin, int64_t end) {
             for (int64_t r = begin; r < end; ++r) {
@@ -279,7 +279,7 @@ TensorObject *layerNormGrad(
         return out;
     }
 
-    TensorObject *out = TensorObject::create(TypeCode::Float32, ws->shapeSpan(), allocator, true);
+    Array *out = createTensor(TypeCode::Float32, ws->shapeSpan(), allocator, true);
     float *po         = out->dataAs<float>();
     std::vector<double> acc(static_cast<size_t>(width), 0.0);
     for (int64_t r = 0; r < rows; ++r) {
@@ -312,8 +312,8 @@ TensorObject *layerNormGrad(
     return out;
 }
 
-TensorObject *sliceGrad(
-    const TensorObject *dy, std::span<const int64_t> shape, int64_t axisArg, int64_t start,
+Array *sliceGrad(
+    const Array *dy, std::span<const int64_t> shape, int64_t axisArg, int64_t start,
     int64_t end, int64_t step, mm::IAllocator &allocator) {
     if (step <= 0) {
         throw std::invalid_argument("slice step must be positive");
@@ -333,11 +333,11 @@ TensorObject *sliceGrad(
     start = range->start;
     end   = range->end;
     const int64_t count     = end > start ? (end - start + step - 1) / step : 0;
-    const TensorObject *src = asFloat(dy, allocator);
+    const Array *src = asFloat(dy, allocator);
     if (src->rank() != shape.size() || src->dim(static_cast<size_t>(axis)) != count) {
         throw ShapeError("slice gradient: dy shape does not match the slice");
     }
-    TensorObject *out = TensorObject::create(TypeCode::Float32, shape, allocator, true);
+    Array *out = createTensor(TypeCode::Float32, shape, allocator, true);
     uint64_t outer = 1, inner = 1;
     for (int64_t d = 0; d < axis; ++d) {
         outer *= static_cast<uint64_t>(shape[static_cast<size_t>(d)]);
@@ -365,13 +365,13 @@ namespace {
 /// Operands of matmul viewed as matrices: vectors get the unit axis matmul gives them, and dy
 /// gets it back.
 struct MatmulView {
-    const TensorObject *lhs;
-    const TensorObject *rhs;
-    const TensorObject *dy;
+    const Array *lhs;
+    const Array *rhs;
+    const Array *dy;
 };
 
 MatmulView matrixView(
-    const TensorObject *dy, const TensorObject *lhs, const TensorObject *rhs,
+    const Array *dy, const Array *lhs, const Array *rhs,
     mm::IAllocator &allocator) {
     MatmulView view{asFloat(lhs, allocator), asFloat(rhs, allocator), asFloat(dy, allocator)};
     Shape dyShape = view.dy->shapeVector();
@@ -397,8 +397,8 @@ enum class MatmulOperand { Lhs, Rhs };
 /// transposes in place), or nullptr for shapes this does not cover: vectors and broadcast batches.
 ///   rhs a matrix:        lhs viewed as [M, K] with M the product of its leading axes; one GEMM.
 ///   equal batch shapes:  one GEMM per batch matrix.
-TensorObject *matmulGradGemm(
-    MatmulOperand which, const TensorObject *dy, const TensorObject *lhs, const TensorObject *rhs,
+Array *matmulGradGemm(
+    MatmulOperand which, const Array *dy, const Array *lhs, const Array *rhs,
     mm::IAllocator &allocator) {
     if (lhs->dtype() != TypeCode::Float32 || rhs->dtype() != TypeCode::Float32 ||
         dy->dtype() != TypeCode::Float32 || lhs->rank() < 2 || rhs->rank() < 2) {
@@ -423,8 +423,8 @@ TensorObject *matmulGradGemm(
     }
     const float *a = lhs->dataAs<float>(), *b = rhs->dataAs<float>(), *g = dy->dataAs<float>();
     const bool forLhs = which == MatmulOperand::Lhs;
-    TensorObject *out =
-        TensorObject::create(TypeCode::Float32, (forLhs ? lhs : rhs)->shapeSpan(), allocator);
+    Array *out =
+        createTensor(TypeCode::Float32, (forLhs ? lhs : rhs)->shapeSpan(), allocator);
     float *o            = out->dataAs<float>();
     const int64_t aSize = M * K, bSize = K * N, gSize = M * N;
     parallelFor(batches, 1, [&](int64_t begin, int64_t end) {
@@ -467,26 +467,26 @@ TensorObject *matmulGradGemm(
 
 } // namespace
 
-TensorObject *matmulGradLhs(
-    const TensorObject *dy, const TensorObject *lhs, const TensorObject *rhs,
+Array *matmulGradLhs(
+    const Array *dy, const Array *lhs, const Array *rhs,
     mm::IAllocator &allocator) {
-    if (TensorObject *g = matmulGradGemm(MatmulOperand::Lhs, dy, lhs, rhs, allocator)) {
+    if (Array *g = matmulGradGemm(MatmulOperand::Lhs, dy, lhs, rhs, allocator)) {
         return g;
     }
     const MatmulView v = matrixView(dy, lhs, rhs, allocator);
-    TensorObject *g    = matmul(v.dy, transposeLast2(v.rhs, allocator), allocator);
+    Array *g    = matmul(v.dy, transposeLast2(v.rhs, allocator), allocator);
     g                  = sumTo(g, v.lhs->shapeSpan(), allocator);
     return reshape(g, lhs->shapeSpan(), allocator);
 }
 
-TensorObject *matmulGradRhs(
-    const TensorObject *dy, const TensorObject *lhs, const TensorObject *rhs,
+Array *matmulGradRhs(
+    const Array *dy, const Array *lhs, const Array *rhs,
     mm::IAllocator &allocator) {
-    if (TensorObject *g = matmulGradGemm(MatmulOperand::Rhs, dy, lhs, rhs, allocator)) {
+    if (Array *g = matmulGradGemm(MatmulOperand::Rhs, dy, lhs, rhs, allocator)) {
         return g;
     }
     const MatmulView v = matrixView(dy, lhs, rhs, allocator);
-    TensorObject *g    = matmul(transposeLast2(v.lhs, allocator), v.dy, allocator);
+    Array *g    = matmul(transposeLast2(v.lhs, allocator), v.dy, allocator);
     g                  = sumTo(g, v.rhs->shapeSpan(), allocator);
     return reshape(g, rhs->shapeSpan(), allocator);
 }

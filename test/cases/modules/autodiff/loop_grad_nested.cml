@@ -1,0 +1,20 @@
+/**
+ * Verifies a loop whose body runs a loop of its own: the inner loop is differentiated inside the
+ * outer body's tape, so one of the values the outer loop collects per round is the inner pullback
+ * closure, and both loops contribute their rounds to the gradient (2 · 3 · w).
+ */
+module loop_grad_nested
+
+import { grad, with_grad } from autodiff
+
+with <w: float>
+func f(): float {
+    return loop acc = 0.0 for x in [1, 2] do
+        loop sub = acc for y in [1, 2, 3] do sub + w
+}
+
+func main(): int sync {
+    let vg = with_grad(f)<2.0>()
+    'loop_grad_nested vg={}'->format<vg>->println
+    return 0
+}

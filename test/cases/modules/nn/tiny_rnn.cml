@@ -1,11 +1,11 @@
 /**
- * Fixed two-step tanh RNN trained with autodiff: value_and_grad of the unrolled sequence loss
+ * Fixed two-step tanh RNN trained with autodiff: with_grad of the unrolled sequence loss
  * gives a TinyRnn-shaped gradient (weights shared across both time steps accumulate), one sgd
  * step lowers the loss, and a recursive train loop repeats the step.
  */
 module tiny_rnn
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, shape, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
@@ -49,7 +49,7 @@ func main(): int sync {
     let target = full([1, 1], 1.0)
 
     let before = rnn_loss<model>(x0, x1, target)
-    let vg = value_and_grad(rnn_loss)<model>(x0, x1, target)
+    let vg = with_grad(rnn_loss)<model>(x0, x1, target)
     let stepped = sgd(model, vg.1, 0.05)
     let after = rnn_loss<stepped>(x0, x1, target)
     let trained = train(model, x0, x1, target, 10)

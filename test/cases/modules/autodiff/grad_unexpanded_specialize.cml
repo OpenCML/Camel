@@ -8,7 +8,7 @@
  */
 module grad_unexpanded_specialize
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { get_env } from sys
 
 with <w: float>
@@ -29,7 +29,7 @@ func loss(x: float, steps: int): float {
 }
 
 func step(w: float, x: float, steps: int): (float, float) {
-    return value_and_grad(loss)<w>(x, steps)
+    return with_grad(loss)<w>(x, steps)
 }
 
 func main(): int sync {

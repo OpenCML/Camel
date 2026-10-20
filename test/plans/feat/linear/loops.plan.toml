@@ -427,26 +427,83 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.grad_refused"
-desc = "grad of a function with a loop is refused at the loop (line 7)."
-kind = "negative"
-case = "../../../cases/loops/grad_refused.cml"
-args = ["-E", "short", "${case}", "std::macro"]
-expect_exit = 1
-expect_diagnostic_line = 7
-expect_output_contains = ["cannot differentiate through a 'loop' expression yet"]
+name = "loops.grad_through_loop"
+desc = "grad of a function with a loop: the forward loop keeps each round's residuals in its collection slots and the reverse pass runs a loop over them, so f(x) = x⁴ at 2 gives 16 and 32."
+kind = "behavior"
+case = "../../../cases/loops/grad_through_loop.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "16.0\n32.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.grad_refused_lowered"
-desc = "grad run by std::fvm without std::macro: the back end lowered the loop in its private copy, but grad reads the program's own graph (OperatorTraits::inspectsGraphs) and refuses the loop at line 7 as std::nvm does."
+name = "loops.grad_through_loop_lowered"
+desc = "The same gradient run by std::fvm, which lowers loops in its private copy while grad reads the program's own graph: the tape is collected by the loop node and the reverse pass is a LOOP node of its own."
+kind = "behavior"
+case = "../../../cases/loops/grad_through_loop.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "16.0\n32.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.grad_array_index"
+desc = "An array has a tangent, the array of its elements' tangents: reading xs[i] sends the element's gradient back by scatter-add, for a numeric array and for a struct array (whose tangent struct keeps only the differentiable fields)."
+kind = "behavior"
+case = "../../../cases/loops/grad_array_index.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "[1.0, 0.0, 1.0]\n[{ x: 1.0, y: 0.0 }, { x: 1.0, y: 0.0 }]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.grad_array_loop"
+desc = "Array gradients through a loop: a captured array read by index accumulates each round's element gradient, and an array loop state grown by append gets the appended value's gradient and the array without its last element; numeric and struct arrays."
+kind = "behavior"
+case = "../../../cases/loops/grad_array_loop.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "6.0\n[1.0, 1.0, 1.0]\n12.0\n6.0\n6.0\n3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.grad_array_loop_lowered"
+desc = "The array gradients of loops.grad_array_loop run by std::fvm, which lowers loops in a private copy while grad reads the program's own graph."
+kind = "behavior"
+case = "../../../cases/loops/grad_array_loop.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "6.0\n[1.0, 1.0, 1.0]\n12.0\n6.0\n6.0\n3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.refuse_loop_no_channel"
+desc = "A loop whose value has no tangent is refused, located at the loop, when it reads a value that depends on a differentiated parameter: skipping it would drop the gradient without a sign. Pipeline: std::nvm, where the transformation runs with the program."
 kind = "negative"
-case = "../../../cases/loops/grad_refused.cml"
-args = ["-E", "short", "${case}", "std::fvm"]
+case = "../../../cases/loops/refuse_loop_no_channel.cml"
+args = ["-E", "short", "${case}", "std::nvm"]
 expect_exit = 1
-expect_diagnostic_line = 7
-expect_output_contains = ["cannot differentiate through a 'loop' expression yet"]
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 8
+expect_output_contains = ["has no gradient channel", "refuse_loop_no_channel.cml:8:13"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.refuse_loop_no_channel_macro"
+desc = "The same refusal reached by std::macro, whose compile-time evaluation reports the located autodiff diagnostic under MacroEvaluationFailed."
+kind = "negative"
+case = "../../../cases/loops/refuse_loop_no_channel.cml"
+args = ["-E", "short", "${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
+expect_diagnostic_line = 8
+expect_output_contains = ["has no gradient channel", "refuse_loop_no_channel.cml:8:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 

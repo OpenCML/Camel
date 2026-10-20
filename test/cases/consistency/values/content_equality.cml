@@ -10,7 +10,12 @@ type Point = { x: int, y: int }
 type Named = { name: string, at: Point, tags: string[] }
 
 func ints(n: int): int[] { return range(0, n) }
-func nan(): float { return (1.0e308 * 10.0) - (1.0e308 * 10.0) }
+// The infinity is reached at run time: `1.0e308 * 10.0` written with literals only is the
+// exact 1e309, which no float type can hold (design principles 5.1), so it is an error there.
+func nan(): float {
+    let big = 1.0e308
+    return (big * 10.0) - (big * 10.0)
+}
 func same(a: int[], b: int[]): bool { return a == b }
 
 func main(): int sync {

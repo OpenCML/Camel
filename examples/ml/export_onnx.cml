@@ -9,6 +9,7 @@ module export_onnx
 import { Tensor, tanh, reshape } from tensor
 import { export_model } from onnx
 import { mkdirs, file_size } from fs
+import { get_env } from sys
 
 type Weights = { hidden: Tensor, out: Tensor }
 
@@ -28,8 +29,12 @@ func main(): int sync {
     let x = reshape([1.0, 2.0, 0.5, -1.0], [2, 2])       // two samples with two features
     println(forward(x, w))
 
-    let path = 'tmp/examples/tiny_model.onnx'
-    mkdirs('tmp/examples')
+    // The runner's per-test scratch directory (the translate test names the file with the pass's
+    // `out` parameter instead); a direct run keeps the header's fixed path.
+    let root = get_env('CAMEL_TEST_TMPDIR')
+    let dir = if root == '' then 'tmp/examples' else root
+    let path = dir + '/tiny_model.onnx'
+    mkdirs(dir)
     // The closure captures the weights, so they are stored in the model; `[0]` leaves the
     // first axis (the batch size) open.
     export_model((t: Tensor): Tensor => forward(t, w), x, path, [0])

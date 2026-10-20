@@ -30,6 +30,13 @@
 
 #include <filesystem>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace mm = camel::core::mm;
 using namespace camel::core::error;
 using namespace camel::core::context;
@@ -79,6 +86,85 @@ std::string openFailureReason(int code) {
     default:
         return std::generic_category().message(code);
     }
+}
+
+// Whether the entry is a symbolic link (POSIX) or any reparse point (Windows: a symbolic link,
+// a junction or a volume mount point). Such an entry is removed as a link and never followed,
+// and `remove_dir` refuses it: following one could delete something outside the named path.
+bool isLinkEntry(const fs_impl::path &path, std::error_code &error) {
+    error.clear();
+#ifdef _WIN32
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+        error = std::error_code(static_cast<int>(GetLastError()), std::system_category());
+        return false;
+    }
+    return (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+    return fs_impl::is_symlink(fs_impl::symlink_status(path, error));
+#endif
+}
+
+// The kind of a failed file operation (design principles 3.9): "the path is not there" and
+// "the file system refused" are told apart by kind; everything else is IOError. The location
+// of an error value from a C++ kernel is the operator, since the kernel does not know the call
+// site.
+std::string errorKind(const std::error_code &error) {
+    if (error == std::errc::no_such_file_or_directory)
+        return "NotFound";
+    if (error == std::errc::permission_denied || error == std::errc::operation_not_permitted ||
+        error == std::errc::read_only_file_system)
+        return "PermissionDenied";
+    return "IOError";
+}
+
+slot_t removeFailure(
+    const std::string &location, const std::string &path, const std::string &kind,
+    const std::string &reason) {
+    return makeError(kind, "'" + path + "': " + reason, location);
+}
+
+slot_t fsRemoveImpl(ArgsView &, ArgsView &norm, bool directory) {
+    const std::string location = directory ? "<fs::remove_dir>" : "<fs::remove>";
+    String *path               = norm.get<String *>(0);
+    const std::string name(path->view());
+    const fs_impl::path target = pathOf(path);
+    std::error_code error;
+    const auto status = fs_impl::symlink_status(target, error);
+    if (error)
+        return error == std::errc::no_such_file_or_directory
+                   ? removeFailure(location, name, "NotFound", "no such file or directory")
+                   : removeFailure(location, name, errorKind(error), error.message());
+    if (status.type() == fs_impl::file_type::not_found)
+        return removeFailure(location, name, "NotFound", "no such file or directory");
+    const bool link = isLinkEntry(target, error);
+    if (error)
+        return removeFailure(location, name, errorKind(error), error.message());
+    if (directory) {
+        if (link)
+            return removeFailure(location, name, "IOError", "is a symbolic link; use fs.remove");
+        if (!fs_impl::is_directory(status))
+            return removeFailure(location, name, "IOError", "is not a directory");
+        fs_impl::directory_iterator iterator(target, error);
+        const fs_impl::directory_iterator end;
+        if (error)
+            return removeFailure(location, name, errorKind(error), error.message());
+        if (iterator != end)
+            return removeFailure(
+                location,
+                name,
+                "IOError",
+                "is a directory that is not empty; remove its contents first");
+    } else if (!link && fs_impl::is_directory(status)) {
+        return removeFailure(location, name, "IOError", "is a directory; use fs.remove_dir");
+    }
+    error.clear();
+    if (!fs_impl::remove(target, error) && error)
+        return removeFailure(location, name, errorKind(error), error.message());
+    const auto *result = camel::core::type::asFallible(norm.resultType());
+    if (!result)
+        result = camel::core::type::TupleType::fallible(camel::core::type::Type::Void());
+    return makeOk(NullSlot, result);
 }
 
 } // namespace
@@ -145,7 +231,7 @@ slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *path    = norm.get<String *>(0);
     String *content = norm.get<String *>(1);
     fs_impl::path p = camel::utils::pathFromUtf8(path->view());
-    auto parent = p.parent_path();
+    auto parent     = p.parent_path();
     if (!parent.empty() && !fs_impl::exists(parent)) {
         std::error_code ec;
         if (!fs_impl::create_directories(parent, ec)) {
@@ -290,6 +376,14 @@ slot_t __fs_mkdirs__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(ok);
 }
 
+slot_t __fs_remove__(ArgsView &with, ArgsView &norm, Context &) {
+    return fsRemoveImpl(with, norm, false);
+}
+
+slot_t __fs_remove_dir__(ArgsView &with, ArgsView &norm, Context &) {
+    return fsRemoveImpl(with, norm, true);
+}
+
 std::unordered_map<std::string, operator_t> getFsOpsMap() {
     return {
         {"read_bytes", fsReadBytes},
@@ -304,5 +398,7 @@ std::unordered_map<std::string, operator_t> getFsOpsMap() {
         {"file_size", __fs_file_size__},
         {"read_chunk", __fs_read_chunk__},
         {"mkdir", __fs_mkdir__},
-        {"mkdirs", __fs_mkdirs__}};
+        {"mkdirs", __fs_mkdirs__},
+        {"remove", __fs_remove__},
+        {"remove_dir", __fs_remove_dir__}};
 }

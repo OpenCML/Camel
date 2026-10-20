@@ -45,6 +45,7 @@ using ::Modifier;
 using ::ModifierSet;
 using camel::core::context::Context;
 using camel::core::error::RuntimeDiag;
+using camel::core::error::SemanticDiag;
 using camel::core::error::throwRuntimeFault;
 using camel::core::rtdata::toSlot;
 using type::FunctionType;
@@ -52,7 +53,7 @@ using type::Type;
 using type::type_vec_t;
 using type::TypeCode;
 
-/// grad and value_and_grad: (f) => the gradient function of f.
+/// grad and with_grad: (f) => the gradient function of f.
 class GradResolver final : public type::FuncTypeResolver {
   public:
     explicit GradResolver(bool withValue) : withValue_(withValue) {}
@@ -80,15 +81,18 @@ class GradResolver final : public type::FuncTypeResolver {
         if (!with.empty() || norm.size() != 1 || norm[0]->code() != TypeCode::Function) {
             return std::nullopt;
         }
-        return std::format(
-            "cannot differentiate a function of type {}: it must return a float and take a "
-            "parameter that has a gradient (a float, a tensor, or a struct or tuple of them)",
-            norm[0]->toString());
+        // The whole reason, naming the condition that failed; reported as NotDifferentiable.
+        return differentiationRefusal(tt::as_ptr<FunctionType>(norm[0]));
+    }
+
+    std::optional<SemanticDiag> rejectionDiag() const override {
+        return SemanticDiag::NotDifferentiable;
     }
 
     std::string signature() const override {
-        return withValue_ ? "(f: <W...>(N...) => float) => <W...>(N...) => (float, gradient)"
-                          : "(f: <W...>(N...) => float) => <W...>(N...) => gradient";
+        return withValue_
+                   ? "(f: <W...>(N...) => float) => <W...>(N...) => (float, gradient of W0)"
+                   : "(f: <W...>(N...) => float) => <W...>(N...) => gradient of W0";
     }
 
   private:
@@ -194,8 +198,8 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create("grad", {{"autodiff:grad", std::make_shared<GradResolver>(false)}}),
         OperatorGroup::create(
-            "value_and_grad",
-            {{"autodiff:value_and_grad", std::make_shared<GradResolver>(true)}}),
+            "with_grad",
+            {{"autodiff:with_grad", std::make_shared<GradResolver>(true)}}),
         OperatorGroup::create("vjp", {{"autodiff:vjp", std::make_shared<VjpResolver>()}}),
         OperatorGroup::create(
             "stop_gradient",
@@ -207,7 +211,7 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
 std::unordered_map<std::string, operator_t> operatorKernels() {
     return {
         {"grad", &gradKernel},
-        {"value_and_grad", &valueAndGradKernel},
+        {"with_grad", &valueAndGradKernel},
         {"stop_gradient", &stopGradientKernel},
         {"vjp", &vjpKernel},
     };
@@ -219,12 +223,12 @@ void registerOperatorMetadata() {
     // must be (design principles 3.3), as not pure.
     camel::core::OperatorTable::instance().declare(
         "autodiff",
-        {{"grad", false}, {"value_and_grad", false}, {"vjp", false}});
-    // grad and value_and_grad differentiate the graph of the function value they receive: on a
+        {{"grad", false}, {"with_grad", false}, {"vjp", false}});
+    // grad and with_grad differentiate the graph of the function value they receive: on a
     // back end that lowered loops in a private copy they are handed the program's own graph, so
     // they refuse a loop there as everywhere else (OperatorTraits::inspectsGraphs; op-semantics
     // 11.4). vjp only attaches a rule to the function it is given and returns it to be called.
-    for (const char *name : {"autodiff:grad", "autodiff:value_and_grad"}) {
+    for (const char *name : {"autodiff:grad", "autodiff:with_grad"}) {
         camel::core::OperatorTable::instance().set(name, {.pure = false, .inspectsGraphs = true});
     }
     camel::core::OperatorTable::instance().set(

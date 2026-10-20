@@ -1,6 +1,6 @@
 id = "perf.showcase_c2_mlp_mnist"
 order = 900
-tier = "benchmark"
+tier = "slow"
 tags = ["showcase", "slow", "c2", "mlp", "mnist"]
 
 # The small configuration of showcase/c2-mlp-mnist (H13): a deterministic synthetic
@@ -11,9 +11,8 @@ tags = ["showcase", "slow", "c2", "mlp", "mnist"]
 # showcase/c2-mlp-mnist/RESULTS.md come from `--profile standard`, which uses MNIST when
 # the repository cache holds it and regenerates the synthetic stand-in otherwise.
 #
-# The plan lives in the `benchmark` tier because that is the existing bucket the default
-# `npm run test` does not run and `npm run test:all` does; the fast/slow split (H10) has
-# not landed yet.  Move it to the slow tier when that split exists.
+# The plan runs in the slow tier (H10): `npm run test` skips it and `--tier all` runs it;
+# the small profile takes seconds, not minutes.
 
 [[tests]]
 name = "small"
@@ -21,7 +20,7 @@ desc = "C2 small configuration: compare.py runs the Camel MLP and its PyTorch co
 kind = "behavior"
 tool = "python"
 case = "../../../showcase/c2-mlp-mnist/compare.py"
-args = ["${case}", "--profile", "small", "--data", "tmp/c2-showcase-small", "--results", "tmp/c2-showcase-small/RESULTS.md"]
+args = ["${case}", "--profile", "small", "--data", "${test_tmp}/c2-showcase-small", "--results", "${test_tmp}/c2-showcase-small/RESULTS.md"]
 skip_unless = ["${python}", "-c", "import numpy, torch, psutil"]
 expect_exit = 0
 expect_stdout_contains = ["c2 compare: PASS"]

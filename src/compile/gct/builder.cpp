@@ -345,6 +345,13 @@ reportLiteralCastFailure(Diags &diags, const Range &range, const data_ptr_t &dat
         .commit(data->toString(), type->toString());
 }
 
+// A primitive type whose values are integers (`i32`, `int`): a float literal is not converted
+// to one by itself (design principles 5.1, "数值类型不做隐式转换").
+static bool isIntegerPrimitive(Type *type) {
+    return type != nullptr && type->isPrimitive() &&
+           (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64);
+}
+
 node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     ENTER("Module");
     // Ensure the AST node is of the expected type
@@ -2534,6 +2541,9 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     const Literal &value = literal->value();
     const auto &str      = value.data();
     data_ptr_t data;
+    // The value the literal was written as, exactly (design principles 5.1). The type it
+    // takes is decided by its context; this is what the context converts or folds.
+    std::optional<literal::Value> exactValue;
 
     // Handle different literal types
     switch (value.type()) {
@@ -2584,7 +2594,8 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
                 .at(ast->load()->tokenRange())
                 .commit(str, std::to_string(parsed.value), asReal);
         }
-        data = makeDataFromLiteral(parsed.value);
+        data       = makeDataFromLiteral(parsed.value);
+        exactValue = literal::Value::fromIntegerText(str);
     } break;
     case LiteralType::Real: {
         // The double nearest to the number written. One too large for a double was an
@@ -2602,6 +2613,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
                 .commit("real", str);
             throw BuildAbortException();
         }
+        exactValue = literal::Value::fromRealText(str);
     } break;
     case LiteralType::Boolean: {
         // Handle boolean literals ("true" or "false")
@@ -2628,6 +2640,9 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
 
     // Create a DataLoad node to represent the literal and return it
     node_ptr_t res = tree_->makeData(data);
+    if (exactValue.has_value()) {
+        tree_->setLiteralValue(res, std::move(*exactValue));
+    }
     if (value.type() == LiteralType::String && literal->fromFormattedString()) {
         // The pattern of a formatted string: a format specification that does not fit its
         // argument is reported at the interpolation (the GIR builder knows the types).
@@ -2771,6 +2786,27 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
     // instantiated) are left to the CAST, and so is a function type, which a literal cannot
     // have.
     if (value->type() == NodeKind::DATA && asTagged(type) == nullptr && !containsTypeVar(type)) {
+        // The value the literal was written as, exactly (design principles 5.1): `let x: f32 =
+        // 0.1` is the f32 nearest to one tenth, not the same double rounded twice, and `let x:
+        // float = 1` is 1.0 (an integer literal takes the float type its context asks for).
+        if (const literal::Value *exact = Tree::of(value)->literalValueOf(value);
+            exact != nullptr && type->isPrimitive() &&
+            (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64 ||
+             type->code() == TypeCode::Float32 || type->code() == TypeCode::Float64)) {
+            if (auto converted = exact->toData(type); converted.has_value()) {
+                return tree_->makeData(*converted);
+            }
+            if (exact->kind() == literal::Kind::Float && isIntegerPrimitive(type)) {
+                // A float literal where an integer is asked for: not a range problem, but a
+                // conversion the language does not do (`1.0 as int` is an error too).
+                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
+                throw BuildAbortException();
+            }
+            diags_->of(SemanticDiag::LiteralOutOfRange)
+                .at(ast->load()->tokenRange())
+                .commit(exact->toString(), type->toString(), literal::rangeText(type));
+            throw BuildAbortException();
+        }
         if (data_ptr_t converted = value->data()->convertTo(type)) {
             return tree_->makeData(converted);
         }
@@ -3123,13 +3159,11 @@ Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
 /*
 TypeExpr(TypeOp op) := Type lhs, Type rhs ;
 enum TypeOp {
-    Union,
     Inter,
     Diff,
     KeyUnion,
     KeyInter,
     KeyDiff,
-    ErrorThen,
     Specialize, // Type type, (Type | Data)* args
     TypeOf,
     TypeAs
@@ -3146,14 +3180,6 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
 
     // Handle different type operations based on the TypeOp enumeration
     switch (op) {
-    case AST::TypeOp::Union: {
-        // `A | B` is retired: a value has one type, and a value that is one of several named
-        // cases is an enum (design principles 5.3). The AST keeps the form so that the
-        // program is told so, instead of failing to parse.
-        diags_->of(SemanticDiag::UnionTypeRetired).at(ast->load()->tokenRange()).commit();
-        throw BuildAbortException();
-    } break;
-
     case AST::TypeOp::Inter: {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
@@ -3186,13 +3212,6 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         diags_->of(SemanticDiag::FeatureNotSupported)
             .at(ast->load()->tokenRange())
             .commit("TypeOp::KeyDiff");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::ErrorThen: {
-        diags_->of(SemanticDiag::ReservedTypeQuestionRetired)
-            .at(ast->load()->tokenRange())
-            .commit();
         throw BuildAbortException();
     } break;
 

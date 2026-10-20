@@ -101,7 +101,7 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
     case TypeCode::Array: {
         auto arrayData        = tt::as_shared<camel::core::data::ArrayData>(data);
         const auto *arrayType = tt::as_ptr<camel::core::type::ArrayType>(arrayData->type());
-        Array *gcArray        = Array::create(allocator, 0);
+        Array *gcArray        = Array::create(allocator, arrayType, 0);
         for (const auto &elem : arrayData->raw()) {
             if (elem->type()->isGCTraced()) {
                 Object *elemRef = makeGCRefFromGCTracedData(elem, allocator);

@@ -1,11 +1,11 @@
 /**
- * Tiny helper-based classifier trained with fused softmax cross entropy: value_and_grad of the
+ * Tiny helper-based classifier trained with fused softmax cross entropy: with_grad of the
  * loss differentiates through nested with-context helpers into a Classifier-shaped gradient,
  * one sgd step lowers the loss, and a recursive train loop repeats the step.
  */
 module softmax_classifier
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, reshape, zeros } from tensor
 import { sgd, softmax_cross_entropy } from nn
 
@@ -57,7 +57,7 @@ func main(): int sync {
     let target = reshape([1.0, 0.0, 0.0, 1.0], [2, 2])
 
     let before = model_loss<model>(x, target)
-    let vg = value_and_grad(model_loss)<model>(x, target)
+    let vg = with_grad(model_loss)<model>(x, target)
     let stepped = sgd(model, vg.1, 0.5)
     let after = model_loss<stepped>(x, target)
     let trained = train(model, x, target, 10)

@@ -10,7 +10,7 @@
 
 ```
 showcase/c2-mlp-mnist/
-  train.cml                Camel 实现（展示品：参数树、value_and_grad、loop、save_tree）
+  train.cml                Camel 实现（展示品：参数树、with_grad、loop、save_tree）
   baseline/train_torch.py  PyTorch 对照（nn.Linear、F.cross_entropy、torch.optim.Adam、state_dict）
   make_data.py             数据与初始权重的生成脚本（MNIST 或确定性的合成替身）
   compare.py               运行两边、比较、度量、写 RESULTS.md；比较失败时以非 0 退出
@@ -102,7 +102,7 @@ camel showcase\c2-mlp-mnist\train.cml `
 ## 并排对照的要点
 
 - **参数就是类型**：Camel 的 `type Mlp = { w1, b1, w2, b2 }` 同时是初始权重、梯度和优化器
-  状态的类型；`value_and_grad(loss)<m>(x, y)` 直接给出同形状的梯度树，`adam(m, g, state, lr)`
+  状态的类型；`with_grad(loss)<m>(x, y)` 直接给出同形状的梯度树，`adam(m, g, state, lr)`
   直接吃这棵树，程序里没有一处按名字数叶子。PyTorch 要 `nn.Module` + `optimizer` 对象 +
   `state_dict` 三套东西来分别表达同一件事。
 - **训练是表达式**：整个训练是一次 `loop`，状态（模型、优化器状态、步数）显式列出，不需要
@@ -134,6 +134,8 @@ camel showcase\c2-mlp-mnist\train.cml `
    **问**：是注释对（应当整体替换、失败时保留旧目录），还是实现对（拒绝覆盖）？如果是后者，
    是否要给 `save_tree` 一个 `replace` 变体（像 `fs.replace` 那样），或给 `fs` 补一个删除
    操作？
+   **已解决（H20）**：按注释实现——`save_tree` 整体替换，旧目录在成功前保留、失败时放回；
+   `fs::remove`、`fs::remove_dir` 返回 `T!`。见 `docs/handover/reports/H20.md` 的 `## H20-4`。
 2. **张量没有按行取子集/重排的算子，数据管线只能在语言外打乱。** 取小批只有
    `slice(t, axis, start, end)`，`t[i]` 取的是单个标量；没有 `gather`/`index_select`/按索引
    数组取行。于是“每个 epoch 重新打乱”在 Camel 里写不出来，示例只能让 `make_data.py` 先
@@ -155,13 +157,14 @@ camel showcase\c2-mlp-mnist\train.cml `
 
 ## 测试
 
-小规模配置已进计划 `test/plans/perf/showcase_c2.plan.toml`（`tier = "benchmark"`，
-`tags` 含 `slow`）：它用合成替身跑 200 步、跑两边、检查上面那组容差，约 5 秒。默认的
-`npm run test` 不含它，`npm run test:all` 或 `node scripts/test.js test\plans\perf` 会跑到。
+上面四条已由检查意见立项：取行/标签/键式随机数与 `save_tree` 整体替换在 H20，
+下标切片与 lambda 推断在 H21（这些项在本分支尚未落地）。H21 第 3 项已撤回（见 H25）：`with <m: Mlp>` 与
+`with_grad(loss)<m>(x, y)` 是最终形态。本示例把 `with_grad(loss)` 绑定在循环外，循环内
+`let (value, gradient) = loss_with_grad<m>(x, y)`。
 
-计划不放在更合适的 `slow` 层，是因为 **H10 的 fast/slow 分层还没有落地**：现有计划只有
-`smoke`、`feat`、`benchmark`、`gpu` 四层，`benchmark` 是唯一“默认不跑、全量才跑”的桶。
-H10 合入后把这个计划移到 `slow` 即可（报告“待决问题”里也记了这一条）。
+小规模配置已进计划 `test/plans/perf/showcase_c2.plan.toml`（`tier = "slow"`）：它用合成替身
+跑 200 步、跑两边、检查上面那组容差，约 6 秒。H10 的 fast/slow 分层已经落地，默认的
+`npm run test` 跳过 slow 层，`npm run test:all`（或 `--tier all`）会跑到它。
 
 ## 不入库的东西
 

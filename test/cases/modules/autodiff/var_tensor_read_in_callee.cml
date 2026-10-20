@@ -4,7 +4,7 @@
  */
 module var_tensor_read_in_callee
 import { Tensor, reshape, sum } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 
 type P = { p0: Tensor }
 
@@ -22,7 +22,7 @@ func main(): int sync {
     let x = reshape([1.0, 2.0], [2])
     let m = { p0: reshape([0.5, 0.25], [2]) }
     var acc = reshape([0.0, 0.0], [2])
-    let vg = wait value_and_grad(loss)<m>(x, acc)
+    let vg = wait with_grad(loss)<m>(x, acc)
     println("value {} grad {}"->format<vg.0, sum(vg.1.p0)>)
     return 0
 }

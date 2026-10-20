@@ -6,7 +6,7 @@
 module tensor_train
 
 import { Tensor, ones, relu, mean } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd } from nn
 
 type Mlp = {
@@ -24,7 +24,7 @@ func loss(x: Tensor): float {
 }
 
 func train(m: Mlp, x: Tensor, steps: int, last: float): float {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     return if steps == 0 then last
         else train(sgd(m, vg.1, 0.000001), x, steps - 1, vg.0)
 }

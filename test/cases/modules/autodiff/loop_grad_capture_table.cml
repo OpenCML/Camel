@@ -1,0 +1,20 @@
+/**
+ * Verifies a loop that captures an array which does not depend on the differentiated parameter: the
+ * body reads an element of it, which is a value with no cotangent, so the gradient stops at the
+ * read and continues through the parameter the body multiplies by.
+ */
+module loop_grad_capture_table
+
+import { grad, with_grad } from autodiff
+
+with <w: float>
+func f(): float {
+    let table = [1.5, 2.5]
+    return loop acc = 0.0 for k in [1, 2] do acc + table[0] * w
+}
+
+func main(): int sync {
+    let vg = with_grad(f)<2.0>()
+    'loop_grad_capture_table vg={}'->format<vg>->println
+    return 0
+}

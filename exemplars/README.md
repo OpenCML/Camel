@@ -23,6 +23,6 @@ graph-based ML stack end to end. Every directory holds:
 | 03 | [Export capability](03_export_capability) | `Relu` on int64 is valid ONNX but ONNX Runtime's CPU provider has no kernel: the export stops at the `relu` call ([PyTorch comparison](../benchmarks/capability_demo.py)). |
 | 04 | [Staticness](04_staticness) | Recursion with shape-determined depth unrolls and exports; tail recursion with value-determined depth exports as a Loop; a linear recursion (the result of its one recursive call is used afterwards) exports as paired Loops; a recursion decided by two branches stops the export with a located diagnostic. Tree recursion is refused. |
 | 05 | [Effect and callback order](05_effect_order) | Prints inside a callback keep their order under NodeVM, FastVM and after inlining. |
-| 06 | [Loop-carried graph state](06_loop_carried_state) | A training loop carries the parameter struct through recursion; `value_and_grad` + `sgd` make the next state. |
+| 06 | [Loop-carried graph state](06_loop_carried_state) | A training loop carries the parameter struct through recursion; `with_grad` + `sgd` make the next state. |
 | 07 | [Export graph integrity](07_export_integrity) | The training step exports whole (parameters in, loss and updates out); an effect stops the export at the effect. |
 | 08 | [Structured control flow](08_structured_control_flow) | A branch on an input-dependent condition exports as an ONNX `If`. |

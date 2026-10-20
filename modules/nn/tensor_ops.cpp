@@ -30,14 +30,18 @@
 #include "layers.h"
 
 #include "../tensor/kernels/conv.h"
+#include "../tensor/interop.h"
 #include "../tensor/ops/indexing.h"
 #include "../tensor/ops/registry.h"
 #include "../tensor/ops/support.h"
 
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/error/runtime.h"
 
 #include <mutex>
+#include <span>
+#include <vector>
 
 namespace camel::nn {
 
@@ -45,11 +49,13 @@ namespace {
 
 using namespace camel::core::type;
 using namespace camel::tensor::ops;
+using camel::core::error::RuntimeDiag;
+using camel::core::error::throwRuntimeFault;
 namespace k      = camel::tensor::kernels;
 using TensorType = camel::tensor::TensorType;
 using camel::tensor::kUnknownDim;
 using camel::tensor::StaticShape;
-using camel::tensor::TensorObject;
+using camel::tensor::Array;
 
 int64_t optInt(ArgsView &norm, size_t index, int64_t fallback) {
     return hasArg(norm, index) ? intArg(norm, index) : fallback;
@@ -69,6 +75,35 @@ bool known(const std::optional<StaticShape> &shape) {
         }
     }
     return true;
+}
+
+bool isIntegerCode(const std::optional<TypeCode> &code) {
+    return !code || *code == TypeCode::Int32 || *code == TypeCode::Int64;
+}
+
+/// Class labels: an int array or a rank-1 integer tensor, read as int64.
+std::vector<int64_t> labelArg(ArgsView &args, size_t index, std::string_view op) {
+    Type *type = args.type(index);
+    if (type->code() == TypeCode::Array) {
+        const Type *elem = static_cast<const ArrayType *>(type)->elemType();
+        if (elem == nullptr ||
+            (elem->code() != TypeCode::Int32 && elem->code() != TypeCode::Int64)) {
+            reportShapeError(op, "expects an integer label array");
+        }
+        return tensor::parseIntArray(args.get<::Array *>(index), type);
+    }
+    const Array *labels = tensorArg(args, index);
+    if (labels->rank() != 1) {
+        reportShapeError(op, "expects a rank-1 integer label tensor");
+    }
+    if (labels->dtype() != TypeCode::Int64 && labels->dtype() != TypeCode::Int32) {
+        reportShapeError(op, "expects integer class labels");
+    }
+    std::vector<int64_t> values(labels->numel());
+    for (uint64_t i = 0; i < labels->numel(); ++i) {
+        values[static_cast<size_t>(i)] = labels->getAsInt64(i);
+    }
+    return values;
 }
 
 // ------------------------------------------------------------------ conv2d
@@ -323,17 +358,17 @@ slot_t batchNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 /// A (y, running_mean, running_var)-shaped triple holding `tensors`.
-slot_t tripleOf(TensorObject *first, TensorObject *second, TensorObject *third) {
+slot_t tripleOf(Array *first, Array *second, Array *third) {
     namespace mm          = camel::core::mm;
-    const auto tensorType = [](const TensorObject *t) -> Type * {
+    const auto tensorType = [](const Array *t) -> Type * {
         StaticShape shape(t->shapeSpan().begin(), t->shapeSpan().end());
         return TensorType::get(t->dtype(), std::move(shape));
     };
     TupleType *type = TupleType::create({tensorType(first), tensorType(second), tensorType(third)});
     auto *tuple     = ::Tuple::create(3, mm::autoSpace());
-    tuple->set<slot_t>(0, camel::core::rtdata::toSlot<TensorObject *>(first), type);
-    tuple->set<slot_t>(1, camel::core::rtdata::toSlot<TensorObject *>(second), type);
-    tuple->set<slot_t>(2, camel::core::rtdata::toSlot<TensorObject *>(third), type);
+    tuple->set<slot_t>(0, camel::core::rtdata::toSlot<Array *>(first), type);
+    tuple->set<slot_t>(1, camel::core::rtdata::toSlot<Array *>(second), type);
+    tuple->set<slot_t>(2, camel::core::rtdata::toSlot<Array *>(third), type);
     return camel::core::rtdata::toSlot<::Tuple *>(tuple);
 }
 
@@ -341,7 +376,7 @@ slot_t batchNormTrainKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("batch_norm_train", [&] {
         const double momentum = hasArg(norm, 5) ? numberArg(norm, 5) : 0.1;
         const double eps      = hasArg(norm, 6) ? numberArg(norm, 6) : 1e-5;
-        TensorObject *y, *mean, *var;
+        Array *y, *mean, *var;
         k::batchNormTrain(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
@@ -374,7 +409,7 @@ std::optional<Type *> batchNormTrainInfer(const InferContext &ctx) {
 slot_t batchNormTrainGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("batch_norm_train_grad", [&] {
         const double eps = hasArg(norm, 3) ? numberArg(norm, 3) : 1e-5;
-        TensorObject *dx, *dgamma, *dbeta;
+        Array *dx, *dgamma, *dbeta;
         k::batchNormTrainGrad(
             tensorArg(norm, 0),
             tensorArg(norm, 1),
@@ -444,6 +479,59 @@ slot_t softmaxCrossEntropyGradKernel(ArgsView &, ArgsView &norm, context::Contex
     });
 }
 
+/// Checked before the labels kernels: a label outside [0, classes) is a located fault (design
+/// principles 3.9), and a label count that disagrees with the batch a shape error.
+void checkClassLabels(
+    const Array *logits, const std::vector<int64_t> &labels, std::string_view op) {
+    if (logits->rank() != 2) {
+        reportShapeError(op, "expects rank-2 logits [batch, classes]");
+    }
+    const int64_t rows = logits->dim(0), cols = logits->dim(1);
+    if (static_cast<int64_t>(labels.size()) != rows) {
+        reportShapeError(op, "requires one label per logits row");
+    }
+    for (const int64_t label : labels) {
+        if (label < 0 || label >= cols) {
+            throwRuntimeFault(
+                RuntimeDiag::IndexOutOfRange,
+                label,
+                std::string("the class dimension of ") + std::string(op),
+                cols);
+        }
+    }
+}
+
+slot_t softmaxCrossEntropyLabelsKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    // The label checks are located faults of their own, not kernel failures (design principles
+    // 3.9): they run outside runKernel, which maps exceptions to TensorDimensionMismatch.
+    const Array *logits        = tensorArg(norm, 0);
+    const std::vector<int64_t> labels = labelArg(norm, 1, "softmax_cross_entropy");
+    checkClassLabels(logits, labels, "softmax_cross_entropy");
+    return runKernel("softmax_cross_entropy_labels", [&] {
+        return camel::core::rtdata::toSlot(softmaxCrossEntropyLabels(logits, labels));
+    });
+}
+
+slot_t softmaxCrossEntropyLabelsGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const Array *logits        = tensorArg(norm, 0);
+    const std::vector<int64_t> labels = labelArg(norm, 1, "softmax_cross_entropy_grad");
+    checkClassLabels(logits, labels, "softmax_cross_entropy_grad");
+    return runKernel("softmax_cross_entropy_labels_grad", [&] {
+        return wrap(softmaxCrossEntropyLabelsGradLogits(
+            logits, labels, numberArg(norm, 2), resultAllocator()));
+    });
+}
+
+/// The labels form is chosen when the target is known to be integer. A target whose element
+/// type is not fixed (a bare `Tensor`) keeps the one-hot form: it is the existing spelling.
+std::optional<Type *> softmaxCrossEntropyLabelsInfer(const InferContext &ctx) {
+    const TensorFacts target = ctx.facts(1);
+    if (!target.dtype || !isIntegerCode(target.dtype)) {
+        return std::nullopt;
+    }
+    return Type::Float64();
+}
+
 const OpTraits kPure{};
 
 std::vector<ParamSpec> convParams(std::string_view third) {
@@ -477,6 +565,18 @@ void softmaxCrossEntropyVjp(VjpBuilder &b, const VjpCall &call) {
             addTensorOper(
                 b,
                 "nn:softmax_cross_entropy_grad",
+                {call.inputs[0], call.inputs[1], *dy}));
+    }
+}
+
+void softmaxCrossEntropyLabelsVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(
+                b,
+                "nn:softmax_cross_entropy_labels_grad",
                 {call.inputs[0], call.inputs[1], *dy}));
     }
 }
@@ -699,27 +799,65 @@ std::vector<OpDef> nnTensorOps() {
             .exports   = {"softmax_cross_entropy"},
             .params    = {{"logits", ParamKind::Tensor}, {"target", ParamKind::Tensor}},
             .resultDoc = "float",
-            .infer  = [](const InferContext &) -> std::optional<Type *> { return Type::Float64(); },
+            .infer  = [](const InferContext &ctx) -> std::optional<Type *> {
+                const TensorFacts target = ctx.facts(1);
+                if (target.dtype && isIntegerCode(target.dtype)) {
+                    return std::nullopt; // integer targets select the labels overload
+                }
+                return Type::Float64();
+            },
             .kernel = &softmaxCrossEntropyKernel,
             .traits = kPure});
     defs.push_back(
         OpDef{
-            .name    = "softmax_cross_entropy_grad",
-            .exports = {"softmax_cross_entropy_grad"},
-            .params =
-                {{"logits", ParamKind::Tensor},
-                 {"target", ParamKind::Tensor},
-                 {"dy", ParamKind::Number}},
+            .name      = "softmax_cross_entropy_grad",
+            .exports   = {"softmax_cross_entropy_grad"},
+            .params    = {{"logits", ParamKind::Tensor},
+                          {"target", ParamKind::Tensor},
+                          {"dy", ParamKind::Number}},
             .resultDoc = "Tensor",
-            .infer     = shapedLike(0),
-            .kernel    = &softmaxCrossEntropyGradKernel,
+            .infer     = [](const InferContext &ctx) -> std::optional<Type *> {
+                const TensorFacts target = ctx.facts(1);
+                if (target.dtype && isIntegerCode(target.dtype)) {
+                    return std::nullopt; // integer targets select the labels overload
+                }
+                return tensorOf(TypeCode::Float32, ctx.facts(0).shape);
+            },
+            .kernel = &softmaxCrossEntropyGradKernel,
+            .traits = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "softmax_cross_entropy_labels",
+            .exports   = {"softmax_cross_entropy"},
+            .params    = {{"logits", ParamKind::Tensor}, {"target", ParamKind::TensorLike}},
+            .resultDoc = "float",
+            .infer     = &softmaxCrossEntropyLabelsInfer,
+            .kernel    = &softmaxCrossEntropyLabelsKernel,
             .traits    = kPure});
+    defs.push_back(
+        OpDef{
+            .name      = "softmax_cross_entropy_labels_grad",
+            .exports   = {"softmax_cross_entropy_grad"},
+            .params    = {{"logits", ParamKind::Tensor},
+                          {"target", ParamKind::TensorLike},
+                          {"dy", ParamKind::Number}},
+            .resultDoc = "Tensor",
+            .infer     = [](const InferContext &ctx) -> std::optional<Type *> {
+                const TensorFacts target = ctx.facts(1);
+                if (!target.dtype || !isIntegerCode(target.dtype)) {
+                    return std::nullopt;
+                }
+                return tensorOf(TypeCode::Float32, ctx.facts(0).shape);
+            },
+            .kernel = &softmaxCrossEntropyLabelsGradKernel,
+            .traits = kPure});
     setVjp(defs, "conv2d", &conv2dVjp);
     setVjp(defs, "batch_norm_train", &batchNormTrainVjp);
     setVjp(defs, "max_pool2d", &pool2dVjp<kMaxPoolGradUri>);
     setVjp(defs, "avg_pool2d", &pool2dVjp<kAvgPoolGradUri>);
     setVjp(defs, "embedding", &embeddingVjp);
     setVjp(defs, "softmax_cross_entropy", &softmaxCrossEntropyVjp);
+    setVjp(defs, "softmax_cross_entropy_labels", &softmaxCrossEntropyLabelsVjp);
     return defs;
 }
 

@@ -9,7 +9,7 @@
 module export_train_step_adam
 
 import { Tensor, relu, mean, reshape } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { OptimizerState, adam, adam_state } from nn
 import { export_model } from onnx
 import { get_env } from sys
@@ -24,7 +24,7 @@ func loss(x: Tensor): float {
 }
 
 func step(m: Mlp, st: OptimizerState, x: Tensor): (float, Mlp, OptimizerState) {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     let next = adam(m, vg.1, st, 0.001)
     return (vg.0, next.0, next.1)
 }

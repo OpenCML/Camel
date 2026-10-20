@@ -1,0 +1,13 @@
+/** Refused: the first `with` parameter is a string, which has no tangent (9.9). */
+module grad_refuse_string
+import { grad } from autodiff
+
+with <s: string>
+func repeated(x: float): float {
+    return float(len(s)) * x
+}
+
+func main(): int sync {
+    println(grad(repeated)<'abc'>(2.0))
+    return 0
+}

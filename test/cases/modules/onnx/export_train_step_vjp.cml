@@ -1,5 +1,5 @@
 /**
- * A training step (value_and_grad + sgd) through a function with a custom derivative rule
+ * A training step (with_grad + sgd) through a function with a custom derivative rule
  * (@vjp): the exported gradient uses the rule, not the derivative of the body. For the example
  * input Camel prints the loss 5.56157 and the updated w [[0.3799, -0.2188], [0.6391, 0.8194]],
  * b [0.1628, -0.2505]; NumPy with the declared rule and the exported model on ONNX Runtime
@@ -7,7 +7,7 @@
  */
 module export_train_step_vjp
 import { Tensor, reshape, sum, tanh, where } from tensor
-import { value_and_grad, vjp } from autodiff
+import { with_grad, vjp } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
 import { get_env } from sys
@@ -32,7 +32,7 @@ func loss(x: Tensor): float {
 }
 
 func step(m: P, x: Tensor): (float, P) {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.1))
 }
 

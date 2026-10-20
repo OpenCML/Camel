@@ -1,5 +1,22 @@
 {
-    "comment": "Rules for `node scripts/test.js --changed`: the first rule whose path prefix matches a changed file names the plans to run, as paths under test/plans. A change that no rule matches (or a rule whose plans cannot be found) falls back to the whole fast layer. Keep rule order from specific to general: the first match wins. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
+    "comment": "Rules for `node scripts/test.js --changed`: a changed file is first looked up by its directory (`directoryRules`), then by the file rules below. The first rule whose path prefix matches names the plans to run, as paths under test/plans; a change that no rule matches (or whose plans cannot be found) falls back to the whole fast layer. Directory rules mirror the path under test/plans/feat and take the deepest existing match: modules/tensor/ops.cpp runs the tensor plans, test/cases/compile/enum/x.cml runs feat/compile/enum.plan.toml (not all of feat/compile), test/cases/loops/x.cml falls through to the file rule for loops. Keep the file rules from specific to general: the first match wins. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
+    "directoryRules": [
+        {
+            "comment": "A test case: its directory is looked up under test/plans/feat (compile, linear, modules/tensor, modules/nn.plan.toml, tools/unicode -> tools, ...).",
+            "paths": ["test/cases/"],
+            "plans": "feat/"
+        },
+        {
+            "comment": "A module: modules/tensor selects feat/modules/tensor, modules/nn selects feat/modules/nn.plan.toml. A module with no plan of its own (python) falls through to the file rules.",
+            "paths": ["modules/"],
+            "plans": "feat/modules/"
+        },
+        {
+            "comment": "A tool: tools/lsp selects feat/tools/lsp.plan.toml; tools/format falls through to the file rules (feat/format).",
+            "paths": ["tools/"],
+            "plans": "feat/tools/"
+        }
+    ],
     "rules": [
         {
             "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set.",
@@ -62,6 +79,11 @@
             "plans": ["feat/modules/tensor.plan.toml", "feat/modules/tensor", "feat/modules/autodiff.plan.toml"]
         },
         {
+            "comment": "Keyed random: the random plan and the signatures/reference that list it.",
+            "paths": ["modules/random/"],
+            "plans": ["feat/modules/random.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
             "comment": "Any other module.",
             "paths": ["modules/"],
             "plans": ["feat/modules"]
@@ -102,24 +124,19 @@
             "plans": ["smoke", "feat/linear", "feat/para", "feat/modules"]
         },
         {
-            "comment": "A test case: its plan is named by the directory it sits in.",
-            "paths": ["test/cases/compile/"],
-            "plans": ["feat/compile"]
-        },
-        {
-            "comment": "A test case: its plan is named by the directory it sits in.",
-            "paths": ["test/cases/linear/", "test/cases/para/", "test/cases/consistency/"],
-            "plans": ["feat/linear", "feat/para", "feat/consistency"]
-        },
-        {
-            "comment": "A test case: its plan is named by the directory it sits in.",
-            "paths": ["test/cases/parse/", "test/cases/format/", "test/cases/trans/", "test/cases/opt/"],
-            "plans": ["feat/parse", "feat/format", "feat/trans", "feat/opt"]
-        },
-        {
-            "comment": "A test case: its plan is named by the directory it sits in.",
-            "paths": ["test/cases/modules/", "test/cases/tools/", "test/cases/definitions/", "test/cases/facts/", "test/cases/loops/", "test/cases/macro/", "test/cases/resources/"],
+            "comment": "Case directories with no plan directory of their own: their cases are exercised by the module, tool and translation plans.",
+            "paths": ["test/cases/definitions/", "test/cases/facts/", "test/cases/macro/", "test/cases/resources/"],
             "plans": ["feat/modules", "feat/tools", "feat/trans"]
+        },
+        {
+            "comment": "A case directory with no plan directory of its own: the loop cases are tested by the linear plan.",
+            "paths": ["test/cases/loops/"],
+            "plans": ["feat/linear/loops.plan.toml"]
+        },
+        {
+            "comment": "A case directory with no plan directory of its own: the recursive Fibonacci case is timed by the perf plan.",
+            "paths": ["test/cases/perf/"],
+            "plans": ["perf/fib.plan.toml"]
         },
         {
             "comment": "A plan file selects itself: editing the tests of one plan runs that plan.",

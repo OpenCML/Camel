@@ -939,7 +939,7 @@ struct Stamp {
 
 ## 11. `LOOP` 的消费接口
 
-> **实施状态（2026-10-15，`lane/loop`）**：`LOOP` 节点、11.1 的访问器（`include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`loopOf`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）、11.4 的私有降级（`include/camel/runtime/loop_lowering.h`，`lowerLoopsToTailRecursion`，结果是脱离主程序的副本）都已实现。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condGraph()` 在 `For` 时返回 `nullptr` 而不是空的 `optional`；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由节点算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。**2026-10-20 补：收集输出（11.6）已实现**，节点载荷带收集槽计数，`LoopView` 有对应的访问器，四个执行器与降级都按 11.6 收集。给 Tiles 的读法见 11.5。
+> **实施状态（2026-10-15，`lane/loop`）**：`LOOP` 节点、11.1 的访问器（`include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`loopOf`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）、11.4 的私有降级（`include/camel/runtime/loop_lowering.h`，`lowerLoopsToTailRecursion`，结果是脱离主程序的副本）都已实现。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condGraph()` 在 `For` 时返回 `nullptr` 而不是空的 `optional`；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由节点算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。**2026-10-20 补：收集输出（11.6）已实现**，节点载荷带收集槽计数，`LoopView` 有对应的访问器，四个执行器与降级都按 11.6 收集；自动微分把它当磁带（11.6，H4d 第二步）。给 Tiles 的读法见 11.5。
 
 `LOOP` 节点本身（语法、建图、编码、校验、打印、降级）是图模型第 10 步与循环设计稿第 7 节的工作（实施情况见图模型第 7 节）。本节规定的是消费者看到的接口，按图模型 3.5 的卡片与 3.10 的裁定（条件图与循环体图共用一份捕获表；`for … while` 是同一种节点的第三种形式；多个状态时循环体返回元组，循环的值也是这个元组；`do` 式的写法）。
 
@@ -1061,7 +1061,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 ```
 
 - 语义：每一轮先求条件（`While`、`ForWhile`；条件看得到状态，看不到元素），再取下一个元素（`For`、`ForWhile`），再求循环体；条件为假或元素取完即结束；循环的值是最后的状态。`camel/core/loop_kind.h` 写明了这一点。
-- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它。**运行时 `tiles.run<f>` 等在每个后端上收到的都是程序原来的 `f` 的图**（`lane/facts` 起）：`std::nvm` 原生执行 `LOOP`；`std::fvm`、`std::jit`（默认）、`std::prl`、`std::cpp` 在私有副本上降级，副本里每张图记着它复制自程序的哪张图（`GCGraph::originalGraph()`），声明了 `inspectsGraphs` 的算子（`OperatorTraits::inspectsGraphs`：Tiles 的 `run`、`run_device`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`value_and_grad`）的每个函数类型的操作数在副本里先经过 `:graph/original`，把副本的函数值换回原图、闭包不变。所以在降级的后端上 Tiles 看到的也是带 `LOOP` 的 `f`，不是 `f.loopN.rec`、`.next`、`.done`。新的模块算子若读函数值的图，同样在登记时声明 `inspectsGraphs`。
+- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它。**运行时 `tiles.run<f>` 等在每个后端上收到的都是程序原来的 `f` 的图**（`lane/facts` 起）：`std::nvm` 原生执行 `LOOP`；`std::fvm`、`std::jit`（默认）、`std::prl`、`std::cpp` 在私有副本上降级，副本里每张图记着它复制自程序的哪张图（`GCGraph::originalGraph()`），声明了 `inspectsGraphs` 的算子（`OperatorTraits::inspectsGraphs`：Tiles 的 `run`、`run_device`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`with_grad`）的每个函数类型的操作数在副本里先经过 `:graph/original`，把副本的函数值换回原图、闭包不变。所以在降级的后端上 Tiles 看到的也是带 `LOOP` 的 `f`，不是 `f.loopN.rec`、`.next`、`.done`。新的模块算子若读函数值的图，同样在登记时声明 `inspectsGraphs`。
 - Tiles 自己决定原生处理还是在自己的入口降级：降级用 `lowerLoopsToTailRecursion(context, root)`，它返回一个脱离主程序的副本，不改共享的程序。
 - 校验已保证：初值能赋给状态类型、循环体返回状态类型、条件返回 `bool`、元素端口类型是数组的元素类型、两张子图的捕获端口个数、次序、类型相同并与 `captures()` 一一对应（I18、I19）。
 
@@ -1073,8 +1073,9 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 - **计数为什么必须在节点里**：`k = 2` 时值 `(状态, 数组)` 与“两个状态、第二个恰是数组”在类型上无法区分；类型本身不能说明有收集槽。
 - **执行**：每个执行器（NodeVM、FastVM 原生循环、宏求值器）与私有降级（FastVM/JIT/PRL）为每个槽建一个空数组，把它与状态放在同一个工作元组里（节点的槽位、后端的帧里，因而被 GC 追踪），每轮把 `vc` **原地追加**到对应数组。数组由这次循环独占（循环体看不到它们），追加是 O(1) 摊还、总计 O(n)；没有轮数上限，内存耗尽按 `RuntimeDiag::MemoryExhausted` 在循环的源位置报出。
 - **降级**：新增两个隐藏算子 `:loop/collector`（建空数组，循环前一次）与 `:loop/collect`（原地追加，返回磁带），它们不是纯的（按算子语义的默认），因此不会被重排或消除；降级后的 `rec` 仍然只把状态传给条件图与循环体图。
-- **消费**：`LoopView` 的 `collectionCount`、`valueIsTuple`、`valueComponentCount`、`stateValueIndex`、`collectionValueIndex`、`collectionArrayType`、`collectionElemType`、`nextStateIsTuple`、`bodyResultType`、`bodyStateResultIndex`、`bodyCollectionResultIndex`、`nextCollectionComponent` 以及自由函数 `loopValueComponent`、`loopStateValue`、`loopCollectedValue`；自动微分不必自己重新推导布局。
-- **导出**：残差是普通值（数组），不是闭包，所以 ONNX 与 `std::cpp` 都能表示；导出与自动微分本身仍不在这一步。
+- **消费**：`LoopView` 的 `collectionCount`、`valueIsTuple`、`valueComponentCount`、`stateValueIndex`、`collectionValueIndex`、`collectionArrayType`、`collectionElemType`、`nextStateIsTuple`、`bodyResultType`、`bodyStateResultIndex`、`bodyCollectionResultIndex`、`nextCollectionComponent` 以及自由函数 `loopValueComponent`、`loopStateValue`、`loopCollectedValue`；自动微分不必自己重新推导布局。改写一个还没编码的循环（自动微分给自己建的两个循环）用同一组访问器的 `LoopDraftView`（`camel/runtime/loop.h`，读的是 `GraphDraft` 里的节点）。
+- **自动微分**（H4d 第二步，2026-10-20）：磁带就是这些收集槽。残差是循环体回传真正读到的值（每条导数规则的入运算；循环体里一次调用的回传闭包整个作为一个 `Function` 值收进去，数组元素可以是函数，GC 追踪），所以一次循环的磁带是 `s` 个数组、每轮原地追加，没有复制。反向是一个 `While` 型 `LOOP`（`collectionCount = 0`）：状态是轮次下标加各状态与各捕获的梯度（只给能承载梯度的类型留位置），循环体用 `:op/idx_arr` 读这一轮的残差、调循环体的回传、接状态梯度、累加捕获梯度；零轮时状态梯度为种子、捕获梯度为零。循环体回传不读残差时仍收一个常量 `1`，反向循环靠它知道轮数。循环迭代或捕获的数组若依赖被微分的参数，按设计原则 9.9 在循环处拒绝并指出数组位置；不依赖的可以读，梯度在读处停住。
+- **导出**：残差是普通值（数组），不是闭包，所以 ONNX 与 `std::cpp` 都能表示：磁带是前向 `Loop` 的 scan output、反向 `Loop` 的输入。导出本身仍未做；`docs/handover/reports/H4.md`"H4d 第二步"列了它需要什么（其中循环体里一次调用的回传闭包不能作为 ONNX 的值，要按捕获的叶子展开）。
 
 ---
 

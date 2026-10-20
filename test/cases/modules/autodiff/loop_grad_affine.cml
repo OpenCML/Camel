@@ -1,0 +1,19 @@
+/**
+ * Verifies a loop whose state is an accumulator with an affine update, acc ← acc · 0.5 + w: the
+ * reverse pass chains each round's gradient through the state it produced, so the gradient is the
+ * geometric series 1 + 0.5 + 0.25 and not a plain sum of per-round contributions.
+ */
+module loop_grad_affine
+
+import { grad, with_grad } from autodiff
+
+with <w: float>
+func f(): float {
+    return loop acc = 0.0 for k in [1, 2, 3] do acc * 0.5 + w
+}
+
+func main(): int sync {
+    let vg = with_grad(f)<2.0>()
+    'loop_grad_affine vg={}'->format<vg>->println
+    return 0
+}

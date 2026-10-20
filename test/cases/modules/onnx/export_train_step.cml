@@ -1,13 +1,13 @@
 /**
  * A training step exports as one ONNX graph: the parameters (a struct) and
- * the input become graph inputs, value_and_grad expands and simplifies into
+ * the input become graph inputs, with_grad expands and simplifies into
  * straight-line gradient code, and the loss and the SGD-updated parameters
  * become graph outputs.
  */
 module export_train_step
 
 import { Tensor, relu, mean, reshape } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
 import { get_env } from sys
@@ -22,7 +22,7 @@ func loss(x: Tensor): float {
 }
 
 func step(m: Mlp, x: Tensor): (float, Mlp) {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 

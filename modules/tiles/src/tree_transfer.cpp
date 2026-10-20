@@ -100,7 +100,7 @@ slot_t transferTree(ArgsView &norm, bool upload) {
                 const double scalar = td::fromSlot<double>(value);
                 std::memcpy(out.bytes.data(), &scalar, sizeof(scalar));
             } else {
-                auto *tensor = td::fromSlot<tensor::TensorObject *>(value);
+                auto *tensor = td::fromSlot<tensor::Array *>(value);
                 if (tensor->dtype() != TypeCode::Float32)
                     throw std::runtime_error("upload currently requires f32 tensor leaves");
                 out.dtype = DType::F32;
@@ -149,7 +149,7 @@ slot_t transferTree(ArgsView &norm, bool upload) {
         if (leaf.dtype != DType::F32 || leaf.bytes.size() != elements(leaf.shape) * sizeof(float))
             throw std::runtime_error("download tensor type mismatch");
         auto *out =
-            tensor::TensorObject::create(TypeCode::Float32, leaf.shape, core::mm::autoSpace());
+            tensor::createTensor(TypeCode::Float32, leaf.shape, core::mm::autoSpace());
         if (!leaf.bytes.empty())
             std::memcpy(out->rawData(), leaf.bytes.data(), leaf.bytes.size());
         return td::toSlot(out);

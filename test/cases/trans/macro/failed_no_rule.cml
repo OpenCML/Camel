@@ -4,14 +4,15 @@ import { grad } from autodiff
 import { sin } from math
 
 // math:sin has no derivative rule, so std::macro cannot expand `grad(f)`: a compile-time error
-// at the grad call (line 14) that names the operator. The program does not run.
-func f(x: float): float {
+// at the grad call that names the operator. The program does not run.
+with <x: float>
+func f(): float {
     return sin(x) * x
 }
 
 func main(): int sync {
     println('main start')
-    let d = grad(f)(4.0)
+    let d = grad(f)<4.0>()
     println(d)
     return 0
 }

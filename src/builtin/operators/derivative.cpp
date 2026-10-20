@@ -28,6 +28,8 @@
 
 #include "camel/core/derivative.h"
 #include "camel/core/type/base.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/utils/type.h"
 
 #include <array>
 #include <format>
@@ -148,11 +150,60 @@ template <typename F> void powVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
+// y = xs->append<v>: dxs is the gradient of y without its last element, and dv is its last
+// element. The appended value is the call's `with` input. The append is what grows an array
+// round by round, so this is the rule that carries a loop state array's gradient backwards
+// (design principles 9.9).
+void appendArrayVjp(VjpBuilder &b, const VjpCall &call) {
+    requireInputs(call, 1);
+    if (!b.gradientOf(call.output)) {
+        return;
+    }
+    Type *const arrayType   = b.nodeType(call.inputs[0]);
+    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    if (tangentType == nullptr) {
+        return;
+    }
+    const auto *tangentArray = tt::as_ptr<type::ArrayType>(tangentType);
+    const auto dy            = *b.gradientOf(call.output);
+    const std::array<vjp_node_t, 1> split{dy};
+    b.accumulateGradient(call.inputs[0], b.addOper(tangentType, ":tangent/init_arr", split));
+    if (!call.withInputs.empty()) {
+        b.accumulateGradient(
+            call.withInputs[0],
+            b.addOper(tangentArray->elemType(), ":tangent/last_arr", split));
+    }
+}
+
 void identityVjp(VjpBuilder &b, const VjpCall &call) {
     requireInputs(call, 1);
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(call.inputs[0], *dy);
     }
+}
+
+// y = xs[i]: dxs = zeros_like(xs) with dy added at i. A read of one element sends its gradient
+// back to that element's place in the array's gradient (design principles 9.9, the reverse of
+// a gather is a scatter-add). The array's tangent is the array of its elements' tangents, so
+// the zeros and the scatter are the tangent-array operators.
+void idxArrayVjp(VjpBuilder &b, const VjpCall &call) {
+    requireInputs(call, 2);
+    if (!b.gradientOf(call.output)) {
+        return;
+    }
+    Type *const arrayType   = b.nodeType(call.inputs[0]);
+    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    if (tangentType == nullptr) {
+        return; // an array whose elements have no tangent: the read has none either
+    }
+    const auto dy = b.gradientOf(call.output);
+    const std::array<vjp_node_t, 1> zeroInputs{call.inputs[0]};
+    const vjp_node_t zero =
+        b.addOper(tangentType, ":tangent/zeros_arr", zeroInputs);
+    const std::array<vjp_node_t, 3> scatterInputs{zero, call.inputs[1], *dy};
+    b.accumulateGradient(
+        call.inputs[0],
+        b.addOper(tangentType, ":tangent/scatter_add_arr", scatterInputs));
 }
 
 // A conversion between float widths: the gradient converts back.
@@ -193,7 +244,15 @@ void registerBuiltinDerivatives() {
     registry.setRule(":op/ftof", identityVjp);
     registry.setRule(":op/dtof", dtofVjp);
     registry.setRule(":op/ftod", ftodVjp);
+    registry.setRule(":op/idx_arr", idxArrayVjp);
+    registry.setRule(":struct/append_arr", appendArrayVjp);
 
     registry.setTangentSpace(TypeCode::Float64, floatTangentSpace<F64>());
     registry.setTangentSpace(TypeCode::Float32, floatTangentSpace<F32>());
+    // Arrays have no entry of their own either: their tangent is the array of their elements'
+    // tangents, and adding two of them is elementwise (design principles 9.9).
+    TangentSpace arraySpace;
+    arraySpace.addUri      = ":tangent/add_arr";
+    arraySpace.zerosLikeUri = ":tangent/zeros_arr";
+    registry.setTangentSpace(TypeCode::Array, std::move(arraySpace));
 }

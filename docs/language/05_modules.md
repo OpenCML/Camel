@@ -25,7 +25,7 @@ import { inc } from lib::Tools       // 引入模块里某个命名空间中的�
 ```
 
 - `import 模块` 不把模块里的名字直接注入当前模块；通过 `模块::名字` 访问，或再写 `using namespace 模块`（[5.4](#54-命名空间)）。
-- **模块可以互相导入**（`a` 导入 `b`、`b` 又导入 `a`，或更长的环）：两边的函数可以互相调用，值与类型可以互相使用，只要顶层的值之间不成环（[5.7](#57-模块的加载)）。找不到模块是 `SemanticDiag::ModuleNotFound`，定位在那条 `import`；被导入的模块有错误时，导入它的地方是 `SemanticDiag::ImportedModuleHasErrors`。
+- **模块可以互相导入**（`a` 导入 `b`、`b` 又导入 `a`，或更长的环）：两边的函数可以互相调用，值与类型可以互相使用，只要顶层的值之间不成环（[5.6](#56-模块的加载)）。找不到模块是 `SemanticDiag::ModuleNotFound`，定位在那条 `import`；被导入的模块有错误时，导入它的地方是 `SemanticDiag::ImportedModuleHasErrors`。
 - **模块导入自己是允许的，没有效果**（设计原则 10.1）：`module m` 里写 `import m`、`import { f } from m` 不绑定任何名字，它的名字本来就是它自己的（带不带 `m::` 都可以，[5.4](#54-命名空间)）。入口文件按文件名导入自己时也不会再加载一份。
 - **导入时可以改名**：`import { find as str_find } from str` 把模块里的 `find` 以 `str_find` 这个名字引入；改名的与不改名的可以写在同一条里（`import { find as str_find, trim } from str`），单个名字也可以（`import find as str_find from str`）。改名之后原名在本模块不可见。两个模块有同名函数时，给其中一个改名，或只导入一个、另一个用限定名（`import array` 后写 `array::find`）。整个模块的别名写 `import m as n`。
 - 两条按名字的导入带来同名、参数类型也相同的函数，是 `SemanticDiag::ImportNameConflict`，定位在后一条 `import`，并指出前一条；不会悄悄取其中一个。同名而参数类型不同的函数合成一组重载，按实参类型选择（同一层里的同名函数是一个重载集，[5.4](#54-命名空间)）。
@@ -54,9 +54,9 @@ func main(): int sync {
 | `str` | 字符串：按字节的切分、修剪、大小写、替换、查找、截取；按码点的计数、读取、编解码 |
 | `array` | 数组：`reverse`、`take`、`drop`、`unique`、`find`、`sum`、`min`、`max`、`sort_by`、`flat_map` 等（用 Camel 写的泛型函数） |
 | `math` | 常量 `pi`、`e`、`inf`、`nan`（值）；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
-| `random` | `seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle` |
+| `random` | 类型 `Key`；`seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle`，以及纯的键式随机 `key`、`split`、`permutation` |
 | `time` | `now`、`strftime`、`strptime` |
-| `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`read_text`、`try_read_text`、`write_text`、`file_size`、`read_chunk` |
+| `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`remove`、`remove_dir`、`read_text`、`try_read_text`、`write_text`、`file_size`、`read_chunk`、`read_bytes`、`write_bytes`、`replace` |
 | `json` | 类型 `Json`；`encode`、`decode`、`decode_as`；`kind`、`is_null`、`get`、`as_bool`、`as_int`、`as_float`、`as_string`、`as_array`、`as_object` |
 | `os`、`sys` | `whoami`、`cpu_count`、终端输入；`get_cwd`、`get_env` |
 | `re` | `test` |
@@ -65,10 +65,10 @@ func main(): int sync {
 | `algo` | `sort`、`merge_sort`、`merge_sorted_arrays` 等排序函数（都返回新数组，每种只有一个名字） |
 | `statistics` | `mean`、`stdev`、`variance`、`median`、`quantile` |
 | `para` | `unordered_foreach`、`unordered_reduce` |
-| `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出 |
+| `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出；取行 `take`、`one_hot`，按目标类型重载的 `softmax_cross_entropy`（独热分布或整数类标） |
 | `python` | 嵌入 Python（需要构建时启用） |
 
-除 `tensor`、`nn`、`autodiff`、`onnx` 与 `python` 之外，表中各模块的每个函数见 [标准库参考](../stdlib-reference.md)，约定见 [5.6](#56-标准库)。
+除 `tensor`、`nn`、`autodiff`、`onnx` 与 `python` 之外，表中各模块的每个函数见 [标准库参考](../stdlib-reference.md)，约定见 [5.5](#55-标准库)。张量的取行、类标与键式随机见 [43_rows_labels_and_keys.md](../technical/43_rows_labels_and_keys.md)，数组的下标与切片规则见 [设计原则 5.4](../design-principles.cn.md)。
 
 ## 5.3 导出
 
@@ -225,11 +225,7 @@ func f(): int {
 
 **名字的优先级只有一条规则**：局部的名字 > 本模块的名字（所在命名空间、外层命名空间、模块顶层）> 按名字导入的（包括经 `模块::` 前缀访问的）> `using namespace` 带来的 > 内建的。取第一个有这个名字的层；同一层里同名的函数合成重载集，跨层不合并（所以本模块的 `inc(string)` 会挡住 `using` 带来的 `inc(int)`）。运算符例外，它的重载来自各层。
 
-## 5.5 `use`（已退役）
-
-`use` 不再是保留字。要引入一个名字写 `import { 名字 } from 模块` 或 `import { 名字 } from 模块::命名空间`；要换一个名字写 `import { 名字 as 新名字 } from 模块`。
-
-## 5.6 标准库
+## 5.5 标准库
 
 各模块导出的函数（签名、是否纯、失败时的行为、例子）见 [标准库参考](../stdlib-reference.md)，它由 `stdlib/signatures/*.cml` 与用 Camel 写的库（`stdlib/*.cml`）生成。约定：
 
@@ -249,7 +245,7 @@ func f(): int {
 - 传给 `array` 模块高阶函数的函数用 `map` 施加：各元素上的调用之间没有顺序约定（并行调度器可以同时执行），结果按位置排列；需要顺序的副作用用内建的 `foreach`、`reduce`。
 - `camel inspect --ops <文件>` 列出内建模块与该程序导入的每个模块的全部算子及其声明的纯度。
 
-## 5.7 模块的加载
+## 5.6 模块的加载
 
 程序的所有模块建在同一张 `__root__` 图上（设计原则 10.1），加载分三步：
 

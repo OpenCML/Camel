@@ -6,7 +6,7 @@
 module export_train_step_adam_dump
 
 import { Tensor, relu, mean, reshape } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { OptimizerState, adam, adam_state, save_params } from nn
 import { get_env } from sys
 
@@ -21,7 +21,7 @@ func loss(x: Tensor): float {
 
 sync func spin(m: Mlp, st: OptimizerState, x: Tensor, i: int, steps: int, dir: string): Mlp {
     return if i >= steps then m else sync {
-        let vg = value_and_grad(loss)<m>(x)
+        let vg = with_grad(loss)<m>(x)
         let next = adam(m, vg.1, st, 0.001)
         'step={} loss={}'->format<i, vg.0>->println
         save_params(next.0, dir + '/step_' + '{}'->format<i>)

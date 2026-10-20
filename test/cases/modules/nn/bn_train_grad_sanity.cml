@@ -2,12 +2,18 @@
  * Sanity check for nn:batch_norm_train (forward + running-statistics update) and its VJP
  * (nn:batch_norm_train_grad), against a manual decomposition into primitive tensor ops and
  * finite differences. x [2,2,2,2] (8 values per channel), momentum 0.1, eps 1e-5.
+ *
+ * The differentiated value is the first `with` parameter: here one struct of tensors, so one
+ * gradient of the same shape gives dL/dx, dL/dgamma, dL/dbeta and the (zero) running-statistics
+ * gradients together.
  */
 module bn_train_grad_sanity
 
 import { Tensor, reshape, mean, sum, abs, sqrt } from tensor
 import { grad } from autodiff
 import { batch_norm_train, batch_norm_train_grad } from nn
+
+type Inputs = { t: Tensor, g: Tensor, b: Tensor, rm: Tensor, rv: Tensor }
 
 // The fixed loss weights: loss = sum(y * w), so dL/dy = w.
 func w(): Tensor {
@@ -40,9 +46,14 @@ func reference(t: Tensor, g: Tensor, b: Tensor, rm: Tensor, rv: Tensor, m: float
     return (y, new_rm, new_rv)
 }
 
-func loss(t: Tensor, g: Tensor, b: Tensor, rm: Tensor, rv: Tensor): float {
+func loss_at(t: Tensor, g: Tensor, b: Tensor, rm: Tensor, rv: Tensor): float {
     let r = batch_norm_train(t, g, b, rm, rv, 0.1, 0.00001)
     return sum(r.0 * w())
+}
+
+with <p: Inputs>
+func loss(): float {
+    return loss_at(p.t, p.g, p.b, p.rm, p.rv)
 }
 
 func main(): int sync {
@@ -59,28 +70,28 @@ func main(): int sync {
 
     // Autodiff through the op vs the gradient operator applied to dL/dy = w; the running
     // statistics must see exactly ZERO gradient (the update is not differentiated).
-    let grads = grad(loss)(x(), g, b, rm, rv)
+    let grads = grad(loss)<{t: x(), g: g, b: b, rm: rm, rv: rv}>()
     let manual = batch_norm_train_grad(x(), g, w(), 0.00001)
-    let dX = sum(abs(grads.0 - manual.0))
-    let dG = sum(abs(grads.1 - manual.1))
-    let dB = sum(abs(grads.2 - manual.2))
-    let dRmGrad = sum(abs(grads.3))
-    let dRvGrad = sum(abs(grads.4))
+    let dX = sum(abs(grads.t - manual.0))
+    let dG = sum(abs(grads.g - manual.1))
+    let dB = sum(abs(grads.b - manual.2))
+    let dRmGrad = sum(abs(grads.rm))
+    let dRvGrad = sum(abs(grads.rv))
 
     // Finite differences: gamma[0], beta[0], x[0,0,0,0] (h = 0.001).
-    let fdG0 = (loss(x(), reshape([1.201, 0.8], [2]), b, rm, rv) - loss(x(), reshape([1.199, 0.8], [2]), b, rm, rv)) / 0.002
-    let fdB0 = (loss(x(), g, reshape([0.301, -0.2], [2]), rm, rv) - loss(x(), g, reshape([0.299, -0.2], [2]), rm, rv)) / 0.002
+    let fdG0 = (loss_at(x(), reshape([1.201, 0.8], [2]), b, rm, rv) - loss_at(x(), reshape([1.199, 0.8], [2]), b, rm, rv)) / 0.002
+    let fdB0 = (loss_at(x(), g, reshape([0.301, -0.2], [2]), rm, rv) - loss_at(x(), g, reshape([0.299, -0.2], [2]), rm, rv)) / 0.002
     let xp = reshape([
         1.001, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
     ], [2, 2, 2, 2])
     let xm = reshape([
         0.999, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
     ], [2, 2, 2, 2])
-    let fdX0 = (loss(xp, g, b, rm, rv) - loss(xm, g, b, rm, rv)) / 0.002
+    let fdX0 = (loss_at(xp, g, b, rm, rv) - loss_at(xm, g, b, rm, rv)) / 0.002
 
-    let g0 = sum(grads.1 * reshape([1.0, 0.0], [2]))
-    let b0 = sum(grads.2 * reshape([1.0, 0.0], [2]))
-    let x0 = sum(grads.0 * reshape([
+    let g0 = sum(grads.g * reshape([1.0, 0.0], [2]))
+    let b0 = sum(grads.b * reshape([1.0, 0.0], [2]))
+    let x0 = sum(grads.t * reshape([
         1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     ], [2, 2, 2, 2]))
 

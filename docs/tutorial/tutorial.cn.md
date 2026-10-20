@@ -1043,21 +1043,22 @@ onnx::export: wrote model.onnx
 
 ## 16. 求梯度
 
-自动微分是建立在遍机制之上的库：`grad(f)` 把 `f` 的图改写成它的导数的图。[`examples/16_grad.cml`](examples/16_grad.cml)：
+自动微分是建立在遍机制之上的库：`grad(f)` 把 `f` 的图改写成它的导数的图。`f` 的第一个 `with` 参数是被求导的权重，普通参数是数据。[`examples/16_grad.cml`](examples/16_grad.cml)：
 
 ```cml
 module grad_demo
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 
-func f(x: float, y: float): float {
+with <x: float>
+func f(y: float): float {
     return x * x * y + y
 }
 
 func main(): int sync {
-    println(f(3.0, 2.0))
-    println(grad(f)(3.0, 2.0))                 // (df/dx, df/dy) = (2xy, x^2 + 1)
-    println(value_and_grad(f)(3.0, 2.0))
+    println(f<3.0>(2.0))
+    println(grad(f)<3.0>(2.0))                 // df/dx = 2xy = 12
+    println(with_grad(f)<3.0>(2.0))            // (值, 梯度) = (20, 12)
     return 0
 }
 ```
@@ -1068,13 +1069,15 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 
 ```text
 20
-(12, 10)
-(20, (12, 10))
+12
+(20, 12)
 ```
 
-- `grad(f)` 返回一个函数，它对 `f` 的每个参数给出一个偏导数。
+- `grad(f)` 返回一个函数，它对 `f` 的第一个 `with` 参数求导；其余 `with` 参数当作常量，普通参数是数据。
+- 要对某个数据求导（例如对抗样本），把它写成一个 `with` 参数：`grad(<x: Tensor> (m: Model): float => loss(m, x))<x>`。
+- `with_grad(f)` 同时返回值和梯度。循环里推荐把变换先绑定一次，再带着权重调用：`let loss_with_grad = with_grad(loss)`，循环内 `let (l, g) = loss_with_grad<model>(x, y)`。
 - `grad` 是 macro 算子。流水线里的 `std::macro` 在运行之前就把它展开成导数的图，后面的优化遍可以继续优化这张图。这是这个库的前提，不是语言的约束。
-- 被求导的函数用 `let` 写成纯的数据流；梯度需要经过 `var` 的读写时会被直接拒绝。
+- 被求导的函数用 `let` 写成纯的数据流；梯度需要经过 `var` 的读写时会被直接拒绝。第一个 `with` 参数是 `var`、没有切向量，或函数没有 `with` 参数时，编译期以 `SemanticDiag::NotDifferentiable` 拒绝并说明原因。
 - 训练一步就是“梯度 + 更新”：模型的权重写成 `with` 参数，`grad(loss)<model>(x, y)` 对权重求导，`nn` 模块的 `sgd` 给出更新后的权重。完整的例子见 [`examples/ml/train_linear.cml`](../../examples/ml/train_linear.cml)。
 
 ## 接下来

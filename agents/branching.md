@@ -20,6 +20,15 @@ This repository uses a strict `main` / `develop` / feature-branch workflow. Foll
 - After the merge completes, rebase the merged feature branch so it stays synchronized with the updated `develop`.
 - After the merge, verify branch ancestry before proceeding.
 
+## Coordinator Workflow: Handover Branches And `wzj-dev`
+
+The coordinator's own work follows a two-step integration so the remote stays quiet and the task book's readers still see progress.
+
+- A `handover/Hxx-...` branch is a **local staging branch**: do not push it to the remote, and do not create a remote branch for it. The only remote branch that represents the coordinator's development is `wzj-dev`.
+- Merge each finished handover branch into `wzj-dev` first (`git merge --no-ff`), and promote `wzj-dev` into `develop` in batches — at least every half hour, so an AI reading `develop` sees the progress quickly. Pushing `develop` and `wzj-dev` is what makes the work visible.
+- As soon as a handover branch is merged into `wzj-dev` and its worktree is removed, delete the branch. If an older remote `handover/...` branch still exists from before this rule, delete it too; the commits are in `develop`.
+- The rules above still hold: merge commits only, never rebase `develop`, never force-push, never touch `main`.
+
 ## `develop` To `main`
 
 - Only merge `develop` into `main` when intentionally releasing a new version.

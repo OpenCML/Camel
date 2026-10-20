@@ -12,7 +12,7 @@ set, and are compared against one set of tolerances. Every number is produced by
 
 ```
 showcase/c2-mlp-mnist/
-  train.cml                the Camel implementation (parameter tree, value_and_grad, loop, save_tree)
+  train.cml                the Camel implementation (parameter tree, with_grad, loop, save_tree)
   baseline/train_torch.py  the PyTorch counterpart (nn.Linear, F.cross_entropy, torch.optim.Adam, state_dict)
   make_data.py             writes the data and the starting weights (MNIST or a deterministic stand-in)
   compare.py               runs both sides, compares, measures, writes RESULTS.md; exits non-zero on failure
@@ -125,7 +125,7 @@ configuration (synthetic stand-in) differs at the `1e-5` level.
 
 - **The parameters are a type.** Camel's `type Mlp = { w1, b1, w2, b2 }` is at once the type
   of the starting weights, of the gradient and of the optimizer state;
-  `value_and_grad(loss)<m>(x, y)` returns a gradient tree of the same shape and
+  `with_grad(loss)<m>(x, y)` returns a gradient tree of the same shape and
   `adam(m, g, state, lr)` consumes it, so no line in the program names a leaf. PyTorch needs
   three things — an `nn.Module`, an optimizer object and a `state_dict` — to express the same
   facts.
@@ -164,6 +164,10 @@ The genuinely awkward parts of writing this example. Each comes with a question 
    **Question**: is the comment right (replace as a whole, keep the old directory on
    failure), or is the implementation right (refuse)? If the latter, should `save_tree` get a
    `replace` variant (like `fs.replace`), or should `fs` get a removal operation?
+   **Resolved (H20)**: the comment was right — `save_tree` replaces as a whole, keeping the
+   old directory until the new one is published and putting it back on failure;
+   `fs::remove` and `fs::remove_dir` return `T!`. See `## H20-4` in
+   `docs/handover/reports/H20.md`.
 2. **Tensors have no way to select or reorder rows, so the data pipeline shuffles outside the
    language.** The only minibatch operation is `slice(t, axis, start, end)`; `t[i]` returns a
    single scalar. There is no `gather`/`index_select`/row-selection by an index array, so
@@ -194,16 +198,16 @@ The genuinely awkward parts of writing this example. Each comes with a question 
 
 ## Tests
 
-The small configuration is registered in `test/plans/perf/showcase_c2.plan.toml`
-(`tier = "benchmark"`, `slow` among its tags): it runs 200 steps on the synthetic stand-in,
-runs both sides, checks the tolerances above, and takes about 5 seconds. The default
-`npm run test` does not run it; `npm run test:all` or `node scripts/test.js test\plans\perf`
-does.
+The four problems above were decided by the review: row selection, labels, keyed randomness
+and atomic `save_tree` replacement are H20; index slicing and lambda inference are H21 (none
+of these has landed on this branch).  H21 item 3 was withdrawn (see H25): `with <m: Mlp>` and
+`with_grad(loss)<m>(x, y)` are the final spelling.  The example binds `with_grad(loss)` outside
+the loop and uses `let (value, gradient) = loss_with_grad<m>(x, y)` inside.
 
-It is not in a `slow` tier because **H10's fast/slow split has not landed**: the existing
-plans only have `smoke`, `feat`, `benchmark` and `gpu`, and `benchmark` is the only bucket
-that the default run excludes and the full run includes. When H10 lands, move the plan to
-`slow` (also recorded in the report's open questions).
+The small configuration is registered in `test/plans/perf/showcase_c2.plan.toml`
+(`tier = "slow"`): it runs 200 steps on the synthetic stand-in, runs both sides, checks the
+tolerances above, and takes about six seconds.  H10's fast/slow split has landed: the default
+`npm run test` skips the slow tier and `npm run test:all` (or `--tier all`) runs it.
 
 ## Not committed
 

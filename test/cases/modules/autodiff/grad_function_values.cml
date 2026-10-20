@@ -37,7 +37,8 @@ func twice(f: (t: Tensor) => Tensor): (t: Tensor) => Tensor {
 }
 
 // 1. a closure called, twice, inside a second closure that captured it
-func loss1(p: Tensor): float {
+with <p: Tensor>
+func loss1(): float {
     let s = sum(p)
     let g = (t: Tensor): Tensor => tanh(t * s)
     let h = (t: Tensor): Tensor => g(t) * 2.0 + g(t * 0.5)
@@ -45,7 +46,8 @@ func loss1(p: Tensor): float {
 }
 
 // 2. the same, three closures deep, the innermost called once
-func loss2(p: Tensor): float {
+with <p: Tensor>
+func loss2(): float {
     let s = sum(p * p)
     let g = (t: Tensor): Tensor => tanh(t * s)
     let h = (t: Tensor): Tensor => g(t) * s
@@ -54,42 +56,49 @@ func loss2(p: Tensor): float {
 }
 
 // 3. a closure returned by a factory, called twice
-func loss3(p: Tensor): float {
+with <p: Tensor>
+func loss3(): float {
     let s = sum(p)
     let g = make(s)
     return sum(g(p) * g(p * 0.5))
 }
 
 // 4. a factory whose closure captures a TENSOR that depends on the parameter
-func loss4(p: Tensor): float {
+with <p: Tensor>
+func loss4(): float {
     let g = make_affine(tanh(p) * 2.0)
     return sum(g(p * p))
 }
 
 // 5. a closure passed to a function that calls it twice
-func loss5(p: Tensor): float {
+with <p: Tensor>
+func loss5(): float {
     let s = sum(p)
     return sum(apply((t: Tensor): Tensor => tanh(t * s), p))
 }
 
 // 6. a named function passed to a function that calls it
-func loss6(p: Tensor): float {
+with <p: Tensor>
+func loss6(): float {
     return sum(apply(square, p))
 }
 
 // 7. a closure passed on through two functions
-func loss7(p: Tensor): float {
+with <p: Tensor>
+func loss7(): float {
     let s = sum(p)
     return sum(apply_outer((t: Tensor): Tensor => tanh(t * s), p))
 }
 
 // 8. the closure of a factory passed to a function that calls it
-func loss8(p: Tensor): float {
+with <p: Tensor>
+func loss8(): float {
     return sum(apply(make(sum(p)), p))
 }
 
 // 9. a function that takes a closure and returns a closure capturing it
-func loss9(p: Tensor): float {
+with <p: Tensor>
+func loss9(): float {
     let s = sum(p)
     let g = (t: Tensor): Tensor => tanh(t * s)
     let h = twice(g)
@@ -97,7 +106,8 @@ func loss9(p: Tensor): float {
 }
 
 // 10. a lambda that returns a lambda
-func loss10(p: Tensor): float {
+with <p: Tensor>
+func loss10(): float {
     let s = sum(p)
     let mk = (a: float) => (t: Tensor): Tensor => tanh(t * a) * s
     return sum(mk(s * 0.5)(p))
@@ -105,15 +115,15 @@ func loss10(p: Tensor): float {
 
 func main(): int sync {
     let x = reshape([0.5, 0.25, -0.35], [3])
-    println(grad(loss1)(x))
-    println(grad(loss2)(x))
-    println(grad(loss3)(x))
-    println(grad(loss4)(x))
-    println(grad(loss5)(x))
-    println(grad(loss6)(x))
-    println(grad(loss7)(x))
-    println(grad(loss8)(x))
-    println(grad(loss9)(x))
-    println(grad(loss10)(x))
+    println(grad(loss1)<x>())
+    println(grad(loss2)<x>())
+    println(grad(loss3)<x>())
+    println(grad(loss4)<x>())
+    println(grad(loss5)<x>())
+    println(grad(loss6)<x>())
+    println(grad(loss7)<x>())
+    println(grad(loss8)<x>())
+    println(grad(loss9)<x>())
+    println(grad(loss10)<x>())
     return 0
 }

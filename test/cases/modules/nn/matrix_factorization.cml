@@ -1,11 +1,11 @@
 /**
- * One-hot matrix factorization trained with autodiff: value_and_grad of the rating loss gives
+ * One-hot matrix factorization trained with autodiff: with_grad of the rating loss gives
  * a MatrixFactorization-shaped gradient (only the selected user/item rows are non-zero), one
  * sgd step lowers the loss, and a recursive train loop repeats the step.
  */
 module matrix_factorization
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, reshape, sum } from tensor
 import { sgd } from nn
 
@@ -41,7 +41,7 @@ func main(): int sync {
     let rating = 1.0
 
     let before = rating_loss<model>(user_one_hot, item_one_hot, rating)
-    let vg = value_and_grad(rating_loss)<model>(user_one_hot, item_one_hot, rating)
+    let vg = with_grad(rating_loss)<model>(user_one_hot, item_one_hot, rating)
     let stepped = sgd(model, vg.1, 0.1)
     let after = rating_loss<stepped>(user_one_hot, item_one_hot, rating)
     let trained = train(model, user_one_hot, item_one_hot, rating, 10)

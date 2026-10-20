@@ -66,13 +66,13 @@ std::string_view libraryGemmName();
 Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs);
 
 /// lhs @ rhs; f32 products by sgemm (canonical), or by sgemmLibrary when `library` is set.
-TensorObject *matmul(
-    const TensorObject *lhs, const TensorObject *rhs, mm::IAllocator &allocator,
+Array *matmul(
+    const Array *lhs, const Array *rhs, mm::IAllocator &allocator,
     bool library = false);
 
 /// y = x @ weight (+ bias). `weight` is [in, out]; `bias` is [out] or null.
-TensorObject *linear(
-    const TensorObject *x, const TensorObject *weight, const TensorObject *bias,
+Array *linear(
+    const Array *x, const Array *weight, const Array *bias,
     mm::IAllocator &allocator);
 
 /**
@@ -84,8 +84,8 @@ TensorObject *linear(
  * in place. Otherwise the unfused operations run. Either way the result is the unfused
  * expression's.
  */
-TensorObject *matmulAdd(
-    const TensorObject *x, const TensorObject *weight, Operand bias, bool relu,
+Array *matmulAdd(
+    const Array *x, const Array *weight, Operand bias, bool relu,
     mm::IAllocator &allocator);
 
 } // namespace camel::tensor::kernels

@@ -264,7 +264,7 @@ slot_t cloneStaticSlot(
     case TypeCode::Array: {
         auto *array       = fromSlot<::Array *>(slot);
         auto *arrayType   = static_cast<ArrayType *>(type);
-        auto *clonedArray = ::Array::create(mm::autoSpace(), array->size());
+        auto *clonedArray = ::Array::create(mm::autoSpace(), arrayType, array->size());
         objectCache.emplace(object, clonedArray);
         for (size_t i = 0; i < array->size(); ++i) {
             clonedArray->set<slot_t>(

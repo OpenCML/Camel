@@ -1,11 +1,11 @@
 /**
  * Tiny single-head attention block trained with autodiff through the row-wise softmax pullback:
- * value_and_grad of the loss gives an AttentionModel-shaped gradient, one sgd step lowers the
+ * with_grad of the loss gives an AttentionModel-shaped gradient, one sgd step lowers the
  * loss, and a recursive train loop repeats the step.
  */
 module tiny_attention
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, reshape, shape, softmax, sum, transpose } from tensor
 import { sgd } from nn
 
@@ -66,7 +66,7 @@ func main(): int sync {
     let target = reshape([1.0, 0.0], [2, 1])
 
     let before = model_loss<model>(x, target)
-    let vg = value_and_grad(model_loss)<model>(x, target)
+    let vg = with_grad(model_loss)<model>(x, target)
     let stepped = sgd(model, vg.1, 0.5)
     let after = model_loss<stepped>(x, target)
     let trained = train(model, x, target, 10)

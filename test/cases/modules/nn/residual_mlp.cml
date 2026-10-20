@@ -4,7 +4,7 @@
  */
 module residual_mlp
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, zeros, sum, tanh } from tensor
 import { OptimizerState, sgd, adam, adam_state } from nn
 
@@ -60,7 +60,7 @@ func main(): int sync {
     let y = full([2, 2], 1.0)
     let model = init()
     let start = loss<model>(x, y)
-    let vg = value_and_grad(loss)<model>(x, y)
+    let vg = with_grad(loss)<model>(x, y)
     let by_sgd = train_sgd(model, x, y, 20)
     let after_sgd = loss<by_sgd>(x, y)
     let by_adam = train_adam(model, adam_state(model), x, y, 20)

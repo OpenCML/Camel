@@ -91,7 +91,7 @@ ConvGeometry geometry(
     return g;
 }
 
-const TensorObject *asFloat(const TensorObject *t, mm::IAllocator &allocator) {
+const Array *asFloat(const Array *t, mm::IAllocator &allocator) {
     return t->dtype() == TypeCode::Float32 ? t : cast(t, TypeCode::Float32, allocator);
 }
 
@@ -143,7 +143,7 @@ void col2im(const ConvGeometry &g, const float *cols, float *image) {
     }
 }
 
-void requireDy(const ConvGeometry &g, const TensorObject *dy) {
+void requireDy(const ConvGeometry &g, const Array *dy) {
     const int64_t expected[] = {g.N, g.O, g.OH, g.OW};
     if (dy->rank() != 4 || !std::equal(expected, expected + 4, dy->shape())) {
         throw ShapeError(
@@ -161,8 +161,8 @@ Shape conv2dShape(
     return {g.N, g.O, g.OH, g.OW};
 }
 
-TensorObject *conv2d(
-    const TensorObject *input, const TensorObject *kernel, const TensorObject *bias, int64_t stride,
+Array *conv2d(
+    const Array *input, const Array *kernel, const Array *bias, int64_t stride,
     int64_t padding, mm::IAllocator &allocator) {
     const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
     if (bias && !(bias->rank() == 1 && bias->dim(0) == g.O)) {
@@ -170,11 +170,11 @@ TensorObject *conv2d(
             "conv2d bias must have shape [" + std::to_string(g.O) + "], got " +
             dims(bias->shapeSpan()));
     }
-    const TensorObject *x    = asFloat(input, allocator);
-    const TensorObject *w    = asFloat(kernel, allocator);
-    const TensorObject *b    = bias ? asFloat(bias, allocator) : nullptr;
+    const Array *x    = asFloat(input, allocator);
+    const Array *w    = asFloat(kernel, allocator);
+    const Array *b    = bias ? asFloat(bias, allocator) : nullptr;
     const int64_t outShape[] = {g.N, g.O, g.OH, g.OW};
-    TensorObject *out        = TensorObject::create(TypeCode::Float32, outShape, allocator);
+    Array *out        = createTensor(TypeCode::Float32, outShape, allocator);
     const float *px = x->dataAs<float>(), *pw = w->dataAs<float>();
     float *py = out->dataAs<float>();
     parallelFor(g.N, 1, [&](int64_t begin, int64_t end) {
@@ -208,14 +208,14 @@ TensorObject *conv2d(
     return out;
 }
 
-TensorObject *conv2dInputGrad(
-    const TensorObject *input, const TensorObject *kernel, const TensorObject *dy, int64_t stride,
+Array *conv2dInputGrad(
+    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
     int64_t padding, mm::IAllocator &allocator) {
     const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
     requireDy(g, dy);
-    const TensorObject *w = asFloat(kernel, allocator);
-    const TensorObject *d = asFloat(dy, allocator);
-    TensorObject *dx = TensorObject::create(TypeCode::Float32, input->shapeSpan(), allocator, true);
+    const Array *w = asFloat(kernel, allocator);
+    const Array *d = asFloat(dy, allocator);
+    Array *dx = createTensor(TypeCode::Float32, input->shapeSpan(), allocator, true);
     parallelFor(g.N, 1, [&](int64_t begin, int64_t end) {
         std::vector<float> cols(static_cast<size_t>(g.ckk() * g.spatial()));
         for (int64_t n = begin; n < end; ++n) {
@@ -240,15 +240,15 @@ TensorObject *conv2dInputGrad(
     return dx;
 }
 
-TensorObject *conv2dKernelGrad(
-    const TensorObject *input, const TensorObject *kernel, const TensorObject *dy, int64_t stride,
+Array *conv2dKernelGrad(
+    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
     int64_t padding, mm::IAllocator &allocator) {
     const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
     requireDy(g, dy);
-    const TensorObject *x = asFloat(input, allocator);
-    const TensorObject *d = asFloat(dy, allocator);
-    TensorObject *dw =
-        TensorObject::create(TypeCode::Float32, kernel->shapeSpan(), allocator, true);
+    const Array *x = asFloat(input, allocator);
+    const Array *d = asFloat(dy, allocator);
+    Array *dw =
+        createTensor(TypeCode::Float32, kernel->shapeSpan(), allocator, true);
     std::vector<float> cols(static_cast<size_t>(g.ckk() * g.spatial()));
     for (int64_t n = 0; n < g.N; ++n) {
         im2col(g, x->dataAs<float>() + n * g.C * g.H * g.W, cols.data());
@@ -271,14 +271,14 @@ TensorObject *conv2dKernelGrad(
     return dw;
 }
 
-TensorObject *conv2dBiasGrad(const TensorObject *dy, mm::IAllocator &allocator) {
+Array *conv2dBiasGrad(const Array *dy, mm::IAllocator &allocator) {
     if (dy->rank() != 4) {
         throw ShapeError("conv2d bias gradient expects a rank-4 dy, got " + dims(dy->shapeSpan()));
     }
-    const TensorObject *d = asFloat(dy, allocator);
+    const Array *d = asFloat(dy, allocator);
     const int64_t N = dy->dim(0), O = dy->dim(1), S = dy->dim(2) * dy->dim(3);
     const int64_t shape[] = {O};
-    TensorObject *db      = TensorObject::create(TypeCode::Float32, shape, allocator);
+    Array *db      = createTensor(TypeCode::Float32, shape, allocator);
     for (int64_t o = 0; o < O; ++o) {
         double acc = 0.0;
         for (int64_t n = 0; n < N; ++n) {
@@ -308,11 +308,11 @@ Shape pool2dShape(std::span<const int64_t> input, const Window2d &window) {
     return {input[0], input[1], window.outH(input[2]), window.outW(input[3])};
 }
 
-TensorObject *pool2d(
-    PoolKind kind, const TensorObject *input, const Window2d &window, mm::IAllocator &allocator) {
+Array *pool2d(
+    PoolKind kind, const Array *input, const Window2d &window, mm::IAllocator &allocator) {
     const Shape outShape  = pool2dShape(input->shapeSpan(), window);
-    const TensorObject *x = asFloat(input, allocator);
-    TensorObject *out     = TensorObject::create(TypeCode::Float32, outShape, allocator);
+    const Array *x = asFloat(input, allocator);
+    Array *out     = createTensor(TypeCode::Float32, outShape, allocator);
     const int64_t H = input->dim(2), W = input->dim(3), OH = outShape[2], OW = outShape[3];
     const int64_t planes = outShape[0] * outShape[1];
     parallelFor(planes, 4, [&](int64_t begin, int64_t end) {
@@ -349,8 +349,8 @@ TensorObject *pool2d(
     return out;
 }
 
-TensorObject *pool2dGrad(
-    PoolKind kind, const TensorObject *input, const TensorObject *dy, const Window2d &window,
+Array *pool2dGrad(
+    PoolKind kind, const Array *input, const Array *dy, const Window2d &window,
     mm::IAllocator &allocator) {
     const Shape outShape = pool2dShape(input->shapeSpan(), window);
     if (dy->rank() != 4 || !std::equal(outShape.begin(), outShape.end(), dy->shape())) {
@@ -358,9 +358,9 @@ TensorObject *pool2dGrad(
             "pool2d gradient expects dy of shape " + dims(outShape) + ", got " +
             dims(dy->shapeSpan()));
     }
-    const TensorObject *x = asFloat(input, allocator);
-    const TensorObject *d = asFloat(dy, allocator);
-    TensorObject *dx = TensorObject::create(TypeCode::Float32, input->shapeSpan(), allocator, true);
+    const Array *x = asFloat(input, allocator);
+    const Array *d = asFloat(dy, allocator);
+    Array *dx = createTensor(TypeCode::Float32, input->shapeSpan(), allocator, true);
     const int64_t H = input->dim(2), W = input->dim(3), OH = outShape[2], OW = outShape[3];
     const int64_t planes = outShape[0] * outShape[1];
     const float scale    = 1.0f / static_cast<float>(window.kernelH * window.kernelW);
@@ -399,26 +399,26 @@ TensorObject *pool2dGrad(
     return dx;
 }
 
-TensorObject *batchNorm(
-    const TensorObject *input, const TensorObject *mean, const TensorObject *var,
-    const TensorObject *gamma, const TensorObject *beta, double eps, mm::IAllocator &allocator) {
+Array *batchNorm(
+    const Array *input, const Array *mean, const Array *var,
+    const Array *gamma, const Array *beta, double eps, mm::IAllocator &allocator) {
     if (input->rank() < 2) {
         throw ShapeError(
             "batch_norm expects input of rank >= 2 with channels on axis 1, got " +
             dims(input->shapeSpan()));
     }
     const int64_t C = input->dim(1);
-    for (const TensorObject *p : {mean, var, gamma, beta}) {
+    for (const Array *p : {mean, var, gamma, beta}) {
         if (p->rank() != 1 || p->dim(0) != C) {
             throw ShapeError(
                 "batch_norm parameters must have shape [" + std::to_string(C) + "], got " +
                 dims(p->shapeSpan()));
         }
     }
-    const TensorObject *x = asFloat(input, allocator);
-    const TensorObject *m = asFloat(mean, allocator), *v = asFloat(var, allocator);
-    const TensorObject *gm = asFloat(gamma, allocator), *bt = asFloat(beta, allocator);
-    TensorObject *out = TensorObject::create(TypeCode::Float32, input->shapeSpan(), allocator);
+    const Array *x = asFloat(input, allocator);
+    const Array *m = asFloat(mean, allocator), *v = asFloat(var, allocator);
+    const Array *gm = asFloat(gamma, allocator), *bt = asFloat(beta, allocator);
+    Array *out = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
     int64_t inner     = 1;
     for (size_t d = 2; d < input->rank(); ++d) {
         inner *= input->dim(d);
@@ -454,7 +454,7 @@ struct BnTrainGeometry {
 };
 
 BnTrainGeometry bnTrainGeometry(
-    const TensorObject *input, std::initializer_list<const TensorObject *> params, const char *op) {
+    const Array *input, std::initializer_list<const Array *> params, const char *op) {
     if (input->rank() < 2) {
         throw ShapeError(
             std::string(op) + " expects input of rank >= 2 with channels on axis 1, got " +
@@ -464,7 +464,7 @@ BnTrainGeometry bnTrainGeometry(
     for (size_t d = 2; d < input->rank(); ++d) {
         g.inner *= input->dim(d);
     }
-    for (const TensorObject *p : params) {
+    for (const Array *p : params) {
         if (p->rank() != 1 || p->dim(0) != g.C) {
             throw ShapeError(
                 std::string(op) + " parameters must have shape [" + std::to_string(g.C) +
@@ -521,19 +521,19 @@ BnTrainStats bnTrainStats(const float *x, const BnTrainGeometry &g, double eps) 
 } // namespace
 
 void batchNormTrain(
-    const TensorObject *input, const TensorObject *gamma, const TensorObject *beta,
-    const TensorObject *runningMean, const TensorObject *runningVar, double momentum, double eps,
-    TensorObject **outY, TensorObject **outRunningMean, TensorObject **outRunningVar,
+    const Array *input, const Array *gamma, const Array *beta,
+    const Array *runningMean, const Array *runningVar, double momentum, double eps,
+    Array **outY, Array **outRunningMean, Array **outRunningVar,
     mm::IAllocator &allocator) {
     const BnTrainGeometry g =
         bnTrainGeometry(input, {gamma, beta, runningMean, runningVar}, "batch_norm_train");
-    const TensorObject *x  = asFloat(input, allocator);
-    const TensorObject *gm = asFloat(gamma, allocator), *bt = asFloat(beta, allocator);
-    const TensorObject *rm = asFloat(runningMean, allocator), *rv = asFloat(runningVar, allocator);
+    const Array *x  = asFloat(input, allocator);
+    const Array *gm = asFloat(gamma, allocator), *bt = asFloat(beta, allocator);
+    const Array *rm = asFloat(runningMean, allocator), *rv = asFloat(runningVar, allocator);
     const Shape statShape{g.C};
-    TensorObject *y   = TensorObject::create(TypeCode::Float32, input->shapeSpan(), allocator);
-    TensorObject *nrm = TensorObject::create(TypeCode::Float32, statShape, allocator);
-    TensorObject *nrv = TensorObject::create(TypeCode::Float32, statShape, allocator);
+    Array *y   = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
+    Array *nrm = createTensor(TypeCode::Float32, statShape, allocator);
+    Array *nrv = createTensor(TypeCode::Float32, statShape, allocator);
 
     const BnTrainStats stats = bnTrainStats(x->dataAs<float>(), g, eps);
 
@@ -569,8 +569,8 @@ void batchNormTrain(
 }
 
 void batchNormTrainGrad(
-    const TensorObject *input, const TensorObject *gamma, const TensorObject *dy, double eps,
-    TensorObject **outDx, TensorObject **outDgamma, TensorObject **outDbeta,
+    const Array *input, const Array *gamma, const Array *dy, double eps,
+    Array **outDx, Array **outDgamma, Array **outDbeta,
     mm::IAllocator &allocator) {
     const BnTrainGeometry g = bnTrainGeometry(input, {gamma}, "batch_norm_train_grad");
     if (!dy->sameShape(input)) {
@@ -578,13 +578,13 @@ void batchNormTrainGrad(
             "batch_norm_train_grad expects dy shaped like the input, got " + dims(dy->shapeSpan()) +
             " vs " + dims(input->shapeSpan()));
     }
-    const TensorObject *x  = asFloat(input, allocator);
-    const TensorObject *gm = asFloat(gamma, allocator);
-    const TensorObject *d  = asFloat(dy, allocator);
+    const Array *x  = asFloat(input, allocator);
+    const Array *gm = asFloat(gamma, allocator);
+    const Array *d  = asFloat(dy, allocator);
     const Shape statShape{g.C};
-    TensorObject *dx = TensorObject::create(TypeCode::Float32, input->shapeSpan(), allocator);
-    TensorObject *dg = TensorObject::create(TypeCode::Float32, statShape, allocator);
-    TensorObject *db = TensorObject::create(TypeCode::Float32, statShape, allocator);
+    Array *dx = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
+    Array *dg = createTensor(TypeCode::Float32, statShape, allocator);
+    Array *db = createTensor(TypeCode::Float32, statShape, allocator);
 
     const BnTrainStats stats = bnTrainStats(x->dataAs<float>(), g, eps);
     const double M           = static_cast<double>(g.perChannel());

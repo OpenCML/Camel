@@ -13,8 +13,8 @@ How to read an entry:
 - **Signature**: `name: <with-parameters> (parameters) => result`. The value a function works
   on is its ordinary parameter and what configures it is a with-parameter, so calls chain:
   `s->trim->split<','>`, `xs->filter<p>->sort_by<key>`. `int` is the 64-bit integer and `float`
-  the 64-bit float; `i32` and `f32` are the 32-bit ones. `A | B` in a parameter means one
-  overload per type; numeric types are never converted implicitly.
+  the 64-bit float; `i32` and `f32` are the 32-bit ones; numeric types are never converted
+  implicitly.
 - **Pure** operators depend on their arguments only: a pass may evaluate a call ahead of time,
   merge two equal calls or drop an unused one. An operator **with effects** is left alone, and
   its call runs only when it is reachable from a `sync` block or its result is used (design
@@ -40,9 +40,9 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [math](#math) | `import { ... } from math` | C++ | 45 |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
 | [algo](#algo) | `import { ... } from algo` | C++ | 8 |
-| [random](#random) | `import { ... } from random` | C++ | 7 |
+| [random](#random) | `import { ... } from random` | C++ | 10 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
-| [fs](#fs) | `import { ... } from fs` | C++ | 13 |
+| [fs](#fs) | `import { ... } from fs` | C++ | 15 |
 | [os](#os) | `import { ... } from os` | C++ | 8 |
 | [sys](#sys) | `import { ... } from sys` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
@@ -1045,12 +1045,23 @@ save_tree: (dir: string, tree: T, dataset_manifest_sha256: string) => void
 
 Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
 tensor), with a manifest that records the types, sizes and SHA-256 sums. The directory is
-replaced as a whole or not at all. A leaf type a checkpoint cannot hold (anything but a
-tensor, `Bytes`, `string`, `bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that
-names the path.
+replaced as a whole or not at all: the new checkpoint is written and flushed into a
+temporary sibling and renamed into place, and the old directory is kept beside it as the
+hidden sibling `.<name>.ckpt-previous` (the destination's own directory name between a
+leading dot and `.ckpt-previous`) until that rename succeeds, so a failure puts the old
+directory back. A destination that does not exist is created; one that does is replaced; a
+symbolic link or a reparse point there is refused. If the process dies between the two
+renames, `load_tree` reads `.<name>.ckpt-previous` and the next `save_tree` restores it
+before replacing it. (A directory rename cannot replace a non-empty directory on Windows or
+POSIX, hence the two renames.) A leaf type a checkpoint cannot hold (anything but a tensor,
+`Bytes`, `string`, `bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that names
+the path. Only one writer may save to a directory at a time: concurrent `save_tree` calls
+for the same directory are not serialized (there is no lock file), so the contract is a
+single writer; one of two racing saves fails explicitly, and a reader still sees a complete
+checkpoint.
 
-- With effects: writes the directory.
-- Failure: fault `FileSystemError` when the directory cannot be written.
+- With effects: writes and replaces the directory.
+- Failure: fault `FileSystemError` when the directory cannot be written or published.
 - Example: `save_tree('out/ckpt', { w: zeros([2, 2]), step: 10 })`
 
 #### `load_tree`
@@ -1062,7 +1073,9 @@ load_tree: (dir: string, dataset_manifest_sha256: string) => T!
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
 the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
 `CheckpointError` value, nothing is partly loaded. T is the explicit type argument or the
-expected type of the result.
+expected type of the result. When a save was interrupted after moving the old directory
+aside, the complete `.<name>.ckpt-previous` sibling is read instead, with a warning on
+standard error; the next save restores it before replacing it.
 
 - With effects: reads the directory.
 - Example: `load_tree::<{ w: Tensor<f32>, step: int }>('out/ckpt') !! initial()`
@@ -2199,6 +2212,45 @@ The elements of xs in a random order, as a new array; xs is not changed.
 - With effects: advances the generator.
 - Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
 
+#### `key`
+
+```camel
+key: (seed: int) => Key
+```
+
+A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
+half, as signed int64 bits). Pure: it reads no generator and the same seed gives the same key
+on every scheduler, in translated C++, and on every platform.
+
+- Pure.
+- Example: `key(42)` gives `{ hi: 1350887118657991639, lo: -7139630017956984517 }`
+
+#### `split`
+
+```camel
+split: (key: Key) => (Key, Key)
+```
+
+Two independent keys derived from key: split(key) gives the same pair every time, and does
+not change key.
+
+- Pure.
+- Example: `let (a, b) = split(key(42))`
+
+#### `permutation`
+
+```camel
+permutation: (key: Key, n: int) => int[]
+```
+
+A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
+stream. Pure: the same key and n give the same permutation everywhere, it reads no generator
+and does not change key; n = 0 gives [] and n = 1 gives [0].
+
+- Pure.
+- Failure: fault `InvalidArgument` when n is negative.
+- Example: `permutation(key(42), 4)` gives `[1, 0, 2, 3]`
+
 <a id="time"></a>
 
 ## `time`
@@ -2398,6 +2450,32 @@ Creates a directory and every missing parent; false when it already exists.
 - With effects: changes the file system.
 - Failure: fault `FileSystemError` when it cannot be created.
 - Example: `mkdirs('out/logs/today')` gives `true`
+
+#### `remove`
+
+```camel
+remove: (path: string) => void!
+```
+
+Removes a file or a symbolic link; a directory, even an empty one, is an error (use
+`remove_dir`). Removing a path that is not there is an error value, not a silent success.
+
+- With effects: removes a file.
+- Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a directory or the removal fails for another reason.
+- Example: `remove('notes.txt')`
+
+#### `remove_dir`
+
+```camel
+remove_dir: (path: string) => void!
+```
+
+Removes one empty directory. A directory that is not empty is an error, not a recursive
+delete; a file or a symbolic link is an error too.
+
+- With effects: removes a directory.
+- Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
+- Example: `remove_dir('out/old')`
 
 <a id="os"></a>
 

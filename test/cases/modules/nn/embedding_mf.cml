@@ -5,7 +5,7 @@
  */
 module embedding_mf
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, reshape, sum } from tensor
 import { embedding, sgd } from nn
 
@@ -50,7 +50,7 @@ func main(): int sync {
     let rating = 1.0
 
     let before = model_loss<model>(user_ids, item_ids, rating)
-    let vg = value_and_grad(model_loss)<model>(user_ids, item_ids, rating)
+    let vg = with_grad(model_loss)<model>(user_ids, item_ids, rating)
     let stepped = sgd(model, vg.1, 0.2)
     let after = model_loss<stepped>(user_ids, item_ids, rating)
     let trained = train(model, user_ids, item_ids, rating, 10)

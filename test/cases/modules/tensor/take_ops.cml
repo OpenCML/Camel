@@ -1,0 +1,48 @@
+/**
+ * H20-2 manual probe: take rows (array and int-tensor indices, repeated rows), one_hot, and the
+ * two softmax cross-entropy forms agreeing in value and gradient. The differentiated value is
+ * the first `with` parameter.
+ */
+module take_ops
+
+import { Tensor, reshape, range, take, one_hot, shape, sum, abs, cast } from tensor
+import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn
+import { grad } from autodiff
+
+with <w: Tensor>
+func row_sum(): float {
+    return sum(take(w, [0, 0, 1]))
+}
+
+func main(): int sync {
+    let t = reshape(range(0, 12), [4, 3])
+    let rows = take(t, [2, 0, 2])
+    'take rows={} shape={} sum={}'->format<rows, shape(rows), sum(cast(rows, 'float32'))>->println
+
+    let index_tensor = cast([3, 1], 'int64')
+    let picked = take(t, index_tensor)
+    'take tensor shape={} sum={}'->format<shape(picked), sum(cast(picked, 'float32'))>->println
+
+    let picked32 = take(t, cast([3, 1], 'int32'))
+    'take int32 sum={}'->format<sum(cast(picked32, 'float32'))>->println
+
+    let none = take(t, [])
+    'take empty shape={}'->format<shape(none)>->println
+
+    let logits = reshape([1.0, 2.0, 3.0, 0.5, -1.0, 0.0], [2, 3])
+    let labels = [1, 0]
+    let hot = one_hot(labels, 3)
+    'one_hot={} shape={}'->format<hot, shape(hot)>->println
+    'one_hot empty shape={}'->format<shape(one_hot([], 3))>->println
+
+    let onehot_loss = softmax_cross_entropy(logits, hot)
+    let labels_loss = softmax_cross_entropy(logits, labels)
+    let onehot_grad = softmax_cross_entropy_grad(logits, hot, 1.0)
+    let labels_grad = softmax_cross_entropy_grad(logits, labels, 1.0)
+    'sce onehot={} labels={} diff={} grad_diff={}'->format<onehot_loss, labels_loss, onehot_loss - labels_loss, sum(abs(onehot_grad - labels_grad))>->println
+
+    let weights = cast(reshape(range(0, 6), [2, 3]), 'float32')
+    let repeated = grad(row_sum)<weights>()
+    'take grad={}'->format<repeated>->println
+    return 0
+}

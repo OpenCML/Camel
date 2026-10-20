@@ -1,11 +1,11 @@
 /**
- * Tiny sigmoid autoencoder trained with autodiff: value_and_grad of the reconstruction loss
+ * Tiny sigmoid autoencoder trained with autodiff: with_grad of the reconstruction loss
  * gives an AutoEncoder-shaped gradient, one sgd step lowers the loss, and a recursive train
  * loop repeats the step.
  */
 module autoencoder
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, shape, sigmoid, sum, zeros } from tensor
 import { sgd } from nn
 
@@ -43,7 +43,7 @@ func main(): int sync {
     let x = full([4, 2], 1.0)
 
     let before = reconstruction_loss<model>(x, x)
-    let vg = value_and_grad(reconstruction_loss)<model>(x, x)
+    let vg = with_grad(reconstruction_loss)<model>(x, x)
     let stepped = sgd(model, vg.1, 0.1)
     let after = reconstruction_loss<stepped>(x, x)
     let trained = train(model, x, 10)

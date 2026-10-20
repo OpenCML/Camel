@@ -9,7 +9,8 @@ tier = "fast"
 tool = "node"
 kind = "behavior"
 case = "selftest_probe.mjs"
-envs = ["SELFTEST_PROBE_LOG=tmp/selftest-parallel.log"]
+# SELFTEST_PROBE_LOG comes from the self-test's environment (under its own scratch directory),
+# not from a fixed path here: two self-tests may run at the same time.
 args = ["${case}", "sleep", "p", "400"]
 expect_exit = 0
 normalizers = ["normalize_newlines"]

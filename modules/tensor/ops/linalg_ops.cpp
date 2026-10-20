@@ -89,7 +89,7 @@ std::optional<Type *> matmulInfer(const InferContext &ctx) {
 
 slot_t linearKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("linear", [&] {
-        TensorObject *bias = hasArg(norm, 2) ? tensorArg(norm, 2) : nullptr;
+        Array *bias = hasArg(norm, 2) ? tensorArg(norm, 2) : nullptr;
         return wrap(k::linear(tensorArg(norm, 0), tensorArg(norm, 1), bias, resultAllocator()));
     });
 }

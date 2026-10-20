@@ -30,6 +30,54 @@ using namespace std;
 using namespace camel::core::error;
 using namespace camel::core::type;
 
+namespace camel::core::type {
+
+ArrayStorage arrayStorageFor(const Type *elementType) {
+    if (!elementType) {
+        return ArrayStorage::Slots;
+    }
+    // A reference element, or an element type the runtime has no fixed-width encoding for, is
+    // a slot. The compact form is only for numbers (the leaf rule).
+    const TypeCode code = elementType->code();
+    if (isCompactElementType(code)) {
+        return ArrayStorage::Compact;
+    }
+    return ArrayStorage::Slots;
+}
+
+bool isCompactElementType(TypeCode code) {
+    switch (code) {
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+    case TypeCode::Bool:
+    case TypeCode::Byte:
+        return true;
+    default:
+        return false;
+    }
+}
+
+size_t arrayElementSize(TypeCode code) {
+    switch (code) {
+    case TypeCode::Int32:
+    case TypeCode::Float32:
+        return 4;
+    case TypeCode::Int64:
+    case TypeCode::Float64:
+        return 8;
+    case TypeCode::Bool:
+    case TypeCode::Byte:
+        return 1;
+    default:
+        ASSERT(false, "Not a compact element type");
+        return 0;
+    }
+}
+
+} // namespace camel::core::type
+
 ArrayType *ArrayTypeFactory::build() {
     if (!elemType_) {
         elemType_ = Type::Void();

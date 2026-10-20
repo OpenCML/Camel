@@ -1,0 +1,13 @@
+/** Refused: the first `with` parameter is a function, which has no tangent (9.9). */
+module grad_refuse_function
+import { grad } from autodiff
+
+with <f: (x: float) => float>
+func applied(x: float): float {
+    return f(x)
+}
+
+func main(): int sync {
+    println(grad(applied)<(x: float): float => x * x>(2.0))
+    return 0
+}

@@ -1316,7 +1316,7 @@ gc_node_ref_t armFillElement(const GraphDraft &draft, gc_node_ref_t fillId, size
 
 } // namespace
 
-/// A CALL whose callee is projected out of a branch JOIN (the value_and_grad pullback shape:
+/// A CALL whose callee is projected out of a branch JOIN (the with_grad pullback shape:
 /// each arm packs (value, pullback closure) into a tuple, the JOIN selects, and the pullback is
 /// called indirectly) is split across the branch. For every arm a new CALL invokes that arm's
 /// closure with the original arguments; the call's result projections and the JOIN's other

@@ -257,8 +257,8 @@ run time.
 ## 5. `try` / `catch`
 
 `try` is recognised by the parser only to explain itself: `TryCatchNotInLanguage` (0x64), at
-the `try` keyword, pointing to `!!`, `?->` and fault isolation. `raise` and `T ? U` are
-untouched (undecided, design principles section 15).
+the `try` keyword, pointing to `!!`, `?->` and fault isolation. `raise` is untouched (undecided,
+design principles section 15).
 
 ## 6. Errors and faults
 

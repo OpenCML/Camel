@@ -9,7 +9,7 @@
 module export_integrity
 
 import { Tensor, reshape, relu, mean, randn } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
 import { get_env } from sys
@@ -24,7 +24,8 @@ func loss(x: Tensor): float {
 }
 
 func step(m: Mlp, x: Tensor): (float, Mlp) {
-    let vg = value_and_grad(loss)<m>(x)
+    let loss_with_grad = with_grad(loss)
+    let vg = loss_with_grad<m>(x)
     return (vg.0, sgd(m, vg.1, 0.1))
 }
 

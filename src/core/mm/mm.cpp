@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,7 +31,7 @@ namespace camel::core::mm {
 namespace detail {
 std::atomic_bool autoSpaceSafepointSlowPath{false};
 std::atomic<uint32_t> nativeCodeDepth{0};
-}
+} // namespace detail
 
 namespace {
 
@@ -227,8 +227,9 @@ GenerationalAllocatorWithGC &autoSpace() {
         autoSpaceCreated.store(true, std::memory_order_release);
         // The birth space (CAMEL_GC_NURSERY_MB, default 4). Untouched pages cost nothing, so
         // the mark-sweep collector, which does not use it, does not pay for it.
-        const size_t nurseryMb   = envSize("CAMEL_GC_NURSERY_MB");
-        const size_t nurseryBytes = std::clamp<size_t>(nurseryMb != 0 ? nurseryMb : 4, 1, 1024) * MB;
+        const size_t nurseryMb = envSize("CAMEL_GC_NURSERY_MB");
+        const size_t nurseryBytes =
+            std::clamp<size_t>(nurseryMb != 0 ? nurseryMb : 4, 1, 1024) * MB;
         // What counts as a large object (CAMEL_GC_LARGE_THRESHOLD_KB). Large objects get a
         // block of their own and never move. With mark-sweep the threshold is 4 KB. With the
         // generational collector it is 64 KB: an object born outside the birth space is old
@@ -236,31 +237,32 @@ GenerationalAllocatorWithGC &autoSpace() {
         // every young element it points at alive until the next major collection.
         const size_t thresholdKb = envSize("CAMEL_GC_LARGE_THRESHOLD_KB");
         const size_t largeThreshold =
-            thresholdKb != 0 ? std::min(thresholdKb * KB, nurseryBytes / 8)
-                             : (youngCopying ? std::min<size_t>(64 * KB, nurseryBytes / 8) : 4 * KB);
-        auto *instance = new GenerationalAllocatorWithGC(GenerationalAllocatorWithGC::Config{
-            .birthSize             = nurseryBytes,
-            // Under safepoint poisoning nothing is promoted by age, so the survivor spaces
-            // must hold whatever the birth space can.
-            .havenSize = debugConfig.poisonAtSafepoints ? nurseryBytes : nurseryBytes / 4,
-            .elderGenSize          = 32 * MB,
-            // Minor collections an object survives before it is promoted
-            // (CAMEL_GC_PROMOTION_AGE, 1 to 15; 1 promotes at the first one, which is the
-            // setting that shows missing write barriers).
-            .promotionAgeThreshold =
-                std::clamp<size_t>(
+            thresholdKb != 0
+                ? std::min(thresholdKb * KB, nurseryBytes / 8)
+                : (youngCopying ? std::min<size_t>(64 * KB, nurseryBytes / 8) : 4 * KB);
+        auto *instance = new GenerationalAllocatorWithGC(
+            GenerationalAllocatorWithGC::Config{
+                .birthSize = nurseryBytes,
+                // Under safepoint poisoning nothing is promoted by age, so the survivor spaces
+                // must hold whatever the birth space can.
+                .havenSize    = debugConfig.poisonAtSafepoints ? nurseryBytes : nurseryBytes / 4,
+                .elderGenSize = 32 * MB,
+                // Minor collections an object survives before it is promoted
+                // (CAMEL_GC_PROMOTION_AGE, 1 to 15; 1 promotes at the first one, which is the
+                // setting that shows missing write barriers).
+                .promotionAgeThreshold = std::clamp<size_t>(
                     envSize("CAMEL_GC_PROMOTION_AGE") != 0 ? envSize("CAMEL_GC_PROMOTION_AGE") : 4,
                     1,
                     15),
-            .largeObjThreshold     = largeThreshold,
-            // Large-object bytes between collections (CAMEL_GC_LARGE_BUDGET_MB overrides).
-            .largeObjCollectionBudget = largeObjectBudgetFromEnv(),
-            .largeObjGrowthPercent    = largeObjectGrowthPercentFromEnv(),
-            .minorGCTriggerRatio      = 0.9f,
-            .heapLimitBytes           = envSize("CAMEL_GC_HEAP_LIMIT_MB") * MB,
-            // Production remains address-stable by default; Phase 3 tests can opt into the
-            // copying path explicitly to exercise remembered-set behavior.
-            .enableYoungGenCopying = youngCopying});
+                .largeObjThreshold = largeThreshold,
+                // Large-object bytes between collections (CAMEL_GC_LARGE_BUDGET_MB overrides).
+                .largeObjCollectionBudget = largeObjectBudgetFromEnv(),
+                .largeObjGrowthPercent    = largeObjectGrowthPercentFromEnv(),
+                .minorGCTriggerRatio      = 0.9f,
+                .heapLimitBytes           = envSize("CAMEL_GC_HEAP_LIMIT_MB") * MB,
+                // Production remains address-stable by default; Phase 3 tests can opt into the
+                // copying path explicitly to exercise remembered-set behavior.
+                .enableYoungGenCopying = youngCopying});
         instance->configureDebug(debugConfig);
         maybePrintDebugConfig(youngCopying, debugConfig);
         // CAMEL_GC_STATS=1: one line of pacing statistics on stderr at exit; =2: also one line
@@ -341,6 +343,25 @@ GrowableFreeListAllocator &graphSpace() {
         64 * MB,
         kDefaultGraphSpaceLimitBytes,
         kGraphSpaceLimitEnv));
+    return *allocator;
+}
+
+// Numeric array buffers: a free-list space, so a buffer is released as soon as its last array
+// value is gone. It is not the collected heap: data does not move and a pointer handed out
+// stays valid. Freeing reads the size from the block header, so the space keeps no per-block
+// table: buffers are freed in bulk under memory pressure and the table would only grow.
+GrowableFreeListAllocator &bufferSpace() {
+    static auto *allocator = new GrowableFreeListAllocator(([] {
+        // The buffer space holds data, not program text: one run that builds several models in one
+        // process legitimately needs hundreds of megabytes, and the space gives memory back as soon
+        // as the last array goes, so its limit only has to catch a runaway allocation. Its default
+        // is therefore of the same order as the collected heap, not the 256 MB of the program
+        // spaces.
+        GrowableSpaceConfig config =
+            spaceConfig("buffer", "numeric array buffers", 8 * MB, 2048 * MB, kBufferSpaceLimitEnv);
+        config.sizesFromHeaders = true;
+        return config;
+    })());
     return *allocator;
 }
 

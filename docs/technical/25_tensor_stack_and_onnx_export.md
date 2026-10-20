@@ -312,6 +312,9 @@ Every node evaluates to either a constant or a symbolic tensor:
   arguments supplied, so the emitted graph carries full shape information.
   Operand dtypes are converted to the inferred result dtype, which reproduces
   Camel's promotion rules (ONNX requires equal input types).
+- `tensor:take` lowers to `Gather(axis = 0)`; constant `int[]` indices become an i64 initializer
+  (the same mapping `nn:embedding` uses). `take`'s reverse is the internal `tensor:take_grad`,
+  which has no ONNX lowering.
 - `FUNC` and `CALL` nodes are inlined. Recursion driven by constants (for
   example the GRU time-step loop) unrolls. A recursion whose depth depends on
   the model input is exported as ONNX `Loop`s when it is a loop: a tail
@@ -323,7 +326,7 @@ Every node evaluates to either a constant or a symbolic tensor:
   (float, int, bool) or a tuple or struct of these, nested, each leaf a
   carried value, a value computed from them where the recursion returns, or
   a constant (an integer counter is an int64 output); and, for the gradient,
-  `value_and_grad` of a loss computed from that result when ONE if / else
+  `with_grad` of a loss computed from that result when ONE if / else
   decides the recursion. The full statement, the refusals and the tests are
   in `26_autodiff_as_graph_rewrite.md` section 7 ("Tail recursion of dynamic
   depth is an ONNX Loop", "Linear recursion").
@@ -385,6 +388,7 @@ Driven by the four benchmark models:
 | Reduction | sum, mean, max, min, argmax, argmin (all with `axis` and `keepdims`) |
 | Linear algebra | matmul (batched, broadcasting), linear (matmul + bias) |
 | Shape | reshape, flatten, transpose/permute, concat, slice, squeeze/unsqueeze |
+| Indexing | take (first-dimension rows; ONNX `Gather` on axis 0) |
 | NN | softmax, log_softmax (any axis), conv2d (stride, padding), max_pool2d, avg_pool2d, layer_norm, batch_norm (inference), dropout (identity at inference), embedding |
 | Recurrent | expressed in Camel from the primitives above (GRU cell as a function), not as a fused op |
 

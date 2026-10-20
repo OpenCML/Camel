@@ -29,6 +29,7 @@
 
 #include "camel/standalone/array.h"
 #include "camel/standalone/core.h"
+#include "camel/utils/philox.h"
 #include "camel/utils/random.h"
 
 #include <cstdint>
@@ -122,6 +123,42 @@ template <typename T> Array<T> randomShuffle(const Array<T> &xs) {
     out.reserve(items.size());
     for (auto &item : items) {
         out.push(std::move(item));
+    }
+    return out;
+}
+
+/// `random.key(seed)` (rand:key): the program's Key struct, whose `hi` and `lo` fields are the
+/// halves of the Philox key (camel/utils/philox.h, the code the random module runs).
+template <typename Key> Key randomKey(int64_t seed) {
+    const auto key = camel::utils::philox::key(static_cast<uint64_t>(seed));
+    return Key{static_cast<int64_t>(key.hi), static_cast<int64_t>(key.lo)};
+}
+
+/// `random.split(key)` (rand:split): the two child keys.
+template <typename Tuple, typename Key> Tuple randomSplitKey(const Key &key) {
+    const auto [left, right] = camel::utils::philox::split(
+        camel::utils::philox::Key{static_cast<uint64_t>(key.hi), static_cast<uint64_t>(key.lo)});
+    return Tuple{
+        Key{static_cast<int64_t>(left.hi), static_cast<int64_t>(left.lo)},
+        Key{static_cast<int64_t>(right.hi), static_cast<int64_t>(right.lo)}};
+}
+
+/// `random.permutation(key, n)` (rand:permutation): a length below zero is InvalidArgument at
+/// `site` (values: "random.permutation", what is wrong).
+template <typename ArrayT, typename Key>
+ArrayT randomPermutationKey(const Key &key, int64_t n, const Site &site) {
+    if (n < 0) [[unlikely]] {
+        fault(
+            site,
+            {"random.permutation",
+             "the permutation length is " + std::to_string(n) + "; it must be non-negative"});
+    }
+    const std::vector<int64_t> order = camel::utils::philox::permutation(
+        camel::utils::philox::Key{static_cast<uint64_t>(key.hi), static_cast<uint64_t>(key.lo)}, n);
+    ArrayT out;
+    out.reserve(order.size());
+    for (const int64_t value : order) {
+        out.push(value);
     }
     return out;
 }

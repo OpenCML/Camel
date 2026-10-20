@@ -142,7 +142,7 @@ LABEL = "preliminary, container on a dev machine"
 # function value; `std::macro` evaluates them ahead of time by design. Identified by URI, not
 # by `stage == "macro"`: without `std::macro` the same operators run with stage "run", and
 # stage "macro" also covers the effects of user macro bodies, which are real effects.
-MACRO_OPERATORS = {"autodiff:grad", "autodiff:value_and_grad", "autodiff:vjp"}
+MACRO_OPERATORS = {"autodiff:grad", "autodiff:with_grad", "autodiff:vjp"}
 PRINT_OPERATORS = {":io/println", ":io/print"}
 # Reported per program (references.csv), not used by any rule: operators that read the clock or
 # draw random numbers. A program that prints a rounded time can pass the determinism check by
@@ -199,7 +199,7 @@ CONTRACT_CLASS = {
 # the language core. The list is part of the rule set; extend it only with a recorded revision.
 LIBRARY_PRECONDITIONS = [
     {"prefix": "autodiff:", "library": "autodiff", "requires_pass": "std::macro",
-     "precondition": "std::macro must run before grad / value_and_grad / vjp "
+     "precondition": "std::macro must run before grad / with_grad / vjp "
                      "(docs/design-principles.cn.md section 9)"},
 ]
 _GENERIC_ERROR_HEAD = re.compile(r"^An error has occurred: ")

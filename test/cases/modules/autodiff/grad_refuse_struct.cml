@@ -1,0 +1,15 @@
+/** Refused: the first `with` parameter is a struct whose members have no tangent (9.9). */
+module grad_refuse_struct
+import { grad } from autodiff
+
+type Plain = { s: string, n: int }
+
+with <p: Plain>
+func plain(x: float): float {
+    return float(p.n) * x
+}
+
+func main(): int sync {
+    println(grad(plain)<{s: 'a', n: 2}>(3.0))
+    return 0
+}

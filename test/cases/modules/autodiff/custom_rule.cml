@@ -2,6 +2,9 @@
  * Verifies @vjp<rule> custom derivative rules: calls of a decorated function use the rule instead
  * of differentiating its body, with one or several differentiable parameters, and the decorated
  * function still computes its ordinary value.
+ *
+ * The differentiated value is the first `with` parameter (9.9); the rule's tuple has one entry
+ * per differentiable parameter of the decorated function.
  */
 module custom_rule
 
@@ -37,23 +40,28 @@ func mix(a: float, b: float, n: int): float {
     return a * b
 }
 
-func use_cube(x: float): float {
+with <x: float>
+func use_cube(): float {
     return cube(x) * 2.0
 }
 
-func use_clip(x: float): float {
+with <x: float>
+func use_clip(): float {
     return clip(x) * x
 }
 
-func use_mix(a: float, b: float): float {
+// `a` is the first `with` parameter, so only its entry of the rule's tuple is used; `b` is a
+// second `with` parameter and stays constant.
+with <a: float, b: float>
+func use_mix(): float {
     return mix(a, b, 3) + a
 }
 
 func main(): int sync {
     let v = cube(2.0)
-    let dc = grad(use_cube)(2.0)
-    let dk = grad(use_clip)(3.0)
-    let dm = grad(use_mix)(2.0, 5.0)
+    let dc = grad(use_cube)<2.0>()
+    let dk = grad(use_clip)<3.0>()
+    let dm = grad(use_mix)<2.0, 5.0>()
     'custom_rule value={} cube={} clip={} mix={}'->format<v, dc, dk, dm>->println
     return 0
 }

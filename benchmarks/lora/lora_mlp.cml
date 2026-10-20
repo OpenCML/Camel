@@ -21,7 +21,7 @@
 module lora_mlp
 
 import { Tensor, relu, mean, sum, neg, log_softmax, load_npy } from tensor
-import { value_and_grad, stop_gradient } from autodiff
+import { with_grad, stop_gradient } from autodiff
 import { OptimizerState, sgd, adam, adam_state, save_params } from nn
 import { get_env } from sys
 import { export_model } from onnx
@@ -64,12 +64,12 @@ func loss_full(x: Tensor): float {
 }
 
 func step(m: LoraMlp, x: Tensor): (float, LoraMlp) {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
 func step_full(m: LoraMlp, x: Tensor): (float, LoraMlp) {
-    let vg = value_and_grad(loss_full)<m>(x)
+    let vg = with_grad(loss_full)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
@@ -83,13 +83,13 @@ func loss_ce(x: Tensor, target: Tensor): float {
 }
 
 func step_ce(m: LoraMlp, x: Tensor, target: Tensor): (float, LoraMlp) {
-    let vg = value_and_grad(loss_ce)<m>(x, target)
+    let vg = with_grad(loss_ce)<m>(x, target)
     return (vg.0, sgd(m, vg.1, 0.1))
 }
 
 /// T3: the same step with the in-graph Adam optimizer (state carried explicitly).
 func step_ce_adam(m: LoraMlp, st: OptimizerState, x: Tensor, target: Tensor, lr: float): (float, LoraMlp, OptimizerState) {
-    let vg = value_and_grad(loss_ce)<m>(x, target)
+    let vg = with_grad(loss_ce)<m>(x, target)
     let next = adam(m, vg.1, st, lr)
     return (vg.0, next.0, next.1)
 }

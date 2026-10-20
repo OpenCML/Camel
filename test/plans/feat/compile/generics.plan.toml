@@ -804,7 +804,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "body_literal"
-desc = "A literal that does not convert to the variable's type in one instance (no implicit numeric conversion) is reported for that instance."
+desc = "A literal that does not convert to the variable's type in one instance (a float literal does not become an integer) is reported for that instance."
 kind = "negative"
 case = "../../../cases/compile/generics/err_literal.cml"
 args = ["${case}"]
@@ -812,7 +812,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralStaticCastFailed"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 5
-expect_output_contains = ["to type 'float'", "in the instance 'zero_of<float>'", "instantiated by the call at 10:20"]
+expect_output_contains = ["to type 'int'", "in the instance 'zero_of<int>'", "instantiated by the call at 9:20"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -1143,3 +1143,4 @@ expect_diagnostic_column = 11
 expect_output_contains = ["this type takes no arguments"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
+

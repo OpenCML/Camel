@@ -119,7 +119,7 @@ slot_t __builtin__assn_append__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const size_t n   = old->size();
     // Room for the appends that are likely to follow, so that a loop of them stays linear.
     // (Allocation never collects or moves an object: `old` stays valid; mm/gen.h.)
-    Array *res = Array::create(mm::autoSpace(), 0);
+    Array *res = Array::create(mm::autoSpace(), arrType, 0);
     res->reserve(n + n / 2 + 1, arrType);
     for (size_t i = 0; i < n; ++i) {
         res->append(old->get<slot_t>(i), arrType);

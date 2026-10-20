@@ -1,0 +1,16 @@
+// Differentiating through a `loop` (design principles 9.9): the forward loop keeps each round's
+// residuals in its collection slots and the reverse pass is a loop of its own over them, so the
+// gradient of f(x) = x⁴ at 2 is 4·x³ = 32. The differentiated value is the first `with` parameter.
+module grad_through_loop
+import { grad } from autodiff
+
+with <x: float>
+func f(): float {
+    return loop y = x for k in [1, 2, 3] do y * x
+}
+
+func main(): int sync {
+    println(f<2.0>())
+    println(grad(f)<2.0>())
+    return 0
+}

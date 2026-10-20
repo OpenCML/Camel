@@ -7,12 +7,13 @@ func iterate(f: (v: float) => float, n: int, x: float): float {
     return if n == 0 then x else iterate(f, n - 1, f(x))
 }
 
-func loss(x: float): float {
+with <x: float>
+func loss(): float {
     let s = x * 0.5
     return iterate((v: float): float => v * s + 1.0, 3, x)
 }
 
 func main(): int sync {
-    println(grad(loss)(2.0))
+    println(grad(loss)<2.0>())
     return 0
 }

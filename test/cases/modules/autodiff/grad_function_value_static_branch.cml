@@ -4,13 +4,14 @@ import { grad } from autodiff
 
 // Refused like any branch: the condition is a constant expression, but the graph grad sees
 // still chooses the function by a branch (nothing folds it before grad runs).
-func loss(p: Tensor): float {
+with <p: Tensor>
+func loss(): float {
     let s = sum(p)
     let g = if 1 > 0 then (t: Tensor): Tensor => tanh(t * s) else (t: Tensor): Tensor => t * s
     return sum(g(p))
 }
 
 func main(): int sync {
-    println(grad(loss)(reshape([0.5, 0.25, -0.35], [3])))
+    println(grad(loss)<reshape([0.5, 0.25, -0.35], [3])>())
     return 0
 }

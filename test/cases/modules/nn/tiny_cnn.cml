@@ -1,11 +1,11 @@
 /**
- * Tiny valid-convolution CNN trained with autodiff through the conv2d pullback: value_and_grad
+ * Tiny valid-convolution CNN trained with autodiff through the conv2d pullback: with_grad
  * of the loss gives a TinyCnn-shaped gradient (kernel, bias and head), one sgd step lowers the
  * loss, and a recursive train loop repeats the step.
  */
 module tiny_cnn
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, reshape, shape, sum, tanh } from tensor
 import { conv2d, sgd } from nn
 
@@ -56,7 +56,7 @@ func main(): int sync {
     let target = reshape([1.0], [1, 1])
 
     let before = model_loss<model>(x, target)
-    let vg = value_and_grad(model_loss)<model>(x, target)
+    let vg = with_grad(model_loss)<model>(x, target)
     let stepped = sgd(model, vg.1, 0.2)
     let after = model_loss<stepped>(x, target)
     let trained = train(model, x, target, 10)

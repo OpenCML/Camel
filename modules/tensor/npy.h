@@ -36,15 +36,15 @@
 
 namespace camel::tensor {
 
-TensorObject *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocator);
+Array *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocator);
 
-void saveNpy(const TensorObject *tensor, const std::filesystem::path &path);
+void saveNpy(const Array *tensor, const std::filesystem::path &path);
 
 /// Owned NPY payloads for atomic checkpoint publication. No Camel heap pointers survive IO.
 std::string
 encodeNpy(type::TypeCode dtype, std::span<const int64_t> shape, std::string_view payload);
 /// Strict storage decoding: no float64/int32 conversion or trailing data.
-TensorObject *decodeNpyExact(std::string_view bytes, mm::IAllocator &allocator);
+Array *decodeNpyExact(std::string_view bytes, mm::IAllocator &allocator);
 /// Validate the complete owned input before allocating any Camel objects.
 struct NpyStorageView {
     type::TypeCode dtype;

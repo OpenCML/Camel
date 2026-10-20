@@ -461,10 +461,10 @@ Shape broadcastShapes(std::span<const int64_t> lhs, std::span<const int64_t> rhs
     return makePlan(shapes).outShape;
 }
 
-TensorObject *unary(UnaryOp op, const TensorObject *input, mm::IAllocator &allocator) {
+Array *unary(UnaryOp op, const Array *input, mm::IAllocator &allocator) {
     const TypeCode outType = unaryProducesFloat(op) ? TypeCode::Float32 : input->dtype();
     const TypedBuffer in   = asDType(Operand::of(input), outType);
-    TensorObject *out      = TensorObject::create(outType, input->shapeSpan(), allocator);
+    Array *out      = createTensor(outType, input->shapeSpan(), allocator);
     const auto count       = static_cast<int64_t>(input->numel());
     if (outType == TypeCode::Float32) {
         runUnaryF32(op, static_cast<const float *>(in.data), out->dataAs<float>(), count);
@@ -480,14 +480,14 @@ void unaryF32(UnaryOp op, const float *src, float *dst, int64_t count) {
     runUnaryF32(op, src, dst, count);
 }
 
-TensorObject *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator) {
+Array *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator) {
     const TypeCode outType =
         binaryProducesFloat(op) ? TypeCode::Float32 : promoteTensorTypes(lhs.dtype, rhs.dtype);
     const std::span<const int64_t> shapes[] = {lhs.shape, rhs.shape};
     const BroadcastPlan plan                = makePlan(shapes);
     const TypedBuffer a                     = asDType(lhs, outType);
     const TypedBuffer b                     = asDType(rhs, outType);
-    TensorObject *out = TensorObject::create(outType, plan.outShape, allocator);
+    Array *out = createTensor(outType, plan.outShape, allocator);
     dispatchDType(outType, [&]<typename T>() {
         binaryTyped<T>(
             op,
@@ -499,13 +499,13 @@ TensorObject *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allo
     return out;
 }
 
-TensorObject *compare(CompareOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator) {
+Array *compare(CompareOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator) {
     const TypeCode computeType              = promoteTensorTypes(lhs.dtype, rhs.dtype);
     const std::span<const int64_t> shapes[] = {lhs.shape, rhs.shape};
     const BroadcastPlan plan                = makePlan(shapes);
     const TypedBuffer a                     = asDType(lhs, computeType);
     const TypedBuffer b                     = asDType(rhs, computeType);
-    TensorObject *out = TensorObject::create(TypeCode::Bool, plan.outShape, allocator);
+    Array *out = createTensor(TypeCode::Bool, plan.outShape, allocator);
     bool_t *dst       = out->dataAs<bool_t>();
     dispatchDType(computeType, [&]<typename T>() {
         const T *pa = static_cast<const T *>(a.data);
@@ -530,14 +530,14 @@ TensorObject *compare(CompareOp op, Operand lhs, Operand rhs, mm::IAllocator &al
     return out;
 }
 
-TensorObject *where(Operand cond, Operand lhs, Operand rhs, mm::IAllocator &allocator) {
+Array *where(Operand cond, Operand lhs, Operand rhs, mm::IAllocator &allocator) {
     const TypeCode outType                  = promoteTensorTypes(lhs.dtype, rhs.dtype);
     const std::span<const int64_t> shapes[] = {lhs.shape, rhs.shape, cond.shape};
     const BroadcastPlan plan                = makePlan(shapes);
     const TypedBuffer a                     = asDType(lhs, outType);
     const TypedBuffer b                     = asDType(rhs, outType);
     const TypedBuffer c                     = asDType(cond, TypeCode::Bool);
-    TensorObject *out = TensorObject::create(outType, plan.outShape, allocator);
+    Array *out = createTensor(outType, plan.outShape, allocator);
     dispatchDType(outType, [&]<typename T>() {
         const T *pa      = static_cast<const T *>(a.data);
         const T *pb      = static_cast<const T *>(b.data);
@@ -560,9 +560,9 @@ TensorObject *where(Operand cond, Operand lhs, Operand rhs, mm::IAllocator &allo
     return out;
 }
 
-TensorObject *cast(const TensorObject *input, TypeCode dtype, mm::IAllocator &allocator) {
+Array *cast(const Array *input, TypeCode dtype, mm::IAllocator &allocator) {
     dtype             = normalizeTensorDType(dtype);
-    TensorObject *out = TensorObject::create(dtype, input->shapeSpan(), allocator);
+    Array *out = createTensor(dtype, input->shapeSpan(), allocator);
     if (dtype == input->dtype()) {
         if (input->byteSize() > 0) {
             std::memcpy(out->rawData(), input->rawData(), input->byteSize());
@@ -575,9 +575,9 @@ TensorObject *cast(const TensorObject *input, TypeCode dtype, mm::IAllocator &al
     return out;
 }
 
-TensorObject *
+Array *
 full(TypeCode dtype, std::span<const int64_t> shape, double value, mm::IAllocator &allocator) {
-    TensorObject *out = TensorObject::create(dtype, shape, allocator);
+    Array *out = createTensor(dtype, shape, allocator);
     dispatchDType(out->dtype(), [&]<typename T>() {
         T converted;
         if constexpr (std::is_same_v<T, bool_t>) {

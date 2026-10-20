@@ -1,11 +1,11 @@
 /**
  * GRU-lite fixed unroll trained with autodiff through repeated with-context helper calls:
- * value_and_grad of the sequence loss gives a GruLite-shaped gradient, one sgd step lowers the
+ * with_grad of the sequence loss gives a GruLite-shaped gradient, one sgd step lowers the
  * loss, and a recursive train loop repeats the step.
  */
 module gru_lite
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, ones, shape, sigmoid, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
@@ -71,7 +71,7 @@ func main(): int sync {
     let target = full([1, 1], 1.0)
 
     let before = sequence_loss<model>(x0, x1, target)
-    let vg = value_and_grad(sequence_loss)<model>(x0, x1, target)
+    let vg = with_grad(sequence_loss)<model>(x0, x1, target)
     let stepped = sgd(model, vg.1, 0.05)
     let after = sequence_loss<stepped>(x0, x1, target)
     let trained = train(model, x0, x1, target, 10)

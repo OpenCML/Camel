@@ -1,7 +1,7 @@
 // C2 — an MLP trained on MNIST, written as a parameter tree.
 //
 // The model is a struct of four tensors, so the starting weights, the gradient and the
-// optimizer state are all values of the same type: `value_and_grad` gives a gradient of the
+// optimizer state are all values of the same type: `with_grad` gives a gradient of the
 // model type and `adam` consumes it without the program naming a leaf.  The whole training
 // run is one `loop`, the evaluation is one call, and the checkpoint is `save_tree`.
 //
@@ -15,7 +15,7 @@ module c2_mlp_mnist
 
 // == imports ==
 import { Tensor, abs, argmax, load_npy, numel, relu, set_num_threads, shape, slice, sum } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { load_tree, save_tree, tree_map, tree_paths, tree_reduce } from tree
 import { read_text } from fs
@@ -41,7 +41,7 @@ func logits(x: Tensor): Tensor {
 
 // == loss ==
 // The training loss of one minibatch.  Its `with` parameter is the whole parameter tree,
-// so `value_and_grad` gives back a tree of the same shape.  The targets are one-hot rows.
+// so `with_grad` gives back a tree of the same shape.  The targets are one-hot rows.
 with <m: Mlp>
 func loss(x: Tensor, targets: Tensor): float {
     return softmax_cross_entropy(logits<m>(x), targets)
@@ -85,23 +85,24 @@ func main(
     let params = tree_reduce<(count: int, leaf: Tensor): int => count + numel(leaf)>(model, 0)
     let batches = shape(train_x)[0] / batch
     let before = evaluate(model, val_x, val_targets)
-    'c2 config steps={} batch={} lr={} threads={} params={} batches={}'->format<steps, batch, lr, threads, params, batches>->println
-    'c2 init val_loss={:.9f} val_accuracy={:.9f}'->format<before.0, before.1>->println
+    `c2 config steps=${steps} batch=${batch} lr=${lr} threads=${threads} params=${params} batches=${batches}`->println
+    `c2 init val_loss=${before.0:.9f} val_accuracy=${before.1:.9f}`->println
 
     // == train ==
     // One loop carries the model, the optimizer state and the step number.  The batches
     // are contiguous slices of the shuffled file, so a step needs no shuffling machinery.
     let started = now()
+    let loss_with_grad = with_grad(loss)
     let (trained, state) = loop m = model, opt = adam_state(model), step = 0
         while step < steps
         do sync {
             let start = (step % batches) * batch
             let x = slice(train_x, 0, start, start + batch)
             let y = slice(train_targets, 0, start, start + batch)
-            let vg = value_and_grad(loss)<m>(x, y)
-            let next = adam(m, vg.1, opt, lr)
+            let (value, gradient) = loss_with_grad<m>(x, y)
+            let next = adam(m, gradient, opt, lr)
             if step % log_every == 0 then {
-                'c2 step={} loss={:.9f}'->format<step, vg.0>->println
+                `c2 step=${step} loss=${value:.9f}`->println
             }
             return (next.0, next.1, step + 1)
         }
@@ -109,7 +110,7 @@ func main(
 
     // == evaluate ==
     let after = evaluate(trained, val_x, val_targets)
-    'c2 trained steps={} seconds={:.6f} val_loss={:.9f} val_accuracy={:.9f}'->format<steps, elapsed, after.0, after.1>->println
+    `c2 trained steps=${steps} seconds=${elapsed:.6f} val_loss=${after.0:.9f} val_accuracy=${after.1:.9f}`->println
 
     // == checkpoint ==
     // The checkpoint is the parameter tree and the identity of the data it was trained on;
@@ -122,7 +123,7 @@ func main(
     let after_restore = evaluate(restored, val_x, val_targets)
     let drift = tree_reduce<(total: float, leaf: float): float => total + leaf>(
         tree_map<(a: Tensor, b: Tensor): float => sum(abs(a - b))>(trained, restored), 0.0)
-    'c2 checkpoint val_loss={:.9f} val_accuracy={:.9f} l1_drift={:.9f}'->format<after_restore.0, after_restore.1, drift>->println
-    'c2 leaves {}'->format<leaves>->println
+    `c2 checkpoint val_loss=${after_restore.0:.9f} val_accuracy=${after_restore.1:.9f} l1_drift=${drift:.9f}`->println
+    `c2 leaves ${leaves}`->println
     return 0
 }

@@ -1,0 +1,7 @@
+module take_negative
+import { reshape, range, take } from tensor
+func main(): int sync {
+    let t = reshape(range(0, 12), [4, 3])
+    let r = take(t, [-1])
+    return 0
+}

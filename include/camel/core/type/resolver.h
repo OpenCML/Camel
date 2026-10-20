@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/func.h"
 
@@ -127,6 +128,15 @@ class FuncTypeResolver {
         (void)norm;
         (void)normStatics;
         (void)modifiers;
+        return std::nullopt;
+    }
+
+    /**
+     * The diagnostic that reports a rejection this rule explains, when the generic
+     * ArgumentsRejected would not name the right thing. Its message takes the reason as its
+     * only parameter. nullopt (the default) keeps ArgumentsRejected.
+     */
+    virtual std::optional<camel::core::error::SemanticDiag> rejectionDiag() const {
         return std::nullopt;
     }
 };

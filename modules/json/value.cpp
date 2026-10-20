@@ -166,7 +166,7 @@ nlohmann::json JsonValue::toJson() const {
         const Array *elements = fromSlot<Array *>(payload_);
         nlohmann::json out    = nlohmann::json::array();
         for (size_t i = 0; i < elements->size(); ++i) {
-            out.push_back(fromSlot<JsonValue *>(elements->data()[i])->toJson());
+            out.push_back(fromSlot<JsonValue *>(elements->getSlot(i))->toJson());
         }
         return out;
     }

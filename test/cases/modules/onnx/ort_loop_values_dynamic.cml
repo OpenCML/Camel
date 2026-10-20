@@ -7,7 +7,7 @@
  */
 module ort_loop_values_dynamic
 import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from sys
 
@@ -27,7 +27,7 @@ func loss(x: Tensor): float {
 with <m: P>
 func step(x: Tensor): (Tensor, int, Tensor, Tensor) {
     let (h, k) = walk<m>(x, 0)
-    let g = value_and_grad(loss)<m>(x)
+    let g = with_grad(loss)<m>(x)
     return (h, k, reshape([g.0], [1]), g.1.w)
 }
 

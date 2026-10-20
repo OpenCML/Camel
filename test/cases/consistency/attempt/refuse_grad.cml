@@ -1,6 +1,7 @@
 /**
  * The value to differentiate flows through a fault boundary. There is no derivative rule for
- * the boundary: `grad` refuses and names the operator.
+ * the boundary: `grad` refuses and names the operator. The differentiated value is the first
+ * `with` parameter.
  */
 module refuse_grad
 
@@ -8,11 +9,12 @@ import { grad } from autodiff
 
 func risky(x: float): float { return 6.0 / x }
 
-func through(x: float): float {
+with <x: float>
+func through(): float {
     return (attempt(risky, x) !! 0.0) * x
 }
 
 func main(): int sync {
-    println(grad(through)(3.0))
+    println(grad(through)<3.0>())
     return 0
 }

@@ -5,7 +5,7 @@
  */
 module var_tensor_local
 import { Tensor, reshape, sum } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 
 type P = { p0: Tensor }
 
@@ -19,7 +19,7 @@ func loss(x: Tensor): float sync {
 func main(): int sync {
     let x = reshape([1.0, 2.0], [2])
     let m = { p0: reshape([0.5, 0.25], [2]) }
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     println("value {} grad {}"->format<vg.0, sum(vg.1.p0)>)
     return 0
 }
