@@ -195,6 +195,14 @@ class RuntimeGraphDraftSession {
     mutable ClosureCache closureCache_;
     /// 1 at the id of a graph that has a draft: the closure walk asks for every graph.
     mutable std::vector<uint8_t> draftedIds_;
+    /// The graphs a frozen graph refers to, by id, kept with the version of the graph they were
+    /// read from (a frozen graph never changes): the closure walk then reads these lists and
+    /// the table, not the graphs.
+    struct FrozenKids {
+        const GCGraph *graph = nullptr;
+        std::vector<GraphId> ids;
+    };
+    mutable std::vector<FrozenKids> frozenKids_;
     std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
         specializationCache_;
     std::unordered_map<GraphId, size_t> typeSpecializationCounts_;
