@@ -1,0 +1,12 @@
+/**
+ * A literal argument takes the type of the parameter (design principles 5.1): 3000000000 is an
+ * `i32` here, and it does not fit one, so the call is refused when the program is compiled.
+ */
+func take(x: i32): i32 {
+    return x
+}
+
+func main(): int sync {
+    println(take(3000000000))
+    return 0
+}

@@ -1,0 +1,16 @@
+/**
+ * H20-3 manual probe: keyed random is pure and deterministic.
+ */
+module keyed_random
+
+import { key, split, permutation } from random
+
+func main(): int sync {
+    let k = key(42)
+    let (a, b) = split(k)
+    'keyed key={} a={} b={}'->format<k, a, b>->println
+    'keyed repeat={} pure={} perm={}'->format<key(42), (key(42) == key(42)), permutation(key(42), 8)>->println
+    'keyed small p0={} p1={}'->format<permutation(k, 0), permutation(k, 1)>->println
+    'keyed splitrepeat={} {}'->format<split(k), split(k)>->println
+    return 0
+}

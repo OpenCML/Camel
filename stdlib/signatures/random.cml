@@ -68,3 +68,30 @@ inner func sample(xs: T[], n: int): T[] {
 inner func shuffle(xs: T[]): T[] {
     return 'rand:shuffle'
 }
+
+/// A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
+/// half, as signed int64 bits). Pure: it reads no generator and the same seed gives the same key
+/// on every scheduler, in translated C++, and on every platform.
+/// @pure
+/// @example key(42)    // { hi: 1350887118657991639, lo: -7139630017956984517 }
+inner func key(seed: int): Key {
+    return 'rand:key'
+}
+
+/// Two independent keys derived from key: split(key) gives the same pair every time, and does
+/// not change key.
+/// @pure
+/// @example let (a, b) = split(key(42))
+inner func split(key: Key): (Key, Key) {
+    return 'rand:split'
+}
+
+/// A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
+/// stream. Pure: the same key and n give the same permutation everywhere, it reads no generator
+/// and does not change key; n = 0 gives [] and n = 1 gives [0].
+/// @pure
+/// @fails fault `InvalidArgument` when n is negative
+/// @example permutation(key(42), 4)    // [1, 0, 2, 3]
+inner func permutation(key: Key, n: int): int[] {
+    return 'rand:permutation'
+}

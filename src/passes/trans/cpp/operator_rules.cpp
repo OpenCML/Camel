@@ -411,6 +411,38 @@ Rules buildRules() {
     r["rand:choice"]  = faultingFunction("randomChoice", RuntimeDiag::InvalidArgument, 2);
     r["rand:sample"]  = faultingFunction("randomSample", RuntimeDiag::InvalidArgument, 2);
     r["rand:shuffle"] = runtimeFunction("randomShuffle", false);
+    // Keyed random is pure, so these expressions may be inlined and shared (design principles
+    // 13.5): no generator, no state, the same bits as the interpreter.
+    r["rand:key"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            return std::format(
+                "rt::randomKey<{}>({})", c.cppType(c.resultType()), c.operand(0));
+        },
+        true,
+    };
+    r["rand:split"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string tuple = c.cppType(c.resultType());
+            const std::string key = c.cppType(c.normType(0));
+            return std::format(
+                "rt::randomSplitKey<{}, {}>({})", tuple, key, c.norm(0).text);
+        },
+        true,
+    };
+    r["rand:permutation"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const std::string array = c.cppType(c.resultType());
+            const std::string key = c.cppType(c.normType(0));
+            return std::format(
+                "rt::randomPermutationKey<{}, {}>({}, {}, {})",
+                array,
+                key,
+                c.norm(0).text,
+                c.operand(1),
+                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+        },
+        false,
+    };
     r["math:sqrt"]    = cmath("sqrt", true);
     for (const char *t : {"i", "l"}) {
         r[std::format("math:abs_{}", t)] = cmath("abs");

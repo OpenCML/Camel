@@ -43,7 +43,7 @@ const want = [
   "2500",
   "0.5",
   "true true true",
-  "false true",
+  "true false",
   "100000.0 100001.0 0.0 15.0",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
@@ -90,7 +90,7 @@ const want = [
   "2500",
   "0.5",
   "true true true",
-  "false true",
+  "true false",
   "100000.0 100001.0 0.0 15.0",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
@@ -137,7 +137,7 @@ const want = [
   "2500",
   "0.5",
   "true true true",
-  "false true",
+  "true false",
   "100000.0 100001.0 0.0 15.0",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
@@ -184,7 +184,7 @@ const want = [
   "2500",
   "0.5",
   "true true true",
-  "false true",
+  "true false",
   "100000.0 100001.0 0.0 15.0",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
@@ -429,3 +429,4 @@ expect_exit = 0
 expect_stdout_starts_with = "2 7 3.0 42 1.5\nConversionOutOfRange\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+

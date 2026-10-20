@@ -1,0 +1,10 @@
+/**
+ * Variables of two numeric types do not meet in an operator (design principles 5.1): there is
+ * no `+` of `i32` and `int`. The rule added the case of a *literal* operand, not this one.
+ */
+func main(): int sync {
+    let a: i32 = 1
+    let b: int = 2
+    println(a + b)
+    return 0
+}

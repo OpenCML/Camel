@@ -79,6 +79,23 @@ TensorObject *slice(
     const TensorObject *input, int64_t axis, int64_t start, int64_t end, int64_t step,
     mm::IAllocator &allocator);
 
+/// Rows of `input` along its first axis, in the order `indices` gives: rank-1 `indices` select
+/// rows, and the result is [indices.size(), input.shape[1:]]. The rows are copied: an arbitrary
+/// row order is not a view of the input (design principles 5.4, 10.5).
+TensorObject *
+take(const TensorObject *input, std::span<const int64_t> indices, mm::IAllocator &allocator);
+
+/// The gradient of take: `dy` scattered back into the shape of `input`, summing where an index
+/// repeats. `indices` are the same ones `take` received.
+TensorObject *takeGrad(
+    const TensorObject *input, std::span<const int64_t> indices, const TensorObject *dy,
+    mm::IAllocator &allocator);
+
+/// One-hot rows: a float32 tensor of shape [labels.size(), classes] with element
+/// [i, labels[i]] = 1 and every other element 0.
+TensorObject *
+oneHot(std::span<const int64_t> labels, int64_t classes, mm::IAllocator &allocator);
+
 TensorObject *arange(int64_t start, int64_t stop, int64_t step, mm::IAllocator &allocator);
 TensorObject *eye(int64_t size, mm::IAllocator &allocator);
 

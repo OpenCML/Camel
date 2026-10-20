@@ -1229,7 +1229,7 @@ Ensure the literal value is compatible with the target type or use an appropriat
 module err_literal
 
 func zero_of(x: typeas T): T {
-    let z: T = 0
+    let z: T = 0.5
     return z
 }
 
@@ -1597,11 +1597,12 @@ The literal '{0}' is out of the range of type '{1}' ({2}).
 A literal that its type cannot hold is not wrapped around or cut off. Write a value in the range, or give the literal a wider type.
 ```
 
-**Example** (`test/cases/compile/literals/int_too_large.cml`, run as `camel -E short test/cases/compile/literals/int_too_large.cml`)
+**Example** (`test/cases/compile/literals/context_fold_out_of_range.cml`, run as `camel -E short test/cases/compile/literals/context_fold_out_of_range.cml`)
 
 ```camel
 func main(): int sync {
-    println(9223372036854775808)
+    let a: int = 9223372036854775807 + 1
+    println(a)
     return 0
 }
 ```
@@ -2811,14 +2812,13 @@ This value has type '{0}', which is not the declared type '{1}'.
 A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself). Convert the value explicitly, e.g. 'float(n)' or 'v as T', or change the declared type.
 ```
 
-**Example** (`test/cases/consistency/declared_type/mismatch.cml`, run as `camel -E short test/cases/consistency/declared_type/mismatch.cml`)
+**Example** (`test/cases/compile/literals/context_variable_declaration.cml`, run as `camel -E short test/cases/compile/literals/context_variable_declaration.cml`)
 
 ```camel
-// Nothing is converted on the way into a declared type: an `int` is not a `float`.
 func main(): int sync {
-    let n = 3
-    let x: float = n
-    println(x)
+    let n: int = 1
+    let y: float = n
+    println(y)
     return 0
 }
 ```

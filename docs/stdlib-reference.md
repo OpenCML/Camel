@@ -40,7 +40,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [math](#math) | `import { ... } from math` | C++ | 45 |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
 | [algo](#algo) | `import { ... } from algo` | C++ | 8 |
-| [random](#random) | `import { ... } from random` | C++ | 7 |
+| [random](#random) | `import { ... } from random` | C++ | 10 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
 | [fs](#fs) | `import { ... } from fs` | C++ | 15 |
 | [os](#os) | `import { ... } from os` | C++ | 8 |
@@ -2206,6 +2206,45 @@ The elements of xs in a random order, as a new array; xs is not changed.
 
 - With effects: advances the generator.
 - Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
+
+#### `key`
+
+```camel
+key: (seed: int) => Key
+```
+
+A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
+half, as signed int64 bits). Pure: it reads no generator and the same seed gives the same key
+on every scheduler, in translated C++, and on every platform.
+
+- Pure.
+- Example: `key(42)` gives `{ hi: 1350887118657991639, lo: -7139630017956984517 }`
+
+#### `split`
+
+```camel
+split: (key: Key) => (Key, Key)
+```
+
+Two independent keys derived from key: split(key) gives the same pair every time, and does
+not change key.
+
+- Pure.
+- Example: `let (a, b) = split(key(42))`
+
+#### `permutation`
+
+```camel
+permutation: (key: Key, n: int) => int[]
+```
+
+A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
+stream. Pure: the same key and n give the same permutation everywhere, it reads no generator
+and does not change key; n = 0 gives [] and n = 1 gives [0].
+
+- Pure.
+- Failure: fault `InvalidArgument` when n is negative.
+- Example: `permutation(key(42), 4)` gives `[1, 0, 2, 3]`
 
 <a id="time"></a>
 

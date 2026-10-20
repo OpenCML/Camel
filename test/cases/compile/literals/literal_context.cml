@@ -1,0 +1,62 @@
+/**
+ * Design principles 5.1: a literal takes its type from the context it is written in — the
+ * expected type, then the other operand of a binary operator, then its default type (int for an
+ * integer, float for one with a decimal point or an exponent). An expression of literals only is
+ * computed with its exact value, so `1 + 2` has no room to wrap and `0.1 + 0.2` is the double
+ * nearest to 0.3. A variable is not converted by any of this: only literals move.
+ */
+module literal_context
+
+func scale(x: f32): f32 {
+    return x * 2 + 1
+}
+
+func widen(x: float): float {
+    return x + 0.5
+}
+
+func half(): f32 {
+    return 1 / 2
+}
+
+func armExit(c: bool): float {
+    let v = if c then { return 2; } else { 2.0 };
+    return v
+}
+
+func main(): int sync {
+    // The declared type: 2 is an f32, 1 a float, 1 + 2 an i32.
+    let a: f32 = 2
+    let b: float = 1
+    let c: i32 = 1 + 2
+    println(a, b, c)
+    // The parameter of the function called, and the declared return type.
+    println(scale(3.0), widen(2), half())
+    // The exit of a branch arm: `return 2` in a float function is a float, so the arm joins
+    // the other arm's 2.0.
+    println(armExit(true), armExit(false))
+    // The other operand of a binary operator, on either side.
+    let x: f32 = 1.5
+    let n: int = 3
+    println(x * 2, 1 + x, n + 1)
+    // The default type of the kind.
+    let v = 3
+    let w = 3.0
+    let s = 'x'
+    let bo = true
+    println(v, w, s, bo)
+    // Exact: the sum of the doubles nearest to 0.1 and to 0.2 is not the double nearest to
+    // 0.30000000000000004, and no intermediate result overflows before the type is known.
+    println(0.1 + 0.2 == 0.3, 0.1 + 0.2 == 0.30000000000000004)
+    println(9223372036854775807 + 1 - 1, 2 ^ 63 - 1)
+    let big: i32 = 3000000000 - 1000000000
+    println(big)
+    // An integer expression stays integer: 1 / 3 is 0, 2 ^ 10 is 1024. A real one is real even
+    // where the result is whole: 2.0 ^ 10 is 1024.0.
+    println(1 / 3, 1.0 / 3.0, 2 ^ 10, 2.0 ^ 10)
+    let third: f32 = 1.0 / 3.0
+    let point: f32 = 0.1 + 0.2
+    println(third, point)
+    println(7 / 2, -7 / 2, 7 % 2, -7 % 2)
+    return 0
+}

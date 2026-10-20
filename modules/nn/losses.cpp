@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -72,7 +73,112 @@ void requireRank2LogitsAndTarget(
     }
 }
 
+void requireRank2Logits(const tensor::TensorObject *logits, const char *what) {
+    if (!logits || logits->rank() != 2) {
+        throw std::invalid_argument(std::string(what) + " expects rank-2 logits [batch, classes]");
+    }
+    if (!tensor::isFloatingTensorType(logits->dtype())) {
+        throw std::invalid_argument(std::string(what) + " requires floating Tensor logits");
+    }
+    if (logits->dim(0) <= 0 || logits->dim(1) <= 0) {
+        throw std::invalid_argument(
+            std::string(what) + " requires non-empty batch and class dimensions");
+    }
+}
+
+void requireLabels(
+    const tensor::TensorObject *logits, std::span<const int64_t> labels, const char *what) {
+    const int64_t rows = logits->dim(0), cols = logits->dim(1);
+    if (static_cast<int64_t>(labels.size()) != rows) {
+        throw std::invalid_argument(
+            std::string(what) + " requires one label per logits row");
+    }
+    for (const int64_t label : labels) {
+        if (label < 0 || label >= cols) {
+            throw std::invalid_argument(
+                std::string(what) + " labels must be class indices in [0, classes)");
+        }
+    }
+}
+
 } // namespace
+
+double softmaxCrossEntropyLabels(
+    const tensor::TensorObject *logits, std::span<const int64_t> labels) {
+    constexpr const char *kWhat = "softmax_cross_entropy";
+    requireRank2Logits(logits, kWhat);
+    requireLabels(logits, labels, kWhat);
+
+    const int64_t rows = logits->dim(0);
+    const int64_t cols = logits->dim(1);
+    double loss        = 0.0;
+
+    // The same loops, in the same order, as the one-hot form: with a one-hot target the only
+    // nonzero label is the row's class, so the two forms produce the same bits.
+    for (int64_t row = 0; row < rows; ++row) {
+        const uint64_t rowOffset = static_cast<uint64_t>(row * cols);
+        double rowMax            = logits->getAsDouble(rowOffset);
+        for (int64_t col = 1; col < cols; ++col) {
+            rowMax = std::max(rowMax, logits->getAsDouble(rowOffset + static_cast<uint64_t>(col)));
+        }
+
+        double expSum = 0.0;
+        for (int64_t col = 0; col < cols; ++col) {
+            expSum +=
+                std::exp(logits->getAsDouble(rowOffset + static_cast<uint64_t>(col)) - rowMax);
+        }
+        const double logZ = rowMax + std::log(expSum);
+
+        const int64_t label = labels[static_cast<size_t>(row)];
+        loss -= logits->getAsDouble(rowOffset + static_cast<uint64_t>(label)) - logZ;
+    }
+
+    return loss / static_cast<double>(rows);
+}
+
+tensor::TensorObject *softmaxCrossEntropyLabelsGradLogits(
+    const tensor::TensorObject *logits, std::span<const int64_t> labels, double dy,
+    tensor::mm::IAllocator &allocator) {
+    constexpr const char *kWhat = "softmax_cross_entropy_grad";
+    requireRank2Logits(logits, kWhat);
+    requireLabels(logits, labels, kWhat);
+
+    const int64_t rows         = logits->dim(0);
+    const int64_t cols         = logits->dim(1);
+    tensor::TensorObject *grad = tensor::TensorObject::create(
+        TypeCode::Float32,
+        std::span<const int64_t>(logits->shape(), logits->rank()),
+        allocator,
+        false);
+
+    const double scale = dy / static_cast<double>(rows);
+    std::vector<double> exps(static_cast<size_t>(cols));
+    for (int64_t row = 0; row < rows; ++row) {
+        const uint64_t rowOffset = static_cast<uint64_t>(row * cols);
+        double rowMax            = logits->getAsDouble(rowOffset);
+        for (int64_t col = 1; col < cols; ++col) {
+            rowMax = std::max(rowMax, logits->getAsDouble(rowOffset + static_cast<uint64_t>(col)));
+        }
+
+        double expSum = 0.0;
+        for (int64_t col = 0; col < cols; ++col) {
+            const uint64_t index = rowOffset + static_cast<uint64_t>(col);
+            const double expValue          = std::exp(logits->getAsDouble(index) - rowMax);
+            exps[static_cast<size_t>(col)] = expValue;
+            expSum += expValue;
+        }
+
+        const int64_t label = labels[static_cast<size_t>(row)];
+        for (int64_t col = 0; col < cols; ++col) {
+            const uint64_t index = rowOffset + static_cast<uint64_t>(col);
+            const double prob    = exps[static_cast<size_t>(col)] / expSum;
+            const double target  = col == label ? 1.0 : 0.0;
+            grad->setFromDouble(index, scale * (prob - target));
+        }
+    }
+
+    return grad;
+}
 
 double softmaxCrossEntropy(const tensor::TensorObject *logits, const tensor::TensorObject *target) {
     constexpr const char *kWhat = "softmax_cross_entropy";
