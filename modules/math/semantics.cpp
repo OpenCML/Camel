@@ -50,6 +50,14 @@
  * describes the narrow float case (f32, and i32 converted to it) and its algorithm says how the
  * wider cases differ, as the tensor declarations do.
  *
+ * The complex functions: `re`, `im` and `conj` are Exact (reading a part and flipping a sign are
+ * not arithmetic). `abs` (hypot of the parts) is Bounded by the module's platform bound of 4 ulp.
+ * `exp` of a complex number is the platform's std::exp(std::complex), which composes its exp with
+ * its sin and cos: the 2 ulp target of the real exp does not describe the composition, so its
+ * record declares the platform bound of 4 ulp. Neither `abs` nor `exp` always propagates a NaN
+ * (hypot(+inf, NaN) is +inf; cexp(-inf + i*NaN) is 0), as for the real hypot and the C standard's
+ * special cases.
+ *
  * Integer operators are Exact and sensitive to no permission (two's complement bit operations and
  * integer arithmetic have no rounding). Special values are the IEEE ones unless a row says
  * otherwise (`pow` and `hypot` have standard-mandated results that are not NaN propagation).
@@ -357,6 +365,77 @@ void declareElementaryFunctions() {
             "+inf"));
 }
 
+// ---- The complex functions ------------------------------------------------------------------
+
+/// `re`, `im` and `conj` are Exact: reading one part and flipping one sign are not arithmetic.
+/// `abs` is hypot of the parts and `exp` is the platform's std::exp(std::complex); both are
+/// Bounded by the platform's accuracy, like the real functions they are built from, and neither
+/// always propagates a NaN (hypot(+inf, NaN) is +inf, and cexp(-inf + i*NaN) is 0).
+void declareComplexFunctions() {
+    declare(
+        "math:re_c",
+        exactFloat(TypeCode::Float32, "the real part of the value, f32: no arithmetic"));
+    declare(
+        "math:re_z",
+        exactFloat(TypeCode::Float64, "the real part of the value, f64: no arithmetic"));
+    declare(
+        "math:im_c",
+        exactFloat(TypeCode::Float32, "the imaginary part of the value, f32: no arithmetic"));
+    declare(
+        "math:im_z",
+        exactFloat(TypeCode::Float64, "the imaginary part of the value, f64: no arithmetic"));
+    declare(
+        "math:conj_c",
+        exactFloat(
+            TypeCode::Float32,
+            "the real part and the negated imaginary part, f32; negating a float flips its sign "
+            "bit, exact (a NaN part stays a NaN, -0 becomes +0 in the imaginary part)"));
+    declare(
+        "math:conj_z",
+        exactFloat(
+            TypeCode::Float64,
+            "the real part and the negated imaginary part, f64; negating a float flips its sign "
+            "bit, exact (a NaN part stays a NaN, -0 becomes +0 in the imaginary part)"));
+    declare(
+        "math:abs_c",
+        bounded(
+            TypeCode::Float32,
+            4.0f,
+            SpecialValues{.nans = false},
+            "sqrt(re^2 + im^2) in f32 without intermediate overflow or underflow (hypot), within "
+            "4 ulp; an infinite part gives +inf even when the other is NaN"));
+    declare(
+        "math:abs_z",
+        bounded(
+            TypeCode::Float64,
+            4.0f,
+            SpecialValues{.nans = false},
+            "sqrt(re^2 + im^2) in f64 without intermediate overflow or underflow (hypot), within "
+            "4 ulp; an infinite part gives +inf even when the other is NaN"));
+    declare(
+        "math:exp_c",
+        bounded(
+            TypeCode::Float32,
+            4.0f,
+            SpecialValues{.nans = false},
+            "e^(re+i*im) in f32 as the platform's std::exp(std::complex): its magnitude is its "
+            "exp and its direction its sin/cos, so the result is within the platform's accuracy "
+            "of that composition (4 ulp), not the 2 ulp target of the real exp alone; the C "
+            "standard's special cases are exact (a NaN part is not always propagated: "
+            "exp(-inf + NaN i) is 0)"));
+    declare(
+        "math:exp_z",
+        bounded(
+            TypeCode::Float64,
+            4.0f,
+            SpecialValues{.nans = false},
+            "e^(re+i*im) in f64 as the platform's std::exp(std::complex): its magnitude is its "
+            "exp and its direction its sin/cos, so the result is within the platform's accuracy "
+            "of that composition (4 ulp), not the 2 ulp target of the real exp alone; the C "
+            "standard's special cases are exact (a NaN part is not always propagated: "
+            "exp(-inf + NaN i) is 0)"));
+}
+
 void declareBoundedFunctions() {
     for (const BoundedRow &row : kUnaryBounded) {
         forFloatWidths(row.name, [&](TypeCode type) {
@@ -418,6 +497,7 @@ void declareIntegerFunctions() {
 
 void declareMathOperatorSemantics() {
     declareElementaryFunctions();
+    declareComplexFunctions();
     declareBoundedFunctions();
     declareIntegerFunctions();
 }

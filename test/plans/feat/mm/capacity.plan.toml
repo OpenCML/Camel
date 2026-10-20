@@ -46,6 +46,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
 [[tests]]
+name = "capacity.fanout"
+desc = "A node with many readers: one parameter read by 40000 terms. The draft's list of the readers of a node grows by one entry per reader; it used to be rebuilt in the node's block each time, leaving the old block behind, and took 6.5 GB and 8 s. The run stays under 1500 MB (measured about 420 MB, 1 s; the peak is not measured on Windows)."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/scale/scale.py"
+args = ["${case}", "fanout"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
 name = "capacity.f24_const_graphs"
 desc = "progen finding F24: 62 functions that each return a string literal. Each graph that owns a constant took a 256 KB block of the 16 MB meta space, so the 62nd did not fit and the program ended in std::bad_alloc before the first pass. Pipeline: the default pipeline."
 kind = "behavior"

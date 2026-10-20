@@ -348,15 +348,39 @@ struct GCOperBody {
 };
 static_assert(std::is_trivially_copyable_v<GCOperBody>);
 
-struct GCGraphNativePayload {
-    // Arrays of the graph's own block, in the graph space (see GCGraphBuildAccess). Released
-    // with the graph.
-    GCNode *nodes              = nullptr; // nodeCount + 1 records (the last is a sentinel)
-    uint32_t *origins          = nullptr; // nodeCount source origins (0: none)
-    uint8_t *permissions       = nullptr; // nodeCount numeric permissions; null when all are 0
-    uint32_t *attrs            = nullptr; // nodeCount attribute sets; null when all are 0
-    gc_node_ref_t *inputs      = nullptr; // edgeCount entries
+/// The columns of up to kNodeChunkNodes consecutive nodes, in one block of the graph space. A
+/// graph version is a directory of chunks; versions share the chunks they did not change
+/// (shares counts the directories that hold one). NodeId `ref` is node `ref & (kNodeChunkNodes
+/// - 1)` of chunk `ref >> kNodeChunkShift`. Offsets in a chunk's records (the input runs, the
+/// payload) are offsets in that chunk's own arrays; node references everywhere are NodeIds of
+/// the graph.
+inline constexpr uint32_t kNodeChunkShift = 8;
+inline constexpr uint32_t kNodeChunkNodes = 1u << kNodeChunkShift;
+
+struct GCNodeChunk {
+    std::atomic<uint32_t> shares{1};
+    uint32_t nodeCount        = 0;
+    uint32_t edgeCount        = 0;
+    uint32_t payloadWordCount = 0;
+    uint32_t *origins         = nullptr; // nodeCount source origins (0: none)
+    uint8_t *permissions      = nullptr; // nodeCount numeric permissions; null when all are 0
+    uint32_t *attrs           = nullptr; // nodeCount attribute sets; null when all are 0
+    gc_node_ref_t *edges      = nullptr; // edgeCount entries: the input runs of the nodes in order
     gc_payload_word_t *payload = nullptr; // payloadWordCount words
+
+    /// The node records, which follow the header: nodeCount of them.
+    GCNode *nodes() { return reinterpret_cast<GCNode *>(this + 1); }
+    const GCNode *nodes() const { return reinterpret_cast<const GCNode *>(this + 1); }
+};
+static_assert(sizeof(GCNodeChunk) % alignof(GCNode) == 0);
+
+struct GCGraphNativePayload {
+    // The graph's own arrays are in its block, in the graph space (see GCGraphBuildAccess); the
+    // chunks are blocks of their own, released with the last graph version that holds them.
+    GCNodeChunk **chunks       = nullptr; // chunkCount chunks
+    gc_cnt_t chunkCount        = 0;
+    bool hasPermissions        = false; // some node has numeric permissions
+    bool hasAttrs              = false; // some node has attributes
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
@@ -374,7 +398,7 @@ struct GCGraphNativePayload {
     gc_node_ref_t returnNode   = kInvalidNodeRef;
     GCReturnKind returnKind    = GCReturnKind::None;
 
-    constexpr bool empty() const { return nodes == nullptr; }
+    constexpr bool empty() const { return chunks == nullptr; }
 };
 
 /// The users of every node of one graph, by edge group, in node order (the reverse of the
@@ -417,12 +441,12 @@ class GCGraph : public camel::core::rtdata::Object {
     /// to node `ref`, 0 when none; the graph has no permission column when no node has any.
     uint8_t nodePermissions(gc_node_ref_t ref) const;
     /// True when some node of the graph has numeric permissions.
-    bool hasNodePermissions() const { return nativePayload_.permissions != nullptr; }
+    bool hasNodePermissions() const { return nativePayload_.hasPermissions; }
     /// The attributes (camel/core/node_attrs.h, AttrSetId) of node `ref`, 0 when none; the
     /// graph has no attribute column when no node has any.
     uint32_t nodeAttrs(gc_node_ref_t ref) const;
     /// True when some node of the graph has attributes.
-    bool hasNodeAttrs() const { return nativePayload_.attrs != nullptr; }
+    bool hasNodeAttrs() const { return nativePayload_.hasAttrs; }
     /// The names of the values the function captures from where it was written, in the order
     /// it captured them (symbols of camel/core/symbol.h). Compile and debug metadata: what a
     /// capture is bound to at run time is the closure tuple and the with-inputs of a call.
@@ -483,7 +507,8 @@ class GCGraph : public camel::core::rtdata::Object {
 
     /// The record of node `ref`, nullptr when `ref` is not a node of this graph.
     const GCNode *node(gc_node_ref_t ref) const {
-        return ref < nativePayload_.nodeCount ? nativePayload_.nodes + ref : nullptr;
+        return ref < nativePayload_.nodeCount ? chunkOf(ref).nodes() + (ref & (kNodeChunkNodes - 1))
+                                              : nullptr;
     }
     bool containsNodeRef(gc_node_ref_t ref) const { return ref < nativePayload_.nodeCount; }
     /// The NodeId of a record of this graph, kInvalidNodeRef for any other pointer.
@@ -512,23 +537,29 @@ class GCGraph : public camel::core::rtdata::Object {
             "GC node bodies must be trivially copyable.");
         const GCNode *n = node(ref);
         ASSERT(n != nullptr && n->hasPayload(), "GCGraph node-body lookup of a node without one.");
-        return reinterpret_cast<const Body *>(nativePayload_.payload + n->payload);
+        return reinterpret_cast<const Body *>(chunkOf(ref).payload + n->payload);
     }
     /// The payload bytes of node `ref` (rounded up to whole words); empty when it has none.
     std::span<const std::byte> nodePayloadBytes(gc_node_ref_t ref) const;
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
         const GCNode *n = node(ref);
-        return n ? inputRun(n->inBegin, n->withBegin) : std::span<const gc_node_ref_t>();
+        return n ? inputRun(ref, n->inBegin, n->withBegin) : std::span<const gc_node_ref_t>();
     }
     std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
         const GCNode *n = node(ref);
-        return n ? inputRun(n->withBegin, n->ctrlBegin) : std::span<const gc_node_ref_t>();
+        return n ? inputRun(ref, n->withBegin, n->ctrlBegin) : std::span<const gc_node_ref_t>();
     }
     std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t ref) const {
         const GCNode *n = node(ref);
-        // The sentinel record after the last node ends the last node's run.
-        return n ? inputRun(n->ctrlBegin, (n + 1)->inBegin) : std::span<const gc_node_ref_t>();
+        if (!n) {
+            return {};
+        }
+        // The run ends where the next node's begins; the last node of a chunk ends at its end.
+        const GCNodeChunk &chunk = chunkOf(ref);
+        const gc_off_t end = (ref & (kNodeChunkNodes - 1)) + 1 < chunk.nodeCount ? (n + 1)->inBegin
+                                                                                 : chunk.edgeCount;
+        return inputRun(ref, n->ctrlBegin, end);
     }
 
     /// The users of every node, built the first time it is asked for and kept with the graph
@@ -606,6 +637,9 @@ class GCGraph : public camel::core::rtdata::Object {
     friend class GraphDraft;
     friend struct GCGraphBuildAccess;
 
+    /// Gives up this graph's share of each node chunk (the graph is being freed).
+    void releaseNodeChunks();
+
     GCGraph(
         GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
         camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
@@ -626,8 +660,11 @@ class GCGraph : public camel::core::rtdata::Object {
     GCGraph **refs_                                = nullptr;
     uint8_t *refRoles_                             = nullptr;
     gc_cnt_t refCount_                             = 0;
-    std::span<const gc_node_ref_t> inputRun(gc_off_t begin, gc_off_t end) const {
-        return {nativePayload_.inputs + begin, static_cast<size_t>(end - begin)};
+    const GCNodeChunk &chunkOf(gc_node_ref_t ref) const {
+        return *nativePayload_.chunks[ref >> kNodeChunkShift];
+    }
+    std::span<const gc_node_ref_t> inputRun(gc_node_ref_t ref, gc_off_t begin, gc_off_t end) const {
+        return {chunkOf(ref).edges + begin, static_cast<size_t>(end - begin)};
     }
 
     GCGraphNativePayload nativePayload_{};

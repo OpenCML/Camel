@@ -258,13 +258,16 @@ uint64_t contentHash(const GCGraph &graph) {
         std::memcpy(&tail, at, size);
         mix(tail);
     };
-    const size_t nodes = native->nodeCount;
-    bytes(native->nodes, (nodes + 1) * sizeof(*native->nodes));
-    bytes(native->origins, nodes * sizeof(*native->origins));
-    bytes(native->permissions, native->permissions ? nodes : 0);
-    bytes(native->attrs, native->attrs ? nodes * sizeof(*native->attrs) : 0);
-    bytes(native->inputs, native->edgeCount * sizeof(*native->inputs));
-    bytes(native->payload, native->payloadWordCount * sizeof(*native->payload));
+    for (runtime::gc_cnt_t c = 0; c < native->chunkCount; ++c) {
+        const runtime::GCNodeChunk &chunk = *native->chunks[c];
+        const size_t nodes       = chunk.nodeCount;
+        bytes(chunk.nodes(), nodes * sizeof(runtime::GCNode));
+        bytes(chunk.origins, nodes * sizeof(*chunk.origins));
+        bytes(chunk.permissions, chunk.permissions ? nodes : 0);
+        bytes(chunk.attrs, chunk.attrs ? nodes * sizeof(*chunk.attrs) : 0);
+        bytes(chunk.edges, chunk.edgeCount * sizeof(*chunk.edges));
+        bytes(chunk.payload, chunk.payloadWordCount * sizeof(*chunk.payload));
+    }
     bytes(native->normPorts, native->normPortCount * sizeof(*native->normPorts));
     bytes(native->withPorts, native->withPortCount * sizeof(*native->withPorts));
     bytes(native->closure, native->closureCount * sizeof(*native->closure));

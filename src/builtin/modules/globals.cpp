@@ -735,6 +735,48 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Float64(), true}, {Type::Float64(), false}},
                         Type::Float64()),
                 },
+                {
+                    ":op/assn_pow_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/assn_pow_c_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Int32(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/assn_pow_c_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), true}, {Type::Int64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/assn_pow_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
+                {
+                    ":op/assn_pow_z_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Int32(), false}},
+                        Type::Complex128()),
+                },
+                {
+                    ":op/assn_pow_z_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), true}, {Type::Int64(), false}},
+                        Type::Complex128()),
+                },
             }),
         OperatorGroup::create(
             "__assn_and__",
@@ -1353,6 +1395,51 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::Float64(), false}, {Type::Float64(), false}},
                         Type::Float64()),
+                },
+                // A complex exponent is a complex number; an integer exponent is the repeated
+                // squaring form (an integer literal exponent becomes a complex literal, and
+                // the two give the same bits — see the runtime's complexPower).
+                {
+                    ":op/pow_c",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Complex64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/pow_c_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Int32(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/pow_c_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex64(), false}, {Type::Int64(), false}},
+                        Type::Complex64()),
+                },
+                {
+                    ":op/pow_z",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Complex128(), false}},
+                        Type::Complex128()),
+                },
+                {
+                    ":op/pow_z_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Int32(), false}},
+                        Type::Complex128()),
+                },
+                {
+                    ":op/pow_z_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Complex128(), false}, {Type::Int64(), false}},
+                        Type::Complex128()),
                 },
             }),
         OperatorGroup::create("__mat__", {}),
