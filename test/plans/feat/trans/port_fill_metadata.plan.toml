@@ -1,6 +1,6 @@
 id = "trans.port_fill_metadata"
 order = 337
-tier = "feat"
+tier = "fast"
 tags = ["feat", "trans", "dump"]
 
 [[tests]]

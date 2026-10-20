@@ -30,6 +30,8 @@
 #include "camel/service/semantic/syntax_index.h"
 
 #include "camel/parse/syntax/cst.h"
+#include "camel/parse/syntax/lexer.h"
+#include "camel/parse/syntax/parser.h"
 
 #include <algorithm>
 #include <utility>
@@ -101,6 +103,17 @@ class Walker {
   public:
     Walker(SyntaxIndex &index, const syn::Tree &tree)
         : index_(index), tree_(tree), buffer_(tree.tokens()), text_(tree.source()) {}
+
+    /// A walk of the expression of a `${...}`: it joins the index of the file, in the scope and
+    /// the function it is written in, but its tree is the one parsed from the interpolation.
+    Walker(
+        SyntaxIndex &index, const syn::Tree &tree, uint32_t scope, int32_t container)
+        : index_(index),
+          tree_(tree),
+          buffer_(tree.tokens()),
+          text_(tree.source()),
+          scope_(scope),
+          container_(container) {}
 
     void run() {
         collectTokens();
@@ -357,6 +370,9 @@ class Walker {
             return arrayData(cst::ArrayData(node));
         case NK::RefData:
             return addRef(node, RefKind::Value);
+        case NK::Literal:
+            // A formatted string holds Camel expressions; they are part of the file's names.
+            return walkInterpolations(node);
         case NK::RefType:
             return addRef(node, RefKind::Type);
         case NK::TypeAsType:
@@ -377,6 +393,26 @@ class Walker {
         }
         default:
             return walkChildren(node);
+        }
+    }
+
+    void walkInterpolations(syn::Node node) {
+        const syn::TokenRef token = node.firstToken();
+        if (!token || token.kind() != TK::FString) {
+            return;
+        }
+        for (const auto &part : buffer_.interpolationsOf(token.index())) {
+            index_.fstringExpressions.push_back(
+                Range{part.exprBegin, part.exprEnd});
+            const std::string source(text_);
+            syn::TokenBuffer tokens =
+                syn::Lexer::tokenizeRange(source, part.exprBegin, part.exprEnd);
+            syn::Tree sub = syn::Parser::parseExpression(std::move(tokens));
+            if (!sub.root() || sub.hasErrors()) {
+                continue;
+            }
+            Walker inner(index_, sub, scope_, container_);
+            inner.walk(sub.root());
         }
     }
 

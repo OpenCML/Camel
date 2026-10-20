@@ -43,6 +43,8 @@
 
 #include "emitter.h"
 
+#include "camel/core/index_semantics.h"
+
 #include <functional>
 #include <span>
 #include <string>
@@ -56,9 +58,10 @@ class LowerContext {
   public:
     LowerContext(
         Emitter &emitter, std::string_view uri, std::span<const Value> args,
-        tensor::ops::TensorFacts result, type::Type *resultType)
+        tensor::ops::TensorFacts result, type::Type *resultType,
+        std::optional<core::sem::IndexedInstance> instance = std::nullopt)
         : emitter_(emitter), uri_(uri), args_(args), result_(std::move(result)),
-          resultType_(resultType) {}
+          resultType_(resultType), instance_(std::move(instance)) {}
 
     Emitter &emitter() const { return emitter_; }
     int64_t opset() const { return emitter_.opset(); }
@@ -70,6 +73,11 @@ class LowerContext {
     tensor::ops::TensorFacts facts(size_t index) const { return factsOf(args_[index]); }
     /// Rank of argument `index`; throws ExportError when unknown.
     size_t rank(size_t index) const;
+    /// The call's index semantics instance (camel/core/index_semantics.h), from the operator's
+    /// declaration (tensor::ops::instantiate); nullopt when it declares none or the facts do
+    /// not fix it. A lowering reads the rules that belong to the operator from here (slice
+    /// bounds, entry checks) instead of restating them.
+    const std::optional<core::sem::IndexedInstance> &instance() const { return instance_; }
 
     /// Inferred facts of the result.
     const tensor::ops::TensorFacts &result() const { return result_; }
@@ -107,6 +115,7 @@ class LowerContext {
     std::span<const Value> args_;
     tensor::ops::TensorFacts result_;
     type::Type *resultType_;
+    std::optional<core::sem::IndexedInstance> instance_;
 };
 
 /// Lowers one operator call.

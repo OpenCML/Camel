@@ -19,6 +19,8 @@
 
 #include "opencmlrc.h"
 
+#include "camel/utils/path.h"
+
 #include "nlohmann/json.hpp"
 
 #include <cstddef>
@@ -52,8 +54,7 @@ struct RcPassesConfig {
 
 bool isPathAcceptable(const fs::path &p) {
     try {
-        std::string s = p.string();
-        return s.size() <= MAX_PATH_LENGTH;
+        return camel::utils::pathToUtf8(p).size() <= MAX_PATH_LENGTH;
     } catch (...) {
         return false;
     }
@@ -188,7 +189,7 @@ RcPassesConfig loadOpenCmlRc(const std::string &cwd, const std::string &scriptDi
     RcPassesConfig merged;
     if (cwd.size() > MAX_PATH_LENGTH)
         return merged;
-    fs::path cwdPath(cwd);
+    fs::path cwdPath = camel::utils::pathFromUtf8(cwd);
     if (!cwd.empty() && isPathAcceptable(cwdPath)) {
         fs::path p = cwdPath / OPENCMLRC_FILENAME;
         if (isPathAcceptable(p)) {
@@ -199,7 +200,7 @@ RcPassesConfig loadOpenCmlRc(const std::string &cwd, const std::string &scriptDi
         }
     }
     if (!scriptDir.empty() && scriptDir != cwd && scriptDir.size() <= MAX_PATH_LENGTH) {
-        fs::path scriptPath(scriptDir);
+        fs::path scriptPath = camel::utils::pathFromUtf8(scriptDir);
         if (isPathAcceptable(scriptPath)) {
             fs::path p = scriptPath / OPENCMLRC_FILENAME;
             if (isPathAcceptable(p)) {

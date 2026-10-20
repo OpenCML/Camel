@@ -1,6 +1,6 @@
 id = "modules.graph_facts"
 order = 372
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "facts", "semantics"]
 desc = "Graph facts (camel/runtime/facts.h, docs/design/op-semantics section 10, docs/technical/40_graph_facts.md): the registry of kinds and its rules, the store and its stamps checked on every read, the core's kinds as `camel inspect --facts` prints them, how rewrites make facts stale and nothing stale is reused, and the persistence hooks."
 

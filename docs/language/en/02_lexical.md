@@ -46,7 +46,7 @@ The following words are reserved and cannot be used as names (using one gives `S
 |---|---|
 | Declarations | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
 | Control | `if` `then` `else` `match` `case` `return` `throw` `wait` `sync` `macro` `loop` `while` `do` `for` `in` |
-| Types and conversion | `as` `typeas` `const` `enum` |
+| Types and conversion | `as` `typeas` `const` `constas` `enum` |
 | Literals | `null` `true` `false` |
 | Reserved, not implemented | `is` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
 
@@ -96,18 +96,35 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 - Single or double quotes: `'Hello'`, `"Hello"`; the two are equivalent, and one kind of quote can be written directly inside the other.
 - Escapes: `\n`, `\t`, `\r`, `\\`, `\'`, `\"`, `\xHH`.
 - Triple-quoted multi-line strings: `'''...'''` or `"""..."""`, which may contain newlines.
+- A backquoted **formatted string** `` `...` `` interpolates with `${expression}`; the format specification of `${expression:spec}` is the one of `format` ([2.5.3.1](#2531-formatted-strings)).
 - A string is a sequence of bytes. `len` gives the number of bytes: `len('héllo')` is 6, `len('中文')` is 6.
-- The backquoted format string `` `...` `` is reserved, not implemented (`SemanticDiag::ConstructNotSupported`); use `format`:
+
+#### 2.5.3.1 Formatted strings
+
+- In a backquoted string `${` starts an **interpolation** that ends at its matching `}`; inside is an arbitrary expression ([6.2](06_expressions.md#62-literals-and-construction)). Strings, comments, braces and backquoted strings may appear again inside it, each closing where it should: `` `point ${({ x: 1 }).x}` ``, `` `${'{'}${'}'}` ``.
+- After the expression an optional `:spec` gives a format specification; the colon must be at the top level of the interpolation (not inside any brackets). The specification is exactly that of a placeholder of `format` (`{:5d}`, `{:.2f}`, `{:>8}`). A specification the type of the value does not take is a compile-time error `SemanticDiag::ArgumentsRejected`, located at that interpolation.
+- **An ordinary `{` or `}` is a literal character and needs no escape**: `` `{ }` `` prints `{ }`. Only `${` together starts an interpolation.
+- `\${` is a literal `${` and starts no interpolation.
+- It may span lines, which are kept as written; the escapes inside a line are those of a string (`\n`, `\t`, `\\`, `\'`, `\"`, `\xHH`), and `` \` `` is a literal backtick (it does not close the string either).
+- It is shorthand for `'...'->format<...>`: the same tree and the same meaning ([6.2](06_expressions.md#62-literals-and-construction)).
 
 ```cml
-println('{} + {} = {}'->format<1, 2, 1 + 2>)
-println(format<3.14159>('pi is about {:.2f}'))
+let name = 'Camel'
+let n = 42
+println(`hello, ${name}!`)                    // the same as 'hello, {}!'->format<name>
+println(`n = ${n}, twice = ${n * 2}`)
+println(`pi = ${3.14159:.2f}`)                // the same as 'pi = {:.2f}'->format<3.14159>
+println(`literal { } and \${not} interpolated`)
 ```
 
 ```text
-1 + 2 = 3
-pi is about 3.14
+hello, Camel!
+n = 42, twice = 84
+pi = 3.14
+literal { } and ${not} interpolated
 ```
+
+The long form of the same call is still written `'{} + {} = {}'->format<1, 2, 1 + 2>`.
 
 ### 2.5.4 Booleans and null
 

@@ -1,6 +1,6 @@
 id = "opt.control"
 order = 324
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "control"]
 
 [[tests]]

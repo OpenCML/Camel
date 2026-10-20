@@ -1,6 +1,6 @@
 id = "para.handoff"
 order = 351
-tier = "feat"
+tier = "fast"
 tags = ["feat", "para", "consistency"]
 desc = "The parallel scheduler runs serial graphs on the bytecode interpreter (design principles 9.10): same output, faults and recursion limit as the other back ends"
 
@@ -128,7 +128,7 @@ envs = ["A=10", "B=988"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_line = 22
-expect_diagnostic_column = 43
+expect_diagnostic_column = 38
 expect_stdout_starts_with = "start\n"
 expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
 
@@ -153,7 +153,7 @@ envs = ["A=0", "B=998"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_line = 22
-expect_diagnostic_column = 43
+expect_diagnostic_column = 38
 expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
 
 [[tests]]
@@ -175,5 +175,5 @@ envs = ["A=10", "B=988"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_line = 22
-expect_diagnostic_column = 43
+expect_diagnostic_column = 38
 expect_output_contains = ["Maximum recursion depth (1000) exceeded"]

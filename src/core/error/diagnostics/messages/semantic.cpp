@@ -816,13 +816,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::LoopSequenceNotArray,
+            SemanticDiag::LoopSequenceNotIterable,
             {
-                "LoopSequenceNotArray",
-                "'for' takes the elements of an array; '{0}' has type '{1}'.",
-                "A loop's 'for x in xs' visits the elements of the array xs in order (design "
-                "principles 3.10). 'range(a, b)' is the array of the integers from a to b; a "
-                "string, a map or a tensor is not iterated by 'for'.",
+                "LoopSequenceNotIterable",
+                "'for' takes the elements of an array, a string, a map or a tensor; '{0}' has "
+                "type '{1}'.",
+                "A loop's 'for x in xs' visits the elements of xs in order (design principles "
+                "3.10): the elements of an array; the code points of a string, each a "
+                "one-character string; the (key, value) pairs of a map, in key order (11.3); "
+                "and the sub-tensors of a tensor along its first dimension. 'range(a, b)' is "
+                "the array of the integers from a to b.",
             },
         },
         {
@@ -1037,6 +1040,60 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ConstasNotAllowed,
+            {
+                "ConstasNotAllowed",
+                "The dimension name '{0}' is bound here, but only a parameter type can bind one.",
+                "Write 'constas n' where the dimension first appears in a parameter type, "
+                "'x: Tensor<f32, const [constas n, 3]>'. Every later occurrence, including one in "
+                "the return type, writes 'n'.",
+            },
+        },
+        {
+            SemanticDiag::DimensionNameNotBound,
+            {
+                "DimensionNameNotBound",
+                "The dimension name '{0}' is not bound by any parameter of this signature.",
+                "A name in a type's extents is bound by 'constas name' where it first appears in "
+                "a parameter type. A name that appears only in the return type is an error: the "
+                "caller has no argument that could say what it is.",
+            },
+        },
+        {
+            SemanticDiag::DimensionNameAlreadyBound,
+            {
+                "DimensionNameAlreadyBound",
+                "The dimension name '{0}' is already bound; write '{0}' here instead of "
+                "'constas {0}'.",
+                "Only the first occurrence of a dimension name in the parameter types binds it "
+                "('constas n'). Writing 'constas' again would ask for a second binding of the "
+                "same name.",
+            },
+        },
+        {
+            SemanticDiag::DimensionMismatch,
+            {
+                "DimensionMismatch",
+                "Argument {0} has extent {1}, but the dimensions the earlier arguments bound do "
+                "not "
+                "allow it.",
+                "The dimensions a signature names are one value for the whole call: every "
+                "argument whose type writes the same name must have the extent the name was "
+                "bound to.",
+            },
+        },
+        {
+            SemanticDiag::InvalidExtentExpression,
+            {
+                "InvalidExtentExpression",
+                "This is not a shape: the extents of a type written with dimension names are "
+                "integers, bound names, or linear expressions over them ('const [n, 3]').",
+                "Each extent is an integer, a dimension name bound by the signature, or a linear "
+                "expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is "
+                "not linear is unknown.",
+            },
+        },
+        {
             SemanticDiag::EnumVariantCaseRepeated,
             {
                 "EnumVariantCaseRepeated",
@@ -1052,6 +1109,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "This case follows 'case _': it is never taken.",
                 "'case _' matches every value, so nothing after it can. Remove it, or move it "
                 "before the wildcard.",
+            },
+        },
+        {
+            SemanticDiag::MatchWildcardRedundant,
+            {
+                "MatchWildcardRedundant",
+                "Every variant of '{0}' is matched before 'case _': the wildcard is never taken.",
+                "Naming every variant already covers every value of the enum. Remove 'case _', or "
+                "remove the case it was meant to stand in for.",
             },
         },
     };

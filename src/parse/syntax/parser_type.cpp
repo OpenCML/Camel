@@ -213,7 +213,11 @@ void ParserImpl::parseSpecType() {
             if (cur_ == TK::KwConst) {
                 const size_t cm = mark();
                 bump();
-                parseExpr();
+                {
+                    // `constas` is written only in the expression of a const type argument.
+                    ConstDataScope constData(*this, true);
+                    parseExpr();
+                }
                 close(cm, NK::ConstData);
             } else {
                 parseType();

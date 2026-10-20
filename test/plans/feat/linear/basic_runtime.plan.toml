@@ -1,6 +1,6 @@
 id = "linear.basic_runtime"
 order = 340
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "basic"]
 
 [[tests]]

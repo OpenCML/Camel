@@ -29,6 +29,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/storage.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
 
@@ -140,24 +141,7 @@ CollectionType::CollectionType(TypeCode code, bool isMap, std::span<Type *const>
 // A type is immutable and shared.
 Type *CollectionType::clone(bool) const { return const_cast<CollectionType *>(this); }
 
-bool CollectionType::equals(Type *type) const {
-    if (this == type) {
-        return true;
-    }
-    if (type == nullptr || type->code() != code_) {
-        return false;
-    }
-    const auto *other = static_cast<const CollectionType *>(type);
-    if (other->paramCount_ != paramCount_) {
-        return false;
-    }
-    for (size_t i = 0; i < paramCount_; ++i) {
-        if (!params_[i]->equals(other->params_[i])) {
-            return false;
-        }
-    }
-    return true;
-}
+bool CollectionType::equals(Type *type) const { return typeEquals(this, type); }
 
 bool CollectionType::assignableFrom(Type *sourceType) const { return equals(sourceType); }
 
@@ -294,19 +278,9 @@ MapType *MapType::prototype() {
     return instance;
 }
 
-std::string MapType::toString() const {
-    if (!complete()) {
-        return "Map";
-    }
-    return "Map<" + params_[0]->toString() + ", " + params_[1]->toString() + ">";
-}
+std::string MapType::toString() const { return typeToString(this); }
 
-std::string MapType::mangle() const {
-    if (!complete()) {
-        return "Dm0";
-    }
-    return "Dm" + params_[0]->mangle() + params_[1]->mangle();
-}
+std::string MapType::mangle() const { return typeMangle(this); }
 
 OtherType *MapType::cloneWithParams(std::span<Type *const> params) const {
     ASSERT(params.size() == 2, "Map takes a key type and a value type.");
@@ -341,11 +315,9 @@ SetType *SetType::prototype() {
     return instance;
 }
 
-std::string SetType::toString() const {
-    return complete() ? "Set<" + params_[0]->toString() + ">" : "Set";
-}
+std::string SetType::toString() const { return typeToString(this); }
 
-std::string SetType::mangle() const { return complete() ? "Ds" + params_[0]->mangle() : "Ds0"; }
+std::string SetType::mangle() const { return typeMangle(this); }
 
 OtherType *SetType::cloneWithParams(std::span<Type *const> params) const {
     ASSERT(params.size() == 1, "Set takes an element type.");

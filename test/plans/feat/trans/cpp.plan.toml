@@ -1,6 +1,6 @@
 id = "trans.cpp"
 order = 330
-tier = "feat"
+tier = "fast"
 tags = ["feat", "trans", "cpp"]
 
 [[tests]]
@@ -17,6 +17,8 @@ timeout_ms = 4000
 
 [[tests]]
 name = "agree_with_fvm"
+# Slow layer: measured 23.8 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 desc = "The programs of test/tools/cppexec/expect.txt are translated with std::cpp, built with the system's C++ compiler and run; each prints what std::fvm prints and exits with its code: scalars and their text, strings, branches as statements, the order of effects, faults with their located report, the recursion limit, tail calls as loops (also between two functions), exit codes, and operators of runtime modules through the bridge."
 kind = "behavior"
 tool = "python"
@@ -86,5 +88,17 @@ args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["struct Shape {", "std::variant<std::monostate, Circle, Rect, Empty> value;", "Shape::make<", "rt::enumField<", "out += \"Shape::Circle\";"]
 expect_output_not_contains = ["camel/core/", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "recursive_enum_types"
+desc = "A recursive enum is translated: the field that contains the enum is held through std::shared_ptr, not refused; make boxes it, get and appendText dereference it, and a generated destructor and operator== walk it on explicit stacks (camel/standalone/recursive.h). The million-node chain itself is built and run by agree_with_fvm, which checks the text and the equality result against std::fvm."
+kind = "behavior"
+case = "../../../cases/consistency/values/deep_enum_chain.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["struct Chain {", "std::shared_ptr<Chain>", "rt::box<Chain>", "rt::beginDestroy()", "std::vector<std::pair<const Chain *, const Chain *>> pending"]
+expect_output_not_contains = ["camel/core/", "libcamel", "TranslationRefused"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000

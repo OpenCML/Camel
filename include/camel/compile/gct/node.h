@@ -120,6 +120,17 @@ class Node {
         return *payload_.data;
     }
 
+    /// DATA: the string was written as a formatted string and lowered to `format` (the AST
+    /// said so). Its format specifications are checked one by one, at their interpolations.
+    bool fromFormattedString() const {
+        check(NodeKind::DATA);
+        return (flags_ & kFlagA) != 0;
+    }
+    void setFromFormattedString() {
+        check(NodeKind::DATA);
+        flags_ |= kFlagA;
+    }
+
     /// TYPE: the type, and how a function of that type is implemented.
     Type *dataType() const {
         check(NodeKind::TYPE);

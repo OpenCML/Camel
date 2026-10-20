@@ -227,6 +227,17 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
         });
     };
 
+    // `items(m)`: the (key, value) pairs in key order (design principles 11.3). The loop
+    // builder uses the same operator for the elements a `for` takes from a map.
+    const auto mapItems = typed(
+        0,
+        1,
+        "(m: Map<K, V>) => (K, V)[]",
+        [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
+            const MapType *map = asMapType(norm[0]);
+            return map ? optional<Type *>(map->sourceArrayType()) : nullopt;
+        });
+
     static const std::vector<oper_group_ptr_t> groups = {
         // ======= Lookup =======
         // `m[k]`: the subscript of a map. It has type `V?` and never faults, where the
@@ -385,15 +396,7 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
                   })}}),
         OperatorGroup::create(
             "items",
-            {{":coll/map_items",
-              typed(
-                  0,
-                  1,
-                  "(m: Map<K, V>) => (K, V)[]",
-                  [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
-                      const MapType *map = asMapType(norm[0]);
-                      return map ? optional<Type *>(map->sourceArrayType()) : nullopt;
-                  })},
+            {{":coll/map_items", mapItems},
              {":coll/set_items",
               typed(
                   0,
@@ -403,6 +406,11 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
                       const SetType *set = asSetType(norm[0]);
                       return set ? optional<Type *>(set->keyArrayType()) : nullopt;
                   })}}),
+        // The elements a `for` takes from a map: its (key, value) pairs in key order
+        // (design principles 11.3). The loop builder converts a map to that array once; a
+        // program does not write `__iter__` itself. A string and a tensor add their own
+        // overloads (globals.cpp, the tensor module).
+        OperatorGroup::create("__iter__", {{":coll/map_items", mapItems}}),
         // ======= Equality (DESIGN-QUESTION(map-equality-print)) =======
         OperatorGroup::create(
             "__eq__",

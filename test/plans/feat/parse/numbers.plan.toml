@@ -1,6 +1,6 @@
 id = "parse.numbers"
 order = 302
-tier = "feat"
+tier = "fast"
 tags = ["feat", "parse", "lexer", "numbers"]
 desc = "Numbers carry no sign in the token stream; the formatter writes binary operators spaced and literal signs tight"
 

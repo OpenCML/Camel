@@ -1,6 +1,6 @@
 id = "mm.capacity"
 order = 368
-tier = "feat"
+tier = "fast"
 tags = ["feat", "mm", "capacity", "scale"]
 desc = """
 Programs of ordinary size must not run into the capacity of the spaces the compiler keeps the

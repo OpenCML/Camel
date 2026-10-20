@@ -1,5 +1,0 @@
-func main(): int sync {
-    let n = loop s = 0 for c in 'abc' do s + 1
-    println(n)
-    return 0
-}

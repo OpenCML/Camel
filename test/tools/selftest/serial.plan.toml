@@ -1,0 +1,31 @@
+# Fixture of test/tools/selftest/run.mjs: two tests marked `parallel = false` and one normal
+# test. A serial-marked test must run alone: no other test of the run overlaps it. The self-test
+# reads the intervals selftest_probe.mjs writes and checks that nothing overlaps anything.
+id = "selftest.serial"
+order = 4
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "selftest_probe.mjs"
+envs = ["SELFTEST_PROBE_LOG=tmp/selftest-serial.log"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "serial.first"
+desc = "Shares a resource with the rest of the run: holds every slot while it runs."
+args = ["${case}", "sleep", "s1", "300"]
+parallel = false
+
+[[tests]]
+name = "serial.second"
+desc = "A second serial test: the serial tests must not overlap each other either."
+args = ["${case}", "sleep", "s2", "300"]
+parallel = false
+
+[[tests]]
+name = "serial.parallel_neighbour"
+desc = "An ordinary test, queued behind the serial ones; it must not overlap them."
+args = ["${case}", "sleep", "s3", "300"]

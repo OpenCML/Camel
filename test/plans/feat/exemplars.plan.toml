@@ -1,6 +1,6 @@
 id = "exemplars"
 order = 900
-tier = "feat"
+tier = "fast"
 tags = ["feat", "exemplars"]
 
 [[tests]]

@@ -1,6 +1,6 @@
 id = "consistency.cleanup"
 order = 353
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "runtime", "cleanup"]
 desc = "What a program wrote before a fault or an exit() is there afterwards, on the four back ends"
 
@@ -40,12 +40,12 @@ assert(input.normalized.stdout === 'line\npending', JSON.stringify(input.normali
 name = "cleanup.file_written_before_fault"
 desc = "A file written (twice) before a fault holds the second, complete content after the program has stopped."
 case = "../../../cases/consistency/cleanup/file_written_before_fault.cml"
-envs = ["CAMEL_TEST_DIR=tmp/test/consistency", "CAMEL_TEST_FILE=before_fault.txt"]
+envs = ["CAMEL_TEST_DIR=${test_tmp}", "CAMEL_TEST_FILE=before_fault.txt"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_stdout_starts_with = "28\n"
 verify_script = """
-const file = input.repo_root + '/tmp/test/consistency/before_fault.txt'
+const file = input.test_tmp + '/before_fault.txt'
 const text = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
 assert(text === 'complete content, 28 bytes.\n', JSON.stringify(text))
 fs.rmSync(file)
@@ -55,10 +55,10 @@ fs.rmSync(file)
 name = "cleanup.file_written_before_exit"
 desc = "A file written before exit(5) is complete; the write after the exit did not happen."
 case = "../../../cases/consistency/cleanup/file_written_before_exit.cml"
-envs = ["CAMEL_TEST_DIR=tmp/test/consistency", "CAMEL_TEST_FILE=before_exit.txt"]
+envs = ["CAMEL_TEST_DIR=${test_tmp}", "CAMEL_TEST_FILE=before_exit.txt"]
 expect_exit = 5
 verify_script = """
-const file = input.repo_root + '/tmp/test/consistency/before_exit.txt'
+const file = input.test_tmp + '/before_exit.txt'
 const text = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
 assert(text === 'complete content, 28 bytes.\n', JSON.stringify(text))
 assert(input.normalized.stdout === '28\n', JSON.stringify(input.normalized.stdout))

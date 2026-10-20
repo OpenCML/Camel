@@ -1,7 +1,7 @@
 {
     "name": "camel-scripts",
     "private": true,
-    "version": "0.2.14",
+    "version": "0.2.15",
     "type": "module",
     "pre-commit": [
         "precommit:staged"
@@ -13,8 +13,8 @@
         "cnt": "node ./scripts/cnt.js",
         "init": "node ./scripts/install.js",
         "check": "node ./scripts/check.js",
-        "test": "node ./scripts/test.js",
-        "test:all": "node ./scripts/test.js --all",
+        "test": "node ./scripts/test.js --tier fast",
+        "test:all": "node ./scripts/test.js --all --tier all",
         "config": "node ./scripts/config.js",
         "build": "node ./scripts/build.js",
         "debug": "node ./scripts/debug.js",

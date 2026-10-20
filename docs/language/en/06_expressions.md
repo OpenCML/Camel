@@ -25,6 +25,24 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 - **A list comprehension** `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>`: `x` has the element type of `xs`, `if c` may be left out, and the result is an array of `e`. On the graph it is exactly what the two calls written out are (two operator nodes, each with the subgraph of its element function), so it has their properties: nothing is promised about the order of the elements (a parallel scheduler may compute them concurrently), and effects in `e` and `c` are treated as in the element functions of `map` and `filter` ([6.10](#610-higher-order-operators)). It nests, and it may stand wherever an expression may. A source that is not an array is `SemanticDiag::ComprehensionSourceRefused`.
 - The spread `...xs` is reserved and not implemented (`SemanticDiag::ConstructNotSupported`). Write `concat(xs, ys)`.
 
+### 6.2.1 Formatted strings
+
+In a backquoted string `` `...` ``, `${expression}` interpolates, optionally with a format specification, `${expression:spec}` (the lexical rules are in [2.5.3.1](02_lexical.md#2531-formatted-strings)). It is **the same tree** as `'...'->format<...>`: each `${...}` becomes a placeholder of `format` (`{}` or `{:spec}`), a `{` or `}` of the literal text is written `{{` or `}}`, and `format` is called with the interpolated expressions as its with-arguments and that text as its ordinary argument.
+
+```cml
+let name = 'Camel'
+let n = 42
+println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
+println(`n = ${n}, twice = ${n * 2}`)
+println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+```
+
+- An interpolated expression is evaluated where it is written, in the lexical scope there; name lookup, type checking and effects are exactly those of the same expression outside the string. They are the with-arguments of `format`, so when they are evaluated follows the dependency and effect rules ([4.2](04_execution_model.md#42-evaluation-by-dependency)), exactly as if the same expressions were written outside the string.
+- A specification the value's type does not take is a **compile-time** error `SemanticDiag::ArgumentsRejected`, located at that interpolation (the same check `format` makes for a constant format string).
+- A syntax error in an interpolated expression is reported at its position in the file; being inside a string does not swallow it.
+- Being the same tree, every execution mode (`std::nvm`, `std::fvm`, `std::jit`, `std::prl`) and the `std::cpp` translator see a `format` call: their output is byte-identical.
+- The formatter does not change the text of a backquoted string (the interpolated expressions are kept as written); to format code inside an interpolation, write the `format` call or move the expression out.
+
 ## 6.3 Access and subscripts
 
 | Form | Meaning |
@@ -80,7 +98,7 @@ func main(): int sync {
         ->map<(x: int): int => x * x>
         ->filter<(x: int): bool => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
-    println('total = {}'->format<total>)
+    println(`total = ${total}`)
     return 0
 }
 ```
@@ -341,7 +359,7 @@ func main(): int sync {
 
 A missing case, an extra case or a literal case mixed in is `SemanticDiag::TaggedMatchCases`.
 
-**Patterns on an `enum`.** When the matched value is an enum, a pattern names one of its variants ([3.5](03_data_model.md#35-enums)): `case Shape::Circle(r)`, `case Shape::Rect { w, h }`, `case Shape::Empty`, `case _`. A tuple variant gives every position; a struct variant writes the fields it binds (it may rename and abbreviate); a variant without data is its bare name. Naming every variant means no `case _` is needed; a missing variant without `case _` is `SemanticDiag::EnumMatchNotExhaustive`, whose diagnostic lists the missing variants; a variant written twice warns (`EnumVariantCaseRepeated`), and a case after `case _` warns (`MatchCaseAfterWildcard`). The first version has no nested patterns (a pattern in the position of a field) and says "not supported yet" (`ConstructNotSupported`).
+**Patterns on an `enum`.** When the matched value is an enum, a pattern names one of its variants ([3.5](03_data_model.md#35-enums)): `case Shape::Circle(r)`, `case Shape::Rect { w, h }`, `case Shape::Empty`, `case _`. A tuple variant gives every position; a struct variant writes the fields it binds (it may rename and abbreviate); a variant without data is written by its qualified name (`case Shape::Empty`; a bare name is a binding, and `case Empty` is `EnumPatternMismatch`). Naming every variant means no `case _` is needed; a missing variant without `case _` is `SemanticDiag::EnumMatchNotExhaustive`, whose diagnostic lists the missing variants; a variant written twice warns (`EnumVariantCaseRepeated`), a case after `case _` warns (`MatchCaseAfterWildcard`), and a `case _` written after every variant is already named warns (`MatchWildcardRedundant`). The first version has no nested patterns (a pattern in the position of a field) and says "not supported yet" (`ConstructNotSupported`).
 
 **A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Three shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, a `match` on a `T?` or `T!` with the fixed patterns above, and a `match` on an enum that names every variant. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
 
@@ -354,7 +372,7 @@ Tuple patterns, struct patterns, and identifier patterns on values of ordinary t
 A loop is an expression with a state (design principles 3.10). The state is written in the head of the loop: each name is declared once with its first value. The expression after `do` is the body; its value is the state of the next round, and the value of the whole loop is the last state.
 
 ```
-loop name = init (, name = init)* (for name in array)? (while condition)? do expression
+loop name = init (, name = init)* (for name in sequence)? (while condition)? do expression
 ```
 
 ```cml
@@ -365,16 +383,21 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 ```
 
 - **State.** With one name the body's value and the loop's value are that value; with several names (separated by commas) the body gives the tuple of them in the order of the head, and the loop's value is that tuple, taken apart with `let (a, b) = loop ...` or `.0`, `.1`. The state has the type of its first value; the body's value must have that type (or enter it, as an `int` enters an `int?`), otherwise `SemanticDiag::LoopBodyTypeMismatch`. `null` and the empty array `[]` have no type of their own as first values: write `null as T?`, or bind the empty array with its type first (`let none: int[] = []`) and start from that name (`SemanticDiag::LoopStateWithoutType`).
-- **`for x in xs`** takes one element of the array `xs` per round, in order; `xs` must be an array (`SemanticDiag::LoopSequenceNotArray`), and `range(a, b)` is one. **`while c`** goes on as long as the condition holds; the condition is a `bool` (`SemanticDiag::LoopConditionNotBool`). With both, each round looks at the condition first and then takes the next element: the loop ends when the condition fails or the elements are used up. At least one of them is written.
+- **`for x in xs`** takes one element of the sequence `xs` per round, in order; `xs` is an array, a string, a map or a tensor, and any other type is `SemanticDiag::LoopSequenceNotIterable`.
+  - **Array**: the element itself; `range(a, b)` is one.
+  - **String**: by code point, each element the one-character string of that code point, as `s[i]` gives it (11.1): the two rounds of `for c in '中文'` are `'中'` and `'文'`, and a multi-byte character counts once.
+  - **Map**: the `(key, value)` pairs in key order (the traversal order of 11.3, as `items(m)` gives them), not insertion order: in `for kv in m` the keys are strictly ascending, and `kv.0` and `kv.1` take the pair apart.
+  - **Tensor**: along the first dimension, each element the sub-tensor with the first dimension dropped (sharing that slice of the data, not copied): a rank-2 `Tensor<f32, const [2, 3]>` gives two `Tensor<f32, const [3]>`, and a rank-1 tensor gives rank-0 sub-tensors (`sum(x)` is its number). The element type of a `Tensor` whose shape is unknown is `Tensor`. A rank-0 tensor has no first dimension and is not a sequence.
+  An empty array, empty string, empty map, or a tensor whose first extent is 0 runs no round, and the loop's value is the first state. **`while c`** goes on as long as the condition holds; the condition is a `bool` (`SemanticDiag::LoopConditionNotBool`). With both, each round looks at the condition first and then takes the next element: the loop ends when the condition fails or the elements are used up. At least one of them is written.
 - **No `break` and no `continue`**: ending early is written as the `while` condition, skipping the rest of a round as an `if`.
-- **Scope.** The first values and the array are evaluated once, where the loop is, and do not see the names of the head; the condition sees the names of the state, the body those and the name of `for`. A name of the head is given once (`SemanticDiag::LoopNameRepeated`). The condition and the body see the names around the loop (a `var` is read anew in every round).
+- **Scope.** The first values and the sequence are evaluated once, where the loop is, and do not see the names of the head; the condition sees the names of the state, the body those and the name of `for`. A name of the head is given once (`SemanticDiag::LoopNameRepeated`). The condition and the body see the names around the loop (a `var` is read anew in every round).
 - **After `do`** comes an expression, read as after `then`: `{ x: 1 }` is a struct, `{ 5 }` and `sync { ... }` are blocks. A `return` in such a block ends the block with the next state; it does not leave the function.
 - **Effects.** Whether the body is a sync block is up to the body (3.2). Written `do sync { println(x); acc + x }`, its effects run in order every round. A loop in a block that is not a sync block, whose value nothing uses, does not run, with `EffectNotExecuted`, as for an unused call.
 - **Order and depth.** The rounds run strictly one after the other. A loop is not a recursion: no number of rounds takes call depth, `--max-recursion-depth` does not count them, and a loop that does not end runs on.
 - **Numeric permissions.** `@numeric(...)` on a function or a block covers the bodies and conditions of the loops written in it (7.5).
 - `loop`, `while`, `do`, `for` and `in` are keywords.
 
-On the graph a loop is one `LOOP` node in the graph it is written in; the condition and the body are a subgraph each, sharing one table of captured values (design principles 3.10; `docs/design/graph-model` 3.5).
+On the graph a loop is one `LOOP` node in the graph it is written in; the condition and the body are a subgraph each, sharing one table of captured values (design principles 3.10; `docs/design/graph-model` 3.5). A string, a map and a tensor are turned into their array of elements (the code points, the key-value pairs, the first-dimension sub-tensors) once, where the loop is; the `LOOP` node itself still iterates an array, which is the only form the back ends and the lowering handle.
 
 ## 6.9 Lambdas and function types
 

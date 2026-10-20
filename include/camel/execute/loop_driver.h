@@ -13,19 +13,25 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 19, 2026
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
  * The rounds of a LOOP node, once for every interpreter (docs/design/loops, docs/technical/
- * 39_loops.md): the order of a round, the layout of the ports a round binds, and what ends the
- * loop are the loop's (design principles 3.10, camel/core/loop_kind.h), not an interpreter's.
- * NodeVM, FastVM's native loop and the macro evaluator each supply only the services below, so a
- * change of the rules (more things to iterate over than arrays) is made here.
+ * 39_loops.md): the order of a round, the layout of the ports a round binds, the state (a value,
+ * a k-tuple, or — when the loop collects — a tuple of the state and one array per collection
+ * slot), and what ends the loop are the loop's (design principles 3.10, camel/core/loop_kind.h),
+ * not an interpreter's. NodeVM, FastVM's native loop and the macro evaluator each supply only
+ * the services below, so a change of the rules (more things to iterate over than arrays, how a
+ * collected value is kept) is made here.
  *
  * Each round: the condition first (a `while` or a `for … while`), then the next element (a `for`),
- * then the body, whose result is the next state. The state is the value (k = 1) or a k-tuple.
+ * then the body, whose result is the next state and — when the loop collects — one value per
+ * collection slot. Collection appends to an array the loop owns, so it is O(1) amortized per
+ * round: arrays grow geometrically, never by copying the whole tape. The arrays live in the
+ * loop's value tuple, which the interpreter roots in the node's slot, so the collector traces
+ * them like any array of their element type.
  *
  * The header-only template keeps the loop as fast as the three copies were: the services are
  * inlined.
@@ -34,10 +40,14 @@
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/graph.h"
+#include "camel/utils/assert.h"
 
 #include <cstddef>
+#include <cstdint>
 
 namespace camel::execute {
 
@@ -47,7 +57,29 @@ struct LoopShape {
     camel::runtime::GCGraph *body = nullptr;
     bool iterates                 = false; // for, for … while: one element a round
     size_t stateCount             = 1;     // k
+    /// s: the typed values the body produces for the loop to collect each round (0 normally).
+    size_t collectionCount = 0;
+    /// The loop's value tuple when it wraps its state (k > 1 or it collects): the k state values,
+    /// then one array per collection slot. nullptr when the value is the state itself (k == 1,
+    /// no collection). LoopView::valueType() is the same type.
+    const camel::core::type::TupleType *valueType = nullptr;
+    /// The source origin of the LOOP node: a memory exhausted while the loop collects is told at
+    /// the loop.
+    uint64_t origin = 0;
+
+    bool valueIsTuple() const { return stateCount > 1 || collectionCount != 0; }
+    bool collecting() const { return collectionCount != 0; }
 };
+
+/// The j-th value of a running state: the state itself for k = 1 without collection, the tuple's
+/// component otherwise. The layout lives here so no interpreter re-derives it.
+inline slot_t loopStateComponent(const LoopShape &shape, slot_t value, size_t j) {
+    if (!shape.valueIsTuple()) {
+        ASSERT(j == 0, "A loop without a value tuple has one state value.");
+        return value;
+    }
+    return camel::core::rtdata::fromSlot<::Tuple *>(value)->get<slot_t>(j);
+}
 
 /// Binds the ports of a round of `target` (the condition or the body): the element (when the
 /// graph takes one), the k values of the state, then the captures. `stateAt(j)` is the j-th value
@@ -70,24 +102,83 @@ inline void bindLoopRound(
     }
 }
 
+namespace detail {
+
+/// A fresh empty array for a collection slot. Its element type is in the loop's value type,
+/// through which the collector traces it.
+inline ::Array *newCollectionArray() { return ::Array::create(camel::core::mm::autoSpace(), 0); }
+
+} // namespace detail
+
 /**
- * Runs the rounds of a loop whose state `host` already holds. The host provides:
+ * Runs the rounds of a loop whose state `host` does not hold yet. The host provides:
  *
  *   void beforeRound(size_t round)            a round is about to start (a limit, a safepoint)
- *   slot_t callRound(GCGraph *target, const slot_t *element)
+ *   slot_t initialState(size_t j)             the j-th first value of the state, read from the
+ *                                             graph before the loop starts
+ *   slot_t stateValue()                       the state (the tuple when valueIsTuple())
+ *   void setStateValue(slot_t value)          makes `value` the state, rooted
+ *   slot_t callRound(const LoopShape &shape, GCGraph *target, const slot_t *element)
  *                                             one call of the condition or of the body for this
  *                                             round: the interpreter's own frame, recursion check
- *                                             and call, with the ports bound (bindLoopRound);
- *                                             returns the graph's result
+ *                                             and call, with the ports bound (bindLoopRound, the
+ *                                             state read through loopStateComponent from
+ *                                             stateValue()); returns the graph's result
  *   Array *iterable()                         the array a `for` iterates, read at each round
- *   void advance(slot_t next)                 the body's result becomes the state
  */
 template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Host &host) {
+    const size_t k = shape.stateCount;
+
+    if (!shape.collecting()) {
+        // The state as before collection existed: the value when k = 1, a k-tuple if not.
+        if (k == 1) {
+            host.setStateValue(host.initialState(0));
+        } else {
+            ::Tuple *state = ::Tuple::create(k, camel::core::mm::autoSpace());
+            for (size_t j = 0; j < k; ++j) {
+                state->set(j, host.initialState(j), shape.valueType);
+            }
+            host.setStateValue(camel::core::rtdata::toSlot(state));
+        }
+        for (size_t round = 0;; ++round) {
+            host.beforeRound(round);
+            if (shape.cond != nullptr &&
+                !camel::core::rtdata::fromSlot<bool>(host.callRound(shape, shape.cond, nullptr))) {
+                break;
+            }
+            slot_t element = NullSlot;
+            if (shape.iterates) {
+                ::Array *array = host.iterable();
+                if (round >= array->size()) {
+                    break;
+                }
+                element = array->data()[round];
+            }
+            const slot_t next =
+                host.callRound(shape, shape.body, shape.iterates ? &element : nullptr);
+            host.setStateValue(next);
+        }
+        return;
+    }
+
+    // A collecting loop's state is (state_0 … state_{k-1}, tape_0 … tape_{s-1}) and stays in
+    // that one tuple: the tapes are appended to, never copied.
+    ASSERT(
+        shape.valueType != nullptr && shape.valueType->size() == k + shape.collectionCount,
+        "A collecting loop's value type does not have its k + s components.");
+    ::Tuple *work = ::Tuple::create(k + shape.collectionCount, camel::core::mm::autoSpace());
+    for (size_t j = 0; j < k; ++j) {
+        work->set(j, host.initialState(j), shape.valueType);
+    }
+    for (size_t c = 0; c < shape.collectionCount; ++c) {
+        work->set(k + c, detail::newCollectionArray(), shape.valueType);
+    }
+    host.setStateValue(camel::core::rtdata::toSlot(work));
+
     for (size_t round = 0;; ++round) {
         host.beforeRound(round);
-        // Each round: the condition first, then the next element (camel/core/loop_kind.h).
         if (shape.cond != nullptr &&
-            !camel::core::rtdata::fromSlot<bool>(host.callRound(shape.cond, nullptr))) {
+            !camel::core::rtdata::fromSlot<bool>(host.callRound(shape, shape.cond, nullptr))) {
             break;
         }
         slot_t element = NullSlot;
@@ -98,7 +189,25 @@ template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Hos
             }
             element = array->data()[round];
         }
-        host.advance(host.callRound(shape.body, shape.iterates ? &element : nullptr));
+        const slot_t result =
+            host.callRound(shape, shape.body, shape.iterates ? &element : nullptr);
+        const auto *produced = camel::core::rtdata::fromSlot<::Tuple *>(result);
+        auto *state          = camel::core::rtdata::fromSlot<::Tuple *>(host.stateValue());
+        for (size_t j = 0; j < k; ++j) {
+            state->set(j, produced->get<slot_t>(j), shape.valueType);
+        }
+        for (size_t c = 0; c < shape.collectionCount; ++c) {
+            const auto *arrayType =
+                static_cast<const camel::core::type::ArrayType *>(shape.valueType->typeAt(k + c));
+            auto *array = state->get<::Array *>(k + c);
+            try {
+                array->append(produced->get<slot_t>(k + c), arrayType);
+            } catch (const camel::core::mm::MemoryExhausted &e) {
+                // Growing a tape is the loop's allocation: report the limit at the loop rather
+                // than as a bare pass failure.
+                throw e.during("collecting the values a loop produces each round", shape.origin);
+            }
+        }
     }
 }
 

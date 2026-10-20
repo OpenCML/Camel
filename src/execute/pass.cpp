@@ -28,6 +28,7 @@
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
 #include "camel/passes/test/control.h"
+#include "camel/passes/test/loop_collect.h"
 #include "camel/passes/trans/json/gir.h"
 #include "camel/runtime/capacity.h"
 #include "macro/macro.h"
@@ -346,14 +347,81 @@ PassParam safeFpParameter() {
         "(design principles 7.4)"};
 }
 
+/// The `growth_budget` parameter of every pass built on the rewrite engine (design principles
+/// 9.3): the nodes specialization and inlining may copy. A pipeline no longer sets it through an
+/// environment variable.
+PassParam growthBudgetParameter() {
+    return PassParam{
+        "growth_budget",
+        PassParamType::Int,
+        static_cast<int64_t>(kDefaultGrowthBudgetNodes),
+        "nodes specialization and inlining may copy before the remaining calls are left as "
+        "calls; 0 stops them (design principles 9.6)"};
+}
+
+GrowthBudget growthBudgetOf(const PassArgs &args, std::string passName) {
+    GrowthBudget budget;
+    const int64_t nodes = args.getInt("growth_budget");
+    budget.nodes    = nodes < 0 ? 0 : static_cast<size_t>(nodes);
+    budget.written  = args.given("growth_budget");
+    budget.passName = std::move(passName);
+    return budget;
+}
+
 PassDescriptor optimizeDescriptor() {
     PassDescriptor d;
     d.doc    = "the standard optimization pipeline";
-    d.params = {safeFpParameter()};
+    d.params = {safeFpParameter(), growthBudgetParameter()};
     d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
         OptimizeRewriteConfig config;
         config.safeFloatingPoint = args.getBool("safe_fp");
+        config.growthBudget      = growthBudgetOf(args, "std::opt");
         return std::make_unique<OptimizeRewritePass>(ctx, config);
+    };
+    return d;
+}
+
+PassDescriptor inlineDescriptor(
+    std::optional<InlineTargetStrategy> strategy, std::string passName) {
+    PassDescriptor d;
+    if (strategy == InlineTargetStrategy::Small) {
+        d.doc = "inline-only rewrite pass, small targets";
+    } else if (strategy == InlineTargetStrategy::Arm) {
+        d.doc = "inline-only rewrite pass, branch-arm targets";
+    } else {
+        d.doc = "inline-only rewrite pass (hybrid target strategy)";
+    }
+    d.params = {growthBudgetParameter()};
+    d.make   = [strategy, passName = std::move(passName)](
+                   const context_ptr_t &ctx, const PassArgs &args) {
+        InlineRewriteConfig config{};
+        if (strategy) {
+            config.inlineStrategy = *strategy;
+        }
+        return std::make_unique<InlineRewritePass>(
+            ctx, config, growthBudgetOf(args, passName));
+    };
+    return d;
+}
+
+PassDescriptor specializeDescriptor() {
+    PassDescriptor d;
+    d.doc    = "specialization only";
+    d.params = {growthBudgetParameter()};
+    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<SpecializeRewritePass>(
+            ctx, growthBudgetOf(args, "std::opt::specialize"));
+    };
+    return d;
+}
+
+PassDescriptor devirtualizeDescriptor() {
+    PassDescriptor d;
+    d.doc    = "devirtualization only";
+    d.params = {growthBudgetParameter()};
+    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<DevirtualizeRewritePass>(
+            ctx, growthBudgetOf(args, "std::opt::devirtualize"));
     };
     return d;
 }
@@ -523,32 +591,21 @@ PassScopePtr initPassScope() {
                      def(optimizeDescriptor(),
                          {
                              {"inline",
-                              def(PASS1(InlineRewritePass, InlineRewriteConfig{}),
+                              def(inlineDescriptor(std::nullopt, "std::opt::inline"),
                                   {
-                                      {"small", def([](const context_ptr_t &ctx) {
-                                           return std::make_unique<InlineRewritePass>(
-                                               ctx,
-                                               InlineRewriteConfig{
-                                                   .inlineStrategy = InlineTargetStrategy::Small,
-                                               });
-                                       })},
-                                      {"arm", def([](const context_ptr_t &ctx) {
-                                           return std::make_unique<InlineRewritePass>(
-                                               ctx,
-                                               InlineRewriteConfig{
-                                                   .inlineStrategy = InlineTargetStrategy::Arm,
-                                               });
-                                       })},
-                                      {"hybrid", def([](const context_ptr_t &ctx) {
-                                           return std::make_unique<InlineRewritePass>(
-                                               ctx,
-                                               InlineRewriteConfig{
-                                                   .inlineStrategy = InlineTargetStrategy::Hybrid,
-                                               });
-                                       })},
+                                      {"small",
+                                       def(inlineDescriptor(
+                                           InlineTargetStrategy::Small, "std::opt::inline::small"))},
+                                      {"arm",
+                                       def(inlineDescriptor(
+                                           InlineTargetStrategy::Arm, "std::opt::inline::arm"))},
+                                      {"hybrid",
+                                       def(inlineDescriptor(
+                                           InlineTargetStrategy::Hybrid,
+                                           "std::opt::inline::hybrid"))},
                                   })},
-                             {"devirtualize", def(PASS(DevirtualizeRewritePass))},
-                             {"specialize", def(PASS(SpecializeRewritePass))},
+                             {"devirtualize", def(devirtualizeDescriptor())},
+                             {"specialize", def(specializeDescriptor())},
                              {"fold", def(PASS(ConstantFoldPass))},
                              {"algebra", def(algebraDescriptor())},
                              {"cse", def(PASS(CommonSubexpressionPass))},
@@ -836,6 +893,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
         TEST_PASS(kResourcesTestPass, ResourcesTestPass),
         TEST_PASS(kControlTestPass, ControlTestPass),
+        TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
+        TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
         TEST_PASS(kFactSeedTestPass, FactSeedTestPass),
         TEST_PASS(kFactCheckTestPass, FactCheckTestPass),
@@ -1173,8 +1232,15 @@ PassApplyResult applyPassesDetailed(
                 // setting that raises it, at the graph that was being built when one is known.
                 setPipelineStage("pass:" + specName(p));
                 auto diag = ctx->rtmDiags()->of(RuntimeDiag::MemoryExhausted);
-                if (e.origin() != camel::source::kInvalidOriginId) {
-                    diag.atOrigin(e.origin());
+                // The allocator names a source only when the caller told it one (the loop
+                // driver does for its tapes); otherwise the bytecode the VM was running is the
+                // innermost place the program asked for memory.
+                uint64_t origin = e.origin();
+                if (origin == camel::source::kInvalidOriginId && ctx->sourceContext() != nullptr) {
+                    origin = ctx->sourceContext()->currentRuntimeOrigin();
+                }
+                if (origin != camel::source::kInvalidOriginId) {
+                    diag.atOrigin(origin);
                 }
                 diag.commit(std::format(" in pass '{}'", p), std::string(e.what()));
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);

@@ -1,0 +1,8 @@
+module fstring_multiline
+func main(): int sync {
+    let x = 7
+    println(`first line
+second line: ${x}
+third line`)
+    return 0
+}

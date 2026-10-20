@@ -1,0 +1,28 @@
+/**
+ * argmax (design principles 7.7) exported to ONNX: ONNX ArgMax takes the first index on ties
+ * with select_last_index=0, but it treats -0 and +0 the same and does not state what it does
+ * with NaN, so the exporter composes the rule. The model returns, for a [2, 8] float input,
+ * argmax along axis 1, the same with keepdims, and argmax along axis 0; MODE=int exports the
+ * same three from an int64 input (no NaN, no -0: a direct ArgMax). Checked on ONNX Runtime by
+ * ort_argmax.py.
+ */
+module ort_argmax
+import { Tensor, reshape, argmax } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func forward(x: Tensor): (Tensor, Tensor, Tensor) {
+    return (argmax(x, 1), argmax(x, 1, true), argmax(x, 0))
+}
+
+func main(): int sync {
+    if get_env('MODE') == 'int' then {
+        let x = reshape([3, 7, 7, 1, 1, 2, 2, 9, 3, 7, 7, 1, 1, 2, 2, 9], [2, 8])
+        export_model((x: Tensor): (Tensor, Tensor, Tensor) => forward(x), x, get_env('ONNX_OUT'))
+    } else {
+        let x = reshape([1.0, 3.0, 3.0, -2.0, -2.0, 7.0, 7.0, 0.5, 1.0, 3.0, 3.0, -2.0, -2.0, 7.0, 7.0, 0.5], [2, 8])
+        export_model((x: Tensor): (Tensor, Tensor, Tensor) => forward(x), x, get_env('ONNX_OUT'))
+    }
+    println('exported')
+    return 0
+}

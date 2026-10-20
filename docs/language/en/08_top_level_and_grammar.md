@@ -84,6 +84,7 @@ variant   : name | name '(' type, ... ')' | name '{' name: type, ... '}'
 
 - `T?`, `T!`: [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t).
 - `typeas T`: [7.5](07_statements.md#75-generic-functions).
+- `constas n`: names a dimension in a `const` argument ([design principles 5.4](../../design-principles.en.md)): the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards; it is allowed only in an array literal of a `const` argument, and anywhere else it is a syntax error.
 - `enum`: [3.5](03_data_model.md#35-enums). `A | B` in a type position is retired and gives `SemanticDiag::UnionTypeRetired`.
 - Angle brackets: the arguments of a type function ([7.7](07_statements.md#77-type-declarations)) or the arguments of a module type.
 
@@ -161,7 +162,9 @@ compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
-primaryData        : identRef | literal | arrayData | structData | tupleData | funcData
+primaryData        : identRef | constasData | literal | arrayData | structData | tupleData
+                     | funcData
+constasData        : 'constas' identDef
 literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
                      | 'true' | 'false' | 'null'
 indexValue         : '...'? dataExpr
@@ -248,7 +251,6 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Construct | Diagnostic given | Alternative today |
 |---|---|---|
 | Spread `[...xs, y]`, `{ ...p, x: 1 }`, `f(...args)` | `ConstructNotSupported` | `concat(xs, [y])`; write out the fields one by one |
-| Format string `` `x = {x}` `` | `ConstructNotSupported` | `'x = {}'->format<x>` |
 | `e is T` | `ConstructNotSupported` | None (there is no type information at run time) |
 | Non-null assertion `x!` | `ConstructNotSupported` | `x ?? default`, `match` |
 | `f ?.. g` | `ConstructNotSupported` | None |

@@ -25,6 +25,24 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 - **列表推导** `[e for x in xs if c]` 就是 `xs->filter<(x) => c>->map<(x) => e>`：`x` 的类型是 `xs` 的元素类型，`if c` 可以省略，结果是 `e` 的数组。图上与手写这两个调用完全相同（两个算子节点，各带一张元素函数的子图），所以它的性质也相同：元素之间没有顺序约定（并行调度器可以并发地算），`e`、`c` 里的副作用与 `map`、`filter` 的元素函数里的一样处理（[6.10](#610-高阶算子)）。可以嵌套，也可以出现在任何需要表达式的位置。`xs` 不是数组是 `SemanticDiag::ComprehensionSourceRefused`。
 - 展开 `...xs` 保留，尚未实现（`SemanticDiag::ConstructNotSupported`）。写成 `concat(xs, ys)`。
 
+### 6.2.1 格式化字符串
+
+反引号字符串 `` `...` `` 里的 `${表达式}` 是插值，可以带格式说明 `${表达式:格式说明}`（词法见 [2.5.3.1](02_lexical.md#2531-格式化字符串)）。它与 `'...'->format<...>` 是**同一棵树**：把 `${...}` 换成 `format` 的占位符（`{}` 或 `{:格式说明}`），把文字里的 `{`、`}` 写成 `{{`、`}}`，再以各插值表达式为 with 实参、以这段文字为普通实参调用 `format`。
+
+```cml
+let name = 'Camel'
+let n = 42
+println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
+println(`n = ${n}, twice = ${n * 2}`)
+println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+```
+
+- 插值表达式在它写的位置、按它所在的词法作用域求值；名字查找、类型检查、副作用与写在字符串外完全一样。它们是 `format` 的 with 实参，何时求值由依赖与副作用规则决定（[4.2](04_execution_model.md#42-按依赖求值)），与同一批表达式写在字符串外没有区别。
+- 格式说明与值的类型不符是**编译期**错误 `SemanticDiag::ArgumentsRejected`，位置指向那一处插值（与 `format` 对常量格式串的检查相同）。
+- 插值表达式的语法错误按它在文件里的位置报告，不会因为在一个字符串里而被吞掉。
+- 由于是同一棵树，所有执行方式（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）与 `std::cpp` 翻译看到的就是 `format` 调用，输出逐字节相同。
+- 格式化器不改变反引号字符串的内容（插值表达式也按原样保留）；要格式化插值里的代码，先把它写成 `format` 调用或单独一行。
+
 ## 6.3 访问与下标
 
 | 写法 | 含义 |
@@ -80,7 +98,7 @@ func main(): int sync {
         ->map<(x: int): int => x * x>
         ->filter<(x: int): bool => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
-    println('total = {}'->format<total>)
+    println(`total = ${total}`)
     return 0
 }
 ```
@@ -341,7 +359,7 @@ func main(): int sync {
 
 缺分支、多分支或混入字面量分支是 `SemanticDiag::TaggedMatchCases`。
 
-**对 `enum` 的模式。** 被匹配的值是枚举时，模式写它的变体（[3.5](03_data_model.md#35-枚举-enum)）：`case Shape::Circle(r)`、`case Shape::Rect { w, h }`、`case Shape::Empty`、`case _`。元组变体要给全位置，结构体变体只写要绑定的字段（可改名、可简写），无数据的变体只写名字。列全所有变体就不必写 `case _`；漏了变体又没有 `case _` 是 `SemanticDiag::EnumMatchNotExhaustive`，诊断列出漏掉的变体名；同一个变体写两次给 `EnumVariantCaseRepeated` 警告，`case _` 之后的臂给 `MatchCaseAfterWildcard` 警告。第一版不支持嵌套模式（字段位置再写模式），给出"暂不支持"（`ConstructNotSupported`）。
+**对 `enum` 的模式。** 被匹配的值是枚举时，模式写它的变体（[3.5](03_data_model.md#35-枚举-enum)）：`case Shape::Circle(r)`、`case Shape::Rect { w, h }`、`case Shape::Empty`、`case _`。元组变体要给全位置，结构体变体只写要绑定的字段（可改名、可简写），无数据的变体写它的限定名（`case Shape::Empty`；裸名字是绑定名，写成 `case Empty` 是 `EnumPatternMismatch`）。列全所有变体就不必写 `case _`；漏了变体又没有 `case _` 是 `SemanticDiag::EnumMatchNotExhaustive`，诊断列出漏掉的变体名；同一个变体写两次给 `EnumVariantCaseRepeated` 警告，`case _` 之后的臂给 `MatchCaseAfterWildcard` 警告，列全所有变体后还写 `case _` 给 `MatchWildcardRedundant` 警告。第一版不支持嵌套模式（字段位置再写模式），给出"暂不支持"（`ConstructNotSupported`）。
 
 **`match` 必须有默认分支。** 没有 `case _` 是编译期错误 `SemanticDiag::MatchWithoutDefault`，定位在 `match` 上。三种情形不必写：对 `bool` 写全了 `case true` 与 `case false`；对 `T?`、`T!` 用上面的固定模式；对枚举列全了所有变体。编译器不会追加程序里没有写的分支臂，所以图上的臂与源码里的 `case` 一一对应。
 
@@ -354,7 +372,7 @@ func main(): int sync {
 循环是一个带状态的表达式（设计原则 3.10）。状态写在循环头上，每个名字只声明一次并给出初值；`do` 后面的表达式是循环体，它的值是下一轮的状态；整个循环的值是最后的状态。
 
 ```
-loop 名字 = 初值 (, 名字 = 初值)* (for 名字 in 数组)? (while 条件)? do 表达式
+loop 名字 = 初值 (, 名字 = 初值)* (for 名字 in 序列)? (while 条件)? do 表达式
 ```
 
 ```cml
@@ -365,16 +383,21 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 ```
 
 - **状态**：一个名字时，循环体的值与循环的值就是这个值；几个名字（逗号分开）时，循环体给出它们按书写顺序组成的元组，循环的值也是这个元组，用 `let (a, b) = loop ...` 或 `.0`、`.1` 取出。状态的类型是初值的类型；循环体的值必须是这个类型（能自动装入的除外，如 `int` 进入 `int?`），否则是 `SemanticDiag::LoopBodyTypeMismatch`。`null` 与空数组 `[]` 作初值时没有自己的类型，写 `null as T?`，或先把空数组带类型绑定到一个名字（`let none: int[] = []`）再用这个名字（`SemanticDiag::LoopStateWithoutType`）。
-- **`for x in xs`** 每轮按顺序取数组 `xs` 的一个元素；`xs` 必须是数组（`SemanticDiag::LoopSequenceNotArray`），`range(a, b)` 就是一个数组。**`while c`** 在条件成立时继续；条件是 `bool`（`SemanticDiag::LoopConditionNotBool`）。两者都写时，每一轮先看条件，再取下一个元素：条件不成立或元素取完即结束。至少写其中一个。
+- **`for x in xs`** 每轮按顺序取序列 `xs` 的一个元素；`xs` 是数组、字符串、映射或张量，别的类型是 `SemanticDiag::LoopSequenceNotIterable`。
+  - **数组**：元素本身，`range(a, b)` 就是一个数组。
+  - **字符串**：按码点，每个元素是只含这个字符的字符串，与 `s[i]` 相同（11.1）：`for c in '中文'` 的两轮是 `'中'`、`'文'`；多字节的字符按一个码点算一次。
+  - **映射**：`(键, 值)` 元组，按键的顺序（11.3 的遍历顺序，与 `items(m)` 相同），不是插入顺序：`for kv in m` 取到的键严格递增，元组用 `kv.0`、`kv.1` 取出。
+  - **张量**：沿第一维，每个元素是去掉第一维后的子张量（与这一维上的一段共享同一份数据，不复制）：rank 2 的 `Tensor<f32, const [2, 3]>` 给出两个 `Tensor<f32, const [3]>`，rank 1 给出 rank 0 的子张量（`sum(x)` 是它的数）。形状未知的 `Tensor` 的元素类型是 `Tensor`。rank 0 的张量没有第一维，不是序列。
+  空数组、空字符串、空映射、第一维为 0 的张量一轮都不执行，循环的值是初值。**`while c`** 在条件成立时继续；条件是 `bool`（`SemanticDiag::LoopConditionNotBool`）。两者都写时，每一轮先看条件，再取下一个元素：条件不成立或元素取完即结束。至少写其中一个。
 - **没有 `break` 与 `continue`**：提前结束写成 `while` 条件，跳过一轮的其余部分写成 `if`。
-- **作用域**：初值与数组在循环所在处求值一次，其中看不到循环头的名字；条件看得到状态的名字，循环体看得到状态的名字与 `for` 的名字。循环头的名字不能重复（`SemanticDiag::LoopNameRepeated`）。条件与循环体看得到外面的名字，读到的是循环开始时的值（`var` 每轮读其当前值）。
+- **作用域**：初值与序列在循环所在处求值一次，其中看不到循环头的名字；条件看得到状态的名字，循环体看得到状态的名字与 `for` 的名字。循环头的名字不能重复（`SemanticDiag::LoopNameRepeated`）。条件与循环体看得到外面的名字，读到的是循环开始时的值（`var` 每轮读其当前值）。
 - **`do` 之后**是一个表达式，读法与 `then` 之后相同：`{ x: 1 }` 是结构体，`{ 5 }` 与 `sync { ... }` 是块。块里 `return` 结束这个块并给出下一轮的状态，不离开函数。
 - **效应**：循环体是不是同步块由它自己决定（3.2）。写成 `do sync { println(x); acc + x }` 时每轮按顺序执行其中的效应。循环所在的块不是同步块、而循环的值又没有被用到时，整个循环不执行，并给出 `EffectNotExecuted`（与没有被用到的调用相同）。
 - **顺序与深度**：各轮严格按顺序。循环不是递归：任意多轮都不占调用深度，`--max-recursion-depth` 不计循环的轮数；不终止的循环一直运行。
 - **数值许可**：写在函数或块上的 `@numeric(...)` 对词法上嵌在其中的循环体与条件同样有效（7.5）。
 - `loop`、`while`、`do`、`for`、`in` 是关键字。
 
-在图上，一个循环是外层图里的一个 `LOOP` 节点，条件与循环体各是一张子图，两者共用一份捕获表（设计原则 3.10；`docs/design/graph-model` 3.5）。
+在图上，一个循环是外层图里的一个 `LOOP` 节点，条件与循环体各是一张子图，两者共用一份捕获表（设计原则 3.10；`docs/design/graph-model` 3.5）。字符串、映射与张量在循环所在处按其类型一次转换成元素数组（字符串的码点、映射的键值对、张量的第一维子张量），`LOOP` 节点本身仍然只遍历数组：各后端与下降都只有这一种情形。
 
 ## 6.9 lambda 与函数类型
 

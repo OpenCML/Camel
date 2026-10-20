@@ -1,6 +1,6 @@
 id = "opt.pass_params"
 order = 331
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "pipeline", "pass-parameters"]
 
 # Pass parameters are general pipeline syntax (design principles 9.2): `name(key=value, ...)`
@@ -129,4 +129,44 @@ args = ["${case}", "tensor::echo(label=\"mine\")", "std::fvm"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 0
 expect_stdout_starts_with = "test_echo: n=1 ratio=0.5 label=mine flag=false\ncamel-ran-marker\n"
+
+[[tests]]
+name = "module_import.adds_no_pass"
+desc = "Importing a module adds no pass to the pipeline (design principles 9.2): the case imports tensor, which registers tensor::fuse and, with the test passes, tensor::test_echo, yet only the scheduler written on the command line runs. It used to insert the registered passes before std::fvm, and test_echo would have printed."
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_starts_with = "camel-ran-marker\n"
+expect_output_not_contains = ["test_echo:"]
+
+[[tests]]
+name = "growth_budget.parameter"
+desc = "std::opt::inline declares growth_budget and takes it as a parameter, like every pass setting (it used to be CAMEL_OPT_GROWTH_BUDGET)."
+args = ["${case}", "std::opt::inline(growth_budget=0)", "std::fvm"]
+expect_exit = 0
+expect_stdout_starts_with = "camel-ran-marker\n"
+
+[[tests]]
+name = "growth_budget.wrong_type"
+desc = "growth_budget is an int of the pass declaration, checked before anything runs."
+args = ["${case}", "std::opt(growth_budget=true)", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "parameter 'growth_budget' is a bool, not an int"]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "timeit.adds_no_module_pass"
+desc = "--timeit is a CLI measurement option, not a pass and not a place where a module's registered passes join: timing std::fvm on a case that imports tensor with the test passes enabled prints no test_echo output."
+args = ["--timeit", "std::fvm/1", "${case}"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_output_not_contains = ["test_echo:"]
+
+[[tests]]
+name = "cli.no_module_passes_retired"
+desc = "The option that left out the passes imported modules used to join to the pipeline is gone with the mechanism (design principles 9.2): writing it is refused by name, with exit 1 and nothing running. The pipeline is composed explicitly instead."
+args = ["--no-module-passes", "${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["Error: --no-module-passes was retired", "importing a module no longer adds a pass to the pipeline"]
+expect_output_not_contains = ["camel-ran-marker"]
 

@@ -1,6 +1,6 @@
 id = "compile.function_value_positions"
 order = 326
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "closures", "functions"]
 desc = "A function is a value in every position a value can stand in, alike on the four back ends."
 

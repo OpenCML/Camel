@@ -64,8 +64,11 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 - Main entry: `node scripts/test.js`
 - Test plans live under `test/plans/`; you may pass either a single `*.plan.toml` file or a plan directory.
 - When adding a new feature or a new test case, first run the relevant case manually from the command line and inspect the execution flow and stdout/stderr directly before relying on the plan runner. Only add or refine automated `verify_*` logic after the manual run confirms the observable behavior you actually want to lock in.
-- `npm run test` runs the default developer set: `smoke` plus all `feat/**` plans.
-- `npm run test:all` runs all plans under `test/plans/`, including `perf/**`.
+- `npm run test` runs the **fast** layer of `smoke` plus all `feat/**` plans, in parallel (one test per core).
+- `npm run test:all` runs every plan under `test/plans/`, including `perf/**` and the slow tests.
+- `--jobs N` sets the parallel width; `--jobs 1` reproduces the serial run. `--tier fast|slow|all`
+  selects a layer (default `fast`); a target's slow tests run only with `--tier all`.
+- `node scripts/test.js --changed` runs the plans a change touches, selected by `test/plan-selection.json`.
 - Prefer passing the target explicitly instead of adding new `npm run test:*` aliases.
 - Shorthand targets such as `smoke`, `feat`, `parse`, `compile`, `opt`, `trans`, `linear`, `para`, `modules`, and `perf` resolve to the matching plan directories.
 - Direct examples:

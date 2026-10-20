@@ -1,6 +1,6 @@
 id = "para.core"
 order = 350
-tier = "feat"
+tier = "fast"
 tags = ["feat", "para"]
 
 [[tests]]

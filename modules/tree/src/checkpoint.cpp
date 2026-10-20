@@ -34,6 +34,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/tree.h"
 #include "camel/core/type/typevar.h"
+#include "camel/utils/path.h"
 #include "camel/utils/sha256.h"
 #include "include/tree/checkpoint_io.h"
 #include <algorithm>
@@ -283,6 +284,7 @@ slot_t rebuild(Type *type, const NativeNode &node) {
 
 slot_t saveKernel(ArgsView &, ArgsView &norm, Context &) {
     const std::string directory(norm.get<::String *>(0)->view());
+    const std::filesystem::path directoryPath = camel::utils::pathFromUtf8(directory);
     const std::string dataHash =
         norm.size() == 3 ? std::string(norm.get<::String *>(2)->view()) : "";
     try {
@@ -296,7 +298,7 @@ slot_t saveKernel(ArgsView &, ArgsView &norm, Context &) {
             {"dataset_manifest_sha256", dataHash},
             {"tree", root.spec}};
         files.emplace_back("manifest.json", manifest.dump(2) + "\n");
-        publishCheckpoint(directory, files);
+        publishCheckpoint(directoryPath, files);
         return NullSlot;
     } catch (const std::exception &error) {
         core::error::throwRuntimeFault(
@@ -308,6 +310,7 @@ slot_t saveKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
     const std::string directory(norm.get<::String *>(0)->view());
+    const std::filesystem::path directoryPath = camel::utils::pathFromUtf8(directory);
     const std::string dataHash =
         norm.size() == 2 ? std::string(norm.get<::String *>(1)->view()) : "";
     try {
@@ -317,12 +320,13 @@ slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
         if (!output)
             throw std::invalid_argument(
                 "backend did not supply the static checkpoint result layout");
-        const auto manifest = Json::parse(readCheckpointFile(directory, "manifest.json"));
+        const auto manifest = Json::parse(readCheckpointFile(directoryPath, "manifest.json"));
         if (manifest.at("schema") != 1)
             throw std::invalid_argument("unsupported checkpoint schema");
         if (!manifest.at("camel_version").is_string())
             throw std::invalid_argument("missing Camel version");
-        const auto restored = readNode(output->payloadType(), manifest.at("tree"), directory, "");
+        const auto restored =
+            readNode(output->payloadType(), manifest.at("tree"), directoryPath, "");
         if (!dataHash.empty() && manifest.at("dataset_manifest_sha256") != dataHash)
             std::cerr
                 << "warning: tree.load_tree: dataset manifest SHA-256 differs from checkpoint\n";

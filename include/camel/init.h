@@ -67,7 +67,8 @@ inline void initialize() {
         namespace fs     = std::filesystem;
         if (!fs::exists(installRoot / "bin") || !fs::exists(installRoot / "libs") ||
             !fs::exists(installRoot / "stdlib")) {
-            std::cerr << "[camel] Warning: detected install root '" << installRoot.string()
+            std::cerr << "[camel] Warning: detected install root '"
+                      << camel::utils::pathToUtf8(installRoot)
                       << "' misses one or more standard directories (bin/libs/stdlib)."
                       << " Set CAMEL_HOME to a valid SDK root if runtime loading fails.\n";
         }

@@ -744,24 +744,22 @@ slot_t MacroEvaluator::executeFunction(
 
 slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t node) {
     const camel::runtime::LoopView loop(*graph, node);
-    const size_t k = loop.stateCount();
-    // The state lives in a tuple held by a root: the condition and the body run safepoints.
+    const size_t k           = loop.stateCount();
+    const size_t collections = loop.collectionCount();
+    const bool wraps         = k > 1 || collections != 0;
+    const auto *valueType    = wraps ? static_cast<const TupleType *>(loop.valueType()) : nullptr;
+    // The state lives in a rooted tuple: the condition and the body run safepoints. When the
+    // loop collects, that tuple is (state…, tape…), the value itself (LoopView::valueType).
     std::vector<Type *> stateTypes;
     for (size_t j = 0; j < k; ++j) {
         stateTypes.push_back(loop.stateType(j));
     }
-    auto *stateTupleType = TupleType::create(stateTypes);
+    auto *stateTupleType = wraps ? valueType : TupleType::create(stateTypes);
     mm::RootHandle state(
         mm::autoSpace(),
-        ::Tuple::create(k, mm::autoSpace()),
+        ::Tuple::create(wraps ? k + collections : k, mm::autoSpace()),
         stateTupleType,
         "MacroEvaluator.loop");
-    for (size_t j = 0; j < k; ++j) {
-        state.getAs<::Tuple>()->set(
-            j,
-            frame->get<slot_t>(dataIndexOf(graph, loop.initialState(j))),
-            stateTupleType);
-    }
     const auto captures = loop.captures();
     // The rounds are the loop's (camel/execute/loop_driver.h); this evaluator supplies a call
     // for each, with the state in a tuple the evaluator roots.
@@ -769,11 +767,13 @@ slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t n
         MacroEvaluator &evaluator;
         Frame *frame;
         GCGraph *graph;
+        camel::runtime::LoopView loop;
         std::span<const gc_node_ref_t> captures;
         std::optional<gc_node_ref_t> iterableNode;
         mm::RootHandle &state;
-        TupleType *stateTupleType;
+        const TupleType *stateTupleType;
         size_t k;
+        bool wraps;
         size_t maxRounds;
 
         void beforeRound(size_t round) {
@@ -789,7 +789,21 @@ slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t n
             }
             mm::safepoint("macro loop round");
         }
-        slot_t callRound(GCGraph *callee, const slot_t *element) {
+        slot_t initialState(size_t j) {
+            return frame->get<slot_t>(dataIndexOf(graph, loop.initialState(j)));
+        }
+        slot_t stateValue() {
+            return wraps ? toSlot<Object *>(state.get()) : state.getAs<::Tuple>()->get<slot_t>(0);
+        }
+        void setStateValue(slot_t value) {
+            if (wraps) {
+                state.reset(fromSlot<Object *>(value), stateTupleType);
+            } else {
+                state.getAs<::Tuple>()->set(0, value, stateTupleType);
+            }
+        }
+        slot_t
+        callRound(const camel::execute::LoopShape &shape, GCGraph *callee, const slot_t *element) {
             auto *funcObj =
                 ::Function::create(callee, ensureMacroClosureType(callee), mm::autoSpace());
             return evaluator.executeFunction(
@@ -801,7 +815,9 @@ slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t n
                         k,
                         element,
                         captures.size(),
-                        [&](size_t j) { return state.getAs<::Tuple>()->get<slot_t>(j); },
+                        [&](size_t j) {
+                            return camel::execute::loopStateComponent(shape, stateValue(), j);
+                        },
                         [&](size_t c) {
                             return frame->get<slot_t>(dataIndexOf(graph, captures[c]));
                         });
@@ -809,36 +825,32 @@ slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t n
                 false);
         }
         ::Array *iterable() { return frame->get<::Array *>(dataIndexOf(graph, *iterableNode)); }
-        void advance(slot_t next) {
-            if (k == 1) {
-                state.getAs<::Tuple>()->set(0, next, stateTupleType);
-            } else {
-                auto *tuple = fromSlot<::Tuple *>(next);
-                for (size_t j = 0; j < k; ++j) {
-                    state.getAs<::Tuple>()->set(j, tuple->get<slot_t>(j), stateTupleType);
-                }
-            }
-        }
     } host{
         *this,
         frame,
         graph,
+        loop,
         captures,
         loop.iterable(),
         state,
         stateTupleType,
         k,
+        wraps,
         camel::execute::macroRoundLimit(*context_)};
     camel::execute::driveLoopRounds(
         camel::execute::LoopShape{
-            loop.condGraph(),
-            loop.bodyGraph(),
-            loop.iterable().has_value(),
-            k},
+            .cond            = loop.condGraph(),
+            .body            = loop.bodyGraph(),
+            .iterates        = loop.iterable().has_value(),
+            .stateCount      = k,
+            .collectionCount = collections,
+            .valueType       = valueType,
+            .origin          = graph->nodeOrigin(node),
+        },
         host);
-    // The value of the loop: the state, or the tuple of its values (a new object: the one the
-    // loop kept is the evaluator's).
-    if (k == 1) {
+    // The value of the loop: the state, or the tuple of its values and tapes (a new object: the
+    // one the loop kept is the evaluator's).
+    if (!wraps) {
         return state.getAs<::Tuple>()->get<slot_t>(0);
     }
     return toSlot<Object *>(state.getAs<::Tuple>()->clone(mm::autoSpace(), stateTupleType, false));

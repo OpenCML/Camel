@@ -1,6 +1,6 @@
 id = "linear.jit_framed"
 order = 356
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "jit", "codegen"]
 desc = "Graphs that need the runtime, compiled by std::jit as framed code (docs/technical/07_jit_architecture.md, section 17): operators, casts, struct and tuple access, match, calls of other graphs, calls through function values and higher-order operators"
 
@@ -54,6 +54,8 @@ expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped c
 
 [[tests]]
 name = "framed.operators.gc_stress"
+# Slow layer: measured 14.5 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 desc = "The same with a collection at every seventh safepoint and the heap verified before and after: framed code keeps every reference in its pool frame, where the collector finds it."
 backends = ["fvm", "jit", "inline_jit"]
 envs = ["CAMEL_GC_STRESS_SAFEPOINT=7", "CAMEL_GC_VERIFY=1"]
@@ -136,7 +138,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_line = 39
-expect_diagnostic_column = 49
+expect_diagnostic_column = 44
 expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
@@ -164,6 +166,8 @@ expect_stdout_starts_with = "1988895\n600001\n13500\n1688895\ndone\n"
 
 [[tests]]
 name = "framed.loops.gc_stress"
+# Slow layer: measured 5.8 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 desc = "The allocating loops with a collection at every safepoint and the heap verified: the self tail call of compiled code polls the collector as the interpreter's does."
 case = "../../../cases/linear/jit/framed_loops.cml"
 backends = ["fvm", "jit", "inline_jit"]

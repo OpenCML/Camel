@@ -1,6 +1,6 @@
 id = "linear.collections_and_structs"
 order = 341
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "collections", "structs"]
 
 [[tests]]

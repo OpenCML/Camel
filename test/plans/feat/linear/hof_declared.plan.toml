@@ -1,6 +1,6 @@
 id = "linear.hof_declared"
 order = 921
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "higher_order", "macro", "loops"]
 desc = "The higher-order array operators are native operators that call their function through the function-call service, and the schedulers run them by their declaration (OperatorSemantics::elementCalls), not by name (design principles 3.6): the macro evaluator runs them; a loop under std::macro stops at the rounds limit, which --max-macro-rounds and CAMEL_MAX_MACRO_ROUNDS set like the nesting limit."
 

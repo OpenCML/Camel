@@ -1,6 +1,6 @@
 id = "consistency.values"
 order = 352
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "runtime"]
 desc = "Programs without faults on the four back ends: the same output, checked against a golden file"
 
@@ -210,3 +210,28 @@ name = "value.enums"
 desc = "An enum value is constructed by its qualified variant, matched, printed as `Shape::Circle(1.0)` / `Shape::Rect { w: 2.0, h: 3.0 }` / `Shape::Empty`, compared by tag and payload, and one enum holds another."
 case = "../../../cases/consistency/values/enums.cml"
 golden = "golden/enums.txt"
+
+[[tests]]
+name = "value.deep_enum_chain"
+desc = "A million-node recursive enum (`Chain::Cons(i, rest)`) built by a loop, printed and compared. Both walks are explicit stacks (src/core/rtdata/print.cpp, equality.cpp); the C++ backend boxes the recursive field and does the same (camel/standalone/recursive.h)."
+case = "../../../cases/consistency/values/deep_enum_chain.cml"
+golden = "golden/deep_enum_chain.txt"
+# Out of the poison sweep (docs/technical/24): poisoning moves the young generation at every
+# safepoint, and a million nodes built one per safepoint turn that into quadratic copying
+# (measured: over the 200 s timeout, H10 baseline). The program still runs in this plan.
+sweep = false
+
+[[tests]]
+name = "value.deep_nested_enum"
+desc = "A hundred thousand levels of `Nest::More([...])`: a recursive enum through an array, printed and compared on explicit stacks. 100000 levels overflowed the native stack before (exit 0xC00000FD)."
+case = "../../../cases/consistency/values/deep_nested_enum.cml"
+golden = "golden/deep_nested_enum.txt"
+# Out of the poison sweep for the reason above: the deep array nests are copied at every
+# safepoint of the build loop.
+sweep = false
+
+[[tests]]
+name = "value.deep_json_depth"
+desc = "JSON has no depth of its own, but every walk of a document in the json module is native recursion: a text deeper than CAMEL_JSON_MAX_DEPTH (10000) is the error value JsonTooDeep with the line and column of the bracket that goes too deep, and a text at the limit decodes (jsonMaxDepth in modules/json/operators.cpp)."
+case = "../../../cases/consistency/values/deep_json_depth.cml"
+golden = "golden/deep_json_depth.txt"

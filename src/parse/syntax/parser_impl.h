@@ -45,6 +45,8 @@ class ParserImpl {
   public:
     explicit ParserImpl(TokenBuffer tokens);
     Tree run();
+    /// One expression, to the end of the buffer (see Parser::parseExpression).
+    Tree runExpression();
 
   private:
     // ---- State ----
@@ -66,6 +68,7 @@ class ParserImpl {
     uint32_t angle_       = kNone;
     bool typeBeforeBlock_ = false; // the type being parsed is followed by a block
     bool castType_        = false; // the type being parsed is that of `e as T` / `e is T`
+    bool constData_       = false; // the expression being parsed is a `const` type argument
     uint32_t spacedGt_    = kNone; // a `>` after a space read as a comparison inside angle_
 
     bool panic_     = false; // an error was reported and the parser has not resynchronized
@@ -97,6 +100,16 @@ class ParserImpl {
             p.castType_        = castType;
             p.spacedGt_        = spacedGt;
         }
+    };
+    /// Sets `constData_` for the expression of a `const` type argument, where `constas` may
+    /// appear; restores it at the end.
+    struct ConstDataScope {
+        ParserImpl &p;
+        bool old;
+        ConstDataScope(ParserImpl &parser, bool inside) : p(parser), old(parser.constData_) {
+            p.constData_ = inside;
+        }
+        ~ConstDataScope() { p.constData_ = old; }
     };
     struct Depth {
         ParserImpl &p;
@@ -253,6 +266,7 @@ class ParserImpl {
     void parseAnno();
     void parseAccess();
     void parsePrimary();
+    void parseConstasData();
     void parseLiteral();
     void parseArrayData();
     void parseStructData();

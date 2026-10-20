@@ -1,6 +1,6 @@
 id = "compile.enum"
 order = 327
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "enum", "types", "match"]
 desc = "Nominal enums (design principles 5.3): `type E = enum { A(i32), B { x: f32 }, C }`, construction by a qualified variant, `match` over the variants with an exhaustiveness check, printing, equality, generics, all four schedulers, the translation passes that refuse an enum, and the retirement of `A | B` and `T ? U`."
 
@@ -13,6 +13,9 @@ args = ["-E", "short", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
+# The positive side of the match warnings: this program matches every variant once (`area`)
+# and names only some before `case _` (`describe`), so no warning is printed.
+expect_output_not_contains = ["EnumVariantCaseRepeated", "MatchWildcardRedundant", "MatchCaseAfterWildcard"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
@@ -132,6 +135,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "err_not_exhaustive_many"
+desc = "Several variants are missing: the diagnostic lists every one of them, in declaration order, and is located at the `match`."
+kind = "negative"
+case = "../../../cases/compile/enum/err_not_exhaustive_many.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumMatchNotExhaustive"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 12
+expect_output_contains = ["The match over 'Shape' has no case for 'B', 'C', 'D', and no 'case _'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "err_unknown_variant"
 desc = "A qualified name of a variant the enum does not declare is a pattern mismatch that lists the variants it does declare."
 kind = "negative"
@@ -142,6 +159,20 @@ expect_diagnostic_name = "SemanticDiag::EnumPatternMismatch"
 expect_diagnostic_line = 7
 expect_diagnostic_column = 13
 expect_output_contains = ["'Circl' is not one of its variants (Shape declares Circle, Empty)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "err_bare_unit_variant"
+desc = "A unit variant written without its qualifier (`case Empty`) is read as a binding pattern; the error names `Empty`, says a bare name binds, and shows `case Shape::Empty`."
+kind = "negative"
+case = "../../../cases/compile/enum/err_bare_unit_variant.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumPatternMismatch"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 9
+expect_output_contains = ["The pattern 'Empty' does not match a value of type 'Shape'", "'Empty' is a variant of this enum, and a bare name in a pattern is a binding", "write the variant qualified: 'case Shape::Empty'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -251,19 +282,43 @@ case = "../../../cases/compile/enum/warn_duplicate_case.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 0
 expect_output_contains = ["1.0"]
-expect_stderr_contains = ["[Warn]: The variant 'Circle' is matched more than once; the later case is never taken.", "name=SemanticDiag::EnumVariantCaseRepeated, code=0x03100130"]
+expect_diagnostic_name = "SemanticDiag::EnumVariantCaseRepeated"
+expect_diagnostic_code = "0x03100130"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 9
+expect_stderr_contains = ["[Warn]: The variant 'Circle' is matched more than once; the later case is never taken."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "warn_after_wildcard"
-desc = "A case after `case _` warns; `case _` matches everything, so the program prints the wildcard's value."
+desc = "A case after `case _` warns at that case; `case _` matches everything, so the program prints the wildcard's value."
 kind = "behavior"
 case = "../../../cases/compile/enum/warn_after_wildcard.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 0
 expect_output_contains = ["1.0"]
-expect_stderr_contains = ["[Warn]: This case follows 'case _': it is never taken.", "name=SemanticDiag::MatchCaseAfterWildcard, code=0x03100131"]
+expect_diagnostic_name = "SemanticDiag::MatchCaseAfterWildcard"
+expect_diagnostic_code = "0x03100131"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 9
+expect_stderr_contains = ["[Warn]: This case follows 'case _': it is never taken."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn_redundant_wildcard"
+desc = "Every variant is named before `case _`, so the wildcard is never taken: the warning is at the wildcard and the program still runs. Naming every variant without a wildcard prints no warning (see `shapes`)."
+kind = "behavior"
+case = "../../../cases/compile/enum/warn_redundant_wildcard.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_output_contains = ["1.0"]
+expect_diagnostic_name = "SemanticDiag::MatchWildcardRedundant"
+expect_diagnostic_code = "0x03100132"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 9
+expect_stderr_contains = ["[Warn]: Every variant of 'Shape' is matched before 'case _': the wildcard is never taken."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -315,7 +370,7 @@ name = "refuse_onnx"
 desc = "onnx::export refuses a model whose input is an enum: a model input is a tensor, a number, or a struct or tuple of those."
 kind = "negative"
 case = "../../../cases/compile/enum/refuse_onnx.cml"
-args = ["-E", "short", "${case}", "onnx::export(out=\"enum_never_written.onnx\")"]
+args = ["-E", "short", "${case}", "onnx::export(out=\"${test_tmp}/enum_never_written.onnx\")"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 15

@@ -21,6 +21,10 @@
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_semantics.h"
 
+#include "camel/parse/syntax/lexer.h"
+#include "camel/parse/syntax/parser.h"
+#include "camel/parse/syntax/report.h"
+
 #include "camel/utils/scope.h"
 #include "camel/utils/token.h"
 #include "camel/utils/type.h"
@@ -2712,11 +2716,168 @@ Value Builder::visitRefData(cst::RefData context) {
     return res;
 }
 
+Value Builder::visitConstasData(cst::ConstasData context) {
+    Reference ref(context->get<cst::IdentDef>()->text());
+    node_ptr_t res = createNodeAs<ConstAsLoad>(ref);
+    setNodeTokenRangeByContext(res, context);
+    return res;
+}
+
 Value Builder::visitLiteralData(cst::Literal context) {
+    if (context->tok(TK::FString)) {
+        return visitFStringData(context);
+    }
     Literal literal = value_cast<Literal>(visitLiteral(context));
     node_ptr_t res  = createNodeAs<LiteralLoad>(literal);
     setNodeTokenRangeByContext(res, context);
     return res;
+}
+
+namespace {
+
+/// The text of a formatted string that is not an interpolation: `\${` is the literal `${` and
+/// every other escape is left for decodeEscapes to decode (a brace has no escape: it is
+/// literal, and is doubled for `format` afterwards).
+std::string decodeFStringText(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '\\' && i + 1 < text.size()) {
+            if (text[i + 1] == '$' && i + 2 < text.size() && text[i + 2] == '{') {
+                out += "${"; // `\${` is a literal `${`
+                i += 2;
+                continue;
+            }
+            if (text[i + 1] == '`') {
+                out += '`'; // `\`` is a literal backtick (it also does not close the string)
+                ++i;
+                continue;
+            }
+        }
+        out += text[i];
+    }
+    return out;
+}
+
+/// The pattern text for `format`: the literal braces of a formatted string are doubled, so
+/// `format` prints them.
+std::string escapeFormatBraces(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (const char c : text) {
+        if (c == '{' || c == '}') {
+            out += c;
+        }
+        out += c;
+    }
+    return out;
+}
+
+/// A sub-tree of an interpolation has the token indices of its own buffer; a token range is
+/// only a hint for a diagnostic, so it is moved to the formatted-string token, which is what
+/// the file shows. Origins, which are exact, are untouched.
+void setTokenRangeDeep(const node_ptr_t &node, size_t begin, size_t end) {
+    if (!node) {
+        return;
+    }
+    node->load()->setTokenRange(begin, end);
+    for (const auto &child : *node) {
+        setTokenRangeDeep(child, begin, end);
+    }
+}
+
+} // namespace
+
+/*
+ * A formatted string is the same tree as `'...'->format<...>`: `format` applied to the
+ * interpolated expressions, then to the pattern. Building that tree here keeps every later
+ * stage (types, passes, schedulers, the C++ translator) unaware of the shorthand.
+ *
+ * The pattern is the text of the string with each `${EXPR}` replaced by `{}` (or `{:SPEC}`),
+ * the braces of the literal text doubled and `\${` unescaped. The pieces of text between the
+ * interpolations keep their escapes for decodeEscapes.
+ */
+Value Builder::visitFStringData(cst::Literal context) {
+    ENTER("FStringData");
+    const syn::TokenRef token = context->firstToken();
+    const std::string &source = context->tree()->source();
+    const std::string_view whole(source);
+    const auto interpolations = context->tree()->tokens().interpolationsOf(token->index());
+
+    std::vector<node_ptr_t> args;
+    std::string pattern;
+    size_t cursor = token->begin() + 1; // just past the opening backtick
+    bool failed   = false;
+
+    for (const auto &part : interpolations) {
+        pattern += escapeFormatBraces(decodeFStringText(
+            whole.substr(cursor, static_cast<size_t>(part.open) - cursor)));
+
+        if (part.hasSpec) {
+            pattern += "{:" + std::string(whole.substr(
+                                    part.specBegin,
+                                    static_cast<size_t>(part.specEnd) - part.specBegin)) +
+                       "}";
+        } else {
+            pattern += "{}";
+        }
+        cursor = static_cast<size_t>(part.close) + 1;
+
+        syn::TokenBuffer tokens = syn::Lexer::tokenizeRange(source, part.exprBegin, part.exprEnd);
+        syn::Tree sub           = syn::Parser::parseExpression(std::move(tokens));
+        syn::reportLexicalErrors(sub.tokens(), *diags_);
+        if (sub.tokens().errors().empty()) {
+            syn::reportSyntaxErrors(sub, *diags_);
+        }
+        if (!sub.root() || sub.hasErrors()) {
+            failed = true;
+            continue;
+        }
+        node_ptr_t exprNode = any2node(visitExpr(sub.root()));
+        setTokenRangeDeep(exprNode, token->index(), token->index() + 1);
+        args.push_back(exprNode);
+    }
+    pattern += escapeFormatBraces(decodeFStringText(
+        whole.substr(cursor, static_cast<size_t>(token->end()) - 1 - cursor)));
+
+    if (failed) {
+        // The errors are already reported; a placeholder keeps the tree well formed.
+        node_ptr_t res = createNodeAs<LiteralLoad>(Literal(LiteralType::String, ""));
+        setNodeTokenRangeByContext(res, context);
+        LEAVE("FStringData");
+        return res;
+    }
+
+    node_ptr_t literalNode = createNodeAs<LiteralLoad>(Literal(LiteralType::String, pattern));
+    setNodeTokenRangeByContext(literalNode, context);
+    unwrapNodeAs<LiteralLoad>(literalNode)->setFromFormattedString();
+
+    node_ptr_t refNode = createNodeAs<RefDataLoad>(qualifyRef(Reference("format")));
+    setNodeTokenRangeByContext(refNode, context);
+
+    node_ptr_t withArgs = createNodeAs<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(withArgs, context);
+    for (const auto &arg : args) {
+        *withArgs << arg;
+    }
+    node_ptr_t withNamed = createNodeAs<RepeatedLoad>("NamedData");
+    setNodeTokenRangeByContext(withNamed, context);
+
+    node_ptr_t bindNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
+    setNodeTokenRangeByContext(bindNode, context);
+    *bindNode << refNode << withArgs << withNamed;
+
+    node_ptr_t normArgs = createNodeAs<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(normArgs, context);
+    *normArgs << literalNode;
+    node_ptr_t normNamed = createNodeAs<RepeatedLoad>("NamedData");
+    setNodeTokenRangeByContext(normNamed, context);
+
+    node_ptr_t callNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
+    setNodeTokenRangeByContext(callNode, context);
+    *callNode << bindNode << normArgs << normNamed;
+    LEAVE("FStringData");
+    return callNode;
 }
 
 /*
@@ -2740,11 +2901,11 @@ Value Builder::visitLiteral(cst::Literal context) {
         type = LiteralType::Real;
     } else if (context->tok(TK::String) || context->tok(TK::FString)) {
         if (context->tok(TK::FString)) {
-            // A backquoted string is a formatted string, which is not implemented. It used to
-            // be compiled as a plain string, its `{...}` left as written.
+            // An expression builds a formatted string (visitFStringData); a pattern needs a
+            // constant, and an interpolation is not one.
             diags_->of(SemanticDiag::ConstructNotSupported)
                 .at(rangeOf(context->firstToken()))
-                .commit("`...`", "formatted strings are not implemented; use 'format'");
+                .commit("`...`", "a formatted string is not a constant, so it cannot be a pattern");
         }
         data = data.substr(1, data.size() - 2); // Remove quotes
         type = LiteralType::String;
@@ -3317,6 +3478,8 @@ Value Builder::visitExpr(syn::Node context) {
         return visitAccessExpr(cst::AccessExpr(context));
     case NK::RefData:
         return visitRefData(cst::RefData(context));
+    case NK::ConstasData:
+        return visitConstasData(cst::ConstasData(context));
     case NK::Literal:
         return visitLiteralData(cst::Literal(context));
     case NK::ArrayData:

@@ -1,6 +1,6 @@
 id = "modules.tensor.shape_diagnostics"
 order = 362
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "tensor", "diagnostics"]
 
 [[tests]]

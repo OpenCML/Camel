@@ -63,7 +63,7 @@ digraph GraphIR {
         N11 [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=209, span="16:25-16:46", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="float[]"];
         N12 [label="[4]", type="DATA", origin=210, span="16:48-16:51", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="int[]"];
         N13 [label="tensor:reshape", type="OPER", origin=211, span="16:17-16:24", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="Tensor<float32, [4]>"];
-        N14 [label="gate", type="FUNC", origin=212, span="16:16-16:53", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="Tensor"];
+        N14 [label="gate", type="FUNC", origin=212, span="16:12-16:53", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="Tensor"];
         N15 [label="0", type="DATA", origin=216, span="17:24-17:25", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="int"];
         N16 [label="tensor:idx", type="OPER", role="scalar-boundary", origin=217, span="17:23-17:24", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="float"];
         N17 [label="gate={}", type="DATA", origin=218, span="17:4-17:13", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="string"];

@@ -1,0 +1,13 @@
+// A rank-0 tensor has no first dimension to iterate over: `for` over one is refused where the
+// shape is known, here a reshape to `[]` whose shape is a constant.
+module tensor_rank0
+
+import { Tensor, zeros, reshape } from tensor
+
+func main(): int sync {
+    let no: int[] = []
+    let s  = reshape(zeros([1]), no)
+    let n  = loop c = 0 for x in s do c + 1
+    println(n)
+    return 0
+}

@@ -35,8 +35,8 @@ reusable external verifier. Full field constraints and examples live in
 
 | Script | Description |
 |------|------|
-| `npm run test` | Main set: `smoke`, `feat/**` |
-| `npm run test:all` | Full suite (`test/plans/`) |
+| `npm run test` | Main developer set: the **fast** layer of `smoke` and `feat/**`, in parallel |
+| `npm run test:all` | Full suite: every plan under `test/plans/`, fast and slow |
 | `npm run precommit:staged` | Format/update only files already staged for the current commit |
 
 The staged pre-commit script delegates file selection to `scripts/format.js` and
@@ -50,11 +50,18 @@ Use `npm run test -- <target>` for everything else instead of adding more fixed 
 
 ```powershell
 node scripts/test.js
-node scripts/test.js test/plans/feat/modules
+node scripts/test.js test/plans/feat/modules --tier all --jobs 8
 node scripts/test.js test/plans/feat/linear/recursion_and_calls.plan.toml
+node scripts/test.js --changed
+node scripts/test.js --jobs 1 test/plans/smoke
 npm run test -- perf
 node test/tools/run-tests.mjs --update-golden test/plans/feat/parse/core.plan.toml
 ```
+
+`--jobs N` sets the number of tests run at once (default: the processor count). `--tier
+fast|slow|all` selects a layer; the default is `fast`, so an explicit target runs its slow tests
+only with `--tier all`. `--changed` selects the plans the working tree touches relative to
+`origin/fsh-dev` (`test/plan-selection.json`).
 
 ## Target Shorthand Examples
 

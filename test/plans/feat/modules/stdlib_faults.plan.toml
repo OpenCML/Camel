@@ -1,6 +1,6 @@
 id = "modules.stdlib_faults"
 order = 370
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "stdlib", "consistency", "fault"]
 desc = "The core standard library: an index or range out of bounds and an argument outside what an operator defines is a located fault, the same on the four back ends"
 

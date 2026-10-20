@@ -13,7 +13,7 @@ func with_raise(e: Employee, percent: int): Employee {
 }
 
 func line(e: Employee): string {
-    return format<e.name, e.dept, e.salary>('{:<4} {:<6} {}')
+    return `${e.name:<4} ${e.dept:<6} ${e.salary}`
 }
 
 func total_by_dept(staff: Employee[]): Map<string, int> {

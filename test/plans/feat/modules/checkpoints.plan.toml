@@ -1,6 +1,6 @@
 id = "modules.checkpoints"
 order = 361
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "nn", "checkpoint"]
 
 [[tests]]

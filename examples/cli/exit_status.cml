@@ -9,7 +9,7 @@ func main(used: int, limit: int): int sync {
         println('limit must be positive')
         exit(2)
     }
-    println(format<used, limit>('usage {}%, limit {}%'))
+    println(`usage ${used}%, limit ${limit}%`)
     let over = used > limit
     println(if over then 'over the limit' else 'ok')
     return if over then 1 else 0

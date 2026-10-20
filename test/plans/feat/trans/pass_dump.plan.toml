@@ -1,6 +1,6 @@
 id = "trans.pass_dump"
 order = 336
-tier = "feat"
+tier = "fast"
 tags = ["feat", "trans", "pass_dump"]
 
 [[tests]]

@@ -153,7 +153,10 @@ class Builder {
     Value visitArrayData(syntax::cst::ArrayData context);
     Value visitTupleData(syntax::cst::TupleData context);
     Value visitRefData(syntax::cst::RefData context);
+    Value visitConstasData(syntax::cst::ConstasData context);
     Value visitLiteralData(syntax::cst::Literal context);
+    /// A formatted string (`FString`): `'...'->format<...>`, built here as that same tree.
+    Value visitFStringData(syntax::cst::Literal context);
     Value visitLiteral(syntax::cst::Literal context);
     Value visitTypeExpr(syntax::cst::TypeExpr context);
     Value visitUnionType(syntax::cst::UnionType context);

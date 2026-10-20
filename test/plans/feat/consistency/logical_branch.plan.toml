@@ -1,6 +1,6 @@
 id = "consistency.logical_branch"
 order = 362
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "compile", "branches"]
 desc = "`&&` and `||` are branches (design principles 4.2): the right side is an arm, evaluated only when the left side does not decide; `&`, `|`, `&=`, `|=` evaluate both sides; both sides of `&&` / `||` are bool."
 

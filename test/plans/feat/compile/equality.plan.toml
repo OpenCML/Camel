@@ -1,6 +1,6 @@
 id = "compile.equality"
 order = 333
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "equality", "types"]
 desc = "`==` and `!=` by content on arrays, tuples and structs, and `contains` on strings (design principles 4.2): the four back ends, the optimisation pipelines, and what is refused at compile time"
 

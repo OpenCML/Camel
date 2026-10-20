@@ -26,6 +26,7 @@
 #include "../nn/state.h"
 #include "../tensor/dtype.h"
 #include "../tensor/interop.h"
+#include "../tensor/ops/indexing.h"
 #include "../tensor/ops/registry.h"
 #include "../tensor/tensor.h"
 #include "capability.h"
@@ -2642,15 +2643,16 @@ Value Evaluator::applyOper(
     }
 
     TensorFacts facts;
+    std::vector<type::Type *> types;
+    std::vector<std::optional<tensor::ops::ConstArg>> constants;
+    for (const Value &v : norm) {
+        types.push_back(inferenceTypeOf(v));
+        constants.push_back(constArgOf(v));
+    }
+    tensor::ops::InferContext inferContext(types, constants);
     if (def && def->infer) {
-        std::vector<type::Type *> types;
-        std::vector<std::optional<tensor::ops::ConstArg>> constants;
-        for (const Value &v : norm) {
-            types.push_back(inferenceTypeOf(v));
-            constants.push_back(constArgOf(v));
-        }
         try {
-            if (auto inferred = def->infer(tensor::ops::InferContext(types, constants))) {
+            if (auto inferred = def->infer(inferContext)) {
                 if (const auto *t = tensor::asTensorType(*inferred)) {
                     facts = {t->dtype(), t->shape()};
                 }
@@ -2658,6 +2660,13 @@ Value Evaluator::applyOper(
         } catch (const tensor::ShapeError &e) {
             unsupported(act, std::format("'{}': {}", uri, e.what()));
         }
+    }
+    // The operator's index semantics declaration for this call: lowerings read the rules of
+    // the operator from it (the legal range of a slice bound, the check that faults) instead
+    // of restating them.
+    std::optional<core::sem::IndexedInstance> instance;
+    if (def && def->index) {
+        instance = tensor::ops::instantiate(*def, inferContext);
     }
     if (traceEnabled()) {
         std::string args;
@@ -2667,8 +2676,8 @@ Value Evaluator::applyOper(
         std::cerr << std::format("[onnx] {} {}({})\n", act.graph->name(), uri, args);
     }
     try {
-        Value result =
-            lowering->lower(LowerContext(emitter_, uri, norm, std::move(facts), resultType));
+        Value result = lowering->lower(
+            LowerContext(emitter_, uri, norm, std::move(facts), resultType, std::move(instance)));
         if (traceEnabled()) {
             std::cerr << std::format("[onnx]   -> {}\n", describe(result));
         }
@@ -3548,10 +3557,11 @@ OptimizeRewriteConfig exportRewriteConfig() {
     // only walked as a value DAG from here on (no execution topo is built), so the sibling
     // JOINs this creates are valid.
     config.enableBranchedCallSplit = true;
-    // An export has to reach straight-line code or it is refused, so it is not held to the
-    // growth bounds that keep an optimization pass cheap (CAMEL_OPT_GROWTH_BUDGET still applies
-    // when set). A graph too large for the runtime representation fails at commit.
-    config.growthBudgetNodes          = std::numeric_limits<size_t>::max();
+    // An export has to reach straight-line code or it is refused, so it is not held to the growth
+    // bounds that keep an optimization pass cheap (the growth_budget parameter belongs to the
+    // pass on the pipeline, and an export that runs after it may be held to it). A graph too
+    // large for the runtime representation fails at commit.
+    config.growthBudget.nodes         = std::numeric_limits<size_t>::max();
     config.inlineConfig.maxOwnerNodes = std::numeric_limits<size_t>::max();
     return config;
 }

@@ -1,0 +1,20 @@
+module named_dims_linear_forms
+import { Tensor, ones, sum } from tensor
+// Dimensions are linear forms: `n`, `n + 1`, `2 * n`, and `n + m` over two names. The names
+// bind in any parameter, and every occurrence is held to the same value.
+func affine(
+    a: Tensor<f32, const [constas n]>,
+    b: Tensor<f32, const [n + 1]>,
+    c: Tensor<f32, const [2 * n]>,
+    d: Tensor<f32, const [n + m]>,
+    e: Tensor<f32, const [constas m]>
+): float {
+    return sum(a) + sum(b) + sum(c) + sum(d) + sum(e)
+}
+func main(): int sync {
+    // n = 2, m = 3: n + 1 = 3, 2 * n = 4, n + m = 5.
+    println(affine(ones([2]), ones([3]), ones([4]), ones([5]), ones([3])))
+    // Another call, other extents: one function, no new instance.
+    println(affine(ones([4]), ones([5]), ones([8]), ones([7]), ones([3])))
+    return 0
+}

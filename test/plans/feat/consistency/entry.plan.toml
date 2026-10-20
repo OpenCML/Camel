@@ -1,6 +1,6 @@
 id = "consistency.entry"
 order = 356
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "runtime", "entry"]
 desc = "What main returns on the four back ends: the result of the program only under a declared return type; an unhandled error value at the exit of main"
 
@@ -46,7 +46,7 @@ name = "entry.undeclared_output_file"
 desc = "-o with a main that declares no return type: there is no result to write, EntryResultNotWritten at main, after the program has run."
 case = "../../../cases/consistency/entry/undeclared_println.cml"
 backends = false
-args = ["-o", "tmp/entry_undeclared.out", "${case}"]
+args = ["-o", "${test_tmp}/entry_undeclared.out", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryResultNotWritten"
 expect_stdout_starts_with = "a\n"
@@ -153,10 +153,10 @@ name = "entry.fallible_ok_output_file"
 desc = "-o with main declared int! and a value: the value is written to the file. (It crashed: the T! box was written as if it were the int.)"
 case = "../../../cases/consistency/entry/fallible_ok.cml"
 backends = false
-args = ["-o", "tmp/entry_fallible_ok.out", "${case}"]
+args = ["-o", "${test_tmp}/entry_fallible_ok.out", "${case}"]
 expect_exit = 7
 verify_script = """
-const file = input.repo_root + '/tmp/entry_fallible_ok.out'
+const file = input.test_tmp + '/entry_fallible_ok.out'
 const text = fs.readFileSync(file, 'utf8')
 assert(text === '7\n', JSON.stringify(text))
 fs.rmSync(file)

@@ -1,6 +1,6 @@
 id = "opt.fold_warning"
 order = 324
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "fold", "diagnostics"]
 
 [[tests]]

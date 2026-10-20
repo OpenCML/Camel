@@ -39,7 +39,7 @@
 | 不同类型的值并排放（`any[]`、`(int, any)`） | 元组或结构体：`(int, string)`、`{ id: int, name: string }` |
 | 值是几种可能之一 | `enum`：`type Shape = enum { Circle(float), Empty }`（见 3.5） |
 | 形状事先知道的 JSON | `json::decode_as(text, shape)`，结果是 `T!` |
-| 形状事先不知道的 JSON | `json::decode(text)` 给出 `Json!`：文字不是 JSON 时是错误值 `JsonParseError`（不是故障，设计原则 11.2），否则是 `Json`，类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），并接受 `Json?` 以便链式取值，例如 `j->get<'server'>->get<'port'>->as_int ?? 8080`；`as_float` 也接受整数，`get<下标>` 越界给 `null`（11.2 定下的访问器设计）。形状已知时用 `decode_as`，目标类型暂由一个“形状值”给出 |
+| 形状事先不知道的 JSON | `json::decode(text)` 给出 `Json!`：文字不是 JSON 时是错误值 `JsonParseError`，嵌套超过深度上限时是 `JsonTooDeep`（都不是故障，设计原则 11.2；上限默认 10000，可用 `CAMEL_JSON_MAX_DEPTH` 调整），否则是 `Json`，类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），并接受 `Json?`、`Json!`（以及 `Json?!`）以便链式取值，例如 `j->get<'server'>->get<'port'>->as_int ?? 8080`；对 `Json!` 取值时错误原样传下去，结果是 `Json?!` 这样的两层，用 `??`、`!!` 拆开；`as_float` 也接受整数，`get<下标>` 越界给 `null`（11.2 定下的访问器设计）。形状已知时用 `decode_as`，目标类型暂由一个“形状值”给出 |
 
 标准库签名说明里的 `T`、`U...`（如 `println: (x: T, ...rest: U...) => T`）只是说明的记法：这些算子由类型规则按实参的类型检查，图上只有具体类型。
 
@@ -164,6 +164,7 @@ println(p, q.x)
 | `==`、`!=`、`<`、`>`、`<=`、`>=` | 按码点顺序比较（与 UTF-8 字节序相同），真前缀在前 |
 | `string(x)`、`int(s)`、`float(s)`、`parse_int(s)`、`parse_float(s)` | 转换，见 3.2 |
 | `fmt->format<a, b, ...>` | 格式化：`{}` 依次取实参，`{:.2f}`、`{:5d}`、`{:.17g}` 等指定格式；实参不够是故障 |
+| `` `x = ${x}` `` | 格式化字符串，是 `'x = {}'->format<x>` 的简写（[2.5.3.1](02_lexical.md#2531-格式化字符串)） |
 | `strs->join<sep>` | 连接字符串数组 |
 | `s[i]` | 第 `i` 个码点，结果是只含这一个字符的字符串；越界是故障 |
 
@@ -238,7 +239,7 @@ error DivByZero: the divisor is zero
 - 两种标记可以组合：`T?!`、`T!?`。同一种不能重复。数组元素等位置需要括号：`(int?)[]`。
 - 与泛型配合：`(typeas T)?` 从可空实参里绑定 `T`（[7.5](07_statements.md#75-泛型函数)）。
 - `let x: int! = v` 中 `!` 与 `=` 之间要有空格。
-- 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`，`json` 模块的 `decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
+- 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
 
 **错误与故障是两回事。** 只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障：程序带位置终止，`!!` 接不住它（见 [4.6](04_execution_model.md#46-故障退出与资源上限)）。
 
@@ -278,8 +279,9 @@ func area(s: Shape): float {
 ```
 
 - 元组变体的模式给出全部位置，不要的字段写 `_`：`case Shape::Circle(_)`；结构体变体的模式只写要绑定的字段，没写的字段忽略，可以改名 `{ w: width }`，简写 `{ w }` 绑定同名变量；无数据的变体只写名字 `case Shape::Empty`；`case _` 匹配剩下的所有值。
-- **穷尽**：列全了所有变体就不必写 `case _`；漏了变体又没有 `case _` 是编译期错误 `EnumMatchNotExhaustive`，诊断列出漏掉的变体名。已被前面的臂覆盖的变体再写一次给警告（`EnumVariantCaseRepeated`）；`case _` 之后的臂永远不执行，给警告（`MatchCaseAfterWildcard`）。
+- **穷尽**：列全了所有变体就不必写 `case _`；漏了变体又没有 `case _` 是编译期错误 `EnumMatchNotExhaustive`，诊断列出漏掉的变体名。已被前面的臂覆盖的变体再写一次给警告（`EnumVariantCaseRepeated`）；`case _` 之后的臂永远不执行，给警告（`MatchCaseAfterWildcard`）；列全所有变体之后还写 `case _`，这个通配符永远不会命中，给警告（`MatchWildcardRedundant`）。
 - 模式必须写现在匹配的类型的变体，前缀（`Shape::`）与变体名都要对：写错是 `EnumPatternMismatch`，诊断列出该类型声明的变体。
+- **模式里不带 `::` 的名字是绑定名**（`case v` 用于 `T?`／`T!`），不是变体：单元变体要写全限定名 `case Shape::Empty`。写成 `case Empty` 是 `EnumPatternMismatch`，诊断指出 `Empty` 是该枚举的变体、并给出 `case Shape::Empty`。
 - **第一版不支持嵌套模式**：`case Shape::Circle(0.0)` 这种把模式写在字段位置的写法给出"暂不支持"（`ConstructNotSupported`），要求为每个字段写名字或 `_`，在臂里再匹配。
 - `match` 的值可以是任意表达式，包括返回 `enum` 的调用；各臂结果类型的统一与现有的 `match` 相同（[6.8.2](06_expressions.md#682-match)）。
 
@@ -287,7 +289,7 @@ func area(s: Shape): float {
 
 **泛型。** `Option<int>` 与 `Option<float>` 是两个不同的类型，各是各的值。字段类型可以再用参数：`type Pair<A, B> = enum { Both(A, B), Neither }`，`Pair<int, string>` 的 `Both` 收一个 `int` 和一个 `string`。
 
-**图上。** 不增加节点种类：构造是"装入一个标签和数据"，`match` 是"取标签、按标签分支、在臂里取出数据"，与 `T?`、`T!` 相同。取标签与取字段是普通的内部算子（`__enum_tag__`、`__enum_field__`），调度器不对它们按名字特判。`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::macro` 都支持 `enum`；`std::cpp` 与 ONNX 导出、自动微分暂时给出带位置的拒绝。
+**图上。** 不增加节点种类：构造是"装入一个标签和数据"，`match` 是"取标签、按标签分支、在臂里取出数据"，与 `T?`、`T!` 相同。取标签与取字段是普通的内部算子（`__enum_tag__`、`__enum_field__`），调度器不对它们按名字特判。`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::macro` 与 `std::cpp` 都支持 `enum`；ONNX 导出与自动微分暂时给出带位置的拒绝。
 
 **已退役。** 类型位置上的 `A | B` 已退役：一个值只有一种类型，值是几种可能之一时写 `enum`（`SemanticDiag::UnionTypeRetired`，`|` 只留给逻辑或）；`T ? U` 同样退役（`SemanticDiag::ReservedTypeQuestionRetired`）。
 

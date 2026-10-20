@@ -1,6 +1,6 @@
 id = "compile.surface"
 order = 332
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "semantic", "negative", "surface"]
 desc = "Located diagnostics for ways of writing a program that ended in an internal error, in a diagnostic without a position, or in one that named types the program does not show"
 

@@ -245,18 +245,201 @@ size_t TokenBuffer::previousSignificant(size_t index) const {
     return index;
 }
 
-TokenBuffer Lexer::tokenize(std::string source) {
+std::vector<FStringInterpolation> TokenBuffer::interpolationsOf(uint32_t token) const {
+    std::vector<FStringInterpolation> out;
+    for (const FStringInterpolation &part : interpolations_) {
+        if (part.token == token) {
+            out.push_back(part);
+        }
+    }
+    return out;
+}
+
+namespace {
+
+/// The end of the string that starts at `i` (s[i] is `'`, `"` or a backtick), just past its
+/// closing quote; npos when it does not close. It is what the lexer does, without the fallback
+/// of an unclosed string: used to skip the strings inside a `${...}`.
+size_t skipQuoted(const char *s, size_t n, size_t i);
+
+/// Finds the `}` that ends the `${` at `open`; `close` is set to it. Strings, comments and
+/// nested braces are skipped, so `${ { a: 1 } }` and `${ '}' }` end where they should.
+bool scanInterpolation(const char *s, size_t n, size_t open, size_t &close);
+
+/// The end of the formatted string that starts at `i` (s[i] is a backtick), nested `${...}`
+/// included; npos when it does not close.
+size_t skipFString(const char *s, size_t n, size_t i) {
+    for (size_t j = i + 1; j < n;) {
+        const char c = s[j];
+        if (c == '`') {
+            return j + 1;
+        }
+        if (c == '\\' && j + 1 < n) {
+            if (j + 2 < n && s[j + 1] == '$' && s[j + 2] == '{') {
+                j += 3; // `\${` is a literal `${`
+                continue;
+            }
+            if (s[j + 1] == '`' || s[j + 1] == '\\') {
+                j += 2;
+                continue;
+            }
+            ++j;
+            continue;
+        }
+        if (c == '$' && j + 1 < n && s[j + 1] == '{') {
+            size_t close = 0;
+            if (!scanInterpolation(s, n, j, close)) {
+                return std::string_view::npos;
+            }
+            j = close + 1;
+            continue;
+        }
+        ++j;
+    }
+    return std::string_view::npos;
+}
+
+size_t skipQuoted(const char *s, size_t n, size_t i) {
+    const char c = s[i];
+    if (c == '`') {
+        return skipFString(s, n, i);
+    }
+    if (i + 2 < n && s[i + 1] == c && s[i + 2] == c) {
+        for (size_t j = i + 3; j + 2 < n; ++j) {
+            if (s[j] == c && s[j + 1] == c && s[j + 2] == c) {
+                return j + 3;
+            }
+        }
+        return i + 2; // no closing triple: the first two quotes are an empty string
+    }
+    for (size_t j = i + 1; j < n; ++j) {
+        if (s[j] == c) {
+            return j + 1;
+        }
+        if (s[j] == '\\' && j + 1 < n && (s[j + 1] == c || s[j + 1] == '\\')) {
+            ++j;
+        }
+    }
+    return std::string_view::npos;
+}
+
+/// Finds the `}` that ends the `${` at `open`; `close` is set to it. Strings, comments and
+/// nested braces are skipped, so `${ { a: 1 } }` and `${ '}' }` end where they should.
+bool scanInterpolation(const char *s, size_t n, size_t open, size_t &close) {
+    size_t j  = open + 2;
+    int depth = 0;
+    while (j < n) {
+        const char c = s[j];
+        if (c == '\'' || c == '"' || c == '`') {
+            const size_t e = skipQuoted(s, n, j);
+            if (e == std::string_view::npos) {
+                return false;
+            }
+            j = e;
+            continue;
+        }
+        if (c == '/' && j + 1 < n) {
+            if (s[j + 1] == '/') {
+                while (j < n && s[j] != '\n' && s[j] != '\r') {
+                    ++j;
+                }
+                continue;
+            }
+            if (s[j + 1] == '*') {
+                const std::string_view rest(s + j + 2, n - j - 2);
+                const size_t end = rest.find("*/");
+                if (end == std::string_view::npos) {
+                    return false;
+                }
+                j += 2 + end + 2;
+                continue;
+            }
+        }
+        if (c == '{') {
+            ++depth;
+        } else if (c == '}') {
+            if (depth == 0) {
+                close = j;
+                return true;
+            }
+            --depth;
+        }
+        ++j;
+    }
+    return false;
+}
+
+/// Splits `${EXPR[:SPEC]}` at the first `:` that is outside every bracket, as the token kinds
+/// of the content say (so a `:` of a key/value pair inside `{}` or of a lambda inside `()`
+/// does not split). `LAngle`/`Gt` are the lexer's own angle-bracket argument lists.
+void splitInterpolation(const std::string &source, FStringInterpolation &part) {
+    const TokenBuffer sub = Lexer::tokenizeRange(source, part.exprBegin, part.close);
+    std::vector<TokenKind> open;
+    for (const Token &token : sub.tokens()) {
+        if (token.kind == TokenKind::Eof) {
+            break;
+        }
+        switch (token.kind) {
+        case TokenKind::LParen:
+        case TokenKind::LBracket:
+        case TokenKind::LBrace:
+        case TokenKind::LAngle:
+            open.push_back(token.kind);
+            break;
+        case TokenKind::RParen:
+        case TokenKind::RBracket:
+        case TokenKind::RBrace:
+            if (!open.empty()) {
+                open.pop_back();
+            }
+            break;
+        case TokenKind::Gt:
+            if (!open.empty() && open.back() == TokenKind::LAngle) {
+                open.pop_back();
+            }
+            break;
+        case TokenKind::Colon:
+            if (open.empty()) {
+                part.hasSpec   = true;
+                part.exprEnd   = token.begin;
+                part.specBegin = token.end;
+                part.specEnd   = part.close;
+                return;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    part.exprEnd   = part.close;
+    part.specBegin = part.close;
+    part.specEnd   = part.close;
+}
+
+} // namespace
+
+/// Tokenizes `source`; with `from`/`to`, only that byte range (the whole text is still the
+/// buffer's source, so positions are those of the file).
+TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
     TokenBuffer buffer(std::move(source));
     const char *const s = buffer.source_.data();
-    const size_t n      = buffer.source_.size();
-    auto &tokens        = buffer.tokens_;
-    auto &lines         = buffer.lineStarts_;
+    const size_t full   = buffer.source_.size();
+    const size_t n      = to;
+    auto &tokens = buffer.tokens_;
+    auto &lines  = buffer.lineStarts_;
+    if (from > 0) {
+        for (size_t k = 0; k < from; ++k) {
+            if (s[k] == '\n') {
+                lines.push_back(static_cast<uint32_t>(k + 1));
+            }
+        }
+    }
     tokens.reserve(n / 4 + 16);
     lines.reserve(n / 24 + 16);
 
     uint8_t pending    = 0;              // what separates the next token from the last one
     TokenKind previous = TokenKind::Eof; // kind of the last token that is not trivia
-    size_t i           = 0;
+    size_t i           = from;
 
     auto at = [&](size_t index) -> unsigned char {
         return index < n ? static_cast<unsigned char>(s[index]) : 0;
@@ -399,6 +582,78 @@ TokenBuffer Lexer::tokenize(std::string source) {
                     continue;
                 }
                 // No closing triple: the first two quotes are an empty string.
+            }
+            if (c == '`') {
+                // FSTRING: `${EXPR[:SPEC]}` starts an interpolation, whose content is ordinary
+                // Camel source (strings and braces nest); `\${` is a literal `${`; other
+                // braces are literal; it may span lines. The interpolation entries remember
+                // where each expression is, for the AST and the language server.
+                size_t j           = i + 1;
+                size_t fallbackEnd = 0;
+                bool closed        = false;
+                std::vector<FStringInterpolation> parts;
+                while (j < n) {
+                    const char d = s[j];
+                    if (d == '`') {
+                        closed = true;
+                        ++j;
+                        break;
+                    }
+                    if (d == '\\' && j + 1 < n) {
+                        if (j + 2 < n && s[j + 1] == '$' && s[j + 2] == '{') {
+                            j += 3;
+                            continue;
+                        }
+                        if (s[j + 1] == '`') {
+                            fallbackEnd = j + 2;
+                            j += 2;
+                            continue;
+                        }
+                        if (s[j + 1] == '\\') {
+                            j += 2;
+                            continue;
+                        }
+                        ++j;
+                        continue;
+                    }
+                    if (d == '$' && j + 1 < n && s[j + 1] == '{') {
+                        size_t close = 0;
+                        if (!scanInterpolation(s, n, j, close)) {
+                            break; // no matching `}`: the whole token is unclosed
+                        }
+                        FStringInterpolation part;
+                        part.open      = static_cast<uint32_t>(j);
+                        part.exprBegin = static_cast<uint32_t>(j + 2);
+                        part.close     = static_cast<uint32_t>(close);
+                        parts.push_back(part);
+                        j = close + 1;
+                        continue;
+                    }
+                    ++j;
+                }
+                if (!closed && fallbackEnd != 0) {
+                    j      = fallbackEnd;
+                    closed = true;
+                }
+                if (closed) {
+                    noteLines(i, j);
+                    const uint32_t tokenIndex = static_cast<uint32_t>(tokens.size());
+                    for (FStringInterpolation &part : parts) {
+                        part.token = tokenIndex;
+                        splitInterpolation(buffer.source_, part);
+                        buffer.interpolations_.push_back(part);
+                    }
+                    emit(TokenKind::FString, i, j);
+                    i = j;
+                    continue;
+                }
+                buffer.errors_.push_back(
+                    {LexErrorKind::UnclosedString,
+                     static_cast<uint32_t>(i),
+                     static_cast<uint32_t>(n)});
+                emitTrivia(TokenKind::Error, i, n, noteLines(i, n));
+                i = n;
+                continue;
             }
             // '...', "...", `...`: to the closing quote; `\\` and an escaped quote do not
             // close. A string may span lines. When no quote closes it, the string ends at its
@@ -653,7 +908,24 @@ TokenBuffer Lexer::tokenize(std::string source) {
     }
     tokens.push_back(
         Token{static_cast<uint32_t>(n), static_cast<uint32_t>(n), TokenKind::Eof, pending});
+    // A partial lex keeps the line table of the whole text, so a position inside the range is
+    // the position in the file.
+    for (size_t k = n; k < full; ++k) {
+        if (s[k] == '\n') {
+            lines.push_back(static_cast<uint32_t>(k + 1));
+        }
+    }
     return buffer;
+}
+
+TokenBuffer Lexer::tokenize(std::string source) {
+    const size_t size = source.size();
+    return tokenizeImpl(std::move(source), 0, size);
+}
+
+TokenBuffer Lexer::tokenizeRange(std::string source, size_t begin, size_t end) {
+    const size_t size = source.size();
+    return tokenizeImpl(std::move(source), std::min(begin, size), std::min(end, size));
 }
 
 } // namespace camel::parse::syntax

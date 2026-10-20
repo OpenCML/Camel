@@ -43,6 +43,7 @@
 #include "camel/core/type/enum.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/install_layout.h"
+#include "camel/utils/path.h"
 #include "core/module/entity_internal.h"
 
 #include <algorithm>
@@ -175,11 +176,11 @@ std::string normalPath(const std::string &path) {
         return path;
     }
     std::error_code ec;
-    fs::path p = fs::absolute(fs::path(path), ec);
+    fs::path p = fs::absolute(camel::utils::pathFromUtf8(path), ec);
     if (ec) {
-        p = fs::path(path);
+        p = camel::utils::pathFromUtf8(path);
     }
-    return p.lexically_normal().generic_string();
+    return camel::utils::genericPathToUtf8(p.lexically_normal());
 }
 
 // Types print themselves in the spelling of source text; a signature written by hand as text
@@ -455,7 +456,8 @@ class ModelBuilder {
         diagnostics->setConfig(DiagsConfig{.total_limit = -1});
 
         // The context of `camel check`: every module collects all of its errors; nothing runs.
-        const std::string entryDir = fs::path(path).parent_path().string();
+        const std::string entryDir =
+            camel::utils::pathToUtf8(camel::utils::pathFromUtf8(path).parent_path());
         auto searchPaths           = camel::utils::buildModuleSearchPaths(
             entryDir,
             camel::utils::ModuleSearchPathOptions{.stdlibOverride = ""});

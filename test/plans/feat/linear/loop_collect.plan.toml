@@ -1,0 +1,58 @@
+id = "linear.loop_collect"
+order = 349
+tier = "feat"
+tags = ["feat", "linear", "loops", "collect"]
+desc = "The graph-level collection slots of a LOOP node (camel/runtime/loop.h): a loop may produce one value per slot each round and have them collected into one array per slot, in round order, the node's value becoming (state…, arrays…). No source syntax declares slots, so the test-only passes `test::loop_collect` and `test::loop_collect_summary` give loops two slots; every native executor and the lowering to tail recursion must collect them, grow the tapes in place (linear, not quadratic) and keep the loop's value exactly what it was without slots."
+
+[[tests]]
+name = "loops.collect.shapes"
+desc = "The four shapes with two slots, and a For, a While and a ForWhile that run no rounds: each printed loop value is (state, tape of next states, tape of next states + 1)."
+kind = "behavior"
+case = "../../../cases/loops/collection.cml"
+args = ["${case}", "test::loop_collect", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "fvm_native_loop", "jit_native_loop"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "(6, [1, 3, 6], [2, 4, 7])\n(4, [1, 2, 3, 4], [2, 3, 4, 5])\n(15, [3, 15], [4, 16])\n(0, [], [])\n(0, [], [])\n(10, [], [])\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.collect.macro"
+desc = "std::macro evaluates a collecting loop ahead of time: a two-value state keeps its first component where the program reads it and the two tapes travel with it."
+kind = "behavior"
+case = "../../../cases/loops/macro.cml"
+args = ["${case}", "test::loop_collect", "std::macro", "std::rgir"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["label=\"500500\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.collect.large"
+desc = "A hundred thousand rounds: two tapes per loop, printed by their lengths, on the native loop instruction and through the lowering."
+kind = "behavior"
+case = "../../../cases/loops/collection_large.cml"
+args = ["${case}", "test::loop_collect_summary", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "fvm_native_loop", "jit_native_loop"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "(100000, 100000, 100000)\n(100000, 100000, 100000)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "loops.collect.oom"
+desc = "A tape that outgrows CAMEL_GC_HEAP_LIMIT_MB is a memory exhaustion at the loop: the diagnostic names the source loop, whichever executor collects."
+kind = "behavior"
+case = "../../../cases/loops/collection_oom.cml"
+args = ["${case}", "test::loop_collect_summary", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "fvm_native_loop", "jit_native_loop"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC_HEAP_LIMIT_MB=16"]
+expect_exit = 1
+expect_stdout_contains = ["RuntimeDiag::MemoryExhausted", "collection_oom.cml:4:13"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

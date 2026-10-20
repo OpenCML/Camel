@@ -1,0 +1,119 @@
+# The graph-store performance and memory baseline (docs/performance/graph-store-baseline.md),
+# as one manual job.
+#
+# Run workflow -> perf-baseline. It is never triggered by a push, a tag or a pull request.
+# The job builds Release and runs test/tools/perfbaseline/baseline.py, which prints the table
+# (also written to the run's summary). There is no threshold: numbers that move are the run's
+# result, not a failure. Only a missing build or a `camel` run that fails every attempt fails
+# the job. Peak working set is Windows-only, so on this Linux runner that column is "n/a";
+# the MLP row is skipped because its training artifacts are gitignored (the script says so).
+
+name: Performance baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: "Iterations of each timed pass (the documented baseline uses 5)"
+        type: string
+        default: "3"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CC: clang
+  CXX: clang++
+  HUSKY: "0"
+
+jobs:
+  baseline:
+    name: Graph-store baseline (Linux x64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Ubuntu 24.04's unversioned `clang` package is Clang 18; the project needs >= 19.
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-19 ninja-build cmake
+          mkdir -p "$RUNNER_TEMP/clang-bin"
+          ln -sf /usr/bin/clang-19 "$RUNNER_TEMP/clang-bin/clang"
+          ln -sf /usr/bin/clang++-19 "$RUNNER_TEMP/clang-bin/clang++"
+          echo "$RUNNER_TEMP/clang-bin" >> "$GITHUB_PATH"
+
+      - name: Install Conan
+        run: python -m pip install --upgrade pip "conan>=2.10,<3"
+
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2/p
+          key: conan-perf-clang19-${{ hashFiles('conanfile.txt') }}
+          restore-keys: |
+            conan-perf-clang19-
+
+      - name: Conan profile
+        run: |
+          conan profile detect --force
+          profile="$(conan profile path default)"
+          python - "$profile" <<'EOF'
+          import re, sys
+          path = sys.argv[1]
+          text = open(path, encoding="utf-8").read()
+          text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
+          text += "\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n"
+          open(path, "w", encoding="utf-8", newline="\n").write(text)
+          EOF
+
+      - name: Install npm dependencies (skip husky / prepare)
+        run: npm ci --ignore-scripts
+
+      - name: Conan install
+        run: node scripts/install.js
+
+      - name: Build (Release)
+        run: npm run build
+
+      # No threshold: the script prints the table and exits 0 unless a `camel` run fails.
+      # Missing optional inputs (the gitignored MLP artifacts) are skipped, not failed.
+      - name: Measure
+        run: |
+          python test/tools/perfbaseline/baseline.py \
+            --rounds "${{ inputs.rounds }}" \
+            --markdown perf-baseline.md \
+            --json perf-baseline.json
+          cat perf-baseline.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the table
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-baseline
+          path: |
+            perf-baseline.md
+            perf-baseline.json
+          if-no-files-found: ignore
+          retention-days: 90

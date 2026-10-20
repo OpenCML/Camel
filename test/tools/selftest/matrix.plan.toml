@@ -2,7 +2,7 @@
 # purpose. What each must give is asserted in run.mjs.
 id = "selftest.matrix"
 order = 1
-tier = "selftest"
+tier = "fast"
 
 [defaults]
 tool = "node"

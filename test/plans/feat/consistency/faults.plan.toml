@@ -1,6 +1,6 @@
 id = "consistency.faults"
 order = 351
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "runtime", "negative"]
 desc = "Run-time faults on the four back ends: the same output, exit code and located diagnostic"
 

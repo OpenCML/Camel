@@ -1,6 +1,6 @@
 id = "tools.compile_bench"
 order = 918
-tier = "feat"
+tier = "fast"
 tags = ["feat", "tools", "bench"]
 desc = """
 The measuring tools of the compile pipeline keep working: the phase report of the compiler

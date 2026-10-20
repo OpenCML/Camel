@@ -1,6 +1,6 @@
 id = "compile.diag_render"
 order = 328
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "diagnostics"]
 
 [[tests]]

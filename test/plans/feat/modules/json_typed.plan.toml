@@ -1,6 +1,6 @@
 id = "modules.json_typed"
 order = 361
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "std", "json", "collections"]
 desc = "json::decode_as: decoding to a given type, with a `T!` result; Map and Set in json::encode (docs/technical/31_map_and_set.md, section 7)."
 

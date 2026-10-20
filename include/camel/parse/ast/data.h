@@ -39,6 +39,7 @@ enum class DataType {
     Struct,
     Func,
     Ref,
+    ConstAs,
     EnumPattern
 };
 
@@ -258,8 +259,15 @@ class LiteralLoad : public DataLoad {
     const Literal &value() const { return value_; }
     const std::string geneCode() const override;
 
+    /// Set on the pattern literal that a formatted string was lowered to (the `'...'` of
+    /// `'...'->format<...>`). A bad format specification is then reported where the
+    /// interpolation is, not at the whole string.
+    bool fromFormattedString() const { return fromFormattedString_; }
+    void setFromFormattedString() { fromFormattedString_ = true; }
+
   private:
     Literal value_;
+    bool fromFormattedString_ = false;
 };
 
 class ArrayDataLoad : public DataLoad {
@@ -310,6 +318,23 @@ class RefDataLoad : public DataLoad {
         return "RefData: " + ref_.toString() + this->status();
     }
 
+    const Reference &ref() const { return ref_; }
+    const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
+};
+
+/// `constas n`: the name of a dimension, bound by the first parameter type of a signature that
+/// writes it (design principles 5.4). Only meaningful inside a `const` type argument; the
+/// compiler reports one anywhere else.
+class ConstAsLoad : public DataLoad {
+  public:
+    ConstAsLoad(const Reference &ref) : DataLoad(DataType::ConstAs), ref_(ref) {}
+
+    const std::string toString() const override {
+        return "ConstAsData: " + ref_.toString() + this->status();
+    }
     const Reference &ref() const { return ref_; }
     const std::string geneCode() const override;
 

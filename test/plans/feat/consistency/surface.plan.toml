@@ -1,6 +1,6 @@
 id = "consistency.surface"
 order = 355
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "runtime", "surface"]
 desc = "The surface of the language on the four back ends: signs and numbers, chained member access, calls of function-valued expressions"
 

@@ -84,6 +84,7 @@ enumBody  : 'enum' '{' 变体, ... '}'
 
 - `T?`、`T!`：[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。
 - `typeas T`：[7.5](07_statements.md#75-泛型函数)。
+- `constas n`：在 `const` 实参里给维度命名（[设计原则 5.4](../design-principles.cn.md)）：名字在形参类型里第一次出现时用 `constas` 绑定，之后直接写 `n`；只能出现在 `const` 实参的数组字面量里，别处写它是语法错误。
 - `enum`：[3.5](03_data_model.md#35-枚举-enum)。类型位置上的 `A | B` 已退役，写法给出 `SemanticDiag::UnionTypeRetired`。
 - 尖括号：类型函数的实参（[7.7](07_statements.md#77-类型声明)）或模块类型的实参。
 
@@ -161,7 +162,9 @@ compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
-primaryData        : identRef | literal | arrayData | structData | tupleData | funcData
+primaryData        : identRef | constasData | literal | arrayData | structData | tupleData
+                     | funcData
+constasData        : 'constas' identDef
 literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
                      | 'true' | 'false' | 'null'
 indexValue         : '...'? dataExpr
@@ -248,7 +251,6 @@ enumField          : identDef ':' typeExpr
 | 写法 | 得到的诊断 | 现在的替代写法 |
 |---|---|---|
 | 展开 `[...xs, y]`、`{ ...p, x: 1 }`、`f(...args)` | `ConstructNotSupported` | `concat(xs, [y])`；逐个写出字段 |
-| 格式化字符串 `` `x = {x}` `` | `ConstructNotSupported` | `'x = {}'->format<x>` |
 | `e is T` | `ConstructNotSupported` | 无（运行时没有类型信息） |
 | 非空断言 `x!` | `ConstructNotSupported` | `x ?? 默认值`、`match` |
 | `f ?.. g` | `ConstructNotSupported` | 无 |

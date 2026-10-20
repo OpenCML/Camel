@@ -1,6 +1,6 @@
 id = "compile.tagged"
 order = 324
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "nullable", "fallible", "types"]
 desc = "The tagged forms `T?` and `T!`, the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` (design principles 3.9; docs/technical/29_nullable_and_fallible_values.md)."
 

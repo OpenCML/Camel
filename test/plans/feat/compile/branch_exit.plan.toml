@@ -1,6 +1,6 @@
 id = "compile.branch_exit"
 order = 327
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "warnings", "branches"]
 desc = "The warning for a return or throw in an arm of an if / match whose value nothing uses."
 

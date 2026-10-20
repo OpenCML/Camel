@@ -39,10 +39,10 @@ digraph GraphIR {
                 N09 [label="items", type="PORT", param_name="items", param_kind="capture", param_index="1", value_type="int[]"];
                 N0A [label="i", type="PORT", param_name="i", param_kind="capture", param_index="2", value_type="int"];
                 N0B [label=":op/idx_arr", type="OPER", origin=274, span="10:24-10:25", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
-                N0C [label="CALL", type="CALL", origin=275, span="10:18-10:28", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
+                N0C [label="CALL", type="CALL", origin=275, span="10:16-10:28", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
                 N0D [label="1", type="DATA", origin=279, span="11:32-11:33", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
                 N0E [label=":op/add_l", type="OPER", origin=280, span="11:30-11:31", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
-                N0F [label="visit", type="FUNC", origin=281, span="11:20-11:38", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
+                N0F [label="visit", type="FUNC", origin=281, span="11:15-11:38", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
                 N10 [label=":op/add_l", type="OPER", origin=282, span="11:39-11:40", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
                 N11 [label="GATE", type="GATE", value_type="int"];
                 F05 -> N08 [label="0", type="WITH_PORT"];
@@ -76,10 +76,10 @@ digraph GraphIR {
             N19 [label="0", type="DATA", origin=271, span="9:35-9:36", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
             N1A [label="GATE", type="GATE", value_type="int"];
             N1B [label=":op/idx_arr", type="OPER", origin=274, span="10:24-10:25", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
-            N1C [label="CALL", type="CALL", origin=275, span="10:18-10:28", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
+            N1C [label="CALL", type="CALL", origin=275, span="10:16-10:28", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
             N1D [label="1", type="DATA", origin=279, span="11:32-11:33", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
             N1E [label=":op/add_l", type="OPER", origin=280, span="11:30-11:31", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
-            N1F [label="visit", type="FUNC", origin=281, span="11:20-11:38", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
+            N1F [label="visit", type="FUNC", origin=281, span="11:15-11:38", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
             N20 [label=":op/add_l", type="OPER", origin=282, span="11:39-11:40", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
             N21 [label="GATE", type="GATE", value_type="int"];
             F03 -> N12 [label="0", type="NORM_PORT"];
@@ -129,9 +129,9 @@ digraph GraphIR {
             N28 [label="0", type="DATA", origin=271, span="9:35-9:36", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
             N29 [label="GATE", type="GATE", value_type="int"];
             N2A [label=":op/idx_arr", type="OPER", origin=274, span="10:24-10:25", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
-            N2B [label="CALL", type="CALL", origin=275, span="10:18-10:28", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
+            N2B [label="CALL", type="CALL", origin=275, span="10:16-10:28", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
             N2C [label="1", type="DATA", origin=279, span="11:32-11:33", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
-            N2D [label="visit", type="FUNC", origin=281, span="11:20-11:38", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
+            N2D [label="visit", type="FUNC", origin=281, span="11:15-11:38", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
             N2E [label=":op/add_l", type="OPER", origin=282, span="11:39-11:40", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
             N2F [label="GATE", type="GATE", value_type="int"];
             N30 [label="2", type="DATA", origin=280, span="11:30-11:31", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
@@ -175,7 +175,7 @@ digraph GraphIR {
         N37 [label=":io/println", type="OPER", role="effect", origin=304, span="21:4-21:11", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
         N38 [label="0", type="DATA", origin=305, span="22:11-22:12", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
         N39 [label="GATE", type="GATE", value_type="int"];
-        N3A [label="visit$spec3", type="FUNC", origin=281, span="11:20-11:38", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
+        N3A [label="visit$spec3", type="FUNC", origin=281, span="11:15-11:38", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
         N3B [label=":op/add_l", type="OPER", origin=282, span="11:39-11:40", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
         N3C [label=":io/println", type="OPER", role="effect", origin=295, span="18:8-18:15", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
         N3D [label="visit 3", type="DATA", origin=294, span="18:34-18:37", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
@@ -208,7 +208,7 @@ digraph GraphIR {
     N45 [label=":str/format", type="OPER", origin=303, span="21:30-21:37", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
     N46 [label=":io/println", type="OPER", role="effect", origin=304, span="21:4-21:11", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
     N47 [label="GATE", type="GATE", value_type="int"];
-    N48 [label="visit$spec3", type="FUNC", origin=281, span="11:20-11:38", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
+    N48 [label="visit$spec3", type="FUNC", origin=281, span="11:15-11:38", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
     N49 [label=":op/add_l", type="OPER", origin=282, span="11:39-11:40", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
     N4A [label=":io/println", type="OPER", role="effect", origin=295, span="18:8-18:15", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
     N4B [label="visit 3", type="DATA", origin=294, span="18:34-18:37", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];

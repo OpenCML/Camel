@@ -1,0 +1,12 @@
+module fstring_nested
+type Point = { x: int, y: int }
+func main(): int sync {
+    let a = 1
+    let b = 2
+    let p: Point = { x: 3, y: 4 }
+    println(`block: ${if a < b then { 'lt' } else { 'ge' }}`)
+    println(`struct: ${({ x: 5, y: 6 }).x}`)
+    println(`braced string: ${'{'}${'}'}`)
+    println(`tuple: ${(a, b, p.x)}`)
+    return 0
+}

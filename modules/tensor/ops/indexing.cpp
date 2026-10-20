@@ -345,16 +345,24 @@ std::optional<IndexedInstance> permuteIndexing(const InferContext &ctx) {
 /**
  * slice(x, axis, start, stop, step = 1), step > 0, with the bounds normalized as the kernel
  * does (a negative bound counts from the end). A bound still outside [0, n] is a fault (design
- * principles 3.9): the call has no instance. A stop before the start is the empty range (3.9):
+ * principles 3.9): the call then has no instance. A stop before the start is the empty range
+ * (3.9):
  *
- *   params   start = static(2), step = static(4), len = derived = max(0, ceil((stop - start) / step))
+ *   params   n = extent(0, axis); axis and step (Static); start/stop (a Derived normalized
+ *            value, known when the bound is a constant and the extent is known); the raw
+ *            constant or Runtime value it came from; len (Derived)
  *   domain   one dim per axis; on `axis` d < len
  *   norm 0   (..., start + step*d_axis, ...)        within [0, n) by construction (Unreachable)
- *   where    0 <= start, start <= n, 1 <= step
+ *   where    0 <= start, start <= n, 0 <= stop, stop <= n, 1 <= step, 0 <= len
+ *   check    a raw start/stop whose normalized value is not known at compile time: [-n, n], the
+ *            bounds a slice accepts (a negative one counts from the end); outside it the
+ *            operator faults with SliceOutOfRange before it reads anything
  *
- * Needs axis, start, stop and step constant and the extent of `axis` known (normalizing a
- * negative bound needs the extent); a step <= 0 or a bound out of range is rejected by the
- * kernel: no instance.
+ * A constant bound is normalized now when the extent is known; one outside [-extent, extent]
+ * is the fault the operator raises, so the call has no instance. With the extent unknown a
+ * constant bound is checked like a run-time one (whether it is in range depends on the extent).
+ * A step that is not constant gives no instance (the operator faults on a non-positive step,
+ * which the map cannot state).
  */
 std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
     const auto in   = shapeOf(ctx, 0);
@@ -362,26 +370,64 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
     if (!in || !axis) {
         return std::nullopt;
     }
-    const auto a          = normalizeAxis(*axis, in->size());
-    const auto start      = ctx.constInt(2);
-    const auto stop       = ctx.constInt(3);
-    const bool stepGiven  = ctx.has(4);
-    const auto step       = stepGiven ? ctx.constInt(4) : std::optional<int64_t>(1);
-    if (!a || !start || !stop || !step || *step <= 0 || (*in)[*a] == kUnknownDim) {
+    const auto a = normalizeAxis(*axis, in->size());
+    if (!a) {
         return std::nullopt;
     }
-    const int64_t n   = (*in)[*a];
-    const auto range  = kernels::normalizeSliceBounds(n, *start, *stop);
-    if (!range) {
-        return std::nullopt; // the operator faults with SliceOutOfRange
+    const bool stepGiven = ctx.has(4);
+    const auto step      = stepGiven ? ctx.constInt(4) : std::optional<int64_t>(1);
+    if (!step || *step <= 0) {
+        return std::nullopt;
     }
-    const int64_t s = range->start, e = range->end;
-    const int64_t len = e > s ? (e - s + *step - 1) / *step : 0;
+    const int64_t extent = (*in)[*a];
+    const auto startRaw  = ctx.constInt(2);
+    const auto stopRaw   = ctx.constInt(3);
+    // The normalized value of a bound when it is fixed: a constant bound with a known extent.
+    std::optional<int64_t> startNorm, stopNorm;
+    if (extent != kUnknownDim) {
+        for (const auto &[raw, normalized] :
+             {std::pair{startRaw, &startNorm}, std::pair{stopRaw, &stopNorm}}) {
+            if (!raw) {
+                continue;
+            }
+            const auto value = kernels::normalizeSliceBound(extent, *raw);
+            if (!value) {
+                return std::nullopt; // the operator faults with SliceOutOfRange
+            }
+            *normalized = *value;
+        }
+    }
 
     IndexBuilder b;
-    const ExprId startP = b.constant("start", 2, s);
-    const ExprId stepP  = stepGiven ? b.constant("step", 4, *step) : b.x().constant(1);
-    const ExprId lenP   = b.derived("len", len, kNoExpr);
+    b.constant("axis", 1, static_cast<int64_t>(*a));
+    const ExprId stepP = stepGiven ? b.constant("step", 4, *step) : b.x().constant(1);
+    const ExprId nP    = b.extent(0, *a, extent);
+    // The value the access uses: the normalized bound, known only when the extent is. Normalizing
+    // a negative bound is not quasi-affine (it branches on the sign), so the parameter states
+    // its value or its range, not a definition.
+    const ExprId startP = b.derived("start", startNorm, kNoExpr);
+    const ExprId stopP  = b.derived("stop", stopNorm, kNoExpr);
+
+    // A bound whose normalized value is not known goes through the check on entry: a slice
+    // accepts exactly [-n, n], the values a negative bound counted from the end turns into
+    // [0, n].
+    const ExprId low = b.x().scale(-1, nP);
+    const auto checkBound = [&](size_t operand, const char *name, std::optional<int64_t> raw,
+                                std::optional<int64_t> normalized) {
+        if (normalized) {
+            return;
+        }
+        const ExprId param = raw ? b.constant(name, operand, *raw) : b.runtime(name, operand);
+        b.check(operand, param, low, nP);
+    };
+    checkBound(2, "start_raw", startRaw, startNorm);
+    checkBound(3, "stop_raw", stopRaw, stopNorm);
+
+    std::optional<int64_t> len;
+    if (startNorm && stopNorm) {
+        len = *stopNorm > *startNorm ? (*stopNorm - *startNorm + *step - 1) / *step : 0;
+    }
+    const ExprId lenP = b.derived("len", len, kNoExpr);
     std::vector<ExprId> coords;
     for (size_t k = 0; k < in->size(); ++k) {
         if (k == *a) {
@@ -391,9 +437,11 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
             coords.push_back(b.dim(b.extent(0, k, (*in)[k])));
         }
     }
-    const ExprId nP = b.extent(0, *a, n);
-    b.require(b.x().constant(0), Rel::Le, startP);
-    b.require(startP, Rel::Le, nP);
+    for (const ExprId bound : {startP, stopP}) {
+        b.require(b.x().constant(0), Rel::Le, bound);
+        b.require(bound, Rel::Le, nP);
+    }
+    b.require(b.x().constant(0), Rel::Le, lenP);
     if (stepGiven) {
         b.require(b.x().constant(1), Rel::Le, stepP);
     }

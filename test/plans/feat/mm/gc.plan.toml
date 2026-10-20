@@ -1,6 +1,6 @@
 id = "mm.gc"
 order = 365
-tier = "feat"
+tier = "slow"
 tags = ["feat", "mm", "gc"]
 
 [[tests]]

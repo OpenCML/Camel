@@ -1,0 +1,23 @@
+// JSON has no depth of its own, but every walk of a document in this module (nlohmann's
+// parser and serializer and JsonValue's fromJson/toJson) is native recursion. A text deeper
+// than CAMEL_JSON_MAX_DEPTH (10000 by default) is therefore the error value JsonTooDeep
+// pointing at the bracket that goes too deep, not a crash (modules/json/operators.cpp,
+// jsonMaxDepth).
+
+import { decode } from json
+
+func repeat(ch: string, n: int): string {
+    let (s, chunk, k) = loop s = '', chunk = ch, k = n while k > 0 do (
+        if k % 2 == 1 then s + chunk else s,
+        chunk + chunk,
+        k / 2)
+    return s
+}
+
+func main(): int sync {
+    let tooDeep = repeat('[', 100000) + '1' + repeat(']', 100000)
+    println(string(decode(tooDeep)))
+    let atLimit = repeat('[', 10000) + '1' + repeat(']', 10000)
+    println(len(string(decode(atLimit))))
+    return 0
+}

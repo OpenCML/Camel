@@ -1,6 +1,6 @@
 id = "consistency.partial_application"
 order = 358
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "compile", "with", "closures"]
 desc = "f<w> used as a value is a partial application: a function that already has its context arguments (design principles 4.4)"
 

@@ -23,6 +23,7 @@
 #include "camel/core/symbol.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/storage.h"
+#include "camel/core/type/text.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
@@ -240,33 +241,9 @@ Type *StructType::resolve(const type_vec_t &typeList) const {
 
 bool StructType::resolved() const { return refCount_ == 0; }
 
-string StructType::toString() const {
-    ostringstream oss;
-    oss << "{ ";
-    bool first = true;
-    for (size_t i = 0; i < size_; ++i) {
-        if (!first) {
-            oss << ", ";
-        }
-        first      = false;
-        Type *type = typeAt(i);
-        oss << fieldName(i) << ": " << (type ? type->toString() : "<null>");
-    }
-    oss << " }";
-    return oss.str();
-}
+string StructType::toString() const { return typeToString(this); }
 
-string StructType::mangle() const {
-    ostringstream oss;
-    oss << "S" << size_;
-    for (size_t i = 0; i < size_; ++i) {
-        std::string name(fieldName(i));
-        Type *type = typeAt(i);
-        oss << name.length() << name;
-        oss << (type ? type->mangle() : "N");
-    }
-    return oss.str();
-}
+string StructType::mangle() const { return typeMangle(this); }
 
 Type *StructType::clone(bool deep /* = false */) const {
     StructTypeFactory factory;
@@ -279,28 +256,7 @@ Type *StructType::clone(bool deep /* = false */) const {
     return factory.build();
 }
 
-bool StructType::equals(Type *type) const {
-    if (!type || type->code() != TypeCode::Struct) {
-        return false;
-    }
-    auto other = static_cast<const StructType *>(type);
-    if (size_ != other->size_) {
-        return false;
-    }
-    for (size_t i = 0; i < size_; ++i) {
-        std::string name(fieldName(i));
-        auto optIdx = other->findField(name);
-        if (!optIdx.has_value()) {
-            return false;
-        }
-        Type *lhsType = typeAt(i);
-        Type *rhsType = other->typeAt(optIdx.value());
-        if (!lhsType || !rhsType || !lhsType->equals(rhsType)) {
-            return false;
-        }
-    }
-    return true;
-}
+bool StructType::equals(Type *type) const { return typeEquals(this, type); }
 
 // Converting a value to its own type is legal and does nothing (design principles 5.1).
 CastSafety StructType::castSafetyFrom(Type *sourceType) const {

@@ -34,7 +34,7 @@ Camel 的程序是一张图。本章说明这张图怎样被求值：按依赖�
 ```cml
 // camel greet.cml --arg name=Camel --arg times=2
 func main(name: string, times: int): int sync {
-    println('Hello, {}! x{}'->format<name, times>)
+    println(`Hello, ${name}! x${times}`)
     return 0
 }
 ```

@@ -1,6 +1,6 @@
 id = "perf.collections_fuzz"
 order = 410
-tier = "benchmark"
+tier = "slow"
 tags = ["perf", "collections", "map", "set", "fuzz", "gc"]
 desc = "The long runs of the random and differential tests of `Map<K, V>` and `Set<T>` (test/tools/collfuzz/collfuzz.py; docs/technical/31_map_and_set.md, section 8). The short runs are in the default set (compile.collections `collfuzz.quick`, mm.gc_collections `gc.collfuzz`); these take minutes and are run on demand: `node scripts/test.js test/plans/perf/collections_fuzz.plan.toml`."
 

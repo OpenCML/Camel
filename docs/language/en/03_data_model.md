@@ -37,7 +37,7 @@ There is no type `any`: after compilation every value has a definite type (desig
 | `e as any` | nothing: the value keeps its own type |
 | values of different types side by side (`any[]`, `(int, any)`) | a tuple or a struct: `(int, string)`, `{ id: int, name: string }` |
 | JSON of a known shape | `json::decode_as(text, shape)`, whose result is a `T!` |
-| JSON of an unknown shape | `json::decode(text)` gives a `Json!`: an error value `JsonParseError` when the text is not JSON (not a fault, design principles 11.2), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2). For a known shape use `decode_as`, whose target type is given by a shape value for now |
+| JSON of an unknown shape | `json::decode(text)` gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000 by default and `CAMEL_JSON_MAX_DEPTH` sets it), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json?!` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json?!` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2). For a known shape use `decode_as`, whose target type is given by a shape value for now |
 
 The `T` and `U...` in the signatures of the standard library (as in `println: (x: T, ...rest: U...) => T`) are a notation of the reference only: these operators check their arguments with type rules, and the graph holds concrete types only.
 
@@ -162,6 +162,7 @@ A string is immutable text and is **always valid UTF-8**; length and subscripts 
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Comparison in code point order (the same as UTF-8 byte order); a proper prefix comes first |
 | `string(x)`, `int(s)`, `float(s)`, `parse_int(s)`, `parse_float(s)` | Conversion, see 3.2 |
 | `fmt->format<a, b, ...>` | Formatting: `{}` takes the arguments in order; `{:.2f}`, `{:5d}`, `{:.17g}` and the like specify a format; too few arguments is a fault |
+| `` `x = ${x}` `` | A formatted string, shorthand for `'x = {}'->format<x>` ([2.5.3.1](02_lexical.md#2531-formatted-strings)) |
 | `strs->join<sep>` | Joins an array of strings |
 | `s[i]` | The `i`-th code point; the result is a string containing just that one character; an out-of-range subscript is a fault |
 
@@ -236,7 +237,7 @@ Rules:
 - The two tags can be combined: `T?!`, `T!?`. The same one cannot be repeated. Positions such as array elements need parentheses: `(int?)[]`.
 - With generics: `(typeas T)?` binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
 - In `let x: int! = v` there must be a space between `!` and `=`.
-- Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)` of the `fs` module, `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
+- Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
 
@@ -276,8 +277,9 @@ func area(s: Shape): float {
 ```
 
 - A tuple variant's pattern gives every position, with `_` for a field it does not need (`case Shape::Circle(_)`); a struct variant's pattern writes the fields it binds, ignores the others, may rename (`{ w: width }`) and may abbreviate (`{ w }` binds a variable of that name); a variant without data is just its name (`case Shape::Empty`); `case _` matches every remaining value.
-- **Exhaustiveness**: naming all variants means no `case _` is needed; a missing variant without `case _` is the compile-time error `EnumMatchNotExhaustive`, whose diagnostic lists the missing variants. A variant already covered by an earlier case is a warning (`EnumVariantCaseRepeated`), and a case after `case _` is never taken and warns (`MatchCaseAfterWildcard`).
+- **Exhaustiveness**: naming all variants means no `case _` is needed; a missing variant without `case _` is the compile-time error `EnumMatchNotExhaustive`, whose diagnostic lists the missing variants. A variant already covered by an earlier case is a warning (`EnumVariantCaseRepeated`), and a case after `case _` is never taken and warns (`MatchCaseAfterWildcard`). A `case _` written after every variant is already named can never be taken and warns (`MatchWildcardRedundant`).
 - A pattern names a variant of the type being matched: a wrong prefix (`Shape::`) or a wrong variant name is `EnumPatternMismatch`, which lists the variants of that type.
+- **A name without `::` in a pattern is a binding** (`case v` over `T?` / `T!`), not a variant: a unit variant is written with its qualifier, `case Shape::Empty`. Writing `case Empty` is `EnumPatternMismatch`, whose diagnostic says that `Empty` is one of the variants and shows `case Shape::Empty`.
 - **The first version has no nested patterns**: a pattern in the position of a field, such as `case Shape::Circle(0.0)`, gives "not supported yet" (`ConstructNotSupported`) and asks for a name or `_` per field, matched inside the arm.
 - The subject may be any expression, including a call that returns an enum; the arms unify as in the existing `match` ([6.8.2](06_expressions.md#682-match)).
 
@@ -285,7 +287,7 @@ func area(s: Shape): float {
 
 **Generics.** `Option<int>` and `Option<float>` are different types with different values. A field type may use the parameters again: `type Pair<A, B> = enum { Both(A, B), Neither }`, and `Pair<int, string>`'s `Both` takes an `int` and a `string`.
 
-**On the graph.** No node kind is added: construction stores a tag and the data, `match` reads the tag, branches on it and takes the data out in the arm, as for `T?` and `T!`. Reading the tag and a field are ordinary internal operators (`__enum_tag__`, `__enum_field__`), and the schedulers do not special-case them by name. `std::nvm`, `std::fvm`, `std::jit`, `std::prl` and `std::macro` all support enums; `std::cpp`, ONNX export and autodiff refuse one with a located diagnostic for now.
+**On the graph.** No node kind is added: construction stores a tag and the data, `match` reads the tag, branches on it and takes the data out in the arm, as for `T?` and `T!`. Reading the tag and a field are ordinary internal operators (`__enum_tag__`, `__enum_field__`), and the schedulers do not special-case them by name. `std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::macro` and `std::cpp` all support enums; ONNX export and autodiff refuse one with a located diagnostic for now.
 
 **Retired.** `A | B` in a type position is retired: a value has one type, and a value that is one of several possibilities is an enum (`SemanticDiag::UnionTypeRetired`; `|` remains the logical or). `T ? U` is retired as well (`SemanticDiag::ReservedTypeQuestionRetired`).
 

@@ -1,0 +1,42 @@
+# Fixture of test/tools/selftest/run.mjs: every test gets its own scratch directory (`${test_tmp}`),
+# a file another test wrote is not visible in it, `${test_tmp}` is expanded in an expectation, and
+# the runner clears a fixed path under tmp/test before the first test. The runner is started twice
+# against this plan to show that a second run inherits nothing from the first.
+id = "selftest.scratch"
+order = 2
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "scratch_probe.mjs"
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "scratch.write"
+desc = "A test writes into its own scratch directory and its verification reads the file there."
+args = ["${case}", "write", "${test_tmp}"]
+expect_exit = 0
+expect_stdout_contains = ["wrote ${test_tmp}/model.onnx"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const file = path.join(input.test_tmp, 'model.onnx')
+assert(fs.existsSync(file), `the model of this test is not in its scratch directory: ${file}`)
+}
+"""
+
+[[tests]]
+name = "scratch.absent"
+desc = "A second test does not see the first test's model: each test gets a fresh directory."
+args = ["${case}", "absent", "${test_tmp}"]
+expect_exit = 0
+expect_stdout_contains = ["scratch directory is clean"]
+
+[[tests]]
+name = "scratch.legacy_path_cleared"
+desc = "A file left at a fixed path under tmp/test, as an earlier run leaves, is cleared before the tests run (the command runs from the repository root)."
+args = ["${case}", "absent-path", "tmp/test/stale_from_previous_run.txt"]
+expect_exit = 0
+expect_stdout_contains = ["stale file is gone"]

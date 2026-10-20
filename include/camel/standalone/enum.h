@@ -32,6 +32,8 @@
 
 #pragma once
 
+#include "camel/standalone/recursive.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>

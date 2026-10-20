@@ -1,6 +1,6 @@
 id = "tools.portability"
 order = 915
-tier = "feat"
+tier = "fast"
 tags = ["feat", "tools", "portability"]
 desc = "Properties of the sources that one platform's toolchain does not check for the others."
 

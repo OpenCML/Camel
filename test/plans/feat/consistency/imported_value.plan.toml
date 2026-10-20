@@ -1,6 +1,6 @@
 id = "consistency.imported_value"
 order = 359
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "modules", "function-values"]
 desc = "A function imported from another module is a value like a local one, written `import { f }` or `import m` and `m::f`"
 

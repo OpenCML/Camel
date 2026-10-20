@@ -1,6 +1,6 @@
 id = "modules.tensor.bounds"
 order = 364
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "tensor", "diagnostics"]
 
 [[tests]]
