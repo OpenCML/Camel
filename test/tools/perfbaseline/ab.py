@@ -22,7 +22,10 @@ for every iteration and times only the pass):
   optinline  --timeit std::opt::inline/1 PROGRAM         (the pass's time)
   opt        --timeit std::opt/1 PROGRAM                 (the pass's time)
 
-Peak memory of the process is taken from the same runs (the maximum over the runs).
+Peak memory of the process is taken from the same runs (the maximum over the runs). The time of
+`compile` is the CPU time of the process (user + system) where the host reports it, which other
+processes on the machine disturb less than the wall time; the pass modes time the pass inside
+the process, over `--rounds` compilations.
 """
 
 import argparse
@@ -35,17 +38,25 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import baseline  # noqa: E402
 import scale_programs  # noqa: E402
 
-MODES = {
-    "compile": lambda args: (args + ["std::stats", "std::null"], False),
-    "optinline": lambda args: (["--timeit", "std::opt::inline/1"] + args + ["--output-format", "json"], True),
-    "opt": lambda args: (["--timeit", "std::opt/1"] + args + ["--output-format", "json"], True),
-}
+def timed(pass_name, rounds):
+    return lambda args: (["--timeit", f"{pass_name}/{rounds}"] + args + ["--output-format", "json"], True)
+
+
+def mode_table(rounds):
+    return {
+        "compile": lambda args: (args + ["std::stats", "std::null"], False),
+        "optinline": timed("std::opt::inline", rounds),
+        "opt": timed("std::opt", rounds),
+    }
 
 
 def measure(home, argv, timeit):
     baseline.CAMEL = os.path.join(home, "bin", "camel" + (".exe" if sys.platform == "win32" else ""))
     result = baseline.run(argv, {"CAMEL_HOME": home})
-    value = baseline.timeit_mean_ms(result["stdout"]) if timeit else result["wall_ms"]
+    if timeit:
+        value = baseline.timeit_mean_ms(result["stdout"])
+    else:
+        value = result["cpu_ms"] if result["cpu_ms"] is not None else result["wall_ms"]
     return value, result["peak"]
 
 
@@ -54,6 +65,7 @@ def main():
     parser.add_argument("--a", required=True)
     parser.add_argument("--b", required=True)
     parser.add_argument("--pairs", type=int, default=5)
+    parser.add_argument("--rounds", type=int, default=5, help="compilations averaged by a pass run")
     parser.add_argument("--only", default="")
     parser.add_argument("--what", default="compile,optinline,opt")
     options = parser.parse_args()
@@ -65,13 +77,16 @@ def main():
     for name, units in scale_programs.SIZES.items():
         programs.append((name, [scale_programs.write(units, scale_dir.name)]))
 
+    small = {name for name, _ in programs if not name.startswith("scale.") or name == "scale.1k"}
     print("| program | mode | A (ms) | B (ms) | B/A | noise (A1 vs A2) | peak A / B (MB) |")
     print("|---|---|---|---|---|---|---|")
     for name, args in programs:
         if only and name not in only:
             continue
         for mode in modes:
-            argv, timeit = MODES[mode](args)
+            # The big programs take seconds to compile and to rewrite: one round is plenty.
+            rounds = options.rounds if name in small else 1
+            argv, timeit = mode_table(rounds)[mode](args)
             a1s, bs, a2s = [], [], []
             peak_a = peak_b = 0
             for _ in range(options.pairs):

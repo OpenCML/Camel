@@ -178,15 +178,18 @@ def run_once(args, extra_env):
         proc.returncode = os.waitstatus_to_exitcode(status)
         out, err = chunks["out"], chunks["err"]
         peak = int(usage.ru_maxrss) * (1 if sys.platform == "darwin" else 1024)
+        cpu_ms = (usage.ru_utime + usage.ru_stime) * 1000.0
     else:
         out, err = proc.communicate()
         peak = None
+        cpu_ms = None
     wall_ms = (time.perf_counter() - started) * 1000.0
     if os.name != "posix":
         peak = peak_working_set(handle)
         close_handle(handle)
     return {
         "wall_ms": wall_ms,
+        "cpu_ms": cpu_ms,
         "exit": proc.returncode,
         "peak": peak,
         "stdout": out.decode("utf-8", "replace"),
