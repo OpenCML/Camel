@@ -115,7 +115,7 @@ bool isWrittenArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith,
         return camel::core::OperatorTable::instance().writesOperand(body->oper, isWith, index);
     }
     case GCNodeKind::Func: {
-        const GCGraph *callee = draft.calleeOf(user);
+        const GCGraph *callee = draft.calleeGraphOf(user);
         return callee && isVarParam(callee->funcType(), isWith, index);
     }
     case GCNodeKind::Loop:

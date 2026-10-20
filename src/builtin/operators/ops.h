@@ -131,6 +131,10 @@ slot_t __builtin__assn_mul_c__(ArgsView &with, ArgsView &norm, camel::core::cont
 slot_t __builtin__assn_mul_z__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_div_c__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_div_z__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__pow_c__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__pow_z__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_pow_c__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_pow_z__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 slot_t __builtin__mul__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 

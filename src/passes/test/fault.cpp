@@ -23,7 +23,6 @@
 
 const camel::runtime::Program *
 DropCallArgumentTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
-    using camel::runtime::GCFuncBody;
     using camel::runtime::GCNodeKind;
     camel::runtime::RuntimeGraphDraftSession session(context_, program);
     for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {

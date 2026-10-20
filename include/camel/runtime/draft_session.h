@@ -160,6 +160,10 @@ class RuntimeGraphDraftSession {
 
     GraphDraft &ensureDraft(GCGraph *graph);
     std::vector<GCGraph *> collectCommitClosure() const;
+    /// The graphs the draft of `graph` refers to (visitDraftGraphs), in visiting order. Kept while
+    /// the draft's revision is the same, so that asking for the closure of the program again
+    /// does not walk the nodes of every draft again.
+    const std::vector<std::pair<GraphId, const Program *>> &draftRefs(GCGraph *graph) const;
 
     camel::core::context::context_ptr_t context_;
     const Program *program_ = nullptr;
@@ -169,6 +173,13 @@ class RuntimeGraphDraftSession {
     /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself.
     /// The commit drops those it encodes back to the same content (sameContent).
     std::unordered_set<GCGraph *> edited_;
+    struct DraftRefs {
+        uint64_t revision = 0;
+        bool valid        = false;
+        std::vector<std::pair<GraphId, const Program *>>
+            graphs; // with the program of a function value
+    };
+    mutable std::unordered_map<GCGraph *, DraftRefs> draftRefs_;
     std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
         specializationCache_;
     std::unordered_map<GraphId, size_t> typeSpecializationCounts_;

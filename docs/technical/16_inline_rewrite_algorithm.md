@@ -23,7 +23,7 @@
 
 | 层次 | 含义 |
 |------|------|
-| **`inlineCallableInDraft`**（`include/camel/runtime/draft_inline.h`） | **通用原语**：对**任意**满足前提的 `FUNC` 节点，把其被调图（`GCFuncBody::calleeGraph`）克隆进调用方并返回 `DraftInlineResult`。 |
+| **`inlineCallableInDraft`**（`include/camel/runtime/draft_inline.h`） | **通用原语**：对**任意**满足前提的 `FUNC` 节点，把其被调图（`GraphDraft::calleeGraphOf`）克隆进调用方并返回 `DraftInlineResult`。 |
 | **`InlineRewritePass`（`std::opt::inline*`）** | **策略层**：先枚举 `FUNC` 候选，再按策略过滤，并通过 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）调用上述原语。支持 `Small` / `Arm` / `Hybrid` 三种策略（`InlineTargetStrategy`）。 |
 
 当前 pass 入口命名与含义（注册表见 `src/execute/pass.cpp`）：
@@ -140,7 +140,7 @@ GATE/臂访问预算，不递归展开嵌套 JOIN。已知结果不等于可删�
 
 draft 中所有指向其他图的引用都是图的编号（`GraphId`）：
 
-- `FUNC` 节点负载中的 `GCFuncBody::calleeGraph`（`LOOP` 的 `condGraph` / `bodyGraph` 同）；
+- `FUNC` 节点负载（`GraphDraft::calleeIdOf` / `setCalleeGraph`；`LOOP` 同，`loopGraphsOf`）：负载是 draft 的 `payloadGraphs()` 表里的下标，表项是 `GraphId`；
 - 静态槽位中的函数值所持有的图（函数值是 `Function(Program, GraphId)`）；
 - draft 上登记的 `dependencies()`、`subGraphs()`、`staticGraphRefs()`。
 

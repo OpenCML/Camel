@@ -53,6 +53,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace camel::runtime {
@@ -89,9 +90,6 @@ struct DraftNodeHeader {
     gc_cnt_t normInputCount = 0;
     gc_cnt_t withInputCount = 0;
     gc_cnt_t ctrlInputCount = 0;
-    gc_cnt_t normUserCount  = 0;
-    gc_cnt_t withUserCount  = 0;
-    gc_cnt_t ctrlUserCount  = 0;
 
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
@@ -112,8 +110,7 @@ struct DraftNodeHeader {
     constexpr size_t usedBytes() const {
         return static_cast<size_t>(payloadBytes) +
                (static_cast<size_t>(normInputCount) + static_cast<size_t>(withInputCount) +
-                static_cast<size_t>(ctrlInputCount) + static_cast<size_t>(normUserCount) +
-                static_cast<size_t>(withUserCount) + static_cast<size_t>(ctrlUserCount)) *
+                static_cast<size_t>(ctrlInputCount)) *
                    sizeof(gc_node_ref_t);
     }
 };
@@ -135,9 +132,6 @@ struct DraftNodeInit {
     std::span<const gc_node_ref_t> normInputs{};
     std::span<const gc_node_ref_t> withInputs{};
     std::span<const gc_node_ref_t> ctrlInputs{};
-    std::span<const gc_node_ref_t> normUsers{};
-    std::span<const gc_node_ref_t> withUsers{};
-    std::span<const gc_node_ref_t> ctrlUsers{};
 };
 
 class DraftNodeView {
@@ -151,13 +145,6 @@ class DraftNodeView {
     static std::span<const gc_node_ref_t> withInputs(const DraftNode *node);
     static std::span<gc_node_ref_t> ctrlInputs(DraftNode *node);
     static std::span<const gc_node_ref_t> ctrlInputs(const DraftNode *node);
-
-    static std::span<gc_node_ref_t> normUsers(DraftNode *node);
-    static std::span<const gc_node_ref_t> normUsers(const DraftNode *node);
-    static std::span<gc_node_ref_t> withUsers(DraftNode *node);
-    static std::span<const gc_node_ref_t> withUsers(const DraftNode *node);
-    static std::span<gc_node_ref_t> ctrlUsers(DraftNode *node);
-    static std::span<const gc_node_ref_t> ctrlUsers(const DraftNode *node);
 
     template <typename Body> static Body *payloadAs(DraftNode *node) {
         auto bytes = payload(node);
@@ -204,6 +191,22 @@ class DraftNodePool {
     std::vector<void *> oversizeBlocks_;
 };
 
+/// The nodes that read a node, by edge group, in the order they were linked. A user appears once
+/// per group however often it reads the node. Kept apart from the node's storage so that adding
+/// a user costs the user alone.
+struct DraftUserLists {
+    std::vector<gc_node_ref_t> norm;
+    std::vector<gc_node_ref_t> with;
+    std::vector<gc_node_ref_t> ctrl;
+
+    std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) {
+        return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+    }
+    const std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) const {
+        return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+    }
+};
+
 class GraphDraft {
   public:
     /// A draft of `graph`, a graph of `program`: the draft reads the graphs it refers to (the
@@ -217,8 +220,6 @@ class GraphDraft {
     /// The graph the draft's graph is written in (GCGraph::outerGraphId).
     GraphId outerGraphId() const { return outerGraphId_; }
     void setOuterGraphId(GraphId outer) { outerGraphId_ = outer; }
-    /// The callee of FUNC node `id` and the two graphs of LOOP node `id`, read in program().
-    GCGraph *calleeOf(gc_node_ref_t id) const;
 
     GraphDraft()  = default;
     ~GraphDraft() = default;
@@ -257,6 +258,10 @@ class GraphDraft {
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
     bool empty() const { return liveNodeCount_ == 0; }
+    /// Changes whenever the graphs this draft refers to may have changed: a node was added,
+    /// erased or rewritten, a payload was handed out for writing, a constant or a dependency
+    /// was added. Equal revisions of one draft mean the same references.
+    uint64_t revision() const { return revision_; }
 
     bool containsNode(gc_node_ref_t id) const;
     bool containsNode(const DraftNode *node) const;
@@ -355,6 +360,21 @@ class GraphDraft {
         gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addCallNode(
         camel::core::type::Type *type, const GCCallBody &body = {}, gc_slot_idx_t dataIndex = 0);
+    /// The graph FUNC node `id` calls: its id (invalid while it names none), and the graph the
+    /// program of the draft holds under it (nullptr when none).
+    GraphId calleeIdOf(gc_node_ref_t id) const;
+    GCGraph *calleeGraphOf(gc_node_ref_t id) const;
+    void setCalleeGraph(gc_node_ref_t id, GraphId callee);
+    /// What LOOP node `id` names: its condition graph (invalid for a For loop), its body graph,
+    /// its form and its collection count.
+    GCLoopBody loopGraphsOf(gc_node_ref_t id) const;
+    void setLoopGraphs(gc_node_ref_t id, GraphId cond, GraphId body);
+    /// The graphs the payloads of FUNC and LOOP nodes index (GCFuncRef, GCLoopRef): the
+    /// reference table of the graph the draft was decoded from, then the graphs added since.
+    std::span<const GraphId> payloadGraphs() const { return payloadGraphs_; }
+    /// The index of `graph` in payloadGraphs(), added when it is not there; kNoLoopGraph for
+    /// an invalid id.
+    uint32_t payloadGraphIndexOf(GraphId graph);
     gc_node_ref_t addFuncNode(
         GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
         gc_slot_idx_t dataIndex = 0);
@@ -447,12 +467,21 @@ class GraphDraft {
     void replaceNodeStorage(gc_node_ref_t id, DraftNode *node);
     void removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
     void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
+    std::span<const gc_node_ref_t> usersOf(gc_node_ref_t id, DraftEdgeKind kind) const;
+    std::vector<gc_node_ref_t> &userListOf(gc_node_ref_t id, DraftEdgeKind kind);
+    std::span<gc_node_ref_t> mutableInputs(DraftNode *node, DraftEdgeKind kind);
+    /// Adds `inputId` at the end of the `kind` inputs of `userId`, in place when the node's
+    /// storage has room.
+    void appendInputEntry(gc_node_ref_t userId, DraftEdgeKind kind, gc_node_ref_t inputId);
     void replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceUsesInList(
         gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
         gc_node_ref_t newId, bool norm, bool with, bool ctrl);
+    GraphId payloadGraphAt(uint32_t index) const;
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
+    /// Records node `id` in the list of its kind when that kind has one (see gateIds_).
+    void noteNodeKind(gc_node_ref_t id, GCNodeKind kind);
 
     GraphId id_                                = kInvalidGraphId;
     GraphId outerGraphId_                      = kInvalidGraphId;
@@ -467,10 +496,20 @@ class GraphDraft {
     bool hasFrameLayout_                       = false;
     camel::core::type::TupleType *closureType_ = nullptr;
     DraftNodePool pool_;
+    std::vector<GraphId> payloadGraphs_;
+    std::unordered_map<GraphId, uint32_t> payloadGraphIndex_;
     std::vector<DraftNode *> nodesById_;
+    std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
     std::vector<gc_node_ref_t> sourceRefsById_;
     std::vector<gc_node_ref_t> draftIdsBySourceRef_;
     gc_cnt_t liveNodeCount_ = 0;
+    uint64_t revision_      = 0;
+    // The nodes that are, or were, a GATE, a BRCH or a JOIN, by id, each once. Erased nodes stay
+    // in the lists (ids are not reused) and are skipped by whoever walks them. The rewrites that
+    // concern only these kinds walk the list instead of every node.
+    std::vector<gc_node_ref_t> gateIds_;
+    std::vector<gc_node_ref_t> brchIds_;
+    std::vector<gc_node_ref_t> joinIds_;
 
     gc_node_ref_t entry_      = kInvalidNodeRef;
     gc_node_ref_t exit_       = kInvalidNodeRef;

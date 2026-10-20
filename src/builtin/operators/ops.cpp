@@ -37,6 +37,7 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
 
 #include "camel/core/error/runtime.h"
 
@@ -110,6 +111,76 @@ template <typename T> slot_t complexNegate(ArgsView &norm, TypeCode code) {
     return toSlot(Complex::create(
         static_cast<double>(-value.real()), static_cast<double>(-value.imag()),
         code, mm::autoSpace()));
+}
+
+// `z ^ n` with an integer n: repeated squaring, so `z ^ 2` is exactly `z * z` and every step
+// is one of the language's multiplications. A negative n is the reciprocal of the positive
+// power; the zero base gives an infinity, as `0.0 ^ -1` does for the real types (no fault).
+template <typename T> std::complex<T> integerPower(const std::complex<T> &base, long long exponent) {
+    const bool negative     = exponent < 0;
+    unsigned long long rest = negative ? 0ULL - static_cast<unsigned long long>(exponent)
+                                       : static_cast<unsigned long long>(exponent);
+    std::complex<T> result{1, 0};
+    std::complex<T> factor = base;
+    while (rest != 0) {
+        if ((rest & 1ULL) != 0) {
+            result *= factor;
+        }
+        rest >>= 1U;
+        if (rest != 0) {
+            factor *= factor;
+        }
+    }
+    if (negative) {
+        result = std::complex<T>{1, 0} / result;
+    }
+    return result;
+}
+
+// `z ^ w`: an exponent that is a whole number (imaginary part zero, real part an integer a
+// double holds exactly) is the integer power above; every other exponent goes through
+// std::pow of the two parts in their width, as `^` does for the real types.
+template <typename T>
+std::complex<T> complexPower(const std::complex<T> &base, const std::complex<T> &exponent) {
+    const T real = exponent.imag() == T{0} ? exponent.real() : std::numeric_limits<T>::quiet_NaN();
+    if (std::isfinite(real) && std::trunc(real) == real &&
+        real >= static_cast<T>(-9007199254740992.0) &&
+        real <= static_cast<T>(9007199254740992.0)) {
+        return integerPower<T>(base, static_cast<long long>(real));
+    }
+    return std::pow(base, exponent);
+}
+
+template <typename T>
+std::complex<T> powerOperand(const Complex *base, ArgsView &norm, size_t index) {
+    if (norm.code(index) == TypeCode::Complex64 || norm.code(index) == TypeCode::Complex128) {
+        return complexPower<T>(asComplex<T>(base), asComplex<T>(norm.get<Complex *>(index)));
+    }
+    const long long exponent =
+        norm.code(index) == TypeCode::Int32
+            ? static_cast<long long>(norm.get<Int32>(index))
+            : static_cast<long long>(norm.get<Int64>(index));
+    return integerPower<T>(asComplex<T>(base), exponent);
+}
+
+template <typename T>
+slot_t complexPowBinary(ArgsView &norm, TypeCode code, bool assign) {
+    Complex *base = nullptr;
+    if (assign) {
+        Tuple *cell = variableOf(norm);
+        base        = cell->get<Complex *>(0);
+    } else {
+        base = norm.get<Complex *>(0);
+    }
+    const std::complex<T> result = powerOperand<T>(base, norm, 1);
+    const slot_t slot            = toSlot(Complex::create(
+        static_cast<double>(result.real()), static_cast<double>(result.imag()),
+        code, mm::autoSpace()));
+    if (assign) {
+        Tuple *cell = variableOf(norm);
+        cell->set<slot_t>(0, slot, static_cast<TupleType *>(norm.type(0)));
+    }
+    return slot;
 }
 
 template <typename T>
@@ -947,4 +1018,16 @@ slot_t __builtin__assn_div_c__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 slot_t __builtin__assn_div_z__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return complexAssign<double>(norm, TypeCode::Complex128, ComplexOp::Div);
+}
+slot_t __builtin__pow_c__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexPowBinary<float>(norm, TypeCode::Complex64, false);
+}
+slot_t __builtin__pow_z__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexPowBinary<double>(norm, TypeCode::Complex128, false);
+}
+slot_t __builtin__assn_pow_c__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexPowBinary<float>(norm, TypeCode::Complex64, true);
+}
+slot_t __builtin__assn_pow_z__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return complexPowBinary<double>(norm, TypeCode::Complex128, true);
 }

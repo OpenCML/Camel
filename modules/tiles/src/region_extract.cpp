@@ -93,15 +93,21 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Region &region) {
         std::vector<rt::gc_node_ref_t> captures;
         for (auto input : source.withInputsOf(ref))
             captures.push_back(mapped(input));
-        // Frozen LOOP references are graph-table indices; a draft owns graph pointers.
-        // Copying the frozen payload bytes would silently bind unrelated graph entries.
-        std::optional<rt::GCLoopBody> loop;
+        // Frozen LOOP references are indices into the source's reference table: the draft
+        // has its own, so the payload is made again.
+        std::optional<rt::GCLoopRef> loop;
         auto payload = source.nodePayloadBytes(ref);
         if (node->kind == rt::GCNodeKind::Loop) {
-            loop = rt::loopBodyOf(source, ref);
-            if (rt::isValid(loop->condGraph))
-                draft.addDependency(loop->condGraph);
-            draft.addDependency(loop->bodyGraph);
+            const rt::GCLoopBody graphs = rt::loopBodyOf(source, ref);
+            if (rt::isValid(graphs.condGraph))
+                draft.addDependency(graphs.condGraph);
+            draft.addDependency(graphs.bodyGraph);
+            loop = rt::GCLoopRef{
+                .kind            = graphs.kind,
+                .condRef         = draft.payloadGraphIndexOf(graphs.condGraph),
+                .bodyRef         = draft.payloadGraphIndexOf(graphs.bodyGraph),
+                .collectionCount = graphs.collectionCount,
+            };
             payload = std::as_bytes(std::span(&*loop, 1));
         }
         auto *type              = typeOf(source, id);

@@ -81,7 +81,6 @@ using camel::runtime::GCBranchArm;
 using camel::runtime::GCBrchBody;
 using camel::runtime::GCCallBody;
 using camel::runtime::GCFillBody;
-using camel::runtime::GCFuncBody;
 using camel::runtime::GCGraph;
 using camel::runtime::GCGraphBuildAccess;
 using camel::runtime::GCGraphPayloadShape;
@@ -461,17 +460,18 @@ class EncodeSession {
 
             switch (header->kind) {
             case GCNodeKind::Func: {
-                GCFuncBody body{
-                    .calleeGraph = camel::runtime::kInvalidGraphId,
-                };
-                payloadStorage = toPayloadBytes(body);
+                payloadStorage = toPayloadBytes(camel::runtime::GCFuncRef{});
             } break;
             case GCNodeKind::Loop: {
                 // The graphs are patched in once every runtime graph has its place
                 // (patchPreparedFuncPayloads), as for a FUNC node.
-                payloadStorage =
-                    toPayloadBytes(*reinterpret_cast<const camel::runtime::GCLoopBody *>(
-                        graph->draft().payloadOf(sourceId).data()));
+                const auto *source = reinterpret_cast<const camel::runtime::GCLoopRef *>(
+                    graph->draft().payloadOf(sourceId).data());
+                payloadStorage = toPayloadBytes(
+                    camel::runtime::GCLoopRef{
+                        .kind            = source->kind,
+                        .collectionCount = source->collectionCount,
+                    });
             } break;
             case GCNodeKind::Call:
                 payloadStorage.assign(
@@ -671,19 +671,17 @@ class EncodeSession {
             const auto *header = prepared.source->draft().header(sourceId);
             ASSERT(header != nullptr, "Live source draft node cannot have a null header.");
             if (header->kind == GCNodeKind::Func) {
-                GCFuncBody *body = reinterpret_cast<GCFuncBody *>(
-                    prepared.draft->mutablePayloadOf(preparedId).data());
-                ASSERT(body != nullptr, "Prepared FUNC payload cannot be null.");
-                body->calleeGraph =
-                    resolvePreparedGraph(prepared.source->funcTarget(sourceId))->draft->id();
+                prepared.draft->setCalleeGraph(
+                    preparedId,
+                    resolvePreparedGraph(prepared.source->funcTarget(sourceId))->draft->id());
             }
             if (header->kind == GCNodeKind::Loop) {
-                auto *body = reinterpret_cast<camel::runtime::GCLoopBody *>(
-                    prepared.draft->mutablePayloadOf(preparedId).data());
                 const auto &target = prepared.source->loopTarget(sourceId);
-                body->condGraph    = target.cond ? resolvePreparedGraph(target.cond)->draft->id()
-                                                 : camel::runtime::kInvalidGraphId;
-                body->bodyGraph    = resolvePreparedGraph(target.body)->draft->id();
+                prepared.draft->setLoopGraphs(
+                    preparedId,
+                    target.cond ? resolvePreparedGraph(target.cond)->draft->id()
+                                : camel::runtime::kInvalidGraphId,
+                    resolvePreparedGraph(target.body)->draft->id());
             }
             ++preparedId;
         }
@@ -817,24 +815,7 @@ class EncodeSession {
             }
             const auto payload = prepared.draft->payloadOf(nodeId);
             if (header->kind == GCNodeKind::Func) {
-                if (payload.size_bytes() < sizeof(GCFuncBody)) {
-                    throw std::runtime_error(
-                        std::format(
-                            "Prepared FUNC node {} in graph '{}' has truncated payload ({} bytes).",
-                            nodeId,
-                            source->name(),
-                            payload.size_bytes()));
-                }
-                const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-                if (body->calleeGraph == static_cast<camel::runtime::GraphId>(-1)) {
-                    throw std::runtime_error(
-                        std::format(
-                            "Prepared FUNC node {} in graph '{}' carries invalid callee "
-                            "placeholder -1.",
-                            nodeId,
-                            source->name()));
-                }
-                if (!camel::runtime::isValid(body->calleeGraph)) {
+                if (!camel::runtime::isValid(prepared.draft->calleeIdOf(nodeId))) {
                     throw std::runtime_error(
                         std::format(
                             "Prepared FUNC node {} in graph '{}' carries a null callee "

@@ -79,6 +79,19 @@ using gc_cnt_t = uint32_t;       // count of a graph-local array
 A graph has no size limit other than the index `0xFFFFFFFF`, which is `kInvalidNodeRef`
 and `kNoPayload`.
 
+## 5a. Node Chunks
+
+The per-node columns are cut into chunks of 256 consecutive nodes (`GCNodeChunk`,
+one block of the graph space each): the node records, the source positions, the
+permissions and attributes (when some node has any), the input table of those
+nodes and their payload words. NodeId `ref` is node `ref & 255` of chunk
+`ref >> 8`; `GCGraph` holds the directory of chunks. Offsets inside a record
+(`inBegin`, `withBegin`, `ctrlBegin`, `payload`) are offsets in the arrays of the
+node's own chunk; node references everywhere are NodeIds of the graph. A chunk
+counts the graph versions that hold it (`shares`), so a version can share the
+chunks it did not change; the last one that lets go frees it
+(`GCGraphManager::freeGraph`).
+
 ## 6. Edges: the Input Table
 
 Each edge is stored **once**, as an entry of the input table:
@@ -221,17 +234,17 @@ node.)
 
 ### 11.3 `FUNC`
 
-In a frozen graph `FUNC` stores the index of its callee in the graph's
-reference table (section 11.8); `GCGraph::calleeIdOf(ref)` gives its `GraphId`, and
-`Program::calleeOf(graph, ref)` the graph the program holds under that id.
+`FUNC` stores the index of its callee in the graph's reference table (section
+11.8); `GCGraph::calleeIdOf(ref)` gives its `GraphId` and `Program::calleeOf(graph, ref)`
+the graph the program holds under it. A draft has the same payload and a table of the
+same kind (`GraphDraft::payloadGraphs()`, `GraphId`s, which starts as the `refs()` of
+the graph it was decoded from); `GraphDraft::calleeIdOf`, `calleeGraphOf` (resolved in
+the draft's program) and `setCalleeGraph` read and write it.
 
 ```cpp
-struct GCFuncRef {         // frozen graph
-    uint32_t ref = 0;      // index into refs()
+struct GCFuncRef {
+    uint32_t ref = kNoLoopGraph;   // index into refs(); kNoLoopGraph: no callee yet
     uint32_t reserved = 0;
-};
-struct GCFuncBody {        // draft: the callee's id; the encoder turns it into a GCFuncRef
-    GraphId calleeGraph = kInvalidGraphId;
 };
 ```
 
@@ -299,10 +312,10 @@ keep other graphs alive either: a program does (a `Program` is rooted as a whole
 `GCGraphManager`), and a graph a transformation makes outside every commit is
 kept by `Context::retainRuntimeGraphs`.
 
-The payload of a draft `FUNC` and `LOOP` node holds `GraphId`s directly
-(`GCFuncBody::calleeGraph`, `GCLoopBody::condGraph` / `bodyGraph`), because a draft is
-not frozen: its table of references is built when it is encoded, from the ids the
-nodes name, and the encoder writes the node's index into it.
+The payload of a draft `FUNC` and `LOOP` node is the same index (`GCFuncRef`,
+`GCLoopRef`) into the draft's own table `GraphDraft::payloadGraphs()`, whose entries are
+`GraphId`s. The encoder builds the frozen table from the graphs the nodes and the static
+values name and rewrites each index through the graph id.
 
 ## 12. Branch Arm Arena
 

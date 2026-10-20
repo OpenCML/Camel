@@ -229,12 +229,8 @@ std::vector<gc_node_ref_t> orderingOf(const GraphDraft &draft, gc_node_ref_t nod
     return function != nullptr && function->graph() != nullptr ? function : nullptr;
 }
 
-/// The graph the FUNC node `node` calls, as the program of the draft holds it.
 GCGraph *calleeOf(const GraphDraft &draft, gc_node_ref_t node) {
-    ASSERT(
-        draft.payloadOf(node).size_bytes() >= sizeof(rt::GCFuncBody),
-        "autodiff: FUNC payload missing.");
-    return draft.calleeOf(node);
+    return draft.calleeGraphOf(node);
 }
 
 gc_node_ref_t addAccs(GraphDraft &draft, Type *type, gc_node_ref_t source, size_t index) {
@@ -1097,8 +1093,7 @@ void ForwardRewrite::run() {
 }
 
 void ForwardRewrite::retarget(gc_node_ref_t func, const PullbackPlan &plan) {
-    auto payload                                                    = draft_.mutablePayloadOf(func);
-    reinterpret_cast<rt::GCFuncBody *>(payload.data())->calleeGraph = plan.forward;
+    draft_.setCalleeGraph(func, plan.forward);
     draft_.setNodeDataType(func, plan.forwardValueType);
     draft_.setNodeDataIndex(func, draft_.allocateRuntimeSlot(plan.forwardValueType));
 }
@@ -1534,9 +1529,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     std::vector<Type *> valueTypes = bodyPlan.stateTypes;
     valueTypes.insert(valueTypes.end(), bodyPlan.collectionTypes.begin(), bodyPlan.collectionTypes.end());
     Type *const valueType = TupleType::create(valueTypes);
-    rt::GCLoopBody *const payload =
-        reinterpret_cast<rt::GCLoopBody *>(draft_.mutablePayloadOf(loop).data());
-    payload->bodyGraph = bodyPlan.graphs.forward;
+    draft_.setLoopGraphs(loop, draft_.loopGraphsOf(loop).condGraph, bodyPlan.graphs.forward);
     draft_.setLoopCollectionCount(loop, static_cast<uint32_t>(bodyPlan.collectionTypes.size()));
     draft_.setNodeDataType(loop, valueType);
     draft_.setNodeDataIndex(loop, draft_.allocateRuntimeSlot(valueType));

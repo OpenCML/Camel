@@ -39,6 +39,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/utils/log.h"
+#include "camel/utils/pointer_set.h"
 
 #include <algorithm>
 #include <queue>
@@ -364,22 +365,17 @@ void visitDraftGraphs(
         }
         const DraftNodeHeader *header = draft.header(id);
         if (header && header->kind == GCNodeKind::Loop) {
-            const auto *loop = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(id).data());
-            if (isValid(loop->condGraph)) {
-                visitor(loop->condGraph, nullptr);
+            const GCLoopBody loop = draft.loopGraphsOf(id);
+            if (isValid(loop.condGraph)) {
+                visitor(loop.condGraph, nullptr);
             }
-            visitor(loop->bodyGraph, nullptr);
+            visitor(loop.bodyGraph, nullptr);
             continue;
         }
         if (!header || header->kind != GCNodeKind::Func) {
             continue;
         }
-        auto payload = draft.payloadOf(id);
-        if (payload.size_bytes() < sizeof(GCFuncBody)) {
-            continue;
-        }
-        auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-        visitor(body->calleeGraph, nullptr);
+        visitor(draft.calleeIdOf(id), nullptr);
     }
 
     const auto staticSlotTypes = draft.staticSlotTypes();
@@ -408,20 +404,15 @@ std::vector<GraphId> collectDraftDependencyGraphs(const GraphDraft &draft) {
         const DraftNodeHeader *header = draft.header(id);
         if (header && header->kind == GCNodeKind::Loop) {
             // A LOOP node calls its two graphs each round: they are callees too.
-            const auto *loop = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(id).data());
-            pushUniqueGraph(dependencies, loop->condGraph);
-            pushUniqueGraph(dependencies, loop->bodyGraph);
+            const GCLoopBody loop = draft.loopGraphsOf(id);
+            pushUniqueGraph(dependencies, loop.condGraph);
+            pushUniqueGraph(dependencies, loop.bodyGraph);
             continue;
         }
         if (!header || header->kind != GCNodeKind::Func) {
             continue;
         }
-        auto payload = draft.payloadOf(id);
-        if (payload.size_bytes() < sizeof(GCFuncBody)) {
-            continue;
-        }
-        auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-        pushUniqueGraph(dependencies, body->calleeGraph);
+        pushUniqueGraph(dependencies, draft.calleeIdOf(id));
     }
     return dependencies;
 }
@@ -464,8 +455,12 @@ std::vector<GraphId> collectDraftStaticGraphRefs(
     return staticGraphRefs;
 }
 
-// Encodes `draft` into `target` (`bytes` reserved); the static function values it holds are
-// copied for the graphs of `program`.
+uint64_t draftGraphOrigin(
+    const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
+    const GraphDraft &draft);
+
+// Encodes `draft` into `target` (`bytes` reserved), rewriting every graph reference through
+// `rewritten`, which must cover all graphs the draft refers to.
 GCGraph *encodeDraftGraph(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
     const GraphDraft &draft, const Program *program, GCGraph *target, size_t bytes) {
@@ -496,6 +491,8 @@ GCGraph *encodeDraftGraph(
     }
 
     const auto payloadShape = describeDraftNativePayload(draft);
+    // The node chunks are blocks of their own: the graph space can run out while they are made.
+    try {
     return GCGraphBuildAccess::constructInPlace(
         target,
         bytes,
@@ -517,6 +514,13 @@ GCGraph *encodeDraftGraph(
         payloadShape,
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(draft, payload); },
         staticSlots);
+    } catch (const mm::MemoryExhausted &e) {
+        throw GraphSpaceExhausted(
+            e,
+            bytes,
+            identity.name,
+            draftGraphOrigin(context, identity, draft));
+    }
 }
 
 size_t draftGraphBytes(
@@ -646,14 +650,25 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
         before.hasNodeAttrs() != after.hasNodeAttrs()) {
         return false;
     }
-    if (!sameArray(a->nodes, b->nodes, size_t(a->nodeCount) + 1) ||
-        !sameArray(a->inputs, b->inputs, a->edgeCount) ||
-        !sameArray(a->normPorts, b->normPorts, a->normPortCount) ||
+    // The columns, chunk by chunk: a chunk both graphs hold is the same chunk.
+    for (gc_cnt_t c = 0; c < a->chunkCount; ++c) {
+        const GCNodeChunk &x = *a->chunks[c];
+        const GCNodeChunk &y = *b->chunks[c];
+        if (&x == &y) {
+            continue;
+        }
+        if (x.nodeCount != y.nodeCount || x.edgeCount != y.edgeCount ||
+            !sameArray(x.nodes(), y.nodes(), x.nodeCount) ||
+            !sameArray(x.edges, y.edges, x.edgeCount) ||
+            (a->hasPermissions && !sameArray(x.permissions, y.permissions, x.nodeCount)) ||
+            (a->hasAttrs && !sameArray(x.attrs, y.attrs, x.nodeCount))) {
+            return false;
+        }
+    }
+    if (!sameArray(a->normPorts, b->normPorts, a->normPortCount) ||
         !sameArray(a->withPorts, b->withPorts, a->withPortCount) ||
         !sameArray(a->closure, b->closure, a->closureCount) ||
-        !sameArray(a->branchArms, b->branchArms, a->branchArmCount) ||
-        (before.hasNodePermissions() && !sameArray(a->permissions, b->permissions, a->nodeCount)) ||
-        (before.hasNodeAttrs() && !sameArray(a->attrs, b->attrs, a->nodeCount))) {
+        !sameArray(a->branchArms, b->branchArms, a->branchArmCount)) {
         return false;
     }
     // Payloads, node by node: an OPER's cached implementation pointer is not content.
@@ -841,9 +856,14 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
         return closure;
     }
 
-    std::queue<GCGraph *> worklist;
-    std::unordered_set<GCGraph *> visited;
-    worklist.push(runtimeRoot_);
+    // Breadth first: the closure is the graphs in the order they are first reached, and `closure`
+    // itself is the queue.
+    camel::utils::PointerSet<GCGraph> visited(drafts_.size() + 64);
+    const auto reach = [&](GCGraph *next) {
+        if (next && visited.insert(next)) {
+            closure.push_back(next);
+        }
+    };
     // The graph an id names: in the work program, else (a function value of another program)
     // in the program the function was made in, which the session then adopts.
     const auto resolve = [&](GraphId id, const Program *home) -> GCGraph * {
@@ -854,27 +874,34 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
         }
         return found;
     };
-
-    while (!worklist.empty()) {
-        GCGraph *graph = worklist.front();
-        worklist.pop();
-        if (!graph || !visited.insert(graph).second) {
-            continue;
-        }
-
-        closure.push_back(graph);
-        if (const GraphDraft *draft = tryDraft(graph)) {
-            visitDraftGraphs(context_, *draft, [&](GraphId next, const Program *home) {
-                if (GCGraph *found = resolve(next, home)) {
-                    worklist.push(found);
-                }
-            });
+    reach(runtimeRoot_);
+    for (size_t head = 0; head < closure.size(); ++head) {
+        GCGraph *graph = closure[head];
+        if (hasDraft(graph)) {
+            for (const auto &[next, home] : draftRefs(graph)) {
+                reach(resolve(next, home));
+            }
         } else {
-            work_->traceGraphs(*graph, [&](GCGraph *next) { worklist.push(next); });
+            work_->traceGraphs(*graph, reach);
         }
     }
 
     return closure;
+}
+
+const std::vector<std::pair<GraphId, const Program *>> &
+RuntimeGraphDraftSession::draftRefs(GCGraph *graph) const {
+    const GraphDraft &draft = *drafts_.at(graph)->draft;
+    DraftRefs &refs         = draftRefs_[graph];
+    if (!refs.valid || refs.revision != draft.revision()) {
+        refs.graphs.clear();
+        visitDraftGraphs(context_, draft, [&](GraphId ref, const Program *home) {
+            refs.graphs.emplace_back(ref, home);
+        });
+        refs.revision = draft.revision();
+        refs.valid    = true;
+    }
+    return refs.graphs;
 }
 
 std::vector<GCGraph *> RuntimeGraphDraftSession::collectReachableRuntimeGraphs() const {
@@ -951,6 +978,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     runtimeRoot_ = rewritten.at(oldRuntimeRoot);
     work_        = std::make_unique<Program>(*program_);
     drafts_.clear();
+    draftRefs_.clear();
     edited_.clear();
     return program_;
 }

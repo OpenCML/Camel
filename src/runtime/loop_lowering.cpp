@@ -450,21 +450,12 @@ void replaceLoop(GraphDraft &draft, const LoopShape &loop, GraphId rec) {
     }
 
     const DraftNodeHeader *header = draft.header(id);
-    const GCFuncBody body{.calleeGraph = rec};
+    const GCFuncRef body{.ref = draft.payloadGraphIndexOf(rec)};
     std::vector<std::byte> payload(sizeof(body));
     std::memcpy(payload.data(), &body, sizeof(body));
     const std::vector<gc_node_ref_t> ctrl(
         draft.ctrlInputsOf(id).begin(),
         draft.ctrlInputsOf(id).end());
-    const std::vector<gc_node_ref_t> normUsers(
-        draft.normUsersOf(id).begin(),
-        draft.normUsersOf(id).end());
-    const std::vector<gc_node_ref_t> withUsers(
-        draft.withUsersOf(id).begin(),
-        draft.withUsersOf(id).end());
-    const std::vector<gc_node_ref_t> ctrlUsers(
-        draft.ctrlUsersOf(id).begin(),
-        draft.ctrlUsersOf(id).end());
     draft.rewriteNode(
         id,
         DraftNodeInit{
@@ -476,9 +467,6 @@ void replaceLoop(GraphDraft &draft, const LoopShape &loop, GraphId rec) {
             .normInputs   = recNorm,
             .withInputs   = recWith,
             .ctrlInputs   = ctrl,
-            .normUsers    = normUsers,
-            .withUsers    = withUsers,
-            .ctrlUsers    = ctrlUsers,
         });
     draft.addDependency(rec);
     draft.addSubGraph(rec);

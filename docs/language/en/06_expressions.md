@@ -152,12 +152,12 @@ The operators of the following sections (except `&&`, `||` and `as`) are calls o
 
 | Operator | Types | Notes |
 |---|---|---|
-| `+` | The four numeric types, `string` | Concatenation for strings |
-| `-` `*` `/` | The four numeric types | Integer division truncates towards zero; a zero divisor is a fault |
-| `%` | `int`, `i32` | The remainder has the sign of the dividend; a zero divisor is a fault |
-| `^` | The four numeric types | Power |
+| `+` | The four real numeric types, `c64`, `c128`, `string` | Concatenation for strings |
+| `-` `*` `/` | The four real numeric types, `c64`, `c128` | Integer division truncates towards zero; a zero divisor is a fault (the complex zero for complex numbers) |
+| `%` | `int`, `i32` | The remainder has the sign of the dividend; a zero divisor is a fault. Never defined for complex numbers |
+| `^` | The four real numeric types, `c64`, `c128` | Power: an integer exponent of a complex number is repeated squaring (exact), a complex exponent is the platform's `pow` ([3.2](03_data_model.md#32-numbers)) |
 | `@` | Defined by modules | `tensor` module: matrix multiplication |
-| Unary `-` | The four numeric types | |
+| Unary `-` | The four real numeric types, `c64`, `c128` | |
 | `~` | `int`, `i32` | Bitwise not: `~5` is `-6` |
 
 The two operands must have the same type. There are no bitwise and, or, xor or shift operators; use `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl` and `shr` of the `math` module.
@@ -489,8 +489,8 @@ If the element function of `foreach` is to produce side effects, its body must b
 
   | Operator | Types |
   |---|---|
-  | `+=` | The four numeric types, `string` (concatenation) |
-  | `-=`, `*=`, `/=`, `^=` | The four numeric types |
+  | `+=` | The four real numeric types, `c64`, `c128`, `string` (concatenation) |
+  | `-=`, `*=`, `/=`, `^=` | The four real numeric types, `c64`, `c128` |
   | `%=` | `int`, `i32` |
   | `&=`, `\|=` | `bool` (`a = a & b`, `a = a \| b`: the right side is always evaluated) |
   | `@=` | None of the built-in types |
