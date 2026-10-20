@@ -40,6 +40,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/utils/log.h"
+#include "camel/utils/pointer_set.h"
 
 #include <algorithm>
 #include <queue>
@@ -825,11 +826,11 @@ RuntimeGraphDraftSession::changedGraphs(const std::vector<GCGraph *> &closure) c
     // transitive, see GCGraph::serial): walk the references backwards from the edited ones.
     std::unordered_map<GCGraph *, std::vector<GCGraph *>> referrers;
     for (GCGraph *graph : closure) {
-        visitDraftGraphs(context_, *drafts_.at(graph)->draft, [&](GCGraph *ref) {
+        for (GCGraph *ref : draftRefs(graph)) {
             if (ref) {
                 referrers[ref].push_back(graph);
             }
-        });
+        }
     }
     std::unordered_set<GCGraph *> changed;
     std::vector<GCGraph *> work;
@@ -897,34 +898,39 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
         return closure;
     }
 
-    std::queue<GCGraph *> worklist;
-    std::unordered_set<GCGraph *> visited;
-    worklist.push(runtimeRoot_);
-
-    while (!worklist.empty()) {
-        GCGraph *graph = worklist.front();
-        worklist.pop();
-        if (!graph || !visited.insert(graph).second) {
-            continue;
+    // Breadth first: the closure is the graphs in the order they are first reached, and `closure`
+    // itself is the queue.
+    camel::utils::PointerSet<GCGraph> visited(drafts_.size() + 64);
+    const auto reach = [&](GCGraph *next) {
+        if (next && visited.insert(next)) {
+            closure.push_back(next);
         }
-
-        closure.push_back(graph);
-        if (const GraphDraft *draft = tryDraft(graph)) {
-            visitDraftGraphs(context_, *draft, [&](GCGraph *next) {
-                if (next) {
-                    worklist.push(next);
-                }
-            });
+    };
+    reach(runtimeRoot_);
+    for (size_t head = 0; head < closure.size(); ++head) {
+        GCGraph *graph = closure[head];
+        if (hasDraft(graph)) {
+            for (GCGraph *next : draftRefs(graph)) {
+                reach(next);
+            }
         } else {
-            graph->traceGraphs([&](GCGraph *next) {
-                if (next) {
-                    worklist.push(next);
-                }
-            });
+            graph->traceGraphs(reach);
         }
     }
 
     return closure;
+}
+
+const std::vector<GCGraph *> &RuntimeGraphDraftSession::draftRefs(GCGraph *graph) const {
+    const GraphDraft &draft = *drafts_.at(graph)->draft;
+    DraftRefs &refs         = draftRefs_[graph];
+    if (!refs.valid || refs.revision != draft.revision()) {
+        refs.graphs.clear();
+        visitDraftGraphs(context_, draft, [&](GCGraph *ref) { refs.graphs.push_back(ref); });
+        refs.revision = draft.revision();
+        refs.valid    = true;
+    }
+    return refs.graphs;
 }
 
 std::vector<GCGraph *> RuntimeGraphDraftSession::collectReachableRuntimeGraphs() const {
@@ -1005,6 +1011,7 @@ GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
         context_->trackDetachedRuntimeGraphs(graphs);
     }
     drafts_.clear();
+    draftRefs_.clear();
     edited_.clear();
     return runtimeRoot_;
 }
