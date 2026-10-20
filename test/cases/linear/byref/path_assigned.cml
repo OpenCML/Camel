@@ -1,0 +1,29 @@
+/**
+ * A path assignment: a `var` followed by fields and elements, in any combination, including a
+ * compound assignment (docs/design-principles.cn.md 3.5, 6.11). The whole variable is rebound
+ * to the value with one place changed.
+ */
+module path_assigned
+
+func main(): int sync {
+    var m = [{ x: 1, y: 2 }, { x: 3, y: 4 }]
+    m[0].x = 9
+    println(m)
+
+    var p = { a: [1, 2, 3], b: 0 }
+    p.a[1] = 7
+    println(p)
+
+    var n = [[1, 2], [3, 4]]
+    n[1][0] = 8
+    println(n)
+
+    var c = [1, 2, 3]
+    c[0] += 10
+    println(c)
+
+    var s = { x: 1 }
+    s.x += 5
+    println(s)
+    return 0
+}

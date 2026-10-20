@@ -910,6 +910,11 @@ class Builder {
     // The value `variable` holds when the returned node runs (`:var/get`), ordered after the
     // variable's last writer in this graph and, in a sync block, in the block's chain.
     node_handle_t readVariable(node_handle_t variable);
+    // `:var/get` or `:var/peek` applied to `variable`, recorded as a read.
+    node_handle_t readVariableThrough(node_handle_t variable, const std::string &group);
+    // The value `variable` holds (`:var/peek`): the same as readVariable, but the variable keeps
+    // its array available for writing in place (the read does not take the array away).
+    node_handle_t peekVariable(node_handle_t variable);
     // `node` as a value: read when it is a variable, itself otherwise.
     node_handle_t valueOf(node_handle_t node) {
         return isVariable(node) ? readVariable(node) : node;
@@ -1139,6 +1144,17 @@ class Builder {
     /// (__builtin__var_take__). Returns nullptr when `gct` is not that form; the statement
     /// is then built as written.
     node_handle_t inPlaceRebindingOf(const GCT::node_ptr_t &gct);
+    /// A path assignment (design principles 3.5): `v.f = e`, `v[i] = e`, `v[i].f += e`, any
+    /// combination of fields and indices starting at a variable `v`. The whole value of `v` is
+    /// rebound to a `set` chain:
+    ///   LINK(DREF __assn__, <path>, e)  ->
+    ///   LINK(DREF __assn__, DREF v,
+    ///        LINK(DREF __set_index__, DREF v, i, LINK(DREF __set_field__, DREF v[i], f, e)))
+    /// and nothing downstream learns that a field or an element was written. In a sync block an
+    /// array variable is written where it is: the outermost index set is the in-place form and
+    /// the variable's array is the one `:var/take` gives it. Returns nullptr when `gct` is not
+    /// such an assignment (the call is then built as written).
+    node_handle_t pathAssignmentOf(const GCT::node_ptr_t &gct);
     /// The calls inPlaceRebindingOf wrote: visitLinkNode calls the in-place form of the
     /// operator they resolve to.
     std::unordered_set<const GCT::Node *> inPlaceCalls_;

@@ -1060,6 +1060,44 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
 /*
 TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
 */
+namespace {
+
+/// A mention of the type being declared, and whether it is held directly.
+struct TypeMention {
+    bool any      = false; // the type names itself somewhere in its right-hand side
+    bool directly = false; // ... in a place a value of it would be held in, not behind `[]`
+};
+
+void findTypeMention(
+    const AST::node_ptr_t &ast, const std::string &name, bool inCollection, TypeMention &out) {
+    if (ast == nullptr || out.directly) {
+        return;
+    }
+    if (ast->type() == AST::LoadType::Type) {
+        const AST::TypeType typeType = ast->loadAs<AST::TypeLoad>()->typeType();
+        if (typeType == AST::TypeType::Ref &&
+            ast->loadAs<AST::RefTypeLoad>()->ref().toString() == name) {
+            out.any = true;
+            out.directly |= !inCollection;
+            return;
+        }
+        // An array or another collection type holds its elements by reference, which is what
+        // lets a type contain itself (design principles 5.2). Anything else holds its parts in
+        // the value.
+        const bool indirect =
+            inCollection || typeType == AST::TypeType::Array || typeType == AST::TypeType::Spec;
+        for (size_t i = 0; i < ast->size(); ++i) {
+            findTypeMention(ast->at(i), name, indirect, out);
+        }
+        return;
+    }
+    for (size_t i = 0; i < ast->size(); ++i) {
+        findTypeMention(ast->at(i), name, inCollection, out);
+    }
+}
+
+} // namespace
+
 node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     ENTER("TypeDecl");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
@@ -1095,6 +1133,31 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
         type = declareEnumType(typeNode, typeLoad.get());
     } else if (typeLoad->params().empty()) {
+        // A type that mentions itself where a value of it would have to be held: a cycle that
+        // can never be built. Only an enum is declared with its name in scope, so any other
+        // self-reference is reported here, with the chain that closes it (design principles
+        // 5.2: recursion is through an array, a map, a set or an enum).
+        TypeMention mention;
+        findTypeMention(typeNode, typeLoad->ref().toString(), false, mention);
+        if (mention.any) {
+            const std::string name = typeLoad->ref().toString();
+            if (!mention.directly) {
+                // Legal by the rule, but the representation cannot hold it yet (see the
+                // handover report H23): say so instead of leaving the name unresolved.
+                diags_->of(SemanticDiag::FeatureNotSupported)
+                    .at(ast->load()->tokenRange())
+                    .commit(
+                        std::format(
+                            "a type that mentions itself through an array or another collection "
+                            "('{}')",
+                            name));
+            } else {
+                diags_->of(SemanticDiag::ModuleTypeCycle)
+                    .at(ast->load()->tokenRange())
+                    .commit(name, name + " -> " + name);
+            }
+            throw BuildAbortException();
+        }
         type = visitType(typeNode);
     } else {
         // A type function (`type Pair<T> = (T, T)`): the right-hand side is an ordinary type
@@ -2897,7 +2960,17 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
         const auto &load = ast->loadAs<AST::DataLoad>();
         if (load->dataType() == AST::DataType::Array) {
             const auto &items = *ast->atAs<AST::RepeatedLoad>(0);
-            if (!items.empty() && type->code() == TypeCode::Array) {
+            if (type->code() == TypeCode::Array) {
+                if (items.empty()) {
+                    // `[]` in a position of type `T[]` is the empty array of `T` (design
+                    // principles 5.1, 5.2): the elements it does not have are the only thing
+                    // its type leaves open, so it takes the type of the position
+                    // (`[] as int[]`, a recursive type's array field, a loop state).
+                    entered = true;
+                    return tree_->makeData(
+                        tt::as_shared<Data>(
+                            ArrayData::create(tt::as_ptr<ArrayType>(type)->elemType())));
+                }
                 return visitArrayInto(ast, type, entered);
             }
         } else if (load->dataType() == AST::DataType::Struct && type->code() == TypeCode::Struct) {

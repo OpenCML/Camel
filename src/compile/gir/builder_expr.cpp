@@ -874,7 +874,12 @@ node_handle_t Builder::newVariable(node_handle_t value) {
 }
 
 node_handle_t Builder::readVariable(node_handle_t variable) {
-    node_handle_t value = variableOperator("__var_get__", variable);
+    return readVariableThrough(variable, "__var_get__");
+}
+
+node_handle_t Builder::readVariableThrough(
+    node_handle_t variable, const std::string &group) {
+    node_handle_t value = variableOperator(group, variable);
     pendingUses_[variable].push_back({value, true});
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
@@ -891,6 +896,14 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
         chainedNodes_.insert(value);
     }
     return value;
+}
+
+node_handle_t Builder::peekVariable(node_handle_t variable) {
+    // The value of the variable without the store's right to its array: a path assignment
+    // reading the value it writes must not take the array away from the set that follows.
+    // It is a read all the same: ordered after the variable's last writer and, in a sync
+    // block, in the block's chain.
+    return readVariableThrough(variable, "__var_peek__");
 }
 
 std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {

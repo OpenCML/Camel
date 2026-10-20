@@ -31,6 +31,17 @@ expect_diagnostic_line = 10
 expect_diagnostic_column = 15
 expect_stdout_starts_with = "before\n"
 
+# --- an index out of range on the right of a path assignment ---------------------------------
+
+[[tests]]
+name = "fault.element_assigned_out_of_range"
+desc = "A path assignment whose index is past the end of the array: a fault, as reading past the end is (design principles 3.9, 6.11). The element store it lowers to reports it, located at the index."
+case = "../../../cases/consistency/faults/element_assigned_out_of_range.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 7
+expect_stdout_starts_with = "before\n"
+
 [[tests]]
 name = "fault.mod_zero_in_function"
 desc = "Modulo by zero in a called function."

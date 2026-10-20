@@ -1,0 +1,12 @@
+/**
+ * A struct that contains itself directly: no value of it could ever be built, since the value
+ * would have to hold a value of itself (docs/design-principles.cn.md 5.2). The error names the
+ * cycle: `A -> A`.
+ */
+module type_contains_itself
+
+type A = { a: A }
+
+func main(): int {
+    return 0
+}

@@ -181,3 +181,29 @@ verify_script = """
 assert(input.normalized.stdout.trim() === 'printed by the program', JSON.stringify(input.normalized.stdout))
 }
 """
+
+[[tests]]
+name = "semantic.type_contains_itself"
+desc = "A struct that contains itself directly is a cycle no value could fill: ModuleTypeCycle names the chain (`A -> A`). It was UnresolvedTypeReference before H23, which said nothing about the cycle."
+kind = "negative"
+case = "../../../cases/compile/semantic/type_contains_itself.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ModuleTypeCycle"
+expect_diagnostic_line = 8
+expect_output_contains = ["part of a cycle of types", "A -> A", "an array, a map, a set or an enum"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "semantic.type_recursion_through_array"
+desc = "A struct that mentions itself through an array is legal by design principles 5.2, but the representation cannot hold it yet: the declaration says so (FeatureNotSupported) instead of leaving the name unresolved."
+kind = "negative"
+case = "../../../cases/compile/semantic/type_recursion_through_array.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
+expect_diagnostic_line = 9
+expect_output_contains = ["mentions itself through an array", "'Node'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

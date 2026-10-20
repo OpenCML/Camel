@@ -1,0 +1,15 @@
+/**
+ * The in-place rebinding of an array that a path assignment is lowered to, next to the one
+ * `append` already uses (docs/design-principles.cn.md 3.5, 10.5): both take the array out of
+ * the cell and store it back (`:var/take`, `:op/assn_owned`), which is how the "not shared"
+ * criterion is asked. `std::jgir` of this program and of `element_assigned.cml` show the same
+ * three nodes.
+ */
+module element_assigned_append
+
+func main(): int sync {
+    var v = [1, 2, 3]
+    v = v->append<4>
+    println(v)
+    return 0
+}

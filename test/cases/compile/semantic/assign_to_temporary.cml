@@ -1,0 +1,17 @@
+/**
+ * An assignment whose target is a temporary: `point()` is a value nobody can name, so the store
+ * would be lost without a trace. A field or an element of a name is a target; a field of a
+ * temporary is not (design principles 3.5, 6.11).
+ */
+module assign_to_temporary
+
+type P = { x: int, y: int }
+
+func point(): P {
+    return { x: 1, y: 2 }
+}
+
+func main(): int sync {
+    wait point().x = 9
+    return 0
+}

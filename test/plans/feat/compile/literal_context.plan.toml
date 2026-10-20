@@ -37,6 +37,22 @@ assert(out === want, `unexpected output: ${out}`)
 """
 timeout_ms = 8000
 
+# The empty array literal is the one whose type the position decides entirely (design principles
+# 5.1, 5.2): it holds nothing, so `[]` in a `T[]` position is the empty array of `T`.
+
+[[tests]]
+name = "context.empty_array"
+desc = "`[]` in a position of type `T[]` is that type: a cast (`[] as int[]`), a declaration, an array of arrays, and the value of a loop (`loop acc = []` whose loop gives an `int[]`, in a function and under an annotated `let`). Before H23 a cast of `[]` was refused."
+kind = "behavior"
+case = "../../../cases/compile/literals/empty_array_context.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "0\n[0, 1, 4, 9]\n[0.5, 1.0, 1.5]\n0\n[[]]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 # The rule is a compile-time rule: a value that does not fit the type it is given is an error at
 # the position that gave it the type, not a fault at run time (and not a wrap-around).
 

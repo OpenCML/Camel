@@ -1,0 +1,15 @@
+/**
+ * A path assignment into a value that is shared copies, and what the other name holds stays as
+ * it was: after `let a = v`, writing through `v` does not change `a`
+ * (docs/design-principles.cn.md 3.5, 10.5).
+ */
+module element_assigned_copy
+
+func main(): int sync {
+    var v = [1, 2, 3]
+    let a = v
+    v[0] = 9
+    println(a)
+    println(v)
+    return 0
+}

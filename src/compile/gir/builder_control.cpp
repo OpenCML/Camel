@@ -184,6 +184,14 @@ data_ptr_t Builder::compositeDataInType(
         // The exact value each element was written as, when the GCT kept them (a composite
         // literal of literals): an element is then converted from the value written, not from
         // the double it was lowered to (design principles 5.1).
+        if (array->raw().empty()) {
+            // `[]`: the elements it does not have are the only thing its type leaves open, so
+            // the empty array takes the element type of the position it stands in (design
+            // principles 5.1, 5.2) — `[]` where an `int[]` is expected is the empty `int[]`,
+            // whether the position is a declaration, a body's value or a loop state. A literal
+            // that has elements keeps their join (H24), so this branch only covers `[]`.
+            return ArrayData::create(elemType);
+        }
         const auto *written =
             origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
         ArrayDataFactory factory;
@@ -1396,12 +1404,33 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
 
     // The first values and the array: evaluated once, where the loop is (they do not see the
-    // names of the head).
+    // names of the head). A loop of one state has the state's type, so a state written as the
+    // empty literal takes the type of the position the loop's value goes to (`loop losses = []
+    // for ...` where the loop gives a `float[]`; design principles 5.1, 5.2). A loop of several
+    // states gives a tuple, and says nothing about one state.
+    Type *loopExpected = nullptr;
+    if (k == 1 && expectedValueType_ != nullptr) {
+        Type *value = valueTypeOf(expectedValueType_);
+        if (value != nullptr && value->code() == TypeCode::Array) {
+            loopExpected = value;
+        }
+    }
     std::vector<node_handle_t> initial;
     std::vector<Type *> stateTypes;
     for (size_t j = 0; j < k; ++j) {
-        const auto &expr   = gct->loopInitial(j);
-        node_handle_t node = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        const auto &expr = gct->loopInitial(j);
+        node_handle_t node;
+        {
+            ExpectedValueScope stateScope(expectedValueType_, loopExpected);
+            node = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        }
+        if (loopExpected != nullptr) {
+            // A value that is not the empty literal is converted only when its position
+            // accepts it; one that does not fit stays as it is and is reported below.
+            if (node_handle_t typed = coerceTo(node, loopExpected, expr); typed != nullptr) {
+                node = typed;
+            }
+        }
         Type *type         = valueTypeOf(nodeTypeOf(node));
         const bool untyped = type == nullptr || type->code() == TypeCode::Void ||
                              (type->code() == TypeCode::Array &&
