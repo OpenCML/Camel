@@ -106,6 +106,21 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         }
         const uint64_t origin = owner->nodeOrigin(id);
         const size_t k        = view.stateCount();
+        // A tape holds one value per round. A loop whose state the compiler writes in place
+        // (Builder::markLoopStateInPlace) has a single array that every round appends to, so
+        // every tape entry would show the final array: refuse rather than record rounds that
+        // never existed as values.
+        const GCGraph *bodyGraph = view.bodyGraph();
+        for (size_t node = 0; node < bodyGraph->nodeCount(); ++node) {
+            const auto *header = bodyGraph->node(node);
+            if (header != nullptr && header->kind == camel::runtime::GCNodeKind::Oper &&
+                bodyGraph->nodeBodyAs<camel::runtime::GCOperBody>(node)->uri() ==
+                    ":struct/append_arr_owned") {
+                throw std::runtime_error(
+                    "test::loop_collect cannot collect a loop whose state is written in place: "
+                    "every tape entry would be the same final array");
+            }
+        }
         std::vector<Type *> stateTypes;
         for (size_t j = 0; j < k; ++j) {
             stateTypes.push_back(view.stateType(j));

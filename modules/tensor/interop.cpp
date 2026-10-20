@@ -213,14 +213,4 @@ Array *tensorFromArray(slot_t slot, type::Type *valueType, mm::IAllocator &alloc
     return tensor;
 }
 
-DLManagedTensor *tensorToDLPackCopy(const Array *tensor) {
-    // Zero-copy now: the managed tensor keeps the array's buffer alive.
-    return camel::core::array::toDLPack(const_cast<Array *>(tensor));
-}
-
-Array *tensorFromDLPackCopy(const DLManagedTensor *managed, mm::IAllocator &allocator) {
-    // Zero-copy now: the array adopts the producer's memory and releases it when it is gone.
-    return camel::core::array::fromDLPack(managed, allocator);
-}
-
 } // namespace camel::tensor

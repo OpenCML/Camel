@@ -41,6 +41,7 @@ struct BufferStats {
     std::atomic<size_t> peakBytes{0};
     std::atomic<uint64_t> liveCount{0};
     std::atomic<uint64_t> creations{0};
+    std::atomic<uint64_t> frees{0};
 };
 
 // Leaked: buffers can be released after static destruction begins.
@@ -122,6 +123,7 @@ void Buffer::releaseFromFinalizerThunk(void *context) noexcept {
 void Buffer::releaseNow() noexcept {
     noteBytesRemoved(capacity_);
     stats().liveCount.fetch_sub(1, std::memory_order_acq_rel);
+    stats().frees.fetch_add(1, std::memory_order_acq_rel);
     if (owner_ == BufferOwner::Camel) {
         if (block_) {
             mm::bufferSpace().free(block_);
@@ -171,6 +173,8 @@ size_t bufferBytesPeak() noexcept { return stats().peakBytes.load(std::memory_or
 uint64_t bufferLiveCount() noexcept { return stats().liveCount.load(std::memory_order_acquire); }
 
 uint64_t bufferCreations() noexcept { return stats().creations.load(std::memory_order_acquire); }
+
+uint64_t bufferFrees() noexcept { return stats().frees.load(std::memory_order_acquire); }
 
 void resetBufferStatsForTests() noexcept {
     auto &s = stats();

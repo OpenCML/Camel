@@ -343,6 +343,9 @@ Rules buildRules() {
     r[":struct/tail_arr"]     = runtimeFunction("tail");
     r[":struct/concat_arr"]   = runtimeFunction("concat");
     r[":struct/append_arr"]   = withArgument("append");
+    // The loop-state form (Builder::markLoopStateInPlace): writing in place is an optimisation of
+    // `append`, and this back end has only the copying form, which gives the same values.
+    r[":struct/append_arr_owned"] = withArgument("append");
     r[":struct/extend_arr"]   = withArgument("concat");
     r[":struct/contains_arr"] = withArgument("contains");
     r[":struct/zip"]          = {

@@ -1,0 +1,37 @@
+// H17 item 4: the old value of a loop state is not visible once the next round begins, so a
+// body that only ever appends to its state may write the state's array in place (design
+// principles 10.5), the same criterion as `t = t->relu`. `std::mem::buffers()` reads the buffer
+// counters between the operations, so the difference is visible from the language: growing to
+// 200 elements takes a handful of buffers in place, one per round when the array is copied.
+//
+// `grow` starts from a literal and only appends to the state: the loop takes a private copy of
+// the literal once and appends to it in place. `growFrom` starts from a parameter, an array the
+// loop does not own: the ordinary copying append (the control). `gather` is the `for` shape of
+// the same rewrite. Calling `grow` twice shows the literal is not edited by the first call.
+func grow(n: int): int[] {
+    return loop xs = [0] while len(xs) < n do xs->append<7>
+}
+
+func growFrom(seed: int[], n: int): int[] {
+    return loop xs = seed while len(xs) < n do xs->append<7>
+}
+
+func gather(xs: int[]): int[] {
+    return loop acc = [0] for x in xs do acc->append<x>
+}
+
+func main(): int sync {
+    let before = std::mem::buffers()
+    let xs     = grow(200)
+    let mid    = std::mem::buffers()
+    let ys     = growFrom([0], 200)
+    let after  = std::mem::buffers()
+    let again  = grow(3)
+    let beforeFor = std::mem::buffers()
+    let zs     = gather([1, 2, 3, 4, 5])
+    let afterFor  = std::mem::buffers()
+    println(len(xs), len(ys), mid.allocs - before.allocs, after.allocs - mid.allocs)
+    println(xs[0], xs[199], ys[0], ys[199], len(again), again[0], again[2])
+    println(len(zs), afterFor.allocs - beforeFor.allocs, zs[0], zs[5])
+    return 0
+}

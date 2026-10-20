@@ -35,6 +35,7 @@ using namespace camel::core::rtdata;
 #include "../operators/io.h"
 #include "../operators/loop.h"
 #include "../operators/macro.h"
+#include "../operators/mem.h"
 #include "../operators/ops.h"
 #include "../operators/other.h"
 #include "../operators/profiler.h"
@@ -85,6 +86,13 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/dtos", __dtos__},
         {"op/stos", __stos__},
         {"op/atos", __atos__},
+
+        // diagnostics
+        {"op/mem_buffers", __builtin__mem_buffers__},
+        // `xs->append<v>` written by the loop-state rewrite; not a group a program can name.
+        {"struct/append_arr_owned", __append_owned_arr__},
+        // The private copy of an array a rewritten loop starts from; likewise internal.
+        {"struct/copy_arr", __copy_arr__},
 
         // variables
         {"var/new", __builtin__var_new__},
@@ -405,6 +413,9 @@ void registerBuiltinOperatorTraits() {
         std::string(camel::execute::kFaultIsolationUri),
         {.pure = false, .callsGraphs = true});
     registry.declare("os", {{"exit", false}, {"sleep", false}});
+    // The buffer counters are ambient state: two calls with the same arguments can return
+    // different structs, so the call must not be folded, merged or dropped as a pure one.
+    registry.set(":op/mem_buffers", {.pure = false});
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});

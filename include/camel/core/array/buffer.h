@@ -138,6 +138,10 @@ uint64_t bufferLiveCount() noexcept;
 /// Number of buffers ever created (a buffer made and released is one creation). The allocation
 /// counter tests read this to prove that an operation copies or does not.
 uint64_t bufferCreations() noexcept;
+/// Number of buffers whose last reference has been dropped (a buffer that is released is one
+/// free). `bufferCreations() - bufferFrees() == bufferLiveCount()`, except after the test hook
+/// `resetBufferStatsForTests` (which zeroes the creation count, not the live one).
+uint64_t bufferFrees() noexcept;
 void resetBufferStatsForTests() noexcept;
 
 /// Debug self-test (`std::gc::buffers`): inline arrays, promotion to a buffer, views and DLPack
