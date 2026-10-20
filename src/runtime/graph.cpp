@@ -338,6 +338,9 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                     -node->dataIndex,
                     staticSlotCount));
         }
+        if (node->kind == GCNodeKind::Dead) {
+            continue;
+        }
         if (node->kind == GCNodeKind::Dref) {
             throw std::runtime_error(
                 std::format(
@@ -503,6 +506,7 @@ branchSliceView(const GCBranchArm *storage, gc_off_t offset, gc_cnt_t count, gc_
 }
 
 struct PlannedDraftNode {
+    bool dead               = false; // the place of an erased node (ids are kept)
     gc_node_ref_t draftId   = kInvalidNodeRef;
     gc_node_ref_t ref       = kInvalidNodeRef;
     gc_off_t payload        = kNoPayload; // word offset in the payload area
@@ -558,11 +562,14 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
             throw std::runtime_error(
                 std::format(
                     "Draft payload planning found dead node ref {} in {} list of node {} "
-                    "(kind={}).",
+                    "(kind={}; the draft has {} places, {} nodes, keeps ids: {}).",
                     ref,
                     lane,
                     owner,
-                    ownerHeader ? static_cast<int>(ownerHeader->kind) : -1));
+                    ownerHeader ? static_cast<int>(ownerHeader->kind) : -1,
+                    draft.nodeSlotCount(),
+                    draft.nodeCount(),
+                    draft.keepsNodeIds()));
         }
     };
 
@@ -574,8 +581,19 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     size_t edgeCount      = 0;
     size_t payloadWords   = 0;
     size_t branchArmCount = 0;
+    const bool keepIds = draft.keepsNodeIds();
     for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
         if (!draft.alive(draftId)) {
+            if (keepIds) {
+                // The place stays, as a Dead record, so that the others keep their ids.
+                plan.nodes.push_back(
+                    PlannedDraftNode{
+                        .dead    = true,
+                        .draftId = draftId,
+                        .ref     = static_cast<gc_node_ref_t>(nodeCount),
+                    });
+                ++nodeCount;
+            }
             continue;
         }
         const DraftNodeHeader *header = draft.header(draftId);
@@ -693,6 +711,14 @@ void emitDraftPayload(
     };
 
     for (const PlannedDraftNode &planned : plan.nodes) {
+        if (planned.dead) {
+            GCNode &record   = payload.nodes[planned.ref];
+            record.kind      = GCNodeKind::Dead;
+            record.inBegin   = static_cast<gc_off_t>(inputCursor);
+            record.withBegin = record.inBegin;
+            record.ctrlBegin = record.inBegin;
+            continue;
+        }
         const DraftNodeHeader *draftHeader = draft.header(planned.draftId);
         ASSERT(draftHeader != nullptr, "Draft payload emission requires a non-null node header.");
         CAMEL_LOG_INFO_S(
@@ -867,8 +893,13 @@ void emitDraftPayload(
         payload.closure[i] = plan.runtimeRefsByDraftId[draft.closureNodes()[i]];
     }
 
+    // A graph without an entry starts at its first node.
+    const auto firstNode = std::find_if(
+        plan.nodes.begin(),
+        plan.nodes.end(),
+        [](const PlannedDraftNode &planned) { return !planned.dead; });
     payload.entryNode  = draft.entryNode() == kInvalidNodeRef
-                             ? (plan.nodes.empty() ? kInvalidNodeRef : plan.nodes.front().ref)
+                             ? (firstNode == plan.nodes.end() ? kInvalidNodeRef : firstNode->ref)
                              : plan.runtimeRefsByDraftId[draft.entryNode()];
     payload.exitNode   = draft.exitNode() == kInvalidNodeRef
                              ? kInvalidNodeRef
@@ -1521,6 +1552,17 @@ const GCNode *GCGraph::returnNode() const { return node(returnNodeRef()); }
 gc_node_ref_t GCGraph::returnNodeRef() const { return nativePayload_.returnNode; }
 
 GCReturnKind GCGraph::returnKind() const { return nativePayload_.returnKind; }
+
+gc_cnt_t GCGraph::liveNodeCount() const {
+    gc_cnt_t live = 0;
+    for (gc_cnt_t c = 0; c < nativePayload_.chunkCount; ++c) {
+        const GCNodeChunk &chunk = *nativePayload_.chunks[c];
+        for (uint32_t i = 0; i < chunk.nodeCount; ++i) {
+            live += chunk.nodes()[i].kind != GCNodeKind::Dead;
+        }
+    }
+    return live;
+}
 
 gc_node_ref_t GCGraph::nodeRef(const GCNode *nodePtr) const {
     for (gc_cnt_t c = 0; c < nativePayload_.chunkCount; ++c) {

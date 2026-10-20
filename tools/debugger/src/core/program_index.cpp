@@ -65,6 +65,7 @@ const char *kindName(GCNodeKind kind) {
         return "LOOP";
     case GCNodeKind::Bind:
     case GCNodeKind::Dref:
+    case GCNodeKind::Dead:
         // Reserved kinds: never part of a frozen graph (see GCNodeKind).
         break;
     }

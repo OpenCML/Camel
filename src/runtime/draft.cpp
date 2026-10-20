@@ -683,8 +683,8 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     std::vector<gc_node_ref_t> sourceToDraft(graph->nodeCount(), kInvalidNodeRef);
     draft->nodesById_.reserve(graph->nodeCount());
     draft->sourceRefsById_.reserve(graph->nodeCount());
-    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-        const gc_node_ref_t sourceRef = it.ref();
+    draft->decoded_ = true;
+    for (gc_node_ref_t sourceRef = 0; sourceRef < graph->nodeCount(); ++sourceRef) {
         ASSERT(sourceRef < sourceToDraft.size(), "Runtime node ref is out of draft decode range.");
         const gc_node_ref_t draftId = static_cast<gc_node_ref_t>(draft->nodesById_.size());
         sourceToDraft[sourceRef]    = draftId;

@@ -271,6 +271,14 @@ class GraphDraft {
     /// erased or rewritten, a payload was handed out for writing, a constant or a dependency
     /// was added. Equal revisions of one draft mean the same references.
     uint64_t revision() const { return revision_; }
+    /// Whether an encoding of this draft numbers the nodes as they are, leaving the place of
+    /// an erased node as a Dead record: a draft decoded from a graph keeps its ids, so that
+    /// the version it becomes names its nodes as the graph did. Past half the places dead,
+    /// or for a draft that was built and not decoded, the nodes are numbered anew.
+    bool keepsNodeIds() const {
+        return decoded_ && 2 * static_cast<size_t>(nodesById_.size() - liveNodeCount_) <=
+                               nodesById_.size();
+    }
 
     bool containsNode(gc_node_ref_t id) const;
     bool containsNode(const DraftNode *node) const;
@@ -509,6 +517,7 @@ class GraphDraft {
     std::vector<gc_node_ref_t> draftIdsBySourceRef_;
     gc_cnt_t liveNodeCount_ = 0;
     uint64_t revision_      = 0;
+    bool decoded_           = false; // see keepsNodeIds()
     // The nodes that are, or were, a GATE, a BRCH or a JOIN, by id, each once. Erased nodes stay
     // in the lists (ids are not reused) and are skipped by whoever walks them. The rewrites that
     // concern only these kinds walk the list instead of every node.

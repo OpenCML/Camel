@@ -2201,6 +2201,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Bind:
     case GCNodeKind::Dref:
+    case GCNodeKind::Dead:
         // Reserved kinds: never part of a frozen graph (see GCNodeKind). Listed only to keep
         // this switch exhaustive.
         return NullSlot;
