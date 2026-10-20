@@ -10,6 +10,7 @@
  */
 
 #include "camel/core/mm.h"
+#include "camel/core/array/buffer.h"
 #include "camel/core/mm/alloc/header.h"
 #include "camel/core/rtdata/foreign.h"
 #include "nlohmann/json.hpp"
@@ -272,6 +273,15 @@ std::string snapshotToJson(bool detailed) {
              {"activeRootedHandles", foreignStats.activeRootedHandles},
              {"activePinnedHandles", foreignStats.activePinnedHandles},
          }},
+        {"buffers",
+         {
+             {"liveBytes", camel::core::array::bufferBytesLive()},
+             {"peakBytes", camel::core::array::bufferBytesPeak()},
+             {"liveCount", camel::core::array::bufferLiveCount()},
+             {"created", camel::core::array::bufferCreations()},
+             {"spaceUsedBytes", bufferSpace().usage().usedBytes},
+             {"spaceReservedBytes", bufferSpace().usage().reservedBytes},
+         }},
         {"summary",
          {
              {"regionCount", regions.size()},
@@ -309,6 +319,10 @@ std::string summaryToText() {
     os << "  foreign: live=" << foreign.liveControlBlocks
        << " rooted=" << foreign.activeRootedHandles << " pinned=" << foreign.activePinnedHandles
        << " finalized=" << foreign.finalizedWrappers << "\n";
+    os << "  buffers: live=" << camel::core::array::bufferLiveCount()
+       << " bytes=" << camel::core::array::bufferBytesLive()
+       << " peak=" << camel::core::array::bufferBytesPeak()
+       << " created=" << camel::core::array::bufferCreations() << "\n";
 
     const auto sources = autoSp.rootSourceDescriptions();
     if (!sources.empty()) {

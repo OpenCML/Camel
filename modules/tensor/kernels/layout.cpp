@@ -104,10 +104,10 @@ Shape resolveReshape(std::span<const int64_t> input, std::span<const int64_t> ta
     return result;
 }
 
-TensorObject *
-reshape(const TensorObject *input, std::span<const int64_t> target, mm::IAllocator &allocator) {
+Array *
+reshape(const Array *input, std::span<const int64_t> target, mm::IAllocator &allocator) {
     // Tensors are immutable, so the result shares the input's buffer.
-    return TensorObject::createView(input, resolveReshape(input->shapeSpan(), target), allocator);
+    return viewTensor(input, resolveReshape(input->shapeSpan(), target), allocator);
 }
 
 Shape permuteShape(std::span<const int64_t> input, std::span<const int64_t> perm) {
@@ -128,10 +128,10 @@ Shape permuteShape(std::span<const int64_t> input, std::span<const int64_t> perm
     return out;
 }
 
-TensorObject *
-permute(const TensorObject *input, std::span<const int64_t> perm, mm::IAllocator &allocator) {
+Array *
+permute(const Array *input, std::span<const int64_t> perm, mm::IAllocator &allocator) {
     const Shape outShape = permuteShape(input->shapeSpan(), perm);
-    TensorObject *out    = TensorObject::create(input->dtype(), outShape, allocator);
+    Array *out    = createTensor(input->dtype(), outShape, allocator);
     const size_t rank    = outShape.size();
     if (out->numel() == 0) {
         return out;
@@ -174,7 +174,7 @@ permute(const TensorObject *input, std::span<const int64_t> perm, mm::IAllocator
     return out;
 }
 
-TensorObject *transposeLast2(const TensorObject *input, mm::IAllocator &allocator) {
+Array *transposeLast2(const Array *input, mm::IAllocator &allocator) {
     if (input->rank() < 2) {
         throw std::invalid_argument("transpose requires a tensor of rank >= 2");
     }
@@ -211,10 +211,10 @@ Shape concatShape(std::span<const std::span<const int64_t>> inputs, int64_t axis
     return out;
 }
 
-TensorObject *
-concat(std::span<const TensorObject *const> inputs, int64_t axisArg, mm::IAllocator &allocator) {
+Array *
+concat(std::span<const Array *const> inputs, int64_t axisArg, mm::IAllocator &allocator) {
     std::vector<std::span<const int64_t>> shapes;
-    for (const TensorObject *t : inputs) {
+    for (const Array *t : inputs) {
         if (t->dtype() != inputs[0]->dtype()) {
             throw std::invalid_argument("concat currently requires matching dtypes");
         }
@@ -223,7 +223,7 @@ concat(std::span<const TensorObject *const> inputs, int64_t axisArg, mm::IAlloca
     const Shape outShape = concatShape(shapes, axisArg);
     const size_t axis    = static_cast<size_t>(
         axisArg < 0 ? axisArg + static_cast<int64_t>(outShape.size()) : axisArg);
-    TensorObject *out = TensorObject::create(inputs[0]->dtype(), outShape, allocator);
+    Array *out = createTensor(inputs[0]->dtype(), outShape, allocator);
     uint64_t outer = 1, inner = 1;
     for (size_t d = 0; d < axis; ++d) {
         outer *= static_cast<uint64_t>(outShape[d]);
@@ -234,7 +234,7 @@ concat(std::span<const TensorObject *const> inputs, int64_t axisArg, mm::IAlloca
     const size_t itemSize = elementSize(out->dtype());
     std::byte *dst        = out->rawData();
     for (uint64_t o = 0; o < outer; ++o) {
-        for (const TensorObject *t : inputs) {
+        for (const Array *t : inputs) {
             const uint64_t chunk = static_cast<uint64_t>(t->dim(axis)) * inner;
             std::memcpy(dst, t->rawData() + o * chunk * itemSize, chunk * itemSize);
             dst += chunk * itemSize;
@@ -260,8 +260,8 @@ std::optional<SliceRange> normalizeSliceBounds(int64_t extent, int64_t start, in
     return SliceRange{*s, *e};
 }
 
-TensorObject *slice(
-    const TensorObject *input, int64_t axisArg, int64_t start, int64_t end, int64_t step,
+Array *slice(
+    const Array *input, int64_t axisArg, int64_t start, int64_t end, int64_t step,
     mm::IAllocator &allocator) {
     if (step <= 0) {
         throw std::invalid_argument("slice step must be positive");
@@ -281,7 +281,7 @@ TensorObject *slice(
     const int64_t count                 = end > start ? (end - start + step - 1) / step : 0;
     Shape outShape                      = input->shapeVector();
     outShape[static_cast<size_t>(axis)] = count;
-    TensorObject *out                   = TensorObject::create(input->dtype(), outShape, allocator);
+    Array *out                   = createTensor(input->dtype(), outShape, allocator);
     uint64_t outer = 1, inner = 1;
     for (int64_t d = 0; d < axis; ++d) {
         outer *= static_cast<uint64_t>(outShape[static_cast<size_t>(d)]);
@@ -306,14 +306,14 @@ TensorObject *slice(
     return out;
 }
 
-TensorObject *
-take(const TensorObject *input, std::span<const int64_t> indices, mm::IAllocator &allocator) {
+Array *
+take(const Array *input, std::span<const int64_t> indices, mm::IAllocator &allocator) {
     if (input->rank() < 1) {
         throw std::invalid_argument("take expects a tensor with at least one dimension");
     }
     Shape outShape{static_cast<int64_t>(indices.size())};
     outShape.insert(outShape.end(), input->shape() + 1, input->shape() + input->rank());
-    TensorObject *out = TensorObject::create(input->dtype(), outShape, allocator, false);
+    Array *out = createTensor(input->dtype(), outShape, allocator, false);
     if (indices.empty()) {
         return out;
     }
@@ -335,8 +335,8 @@ take(const TensorObject *input, std::span<const int64_t> indices, mm::IAllocator
     return out;
 }
 
-TensorObject *takeGrad(
-    const TensorObject *input, std::span<const int64_t> indices, const TensorObject *dy,
+Array *takeGrad(
+    const Array *input, std::span<const int64_t> indices, const Array *dy,
     mm::IAllocator &allocator) {
     if (input->rank() < 1) {
         throw std::invalid_argument("take_grad expects a tensor with at least one dimension");
@@ -344,7 +344,7 @@ TensorObject *takeGrad(
     if (dy->rank() != input->rank() || dy->dim(0) != static_cast<int64_t>(indices.size())) {
         throw ShapeError("take_grad expects a gradient shaped like the take result");
     }
-    TensorObject *out = TensorObject::create(input->dtype(), input->shapeSpan(), allocator, true);
+    Array *out = createTensor(input->dtype(), input->shapeSpan(), allocator, true);
     if (indices.empty()) {
         return out;
     }
@@ -395,12 +395,12 @@ TensorObject *takeGrad(
     return out;
 }
 
-TensorObject *
+Array *
 oneHot(std::span<const int64_t> labels, int64_t classes, mm::IAllocator &allocator) {
     if (classes < 0) {
         throw std::invalid_argument("one_hot classes must be non-negative");
     }
-    TensorObject *out = TensorObject::create(
+    Array *out = createTensor(
         TypeCode::Float32,
         Shape{static_cast<int64_t>(labels.size()), classes},
         allocator,
@@ -416,7 +416,7 @@ oneHot(std::span<const int64_t> labels, int64_t classes, mm::IAllocator &allocat
     return out;
 }
 
-TensorObject *arange(int64_t start, int64_t stop, int64_t step, mm::IAllocator &allocator) {
+Array *arange(int64_t start, int64_t stop, int64_t step, mm::IAllocator &allocator) {
     if (step == 0) {
         throw std::invalid_argument("range step cannot be zero");
     }
@@ -427,7 +427,7 @@ TensorObject *arange(int64_t start, int64_t stop, int64_t step, mm::IAllocator &
         count = (start - stop - step - 1) / -step;
     }
     const int64_t shape[] = {count};
-    TensorObject *out     = TensorObject::create(TypeCode::Int64, shape, allocator);
+    Array *out     = createTensor(TypeCode::Int64, shape, allocator);
     auto *values          = out->dataAs<int64_t>();
     for (int64_t i = 0; i < count; ++i) {
         values[i] = start + i * step;
@@ -435,12 +435,12 @@ TensorObject *arange(int64_t start, int64_t stop, int64_t step, mm::IAllocator &
     return out;
 }
 
-TensorObject *eye(int64_t size, mm::IAllocator &allocator) {
+Array *eye(int64_t size, mm::IAllocator &allocator) {
     if (size < 0) {
         throw std::invalid_argument("eye size cannot be negative");
     }
     const int64_t shape[] = {size, size};
-    TensorObject *out     = TensorObject::create(TypeCode::Float32, shape, allocator, true);
+    Array *out     = createTensor(TypeCode::Float32, shape, allocator, true);
     auto *values          = out->dataAs<float>();
     for (int64_t i = 0; i < size; ++i) {
         values[i * size + i] = 1.0f;
@@ -448,12 +448,12 @@ TensorObject *eye(int64_t size, mm::IAllocator &allocator) {
     return out;
 }
 
-TensorObject *
+Array *
 randomUniform(std::span<const int64_t> shape, double low, double high, mm::IAllocator &allocator) {
     if (low > high) {
         std::swap(low, high);
     }
-    TensorObject *out = TensorObject::create(TypeCode::Float32, shape, allocator);
+    Array *out = createTensor(TypeCode::Float32, shape, allocator);
     const float lo = static_cast<float>(low), hi = static_cast<float>(high);
     std::lock_guard guard(rngMutex());
     float *values = out->dataAs<float>();
@@ -463,9 +463,9 @@ randomUniform(std::span<const int64_t> shape, double low, double high, mm::IAllo
     return out;
 }
 
-TensorObject *randomNormal(
+Array *randomNormal(
     std::span<const int64_t> shape, double mean, double stddev, mm::IAllocator &allocator) {
-    TensorObject *out = TensorObject::create(TypeCode::Float32, shape, allocator);
+    Array *out = createTensor(TypeCode::Float32, shape, allocator);
     const float mu = static_cast<float>(mean), sigma = static_cast<float>(stddev);
     camel::utils::random::NormalSource<float> normal;
     std::lock_guard guard(rngMutex());

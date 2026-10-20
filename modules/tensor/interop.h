@@ -40,12 +40,12 @@ std::vector<int64_t> parseIntArray(const ::Array *array, const type::Type *array
 /// Parses an int[] value into a shape. Negative extents are rejected.
 Shape parseShapeArray(const ::Array *shapeArray, const type::Type *shapeType);
 /// Builds an int[] value holding the tensor's shape.
-::Array *makeShapeArray(const TensorObject *tensor, mm::IAllocator &allocator);
+::Array *makeShapeArray(const Array *tensor, mm::IAllocator &allocator);
 
 /// Converts a (nested) numeric array into a tensor; nesting depth becomes rank.
-TensorObject *tensorFromArray(slot_t slot, type::Type *valueType, mm::IAllocator &allocator);
+Array *tensorFromArray(slot_t slot, type::Type *valueType, mm::IAllocator &allocator);
 
-DLManagedTensor *tensorToDLPackCopy(const TensorObject *tensor);
-TensorObject *tensorFromDLPackCopy(const DLManagedTensor *managed, mm::IAllocator &allocator);
+DLManagedTensor *tensorToDLPackCopy(const Array *tensor);
+Array *tensorFromDLPackCopy(const DLManagedTensor *managed, mm::IAllocator &allocator);
 
 } // namespace camel::tensor

@@ -157,7 +157,7 @@ class Compiler {
             return value;
         }
         if (tensor::asTensorType(type)) {
-            const auto *t = td::fromSlot<tensor::TensorObject *>(slot);
+            const auto *t = td::fromSlot<tensor::Array *>(slot);
             if (!t || t->dtype() != ty::TypeCode::Float32)
                 throw UnsupportedComputation("tiles currently requires f32 tensors");
             Node node{.op = "input", .shape = t->shapeVector()};
@@ -190,7 +190,10 @@ class Compiler {
     // The core instantiator reads its temporary slot under extraction's no-GC scope;
     // neither the slot nor the array escapes into the owned Program.
     Value integerArray(const std::vector<int64_t> &values) {
-        auto *array = ::Array::create(tensor::ops::resultAllocator(), values.size());
+        auto *array = ::Array::create(
+            tensor::ops::resultAllocator(),
+            ty::ArrayType::create(ty::Type::Int64()),
+            values.size());
         for (size_t i = 0; i < values.size(); ++i)
             array->set<td::Int64>(i, values[i]);
         return host(td::toSlot<::Array *>(array), ty::ArrayType::create(ty::Type::Int64()));

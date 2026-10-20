@@ -35,7 +35,7 @@ namespace camel::tensor::ops {
 // ---------------------------------------------------------------- runtime args
 
 /// Tensor argument; numeric arrays are converted when `allowArray` is set.
-TensorObject *tensorArg(ArgsView &args, size_t index, bool allowArray = false);
+Array *tensorArg(ArgsView &args, size_t index, bool allowArray = false);
 
 /// Tensor, numeric array, or scalar operand. `storage` keeps a scalar alive for the operand's
 /// lifetime.
@@ -50,7 +50,7 @@ Shape shapeArg(ArgsView &args, size_t index);
 /// True when optional argument `index` was supplied.
 inline bool hasArg(ArgsView &args, size_t index) { return index < args.size(); }
 
-slot_t wrap(TensorObject *tensor);
+slot_t wrap(Array *tensor);
 
 /// The allocator every tensor operator allocates results from.
 mm::IAllocator &resultAllocator();

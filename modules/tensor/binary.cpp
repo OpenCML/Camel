@@ -56,7 +56,7 @@ size_t tensorPayloadSize(type::TypeCode dtype, std::span<const int64_t> shape) {
     return checkedBytes(shape, elementSize(normalizeTensorDType(dtype)));
 }
 
-std::string tensorToLittleEndian(const TensorObject *tensor) {
+std::string tensorToLittleEndian(const Array *tensor) {
     std::string bytes;
     if (tensor->byteSize()) {
         bytes.assign(reinterpret_cast<const char *>(tensor->rawData()), tensor->byteSize());
@@ -65,7 +65,7 @@ std::string tensorToLittleEndian(const TensorObject *tensor) {
     return bytes;
 }
 
-TensorObject *tensorFromLittleEndian(
+Array *tensorFromLittleEndian(
     std::string_view input, type::TypeCode dtype, std::span<const int64_t> shape,
     mm::IAllocator &allocator) {
     dtype                 = normalizeTensorDType(dtype);
@@ -88,7 +88,7 @@ TensorObject *tensorFromLittleEndian(
     std::string bytes(input);
     convertEndian(bytes, width);
     const Shape ownedShape(shape.begin(), shape.end());
-    TensorObject *result = TensorObject::create(dtype, ownedShape, allocator);
+    Array *result = createTensor(dtype, ownedShape, allocator);
     if (!bytes.empty()) {
         std::memcpy(result->rawData(), bytes.data(), bytes.size());
     }

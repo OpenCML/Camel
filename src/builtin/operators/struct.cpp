@@ -48,7 +48,7 @@ slot_t __iter_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *s                   = norm.get<String *>(0);
     const std::string_view text = s != nullptr ? s->view() : std::string_view();
     auto *arrayType             = ArrayType::create(Type::String());
-    Array *result               = Array::create(mm::autoSpace(), camel::utf8::count(text));
+    Array *result               = Array::create(mm::autoSpace(), arrayType, camel::utf8::count(text));
     size_t at                   = 0;
     size_t index                = 0;
     while (at < text.size()) {
@@ -132,11 +132,11 @@ slot_t __tail_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     size_t n = arr->size();
     if (n <= 1) {
-        Array *empty = Array::create(mm::autoSpace(), 0);
+        Array *empty = Array::create(mm::autoSpace(), arrType, 0);
         return rtdata::toSlot(empty);
     }
 
-    Array *res = Array::create(mm::autoSpace(), n - 1);
+    Array *res = Array::create(mm::autoSpace(), arrType, n - 1);
     for (size_t i = 1; i < n; ++i) {
         res->set<slot_t>(i - 1, arr->get<slot_t>(i), arrType);
     }
@@ -165,7 +165,8 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
             count = static_cast<size_t>((start - stop - 1) / (-step) + 1);
     }
 
-    Array *result = Array::create(mm::autoSpace(), count);
+    auto *intArrayType = ArrayType::create(Type::Int64());
+    Array *result      = Array::create(mm::autoSpace(), intArrayType, count);
 
     Int64 value = start;
     for (size_t i = 0; i < count; ++i, value += step)
@@ -194,7 +195,7 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
         end = start;
 
     size_t newSize = static_cast<size_t>(end - start);
-    Array *res     = Array::create(mm::autoSpace(), newSize);
+    Array *res     = Array::create(mm::autoSpace(), arrType, newSize);
 
     for (size_t i = 0; i < newSize; ++i)
         res->set<slot_t>(i, arr->get<slot_t>(start + i), arrType);
@@ -208,7 +209,7 @@ slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
 
     size_t n1 = lhs->size(), n2 = rhs->size();
-    Array *res = Array::create(mm::autoSpace(), n1 + n2);
+    Array *res = Array::create(mm::autoSpace(), arrType, n1 + n2);
 
     for (size_t i = 0; i < n1; ++i)
         res->set<slot_t>(i, lhs->get<slot_t>(i), arrType);
@@ -225,7 +226,7 @@ namespace {
 // cheap; it is not visible, only `size()` elements exist.
 Array *copyWithRoom(const Array *arr, size_t extra, const ArrayType *arrType) {
     const size_t n = arr->size();
-    Array *res     = Array::create(mm::autoSpace(), 0);
+    Array *res     = Array::create(mm::autoSpace(), arrType, 0);
     res->reserve(n + extra, arrType);
     for (size_t i = 0; i < n; ++i) {
         res->append(arr->get<slot_t>(i), arrType);

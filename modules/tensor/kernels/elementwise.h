@@ -44,7 +44,7 @@ struct Operand {
     type::TypeCode dtype;
     std::span<const int64_t> shape;
 
-    static Operand of(const TensorObject *tensor) {
+    static Operand of(const Array *tensor) {
         return {tensor->rawData(), tensor->dtype(), tensor->shapeSpan()};
     }
 };
@@ -104,7 +104,7 @@ bool binaryProducesFloat(BinaryOp op);
 /// Result shape of broadcasting `lhs` with `rhs`. Throws std::invalid_argument on conflict.
 Shape broadcastShapes(std::span<const int64_t> lhs, std::span<const int64_t> rhs);
 
-TensorObject *unary(UnaryOp op, const TensorObject *input, mm::IAllocator &allocator);
+Array *unary(UnaryOp op, const Array *input, mm::IAllocator &allocator);
 
 /// dst[i] = op(src[i]) for float data (src may equal dst), split across threads, with the
 /// per-ISA loop `unary` itself uses. A kernel that applies a math function inside a larger
@@ -112,19 +112,19 @@ TensorObject *unary(UnaryOp op, const TensorObject *input, mm::IAllocator &alloc
 void unaryF32(UnaryOp op, const float *src, float *dst, int64_t count);
 
 /// Result dtype is the promotion of both operands (float32 for Div/Pow).
-TensorObject *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator);
+Array *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator);
 
 /// Result dtype is bool. Operands are compared in their promoted dtype.
-TensorObject *compare(CompareOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator);
+Array *compare(CompareOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator);
 
 /// out = cond ? lhs : rhs, broadcasting all three. `cond` is read as bool.
-TensorObject *where(Operand cond, Operand lhs, Operand rhs, mm::IAllocator &allocator);
+Array *where(Operand cond, Operand lhs, Operand rhs, mm::IAllocator &allocator);
 
 /// Converts to another storage dtype. Returns a copy even when the dtype matches.
-TensorObject *cast(const TensorObject *input, type::TypeCode dtype, mm::IAllocator &allocator);
+Array *cast(const Array *input, type::TypeCode dtype, mm::IAllocator &allocator);
 
 /// Fills a new tensor with `value` converted to `dtype`.
-TensorObject *
+Array *
 full(type::TypeCode dtype, std::span<const int64_t> shape, double value, mm::IAllocator &allocator);
 
 } // namespace camel::tensor::kernels

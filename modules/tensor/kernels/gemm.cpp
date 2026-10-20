@@ -203,15 +203,15 @@ Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs) {
     return planMatmul(lhs, rhs).outShape;
 }
 
-TensorObject *matmul(
-    const TensorObject *lhs, const TensorObject *rhs, mm::IAllocator &allocator, bool library) {
+Array *matmul(
+    const Array *lhs, const Array *rhs, mm::IAllocator &allocator, bool library) {
     const auto gemm = library ? &sgemmLibrary : &sgemm;
     const MatmulPlan plan  = planMatmul(lhs->shapeSpan(), rhs->shapeSpan());
     const TypeCode outType = promoteTensorTypes(lhs->dtype(), rhs->dtype());
     const TypeCode compute = outType == TypeCode::Bool ? TypeCode::Int64 : outType;
-    const TensorObject *a  = lhs->dtype() == compute ? lhs : cast(lhs, compute, allocator);
-    const TensorObject *b  = rhs->dtype() == compute ? rhs : cast(rhs, compute, allocator);
-    TensorObject *out      = TensorObject::create(compute, plan.outShape, allocator);
+    const Array *a  = lhs->dtype() == compute ? lhs : cast(lhs, compute, allocator);
+    const Array *b  = rhs->dtype() == compute ? rhs : cast(rhs, compute, allocator);
+    Array *out      = createTensor(compute, plan.outShape, allocator);
 
     const int64_t batches = static_cast<int64_t>(numelOf(plan.batchShape));
     const int64_t aSize = plan.M * plan.K, bSize = plan.K * plan.N, cSize = plan.M * plan.N;
@@ -252,8 +252,8 @@ TensorObject *matmul(
     return out;
 }
 
-TensorObject *linear(
-    const TensorObject *x, const TensorObject *weight, const TensorObject *bias,
+Array *linear(
+    const Array *x, const Array *weight, const Array *bias,
     mm::IAllocator &allocator) {
     if (weight->rank() != 2) {
         throw std::invalid_argument("linear expects a rank-2 weight [in, out]");
@@ -268,7 +268,7 @@ TensorObject *linear(
     const bool allFloat = x->dtype() == TypeCode::Float32 && weight->dtype() == TypeCode::Float32 &&
                           (!bias || bias->dtype() == TypeCode::Float32);
     if (!allFloat) {
-        TensorObject *product = matmul(x, weight, allocator);
+        Array *product = matmul(x, weight, allocator);
         return bias ? binary(BinaryOp::Add, Operand::of(product), Operand::of(bias), allocator)
                     : product;
     }
@@ -276,7 +276,7 @@ TensorObject *linear(
     const int64_t M  = static_cast<int64_t>(x->numel()) / std::max<int64_t>(in, 1);
     Shape outShape   = x->shapeVector();
     outShape.back()  = out;
-    TensorObject *y  = TensorObject::create(TypeCode::Float32, outShape, allocator);
+    Array *y  = createTensor(TypeCode::Float32, outShape, allocator);
     float *dst       = y->dataAs<float>();
     float beta       = 0.0f;
     if (bias) {
@@ -315,7 +315,7 @@ bool isRowBias(const Operand &bias, size_t resultRank, int64_t out) {
     return std::all_of(shape.begin(), shape.end() - 1, [](int64_t d) { return d == 1; });
 }
 
-void reluInPlace(TensorObject *t) {
+void reluInPlace(Array *t) {
     dispatchDType(t->dtype(), [&]<typename T>() {
         T *data = t->dataAs<T>();
         parallelFor(static_cast<int64_t>(t->numel()), 1 << 15, [&](int64_t begin, int64_t end) {
@@ -328,14 +328,14 @@ void reluInPlace(TensorObject *t) {
 
 } // namespace
 
-TensorObject *matmulAdd(
-    const TensorObject *x, const TensorObject *weight, Operand bias, bool relu,
+Array *matmulAdd(
+    const Array *x, const Array *weight, Operand bias, bool relu,
     mm::IAllocator &allocator) {
     const bool fused = x->rank() >= 1 && weight->rank() == 2 &&
                        x->dim(x->rank() - 1) == weight->dim(0) && x->dtype() == TypeCode::Float32 &&
                        weight->dtype() == TypeCode::Float32 && bias.dtype == TypeCode::Float32 &&
                        isRowBias(bias, x->rank(), weight->dim(1));
-    TensorObject *y = nullptr;
+    Array *y = nullptr;
     if (fused) {
         // GEMM with the bias rows preloaded as C (beta = 1): one allocation, one output pass.
         const int64_t in  = weight->dim(0);
@@ -343,7 +343,7 @@ TensorObject *matmulAdd(
         const int64_t M   = static_cast<int64_t>(x->numel()) / std::max<int64_t>(in, 1);
         Shape outShape    = x->shapeVector();
         outShape.back()   = out;
-        y                 = TensorObject::create(TypeCode::Float32, outShape, allocator);
+        y                 = createTensor(TypeCode::Float32, outShape, allocator);
         float *dst        = y->dataAs<float>();
         const auto *pb    = static_cast<const float *>(bias.data);
         for (int64_t i = 0; i < M; ++i) {
@@ -365,7 +365,7 @@ TensorObject *matmulAdd(
             out);
     } else {
         // Exactly the unfused expression (NumPy matmul, broadcasting add with promotion).
-        const TensorObject *product = matmul(x, weight, allocator);
+        const Array *product = matmul(x, weight, allocator);
         y                           = binary(BinaryOp::Add, Operand::of(product), bias, allocator);
     }
     if (relu) {

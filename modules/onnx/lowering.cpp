@@ -734,11 +734,11 @@ Value lowerShape(const LowerContext &ctx) {
     if (!known) {
         return Value::symbolicIntArray(ctx.emitter().node("Shape", {ctx.input(0)}), *facts.shape);
     }
-    auto *array = ::Array::create(core::mm::autoSpace(), facts.shape->size());
+    static type::ArrayType *intArray = type::ArrayType::create(type::Type::Int64());
+    auto *array = ::Array::create(core::mm::autoSpace(), intArray, facts.shape->size());
     for (size_t i = 0; i < facts.shape->size(); ++i) {
         array->set(i, static_cast<rtdata::Int64>((*facts.shape)[i]));
     }
-    static type::ArrayType *intArray = type::ArrayType::create(type::Type::Int64());
     ctx.emitter().retain(array, intArray);
     return Value::constant(rtdata::toSlot(array), intArray);
 }

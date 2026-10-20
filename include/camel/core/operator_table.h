@@ -307,6 +307,15 @@ class OperatorTable {
     /// The in-place form of the operator `uri`, or nullopt when it has none.
     std::optional<std::string> inPlaceForm(std::string_view uri) const;
 
+    /// Declares that the operator `uri` may return one of its operands, changed in place, when
+    /// the compiler hands it a value no one else holds (design principles 11.3; the buffer must
+    /// also be unshared and Camel-owned at run time, Array::canWriteInPlace). One fact, written
+    /// where the operator is registered; the builder's temporary-value analysis reads it.
+    void declareReusesOperand(std::string_view uri, bool reuses = true);
+
+    /// Whether the operator `uri` was declared to reuse an operand.
+    bool reusesOperand(std::string_view uri) const;
+
     // ---- Decorators that grant attributes (language reference 7.6) -------------------------
 
     /// Declares that the operator `uri`, used as a decorator, grants an attribute (AttrGrant).
@@ -469,6 +478,9 @@ class OperatorTable {
         std::unique_ptr<TypeFolder> folder;
         /// The in-place form (setInPlaceForm); kEmptySym when there is none.
         SymId inPlace = kEmptySym;
+        /// The operator may return its operand (declareReusesOperand): an elementwise operator
+        /// that writes into an operand it owns, rather than allocating a result.
+        bool reusesOperand = false;
         /// What it grants as a decorator (declareGrant), or nullptr.
         std::shared_ptr<const AttrGrant> grant;
 

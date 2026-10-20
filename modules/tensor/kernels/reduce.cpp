@@ -79,8 +79,8 @@ template <typename Fn> void forEachLane(const AxisSplit &split, Fn &&fn) {
     });
 }
 
-const TensorObject *
-requireFloat(const TensorObject *input, const char *what, mm::IAllocator &allocator) {
+const Array *
+requireFloat(const Array *input, const char *what, mm::IAllocator &allocator) {
     if (input->dtype() == TypeCode::Float32) {
         return input;
     }
@@ -117,8 +117,8 @@ Shape reducedShape(std::span<const int64_t> shape, size_t axis, bool keepDims) {
     return out;
 }
 
-TensorObject *reduceAxis(
-    ReduceOp op, const TensorObject *input, int64_t axisArg, bool keepDims,
+Array *reduceAxis(
+    ReduceOp op, const Array *input, int64_t axisArg, bool keepDims,
     mm::IAllocator &allocator) {
     const size_t axis     = normalizeAxis(axisArg, input->rank());
     const AxisSplit split = splitAt(input->shapeSpan(), axis);
@@ -137,7 +137,7 @@ TensorObject *reduceAxis(
     } else if (op == ReduceOp::Sum && outType == TypeCode::Bool) {
         outType = TypeCode::Int64;
     }
-    TensorObject *out = TensorObject::create(outType, outShape, allocator);
+    Array *out = createTensor(outType, outShape, allocator);
 
     dispatchDType(input->dtype(), [&]<typename T>() {
         const T *src = input->dataAs<T>();
@@ -211,7 +211,7 @@ TensorObject *reduceAxis(
     return out;
 }
 
-double sumAll(const TensorObject *input) {
+double sumAll(const Array *input) {
     return dispatchDType(input->dtype(), [&]<typename T>() {
         const T *src = input->dataAs<T>();
         if constexpr (std::is_same_v<T, float>) {
@@ -255,12 +255,12 @@ enum class SoftmaxKind { Softmax, LogSoftmax };
  * The work is three passes so the middle one can call the vectorized exp loop on the whole
  * tensor: per lane, the maximum and x - m; exp in place; per lane, the sum and the result.
  */
-TensorObject *softmaxImpl(
-    SoftmaxKind kind, const TensorObject *input, int64_t axisArg, mm::IAllocator &allocator) {
+Array *softmaxImpl(
+    SoftmaxKind kind, const Array *input, int64_t axisArg, mm::IAllocator &allocator) {
     const size_t axis     = normalizeAxis(axisArg, input->rank());
     const AxisSplit split = splitAt(input->shapeSpan(), axis);
-    const TensorObject *x = requireFloat(input, "softmax", allocator);
-    TensorObject *out     = TensorObject::create(TypeCode::Float32, input->shapeSpan(), allocator);
+    const Array *x = requireFloat(input, "softmax", allocator);
+    Array *out     = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
     const float *src      = x->dataAs<float>();
     float *dst            = out->dataAs<float>();
     const int64_t stride  = split.inner;
@@ -309,25 +309,25 @@ TensorObject *softmaxImpl(
 
 } // namespace
 
-TensorObject *softmax(const TensorObject *input, int64_t axis, mm::IAllocator &allocator) {
+Array *softmax(const Array *input, int64_t axis, mm::IAllocator &allocator) {
     return softmaxImpl(SoftmaxKind::Softmax, input, axis, allocator);
 }
 
-TensorObject *logSoftmax(const TensorObject *input, int64_t axis, mm::IAllocator &allocator) {
+Array *logSoftmax(const Array *input, int64_t axis, mm::IAllocator &allocator) {
     return softmaxImpl(SoftmaxKind::LogSoftmax, input, axis, allocator);
 }
 
-TensorObject *softmaxGrad(
-    const TensorObject *output, const TensorObject *dy, int64_t axisArg,
+Array *softmaxGrad(
+    const Array *output, const Array *dy, int64_t axisArg,
     mm::IAllocator &allocator) {
     if (!output->sameShape(dy)) {
         throw ShapeError("softmax_grad requires output and dy shapes to match");
     }
     const size_t axis     = normalizeAxis(axisArg, output->rank());
     const AxisSplit split = splitAt(output->shapeSpan(), axis);
-    const TensorObject *y = requireFloat(output, "softmax_grad", allocator);
-    const TensorObject *g = requireFloat(dy, "softmax_grad", allocator);
-    TensorObject *out     = TensorObject::create(TypeCode::Float32, output->shapeSpan(), allocator);
+    const Array *y = requireFloat(output, "softmax_grad", allocator);
+    const Array *g = requireFloat(dy, "softmax_grad", allocator);
+    Array *out     = createTensor(TypeCode::Float32, output->shapeSpan(), allocator);
     const float *py       = y->dataAs<float>();
     const float *pg       = g->dataAs<float>();
     float *dst            = out->dataAs<float>();
@@ -346,8 +346,8 @@ TensorObject *softmaxGrad(
     return out;
 }
 
-TensorObject *layerNorm(
-    const TensorObject *input, const TensorObject *gamma, const TensorObject *beta, double eps,
+Array *layerNorm(
+    const Array *input, const Array *gamma, const Array *beta, double eps,
     mm::IAllocator &allocator) {
     const size_t normRank = gamma->rank();
     if (normRank == 0 || normRank > input->rank() || !gamma->sameShape(beta)) {
@@ -362,10 +362,10 @@ TensorObject *layerNorm(
     }
     const auto width      = static_cast<int64_t>(gamma->numel());
     const auto rows       = static_cast<int64_t>(input->numel()) / std::max<int64_t>(width, 1);
-    const TensorObject *x = requireFloat(input, "layer_norm", allocator);
-    const TensorObject *w = requireFloat(gamma, "layer_norm", allocator);
-    const TensorObject *b = requireFloat(beta, "layer_norm", allocator);
-    TensorObject *out     = TensorObject::create(TypeCode::Float32, input->shapeSpan(), allocator);
+    const Array *x = requireFloat(input, "layer_norm", allocator);
+    const Array *w = requireFloat(gamma, "layer_norm", allocator);
+    const Array *b = requireFloat(beta, "layer_norm", allocator);
+    Array *out     = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
     const float *src      = x->dataAs<float>();
     const float *pw       = w->dataAs<float>();
     const float *pb       = b->dataAs<float>();

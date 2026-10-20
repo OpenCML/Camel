@@ -59,7 +59,7 @@ slot_t __algo_flatten__(ArgsView &, ArgsView &norm, Context &) {
     size_t total = 0;
     for (size_t i = 0; i < outer->size(); ++i)
         total += outer->get<Array *>(i)->size();
-    Array *result = Array::create(mm::autoSpace(), total);
+    Array *result = Array::create(mm::autoSpace(), innerType, total);
     // The argument is read again after the allocation.
     outer    = norm.get<Array *>(0);
     size_t k = 0;
@@ -117,7 +117,7 @@ slot_t __algo_unique__(ArgsView &, ArgsView &norm, Context &) {
                 kept.push_back(i);
         }
     }
-    Array *result = Array::create(mm::autoSpace(), kept.size());
+    Array *result = Array::create(mm::autoSpace(), arrType, kept.size());
     arr           = norm.get<Array *>(0);
     for (size_t k = 0; k < kept.size(); ++k)
         result->set<slot_t>(k, arr->get<slot_t>(kept[k]), arrType);
@@ -177,7 +177,7 @@ slot_t __algo_argsort__(ArgsView &, ArgsView &norm, Context &) {
             typeCodeToString(code) + "[]",
             "an array of numbers, strings or bools");
     }
-    Array *result = Array::create(mm::autoSpace(), n);
+    Array *result = Array::create(mm::autoSpace(), ArrayType::create(Type::Int64()), n);
     for (size_t i = 0; i < n; ++i)
         result->set<Int64>(i, order[i]);
     return toSlot(result);

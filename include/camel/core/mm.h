@@ -50,6 +50,13 @@ GrowableFreeListAllocator &metaSpace();
 GrowableFreeListAllocator &graphSpace();
 GrowableBumpAllocator &permSpace();
 
+/// Numeric array buffers (core/array/buffer.h). A non-moving free-list space, like the meta
+/// space: a data pointer handed to a kernel or to DLPack stays valid until the last reference
+/// drops. Its limit is CAMEL_BUFFER_LIMIT_MB, default 256 MB, and can be raised like the
+/// other spaces.
+constexpr const char *kBufferSpaceLimitEnv = "CAMEL_BUFFER_LIMIT_MB";
+GrowableFreeListAllocator &bufferSpace();
+
 /// One line with the occupancy of the graph, permanent and meta spaces (`[camel] spaces: ...`):
 /// bytes in use now and at the high-water mark, bytes reserved, segments, allocations, limit.
 /// Printed at exit after the collector's line when CAMEL_GC_STATS is set.

@@ -35,10 +35,10 @@ using namespace camel::core::type;
 using camel::core::error::RuntimeDiag;
 using camel::core::error::throwRuntimeFault;
 
-TensorObject *tensorArg(ArgsView &args, size_t index, bool allowArray) {
+Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
     Type *argType = args.type(index);
     if (asTensorType(argType)) {
-        auto *tensor = args.get<TensorObject *>(index);
+        auto *tensor = args.get<Array *>(index);
         if (!tensor) {
             throwRuntimeFault(RuntimeDiag::RuntimeError, "Tensor argument cannot be null");
         }
@@ -79,7 +79,7 @@ Shape shapeArg(ArgsView &args, size_t index) {
     return parseShapeArray(args.get<::Array *>(index), args.type(index));
 }
 
-slot_t wrap(TensorObject *tensor) {
+slot_t wrap(Array *tensor) {
     return camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Object *>(tensor));
 }
 

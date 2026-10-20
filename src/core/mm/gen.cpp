@@ -19,6 +19,8 @@
 
 #include "camel/core/mm/gen.h"
 
+#include "camel/core/array/buffer.h"
+#include "camel/core/mm/deferred.h"
 #include "camel/core/mm/poison.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/rtdata/array.h"
@@ -330,7 +332,7 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
     }
     // The collection is over and the allocator unlocked: release what the wrappers it
     // found dead were holding (see ForeignResourceObject::finalize).
-    rtdata::runDeferredForeignReleases();
+    runDeferredReleases();
 }
 
 void GenerationalAllocatorWithGC::minorGC() {
@@ -350,7 +352,7 @@ void GenerationalAllocatorWithGC::minorGC() {
     }
     // The collection is over and the allocator unlocked: release what the wrappers it
     // found dead were holding (see ForeignResourceObject::finalize).
-    rtdata::runDeferredForeignReleases();
+    runDeferredReleases();
 }
 
 void GenerationalAllocatorWithGC::majorGC() {
@@ -370,7 +372,7 @@ void GenerationalAllocatorWithGC::majorGC() {
     }
     // The collection is over and the allocator unlocked: release what the wrappers it
     // found dead were holding (see ForeignResourceObject::finalize).
-    rtdata::runDeferredForeignReleases();
+    runDeferredReleases();
 }
 
 bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
@@ -543,14 +545,27 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
 
     stats_.youngBytesAllocated += payloadSize;
     headerOf(ptr)->setRegion(AllocRegion::YoungGen);
-    if (UNLIKELY(!minorPending && birthSpace_.used() >= minorTriggerBytes_)) {
+    if (UNLIKELY(
+            !minorPending &&
+            birthSpace_.used() + bufferBytesGrowthUnlocked() >= minorTriggerBytes_)) {
         requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "birth space nearly full");
     }
     return ptr;
 }
 
 size_t GenerationalAllocatorWithGC::oldBytesHeldUnlocked() const {
-    return elderGenSpace_.usage().usedBytes + largeLiveBytes_ + largeBytesSinceSweep_;
+    return elderGenSpace_.usage().usedBytes + largeLiveBytes_ + largeBytesSinceSweep_ +
+           camel::core::array::bufferBytesLive();
+}
+
+size_t GenerationalAllocatorWithGC::bufferBytesGrowthUnlocked() const {
+    const size_t live = camel::core::array::bufferBytesLive();
+    return live > bufferBytesAtCollection_ ? live - bufferBytesAtCollection_ : 0;
+}
+
+void GenerationalAllocatorWithGC::checkBufferBytes(size_t bytes) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    checkHeapLimitUnlocked(bytes);
 }
 
 void GenerationalAllocatorWithGC::checkHeapLimitUnlocked(size_t requestBytes) {
@@ -617,7 +632,7 @@ void *GenerationalAllocatorWithGC::allocLargeUnlocked(size_t payloadSize, size_t
     stats_.largeBytesAllocated += payloadSize;
     stats_.largeHighWaterMark =
         std::max(stats_.largeHighWaterMark, largeLiveBytes_ + largeBytesSinceSweep_);
-    if (largeBytesSinceSweep_ >= largeObjBudget_) {
+    if (largeBytesSinceSweep_ + bufferBytesGrowthUnlocked() >= largeObjBudget_) {
         requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseLargeBudget);
     }
     return ptr;
@@ -645,7 +660,8 @@ void *GenerationalAllocatorWithGC::allocElderUnlocked(size_t payloadSize, size_t
         freshOld_.insert(header);
         anyFreshOld_.store(true, std::memory_order_release);
     }
-    if (UNLIKELY(elderBytesSinceSweep_ >= elderBudget_) &&
+    if (UNLIKELY(
+            elderBytesSinceSweep_ + bufferBytesGrowthUnlocked() >= elderBudget_) &&
         pendingSafepointCollection_ != CollectionKind::Major &&
         pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
         requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderExhausted);
@@ -739,6 +755,10 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
             stats_.majorPauseMaxNs = std::max(stats_.majorPauseMaxNs, pause);
         }
     }
+    // The collection has finished: buffers that its finalizers dead-arrayed are now free, and
+    // this is the volume the next pacing window starts from.
+    bufferBytesAtCollection_ = camel::core::array::bufferBytesLive();
+
     if (heapLimitBytes_ != 0 && kind == CollectionKind::Minor &&
         oldBytesHeldUnlocked() > heapLimitBytes_ && !heapLimitExceeded_) {
         // Promotion took the old spaces over the limit (it cannot be refused in the middle of
@@ -1089,7 +1109,8 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
     const auto promote = [&]() {
         newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
         elderBytesSinceSweep_ += objSize;
-        if (UNLIKELY(elderBytesSinceSweep_ >= elderBudget_) &&
+        if (UNLIKELY(
+                elderBytesSinceSweep_ + bufferBytesGrowthUnlocked() >= elderBudget_) &&
             pendingSafepointCollection_ != CollectionKind::Major &&
             pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
             requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderExhausted);
