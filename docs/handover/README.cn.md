@@ -306,3 +306,24 @@ let area = match b {
 2. **`alloc_small` 的偶发访问冲突**：`camel --timeit std::nvm/5 test/cases/perf/gc/alloc_small.cml --arg reps=200000 --output-format json` 偶发以 `0xC0000005` 结束。先写一个能稳定复现的循环脚本（重复运行到出现为止，记录出现频率），用调试构建拿到调用栈，查明原因（GC、计时、输出路径都有可能）并修好；加一个压力测试，在两种回收器下运行。查不出原因时，在报告中写下已排除的可能与证据。
 3. **Windows 上的非 ASCII 路径与环境**：用户名或 `PATH` 含中文时 `sys.basic` 失败。Windows 上读取环境变量、命令行参数、当前目录、文件路径，一律使用宽字符接口（`GetEnvironmentVariableW`、`GetCommandLineW`/`wmain`、`_wgetcwd`、`std::filesystem::path` 的宽字符形式等），再转换为 UTF-8；打开文件时把 UTF-8 路径转回宽字符。范围包括 CLI 入口、`io`/`fs`/`env` 模块、模块搜索路径（`CAMEL_HOME`、`CAMEL_PACKAGES`）。测试：在一个含中文名的临时目录里运行程序、读写文件、读取环境变量。
 4. **测试的残留文件**：测试写入 `tmp/test/...` 的产物，在下一次运行时会影响结果（如"拒绝时不得写出模型"的断言被上一次留下的文件干扰）。让会写文件的测试在运行前清理自己的输出，或使用每次运行唯一的目录；找出所有这类测试一并处理。
+
+---
+
+### H10：测试提速（2026-10-20 指派，H9 之后做）
+
+**问题**：全套测试拖慢开发。以 2026-10-19 的一次全套为例（5,667 项）：各测试耗时之和约 2,424 秒（40 分钟），而且运行器逐个串行执行。耗时极不均匀：
+
+- 超过 5 秒的 72 项占了 2,060 秒（85%）；
+- 最慢的两项是与 PyTorch 对比梯度的 ResNet 测试（`resnetbn_gradient_relu_kinks_vs_torch64` 530 秒、`resnet_gradient_relu_kinks_vs_torch64` 248 秒），合计 778 秒（32%）；
+- `poison:` 前缀的 GC 投毒扫描 1,627 项，合计 607 秒（25%）；
+- GC 压力（`gc.collection_trees_*`）、`progen_check`、`agree_with_fvm`、`export_tree_recursion`、`benchmark_gradients_vs_torch` 等各数十秒。
+
+**要做的**（按顺序，每项一节报告，记录前后的耗时）：
+
+1. **并行执行**：`test/tools/run-tests.mjs` 支持 `--jobs N`（默认为处理器核数），以测试为单位并行，每个测试使用独立的临时目录（依赖 H9 第 4 项）。输出顺序保持确定（按计划与测试的顺序汇总），失败信息完整。先找出不能并行的测试（共享文件、端口、全局状态），标记为串行执行而不是放弃并行。
+2. **分层**：利用已有的 `tier` 字段，把测试分为 `fast`（默认，`npm run test` 只跑这一层）与 `slow`。归入 `slow` 的：与 PyTorch 的对比、GC 压力与 GC 投毒扫描、随机程序检查、性能基准、单项超过约 5 秒的其他测试。目标：`fast` 层在 8 核机器上并行后 2 分钟以内。`npm run test:all`（或 `--tier all`）跑全部。在 `docs/test-plans.md` 写明分层规则：新测试默认进 `fast`，超过 5 秒的必须标为 `slow` 并说明理由。
+3. **投毒扫描只扫一部分**：现在投毒扫描把大量普通测试各重跑一遍。改为：`fast` 层对每个计划只扫少量有代表性的用例（例如每个计划一个），完整的投毒扫描放进 `slow`。不得删掉 GC 相关测试本身。
+4. **缩小最慢的测试**：与 PyTorch 对比的 ResNet 测试，检查能否在保持检验能力（同样覆盖 ReLU 拐点、BN 等情形）的前提下缩小网络与批量；做不到就保留在 `slow`。
+5. **按改动选择计划（可选）**：提供 `node scripts/test.js --changed`，根据与 `origin/fsh-dev` 相比改动的文件（如 `src/passes/sched/fastvm/` → 调度器相关计划；`docs/` → 文档检查），选出相关计划运行。映射写成一个简单的配置文件，选不出时退回 `fast` 全层。
+
+**约定变化**：完成后，日常开发跑 `fast`；合入 `develop` 前跑一次 `all`。交接任务书第 1.2 节同步修改。
