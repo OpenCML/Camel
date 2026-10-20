@@ -670,6 +670,7 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
             plan.nodes.begin(),
             plan.nodes.end(),
             [&](const auto &planned) { return draft.nodeAttrs(planned.draftId) != 0; }),
+        .base = draft.baseGraph(),
     };
 }
 
@@ -1036,6 +1037,36 @@ void releaseNodeChunk(GCNodeChunk *chunk) {
     }
 }
 
+/// Whether `chunk` has exactly the content the staged nodes [first, first + count) would be cut
+/// into: the same records (with their offsets in the chunk), columns, input table and payload.
+bool chunkHolds(
+    const GCNodeChunk &chunk, const PayloadStaging &staging, size_t first, size_t count,
+    uint32_t edgeBegin, size_t edges, uint32_t payBegin, size_t words) {
+    if (chunk.nodeCount != count || chunk.edgeCount != edges || chunk.payloadWordCount != words) {
+        return false;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        GCNode record = staging.nodes[first + i];
+        record.inBegin -= edgeBegin;
+        record.withBegin -= edgeBegin;
+        record.ctrlBegin -= edgeBegin;
+        if (record.hasPayload()) {
+            record.payload -= payBegin;
+        }
+        if (std::memcmp(&record, chunk.nodes() + i, sizeof(GCNode)) != 0) {
+            return false;
+        }
+    }
+    const auto same = [](const auto *x, const auto *y, size_t n) {
+        return n == 0 || std::memcmp(x, y, n * sizeof(*x)) == 0;
+    };
+    return same(chunk.origins, staging.origins.data() + first, count) &&
+           (!chunk.permissions || same(chunk.permissions, staging.permissions.data() + first, count)) &&
+           (!chunk.attrs || same(chunk.attrs, staging.attrs.data() + first, count)) &&
+           same(chunk.edges, staging.inputs.data() + edgeBegin, edges) &&
+           same(chunk.payload, staging.payload.data() + payBegin, words);
+}
+
 /// Cuts the staged arrays into chunks of kNodeChunkNodes nodes, in the graph space. Offsets of
 /// a chunk's records become offsets in that chunk's arrays.
 void buildNodeChunks(
@@ -1052,6 +1083,12 @@ void buildNodeChunks(
     const auto align8 = [](size_t bytes) {
         return camel::core::mm::alignUp(bytes, alignof(gc_payload_word_t));
     };
+    // The chunks of the graph the draft came from can stand for the new ones that equal them,
+    // when the two graphs have the same columns.
+    const GCGraphNativePayload *old = shape.base ? shape.base->nodePayload() : nullptr;
+    if (old && (old->hasPermissions != shape.permissions || old->hasAttrs != shape.attrs)) {
+        old = nullptr;
+    }
     size_t built = 0;
     try {
         for (; built < payload.chunkCount; ++built) {
@@ -1063,6 +1100,15 @@ void buildNodeChunks(
             const uint32_t payEnd    = nextPayload[first + count];
             const size_t edges       = edgeEnd - edgeBegin;
             const size_t words       = payEnd - payBegin;
+
+            if (old && built < old->chunkCount) {
+                GCNodeChunk *known = old->chunks[built];
+                if (chunkHolds(*known, staging, first, count, edgeBegin, edges, payBegin, words)) {
+                    known->shares.fetch_add(1, std::memory_order_relaxed);
+                    payload.chunks[built] = known;
+                    continue;
+                }
+            }
 
             const size_t recordsAt = sizeof(GCNodeChunk);
             const size_t originsAt = align8(recordsAt + count * sizeof(GCNode));

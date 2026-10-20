@@ -319,6 +319,26 @@ def check_wide(n: int) -> int:
     return 0 if failed == 0 else 1
 
 
+CHUNKS_N = 3000
+
+
+def check_chunks(n: int) -> int:
+    """A commit that edits one node shares every node chunk but that node's with the old version."""
+    text, total = wide_program(n)
+    with tempfile.TemporaryDirectory(prefix="camel_scale_") as tmp:
+        path = Path(tmp) / f"scale_chunks_{n}.cml"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        code, out, err, _, _ = run_file(
+            path, ["test::chunks", "std::nvm"], {"CAMEL_ENABLE_TEST_PASSES": "1"})
+    line = next((l for l in out.splitlines() if l.startswith("CHUNKS ")), "")
+    fields = dict(f.split("=") for f in line.split()[1:] if "=" in f)
+    shared, chunks = int(fields.get("shared", "-1")), line.split(" of ")[1].split()[0] if " of " in line else "0"
+    ok = code == 0 and f"scale total={total}" in out.splitlines() and int(chunks) >= 8         and shared == int(chunks) - 1
+    print(f"{'ok  ' if ok else 'FAIL'} {line or (out + err)[:300]}")
+    print("PASS" if ok else "FAILED")
+    return 0 if ok else 1
+
+
 # One parameter with this many readers. Adding a reader used to rebuild the block of the
 # parameter's draft node and leave the old one behind: 40000 readers took 6.5 GB and 8 s.
 FANOUT_N = 40000
@@ -355,6 +375,8 @@ def main(argv: List[str]) -> int:
     t.add_argument("passes", nargs="*")
     t.add_argument("--max", type=int, default=4096)
     sub.add_parser("check")
+    c = sub.add_parser("chunks")
+    c.add_argument("n", type=int, nargs="?", default=CHUNKS_N)
     f = sub.add_parser("fanout")
     f.add_argument("n", type=int, nargs="?", default=FANOUT_N)
     w = sub.add_parser("wide")
@@ -378,6 +400,8 @@ def main(argv: List[str]) -> int:
         if res.spaces:
             print(res.spaces)
         return 0 if res.ok else 1
+    if args.cmd == "chunks":
+        return check_chunks(args.n)
     if args.cmd == "fanout":
         return check_fanout(args.n)
     if args.cmd == "wide":

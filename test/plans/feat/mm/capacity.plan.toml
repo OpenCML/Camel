@@ -46,6 +46,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
 [[tests]]
+name = "capacity.chunks_shared"
+desc = "A commit that edits one node of a graph of 9000 nodes (36 node chunks) gives the new version every chunk of the old one but the edited node's: the others are the same blocks (GCNodeChunk::shares), found by comparing what the encoder staged with what the old version holds."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/scale/scale.py"
+args = ["${case}", "chunks"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
 name = "capacity.fanout"
 desc = "A node with many readers: one parameter read by 40000 terms. The draft's list of the readers of a node grows by one entry per reader; it used to be rebuilt in the node's block each time, leaving the old block behind, and took 6.5 GB and 8 s. The run stays under 1500 MB (measured about 420 MB, 1 s; the peak is not measured on Windows)."
 kind = "behavior"

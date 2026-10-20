@@ -275,6 +275,8 @@ class GraphDraft {
     /// an erased node as a Dead record: a draft decoded from a graph keeps its ids, so that
     /// the version it becomes names its nodes as the graph did. Past half the places dead,
     /// or for a draft that was built and not decoded, the nodes are numbered anew.
+    /// The graph this draft was decoded from; nullptr for a draft that was built.
+    const GCGraph *baseGraph() const { return base_; }
     bool keepsNodeIds() const {
         return decoded_ && 2 * static_cast<size_t>(nodesById_.size() - liveNodeCount_) <=
                                nodesById_.size();
@@ -518,6 +520,7 @@ class GraphDraft {
     gc_cnt_t liveNodeCount_ = 0;
     uint64_t revision_      = 0;
     bool decoded_           = false; // see keepsNodeIds()
+    const GCGraph *base_    = nullptr;
     // The nodes that are, or were, a GATE, a BRCH or a JOIN, by id, each once. Erased nodes stay
     // in the lists (ids are not reused) and are skipped by whoever walks them. The rewrites that
     // concern only these kinds walk the list instead of every node.
