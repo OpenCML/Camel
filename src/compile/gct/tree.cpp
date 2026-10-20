@@ -102,6 +102,22 @@ const literal::Value *Tree::literalValueOf(const Node *node) const {
     return it == literalValues_.end() ? nullptr : &it->second;
 }
 
+void Tree::setLiteralElements(
+    const data_ptr_t &data, std::vector<std::optional<literal::Value>> elements) {
+    if (data != nullptr) {
+        literalElements_[data.get()] = std::move(elements);
+    }
+}
+
+const std::vector<std::optional<literal::Value>> *Tree::literalElementsOf(
+    const data_ptr_t &data) const {
+    if (data == nullptr) {
+        return nullptr;
+    }
+    const auto it = literalElements_.find(data.get());
+    return it == literalElements_.end() ? nullptr : &it->second;
+}
+
 Tree *Tree::of(const Node *node) {
     const auto address = reinterpret_cast<uintptr_t>(node);
     return reinterpret_cast<const Chunk *>(address & ~(static_cast<uintptr_t>(kChunkBytes) - 1))
@@ -345,6 +361,11 @@ node_ptr_t Tree::clone(const Node *node) {
         // A literal keeps its exact value through a copy: the copy is the same literal.
         if (const literal::Value *exact = Tree::of(node)->literalValueOf(node)) {
             literalValues_[copy] = *exact;
+        }
+        // A composite literal keeps the exact value of its elements too (the data object is
+        // shared with the original, so the entry is keyed by the same pointer).
+        if (const auto *elements = Tree::of(node)->literalElementsOf(*node->payload_.data)) {
+            literalElements_[copy->payload_.data->get()] = *elements;
         }
         break;
     case NodeKind::DECL:

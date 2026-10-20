@@ -1,8 +1,0 @@
-module written_cast
-
-// `as any` converts nothing: the value keeps its own type without it.
-func main(): int sync {
-    let t = 'te' + 'xt'
-    println(t as any)
-    return 0
-}

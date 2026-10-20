@@ -229,6 +229,8 @@ if condition then arm else arm
 
 `if` is an expression. An arm can be an expression or a block (`{ ... }` or `sync { ... }`); the value of a block is given by the `return` in the block. The two arms must have the same type, or one must enter the form of the other ([3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t)): an arm of type `T` and an arm that is `null` or has no value make the branch a `T?`.
 
+The value of an arm is itself **a position with an expected type** (design principles 5.1): when the whole `if` has one (a declaration written with a type, a function's return position, and so on), a literal in an arm takes that type, so both arms of `let x: float = if c then 1 else 2` are `float`. An arm written as a name is a variable, not converted; a type that does not fit the other arm is still reported as a mismatch of the arms.
+
 ```cml
 func sign(x: int): string {
     return if x > 0 then 'positive' else if x < 0 then 'negative' else 'zero'
@@ -311,7 +313,7 @@ match name {
 
 - What is matched may be any expression (`match f(x) { ... }`), not only a name.
 - A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **A pattern literal takes the type of the matched value** (it is a position with an expected type, design principles 5.1): with `x: f32`, the `3` of `case 3` is an `f32`; with `x: int`, `case 5000000000` is `SemanticDiag::LiteralNotRepresentable`. **Each pattern must be a value the type of the matched value accepts** (design principles 3.7): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
-- The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`, and takes its type from the position of the arm (see 6.8.1).
+- The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`, and takes its type from the position of the arm (see 6.8.1); the value of an arm is such a position too, and takes the expected type of the whole `match`.
 
 ```cml
 func kind(c: string): string {

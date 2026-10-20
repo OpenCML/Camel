@@ -671,17 +671,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::AnyNotAllowed,
-            {
-                "AnyNotAllowed",
-                "'any' is not a type a program can write: {0}.",
-                "Every value has a definite type after compilation. A type parameter ('typeas T') "
-                "takes values of several types, a tuple or "
-                "a struct holds values of different types side by side, and 'decode_as' of "
-                "the json module reads JSON of a known shape.",
-            },
-        },
-        {
             SemanticDiag::ConditionNotBool,
             {
                 "ConditionNotBool",

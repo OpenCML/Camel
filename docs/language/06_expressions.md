@@ -229,6 +229,8 @@ if 条件 then 臂 else 臂
 
 `if` 是表达式。臂可以是一个表达式，也可以是一个块（`{ ... }` 或 `sync { ... }`）；块的值由块里的 `return` 给出。两臂的类型必须相同，或者一条臂能进入另一条的形式（[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)）：一条臂是 `T`、另一条是 `null` 或没有值时，分支是 `T?`。
 
+臂的值本身是**有期望类型的位置**（设计原则 5.1）：整个 `if` 有期望类型时（带类型的声明、函数的返回位置等），臂里的字面量取那个类型，所以 `let x: float = if c then 1 else 2` 的两条臂都是 `float`。写成名字的臂值是变量，不转换；它与另一条臂的类型不符时仍按臂的类型不一致报告。
+
 ```cml
 func sign(x: int): string {
     return if x > 0 then 'positive' else if x < 0 then 'negative' else 'zero'
@@ -311,7 +313,7 @@ match 名字 {
 
 - 被匹配的可以是任意表达式（`match f(x) { ... }`），不只是一个名字。
 - 模式是字面量（整数、浮点数、字符串、`true`/`false`）或通配 `_`。一个 `case` 可以用 `|` 列出多个模式，任一匹配即进入。**模式里的字面量取被匹配值的类型**（它有期望类型，设计原则 5.1）：`x: f32` 时 `case 3` 的 `3` 是 `f32`，`x: int` 时 `case 5000000000` 是 `SemanticDiag::LiteralNotRepresentable`。**每个模式的值必须能被被匹配值的类型接受**（设计原则 3.7）：它用该类型的比较与被匹配的值比较，所以 `string` 上的 `case 1` 是 `SemanticDiag::MatchCaseTypeMismatch`。
-- 按书写顺序取第一个匹配的分支。各臂类型必须相同。臂里的 `return` 与 `if` 的臂一样，给出的是 `match` 的值，并按臂所在的位置取类型（见 6.8.1）。
+- 按书写顺序取第一个匹配的分支。各臂类型必须相同。臂里的 `return` 与 `if` 的臂一样，给出的是 `match` 的值，并按臂所在的位置取类型（见 6.8.1）；臂的值本身也一样，整个 `match` 有期望类型时取那个类型。
 
 ```cml
 func kind(c: string): string {

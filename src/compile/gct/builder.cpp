@@ -266,47 +266,6 @@ bool isCollectionPrototype(Type *type) {
 
 } // namespace
 
-Builder::TypePositionGuard::TypePositionGuard(Builder &builder, TypePosition position)
-    : builder(builder), saved(std::exchange(builder.typePosition_, position)) {}
-
-Builder::TypePositionGuard::~TypePositionGuard() { builder.typePosition_ = saved; }
-
-void Builder::reportAnyType(const AST::node_ptr_t &ast) {
-    // Design principles 5.10: every value has a definite type after compilation, and
-    // `any` is refused wherever a recommended form exists. Each position has one.
-    const char *instead = "";
-    switch (typePosition_) {
-    case TypePosition::Parameter:
-        instead = "a parameter that takes values of several types declares a type parameter "
-                  "where its type is written, 'func f(x: typeas T): T'";
-        break;
-    case TypePosition::WithParameter:
-        instead = "a 'with' parameter that takes values of several types declares a type "
-                  "parameter, 'with <tag: typeas T>'";
-        break;
-    case TypePosition::ReturnType:
-        instead = "write the type the function returns, or leave the return type out to have "
-                  "it inferred from the body";
-        break;
-    case TypePosition::CastTarget:
-        instead = "'as any' converts nothing; leave it out and the value keeps its own type";
-        break;
-    case TypePosition::Annotation:
-        instead = "write the type of the value, or leave the annotation out";
-        break;
-    case TypePosition::TypeDeclaration:
-        instead = "a type that stands for several types is a type function, "
-                  "'type Box<T> = (T, int)'";
-        break;
-    case TypePosition::Other:
-        instead = "write the type of the value; values of different types side by side go in "
-                  "a tuple or a struct";
-        break;
-    }
-    diags_->of(SemanticDiag::AnyNotAllowed).at(ast->load()->tokenRange()).commit(instead);
-    throw BuildAbortException();
-}
-
 void Builder::initInnerTypes() {
     typeScope_->clear();
     typeScope_->insert(Reference("i32"), Type::Int32());
@@ -319,7 +278,6 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("string"), Type::String());
     // The type of binary data (design principles 11.1), a built-in name like `string`.
     typeScope_->insert(Reference("Bytes"), camel::core::type::BytesType::get());
-    // No `any`: see reportAnyType.
     typeScope_->insert(Reference("void"), Type::Void());
     // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 11.3).
     typeScope_->insert(Reference("Map"), MapType::prototype());
@@ -887,7 +845,6 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 // from it (visitDataInto).
                 Type *declaredType = nullptr;
                 if (i < typeNodes->size()) {
-                    TypePositionGuard position(*this, TypePosition::Annotation);
                     declaredType = visitType(typeNodes->atAs<AST::TypeLoad>(i));
                 }
                 bool enteredLiteral = false;
@@ -938,7 +895,6 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
                     Type *type              = nullptr;
                     {
-                        TypePositionGuard position(*this, TypePosition::Annotation);
                         type = visitType(typeASTNode);
                     }
                     dataNode = declaredValue(dataNode, type, ast);
@@ -1134,7 +1090,6 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         }
         ~InProgress() { context.leaveTypeDeclaration(); }
     } inProgress{*context_, module_.get(), typeLoad->ref().toString()};
-    TypePositionGuard position(*this, TypePosition::TypeDeclaration);
     if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
         // The name is in scope before the variants are read, so that a variant field can hold
         // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
@@ -2109,7 +2064,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         const auto &rhsASTNode = ast->atAs<AST::TypeLoad>(1);
         Type *dstType          = nullptr;
         {
-            TypePositionGuard position(*this, TypePosition::CastTarget);
             dstType = visitType(rhsASTNode);
         }
         // `[1, null] as (int?)[]`: the literal takes the form of its elements from the type.
@@ -2682,6 +2636,16 @@ static std::optional<literal::Kind> writtenNumberKind(const AST::node_ptr_t &ite
     }
 }
 
+/// The exact value a literal element was written as, when the node is one (design principles
+/// 5.1). A nested composite, a name and a computed element have none of their own.
+static std::optional<literal::Value> writtenLiteralValue(const node_ptr_t &node) {
+    if (node == nullptr || node->type() != NodeKind::DATA) {
+        return std::nullopt;
+    }
+    const literal::Value *exact = Tree::of(node)->literalValueOf(node);
+    return exact != nullptr ? std::optional<literal::Value>(*exact) : std::nullopt;
+}
+
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ENTER("ArrayData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
@@ -2720,6 +2684,10 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
         }
     }
     const bool widenToFloat = hasInteger && hasReal;
+    // The values the elements were written as, in the order the data holds them: the elements
+    // keep their exact values until GIR decides the type of the array (design principles 5.1).
+    std::vector<std::optional<literal::Value>> literalElements;
+    literalElements.reserve(items->size());
 
     for (const auto &item : *items) {
         node_ptr_t dataNode = visitData(item);
@@ -2727,6 +2695,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
             // An integer literal beside a decimal one is a value of the float type, exactly.
             dataNode = literalNodeInType(dataNode, Type::Float(), item);
         }
+        literalElements.push_back(writtenLiteralValue(dataNode));
         if (allComputed) {
             auto [refNode, refData] = makeRefData(dataNode);
             *execNode << refNode;
@@ -2747,6 +2716,11 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     }
 
     auto arrayData = factory.build();
+    if (!dangling) {
+        // Every element is a constant: the array is one literal, and the values its elements
+        // were written as are kept for the type it may take later (GIR).
+        tree_->setLiteralElements(arrayData, std::move(literalElements));
+    }
     node_ptr_t res = tree_->makeData(arrayData);
 
     if (dangling) {
@@ -2993,6 +2967,9 @@ node_ptr_t Builder::literalNodeInType(
     }
     if (auto converted = exact->toData(type); converted.has_value()) {
         node_ptr_t res = tree_->makeData(*converted);
+        // The converted literal is the same value written: later positions round it again from
+        // the exact value, never from the double it became here (design principles 5.1).
+        tree_->setLiteralValue(res, *exact);
         setOriginFromAst(context_, res, at, camel::source::OriginKind::GctNode, "gct.data");
         return res;
     }
@@ -3115,6 +3092,9 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
     std::unordered_set<string> fieldNames;
+    // The value each field was written as, in the order the data holds them (design
+    // principles 5.1; see visitArrayData).
+    std::vector<std::optional<literal::Value>> literalElements;
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
@@ -3125,12 +3105,16 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
-        auto [data, _]      = extractData(dataNode, execNode, dangling);
+        literalElements.push_back(writtenLiteralValue(dataNode));
+        auto [data, _] = extractData(dataNode, execNode, dangling);
         factory.add(name, data);
     }
 
     auto structData = factory.build();
-    node_ptr_t res  = tree_->makeData(structData);
+    if (!dangling) {
+        tree_->setLiteralElements(structData, std::move(literalElements));
+    }
+    node_ptr_t res = tree_->makeData(structData);
 
     // If there are dangling nodes, attach them to the execution node
     if (dangling) {
@@ -3666,7 +3650,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         const string &name = paramRef.ident();
         Type *type         = nullptr;
         {
-            TypePositionGuard position(*this, TypePosition::WithParameter);
             dimBindAllowed_ = signature;
             type            = visitType(paramPair->atAs<AST::TypeLoad>(0));
             dimBindAllowed_ = false;
@@ -3717,7 +3700,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         const string &name = paramRef.ident();
         Type *type         = nullptr;
         {
-            TypePositionGuard position(*this, TypePosition::Parameter);
             dimBindAllowed_ = signature;
             type            = visitType(paramPair->atAs<AST::TypeLoad>(0));
             dimBindAllowed_ = false;
@@ -3756,7 +3738,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             typeasAllowed_    = true;
             inDeclReturnType_ = true;
         }
-        TypePositionGuard position(*this, TypePosition::ReturnType);
         dimBindAllowed_ = false;
         factory.setExitType(visitType(exitTypeNode));
     }
@@ -4276,10 +4257,6 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     }
     if (wholeImportFailed_ || poisonedTypes_.contains(written)) {
         throw BuildAbortException();
-    }
-    if (ref.plain() && ref.ident() == "any") {
-        // `any` is no longer a type: say so rather than that the name is unknown.
-        reportAnyType(ast);
     }
     diags_->of(SemanticDiag::UnresolvedTypeReference).at(ast->load()->tokenRange()).commit(written);
     throw BuildAbortException();

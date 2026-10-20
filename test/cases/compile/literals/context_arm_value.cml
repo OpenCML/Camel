@@ -1,0 +1,48 @@
+/**
+ * Handover H27, item 2 (design principles 5.1, amended): the value of an `if` or `match` arm
+ * takes the expected type of the whole expression, as a declaration's value does. With
+ * `let x: float`, the arm values are floats (`1`, printed `1.0`); with `let z: i32` they are
+ * i32s; and an arm that is an array literal takes the element type of the whole (`[1.0]` is an
+ * `f32[]`). A function body whose last expression is a branch is a position too, and so is the
+ * value of a `return`.
+ */
+module literal_context_arm_value
+
+func fromIf(c: bool): float {
+    if c then 1 else 2
+}
+
+func fromMatch(c: bool): float {
+    return match c {
+        case true => 1
+        case _ => 2
+    }
+}
+
+func arrayFromIf(c: bool): f32[] {
+    if c then [1.0] else [2.0]
+}
+
+func fromReturn(c: bool): float {
+    return if c then 1 else 2
+}
+
+func main(): int sync {
+    let c = true
+    // The expected type reaches both arms, in a declaration...
+    let x: float = if c then 1 else 2
+    let y: float = match c {
+        case true => 1
+        case _ => 2
+    }
+    let z: i32 = if c then 1 else 2
+    let xs: f32[] = if c then [1.0] else [2.0]
+    println(x, y, z)
+    println(xs[0])
+    // ...and in a function's body, whose last expression is the value it returns.
+    println(fromIf(true), fromIf(false))
+    println(fromMatch(true), fromMatch(false))
+    println(arrayFromIf(false)[0])
+    println(fromReturn(true), fromReturn(false))
+    return 0
+}

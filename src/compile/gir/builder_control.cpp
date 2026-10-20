@@ -139,8 +139,9 @@ node_handle_t Builder::compositeLiteralInType(
         return nullptr;
     }
     // Only the constant the literal was lowered to: a value computed by the program is not a
-    // literal, and takes no type from its position.
-    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || node->header.dataIndex < 0) {
+    // literal, and takes no type from its position. A constant lives in a static slot, whose
+    // index is negative (a runtime slot index is not).
+    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || node->header.dataIndex >= 0) {
         return nullptr;
     }
     const data_ptr_t &data = origin->data();
@@ -180,9 +181,20 @@ data_ptr_t Builder::compositeDataInType(
         if (elemType == nullptr || array == nullptr) {
             return nullptr;
         }
+        // The exact value each element was written as, when the GCT kept them (a composite
+        // literal of literals): an element is then converted from the value written, not from
+        // the double it was lowered to (design principles 5.1).
+        const auto *written =
+            origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
         ArrayDataFactory factory;
+        size_t index = 0;
         for (const auto &element : array->raw()) {
-            data_ptr_t converted = literalElementInType(element, elemType, origin);
+            const literal::Value *exact = nullptr;
+            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
+                exact = &*(*written)[index];
+            }
+            ++index;
+            data_ptr_t converted = literalElementInType(element, elemType, origin, exact);
             if (converted == nullptr) {
                 return nullptr;
             }
@@ -197,13 +209,22 @@ data_ptr_t Builder::compositeDataInType(
             object->raw().size() != structType->size()) {
             return nullptr;
         }
+        const auto *written =
+            origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
         StructDataFactory factory;
+        size_t index = 0;
         for (const auto &[name, value] : object->raw()) {
-            const std::optional<size_t> index = structType->findField(name);
-            if (!index.has_value()) {
+            const std::optional<size_t> fieldIndex = structType->findField(name);
+            if (!fieldIndex.has_value()) {
                 return nullptr;
             }
-            data_ptr_t converted = literalElementInType(value, structType->typeAt(*index), origin);
+            const literal::Value *exact = nullptr;
+            if (written != nullptr && index < written->size() && (*written)[index].has_value()) {
+                exact = &*(*written)[index];
+            }
+            ++index;
+            data_ptr_t converted =
+                literalElementInType(value, structType->typeAt(*fieldIndex), origin, exact);
             if (converted == nullptr) {
                 return nullptr;
             }
@@ -215,7 +236,8 @@ data_ptr_t Builder::compositeDataInType(
 }
 
 data_ptr_t Builder::literalElementInType(
-    const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin) {
+    const data_ptr_t &data, Type *type, const GCT::node_ptr_t &origin,
+    const literal::Value *written) {
     if (data == nullptr || type == nullptr || asTagged(type) != nullptr) {
         return nullptr;
     }
@@ -226,8 +248,10 @@ data_ptr_t Builder::literalElementInType(
         // A nested literal: an array in an array, a struct in an array, and so on.
         return compositeDataInType(data, type, origin);
     }
-    const std::optional<literal::Value> value = exactValueOfData(data);
-    if (!value.has_value() || !isNumericType(type) || !isNumericType(data->type())) {
+    const std::optional<literal::Value> fallback =
+        written == nullptr ? exactValueOfData(data) : std::nullopt;
+    const literal::Value *value = written != nullptr ? written : fallback ? &*fallback : nullptr;
+    if (value == nullptr || !isNumericType(type) || !isNumericType(data->type())) {
         // Not a numeric literal (a string, a bool): the type is not one it can be given by
         // taking the position's type, so the value is left as it is.
         return nullptr;

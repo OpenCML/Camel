@@ -636,6 +636,9 @@ class Builder {
     // that position expects.
     const GCT::Node *tailExpectedFor_ = nullptr;
     Type *tailExpectedType_           = nullptr;
+    // The last statement of such a body, the one whose value is in the position: a literal
+    // there takes the position's type (design principles 5.1; see visitDataNode).
+    const GCT::Node *tailStatement_ = nullptr;
     struct ExpectedValueScope {
         Type *&current;
         Type *outer;
@@ -1199,16 +1202,20 @@ class Builder {
     node_handle_t compositeLiteralInType(
         node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// `data` with every element (field) in `type`, recursively; nullptr when a part of it is
-    /// not a value of the type.
+    /// not a value of the type. The exact value an element was written as, kept by the GCT for
+    /// a composite literal, is used rather than the double it was lowered to, so an element is
+    /// rounded once (design principles 5.1).
     camel::core::data::data_ptr_t compositeDataInType(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
         const GCT::node_ptr_t &origin);
     /// One element (field) of a composite literal as a value of `type`: the value itself when
-    /// the type accepts it, the exact conversion when it is a literal, nullptr for a type a
-    /// literal cannot be given this way (`T?` / `T!`, a shape that does not match).
+    /// the type accepts it, the exact conversion when it is a literal (`written` is the value
+    /// it was written as, when known), nullptr for a type a literal cannot be given this way
+    /// (`T?` / `T!`, a shape that does not match).
     camel::core::data::data_ptr_t literalElementInType(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
-        const GCT::node_ptr_t &origin);
+        const GCT::node_ptr_t &origin,
+        const camel::compile::literal::Value *written = nullptr);
     // ---- Literals: the value as written, until the context gives it a type (5.1) ----
     /// The exact value of the expression `expr` when it is a literal: a numeric literal
     /// written in the program, or an expression of literals only that folds to one. A name

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-168 diagnostics: 151 errors, 17 warnings.
+167 diagnostics: 150 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -105,7 +105,6 @@ prints one entry.
 | `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error |
 | `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error |
 | `0x030000D3` | [SemanticDiag::AmbiguousName](#ambiguousname) | Error |
-| `0x030000E2` | [SemanticDiag::AnyNotAllowed](#anynotallowed) | Error |
 | `0x030000E3` | [SemanticDiag::ConditionNotBool](#conditionnotbool) | Error |
 | `0x030000E4` | [SemanticDiag::MatchCaseTypeMismatch](#matchcasetypemismatch) | Error |
 | `0x030000F0` | [SemanticDiag::UnusedPureResult](#unusedpureresult) | Error |
@@ -2513,38 +2512,6 @@ using namespace lib::Tools
 using namespace lib2::Tools
 func main(): int sync {
     println(inc(1))
-    return 0
-}
-```
-
-### AnyNotAllowed
-
-`0x030000E2` · Error · `SemanticDiag::AnyNotAllowed`
-
-**Message**
-
-```text
-'any' is not a type a program can write: {0}.
-```
-
-**Help**
-
-```text
-Every value has a definite type after compilation. A type parameter ('typeas T') takes values of several types, a tuple or a struct holds values of different types side by side, and 'decode_as' of the json module reads JSON of a known shape.
-```
-
-**Example** (`test/cases/compile/any_typing/written_parameter.cml`, run as `camel test/cases/compile/any_typing/written_parameter.cml`)
-
-```camel
-module written_parameter
-
-// `any` is not a type a program can write (design principles 5.10). A parameter that takes
-// values of several types declares a type parameter: `func keep(x: typeas T, n: int): T`.
-func keep(x: any, n: int): any {
-    return x
-}
-func main(): int sync {
-    println(keep('abc', 3))
     return 0
 }
 ```

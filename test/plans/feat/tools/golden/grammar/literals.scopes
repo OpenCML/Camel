@@ -239,9 +239,9 @@
 #^^^^^^^^^^^^^^^^^ string.quoted.triple.double.camel
 #                 ^^^ string.quoted.triple.double.camel punctuation.definition.string.end.camel
 >
->// FSTRING (a token; the compiler rejects it)
+>// FSTRING (a token; the AST builder makes it a `format` call)
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
 >let formatted = `value {x} \` done`
 #^^^ meta.declaration.let.camel storage.type.let.camel
 #    ^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel

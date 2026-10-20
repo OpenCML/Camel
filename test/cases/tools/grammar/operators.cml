@@ -10,6 +10,7 @@ func compare(a: int, b: int): bool {
     let gt = a > b
     let le = a <= b
     let ge = a >= b
+    let either = eq | ne
     return strict && eq || !ne
 }
 
@@ -59,7 +60,6 @@ func pipes(xs: int[], idx: int): void sync {
     spread(...xs)
 }
 
-type Union = int | string
 type Both = A & B
 type Diff = A \ B
 type Keys = A + B - C ^ D

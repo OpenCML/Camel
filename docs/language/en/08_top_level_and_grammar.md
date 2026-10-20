@@ -262,7 +262,7 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Slice subscripts `xs[a:b]`, `xs[a:b:c]` | `SemanticDiag::NoMatchingFunction` (there is no dedicated diagnostic: it is reported as "the subscript operator has no overload that accepts these arguments") | `xs->slice<a, b>` |
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |
 | `typeof e`, `name of T` | `FeatureNotSupported` | None |
-| `keyof`, `enum` | Syntax error | None |
+| `keyof` | Syntax error | None |
 | Modifiers `atomic`, `shared`, `inner`, `outer` | No diagnostic; no semantics | Do not write them |
 
 In addition there is one thing that "can be written but cannot be used at present": a declaration with a function type `let f: (x: int) => int = g`.
