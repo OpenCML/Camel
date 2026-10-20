@@ -1,0 +1,19 @@
+// `std::mem::buffers()` (design principles 10.5): the buffer counters as a struct, available in
+// every build and readable between two operations, so a program can state how many buffers an
+// operation allocated. The name needs no import: the built-in module exports it under the path.
+// `allocs - frees == live` is the counter identity; growing an array that needs a buffer moves
+// `allocs`, `live` and `bytes` by that one buffer.
+func make(n: int): int[] {
+    return loop xs = [0] while len(xs) < n do xs->append<7>
+}
+
+func main(): int sync {
+    let a  = std::mem::buffers()
+    let xs = make(100)
+    let b  = std::mem::buffers()
+    println(a.allocs - a.frees == a.live)
+    println(b.allocs - b.frees == b.live)
+    println(b.live - a.live, b.allocs - a.allocs, b.frees - a.frees, b.bytes > a.bytes)
+    println(len(xs), xs[99])
+    return 0
+}

@@ -1490,6 +1490,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
     }
 
+    markLoopStateInPlace(bodyGraph, gct, initial);
+
     // Called by the LOOP node: the captures are with-ports, in the order both graphs share.
     for (const compile_graph_ptr_t &graph : {condGraph, bodyGraph}) {
         if (!graph) {
@@ -1664,6 +1666,90 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     tailExpectedType_ = outerTail;
     tailExpectedFor_  = outerTailFor;
     return result;
+}
+
+void Builder::markLoopStateInPlace(
+    const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+    std::vector<node_handle_t> &initial) {
+    // One state value: the body hands it back directly. With two or more the body returns a
+    // tuple and the elements are read out of it, which is not the shape this rewrite covers.
+    if (loop->loopStateCount() != 1 || initial.size() != 1 || initial[0] == nullptr) {
+        return;
+    }
+    // The first value has to be a literal: a name, a call or a projection can name an array
+    // that something else also reads, and the loop is about to make its first value private.
+    if (!nodeIsKind(initial[0], runtime::GCNodeKind::Data) &&
+        !nodeIsKind(initial[0], runtime::GCNodeKind::Fill)) {
+        return;
+    }
+    const Type *stateType = valueTypeOf(nodeTypeOf(initial[0]));
+    if (stateType == nullptr || stateType->code() != TypeCode::Array) {
+        return;
+    }
+    runtime::GraphDraft &draft = bodyGraph->draft();
+    if (draft.returnKind() != runtime::GCReturnKind::Self ||
+        draft.returnNode() == runtime::kInvalidNodeRef) {
+        return;
+    }
+    node_handle_t value = draft.node(draft.returnNode());
+    if (value == nullptr || !nodeIsKind(value, runtime::GCNodeKind::Oper)) {
+        return;
+    }
+    const oper_idx_ptr_t op = nodeGraphOf(value)->operTarget(value);
+    if (op == nullptr || op->uri() != ":struct/append_arr") {
+        return;
+    }
+    // The array the call appends to is the state parameter, and the body uses it nowhere
+    // else: once the round returns, the value the parameter was bound to is gone (the driver
+    // binds the round's own state), so nothing can see it as it was.
+    const auto normIns = normInputsOf(value);
+    if (normIns.size() != 1) {
+        return;
+    }
+    node_handle_t port = nodeDraftOf(value)->node(normIns.front());
+    if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(0)) {
+        return;
+    }
+    if (normUsersOf(port).size() + withUsersOf(port).size() != 1) {
+        return;
+    }
+    // The appended value is the call's only With input; the owned form takes the same.
+    const auto withIns = withInputsOf(value);
+    if (withIns.size() != 1) {
+        return;
+    }
+    Type *valueType = nodeTypeOf(nodeDraftOf(value)->node(withIns.front()));
+    if (valueType == nullptr) {
+        return;
+    }
+    const auto group = module_->getImportedEntity("__append_owned__");
+    if (!group.has_value() || !group->isOperGroup()) {
+        return;
+    }
+    const std::vector<StaticArg> statics(1);
+    const auto owned =
+        group->operGroup()->resolve({valueType}, {nodeTypeOf(port)}, statics, Modifier::None);
+    if (!owned.has_value()) {
+        return;
+    }
+    // The loop starts from a private copy of its first value. A literal is a constant of the
+    // graph: the same array object on every evaluation of the loop's site, so appending to it
+    // in place would edit the program's own literal. One copy per loop entry buys every round.
+    const auto copyGroup = module_->getImportedEntity("__copy_arr__");
+    if (!copyGroup.has_value() || !copyGroup->isOperGroup()) {
+        return;
+    }
+    const auto copyOp =
+        copyGroup->operGroup()->resolve({}, {nodeTypeOf(initial[0])}, statics, Modifier::None);
+    if (!copyOp.has_value()) {
+        return;
+    }
+    node_handle_t copy = currGraph_->addOperNode(*copyOp, 0);
+    stampPermissions(copy);
+    registerNodeOrigin(context_, copy, loop->loopInitial(0), "gir.loop.copy");
+    linkNodes(LinkType::Norm, initial[0], copy);
+    initial[0] = copy;
+    nodeGraphOf(value)->retargetOperNode(value, *owned);
 }
 
 void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {

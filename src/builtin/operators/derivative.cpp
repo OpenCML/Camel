@@ -246,6 +246,9 @@ void registerBuiltinDerivatives() {
     registry.setRule(":op/ftod", ftodVjp);
     registry.setRule(":op/idx_arr", idxArrayVjp);
     registry.setRule(":struct/append_arr", appendArrayVjp);
+    // The form the loop-state rewrite uses (Builder::markLoopStateInPlace): the same call, so
+    // the same rule - it reads the output's gradient and never the array's own value.
+    registry.setRule(":struct/append_arr_owned", appendArrayVjp);
 
     registry.setTangentSpace(TypeCode::Float64, floatTangentSpace<F64>());
     registry.setTangentSpace(TypeCode::Float32, floatTangentSpace<F32>());

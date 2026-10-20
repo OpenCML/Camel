@@ -245,6 +245,33 @@ slot_t __append_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(res);
 }
 
+// A private copy of an array, made for the first state of a loop whose body only appends to it
+// (Builder::markLoopStateInPlace): the rounds then append to the copy in place, and the literal
+// the program wrote stays the constant it is. Not a name a program can reach for.
+slot_t __copy_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    const Array *arr = norm.get<Array *>(0);
+    auto *arrType    = tt::as_ptr<ArrayType>(norm.type(0));
+    return rtdata::toSlot(copyWithRoom(arr, 0, arrType));
+}
+
+// `xs->append<v>` on a value the compiler proved no one else can see (the loop-state rewrite,
+// Builder::markLoopStateInPlace): the same call, but the array may take the element in place
+// when it owns its storage (design principles 10.5). When it cannot - an array of references,
+// a view, a buffer someone else holds - it copies exactly like `append`, so the result is the
+// same either way.
+slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Array *arr        = norm.get<Array *>(0);
+    const slot_t elem = with.get<slot_t>(0);
+    auto *arrType     = tt::as_ptr<ArrayType>(norm.type(0));
+    if (!arr->canWriteInPlace()) {
+        return __append_arr__(with, norm, ctx);
+    }
+    arr->append(elem, arrType);
+    return rtdata::toSlot(arr);
+}
+
 // `xs->extend<ys>`: a new array, the elements of xs and then those of ys. xs is unchanged.
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const Array *arr  = norm.get<Array *>(0);

@@ -45,7 +45,4 @@ Shape parseShapeArray(const ::Array *shapeArray, const type::Type *shapeType);
 /// Converts a (nested) numeric array into a tensor; nesting depth becomes rank.
 Array *tensorFromArray(slot_t slot, type::Type *valueType, mm::IAllocator &allocator);
 
-DLManagedTensor *tensorToDLPackCopy(const Array *tensor);
-Array *tensorFromDLPackCopy(const DLManagedTensor *managed, mm::IAllocator &allocator);
-
 } // namespace camel::tensor
