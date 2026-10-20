@@ -1,0 +1,40 @@
+/**
+ * Handover H27, item 1: a composite literal keeps the exact value each element was written as
+ * until the type of its position is known, and GIR rebuilds it from those values. The decimal
+ * below is just above the midpoint between 1.0 and the next f32: converted directly it rounds
+ * up to 1.0000001192092896, while a conversion that first made it the nearest double would land
+ * exactly on the midpoint and round back down to 1.0. A `return` of the literal and a declared
+ * array print the same 1.00000012, for an array element, a struct field and a nested array.
+ */
+module literal_context_composite_rounding
+
+type Point = { x: f32 }
+
+func viaReturn(): f32[] {
+    return [1.0000000596046447753906251]
+}
+
+func viaDeclaration(): f32[] {
+    let xs: f32[] = [1.0000000596046447753906251]
+    return xs
+}
+
+func structField(): Point {
+    return { x: 1.0000000596046447753906251 }
+}
+
+func nested(): f32[][] {
+    return [[1.0000000596046447753906251]]
+}
+
+func main(): int sync {
+    let a = viaReturn()[0]
+    let b = viaDeclaration()[0]
+    let p = structField()
+    let n = nested()
+    println('{:.9g}'->format<a>)
+    println('{:.9g}'->format<b>)
+    println('{:.9g}'->format<p.x>)
+    println('{:.9g}'->format<n[0][0]>)
+    return 0
+}

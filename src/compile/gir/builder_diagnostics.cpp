@@ -757,23 +757,13 @@ void Builder::rejectLiteralConversion(
         return;
     } catch (const camel::core::error::RuntimeFault &) {
     }
-    if (text) {
-        diags_->of(SemanticDiag::LiteralStaticCastFailed)
-            .atOrigin(call->origin())
-            .commit(data->toString(), target->toString());
-    } else {
-        std::string limits = literalRangeViolation(data, target);
-        if (limits.empty()) {
-            limits = target->code() == TypeCode::Int32   ? "-2147483648 to 2147483647"
-                     : target->code() == TypeCode::Int64 ? "-9223372036854775808 to "
-                                                           "9223372036854775807"
-                                                         : "the value does not fit the type";
-        }
-        diags_->of(SemanticDiag::LiteralOutOfRange)
-            .atOrigin(call->origin())
-            .commit(literalValueText(data), target->toString(), limits);
-    }
-    throw BuildAbortException();
+    // Whether the argument was text or a number, the same report says why the conversion has
+    // no value: not a number, out of range, or truncated.
+    rejectLiteralData(
+        data,
+        target,
+        call->origin(),
+        operands.empty() ? nullptr : operands[0].expr);
 }
 
 void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin) {
@@ -886,6 +876,104 @@ std::string Builder::sourceTextOf(const GCT::node_ptr_t &expr) const {
         }
     }
     return depth == 0 ? text : std::string();
+}
+
+camel::source::origin_id_t Builder::expressionPositionOf(const GCT::node_ptr_t &expr) const {
+    if (expr == nullptr) {
+        return camel::source::kInvalidOriginId;
+    }
+    // A folded expression's own origin covers only its last operand: the position of a value it
+    // computes to is the whole expression (design principles 5.1).
+    const camel::source::span_id_t span = expressionSpan(context_, expr);
+    if (span != camel::source::kInvalidSpanId) {
+        const camel::source::origin_id_t where = deriveGirOrigin(
+            context_,
+            expr,
+            camel::source::OriginKind::GirNode,
+            "gir.expr.span",
+            {},
+            span);
+        if (where != camel::source::kInvalidOriginId) {
+            return where;
+        }
+    }
+    return expr->origin();
+}
+
+namespace {
+
+bool isIntegerType(Type *type) {
+    return type != nullptr && type->isPrimitive() &&
+           (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64);
+}
+
+/// Whether a numeric literal datum is a whole number (`1.0` is, `1.9` is not): put into an
+/// integer type it either fits or is out of range; a fraction would be truncated.
+bool isWholeNumber(const data_ptr_t &data) {
+    if (std::dynamic_pointer_cast<LongData>(data) != nullptr ||
+        std::dynamic_pointer_cast<IntData>(data) != nullptr) {
+        return true;
+    }
+    double value = 0.0;
+    if (const auto real = std::dynamic_pointer_cast<DoubleData>(data); real != nullptr) {
+        value = real->data();
+    } else if (const auto real32 = std::dynamic_pointer_cast<FloatData>(data); real32 != nullptr) {
+        value = static_cast<double>(real32->data());
+    } else {
+        return false;
+    }
+    return std::isfinite(value) && std::trunc(value) == value;
+}
+
+} // namespace
+
+void Builder::rejectLiteralValue(
+    const literal::Value &value, Type *type, const GCT::node_ptr_t &expr) {
+    const bool folded = expr != nullptr && expr->type() != GCT::NodeKind::DATA;
+    std::string written = sourceTextOf(expr);
+    if (written.empty()) {
+        written = value.toString();
+    }
+    const std::string range = literal::rangeText(type);
+    std::string reason;
+    if (!range.empty()) {
+        // A folded expression is quoted as written, so the value it came to is also said.
+        reason = folded ? "the value " + value.toString() + " is out of range (" + range + ")"
+                        : "out of range (" + range + ")";
+    } else {
+        reason = "the value does not fit the type";
+    }
+    diags_->of(SemanticDiag::LiteralNotRepresentable)
+        .atOrigin(expressionPositionOf(expr))
+        .commit(written, type->toString(), reason);
+    throw BuildAbortException();
+}
+
+void Builder::rejectLiteralData(
+    const data_ptr_t &data, Type *type, camel::source::origin_id_t where,
+    const GCT::node_ptr_t &written) {
+    std::string reason;
+    if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
+        reason = "out of range (" + limits + ")";
+    } else if (data->type()->isPrimitive() && isIntegerType(type)) {
+        // A decimal literal in an integer type: `int(1.9)` loses the fraction, `int(1.0e30)`
+        // is out of the range.
+        reason = isWholeNumber(data) ? "out of range (" + literal::rangeText(type) + ")"
+                                     : "the value would be truncated";
+    } else if (data->type()->code() == TypeCode::String) {
+        reason = "the text is not a number";
+    } else {
+        reason = "the value cannot become that type";
+    }
+    // The literal as it is written, when the expression it came from is at hand.
+    std::string text = sourceTextOf(written);
+    if (text.empty()) {
+        text = literalValueText(data);
+    }
+    diags_->of(SemanticDiag::LiteralNotRepresentable)
+        .atOrigin(where)
+        .commit(text, type->toString(), reason);
+    throw BuildAbortException();
 }
 
 std::string Builder::sourceLocationOf(uint64_t origin) const {

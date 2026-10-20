@@ -1,0 +1,14 @@
+/**
+ * A path assignment whose index is past the end of the array: a fault, as reading past the end
+ * is (docs/design-principles.cn.md 3.9, 6.11). The statement writes the whole variable, so the
+ * fault comes from the element store it lowers to.
+ */
+module element_assigned_out_of_range
+
+func main(): int sync {
+    var xs = [1, 2, 3]
+    println('before')
+    xs[5] = 1
+    println('not reached')
+    return 0
+}

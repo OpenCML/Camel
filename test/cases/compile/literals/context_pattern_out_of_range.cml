@@ -1,0 +1,17 @@
+/**
+ * Handover H24, item 3: the pattern of a `match` case takes the type of the value matched, so a
+ * pattern literal the type cannot hold is reported.
+ */
+module literal_context_pattern_out_of_range
+
+func pick(x: i32): int {
+    return match x {
+        case 5000000000 => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    println(pick(1))
+    return 0
+}

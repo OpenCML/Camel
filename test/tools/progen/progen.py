@@ -258,14 +258,13 @@ CHECK_RANGE = range(1, 26)
 # seed of the range passes; the seed left out under VERSION 1 (5, finding F18) is another
 # program now.
 # Seed 16 (handover H15, literals take their type from the context): `e23` declares `float` and
-# one arm of a `match` expression in it ends in `return 5 - 10`. An expression of literals now
-# has the type of the position it is returned in, `float`, so that arm's value is a `float`
-# while the other arms of the match are `int` and the arm join reports
-# BranchReturnTypeMismatch. The program was accepted before only because an `int` returned
-# under a declared `float` was neither converted nor reported (the same hole that made
-# `return sub5(5, 10)` run); the generator's reference evaluator types the arm `int`. See
+# one arm of a `match` expression in it ends in `return 5 - 10`. That `return` is the value of
+# its arm, and the arm's position (the `var v32 = match …` it is written in) expects no type, so
+# the value is an `int`, as the other arms of the match are and as the generator's reference
+# evaluator types it: the arm join holds. It is back in the batch since handover H24 (a `return`
+# in an arm no longer takes the function's declared return type). See
 # test/cases/opt/progen/README.md, J5.
-CHECK_EXCLUDED = {16: "an arm of a float function returns a float now, so its int arms no longer join (H15)"}
+CHECK_EXCLUDED = {}
 CHECK_MATRIX = "cross"
 
 

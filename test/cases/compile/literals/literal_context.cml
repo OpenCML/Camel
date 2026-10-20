@@ -20,7 +20,9 @@ func half(): f32 {
 }
 
 func armExit(c: bool): float {
-    let v = if c then { return 2; } else { 2.0 };
+    // A `return` in an arm takes the type of the arm's position — here the declared type of
+    // `v`, float — not the return type of the function.
+    let v: float = if c then { return 2; } else { 2.0 };
     return v
 }
 
@@ -32,8 +34,8 @@ func main(): int sync {
     println(a, b, c)
     // The parameter of the function called, and the declared return type.
     println(scale(3.0), widen(2), half())
-    // The exit of a branch arm: `return 2` in a float function is a float, so the arm joins
-    // the other arm's 2.0.
+    // The exit of a branch arm: `return 2` in the arm takes the type of the arm's position
+    // (the declaration of `v`, float), and joins the other arm's 2.0.
     println(armExit(true), armExit(false))
     // The other operand of a binary operator, on either side.
     let x: f32 = 1.5

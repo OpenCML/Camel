@@ -1,0 +1,93 @@
+// H17 item 4: the old value of a loop state is not visible once the next round begins, so a
+// body that only ever appends to its state may write the state's array in place (design
+// principles 10.5), the same criterion as `t = t->relu`. `std::mem::buffers()` reads the buffer
+// counters between the operations, so the difference is visible from the language: growing to
+// 200 elements takes a handful of buffers in place, one per round when the array is copied.
+//
+// `grow` starts from a literal and only appends to the state: the loop takes a private copy of
+// the literal once and appends to it in place. `growFrom` starts from a parameter, an array the
+// loop does not own: the ordinary copying append (the control). `gather` is the `for` shape of
+// the same rewrite. Calling `grow` twice shows the literal is not edited by the first call.
+//
+// The criterion is decided per state, so a loop that carries an array and a counter rewrites
+// only the array: `growCounted` appends to state 0 and counts in state 1, `countAndGrow` puts
+// the array second (the rule is not "state 0"), `growBoth` appends to two states (one copy
+// each). `growCountedFrom` is the multi-state control (the array comes from a parameter) and
+// `growAndPeek` another: its body also reads `len(xs)`, so the state is copied every round.
+// `growConst` writes a constant as the other state's next value: the constant is not a value
+// node of the tuple's With inputs, and the appended state is still rewritten.
+func grow(n: int): int[] {
+    return loop xs = [0] while len(xs) < n do xs->append<7>
+}
+
+func growFrom(seed: int[], n: int): int[] {
+    return loop xs = seed while len(xs) < n do xs->append<7>
+}
+
+func gather(xs: int[]): int[] {
+    return loop acc = [0] for x in xs do acc->append<x>
+}
+
+func growCounted(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do (xs->append<7>, rounds + 1)
+}
+
+func countAndGrow(n: int): (int, int[]) {
+    return loop rounds = 0, xs = [0] while len(xs) < n do (rounds + 1, xs->append<7>)
+}
+
+func growBoth(n: int): (int[], int[]) {
+    return loop xs = [0], ys = [10] while len(xs) < n do (xs->append<7>, ys->append<8>)
+}
+
+func growCountedFrom(seed: int[], n: int): (int[], int) {
+    return loop xs = seed, rounds = 0 while len(xs) < n do (xs->append<7>, rounds + 1)
+}
+
+func growAndPeek(n: int): (int[], int) {
+    return loop xs = [0], last = 0 while len(xs) < n do (xs->append<7>, len(xs))
+}
+
+func growConst(n: int): (int[], int) {
+    return loop xs = [0], fixed = 9 while len(xs) < n do (xs->append<7>, 0)
+}
+
+func main(): int sync {
+    let before = std::mem::buffers()
+    let xs     = grow(200)
+    let mid    = std::mem::buffers()
+    let ys     = growFrom([0], 200)
+    let after  = std::mem::buffers()
+    let again  = grow(3)
+    let beforeFor = std::mem::buffers()
+    let zs     = gather([1, 2, 3, 4, 5])
+    let afterFor  = std::mem::buffers()
+    let beforeMulti  = std::mem::buffers()
+    let (ws, wr)     = growCounted(200)
+    let afterCounted = std::mem::buffers()
+    let (vr, vs)     = countAndGrow(200)
+    let afterSecond  = std::mem::buffers()
+    let (ms, ns)     = growBoth(200)
+    let afterBoth    = std::mem::buffers()
+    let (us, ur)     = growCountedFrom([0], 200)
+    let afterFrom    = std::mem::buffers()
+    let (ps, pl)     = growAndPeek(200)
+    let afterPeek    = std::mem::buffers()
+    let beforeConst  = std::mem::buffers()
+    let (cs, ck)     = growConst(200)
+    let afterConst   = std::mem::buffers()
+    println(len(xs), len(ys), mid.allocs - before.allocs, after.allocs - mid.allocs)
+    println(xs[0], xs[199], ys[0], ys[199], len(again), again[0], again[2])
+    println(len(zs), afterFor.allocs - beforeFor.allocs, zs[0], zs[5])
+    println(len(ws), ws[0], ws[199], wr, len(vs), vs[0], vs[199], vr)
+    println(len(ms), ms[0], ms[199], len(ns), ns[0], ns[199])
+    println(len(us), us[0], us[199], ur, len(ps), ps[199], pl)
+    println(
+        afterCounted.allocs - beforeMulti.allocs,
+        afterSecond.allocs - afterCounted.allocs,
+        afterBoth.allocs - afterSecond.allocs,
+        afterFrom.allocs - afterBoth.allocs,
+        afterPeek.allocs - afterFrom.allocs)
+    println(len(cs), cs[0], cs[199], ck, afterConst.allocs - beforeConst.allocs)
+    return 0
+}

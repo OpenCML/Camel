@@ -1,0 +1,32 @@
+/**
+ * The empty array literal `[]` takes its type from the position it is written in (design
+ * principles 5.1, 5.2): a cast, a declaration, the type of a loop's value. Nothing is written
+ * in it, so the position is the only thing that decides its element type. A loop of one state
+ * has the state's type, so the loop's own position types `loop acc = []`.
+ */
+module empty_array_context
+
+func squares(n: int): int[] sync {
+    // The function's declared return type is the loop's position: `acc` is an `int[]`.
+    loop acc = [] for i in range(0, n) do acc->append<i * i>
+}
+
+func halves(): float[] sync {
+    let out: float[] = loop acc = [] for x in [1.0, 2.0, 3.0] do acc->append<x / 2.0>
+    return out
+}
+
+func main(): int sync {
+    // A cast: the same literal with the element type of the cast.
+    let none = [] as int[]
+    println(len(none))
+    println(squares(4))
+    println(halves())
+
+    // A declaration types it, and an array of it is an array of arrays.
+    let empty: string[] = []
+    let nested: int[][] = [[]]
+    println(len(empty))
+    println(nested)
+    return 0
+}

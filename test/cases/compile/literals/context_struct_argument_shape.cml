@@ -1,0 +1,15 @@
+/**
+ * Handover H27b: a struct literal argument must write exactly the fields of the parameter's
+ * struct type. `norm({ x: 1.0 })` for a `{ x: f32, y: f32 }` parameter stays no matching
+ * function; the rule moves literals into the type, it does not invent the fields a type has.
+ */
+module literal_context_struct_argument_shape
+
+type Point = { x: f32, y: f32 }
+
+func norm(p: Point): f32 { return p.x * p.x + p.y * p.y }
+
+func main(): int sync {
+    println(norm({ x: 1.0 }))
+    return 0
+}

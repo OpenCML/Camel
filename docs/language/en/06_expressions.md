@@ -20,8 +20,8 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 (x: int): int => x + 1      // lambda, see 6.9
 ```
 
-- The elements of an array literal must have the same type. The element type of the empty array `[]` comes from the context: `let xs: int[] = []`, `[] as Map<string, int>`.
-- The keys of a struct literal are identifiers.
+- The elements of an array literal must have the same type. An element is **a position with an expected type** ([3.3.1](03_data_model.md#331-arrays)): with a context every element takes that type, so the elements of `let xs: float[] = [1, 2.0]` are `float`; with none, the number literals of one array take the widest kind (integer < decimal), so `[1, 2.0]` is a `float[]` (as Go's untyped constants do). The element type of the empty array `[]` comes from the context: `let xs: int[] = []`, `[] as Map<string, int>`.
+- The keys of a struct literal are identifiers. A field is such a position too: in `let p: P = { a: 1, b: 2.0 }` (`P = { a: float, b: float }`) the `1` is a `float`. A field written as a name is a variable, not converted: a type it does not fit is `SemanticDiag::DeclaredTypeMismatch`.
 - **A list comprehension** `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>`: `x` has the element type of `xs`, `if c` may be left out, and the result is an array of `e`. On the graph it is exactly what the two calls written out are (two operator nodes, each with the subgraph of its element function), so it has their properties: nothing is promised about the order of the elements (a parallel scheduler may compute them concurrently), and effects in `e` and `c` are treated as in the element functions of `map` and `filter` ([6.10](#610-higher-order-operators)). It nests, and it may stand wherever an expression may. A source that is not an array is `SemanticDiag::ComprehensionSourceRefused`.
 - The spread `...xs` is reserved and not implemented (`SemanticDiag::ConstructNotSupported`). Write `concat(xs, ys)`.
 
@@ -229,6 +229,8 @@ if condition then arm else arm
 
 `if` is an expression. An arm can be an expression or a block (`{ ... }` or `sync { ... }`); the value of a block is given by the `return` in the block. The two arms must have the same type, or one must enter the form of the other ([3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t)): an arm of type `T` and an arm that is `null` or has no value make the branch a `T?`.
 
+The value of an arm is itself **a position with an expected type** (design principles 5.1): when the whole `if` has one (a declaration written with a type, a function's return position, and so on), a literal in an arm takes that type, so both arms of `let x: float = if c then 1 else 2` are `float`. An arm written as a name is a variable, not converted; a type that does not fit the other arm is still reported as a mismatch of the arms.
+
 ```cml
 func sign(x: int): string {
     return if x > 0 then 'positive' else if x < 0 then 'negative' else 'zero'
@@ -298,6 +300,8 @@ note: the value of this 'if' is not used
 
 So there is no "early return" in Camel: write the branch as the last expression of the function body, or write `return` before it. When several conditions are tested in turn, join `if ... else if ... else ...` into one expression. The warning can be turned off with `-Wno-exit-in-unused-branch`. `return null` and a `return` without a value are reported too: an arm does not need one to make the types fit, so one written there was most likely meant to leave the function.
 
+A `return` in an arm takes its type from **the position the arm stands at**, like any other expression in the arm ([3.3.1](03_data_model.md#331-arrays), design principles 5.1): in `let v: float = if c then { return 1 } else { 2.0 }` the `1` is a `float` (the position is the declaration of `v`), while in `let v = if c then { return 1 } else { 2 }` it is an `int` (the position has no type, so the arms decide). The declared return type of the function is **not** the expected type of such a `return`: in `func f(c: bool): float { let v = if c then { return 2 } else { 3 } … }` the `v` is an `int`, and the function converts where it needs to. The last expression of a function body (a whole `if`/`match` included) is the position of the function's return value: its type is the declared return type, and a `return` in its arms reads it from there.
+
 ### 6.8.2 `match`
 
 ```
@@ -308,8 +312,8 @@ match name {
 ```
 
 - What is matched may be any expression (`match f(x) { ... }`), not only a name.
-- A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **Each pattern must be a value the type of the matched value accepts** (design principles 3.7): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
-- The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`.
+- A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **A pattern literal takes the type of the matched value** (it is a position with an expected type, design principles 5.1): with `x: f32`, the `3` of `case 3` is an `f32`; with `x: int`, `case 5000000000` is `SemanticDiag::LiteralNotRepresentable`. **Each pattern must be a value the type of the matched value accepts** (design principles 3.7): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
+- The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`, and takes its type from the position of the arm (see 6.8.1); the value of an arm is such a position too, and takes the expected type of the whole `match`.
 
 ```cml
 func kind(c: string): string {
@@ -478,7 +482,9 @@ If the element function of `foreach` is to produce side effects, its body must b
 
 ## 6.11 Assignment and `wait`
 
-- `x = e`, `x += e` and so on are expressions whose value is the value assigned. The target must be a `var` variable or a `var` parameter itself ([3.7](03_data_model.md#37-let-var-and-references)).
+- `x = e`, `x += e` and so on are expressions; their value is described below. The target is a `var` variable or a `var` parameter itself, or a **path** that starts at one: fields, indices, any combination ([3.7](03_data_model.md#37-let-var-and-references)). `p.x = e`, `xs[0] = e` and `m[i].f = e` all rebind the whole of `p`, `xs`, `m`: `xs[i].f = e` is `xs = set(xs, i, set(xs[i], f, e))`, where `set` is a pure operator that returns the value with one place changed. A path assignment may therefore appear in any expression position; when the root of the target is not a variable (`f().x = e`, `{ x: 1 }.x = e`) the diagnostic is `AssignmentTargetNotVariable`, and an index out of range is the fault `IndexOutOfRange`.
+- The value of a path assignment is the **whole value rebound**: `xs = xs->append<…>` gives the new array, and `xs[0] = 5` gives that `xs` as it is now, not `5`. Only when the target is the variable itself is the value the value assigned.
+- In a `sync` body, writing one element of a `var` array **does not copy** it: the store back asks the same "not shared" criterion as `xs = xs->sort` ([10.5](../../design-principles.en.md#105-library-boundary)), that is `:var/take` hands out a copy only after the variable has been read elsewhere. So after `let a = xs`, writing `xs[0]` copies and `a` stays as it was; when `xs` has not been read, its own storage is written.
 - Types for which compound assignment is available:
 
   | Operator | Types |
@@ -489,7 +495,7 @@ If the element function of `foreach` is to produce side effects, its body must b
   | `&=`, `\|=` | `bool` (`a = a & b`, `a = a \| b`: the right side is always evaluated) |
   | `@=` | None of the built-in types |
 
-- **A compound assignment changes nothing in place.** `x op= e` computes the new value and binds `x` to it. A type defined by a module (a tensor), and a type for which the program overloads an operator ([7.4.5](07_statements.md#745-operator-overloading)), has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, `&=`, `|=`, wherever the binary operator is defined for the types): after `let a = t`, `t += u` leaves `a` unchanged. To change a value in place, use an explicit operator.
+- **A compound assignment computes the new value first, then rebinds.** `x op= e` computes the new value and binds `x` to it, so numerically it is `x = x op e`. A compound assignment on a path (`xs[0] += 1`, `p.n += 1`) writes the new value back to that place, and the write back follows the in-place rule above: after `let a = xs`, `xs[0] += 1` copies and `a` is unchanged. A type defined by a module (a tensor), and a type for which the program overloads an operator ([7.4.5](07_statements.md#745-operator-overloading)), has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, `&=`, `|=`, wherever the binary operator is defined for the types).
 
 - For `wait e` see [4.4](04_execution_model.md#44-var-references-and-wait).
 

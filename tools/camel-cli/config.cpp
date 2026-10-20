@@ -511,6 +511,21 @@ bool explainDiagnostic(const std::string &target) {
     return found;
 }
 
+/// clipp's positional parameter accepts any non-empty text, so an option it does not know
+/// (`--bogus`, `-x`) is taken for the input file. Report it as an unknown option instead; a
+/// file whose name really begins with '-' is written './-name'.
+bool rejectUnknownOptions() {
+    for (const string &arg : Run::targetFiles) {
+        if (arg.size() > 1 && arg.front() == '-') {
+            std::cerr << "Error: unknown option '" << arg
+                      << "'. Run 'camel --help' for the options accepted." << std::endl;
+            exitCode = 1;
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 void _printCheckArgs() {
@@ -731,6 +746,9 @@ bool parseArgs(int argc, char *argv[]) {
         cout << usage_lines(cli, "camel") << endl;
         cout << kWarningOptionsHelp;
         exitCode = 1;
+        return false;
+    }
+    if (!rejectUnknownOptions()) {
         return false;
     }
 

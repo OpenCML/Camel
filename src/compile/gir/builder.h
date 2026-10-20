@@ -477,6 +477,32 @@ class Builder {
     // The source text of the expression `expr` when it is short and on one line; empty
     // otherwise. For diagnostics that suggest source text.
     std::string sourceTextOf(const GCT::node_ptr_t &expr) const;
+    // The position of the whole expression `expr`: its own span and those of everything below
+    // it. A folded expression's own origin covers only its last operand, so a value it computes
+    // to that does not fit its type is reported at the whole expression (design principles
+    // 5.1). `expr->origin()` when no span can be made.
+    camel::source::origin_id_t expressionPositionOf(const GCT::node_ptr_t &expr) const;
+    // Reports SemanticDiag::LiteralNotRepresentable at `expr` for a literal (or a folded
+    // expression of literals) whose value `type` cannot hold, and aborts: the literal as it is
+    // written, the exact value when it was folded, the type, and why.
+    [[noreturn]] void rejectLiteralValue(
+        const camel::compile::literal::Value &value, camel::core::type::Type *type,
+        const GCT::node_ptr_t &expr);
+    // The same, for a literal whose value is the data `data` (a written literal the GCT
+    // converted or kept): reported at `where` and aborted. `written` is the expression the
+    // literal was written as, when it is at hand (its source text is quoted).
+    [[noreturn]] void rejectLiteralData(
+        const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
+        camel::source::origin_id_t where, const GCT::node_ptr_t &written = nullptr);
+
+    // ---- The value of a body (design principles 5.1: a return position) ----
+    // The last statement of a body is the value the body hands on, so it is a position with an
+    // expected type: the body's declared type when it has one (`func f(): void! { if … }`), else
+    // the type the place the body stands at asks for (a branch arm's `if`). A `return` written
+    // in an arm of that statement takes the type from there, not from the function's declared
+    // return type (handover H24).
+    Type *ownDeclaredExitType() const;
+    Type *tailPositionType() const;
     // See the definition: the hint for a call that put with-arguments in the parentheses.
     std::string withArgumentsHint(
         const std::string &name, const std::vector<Argument> &arguments, size_t normCount) const;
@@ -606,6 +632,13 @@ class Builder {
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
     Type *expectedValueType_   = nullptr;
+    // The body statement whose last value is in a position (see tailPositionType), and the type
+    // that position expects.
+    const GCT::Node *tailExpectedFor_ = nullptr;
+    Type *tailExpectedType_           = nullptr;
+    // The last statement of such a body, the one whose value is in the position: a literal
+    // there takes the position's type (design principles 5.1; see visitDataNode).
+    const GCT::Node *tailStatement_ = nullptr;
     struct ExpectedValueScope {
         Type *&current;
         Type *outer;
@@ -812,7 +845,7 @@ class Builder {
         const std::string &group, const GCT::node_ptr_t &gct,
         const std::vector<Argument> &operands);
     /// An error at `call` when the conversion `group` (`int`, `i32`, `float`, ...) is given
-    /// a literal that does not fit the type (LiteralOutOfRange, LiteralStaticCastFailed).
+    /// a literal that does not fit the type (LiteralNotRepresentable).
     void rejectLiteralConversion(
         const std::string &group, FunctionType *funcType, const std::vector<Argument> &operands,
         const GCT::node_ptr_t &call);
@@ -877,6 +910,11 @@ class Builder {
     // The value `variable` holds when the returned node runs (`:var/get`), ordered after the
     // variable's last writer in this graph and, in a sync block, in the block's chain.
     node_handle_t readVariable(node_handle_t variable);
+    // `:var/get` or `:var/peek` applied to `variable`, recorded as a read.
+    node_handle_t readVariableThrough(node_handle_t variable, const std::string &group);
+    // The value `variable` holds (`:var/peek`): the same as readVariable, but the variable keeps
+    // its array available for writing in place (the read does not take the array away).
+    node_handle_t peekVariable(node_handle_t variable);
     // `node` as a value: read when it is a variable, itself otherwise.
     node_handle_t valueOf(node_handle_t node) {
         return isVariable(node) ? readVariable(node) : node;
@@ -916,6 +954,21 @@ class Builder {
     /// Builds `graph`, a loop's condition or body graph made with its ports, from `exec`: the
     /// names of its Norm ports are declared in it, and its result is the value of the block.
     void buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec);
+    /// Rewrites the body of a loop whose state values are handed back as `xs->append<v>`, when
+    /// that state's first value is a fresh literal, to the form that may append to the state in
+    /// place (design principles 10.5): the state's old value cannot be seen once the next round
+    /// begins, the same criterion as `t = t->relu`. The decision is made per state, so a loop
+    /// that appends to one state and counts in another rewrites only the appended one; with one
+    /// state the body hands the append call back directly, with several it returns a tuple whose
+    /// j-th component is state j's next value.
+    void markLoopStateInPlace(
+        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+        std::vector<node_handle_t> &initial);
+    /// The per-state half of markLoopStateInPlace: rewrites state `index` when its next value
+    /// (`next`) is `state->append<v>` and the body uses that state's parameter nowhere else.
+    void markLoopStateInPlaceOne(
+        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+        std::vector<node_handle_t> &initial, size_t index, node_handle_t next);
     /// The condition and the body graph of a loop capture the same values in the same order
     /// (design principles 3.10: one capture table): a capture made into one is made into the
     /// other (captureInto).
@@ -1062,11 +1115,13 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         const std::function<bool(FunctionType *, bool)> &accepts);
-    /// Whether the generic overload `tmpl` accepts arguments of the types `normTypes`: its type
-    /// variables bind and every argument then fits its parameter (resolveGenericCall without
-    /// the diagnostics).
+    /// Whether the generic overload `tmpl` accepts the arguments `normInputs` of the types
+    /// `normTypes`: its type variables bind and every argument then fits its parameter
+    /// (resolveGenericCall without the diagnostics). An argument that is a composite literal
+    /// enters its parameter's type, as it does in a call (design principles 5.1).
     bool genericOperatorAccepts(
-        const template_ptr_t &tmpl, const camel::core::type::type_vec_t &normTypes);
+        const template_ptr_t &tmpl, const std::vector<Argument> &normInputs,
+        const camel::core::type::type_vec_t &normTypes);
     /// OperatorOverloadConflict when the overload `funcType` of the operator `group` takes
     /// parameter types a built-in, C++ module or imported overload of it takes.
     void rejectOperatorConflict(
@@ -1099,6 +1154,17 @@ class Builder {
     /// (__builtin__var_take__). Returns nullptr when `gct` is not that form; the statement
     /// is then built as written.
     node_handle_t inPlaceRebindingOf(const GCT::node_ptr_t &gct);
+    /// A path assignment (design principles 3.5): `v.f = e`, `v[i] = e`, `v[i].f += e`, any
+    /// combination of fields and indices starting at a variable `v`. The whole value of `v` is
+    /// rebound to a `set` chain:
+    ///   LINK(DREF __assn__, <path>, e)  ->
+    ///   LINK(DREF __assn__, DREF v,
+    ///        LINK(DREF __set_index__, DREF v, i, LINK(DREF __set_field__, DREF v[i], f, e)))
+    /// and nothing downstream learns that a field or an element was written. In a sync block an
+    /// array variable is written where it is: the outermost index set is the in-place form and
+    /// the variable's array is the one `:var/take` gives it. Returns nullptr when `gct` is not
+    /// such an assignment (the call is then built as written).
+    node_handle_t pathAssignmentOf(const GCT::node_ptr_t &gct);
     /// The calls inPlaceRebindingOf wrote: visitLinkNode calls the in-place form of the
     /// operator they resolve to.
     std::unordered_set<const GCT::Node *> inPlaceCalls_;
@@ -1149,10 +1215,42 @@ class Builder {
     /// itself when its type is assignable; otherwise the value put into `T?` / `T!` (one
     /// CAST per level), `null` as a `T?`, or the empty literal `[]` given the element type of
     /// `target`. A literal whose value the target type can hold takes the target type (design
-    /// principles 5.1: `let x: float = 1`, `return 2` under `f32`). nullptr when the value
-    /// does not enter (camel::core::type::entersImplicitly).
+    /// principles 5.1: `let x: float = 1`, `return 2` under `f32`), and so does an array or
+    /// struct literal: its elements (fields) are positions with an expected type.
+    /// nullptr when the value does not enter (camel::core::type::entersImplicitly).
     node_handle_t
     coerceTo(node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// The constant an array / struct literal written at `origin` becomes when the position
+    /// gives its elements / fields the type `target` (design principles 5.1): `f([1, 2])` with
+    /// `f(xs: float[])`, `return { a: 1 }` under `{ a: float }`. nullptr when `node` is not a
+    /// literal of that shape, or when a part of it cannot take the type it is given (a literal
+    /// the type cannot hold is reported here).
+    node_handle_t compositeLiteralInType(
+        node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// Whether the array / struct literal written at `origin` can be given `target` as its type,
+    /// with the same walk as compositeLiteralInType but without building the converted value and
+    /// without reporting: an argument enters its parameter's type while overloads are tried
+    /// (design principles 5.1), and the conversion — which may report a value that does not fit
+    /// — is made once the callee is known (coerceTo). A value of the right kind that is out of
+    /// the type's range still enters: it is the conversion that refuses it. An element that is a
+    /// name is a value of its own type and does not enter; neither does one of another kind.
+    bool compositeLiteralEntersIn(
+        node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// `data` with every element (field) in `type`, recursively; nullptr when a part of it is
+    /// not a value of the type. The exact value an element was written as, kept by the GCT for
+    /// a composite literal, is used rather than the double it was lowered to, so an element is
+    /// rounded once (design principles 5.1).
+    camel::core::data::data_ptr_t compositeDataInType(
+        const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
+        const GCT::node_ptr_t &origin);
+    /// One element (field) of a composite literal as a value of `type`: the value itself when
+    /// the type accepts it, the exact conversion when it is a literal (`written` is the value
+    /// it was written as, when known), nullptr for a type a literal cannot be given this way
+    /// (`T?` / `T!`, a shape that does not match).
+    camel::core::data::data_ptr_t literalElementInType(
+        const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
+        const GCT::node_ptr_t &origin,
+        const camel::compile::literal::Value *written = nullptr);
     // ---- Literals: the value as written, until the context gives it a type (5.1) ----
     /// The exact value of the expression `expr` when it is a literal: a numeric literal
     /// written in the program, or an expression of literals only that folds to one. A name
@@ -1160,9 +1258,10 @@ class Builder {
     std::optional<camel::compile::literal::Value> literalValueOfExpr(const GCT::node_ptr_t &expr);
     /// The exact value of `gct`, a literal of the construction tree, when it has one.
     static const camel::compile::literal::Value *literalValueOfGct(const GCT::node_ptr_t &gct);
-    /// The value as a constant of `type`. Reports SemanticDiag::LiteralOutOfRange at `origin`
-    /// and aborts when the type cannot hold it (a literal that does not fit its context is an
-    /// error, not a value cut to size).
+    /// The value as a constant of `type`. Reports SemanticDiag::LiteralNotRepresentable at the
+    /// whole expression (the literal, or the expression it was folded from) and aborts when the
+    /// type cannot hold it (a literal that does not fit its context is an error, not a value
+    /// cut to size).
     node_handle_t makeLiteralNode(
         const camel::compile::literal::Value &value, camel::core::type::Type *type,
         const GCT::node_ptr_t &origin);
@@ -1196,6 +1295,14 @@ class Builder {
     /// The return type the function around the current position declares (looking out of
     /// branch arms), or nullptr when it declares none.
     camel::core::type::Type *declaredExitTypeHere() const;
+    /// The type a `return` here is expected to have (design principles 5.1): the declared
+    /// return type of the function, or, for a `return` in a branch arm, the type the arm's
+    /// position expects (the branch's expected type; nullptr when nothing expects one, and
+    /// then the other arms decide through the join). The declared return type of the function
+    /// is not the expected type of an arm's `return`: the value of an arm is the branch's, and
+    /// the declared type is checked where the function itself returns (language reference
+    /// 7.3, handover H24).
+    camel::core::type::Type *expectedExitTypeHere() const;
     /// What `return value` / `throw value` hands back: the value put into the declared
     /// `T?` / `T!`, or the failed form of the declared `T!`.
     node_handle_t adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t value);

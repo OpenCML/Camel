@@ -35,9 +35,11 @@ using namespace camel::core::rtdata;
 #include "../operators/io.h"
 #include "../operators/loop.h"
 #include "../operators/macro.h"
+#include "../operators/mem.h"
 #include "../operators/ops.h"
 #include "../operators/other.h"
 #include "../operators/profiler.h"
+#include "../operators/set_value.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
 #include "../operators/tagged.h"
@@ -86,6 +88,13 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/stos", __stos__},
         {"op/atos", __atos__},
 
+        // diagnostics
+        {"op/mem_buffers", __builtin__mem_buffers__},
+        // `xs->append<v>` written by the loop-state rewrite; not a group a program can name.
+        {"struct/append_arr_owned", __append_owned_arr__},
+        // The private copy of an array a rewritten loop starts from; likewise internal.
+        {"struct/copy_arr", __copy_arr__},
+
         // variables
         {"var/new", __builtin__var_new__},
         {"var/get", __builtin__var_get__},
@@ -105,6 +114,12 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // `acc = acc->append<v>` as a statement; not a group a program can name.
         {"op/assn_append", __builtin__assn_append__},
         {"op/assn_owned", __builtin__assn_owned__},
+
+        // The `set` operators a path assignment lowers to (Builder::pathAssignmentOf) and the
+        // in-place form of the element set, which only the compiler names.
+        {"op/set_field", __builtin__set_field__},
+        {"op/set_index", __builtin__set_index__},
+        {"op/set_index_in_place", __builtin__set_index_in_place__},
 
         {"op/assn_add_i", __builtin__assn_add_i__},
         {"op/assn_add_l", __builtin__assn_add_l__},
@@ -405,11 +420,20 @@ void registerBuiltinOperatorTraits() {
         std::string(camel::execute::kFaultIsolationUri),
         {.pure = false, .callsGraphs = true});
     registry.declare("os", {{"exit", false}, {"sleep", false}});
+    // The buffer counters are ambient state: two calls with the same arguments can return
+    // different structs, so the call must not be folded, merged or dropped as a pure one.
+    registry.set(":op/mem_buffers", {.pure = false});
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});
     registry.set(":var/peek", {.stateOnly = true});
     registry.set(":var/take", {.stateOnly = true});
+    // The in-place element set of a path assignment (Builder::pathAssignmentOf) writes the
+    // array `:var/take` handed it and returns it; it changes nothing outside the program's own
+    // variables, and an index out of bounds is a fault.
+    registry.set(":op/set_index_in_place", {.stateOnly = true, .mayFault = true});
+    registry.setInPlaceForm(":op/set_index", ":op/set_index_in_place");
+    registry.declareReusesOperand(":op/set_index_in_place");
     // What the compiler does at a call because of the operator (design principles log 2.17).
     registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
     registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});

@@ -1,0 +1,16 @@
+/**
+ * Handover H27b: an array literal argument enters the element type of its parameter, so an
+ * element the element type cannot hold is refused once the callee is known (`LiteralNotRepresentable`,
+ * at the argument, quoting the element's value) rather than left as a `float[]` with no matching
+ * function.
+ */
+module literal_context_array_argument_out_of_range
+
+func sum32(xs: i32[]): i32 {
+    return xs[0] + xs[1]
+}
+
+func main(): int sync {
+    println(sum32([1, 3000000000]))
+    return 0
+}

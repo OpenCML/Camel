@@ -53,6 +53,7 @@
 #include <cctype>
 #include <cstddef>
 #include <format>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -532,6 +533,47 @@ callExpressionSpan(const context_ptr_t &context, const GCT::node_ptr_t &gct) {
     for (size_t i = 0; i < gct->size(); ++i) {
         cover(gct->at(i));
     }
+    if (fileId == camel::source::kInvalidSourceFileId) {
+        return camel::source::kInvalidSpanId;
+    }
+    return sourceContext->createSpan(fileId, start, end);
+}
+
+/// The span of the whole expression a GCT node stands for: the union of the node's span and
+/// those of everything below it. A node's own span covers only part of what it stands for (an
+/// operator's is the operator token, a binary expression's is its right side), and a folded
+/// expression is nested (`(1 + 2) * 3`), so the whole tree is covered. Spans of another file
+/// are ignored. Invalid when no node has a span.
+inline camel::source::span_id_t
+expressionSpan(const context_ptr_t &context, const GCT::node_ptr_t &gct) {
+    auto *sourceContext = context ? context->sourceContext().get() : nullptr;
+    if (sourceContext == nullptr || gct == nullptr) {
+        return camel::source::kInvalidSpanId;
+    }
+    camel::source::source_file_id_t fileId = camel::source::kInvalidSourceFileId;
+    size_t start = 0, end = 0;
+    std::function<void(const GCT::node_ptr_t &, int)> cover = [&](const GCT::node_ptr_t &node,
+                                                                 int depth) {
+        if (node == nullptr || depth > 32) {
+            return;
+        }
+        const auto *record = sourceContext->origin(node->origin());
+        const auto *span   = record ? sourceContext->span(record->primarySpan) : nullptr;
+        if (span != nullptr && span->valid() && span->endOffset > span->startOffset) {
+            if (fileId == camel::source::kInvalidSourceFileId) {
+                fileId = span->fileId;
+                start  = span->startOffset;
+                end    = span->endOffset;
+            } else if (fileId == span->fileId) {
+                start = std::min(start, span->startOffset);
+                end   = std::max(end, span->endOffset);
+            }
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            cover(node->at(i), depth + 1);
+        }
+    };
+    cover(gct, 0);
     if (fileId == camel::source::kInvalidSourceFileId) {
         return camel::source::kInvalidSpanId;
     }

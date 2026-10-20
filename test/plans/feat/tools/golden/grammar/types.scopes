@@ -140,21 +140,6 @@
 #             ^^^^^^ support.type.primitive.camel
 #                   ^ meta.brackets.camel punctuation.section.brackets.begin.camel
 #                    ^ meta.brackets.camel punctuation.section.brackets.end.camel
->type All = i32 | i64 | f32 | f64 | bool | void
-#^^^^ meta.type.definition.camel storage.type.type.camel
-#     ^^^ meta.type.definition.camel entity.name.type.camel
-#         ^ keyword.operator.assignment.camel
-#           ^^^ support.type.primitive.camel
-#               ^ keyword.operator.type.camel
-#                 ^^^ support.type.primitive.camel
-#                     ^ keyword.operator.type.camel
-#                       ^^^ support.type.primitive.camel
-#                           ^ keyword.operator.type.camel
-#                             ^^^ support.type.primitive.camel
-#                                 ^ keyword.operator.type.camel
-#                                   ^^^^ support.type.primitive.camel
-#                                        ^ keyword.operator.type.camel
-#                                          ^^^^ support.type.primitive.camel
 >
 >func or_else(x: (typeas T)?, d: T): T {
 #^^^^ meta.function.definition.camel storage.type.function.camel

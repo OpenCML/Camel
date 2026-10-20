@@ -1,0 +1,33 @@
+/**
+ * Handover H24, items 2 and 3: the elements of an array literal and the fields of a struct
+ * literal are positions with an expected type, and a literal in one array with no expected
+ * type takes the widest kind of the literals written next to it (integer < decimal), as in
+ * Go: `[1, 2.0]` is a float array. The pattern of a `match` case takes the type of the value
+ * matched.
+ */
+module literal_context_data
+
+type Point = { x: float, y: float }
+
+func pick(x: f32): int {
+    return match x {
+        case 3 => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    // The declared type reaches the elements and the fields.
+    let xs: float[] = [1, 2.0]
+    let zs: i32[] = [1, 2]
+    let p: Point = { x: 1, y: 2.0 }
+    println(xs, zs, p)
+    // No declared type: one array widens to the widest kind written in it.
+    let ys = [1, 2.0]
+    let q = { x: 1, y: 2.0 }
+    println(ys, q)
+    // The pattern is the type of the value matched: an f32 here, so `3` is an f32.
+    let x: f32 = 3.0
+    println(pick(x), pick(2.5))
+    return 0
+}

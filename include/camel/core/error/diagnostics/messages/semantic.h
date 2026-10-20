@@ -51,7 +51,11 @@ enum class SemanticDiag : uint32_t {
     // 0x000014 was ClosureCaptureAfterSelfCall, replaced by CaptureAfterRecursiveCall: with
     // function bodies built when first needed it is only met in recursion.
     ImportNameNotExported        = 0x000015,
-    LiteralStaticCastFailed      = 0x000016,
+    // A literal the type it is given cannot hold: out of range, truncated (a decimal literal
+    // in an integer type), or not a value of that type at all (a text that is not a number).
+    // One diagnostic for all of them (handover H24): it says which literal, which type, and
+    // why.
+    LiteralNotRepresentable      = 0x000016,
     DynamicCastForbidden         = 0x000017,
     ModuleParseFailed            = 0x000018,
     InvalidOperatorURI           = 0x000019,
@@ -64,7 +68,7 @@ enum class SemanticDiag : uint32_t {
     InvalidTypeArgument          = 0x000020,
     ArgumentNeedsConversion      = 0x000021,
     ReturnNeedsConversion        = 0x000022,
-    LiteralOutOfRange            = 0x000023,
+    // 0x000023 was LiteralOutOfRange, merged into LiteralNotRepresentable (0x000016).
     // 0x000025 was ImportCycle: modules may import each other (design principles 10.1).
     // 0x000026 was ImportedFunctionUsesModuleValue: a function of another module may use the
     // top level of its own module since every module builds into one root graph.
@@ -111,10 +115,9 @@ enum class SemanticDiag : uint32_t {
     ModuleValueCycle          = 0x0000D1,
     CaptureAfterRecursiveCall = 0x0000D2,
     AmbiguousName             = 0x0000D3,
-    // `any` (design principles 5.10), 0xE0 and up. 0xE0 (AnyUncheckedCast) and 0xE1
-    // (AnyBranchSubject) reported reading a slot typed `any`; with the type gone they are
-    // retired, and their codes are not reused.
-    AnyNotAllowed = 0x0000E2,
+    // `any` (design principles 5.10), 0xE0 and up. 0xE0 (AnyUncheckedCast), 0xE1
+    // (AnyBranchSubject) and 0xE2 (AnyNotAllowed) are retired: there is no `any` type, and
+    // writing it is an ordinary unknown name. Their codes are not reused.
     // The condition and the cases of a branch (found with the `any` cases above).
     ConditionNotBool      = 0x0000E3,
     MatchCaseTypeMismatch = 0x0000E4,

@@ -78,6 +78,38 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     ENTER("DATA");
     const data_ptr_t &data = gct->data();
 
+    // A literal that is the value of a body — an arm's value, or a function's last expression —
+    // is in the position the body stands at, so it takes that position's type (design
+    // principles 5.1): `let x: float = if c then 1 else 2` has float arms, and so has a
+    // `match` whose value is declared a float. The value written is converted exactly, and a
+    // composite literal element by element.
+    if (gct == tailStatement_ && expectedValueType_ != nullptr &&
+        !expectedValueType_->assignableFrom(data->type())) {
+        Type *expected = expectedValueType_;
+        if (isComposite(data->type()->code())) {
+            if (tt::as_shared<CompositeData>(data)->resolved()) {
+                if (const data_ptr_t typed = compositeDataInType(data, expected, gct)) {
+                    node_handle_t result = currGraph_->addStaticDataNode(typed);
+                    if (varied_ && currGraph_->outerGraph().get() != nullptr) {
+                        node_handle_t copyNode = currGraph_->addCopyNode(typed->type());
+                        linkNodes(LinkType::Norm, result, copyNode);
+                        result = copyNode;
+                    }
+                    registerNodeOrigin(context_, result, gct, "gir.data.literal");
+                    LEAVE("DATA");
+                    return result;
+                }
+            }
+        } else if (expected->isPrimitive()) {
+            if (const literal::Value *exact = literalValueOfGct(gct);
+                exact != nullptr && literal::kindEnters(*exact, expected)) {
+                node_handle_t literal = literalInType(*exact, expected, gct, true);
+                LEAVE("DATA");
+                return literal;
+            }
+        }
+    }
+
     node_handle_t node{};
     TypeCode dataType = data->type()->code();
     if (isComposite(dataType)) {
@@ -95,39 +127,34 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             ASSERT(
                 holes.size() == refNodes.size(),
                 "Composite holes must match unresolved reference count.");
-            if (dataType->code() == TypeCode::Array && !dataType->resolved() && !refTypes.empty()) {
-                // An array whose elements are all computed (`[x, null]`, `[a, b]` with an
-                // `int` and an `int?`): its element type is what the elements join to, and
-                // an element that is not of that type enters it (design principles 3.8).
-                Type *joined = valueTypeOf(refTypes.front());
-                for (size_t i = 1; i < refTypes.size() && joined != nullptr; ++i) {
-                    joined = joinTypes(joined, valueTypeOf(refTypes[i]));
-                }
-                for (size_t i = 0; i < refTypes.size() && joined != nullptr; ++i) {
-                    if (joined->assignableFrom(valueTypeOf(refTypes[i]))) {
-                        continue;
-                    }
-                    if (node_handle_t entered = coerceTo(refNodes[i], joined, gct)) {
-                        refNodes[i] = entered;
-                        refTypes[i] = joined;
+            if (dataType->code() == TypeCode::Array && !refTypes.empty()) {
+                // The element type of the literal: what its literal elements fixed (`[x, 5]` is
+                // an `int[]`), else what the computed elements join to (`[x, null]`, `[a, b]` with
+                // an `int` and an `int?`; design principles 3.8, 5.1). An element that is not of
+                // it enters it, or is reported: an `int` value is not a `float`. A literal whose
+                // element type the position names is built with it already (`let xs: float[] =
+                // [n, m]`), so a nested literal never reads the type of an outer position (H24).
+                Type *targetElem = nullptr;
+                if (dataType->resolved()) {
+                    Type *elemType = tt::as_ptr<ArrayType>(dataType)->elemType();
+                    if (elemType != nullptr && elemType->code() != TypeCode::Void) {
+                        targetElem = elemType;
                     }
                 }
-            } else if (
-                dataType->code() == TypeCode::Array && dataType->resolved() &&
-                tt::as_ptr<ArrayType>(dataType)->elemType()->code() != TypeCode::Void) {
-                // The literal elements fixed the element type (`[x, 5]` is an `int[]`): each
-                // computed element must be of it or enter it. Unchecked, `x: string` (or an
-                // `any`) was stored as an `int` and its address read as a number
-                // (docs/design/any-typing, defect D2).
-                Type *elemType = tt::as_ptr<ArrayType>(dataType)->elemType();
+                if (targetElem == nullptr) {
+                    targetElem = valueTypeOf(refTypes.front());
+                    for (size_t i = 1; i < refTypes.size() && targetElem != nullptr; ++i) {
+                        targetElem = joinTypes(targetElem, valueTypeOf(refTypes[i]));
+                    }
+                }
                 for (size_t i = 0; i < refTypes.size(); ++i) {
                     Type *have = valueTypeOf(refTypes[i]);
-                    if (elemType->assignableFrom(have)) {
+                    if (targetElem == nullptr || targetElem->assignableFrom(have)) {
                         continue;
                     }
-                    if (node_handle_t entered = coerceTo(refNodes[i], elemType, gct)) {
+                    if (node_handle_t entered = coerceTo(refNodes[i], targetElem, gct)) {
                         refNodes[i] = entered;
-                        refTypes[i] = elemType;
+                        refTypes[i] = targetElem;
                         continue;
                     }
                     // Reported at the element (the literal itself carries no position).
@@ -136,7 +163,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                                                               : gct->origin();
                     diags_->of(SemanticDiag::ElementTypeMismatch)
                         .atOrigin(at)
-                        .commit("array", have->toString(), elemType->toString());
+                        .commit("array", have->toString(), targetElem->toString());
                     throw BuildAbortException();
                 }
             }
@@ -667,13 +694,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
                 literal::kindEnters(*exact, targetType)) {
                 const auto data = exact->toData(targetType);
                 if (!data.has_value()) {
-                    diags_->of(SemanticDiag::LiteralOutOfRange)
-                        .atOrigin(gct->origin())
-                        .commit(
-                            exact->toString(),
-                            targetType->toString(),
-                            literal::rangeText(targetType));
-                    throw BuildAbortException();
+                    rejectLiteralValue(*exact, targetType, operand);
                 }
                 converted = *data;
             } else if (
@@ -681,17 +702,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
                 converted = data->convertTo(targetType);
             }
             if (!converted) {
-                if (const std::string limits = literalRangeViolation(data, targetType);
-                    !limits.empty()) {
-                    diags_->of(SemanticDiag::LiteralOutOfRange)
-                        .atOrigin(gct->origin())
-                        .commit(literalValueText(data), targetType->toString(), limits);
-                    throw BuildAbortException();
-                }
-                diags_->of(SemanticDiag::LiteralStaticCastFailed)
-                    .atOrigin(gct->origin())
-                    .commit(data->toString(), targetType->toString());
-                throw BuildAbortException();
+                rejectLiteralData(data, targetType, gct->origin(), gct->at(0));
             }
             node_handle_t node = currGraph_->addStaticDataNode(converted);
             if (varied_ && currGraph_->outerGraph().get() != nullptr) {
@@ -752,12 +763,9 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             if (data_ptr_t converted = data->convertTo(payload)) {
                 valueNode = currGraph_->addStaticDataNode(converted);
                 registerNodeOrigin(context_, valueNode, gct->at(0), "gir.data");
-            } else if (
-                const std::string limits = literalRangeViolation(data, payload); !limits.empty()) {
-                diags_->of(SemanticDiag::LiteralOutOfRange)
-                    .atOrigin(gct->origin())
-                    .commit(literalValueText(data), payload->toString(), limits);
-                throw BuildAbortException();
+            } else if (const std::string limits = literalRangeViolation(data, payload);
+                       !limits.empty()) {
+                rejectLiteralData(data, payload, gct->origin(), gct->at(0));
             }
         }
     }
@@ -770,8 +778,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
-    if (gct->annotation() && asTagged(targetType) == nullptr &&
-        gct->at(0)->type() != GCT::NodeKind::DATA) {
+    if (gct->annotation() && asTagged(targetType) == nullptr) {
         // The type a declaration is written with (`let x: T = e`; GCT Builder::declaredValue):
         // `e` must already have it. A value of that very type passes as it is (converting a
         // value to its own type does nothing, design principles 5.1); one of a type the
@@ -867,7 +874,12 @@ node_handle_t Builder::newVariable(node_handle_t value) {
 }
 
 node_handle_t Builder::readVariable(node_handle_t variable) {
-    node_handle_t value = variableOperator("__var_get__", variable);
+    return readVariableThrough(variable, "__var_get__");
+}
+
+node_handle_t Builder::readVariableThrough(
+    node_handle_t variable, const std::string &group) {
+    node_handle_t value = variableOperator(group, variable);
     pendingUses_[variable].push_back({value, true});
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
@@ -884,6 +896,14 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
         chainedNodes_.insert(value);
     }
     return value;
+}
+
+node_handle_t Builder::peekVariable(node_handle_t variable) {
+    // The value of the variable without the store's right to its array: a path assignment
+    // reading the value it writes must not take the array away from the set that follows.
+    // It is a read all the same: ordered after the variable's last writer and, in a sync
+    // block, in the block's chain.
+    return readVariableThrough(variable, "__var_peek__");
 }
 
 std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {

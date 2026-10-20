@@ -1,0 +1,47 @@
+/**
+ * Handover H27b: a composite literal written as an argument enters the parameter's type, as a
+ * numeric literal does (design principles 5.1). `pick([1.0])` with `xs: f32[]` is an `f32[]`,
+ * its elements converted once from the values written; a struct literal at a struct parameter,
+ * an array of arrays, a method-style call (`x->f`), a `with` argument, an operator of the
+ * program (generic included) and a generic parameter fixed by another argument are the same
+ * rule. `[]` takes the element type too, as it does in a declaration.
+ */
+module literal_context_composite_argument
+
+type Point = { x: f32, y: f32 }
+type Box = { xs: f32[] }
+
+func pick(xs: f32[]): f32 { return xs[0] }
+func total(xs: f32[]): f32 { return xs[0] + xs[1] }
+func count(xs: f32[]): int { return len(xs) }
+func norm(p: Point): f32 { return p.x * p.x + p.y * p.y }
+func px(p: Point): f32 { return p.x }
+func volume(b: Box): f32 { return b.xs[0] * b.xs[1] }
+func corner(xs: f32[][]): f32 { return xs[1][0] }
+
+// A parameter another argument fixes: `T` is f32 here, so `[2.0]` is an `f32[]` too.
+func join(a: (typeas T)[], b: T[]): T { return a[0] + b[0] }
+func first(xs: (typeas T)[]): T { return xs[0] }
+
+// Operators of the program, exact and generic: an array literal works as their operand.
+func operator +(a: f32[], b: f32[]): f32 { return a[0] + b[0] }
+func operator -(a: (typeas T)[], b: T[]): T[] { return a->extend<b> }
+
+with <xs: f32[]>
+func at(i: int): f32 { return xs[i] }
+
+func main(): int sync {
+    // an ordinary call: an array literal, integer elements, a struct literal, and `[]`
+    println(pick([1.5]), pick([1, 2]), total([1.0, 2.25]), count([]))
+    println(norm({ x: 3.0, y: 4.0 }), volume({ xs: [3.0, 4.0] }), corner([[1.0, 2.0], [3.0, 4.0]]))
+    // a method-style call, a `with` argument and operators of the program
+    println([2.5]->pick, at<[7.0, 8.0]>(1))
+    let xs: f32[] = [1.0]
+    println(xs + [2.0], xs - [2.0])
+    // a generic parameter fixed by another argument, and an explicit type argument
+    println(join(xs, [2.0]), first::<f32>([1.0, 2.0]))
+    // the value as written, converted once: 1.00000012, never 1.0
+    println('{:.9g}'->format<pick([1.0000000596046447753906251])>)
+    println('{:.9g}'->format<px({ x: 1.0000000596046447753906251, y: 0.0 })>)
+    return 0
+}

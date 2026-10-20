@@ -1929,7 +1929,7 @@ bash docs/design/graph-model/tools/run_examples.sh docs/design/graph-model/examp
 | D1 | 两条 `using namespace` 从两个模块带来同名、同签名的函数，**静默取先写的那个**，没有任何诊断。按名字的导入已有 `ImportNameConflict`，`using` 这条路没有覆盖 | `camel docs/design/graph-model/examples/defects/using_conflict.cml` 打印 `2` | 使用处的歧义错误（8.2 N2） |
 | D2 | `import sqrt from math` 之后 `sqrt(9.0)` 是 `UnresolvedReference`：实现把单个名字当作模块的别名，而 `docs/language/05_modules.md` 5.2 把这种写法列为"引入一个名字" | `camel docs/design/graph-model/examples/defects/import_one_name.cml` | 实现与文档一致（8.2 N4） |
 | D3 | 写在函数体里的 `using namespace` 对整个模块生效 | `camel docs/design/graph-model/examples/ns/p24_using_scope.cml` 打印 `2 11`（`b` 里没有写 `using` 也能用 `inc`） | 按 8.2 N2：`b` 里的 `inc` 是 `UnresolvedReference` |
-| D4 | 带类型标注的结构体字面量里有算出来的字段时是 `LiteralStaticCastFailed`：`let p: P = { x: a, y: b }`；去掉标注可以 | `camel docs/design/graph-model/examples/defects/struct_annotated.cml` | 通过，打印 `2` |
+| D4 | 带类型标注的结构体字面量里有算出来的字段时是 `LiteralNotRepresentable`：`let p: P = { x: a, y: b }`；去掉标注可以 | `camel docs/design/graph-model/examples/defects/struct_annotated.cml` | 通过，打印 `2` |
 | D5 | `src/compile/gir/validate.cpp` 没有调用点（`debug_json.cpp` 原列在此处，有误：调试器在用，见第 7 节的实施状态）；`GCNodeKind::Bind` 没有创建者；`DraftGraphBuilder::looped_` 没有读写者 | 检索 `assertGraphTreeSealingPreconditions`、`getGirJsonFromCompileGraph`、`addBindNode`、`setLooped` | 删除（第 7 节第 1 步） |
 | D6 | NodeVM 对冻结的图做 `const_cast` 并写入（把解析到的算子函数指针写回节点负载）。冻结图按约定是只读的（`docs/technical/17_graph_rewrite_api_contracts.md` 2.2） | 【读码 `src/passes/sched/nodevm/nodevm.cpp:754-766`】；未构造出可观察的错误 | 解析结果放在后端自己的结构里（4.1 的 `ExecPlan`） |
 

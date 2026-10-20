@@ -648,6 +648,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     std::pair<GCT::node_ptr_t, node_handle_t> lastStatement{};
     for (size_t i = 0; i < gct->size(); i++) {
         StatementState before(*this);
+        // The tail statement of an enclosing body, kept across a statement that fails.
+        const GCT::Node *outerTailStatement = tailStatement_;
         try {
             const auto &child = gct->at(i);
             // Every statement but the last is one whose value nothing takes, and the last one
@@ -656,8 +658,19 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
             // block inside a sync block continues the chain but has statements of its own.
             const bool unused = !gct->operands() && (i + 1 < gct->size() || valueDropped);
             unusedStatement_  = unused ? child : nullptr;
-            any result        = visit(child);
-            unusedStatement_  = nullptr;
+            any result;
+            if (gct == tailExpectedFor_ && i + 1 == gct->size() && !gct->operands()) {
+                // The body's value, in the position of the body (see visitBodyNode). A literal
+                // written here takes that position's type (design principles 5.1), which is
+                // how an arm's value takes the type of the whole `if` / `match`.
+                tailStatement_ = child;
+                ExpectedValueScope tailScope(expectedValueType_, tailExpectedType_);
+                result         = visit(child);
+                tailStatement_ = outerTailStatement;
+            } else {
+                result = visit(child);
+            }
+            unusedStatement_ = nullptr;
             if (unused && result.has_value() && result.type() == typeid(node_handle_t)) {
                 rejectUnusedPureResult(child, any_cast<node_handle_t>(result));
             }
@@ -673,6 +686,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
                 res = valueNodeOf(result);
             }
         } catch (const BuildAbortException &e) {
+            tailStatement_ = outerTailStatement;
             before.restore();
             unusedStatement_ = nullptr;
             failed           = true;

@@ -20,10 +20,12 @@
 #include "globals.h"
 #include "builtin/executors/builtin.h"
 #include "builtin/operators/collection.h"
+#include "builtin/operators/mem.h"
 #include "builtin/operators/derivative.h"
 #include "builtin/operators/enum.h"
 #include "builtin/operators/ops.h"
 #include "builtin/operators/tagged.h"
+#include "builtin/operators/set_value.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
@@ -1509,6 +1511,50 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
+        // A private copy of an array: the first state of a loop whose body only appends to it
+        // (Builder::markLoopStateInPlace), so the literal the program wrote stays a constant and
+        // the loop appends to its own array. Not a name a program can reach for on its own.
+        OperatorGroup::create(
+            "__copy_arr__",
+            {
+                {
+                    ":struct/copy_arr",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(arr: T[]) => T[]",
+                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            return norm[0];
+                        }),
+                },
+            }),
+        // `xs->append<v>` where the compiler proved the old array invisible: the loop body of a
+        // loop whose state is the array, with the state bound only to this call and the first
+        // value a fresh literal (Builder::markLoopStateInPlace). The append may then write into
+        // the state's own buffer (Array::canWriteInPlace) instead of copying the array; when it
+        // cannot, it behaves exactly as `append`. Not a name a program can reach for on its own.
+        OperatorGroup::create(
+            "__append_owned__",
+            {
+                {
+                    ":struct/append_arr_owned",
+                    DynamicFuncTypeResolver::create(
+                        {{1, {false}}, {1, {false}}},
+                        "<value: T> (arr: T[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
+                            const auto &eleType = arrType->elemType();
+                            if (eleType != Type::Void() && !eleType->equals(with[0]))
+                                return nullopt;
+                            return arrType;
+                        }),
+                },
+            }),
         OperatorGroup::create(
             "extend",
             {
@@ -1692,6 +1738,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
+        // ======= Diagnostics =======
+        // `std::mem::buffers()`: the buffer counters as a struct, readable between two
+        // operations (docs/design-principles 10.5; the allocation-count assertions). Declared
+        // with effects below: the counters are not a function of the arguments.
+        OperatorGroup::create(
+            "std::mem::buffers",
+            {{":op/mem_buffers", StaticFuncTypeResolver::create({}, {}, memBuffersStructType())}}),
         // ======= Macros =======
         OperatorGroup::create(
             "__cmp__",
@@ -1755,6 +1808,10 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     }
     // The lowering targets of the enum (design principles 5.3).
     for (const auto &group : getEnumOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // The `set` operators a path assignment lowers to (design principles 3.5).
+    for (const auto &group : getSetValueOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }

@@ -214,12 +214,13 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::LiteralStaticCastFailed,
+            SemanticDiag::LiteralNotRepresentable,
             {
-                "LiteralStaticCastFailed",
-                "Failed to static cast literal data '{0}' to type '{1}'.",
-                "Ensure the literal value is compatible with the target type or use an appropriate "
-                "conversion.",
+                "LiteralNotRepresentable",
+                "The literal '{0}' cannot be represented as type '{1}': {2}.",
+                "A literal the type cannot hold is not wrapped around or cut off, and a value is "
+                "never cut to fit a type. Write a value the type holds, or give the literal a "
+                "wider type.",
             },
         },
         {
@@ -270,9 +271,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::AssignmentTargetNotVariable,
             {
                 "AssignmentTargetNotVariable",
-                "The target of an assignment must be a variable.",
-                "A field, an element or any other expression cannot be assigned: the store "
-                "would go to a temporary. Assign a new value to the whole variable instead.",
+                "The target of an assignment must be a variable, or a path from one.",
+                "A path is a variable followed by any number of fields and elements: 'var p = {{ x: 1 }}; "
+                "p.x = 2' and 'var xs = [1, 2]; xs[0] = 2' are assignments of the whole "
+                "variable (design principles 3.5). Any other expression is a temporary, and a "
+                "store into it would go nowhere: assign the value to the whole variable instead.",
             },
         },
         {
@@ -327,15 +330,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Where the value is known to fit, write the conversion: {2}. A conversion "
                 "written with 'as' is checked when it runs; a value that does not fit stops the "
                 "program at that position.",
-            },
-        },
-        {
-            SemanticDiag::LiteralOutOfRange,
-            {
-                "LiteralOutOfRange",
-                "The literal '{0}' is out of the range of type '{1}' ({2}).",
-                "A literal that its type cannot hold is not wrapped around or cut off. Write a "
-                "value in the range, or give the literal a wider type.",
             },
         },
         {
@@ -679,17 +673,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::AnyNotAllowed,
-            {
-                "AnyNotAllowed",
-                "'any' is not a type a program can write: {0}.",
-                "Every value has a definite type after compilation. A type parameter ('typeas T') "
-                "takes values of several types, a tuple or "
-                "a struct holds values of different types side by side, and 'decode_as' of "
-                "the json module reads JSON of a known shape.",
-            },
-        },
-        {
             SemanticDiag::ConditionNotBool,
             {
                 "ConditionNotBool",
@@ -871,10 +854,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::ModuleTypeCycle,
             {
                 "ModuleTypeCycle",
-                "The type '{0}' is part of a cycle of types across modules: {1}.",
+                "The type '{0}' is part of a cycle of types: {1}.",
                 "Each of these types needs the next one to be declared first, and the last needs "
                 "the first: none of them can be. Remove one of the references that close the "
-                "cycle.",
+                "cycle. A type may contain itself only through an array, a map, a set or an "
+                "enum (design principles 5.2).",
             },
         },
         {

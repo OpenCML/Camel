@@ -159,32 +159,6 @@ class Builder {
     std::shared_ptr<std::set<std::string>> boundDims_;
     bool dimBindAllowed_ = false;
 
-    // `any` is not a type a program can write (design principles 5.10): the name is
-    // not in the type scope, and visitRefType reports it with the form recommended for the
-    // position it was written in. The visitors of those positions set this around the
-    // type they visit (TypePositionGuard in builder.cpp). A type nested in another one is
-    // reported for the innermost of those positions: `any` in `g: (x: int) => any` is the
-    // return type of a function type, in `xs: any[]` the type of a parameter.
-    enum class TypePosition {
-        Other,
-        Parameter,
-        WithParameter,
-        ReturnType,
-        CastTarget,
-        Annotation,
-        TypeDeclaration,
-    };
-    TypePosition typePosition_ = TypePosition::Other;
-    /// Sets typePosition_ while the type of one position is visited.
-    struct TypePositionGuard {
-        TypePositionGuard(Builder &builder, TypePosition position);
-        ~TypePositionGuard();
-        Builder &builder;
-        TypePosition saved;
-    };
-    /// Reports `any` written as a type (AnyNotAllowed) and aborts the declaration.
-    [[noreturn]] void reportAnyType(const AST::node_ptr_t &ast);
-
     // Where the value of what is being lowered goes, as far as the warning
     // ExitInUnusedBranch needs it. A `return` / `throw` in a branch arm ends the arm and
     // gives the value of the `if` / `match` (an arm is a graph of its own); when nothing
@@ -276,10 +250,26 @@ class Builder {
     /// which only the GIR builder knows: each of the two functions is written with a type
     /// variable for it and is instantiated where `map` / `filter` receive it.
     node_ptr_t visitComprehension(const AST::node_ptr_t &ast);
-    /// `ast` lowered where a value of type `type` is expected. An array literal whose
-    /// elements are to be put into `T?` / `T!` is built with the conversions in place, and
-    /// `entered` is set; anything else is visitData(ast).
+    /// `ast` lowered where a value of type `type` is expected: an array literal whose
+    /// elements are to be put into `T?` / `T!` is built with the conversions in place, an
+    /// array or struct literal takes the element (field) type its position gives it (design
+    /// principles 5.1), and anything else is visitData(ast). `entered` is set when the value
+    /// built is the value of the declared type itself (nothing is left to declaredValue).
     node_ptr_t visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &entered);
+    /// The array literal `ast` built with every element in `elemType`, the element type its
+    /// position gives it (`let xs: float[] = [1, 2.0]`, design principles 5.1). A literal
+    /// element becomes the element type exactly; an element that is not a literal keeps its
+    /// type (the GIR builder reports it if it does not fit).
+    node_ptr_t visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, bool &entered);
+    /// The struct literal `ast` built with every field in the type its position gives it
+    /// (`let p: P = { a: 1, b: 2.0 }`). Only when the literal writes exactly the fields of
+    /// `structType`: any other shape is left to the ordinary build, which reports it.
+    node_ptr_t visitStructInto(const AST::node_ptr_t &ast, Type *structType, bool &entered);
+    /// `node` as a constant of `type` when it is a literal the tree kept the exact value of
+    /// (an integer literal becomes the float type exactly, a value out of range or one that
+    /// would be truncated is reported at `at`); the same node when it is not a literal, or
+    /// when the type is not one a literal can be given this way. Null-safe.
+    node_ptr_t literalNodeInType(const node_ptr_t &node, Type *type, const AST::node_ptr_t &at);
     /// The initializer `value` of a declaration written with the type `type` (`let x: T = e`,
     /// lowered from `ast`). A literal is converted to the type here; any other expression is
     /// put under an annotation CAST, which the GIR builder resolves once the type of the value

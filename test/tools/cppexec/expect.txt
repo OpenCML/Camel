@@ -87,3 +87,6 @@ test/cases/compile/entry_args/scalars.cml --arg n=3 --arg n=4
 test/cases/loops/shapes.cml
 test/cases/loops/effects.cml
 test/cases/loops/captures.cml
+# A loop state appended in place (H17 item 4, single and multiple states): the private copy of
+# the first value translates to the array value itself, which `append` copies when it is shared.
+test/cases/trans/cpp/loop_state_in_place.cml

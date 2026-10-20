@@ -27,6 +27,7 @@
 #include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
@@ -43,6 +44,7 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #define DEBUG_LEVEL -1
@@ -210,7 +212,9 @@ node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_
     return drefNode;
 }
 
-bool Builder::genericOperatorAccepts(const template_ptr_t &tmpl, const type_vec_t &normTypes) {
+bool Builder::genericOperatorAccepts(
+    const template_ptr_t &tmpl, const std::vector<Argument> &normInputs,
+    const type_vec_t &normTypes) {
     FunctionType *signature = tmpl->funcType;
     if (signature->withTypesCount() != 0 || signature->normTypesCount() != normTypes.size()) {
         return false;
@@ -228,9 +232,20 @@ bool Builder::genericOperatorAccepts(const template_ptr_t &tmpl, const type_vec_
     }
     for (size_t i = 0; i < normTypes.size(); ++i) {
         Type *wanted = substituteTypeVars(signature->normTypeAt(i), bindings);
-        if (containsTypeVar(wanted) || !entersImplicitly(wanted, valueTypeOf(normTypes[i]))) {
+        if (containsTypeVar(wanted)) {
             return false;
         }
+        if (entersImplicitly(wanted, valueTypeOf(normTypes[i]))) {
+            continue;
+        }
+        // An argument that is an array or struct literal enters the parameter's type (design
+        // principles 5.1); resolveGenericCall makes the conversion once this template is the
+        // one the call means.
+        if (i < normInputs.size() &&
+            compositeLiteralEntersIn(normInputs[i].node, wanted, normInputs[i].expr)) {
+            continue;
+        }
+        return false;
     }
     return true;
 }
@@ -291,7 +306,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         }
         if (!entering) {
             for (const auto &tmpl : set.templates) {
-                if (genericOperatorAccepts(tmpl, normTypes)) {
+                if (genericOperatorAccepts(tmpl, normInputs, normTypes)) {
                     templates.push_back(tmpl);
                 }
             }
@@ -864,6 +879,214 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
     return visitLinkNode(rebinding);
 }
 
+namespace {
+
+/// One place a path assignment writes: a field (`v.f`, `v.0`) or an element (`v[i]`).
+struct PathStep {
+    GCT::node_ptr_t node;   // the ACCS or __idx__ node, as written
+    bool isIndex = false;   // a field of a struct or tuple, or an element of an array
+    size_t field = 0;       // the position of the field
+    std::string selector;   // the name of the index value of an element
+    std::string base;       // the name of the value the step is applied to
+    std::string value;      // the name of the value the step reads
+};
+
+} // namespace
+
+node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
+    // `v.f = e`, `v[i] = e`, `v[i].f += e` (design principles 3.5): the whole value of the
+    // variable is rebound to a `set` chain, so everything downstream sees an ordinary
+    // assignment of `v`:
+    //   LINK(DREF __assn__, <path>, e)  ->
+    //   LINK(DREF __assn__, DREF v,
+    //        LINK(DREF __set_index__, DREF v, i, LINK(DREF __set_field__, DREF v[i], f, e)))
+    // Each step of the path is read once, and each prefix of it is named, so that the chain
+    // refers to the values the reads gave and to the places they came from.
+    const auto isDref = [](const GCT::node_ptr_t &node, std::string_view name = {}) {
+        return node != nullptr && node->type() == GCT::NodeKind::DREF &&
+               (name.empty() || node->name() == name);
+    };
+    if (gct->size() != 3 || !isDref(gct->at(0))) {
+        return nullptr;
+    }
+    // `=` or a compound assignment (`+=`), which is the plain operator over the place's value.
+    const std::string group = gct->at(0)->name();
+    std::optional<std::string_view> plainGroup;
+    if (group != "__assn__") {
+        plainGroup = camel::core::plainGroupOfCompoundAssignment(group);
+        if (!plainGroup.has_value()) {
+            return nullptr;
+        }
+    }
+    // The path, read from its leaf back to the variable it starts at, then in the order it is
+    // written. A place is a field of a struct or tuple or an element of an array; anything else
+    // (`s.0` on a string, `f().x`) is left to the call as written.
+    std::vector<GCT::node_ptr_t> chain;
+    GCT::node_ptr_t root = gct->at(1);
+    while (!isDref(root)) {
+        const bool element = root->type() == GCT::NodeKind::LINK && root->size() == 3 &&
+                             isDref(root->at(0), "__idx__");
+        if (root->type() != GCT::NodeKind::ACCS && !element) {
+            return nullptr;
+        }
+        chain.push_back(root);
+        root = element ? root->at(1) : root->at(0);
+    }
+    if (chain.empty()) {
+        return nullptr; // `v = e`: the whole variable, which is the assignment as written
+    }
+    std::reverse(chain.begin(), chain.end());
+    // The path starts at a variable: its whole value can be stored back into it.
+    const std::string name = moduleLevelName(root->name());
+    if (!nodeAt(name).has_value()) {
+        return nullptr;
+    }
+    const node_handle_t variable = resolveNodeByRef(name);
+    if (!isVariable(variable)) {
+        return nullptr;
+    }
+    Type *rootType = valueTypeOf(nodeTypeOf(variable));
+    if (rootType == nullptr) {
+        return nullptr;
+    }
+    // The types along the path and what each step does.
+    std::vector<PathStep> steps(chain.size());
+    Type *type = rootType;
+    for (size_t i = 0; i < chain.size(); ++i) {
+        PathStep &built = steps[i];
+        built.node      = chain[i];
+        if (chain[i]->type() == GCT::NodeKind::ACCS) {
+            if (type->code() == TypeCode::Struct) {
+                const auto *structType = tt::as_ptr<StructType>(type);
+                const auto index       = structType->findField(chain[i]->accessKey());
+                if (!index.has_value()) {
+                    return nullptr; // the read reports the field that does not exist
+                }
+                built.field = *index;
+                type        = structType->typeAt(*index);
+            } else if (type->code() == TypeCode::Tuple) {
+                const auto *tupleType = tt::as_ptr<TupleType>(type);
+                if (chain[i]->accessIndex() >= tupleType->size()) {
+                    return nullptr; // the read reports the element past the end
+                }
+                built.field = chain[i]->accessIndex();
+                type        = tupleType->typeAt(built.field);
+            } else {
+                return nullptr;
+            }
+        } else {
+            if (type->code() != TypeCode::Array) {
+                return nullptr; // an element of a tuple or struct by a runtime index
+            }
+            built.isIndex = true;
+            type          = tt::as_ptr<ArrayType>(type)->elemType();
+        }
+    }
+    // An array variable is written where it is when the statement is part of a sync block: the
+    // outermost element set takes the variable's own array (`:var/take`) and the store keeps it
+    // as the variable's, so nothing downstream copies. The read must not take the array away.
+    const bool inPlace     = synced_ && rootType->code() == TypeCode::Array;
+    node_handle_t rootRead = inPlace ? peekVariable(variable) : readVariable(variable);
+    const auto make        = [&](GCT::node_ptr_t node, const GCT::node_ptr_t &at) {
+        node->setOrigin(at->origin());
+        return node;
+    };
+    steps.front().base = bindTemporary(rootRead);
+    for (size_t i = 0; i < steps.size(); ++i) {
+        PathStep &step     = steps[i];
+        node_handle_t read = nullptr;
+        if (step.isIndex) {
+            // The index is a value of the program: evaluated once, and named for the set below.
+            node_handle_t indexValue = valueOf(visitOperand(step.node->at(2), step.node));
+            if (nodeIsKind(indexValue, runtime::GCNodeKind::Dref) ||
+                boundWithArgs_.contains(indexValue)) {
+                rejectNameWithoutValue(indexValue, "the index", step.node->at(2));
+            }
+            step.selector        = bindTemporary(indexValue);
+            GCT::node_ptr_t call = make(tree_->makeLink(2), step.node);
+            *call << make(tree_->makeDRef("__idx__"), step.node->at(0))
+                  << make(tree_->makeDRef(step.base), step.node->at(1))
+                  << make(tree_->makeDRef(step.selector), step.node->at(2));
+            read = visitLinkNode(call);
+        } else {
+            GCT::node_ptr_t accs = step.node->accessByIndex()
+                                       ? make(tree_->makeAccs(step.node->accessIndex()), step.node)
+                                       : make(tree_->makeAccs(step.node->accessKey()), step.node);
+            *accs << make(tree_->makeDRef(step.base), step.node->at(0));
+            read = visitAccsNode(accs);
+        }
+        step.value = bindTemporary(read);
+        if (i + 1 < steps.size()) {
+            steps[i + 1].base = step.value;
+        }
+    }
+    // The value written: the right-hand side for `=`, and for a compound assignment the plain
+    // operator over the place's value and the right-hand side (which is therefore read once,
+    // design principles 6.11). The right-hand side takes the type of the place, as it takes the
+    // type of the variable in `v = e`.
+    std::string assigned;
+    {
+        ExpectedValueScope valueScope(expectedValueType_, type);
+        node_handle_t right = valueOf(visitOperand(gct->at(2), gct));
+        if (nodeIsKind(right, runtime::GCNodeKind::Dref) || boundWithArgs_.contains(right)) {
+            rejectNameWithoutValue(right, "the value", gct->at(2));
+        }
+        if (plainGroup.has_value()) {
+            const std::string rightName = bindTemporary(right);
+            GCT::node_ptr_t plain       = make(tree_->makeLink(2), gct);
+            *plain << make(tree_->makeDRef(std::string(*plainGroup)), gct->at(0))
+                   << make(tree_->makeDRef(steps.back().value), chain.back())
+                   << make(tree_->makeDRef(rightName), gct->at(2));
+            right = visitLinkNode(plain);
+        }
+        assigned = bindTemporary(right);
+    }
+    // The set chain, from the deepest place to the variable.
+    GCT::node_ptr_t value = make(tree_->makeDRef(assigned), gct->at(2));
+    for (size_t i = steps.size(); i-- > 0;) {
+        const PathStep &step = steps[i];
+        const bool outermost = i == 0;
+        GCT::node_ptr_t call = make(tree_->makeLink(3), step.node);
+        if (step.isIndex) {
+            GCT::node_ptr_t applied = nullptr;
+            if (outermost && inPlace) {
+                applied = make(tree_->makeLink(1), step.node->at(1));
+                *applied << make(
+                                tree_->makeDRef(std::string(kBuiltinPrefix) + "__var_take__"),
+                                step.node->at(1))
+                         << tree_->clone(root);
+                inPlaceCalls_.insert(call);
+            } else {
+                applied = make(tree_->makeDRef(step.base), step.node->at(1));
+            }
+            *call << make(
+                         tree_->makeDRef(std::string(kBuiltinPrefix) + "__set_index__"),
+                         step.node->at(0))
+                  << applied << make(tree_->makeDRef(step.selector), step.node->at(2)) << value;
+        } else {
+            GCT::node_ptr_t field = make(
+                tree_->makeData(std::make_shared<LongData>(static_cast<int64_t>(step.field))),
+                step.node);
+            *call << make(
+                         tree_->makeDRef(std::string(kBuiltinPrefix) + "__set_field__"),
+                         step.node->at(0))
+                  << make(tree_->makeDRef(step.base), step.node->at(0)) << field << value;
+        }
+        value = call;
+    }
+    // The store: the variable keeps the new value, and the array as its own when it was written
+    // in place (so that the next statement may write it in place again).
+    GCT::node_ptr_t rebinding = make(tree_->makeLink(2), gct);
+    *rebinding
+        << make(
+               tree_->makeDRef(
+                   std::string(kBuiltinPrefix) +
+                   (inPlace ? "__assn_owned__" : "__assn__")),
+               gct->at(0))
+        << tree_->clone(root) << value;
+    return visitLinkNode(rebinding);
+}
+
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
     Type *expectedResult = expectedValueType_;
@@ -875,6 +1098,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         node_handle_t result = visitDecoratedBlock(gct, unusedStatement);
         LEAVE("LINK");
         return result;
+    }
+    // `v.f = e`, `v[i] = e`: the path is lowered to a rebinding of the whole variable, whether
+    // the assignment's value is taken or not.
+    if (node_handle_t rebound = pathAssignmentOf(gct)) {
+        LEAVE("LINK");
+        return rebound;
     }
     if (unusedStatement) {
         if (node_handle_t rebound = rebindingAppendOf(gct)) {
@@ -1139,6 +1368,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 value = literalValueOfExpr(inputs[i].expr);
             }
             if (value.has_value() && literal::kindEnters(*value, param)) {
+                entered[i] = param;
+                continue;
+            }
+            // An array or struct literal is a position with an expected type too (design
+            // principles 5.1): `pick([1.0])` with `xs: f32[]`, `norm({ x: 1.0 })` with a
+            // struct parameter. Its elements are converted once, from the values they were
+            // written as, when the callee is known (enterParameters, coerceTo); a literal that
+            // does not fit is refused there, and one that does not fit at all stays a name
+            // without a matching function.
+            if (i < inputs.size() &&
+                compositeLiteralEntersIn(inputs[i].node, param, inputs[i].expr)) {
                 entered[i] = param;
             }
         }
