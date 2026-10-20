@@ -3105,10 +3105,10 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     if (!signature) {
         fail(
             std::format(
-                "cannot differentiate '{}' of type {}: it must return a float and take a "
-                "differentiable parameter",
+                "cannot differentiate '{}' of type {}: {}",
                 function->name(),
-                type->toString()));
+                type->toString(),
+                differentiationRefusal(type)));
     }
 
     const GraphScope scope{.role = GraphRole::Differentiated};
@@ -3125,16 +3125,9 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     backward.seed(value, draft->materializeStaticValue(one, type->exitType()));
     backward.run(order);
 
-    std::vector<gc_node_ref_t> gradients;
-    for (size_t index : signature->withPorts) {
-        gradients.push_back(backward.gradient(draft->withPorts()[index]));
-    }
-    for (size_t index : signature->normPorts) {
-        gradients.push_back(backward.gradient(draft->normPorts()[index]));
-    }
-    gc_node_ref_t result = gradients.size() == 1
-                               ? gradients.front()
-                               : addAggregate(*draft, signature->gradientType, gradients);
+    // The differential form differentiates the first normal parameter (9.9); the others are
+    // data, and `with` parameters are configuration.
+    gc_node_ref_t result = backward.gradient(draft->normPorts().front());
     if (withValue) {
         const std::array<gc_node_ref_t, 2> pair{value, result};
         result = addAggregate(*draft, signature->functionType->exitType(), pair);
@@ -3182,46 +3175,50 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
 
 } // namespace
 
-std::optional<GradientSignature> gradientSignature(FunctionType *function, bool withValue) {
+std::string differentiationRefusal(FunctionType *function) {
     Type *valueType = function->exitType();
     if (valueType == nullptr ||
         (valueType->code() != TypeCode::Float64 && valueType->code() != TypeCode::Float32)) {
+        return std::format(
+            "it returns {}, not a float", valueType ? valueType->toString() : "nothing");
+    }
+    // `grad` differentiates f's first normal parameter (9.9). `with` parameters are
+    // configuration and play no part in the choice.
+    if (function->normTypesCount() == 0) {
+        return "it has no normal parameter, and grad differentiates the first normal parameter";
+    }
+    Type *first = function->normTypeAt(0);
+    if (first == nullptr) {
+        return "its first normal parameter has no known type";
+    }
+    if (function->normIsVarAt(0)) {
+        return std::format(
+            "its first normal parameter is a `var` of type {}; gradients do not flow through "
+            "variables (design principles 3.5)",
+            first->toString());
+    }
+    if (tangentTypeOf(first) == nullptr) {
+        return std::format(
+            "its first normal parameter has type {}, which has no gradient (a float, a tensor, "
+            "or a struct or tuple of them)",
+            first->toString());
+    }
+    return {};
+}
+
+std::optional<GradientSignature> gradientSignature(FunctionType *function, bool withValue) {
+    if (!differentiationRefusal(function).empty()) {
         return std::nullopt;
     }
     GradientSignature signature;
-    std::vector<Type *> tangents;
-    // A `var` parameter is a variable, not a differentiable input: no gradient is taken with
-    // respect to it.
-    for (size_t i = 0; i < function->withTypesCount(); ++i) {
-        if (function->withIsVarAt(i)) {
-            continue;
-        }
-        if (Type *tangent = tangentTypeOf(function->withTypeAt(i))) {
-            signature.withPorts.push_back(i);
-            tangents.push_back(tangent);
-        }
-    }
-    if (signature.withPorts.empty()) {
-        for (size_t i = 0; i < function->normTypesCount(); ++i) {
-            if (function->normIsVarAt(i)) {
-                continue;
-            }
-            if (Type *tangent = tangentTypeOf(function->normTypeAt(i))) {
-                signature.normPorts.push_back(i);
-                tangents.push_back(tangent);
-            }
-        }
-    }
-    if (tangents.empty()) {
-        return std::nullopt;
-    }
-    signature.gradientType =
-        tangents.size() == 1 ? tangents.front() : TupleType::create(std::move(tangents));
-    Type *result = withValue
-                       ? TupleType::create(std::vector<Type *>{valueType, signature.gradientType})
-                       : signature.gradientType;
-    // The gradient function runs the function: a `var` parameter stays one, so its caller
-    // passes the variable and the function's writes reach it.
+    // The first normal parameter is the differentiated one; every other parameter is passed
+    // through so the gradient function runs the function. A `var` parameter stays one, so its
+    // caller passes the variable and the function's writes reach it.
+    signature.gradientType = tangentTypeOf(function->normTypeAt(0));
+    Type *valueType        = function->exitType();
+    Type *result           = withValue
+                                 ? TupleType::create(std::vector<Type *>{valueType, signature.gradientType})
+                                 : signature.gradientType;
     param_vec_t withParams, normParams;
     for (size_t i = 0; i < function->withTypesCount(); ++i) {
         withParams.emplace_back(function->withTypeAt(i), function->withIsVarAt(i));

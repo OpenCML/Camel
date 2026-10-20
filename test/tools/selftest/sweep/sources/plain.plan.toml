@@ -1,0 +1,25 @@
+# Fixture of test/tools/selftest/run.mjs: a plan outside the sweep's risk tags, so the fast
+# sample keeps one of its four tests. It is not under test/plans.
+id = "selftest.sweep.plain"
+order = 21
+tier = "fast"
+tags = ["selftest", "scalar"]
+
+[defaults]
+kind = "behavior"
+case = "../probe.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "plain.1"
+
+[[tests]]
+name = "plain.2"
+
+[[tests]]
+name = "plain.3"
+
+[[tests]]
+name = "plain.4"

@@ -285,11 +285,11 @@ c3f04c3418d31202 ok examples/cli/temperature.cml
 8a0b0d78f5e80c64 ok examples/data/nullable_lookup.cml
 fc5a00a6e3b575c4 ok examples/data/records.cml
 28fbb7b4eb88a948 ok examples/data/validate_input.cml
-4d0b92c08f1dbc63 ok examples/files/json_config.cml
-ceb9f3a523b169b8 ok examples/files/read_write.cml
+c3846e2459796b9e ok examples/files/json_config.cml
+97757651c6a583b1 ok examples/files/read_write.cml
 6ea08ed18ec94cc1 ok examples/functions/closures.cml
 6cafbc617eaddad9 ok examples/functions/generic_helpers.cml
-ef1b47bbef8438cb ok examples/ml/export_onnx.cml
+c16ff631cdabea37 ok examples/ml/export_onnx.cml
 92c77ccc929a8cf1 ok examples/ml/train_linear.cml
 c1d16903890b5edc ok examples/numeric/monte_carlo_pi.cml
 01c62d482b7860e7 ok examples/numeric/ode_euler.cml
@@ -297,7 +297,7 @@ b2ab4910dbb7b410 ok examples/numeric/random_walk.cml
 eaa19fbeaad142bf ok examples/parallel/parallel_map.cml
 c5b8fc9a9e80c3bd ok examples/perf/fibs.cml
 7262630c8cf322fe ok examples/text/csv_parse.cml
-7a466f25e908258c ok examples/text/log_filter.cml
+5eee970260c8ca08 ok examples/text/log_filter.cml
 21a2efc5a981ddcc ok examples/text/table_report.cml
 30bbc0451981b3c4 ok examples/text/word_frequency.cml
 eb2d753cf93e55ba ok examples/tty/snake.cml
@@ -1439,7 +1439,7 @@ f55a117de4a5f5ff ok test/cases/modules/nn/graph_autograd_multi_param_demo.cml
 5fd02ce42b98d9f4 ok test/cases/modules/nn/matrix_factorization.cml
 d85b0f6c4d1523dc ok test/cases/modules/nn/mlp.cml
 ee603c718a9d27dd ok test/cases/modules/nn/mnist.cml
-4ac80cc1efe2b543 ok test/cases/modules/nn/mnist_py.cml
+c506ff4cdeb7acb7 ok test/cases/modules/nn/mnist_py.cml
 8d2f0e02251ca710 ok test/cases/modules/nn/residual_mlp.cml
 1fa2de30f41bf2f4 ok test/cases/modules/nn/siamese_shared_encoder.cml
 9bf370a1feab62b4 ok test/cases/modules/nn/softmax_axis_error.cml

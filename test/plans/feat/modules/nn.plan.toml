@@ -5,7 +5,7 @@ tags = ["feat", "modules", "nn"]
 
 [[tests]]
 name = "with_context_step_demo"
-desc = "Trains a with-context Linear model: value_and_grad through a with-context helper, then one functional sgd step."
+desc = "Trains a Linear model passed as the loss's first normal parameter (9.9); the remaining `with` parameter is a scale (configuration), and one functional sgd step lowers the loss."
 kind = "behavior"
 case = "../../../cases/modules/nn/with_context_step_demo.cml"
 args = ["${case}", "std::macro", "std::nvm"]
@@ -32,7 +32,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "autograd_linear_demo"
-desc = "Differentiates a loss with two with-parameters: grad returns a tuple of gradients, and .0 drives sgd and a recursive train loop."
+desc = "Differentiates a loss whose first normal parameter is the model (9.9): grad returns one Linear-shaped gradient (the targets are data), and it drives sgd and a recursive train loop."
 kind = "behavior"
 case = "../../../cases/modules/nn/autograd_linear_demo.cml"
 args = ["${case}", "std::macro", "std::nvm"]
@@ -53,8 +53,6 @@ match(/autograd_linear_demo w1=tensor/, out)
 const nums = (line) => (line.match(/-?[0-9]+[.]?[0-9]*(e[-+]?[0-9]+)?/g) || []).map(Number)
 const weightGrad = nums(match(/autograd_linear_demo weight_grad=(.*)/, out)[1])
 assert(approx(weightGrad[0], -2, 1e-6), `expected weight gradient -2, got ${weightGrad[0]}`)
-const yGrad = nums(match(/autograd_linear_demo y_grad=(.*)/, out)[1])
-assert(approx(yGrad[0], 0.5, 1e-6), `expected gradient w.r.t. the y with-parameter 0.5, got ${yGrad[0]}`)
 }
 """
 timeout_ms = 4000
@@ -998,10 +996,10 @@ desc = "Exercises Python-backed MNIST loading, training, and visualization throu
 kind = "behavior"
 case = "../../../cases/modules/nn/mnist_py.cml"
 args = ["${case}"]
-# The training set is downloaded once into tmp/; without network access the test is skipped.
-skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]
-# The download writes the shared tmp/mnist cache; two of these at once could corrupt it.
-parallel = false
+# The training set is downloaded into this test's scratch directory (${test_tmp}/mnist); without
+# network access the test is skipped. The directory is per test, so the download no longer needs
+# the serial mark: two mnist tests cannot write one cache file.
+skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "${test_tmp}/mnist"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1020,10 +1018,9 @@ desc = "MNIST training keeps its result under std::opt::fold: the trained weight
 kind = "behavior"
 case = "../../../cases/modules/nn/mnist_py.cml"
 args = ["${case}", "std::opt::fold", "std::nvm"]
-# The training set is downloaded once into tmp/; without network access the test is skipped.
-skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]
-# Shared tmp/mnist cache (see mnist_py).
-parallel = false
+# The training set is downloaded into this test's scratch directory (see mnist_py); without
+# network access the test is skipped.
+skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "${test_tmp}/mnist"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1042,10 +1039,9 @@ desc = "MNIST training keeps its result under std::opt: the trained weights are 
 kind = "behavior"
 case = "../../../cases/modules/nn/mnist_py.cml"
 args = ["${case}", "std::opt", "std::nvm"]
-# The training set is downloaded once into tmp/; without network access the test is skipped.
-skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]
-# Shared tmp/mnist cache (see mnist_py).
-parallel = false
+# The training set is downloaded into this test's scratch directory (see mnist_py); without
+# network access the test is skipped.
+skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "${test_tmp}/mnist"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1372,3 +1368,29 @@ assert(depth === 2, `expected the int field to survive sgd updates unchanged, go
 }
 """
 timeout_ms = 90000
+
+[[tests]]
+name = "softmax_cross_entropy_labels"
+desc = "softmax_cross_entropy and softmax_cross_entropy_grad overloaded on the target's type: integer class labels (int[] or a rank-1 int64/int32 tensor) give exactly the value and gradient of the one-hot form, which is selected when the target has a floating element type (H20-2)."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_labels.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["softmax_labels loss=1.0058682848905545 1.0058682848905545 1.0058682848905545 1.0058682848905545 grad_diff=0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "softmax_cross_entropy_labels_out_of_range"
+desc = "A label outside the class dimension is a located IndexOutOfRange of the labels form, naming the operator and the length (design principles 3.9)."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_labels_oob.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_stdout_contains = ["RuntimeDiag::IndexOutOfRange", "Index -1 is out of range for the class dimension of softmax_cross_entropy of length 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

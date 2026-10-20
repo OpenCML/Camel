@@ -6,6 +6,7 @@ module read_write
 
 import { split, trim_end } from str
 import { exists, is_file, mkdirs, write_text, try_read_text, file_size } from fs
+import { get_env } from sys
 
 func load(path: string): string {
     let r = try_read_text(path)
@@ -16,7 +17,9 @@ func load(path: string): string {
 }
 
 func main(): int sync {
-    let dir = 'tmp/examples'
+    // The runner's per-test scratch directory; a direct run keeps the header's fixed path.
+    let root = get_env('CAMEL_TEST_TMPDIR')
+    let dir = if root == '' then 'tmp/examples' else root
     let path = dir + '/notes.txt'
     mkdirs(dir)                                     // creates missing parent directories
 

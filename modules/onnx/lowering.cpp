@@ -1023,6 +1023,39 @@ Value lowerBatchNormTrain(const LowerContext &ctx) {
     return Value::aggregate(resultType, {std::move(yV), std::move(rmV), std::move(rvV)});
 }
 
+/// take(t, indices) is ONNX Gather along axis 0: the result has the indices' shape followed by
+/// t's remaining axes, as the Camel operator's inference computes. A constant index list outside
+/// [0, extent) is rejected here (design principles 3.9: the Camel call would fault); a computed
+/// index list is exported as it is.
+Value lowerTake(const LowerContext &ctx) {
+    std::string indices;
+    if (ctx.arg(1).kind == Value::Kind::Constant) {
+        const auto constantIndices = ctx.constInts(1);
+        const auto input           = ctx.facts(0).shape;
+        if (input && !input->empty() && (*input)[0] != tensor::kUnknownDim) {
+            const int64_t extent = (*input)[0];
+            for (const int64_t index : constantIndices) {
+                if (index < 0 || index >= extent) {
+                    throw ExportError(std::format(
+                        "'tensor:take': index {} is out of range for the first dimension of "
+                        "extent {}",
+                        index,
+                        extent));
+                }
+            }
+        }
+        // The operator accepts an int[] as well as an int64 tensor (TensorLike); an array has
+        // no operand name of its own, so it becomes an i64 initializer directly.
+        if (ctx.arg(1).ty && ctx.arg(1).ty->code() == type::TypeCode::Array) {
+            indices = ctx.emitter().int64s(constantIndices);
+        }
+    }
+    if (indices.empty()) {
+        indices = ctx.input(1, TypeCode::Int64);
+    }
+    return ctx.emit("Gather", {ctx.input(0), indices}, {intAttr("axis", 0)});
+}
+
 Value lowerEmbedding(const LowerContext &ctx) {
     return ctx.emit("Gather", {ctx.input(0), ctx.input(1, TypeCode::Int64)}, {intAttr("axis", 0)});
 }
@@ -1107,6 +1140,7 @@ LoweringRegistry::LoweringRegistry() {
     add("nn:batch_norm", lowerBatchNorm, 15);
     add("nn:batch_norm_train", lowerBatchNormTrain, 13);
     add("nn:embedding", lowerEmbedding);
+    add("tensor:take", lowerTake);
 
     // Builtin scalar operators (only reached when an operand depends on the model input).
     for (const char *suffix : {"i", "l", "f", "d"}) {

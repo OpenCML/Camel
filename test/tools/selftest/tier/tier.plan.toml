@@ -1,6 +1,7 @@
-# Fixture of test/tools/selftest/run.mjs: the tier filter. The plan is in the fast layer; one
-# test overrides that to slow, one keeps the plan's layer. `--tier fast` must run two tests,
-# `--tier slow` one, and `--tier all` all three.
+# Fixture of test/tools/selftest/run.mjs: the tier filter and the named-plan rule. The plan is
+# in the fast layer; one test overrides that to slow, one keeps the plan's layer. With this
+# DIRECTORY as the target, `--tier fast` must run two tests, `--tier slow` one, and `--tier all`
+# all three; with this FILE as the target, all three run whatever `--tier` says.
 id = "selftest.tier"
 order = 5
 tier = "fast"
@@ -8,7 +9,7 @@ tier = "fast"
 [defaults]
 tool = "node"
 kind = "behavior"
-case = "selftest_probe.mjs"
+case = "../selftest_probe.mjs"
 args = ["${case}", "echo", "tier"]
 expect_exit = 0
 normalizers = ["normalize_newlines"]

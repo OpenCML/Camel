@@ -2,6 +2,8 @@
  * Tiny valid-convolution CNN trained with autodiff through the conv2d pullback: value_and_grad
  * of the loss gives a TinyCnn-shaped gradient (kernel, bias and head), one sgd step lowers the
  * loss, and a recursive train loop repeats the step.
+ *
+ * The model is the first normal parameter of the loss (9.9).
  */
 module tiny_cnn
 
@@ -15,14 +17,12 @@ type TinyCnn = {
     head: Tensor
 }
 
-with <model: TinyCnn>
-func features(x: Tensor): Tensor {
+func features(model: TinyCnn, x: Tensor): Tensor {
     return tanh(conv2d(x, model.kernel, model.bias))
 }
 
-with <model: TinyCnn>
-func predict(x: Tensor): Tensor {
-    let feat = x->features<model>
+func predict(model: TinyCnn, x: Tensor): Tensor {
+    let feat = features(model, x)
     let flat = reshape(feat, [1, 4])
     return flat @ model.head
 }
@@ -32,9 +32,8 @@ func mse_loss(pred: Tensor, target: Tensor): float {
     return sum(diff * diff) / float(shape(pred)[0])
 }
 
-with <model: TinyCnn>
-func model_loss(x: Tensor, target: Tensor): float {
-    let pred = x->predict<model>
+func model_loss(model: TinyCnn, x: Tensor, target: Tensor): float {
+    let pred = predict(model, x)
     return mse_loss(pred, target)
 }
 
@@ -47,7 +46,7 @@ func init(): TinyCnn {
 }
 
 func train(model: TinyCnn, x: Tensor, target: Tensor, steps: int): TinyCnn {
-    return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(x, target), 0.2), x, target, steps - 1)
+    return if steps == 0 then model else train(sgd(model, grad(model_loss)(model, x, target), 0.2), x, target, steps - 1)
 }
 
 func main(): int sync {
@@ -55,12 +54,12 @@ func main(): int sync {
     let x = reshape([1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0], [1, 1, 3, 3])
     let target = reshape([1.0], [1, 1])
 
-    let before = model_loss<model>(x, target)
-    let vg = value_and_grad(model_loss)<model>(x, target)
+    let before = model_loss(model, x, target)
+    let vg = value_and_grad(model_loss)(model, x, target)
     let stepped = sgd(model, vg.1, 0.2)
-    let after = model_loss<stepped>(x, target)
+    let after = model_loss(stepped, x, target)
     let trained = train(model, x, target, 10)
-    let after_train = model_loss<trained>(x, target)
+    let after_train = model_loss(trained, x, target)
 
     'tiny_cnn metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
     'tiny_cnn kernel={}'->format<stepped.kernel>->println

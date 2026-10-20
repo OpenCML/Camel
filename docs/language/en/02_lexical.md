@@ -65,9 +65,9 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 | Binary | `0b1010` | 10 |
 | Octal (`0` followed by octal digits) | `077` | 63 |
 
-- The type of an integer literal is `int` (64-bit signed), with range -9223372036854775808 to 9223372036854775807.
-- **A literal out of range is a compile-time error** (`SemanticDiag::LiteralOutOfRange`): `9223372036854775808`, `1e400` and `0x8000000000000000` all are. `-9223372036854775808` is in range. A declaration with a type that puts a literal into a narrower type is checked in the same way: `let b: i32 = 3000000000` and `let c: f32 = 1.0e39` are errors. A floating-point literal larger than the largest `float` (`1.0e400`) is this error too.
-- **A literal with an exponent or a decimal point is a floating-point number** ([2.5.2](#252-floating-point-numbers)): `1e6` is a `float` with the value `1000000.0`; `1e-2` is `0.01`. An integer literal has only the four forms of the table above.
+- The default type of an integer literal is `int` (64-bit signed), with range -9223372036854775808 to 9223372036854775807. Where the context asks for another integer type it takes that one ([3.2](03_data_model.md#32-numbers)): the `1` in `let b: i32 = 1` is an `i32`, and in `f(1)` with `f(x: f32)` it is an `f32`.
+- **A literal out of range is a compile-time error** (`SemanticDiag::LiteralOutOfRange`): `9223372036854775808`, `1e400` and `0x8000000000000000` all are. `-9223372036854775808` is in range. A declaration with a type that puts a literal into a narrower type is checked in the same way: `let b: i32 = 3000000000` and `let c: f32 = 1.0e39` are errors. A floating-point literal larger than the largest `float` (`1.0e400`) is this error too. An operation between literals is computed with its exact value before it is put into a type, so `9223372036854775807 + 1` is this error as well (a run-time addition wraps around instead).
+- **A literal with an exponent or a decimal point has `float` as its default type** ([2.5.2](#252-floating-point-numbers)): with no context `1e6` is a `float` with the value `1000000.0`, and `1e-2` is `0.01`; where the context asks for `f32` it takes `f32`. An integer literal has only the four forms of the table above.
 - An exponent is for decimal numbers only: `0b1e5` and `07e2` are `SemanticDiag::InvalidLiteral` (in a hexadecimal number `e` is a digit).
 - There are no digit separators (`1_000` is a syntax error) and no `0o` prefix.
 - **A number token carries no sign, and a minus is always an operator.** Between two operands `+` and `-` are always the binary operators, whatever the spacing: `n - 1`, `n-1` and `n -1` are all subtractions. Where an operand is expected (no value precedes) `-` is the unary minus, and it reads the same before a literal and before a name: it binds less tightly than `^` and more tightly than `->` and the other binary operators ([6.12](06_expressions.md#612-operator-precedence)). `-2 ^ 2` is `-(2 ^ 2)`, that is `-4`; `-2->f` is `(-2)->f`; `-x->f` is `(-x)->f`. A minus applied directly to a number gives the negative literal, so `-1`, `-2.5`, `[-1, 2]`, `f(-1)`, `-9223372036854775808` and `let b: i32 = -2147483648` are written as ever; a `match` pattern may be `case -1 =>`. A `+` before a number is read as its sign (`+2.5`). The sign of an exponent belongs to the number token itself: `1.0e-2`.
@@ -76,13 +76,13 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 ### 2.5.2 Floating-point numbers
 
 - The form is "digits `.` digits", optionally with an exponent (`1.0`, `0.5`, `2.5e+3`, `1.0e-2`), or decimal digits directly followed by an exponent (`1e6`, `1E5`, `1e-2`). There must be digits on both sides of a decimal point (`.5` and `5.` are syntax errors).
-- The type is `float` (64-bit double precision). The value of a literal is the double-precision number nearest to the decimal number written (round to even), the same value that `float('...')` gives for the same text.
+- The default type is `float` (64-bit double precision); where the context asks for `f32` it is an `f32` ([3.2](03_data_model.md#32-numbers)). The value of a literal is the double-precision number nearest to the decimal number written (round to even), the same value that `float('...')` gives for the same text.
 - **A float has one text: the shortest that reads back as the same number.** `println`, `print`, `string(x)`, a `{}` of `format`, and a float element of an array, tuple, struct or `Map` all write the same text:
 
   | Value | Text | Note |
   |---|---|---|
   | `2.0`, `100000.0` | `2.0`, `100000.0` | A float with a whole value keeps `.0`, so it reads back as a float |
-  | `0.1 + 0.2`, `1.0 / 3.0` | `0.30000000000000004`, `0.3333333333333333` | No longer cut to 6 significant digits |
+  | `let a = 0.1; a + 0.2`, `1.0 / 3.0` | `0.30000000000000004`, `0.3333333333333333` | No longer cut to 6 significant digits. `0.1 + 0.2` between literals is computed exactly when the program is compiled and is `0.3` (design principles 5.1) |
   | `0.1`, `3.14159265358979` | `0.1`, `3.14159265358979` | The shortest one |
   | `1.0e21`, `1.0e-7` | `1e+21`, `1e-07` | With a decimal exponent below -4 or of 16 and more the exponent form is used, with a sign and at least two digits |
   | `1.0e15`, `0.0001` | `1000000000000000.0`, `0.0001` | Otherwise the plain decimal form |

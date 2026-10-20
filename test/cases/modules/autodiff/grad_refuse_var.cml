@@ -1,0 +1,16 @@
+/**
+ * Refused: the first normal parameter is a `var`. Gradients do not flow through variables
+ * (design principles 3.5), and the differential form marks no parameter `var` (9.9).
+ */
+module grad_refuse_var
+import { grad } from autodiff
+
+sync func consume(var v: float, w: float): float sync {
+    return v * w
+}
+
+func main(): int sync {
+    var v = 2.0
+    println(grad(consume)(v, 3.0))
+    return 0
+}

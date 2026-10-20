@@ -1,28 +1,44 @@
-// Self-test of the plan runner. It covers three things:
+// Self-test of the plan runner. It covers:
 //
 //   * the back-end matrix (`backends`, `backends_agree`, `known_fail`, the `[defaults]` table):
 //     matrix.plan.toml, whose tests pass and fail on purpose;
 //   * the per-test scratch directory: scratch.plan.toml is run twice, and a test must not see
-//     another test's (or an earlier run's) files in its `${test_tmp}` directory;
+//     another test's (or an earlier run's) files in its `${test_tmp}` directory; the scratch
+//     directory must lie under this run's `tmp/test/run-<pid>`; a file another run keeps under
+//     tmp/test survives, and the run root is removed on success and kept on failure;
 //   * parallel execution, the serial mark and the tier filter: parallel.plan.toml must print the
 //     same status lines in the same order with `--jobs 4` as with `--jobs 1`, and its tests must
-//     overlap; the tests of serial.plan.toml marked `parallel = false` must overlap nothing; and
-//     tier.plan.toml must be selected test by test by `--tier fast|slow|all`.
+//     overlap; the tests of serial.plan.toml marked `parallel = false` must overlap nothing;
+//     tier.plan.toml must be selected test by test by `--tier fast|slow|all` when its DIRECTORY
+//     is the target, and run in full when its FILE is the target;
+//   * the risk-based fast sample of a `[[sweeps]]` entry: three copies for a plan tagged
+//     collections, one for the rest, every copy under `--tier all`;
+//   * the `--changed` mapping: directory rule first, file rules second, the base branch and its
+//     CAMEL_TEST_BASE override.
 import fs from 'fs'
 import path from 'path'
 import { spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { plansForChanges } from '../../runner.mjs'
+import { changedBase, plansForChanges } from '../../runner.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..', '..')
 const runner = path.join(path.dirname(here), 'run-tests.mjs')
 const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, '')
 const problems = []
+const scratchRoot = path.join(repoRoot, 'tmp', 'test')
+// When the self-test runs under the runner, this is its own scratch directory; a direct run
+// keeps the logs under tmp/ with its own pid in the name.
+const probeLogDir = process.env.CAMEL_TEST_TMPDIR || path.join(repoRoot, 'tmp')
+fs.mkdirSync(probeLogDir, { recursive: true })
 
-function runRunner(args) {
-    const proc = spawnSync(process.execPath, [runner, ...args], { encoding: 'utf8', cwd: repoRoot })
-    return { status: proc.status, output: stripAnsi(`${proc.stdout}${proc.stderr}`) }
+function runRunner(args, extraEnv = {}) {
+    const proc = spawnSync(process.execPath, [runner, ...args], {
+        encoding: 'utf8',
+        cwd: repoRoot,
+        env: { ...process.env, ...extraEnv },
+    })
+    return { status: proc.status, output: stripAnsi(`${proc.stdout}${proc.stderr}`), pid: proc.pid }
 }
 
 function statusLines(output) {
@@ -88,35 +104,48 @@ for (const text of mustContain) {
 // Failures fail the run; a known failure alone would not.
 if (matrix.status !== 1) problems.push(`runner exit ${matrix.status}, expected 1`)
 
+// A failed run keeps its root and says where: the per-test directories are gone, but what a
+// program wrote outside them (or a report left later) is evidence, not garbage.
+const matrixRoot = path.join(scratchRoot, `run-${matrix.pid}`)
+if (!output.includes(`[INFO] test scratch kept: ${matrixRoot}`)) {
+    problems.push('the failed run did not print the kept test root')
+}
+if (!fs.existsSync(matrixRoot)) problems.push(`the failed run removed its root: ${matrixRoot}`)
+fs.rmSync(matrixRoot, { recursive: true, force: true })
+
 // --- the per-test scratch directory -----------------------------------------------------------
-// A file a previous run could have left at a fixed path under tmp/test must be cleared before the
-// first test; a model written by one test must not be visible to another; and a second run must
-// inherit nothing from the first. The fixture plan is run twice for exactly that last point.
+// A model written by one test must not be visible to another; a second run must inherit nothing
+// from the first; and the scratch directory must be under this run's own tmp/test/run-<pid>.
 const scratchPlan = path.join(here, 'scratch.plan.toml')
-const staleFile = path.join(repoRoot, 'tmp', 'test', 'stale_from_previous_run.txt')
+// Unique per self-test process: two runners may run the self-test at the same time, and each
+// keeps its own marker under tmp/test (outside every run-<pid> root).
+const markerFile = path.join(scratchRoot, `marker-from-another-run-${process.pid}.txt`)
 for (const attempt of [1, 2]) {
-    fs.mkdirSync(path.dirname(staleFile), { recursive: true })
-    fs.writeFileSync(staleFile, 'a model a previous run left behind')
-    const scratch = runRunner([scratchPlan])
+    fs.mkdirSync(scratchRoot, { recursive: true })
+    fs.writeFileSync(markerFile, 'a file another run keeps')
+    const scratch = runRunner([scratchPlan], { SELFTEST_MARKER: markerFile })
     const where = `scratch run ${attempt}`
     if (scratch.status !== 0) problems.push(`${where}: runner exit ${scratch.status}, expected 0`)
-    for (const name of ['scratch.write', 'scratch.absent', 'scratch.legacy_path_cleared']) {
+    for (const name of ['scratch.write', 'scratch.absent', 'scratch.other_run_untouched']) {
         if (!scratch.output.includes(`[PASS] ${name}`)) problems.push(`${where}: ${name} did not pass`)
     }
     if (!scratch.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0')) {
         problems.push(`${where}: unexpected summary (${summaryLine(scratch.output)})`)
     }
-    if (fs.existsSync(staleFile)) problems.push(`${where}: the planted stale file was not cleared`)
-    if (fs.existsSync(path.join(repoRoot, 'tmp', 'test'))) {
-        problems.push(`${where}: tmp/test was left behind`)
-    }
+    // The test checked, from inside, that its scratch directory is under a `run-*` root of
+    // tmp/test (scratch.other_run_untouched). Here the run's own root, named for its process,
+    // must be gone after a successful run.
+    const runRoot = path.join(scratchRoot, `run-${scratch.pid}`)
+    if (fs.existsSync(runRoot)) problems.push(`${where}: the successful run kept its root ${runRoot}`)
+    if (!fs.existsSync(markerFile)) problems.push(`${where}: removed a file another run keeps`)
 }
+fs.rmSync(markerFile, { force: true })
 
 // --- parallel execution: same output, overlapping tests --------------------------------------
 const parallelPlan = path.join(here, 'parallel.plan.toml')
-const parallelLog = path.join(repoRoot, 'tmp', 'selftest-parallel.log')
+const parallelLog = path.join(probeLogDir, `selftest-parallel-${process.pid}.log`)
 fs.rmSync(parallelLog, { force: true })
-const parallel = runRunner(['--jobs', '4', parallelPlan])
+const parallel = runRunner(['--jobs', '4', parallelPlan], { SELFTEST_PROBE_LOG: parallelLog })
 if (parallel.status !== 0) problems.push(`parallel run: runner exit ${parallel.status}, expected 0`)
 if (!parallel.output.includes('[SUMMARY] total: 6, pass: 6, fail: 0')) {
     problems.push(`parallel run: unexpected summary (${summaryLine(parallel.output)})`)
@@ -138,23 +167,28 @@ if (!overlapped) problems.push('parallel run: no two tests overlapped, so nothin
 
 // The same plan serially: the status lines, in order, must be identical to the parallel run's.
 fs.rmSync(parallelLog, { force: true })
-const serialSamePlan = runRunner(['--jobs', '1', parallelPlan])
+const serialSamePlan = runRunner(['--jobs', '1', parallelPlan], { SELFTEST_PROBE_LOG: parallelLog })
 if (serialSamePlan.status !== 0) problems.push(`serial run of parallel.plan: exit ${serialSamePlan.status}`)
 const parallelOrder = statusLines(parallel.output)
 const serialOrder = statusLines(serialSamePlan.output)
 if (parallelOrder.join('\n') !== serialOrder.join('\n')) {
-    problems.push(`parallel output order differs from serial:\n  parallel: ${parallelOrder.join(', ')}\n  serial:   ${serialOrder.join(', ')}`)
+    problems.push(
+        `parallel output order differs from serial:\n  parallel: ${parallelOrder.join(', ')}\n  serial:   ${serialOrder.join(', ')}`
+    )
 }
-const expectedOrder = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'].map((name) => `PASS parallel.${name}`).join('\n')
+const expectedOrder = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6']
+    .map((name) => `PASS parallel.${name}`)
+    .join('\n')
 if (parallelOrder.join('\n') !== expectedOrder) {
     problems.push(`parallel run printed tests out of plan order: ${parallelOrder.join(', ')}`)
 }
+fs.rmSync(parallelLog, { force: true })
 
 // --- a serial-marked test overlaps nothing ----------------------------------------------------
 const serialPlan = path.join(here, 'serial.plan.toml')
-const serialLog = path.join(repoRoot, 'tmp', 'selftest-serial.log')
+const serialLog = path.join(probeLogDir, `selftest-serial-${process.pid}.log`)
 fs.rmSync(serialLog, { force: true })
-const serial = runRunner(['--jobs', '4', serialPlan])
+const serial = runRunner(['--jobs', '4', serialPlan], { SELFTEST_PROBE_LOG: serialLog })
 if (serial.status !== 0) problems.push(`serial-marked run: runner exit ${serial.status}, expected 0`)
 if (!serial.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0')) {
     problems.push(`serial-marked run: unexpected summary (${summaryLine(serial.output)})`)
@@ -173,30 +207,79 @@ for (let i = 0; i < serialEntries.length; i++) {
         }
     }
 }
+fs.rmSync(serialLog, { force: true })
 
-// --- the tier filter ---------------------------------------------------------------------------
-const tierPlan = path.join(here, 'tier.plan.toml')
-const tierFast = runRunner(['--tier', 'fast', tierPlan])
-const tierSlow = runRunner(['--tier', 'slow', tierPlan])
-const tierAll = runRunner(['--tier', 'all', tierPlan])
+// --- the tier filter, and the named plan that ignores it ---------------------------------------
+// With the DIRECTORY as the target the layer selects test by test; with the FILE as the target
+// the plan runs in full, because naming the plan is the intent.
+const tierDir = path.join(here, 'tier')
+const tierPlan = path.join(tierDir, 'tier.plan.toml')
+const tierFast = runRunner(['--tier', 'fast', tierDir])
+const tierSlow = runRunner(['--tier', 'slow', tierDir])
+const tierAll = runRunner(['--tier', 'all', tierDir])
 if (!tierFast.output.includes('[SUMMARY] total: 2, pass: 2, fail: 0')) {
-    problems.push(`--tier fast: unexpected summary (${summaryLine(tierFast.output)})`)
+    problems.push(`--tier fast (directory): unexpected summary (${summaryLine(tierFast.output)})`)
 }
 if (statusLines(tierFast.output).join(', ') !== 'PASS tier.fast, PASS tier.default') {
-    problems.push(`--tier fast ran: ${statusLines(tierFast.output).join(', ')}`)
+    problems.push(`--tier fast (directory) ran: ${statusLines(tierFast.output).join(', ')}`)
 }
 if (!tierSlow.output.includes('[SUMMARY] total: 1, pass: 1, fail: 0')) {
-    problems.push(`--tier slow: unexpected summary (${summaryLine(tierSlow.output)})`)
+    problems.push(`--tier slow (directory): unexpected summary (${summaryLine(tierSlow.output)})`)
 }
 if (statusLines(tierSlow.output).join(', ') !== 'PASS tier.slow') {
-    problems.push(`--tier slow ran: ${statusLines(tierSlow.output).join(', ')}`)
+    problems.push(`--tier slow (directory) ran: ${statusLines(tierSlow.output).join(', ')}`)
 }
 if (!tierAll.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0')) {
-    problems.push(`--tier all: unexpected summary (${summaryLine(tierAll.output)})`)
+    problems.push(`--tier all (directory): unexpected summary (${summaryLine(tierAll.output)})`)
+}
+for (const [label, run] of [
+    ['default tier', runRunner([tierPlan])],
+    ['--tier fast', runRunner(['--tier', 'fast', tierPlan])],
+    ['--tier slow', runRunner(['--tier', 'slow', tierPlan])],
+]) {
+    if (!run.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0')) {
+        problems.push(`named plan (${label}): unexpected summary (${summaryLine(run.output)})`)
+    }
+    const ran = statusLines(run.output)
+    if (ran.join(', ') !== 'PASS tier.fast, PASS tier.default, PASS tier.slow') {
+        problems.push(`named plan (${label}) ran: ${ran.join(', ')}`)
+    }
+    if (!run.output.includes('named plan target(s) run in full')) {
+        problems.push(`named plan (${label}): the run did not say the named plan runs in full`)
+    }
+}
+
+// --- the risk-based fast sample of a sweep -----------------------------------------------------
+// sweep/ holds two source plans (five tests tagged collections, four scalar tests) and the plan
+// that sweeps them. In the fast layer the risky plan keeps three copies and the plain one one;
+// `--tier all` keeps every copy. The source plans themselves always run.
+const sweepDir = path.join(here, 'sweep')
+const sweepFast = runRunner(['--tier', 'fast', sweepDir])
+if (sweepFast.status !== 0) problems.push(`sweep fast: runner exit ${sweepFast.status}, expected 0`)
+if (!sweepFast.output.includes('[SUMMARY] total: 13, pass: 13, fail: 0')) {
+    problems.push(`sweep fast: unexpected summary (${summaryLine(sweepFast.output)})`)
+}
+const fastPoison = statusLines(sweepFast.output).filter((line) => line.startsWith('PASS poison:'))
+const riskyPoison = fastPoison.filter((line) => line.includes('poison:risky.'))
+const plainPoison = fastPoison.filter((line) => line.includes('poison:plain.'))
+if (fastPoison.length !== 4 || riskyPoison.length !== 3 || plainPoison.length !== 1) {
+    problems.push(
+        `sweep fast sampled ${fastPoison.length} copies (risky ${riskyPoison.length}, plain ${plainPoison.length}), expected 3 + 1`
+    )
+}
+const sweepAll = runRunner(['--tier', 'all', sweepDir])
+if (sweepAll.status !== 0) problems.push(`sweep all: runner exit ${sweepAll.status}, expected 0`)
+if (!sweepAll.output.includes('[SUMMARY] total: 18, pass: 18, fail: 0')) {
+    problems.push(`sweep all: unexpected summary (${summaryLine(sweepAll.output)})`)
+}
+if (statusLines(sweepAll.output).filter((line) => line.includes('poison:')).length !== 9) {
+    problems.push('sweep --tier all did not keep every copy')
 }
 
 // --- the --changed mapping ---------------------------------------------------------------------
 const hasPlan = (selection, name) => selection !== null && selection.names.includes(name)
+const hasTarget = (selection, relative) =>
+    selection !== null && selection.targets.some((target) => path.resolve(target) === path.join(repoRoot, relative))
 const scheduler = plansForChanges(['src/passes/sched/fastvm/dispatch.cpp'])
 if (!hasPlan(scheduler, 'smoke') || !hasPlan(scheduler, 'feat/linear')) {
     problems.push(`--changed: src/passes/sched/ selected ${scheduler ? scheduler.names.join(', ') : 'nothing'}`)
@@ -205,14 +288,59 @@ const docs = plansForChanges(['docs/test-plans.md'])
 if (!hasPlan(docs, 'feat/docs_links.plan.toml')) {
     problems.push(`--changed: docs/ selected ${docs ? docs.names.join(', ') : 'nothing'}`)
 }
+// Directory first: the module's own plan directory, not the broad `modules/` mapping.
+const tensor = plansForChanges(['modules/tensor/ops/matmul.cpp'])
+if (!hasTarget(tensor, 'test/plans/feat/modules/tensor')) {
+    problems.push(
+        `--changed: modules/tensor/ selected ${tensor ? tensor.targets.join(', ') || tensor.names.join(', ') : 'nothing'}`
+    )
+}
+if (tensor && (tensor.names.length !== 0 || tensor.targets.length !== 1)) {
+    problems.push(`--changed: modules/tensor/ fell through to the file rules as well: ${JSON.stringify(tensor)}`)
+}
+const nn = plansForChanges(['modules/nn/ops.cpp'])
+if (!hasTarget(nn, 'test/plans/feat/modules/nn.plan.toml')) {
+    problems.push(`--changed: modules/nn/ did not select its plan file`)
+}
+// A test case takes the directory rule too, down to the deepest plan that mirrors its
+// directory: test/cases/compile/enum/ selects feat/compile/enum.plan.toml, not all of
+// feat/compile; test/cases/modules/tensor/ selects the tensor plan directory.
+for (const [file, expectedTarget] of [
+    ['test/cases/compile/enum/shapes.cml', 'test/plans/feat/compile/enum.plan.toml'],
+    ['test/cases/modules/tensor/bounds.cml', 'test/plans/feat/modules/tensor'],
+]) {
+    const selection = plansForChanges([file])
+    if (!hasTarget(selection, expectedTarget)) {
+        problems.push(`--changed: ${file} did not select ${expectedTarget}`)
+    }
+}
+// test/cases/loops/ has no plan directory of its own: the file rule names the linear plan.
+const loopCase = plansForChanges(['test/cases/loops/onnx_refused.cml'])
+if (!hasPlan(loopCase, 'feat/linear/loops.plan.toml')) {
+    problems.push(
+        `--changed: test/cases/loops/ selected ${loopCase ? loopCase.names.join(', ') : 'nothing'}`
+    )
+}
 const planFile = 'test/plans/smoke/core.plan.toml'
 const ownPlan = plansForChanges([planFile])
-if (!ownPlan || !ownPlan.targets.some((target) => path.resolve(target) === path.join(repoRoot, planFile))) {
+if (!hasTarget(ownPlan, planFile)) {
     problems.push(`--changed: ${planFile} did not select itself`)
 }
 if (plansForChanges(['no/such/directory/file.txt']) !== null) {
     problems.push('--changed: an unmatched path selected plans instead of falling back')
 }
+// The base branch: origin/develop by default, overridden by CAMEL_TEST_BASE.
+const savedBase = process.env.CAMEL_TEST_BASE
+delete process.env.CAMEL_TEST_BASE
+if (changedBase() !== 'origin/develop') {
+    problems.push(`--changed: the default base is ${changedBase()}, expected origin/develop`)
+}
+process.env.CAMEL_TEST_BASE = 'origin/release'
+if (changedBase() !== 'origin/release') {
+    problems.push(`--changed: CAMEL_TEST_BASE did not override the base (${changedBase()})`)
+}
+if (savedBase === undefined) delete process.env.CAMEL_TEST_BASE
+else process.env.CAMEL_TEST_BASE = savedBase
 
 if (problems.length > 0) {
     console.error(problems.join('\n'))

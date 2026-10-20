@@ -12,7 +12,10 @@ func sub(a: float, b: float): float { return a - b }
 func main(): int sync {
     let pz = 0.0
     let nz = neg(0.0)
-    let nan = sub(1.0e308 * 10.0, 1.0e308 * 10.0)
+    // Infinity is reached at run time: `1.0e308 * 10.0` written with literals only is the
+    // exact 1e309, which no float type can hold (design principles 5.1), so it is an error.
+    let big = 1.0e308
+    let nan = sub(big * 10.0, big * 10.0)
     println(max(pz, nz))
     println(max(nz, pz))
     println(min(pz, nz))

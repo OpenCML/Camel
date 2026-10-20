@@ -15,8 +15,7 @@ import { get_env } from sys
 
 type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
 
-with <m: Mlp>
-func loss(x: Tensor): float {
+func loss(m: Mlp, x: Tensor): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     let s = mean(y * y)
@@ -25,7 +24,7 @@ func loss(x: Tensor): float {
 }
 
 func step(m: Mlp, x: Tensor): (float, Mlp) {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = value_and_grad(loss)(m, x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 

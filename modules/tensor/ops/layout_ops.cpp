@@ -35,6 +35,8 @@
 
 #include <format>
 #include <array>
+#include <span>
+#include <vector>
 
 namespace camel::tensor::ops {
 
@@ -338,6 +340,190 @@ std::optional<Type *> sliceInfer(const InferContext &ctx) {
     return tensorOf(in);
 }
 
+// ---------------------------------------------------------------- take / one_hot
+
+bool isIntegerCode(const std::optional<TypeCode> &code) {
+    return !code || *code == TypeCode::Int32 || *code == TypeCode::Int64;
+}
+
+bool isIntegerType(const Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (type->code() == TypeCode::Array) {
+        const Type *elem = static_cast<const ArrayType *>(type)->elemType();
+        return elem != nullptr &&
+               (elem->code() == TypeCode::Int32 || elem->code() == TypeCode::Int64);
+    }
+    return type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64;
+}
+
+/// An integer list argument: an int array or a rank-1 integer tensor, read as int64.
+std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view op) {
+    Type *type = args.type(index);
+    if (type->code() == TypeCode::Array) {
+        ::Array *array = args.get<::Array *>(index);
+        // An empty literal `[]` has no element type to infer from (H15 literal context typing is
+        // not here yet); there are no elements to convert, so it is the empty integer list.
+        if (array->size() == 0) {
+            return {};
+        }
+        if (!isIntegerType(type)) {
+            reportShapeError(op, "expects an integer array");
+        }
+        return parseIntArray(array, type);
+    }
+    const TensorObject *tensor = tensorArg(args, index);
+    if (tensor->dtype() != TypeCode::Int64 && tensor->dtype() != TypeCode::Int32) {
+        reportShapeError(op, "expects integer indices");
+    }
+    if (tensor->rank() != 1) {
+        reportShapeError(op, "expects a rank-1 index tensor");
+    }
+    std::vector<int64_t> values(tensor->numel());
+    for (uint64_t i = 0; i < tensor->numel(); ++i) {
+        values[static_cast<size_t>(i)] = tensor->getAsInt64(i);
+    }
+    return values;
+}
+
+// take(t, indices): rows along the first axis, in the order the indices give.
+slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const TensorObject *input = tensorArg(norm, 0);
+    if (input->rank() < 1) {
+        reportShapeError("take", "expects a tensor with at least one dimension");
+    }
+    const std::vector<int64_t> indices = intListArg(norm, 1, "take");
+    const int64_t extent               = input->dim(0);
+    for (const int64_t index : indices) {
+        if (index < 0 || index >= extent) {
+            throwRuntimeFault(
+                RuntimeDiag::IndexOutOfRange,
+                index,
+                std::string("the first dimension of the input tensor"),
+                extent);
+        }
+    }
+    return runKernel("take", [&] {
+        return wrap(k::take(input, indices, resultAllocator()));
+    });
+}
+
+std::optional<Type *> takeInfer(const InferContext &ctx) {
+    const TensorFacts input   = ctx.facts(0);
+    const TensorFacts indices = ctx.facts(1);
+    if (!isIntegerCode(indices.dtype)) {
+        throw ShapeError("take indices must be an integer array or a rank-1 integer tensor");
+    }
+    if (input.shape && input.shape->empty()) {
+        throw ShapeError("take expects a tensor with at least one dimension");
+    }
+    if (indices.shape && indices.shape->size() != 1) {
+        throw ShapeError("take indices must be an int array or a rank-1 integer tensor");
+    }
+
+    StaticShape out;
+    const int64_t extent = input.shape ? (*input.shape)[0] : kUnknownDim;
+    if (const auto constant = ctx.constInts(1)) {
+        if (extent != kUnknownDim) {
+            for (const int64_t index : *constant) {
+                if (index < 0 || index >= extent) {
+                    throw ShapeError(std::format(
+                        "index {} is out of range for the first dimension of extent {}",
+                        index,
+                        extent));
+                }
+            }
+        }
+        out.push_back(static_cast<int64_t>(constant->size()));
+    } else if (indices.shape) {
+        out.push_back((*indices.shape)[0]);
+    } else {
+        out.push_back(kUnknownDim);
+    }
+    if (input.shape) {
+        out.insert(out.end(), input.shape->begin() + 1, input.shape->end());
+    } else {
+        return tensorOf(input.dtype, std::nullopt);
+    }
+    return tensorOf(input.dtype, out);
+}
+
+// take_grad(t, indices, dy): scatter-add dy back into t's shape.
+slot_t takeGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const TensorObject *input = tensorArg(norm, 0);
+    if (input->rank() < 1) {
+        reportShapeError("take_grad", "expects a tensor with at least one dimension");
+    }
+    const std::vector<int64_t> indices = intListArg(norm, 1, "take_grad");
+    const int64_t extent               = input->dim(0);
+    for (const int64_t index : indices) {
+        if (index < 0 || index >= extent) {
+            throwRuntimeFault(
+                RuntimeDiag::IndexOutOfRange,
+                index,
+                std::string("the first dimension of the input tensor"),
+                extent);
+        }
+    }
+    const TensorObject *dy = tensorArg(norm, 2);
+    return runKernel("take_grad", [&] {
+        return wrap(k::takeGrad(input, indices, dy, resultAllocator()));
+    });
+}
+
+std::optional<Type *> takeGradInfer(const InferContext &ctx) {
+    return tensorOf(ctx.facts(0).dtype, ctx.facts(0).shape);
+}
+
+// one_hot(labels, classes): [len(labels), classes] float32 rows.
+slot_t oneHotKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const int64_t classes              = intArg(norm, 1);
+    const std::vector<int64_t> labels = intListArg(norm, 0, "one_hot");
+    if (classes < 0) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument, "one_hot", std::string("classes must be non-negative"));
+    }
+    for (const int64_t label : labels) {
+        if (label < 0 || label >= classes) {
+            throwRuntimeFault(
+                RuntimeDiag::IndexOutOfRange,
+                label,
+                std::string("the class dimension of one_hot"),
+                classes);
+        }
+    }
+    return runKernel("one_hot", [&] {
+        return wrap(k::oneHot(labels, classes, resultAllocator()));
+    });
+}
+
+std::optional<Type *> oneHotInfer(const InferContext &ctx) {
+    const TensorFacts labels = ctx.facts(0);
+    if (!isIntegerCode(labels.dtype)) {
+        throw ShapeError("one_hot labels must be an integer array or a rank-1 integer tensor");
+    }
+    if (labels.shape && labels.shape->size() != 1) {
+        throw ShapeError("one_hot labels must be an int array or a rank-1 integer tensor");
+    }
+    const auto classes = ctx.constInt(1);
+    if (classes && *classes < 0) {
+        throw ShapeError("one_hot classes must be non-negative");
+    }
+    StaticShape out;
+    if (const auto constant = ctx.constInts(0)) {
+        out.push_back(static_cast<int64_t>(constant->size()));
+    } else if (const auto partial = ctx.partialInts(0)) {
+        out.push_back(static_cast<int64_t>(partial->size()));
+    } else if (labels.shape) {
+        out.push_back((*labels.shape)[0]);
+    } else {
+        out.push_back(kUnknownDim);
+    }
+    out.push_back(classes.value_or(kUnknownDim));
+    return tensorOf(TypeCode::Float32, out);
+}
+
 // ---------------------------------------------------------------- VJP rules
 
 // transpose swaps the last two axes, so it is its own inverse.
@@ -398,6 +584,17 @@ void sliceVjp(VjpBuilder &b, const VjpCall &call) {
         b.accumulateGradient(
             call.inputs[0],
             b.addOper(vjpTensorType(), "tensor:slice_grad", inputs));
+    }
+}
+
+// take(t, indices): rows are selected with repetition, so the reverse scatters dy back and
+// sums where an index repeats. The indices take no gradient.
+void takeVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        b.accumulateGradient(
+            call.inputs[0],
+            addTensorOper(b, "tensor:take_grad", {call.inputs[0], call.inputs[1], *dy}));
     }
 }
 
@@ -476,6 +673,32 @@ std::vector<OpDef> layoutOps() {
         .infer     = sliceInfer,
         .kernel    = &sliceKernel,
         .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "take",
+        .exports   = {"take"},
+        .params    = {{"t", ParamKind::Tensor}, {"indices", ParamKind::TensorLike}},
+        .resultDoc = "Tensor",
+        .infer     = takeInfer,
+        .kernel    = &takeKernel,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "take_grad",
+        .exports   = {},
+        .params    = {{"t", ParamKind::Tensor},
+                      {"indices", ParamKind::TensorLike},
+                      {"dy", ParamKind::Tensor}},
+        .resultDoc = "Tensor",
+        .infer     = takeGradInfer,
+        .kernel    = &takeGradKernel,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "one_hot",
+        .exports   = {"one_hot"},
+        .params    = {{"labels", ParamKind::TensorLike}, {"classes", ParamKind::Int}},
+        .resultDoc = "Tensor",
+        .infer     = oneHotInfer,
+        .kernel    = &oneHotKernel,
+        .traits    = {}});
     setVjp(defs, "transpose", &transposeVjp);
     setVjp(defs, "reshape", &reshapeLikeVjp);
     setVjp(defs, "flatten", &reshapeLikeVjp);
@@ -483,6 +706,7 @@ std::vector<OpDef> layoutOps() {
     setVjp(defs, "permute", &permuteVjp);
     setVjp(defs, "concat", &concatVjp);
     setVjp(defs, "slice", &sliceVjp);
+    setVjp(defs, "take", &takeVjp);
     setVjp(defs, "shape", &camel::core::noGradient);
     return defs;
 }

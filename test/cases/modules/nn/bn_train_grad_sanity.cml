@@ -58,14 +58,20 @@ func main(): int sync {
     let dRv = sum(abs(got.2 - ref.2))
 
     // Autodiff through the op vs the gradient operator applied to dL/dy = w; the running
-    // statistics must see exactly ZERO gradient (the update is not differentiated).
-    let grads = grad(loss)(x(), g, b, rm, rv)
+    // statistics must see exactly ZERO gradient (the update is not differentiated). Only the
+    // first normal parameter is differentiated, so gamma/beta/running statistics are reached
+    // through lambdas that put each in the first position (9.9).
+    let gradX = grad(loss)(x(), g, b, rm, rv)
+    let gradG = grad((gg: Tensor): float => loss(x(), gg, b, rm, rv))(g)
+    let gradB = grad((bb: Tensor): float => loss(x(), g, bb, rm, rv))(b)
+    let gradRm = grad((rrm: Tensor): float => loss(x(), g, b, rrm, rv))(rm)
+    let gradRv = grad((rrv: Tensor): float => loss(x(), g, b, rm, rrv))(rv)
     let manual = batch_norm_train_grad(x(), g, w(), 0.00001)
-    let dX = sum(abs(grads.0 - manual.0))
-    let dG = sum(abs(grads.1 - manual.1))
-    let dB = sum(abs(grads.2 - manual.2))
-    let dRmGrad = sum(abs(grads.3))
-    let dRvGrad = sum(abs(grads.4))
+    let dX = sum(abs(gradX - manual.0))
+    let dG = sum(abs(gradG - manual.1))
+    let dB = sum(abs(gradB - manual.2))
+    let dRmGrad = sum(abs(gradRm))
+    let dRvGrad = sum(abs(gradRv))
 
     // Finite differences: gamma[0], beta[0], x[0,0,0,0] (h = 0.001).
     let fdG0 = (loss(x(), reshape([1.201, 0.8], [2]), b, rm, rv) - loss(x(), reshape([1.199, 0.8], [2]), b, rm, rv)) / 0.002
@@ -78,9 +84,9 @@ func main(): int sync {
     ], [2, 2, 2, 2])
     let fdX0 = (loss(xp, g, b, rm, rv) - loss(xm, g, b, rm, rv)) / 0.002
 
-    let g0 = sum(grads.1 * reshape([1.0, 0.0], [2]))
-    let b0 = sum(grads.2 * reshape([1.0, 0.0], [2]))
-    let x0 = sum(grads.0 * reshape([
+    let g0 = sum(gradG * reshape([1.0, 0.0], [2]))
+    let b0 = sum(gradB * reshape([1.0, 0.0], [2]))
+    let x0 = sum(gradX * reshape([
         1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     ], [2, 2, 2, 2]))
 

@@ -1,0 +1,9 @@
+/**
+ * A real literal does not become an `int` because the other operand is one, and an `int` does
+ * not become a real one: the two numbers are of different types (design principles 5.1).
+ */
+func main(): int sync {
+    let n: int = 1
+    println(n + 1.0)
+    return 0
+}

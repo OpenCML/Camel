@@ -25,14 +25,13 @@ func hard_sign(x: Tensor): Tensor {
 
 type P = { w: Tensor, b: Tensor }
 
-with <m: P>
-func loss(x: Tensor): float {
+func loss(m: P, x: Tensor): float {
     let h = hard_sign(x @ m.w + m.b)
     return sum(tanh(h + x @ m.w) * h)
 }
 
 func step(m: P, x: Tensor): (float, P) {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = value_and_grad(loss)(m, x)
     return (vg.0, sgd(m, vg.1, 0.1))
 }
 

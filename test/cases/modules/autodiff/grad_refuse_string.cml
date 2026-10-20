@@ -1,0 +1,12 @@
+/** Refused: the first normal parameter is a string, which has no tangent (grad differentiates it, 9.9). */
+module grad_refuse_string
+import { grad } from autodiff
+
+func greet(name: string): float {
+    return 1.0
+}
+
+func main(): int sync {
+    println(grad(greet)('world'))
+    return 0
+}

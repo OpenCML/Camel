@@ -1056,8 +1056,9 @@ func f(x: float, y: float): float {
 
 func main(): int sync {
     println(f(3.0, 2.0))
-    println(grad(f)(3.0, 2.0))                 // (df/dx, df/dy) = (2xy, x^2 + 1)
-    println(value_and_grad(f)(3.0, 2.0))
+    println(grad(f)(3.0, 2.0))                 // df/dx = 2xy = 12; y is data
+    println(value_and_grad(f)(3.0, 2.0))       // (20, 12)
+    println(grad((y: float): float => f(3.0, y))(2.0))  // df/dy = 10
     return 0
 }
 ```
@@ -1067,15 +1068,18 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 ```
 
 ```text
-20
-(12, 10)
-(20, (12, 10))
+20.0
+12.0
+(20.0, 12.0)
+10.0
 ```
 
-- `grad(f)` returns a function that gives one partial derivative for each parameter of `f`.
+- `grad(f)` returns a function that differentiates the first normal parameter of `f` ([design principles](../design-principles.en.md) 9.9); every other normal parameter is data and takes no part in it. The gradient has the same shape as the parameter differentiated: a `float` gives a `float`, a tensor a tensor of the same shape, a struct a struct of the same shape.
+- `value_and_grad(f)` returns `(value, gradient)`.
+- To differentiate another parameter, move it to the front with a lambda: `grad((y: float): float => f(3.0, y))(2.0)`.
 - `grad` is a macro operator. The `std::macro` in the pipeline expands it into the graph of the derivative before anything runs, and the optimisation passes after it can go on to optimise that graph. This is a precondition of this library, not a constraint of the language.
-- The function being differentiated is written as pure data flow with `let`; when a gradient would have to pass through reads and writes of a `var`, it is rejected outright.
-- One training step is "gradient + update": the weights of the model are written as `with` parameters, `grad(loss)<model>(x, y)` differentiates with respect to the weights, and `sgd` from the `nn` module gives the updated weights. For a complete example see [`examples/ml/train_linear.cml`](../../examples/ml/train_linear.cml).
+- The function being differentiated is written as pure data flow with `let`; when a gradient would have to pass through reads and writes of a `var`, it is rejected outright. `grad` also refuses at compile time when the first normal parameter is a `var`, has no tangent (a `string`, an `int`, ...), or when the function has no normal parameter at all, and says which of these it is.
+- One training step is "gradient + update": the model is the first normal parameter of the loss, `grad(loss)(model, x, y)` differentiates it, and `sgd` from the `nn` module gives the updated weights. `with` parameters are configuration only and are not differentiated: `grad(loss)<cfg>(model, x, y)` passes the configuration on to the gradient function. For a complete example see [`examples/ml/train_linear.cml`](../../examples/ml/train_linear.cml).
 
 ## Where to go next
 

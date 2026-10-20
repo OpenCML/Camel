@@ -33,5 +33,8 @@ slot_t __rand_randint__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __rand_choice__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __rand_sample__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __rand_shuffle__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __rand_key__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __rand_split__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __rand_permutation__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getRandomOpsMap();
