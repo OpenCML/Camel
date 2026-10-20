@@ -587,6 +587,10 @@ class Formatter {
 
     std::any visitTypeList(cst::TypeList context);
 
+    std::any visitTypeArguments(cst::TypeArguments context);
+
+    std::any visitNamedTypeArgument(cst::NamedTypeArgument context);
+
     std::any visitTupleType(cst::TupleType context);
 
     std::any visitFuncType(cst::FuncType context);

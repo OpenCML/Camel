@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -37,7 +37,6 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/core/type/composite/union.h"
 #include "camel/core/type/other.h"
 #include "camel/runtime/graph.h"
 

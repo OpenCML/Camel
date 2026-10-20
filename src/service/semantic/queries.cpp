@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1075,6 +1075,58 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
         std::string prefix;
         for (const std::string &part : path) {
             prefix += (prefix.empty() ? "" : "::") + part;
+        }
+        // The variants of an enum type: `Shape::` offers `Circle`, `Rect`, `Empty`. The name
+        // may stand for a type of this file or for one imported from another module. When it
+        // does, these are the members, and no namespace of that name is consulted: the compiler
+        // lets the import of a type bring its name as a prefix (`Shape` imports as `Shape`).
+        if (path.size() == 1) {
+            std::set<std::string> offered;
+            const auto offer = [&](const std::string &name, const std::string &detail) {
+                if (!offered.insert(name).second) {
+                    return;
+                }
+                Completion item;
+                item.label  = name;
+                item.kind   = Completion::Kind::Field;
+                item.detail = detail;
+                items.push_back(std::move(item));
+            };
+            const auto offerVariants = [&](uint32_t fileIndex, uint32_t declId) {
+                const FileModel &where = files_[fileIndex];
+                for (uint32_t type : where.declFacts[declId].types) {
+                    for (const auto &[name, detail] : types_[type].variants) {
+                        offer(name, detail);
+                    }
+                }
+            };
+            const std::vector<uint32_t> decls =
+                file.syntax.lookup(file.syntax.scopeAt(offset), path.front(), offset, true);
+            for (uint32_t id : decls) {
+                const Decl &decl = file.syntax.decls[id];
+                if (decl.kind == DeclKind::Type) {
+                    offerVariants(0, id);
+                } else if (decl.kind == DeclKind::Import) {
+                    const DeclFacts &facts = file.declFacts[id];
+                    for (const auto &[name, detail] : facts.importedVariants) {
+                        offer(name, detail);
+                    }
+                    for (const Location &at : facts.imported) {
+                        if (at.file >= files_.size()) {
+                            continue;
+                        }
+                        for (const Decl &remote : files_[at.file].syntax.decls) {
+                            if (remote.kind == DeclKind::Type && remote.name == decl.name) {
+                                offerVariants(at.file, remote.id);
+                            }
+                        }
+                    }
+                }
+            }
+            // An enum type's variants are what follows `Shape::`; nothing else of that name is.
+            if (!items.empty()) {
+                return items;
+            }
         }
         if (auto ns = namespaces_.find(prefix); ns != namespaces_.end()) {
             std::set<std::string> seen;

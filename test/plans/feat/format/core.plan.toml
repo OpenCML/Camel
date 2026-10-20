@@ -120,3 +120,17 @@ snapshot_compare = "text_exact"
 golden = "./golden/type_params.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "format.match_and_type_arguments_snapshot"
+desc = "Formats a match whose arms are a literal and enum patterns, and calls with positional and named explicit type arguments (both used to crash camel-format or to have no formatting rule)."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/match_and_type_arguments.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/match_and_type_arguments.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

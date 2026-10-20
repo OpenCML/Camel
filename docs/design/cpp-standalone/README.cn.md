@@ -183,6 +183,7 @@ int main(int argc, char **argv) { return camel::standalone::run(argc, argv, a01_
 | `T[]` | `rt::Array<T>` | 句柄，指向 `{计数, 长度, 容量, T 元素}`；元素是 `T` 的 C++ 表示，`int[]` 是连续的 `int64_t`。计数为 1 时“返回新值”的算子在原处改（5.2） |
 | 元组 `(A, B)` | 生成的 `struct`（`Tuple_i64_str { int64_t _0; rt::Str _1; }`） | 按值。带 `==`（逐个元素，4.2）与打印 |
 | 结构体 `{ x: A }` | 生成的 `struct`，字段同名 | 按值。类型有别名时用别名作类型名 |
+| 枚举 `enum { A(T), B { x: A }, C }` | 生成的 `struct`：`tag`（第几个变体）与 `std::variant<std::monostate, A, B, C> value`，每个变体一个嵌套的载荷 `struct`；`make<Tag>`、`get<Tag, Index>` 由声明生成 | `tag` 与字段下标在图上都是常量，所以是模板参数（`Shape::make<1>(2.0, 3.0)`、`rt::enumField<1, 0>(x)`）。按值。带 `==`（先比 `tag`，再比载荷）与打印（`Shape::Rect { w: 2.0, h: 3.0 }`，与解释器逐字节相同） |
 | `T?` | `rt::Opt<T>` | 标量是“值 + 一位标记”；句柄类型用空句柄表示空，不多占位 |
 | `T!` | `rt::Fallible<T>` | “值 + 错误句柄”，错误句柄非空即出错 |
 | 错误值 | `rt::Error` | 句柄，指向固定的内建结构：种类名、消息、源码位置（3.9） |
@@ -442,7 +443,7 @@ python3 test/tools/cppexec/run.py [--passes "std::opt::inline"] [--jobs N] 程�
 | 0 | 本稿 | 提交 |
 | 1 | 新转译器的骨架（3.1 的分工；执行序；分支语句；臂并入；区域形态）；`camel/standalone/` 的 `core.h`、`num.h`、`str.h`、`format.h`；标量、字符串、`println`/`print`/`format` 与今天的子集用到的其余算子（独立译法或桥）；`cppexec` 与默认测试集里的用例；`camel-cpp` 与文档 | 今天能译的程序全部编得过；与 `std::fvm` 不同的只剩阶段 2 要做的三类（故障报告、递归上限、深尾递归）；编译时间的数字 |
 | 2 | 回绕运算与带位置的算子；自尾调用写成循环；递归计数与大栈线程；故障报告；`main` 的返回值与 `exit` | 上一行剩下的三类都相同；`fib(32)` 等基准对 `std::fvm`、`std::jit` 的数字 |
-| 3 | 数组（含 `range`、`len`、下标、`slice`、`concat`、`append`）、元组与结构体（`FILL`、`ACCS`）、`T?`/`T!` 与错误值、`if` 无 `else`、变量单元、闭包与 `CALL`、高阶算子、`attempt`、带参数的 `main`、算出来的顶层值；每一项加进清单 | 每一项之后的全语料数字 |
+| 3 | 数组（含 `range`、`len`、下标、`slice`、`concat`、`append`）、元组与结构体（`FILL`、`ACCS`）、枚举（`tag`、字段、打印、相等）、`T?`/`T!` 与错误值、`if` 无 `else`、变量单元、闭包与 `CALL`、高阶算子、`attempt`、带参数的 `main`、算出来的顶层值；每一项加进清单 | 每一项之后的全语料数字 |
 | 4 | 映射与集合；互相尾调用的合成；`std::opt::inline` 之后的覆盖率追平 | 同上 |
 | 5 | 桥上的外部对象（张量）；并行的 `map` | 同上 |
 

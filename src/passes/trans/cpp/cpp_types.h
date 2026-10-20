@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,8 +49,8 @@ bool isVoid(const Type *type);
 
 /// What the refusals say std::cpp translates.
 inline constexpr const char *kTranslatedTypes =
-    "std::cpp translates numbers, bool, string, arrays, tuples, structs, T?, T!, functions and "
-    "var variables of these, and void";
+    "std::cpp translates numbers, bool, string, enums, arrays, tuples, structs, T?, T!, "
+    "functions and var variables of these, and void";
 
 /// A C++ string literal of `bytes`: printable ASCII as it is, everything else as an octal
 /// escape (an octal escape takes at most three digits, so a digit after it stays a digit).
@@ -109,8 +109,8 @@ class ProgramValues {
   private:
     std::string hoist(const std::string &type, const std::string &expr, const std::string &hint);
 
-    std::map<std::string, std::string> types_;     // the type's mangled name -> C++ type
-    std::map<std::string, std::string> constants;  // C++ expression -> name of the constant
+    std::map<std::string, std::string> types_;    // the type's mangled name -> C++ type
+    std::map<std::string, std::string> constants; // C++ expression -> name of the constant
     std::string declarations_;
     std::string constants_;
     NameScope names_;         // the declared types

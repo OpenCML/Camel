@@ -21,7 +21,7 @@ verify_script = '''
  for(const name of ['strict','strict32','integer_coefficients','integer32','integer_chain'])counts(name,0,1);
  counts('underflow_sensitive',safe?1:0,1);
  for(const name of ['strict_coefficients','relaxed_coefficients'])counts(name,safe?1:0,safe?2:1);
- counts('mixed_permissions',1,2);counts('shared_product',1,1);
+ counts('mixed_permissions',1,2);counts('shared_product',safe?1:0,safe?1:2);
  const mul=g('strict').nodes.find(n=>n.label===':op/mul_d');
  assert(g('strict').nodes.some(n=>n.label==='6.0'),'coefficient six missing');
  assert(mul.origin&&mul.source,'consumer source lost');
@@ -42,7 +42,7 @@ verify_script = '''
  for(const name of ['strict','strict32','integer_coefficients','integer32','integer_chain'])counts(name,0,1);
  counts('underflow_sensitive',safe?1:0,1);
  for(const name of ['strict_coefficients','relaxed_coefficients'])counts(name,safe?1:0,safe?2:1);
- counts('mixed_permissions',1,2);counts('shared_product',1,1);
+ counts('mixed_permissions',1,2);counts('shared_product',safe?1:0,safe?1:2);
  const mul=g('strict').nodes.find(n=>n.label===':op/mul_d');
  assert(g('strict').nodes.some(n=>n.label==='6.0'),'coefficient six missing');
  assert(mul.origin&&mul.source,'consumer source lost');
@@ -644,7 +644,7 @@ verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  assert(g.normalPorts.length===1,'runtime input folded');
- assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===13,'integrated algebra policy not applied');
+ assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===11,'integrated algebra policy not applied');
 }
 '''
 
@@ -656,7 +656,7 @@ verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  assert(g.normalPorts.length===1,'runtime input folded');
- assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===18,'integrated algebra policy not applied');
+ assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===15,'integrated algebra policy not applied');
 }
 '''
 

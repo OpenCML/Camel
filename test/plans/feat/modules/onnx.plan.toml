@@ -1122,14 +1122,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "pass_export_refusal_var_param"
-desc = "onnx::export refuses, with a located diagnostic that states why, a variable passed to a call that assigns it: its content would be state outside the model."
-kind = "negative"
+name = "pass_export_var_param_inlined"
+desc = "A variable passed to a call that assigns it is exported after the inliner copies the call into the exported function: the variable is then local to the function, so its content is not state outside the model. (Before the inliner handled this call, onnx::export refused the graph; var_outer.cml still covers that refusal.)"
+kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/var_param.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_refusal_var_param.onnx")']
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_var_param.onnx")']
+expect_exit = 0
+expect_stdout_contains = ["onnx::export: wrote"]
+expect_output_not_contains = ["error", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,10 +25,12 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/rtdata/variant.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/enum.h"
 
 #include <array>
 #include <cctype>
@@ -85,10 +87,7 @@ template <typename T> std::string floatLiteral(T value, const char *typeName, co
         return std::format("std::numeric_limits<{}>::quiet_NaN()", typeName);
     }
     if (std::isinf(value)) {
-        return std::format(
-            "{}std::numeric_limits<{}>::infinity()",
-            value < 0 ? "-" : "",
-            typeName);
+        return std::format("{}std::numeric_limits<{}>::infinity()", value < 0 ? "-" : "", typeName);
     }
     std::array<char, 64> buffer{};
     const auto [end, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
@@ -124,22 +123,102 @@ std::string cppIntLiteral(int32_t value) {
 
 std::string cppIdentifier(std::string_view name) {
     static const std::set<std::string, std::less<>> kKeywords = {
-        "alignas",   "alignof",   "and",        "and_eq",      "asm",          "auto",
-        "bitand",    "bitor",     "bool",       "break",       "case",         "catch",
-        "char",      "char8_t",   "char16_t",   "char32_t",    "class",        "compl",
-        "concept",   "const",     "consteval",  "constexpr",   "constinit",    "const_cast",
-        "continue",  "co_await",  "co_return",  "co_yield",    "decltype",     "default",
-        "delete",    "do",        "double",     "dynamic_cast", "else",        "enum",
-        "explicit",  "export",    "extern",     "false",       "float",        "for",
-        "friend",    "goto",      "if",         "inline",      "int",          "long",
-        "mutable",   "namespace", "new",        "noexcept",    "not",          "not_eq",
-        "nullptr",   "operator",  "or",         "or_eq",       "private",      "protected",
-        "public",    "register",  "reinterpret_cast", "requires", "return",    "short",
-        "signed",    "sizeof",    "static",     "static_assert", "static_cast", "struct",
-        "switch",    "template",  "this",       "thread_local", "throw",       "true",
-        "try",       "typedef",   "typeid",     "typename",    "union",        "unsigned",
-        "using",     "virtual",   "void",       "volatile",    "wchar_t",      "while",
-        "xor",       "xor_eq",    "main",       "rt",          "std",          "depth",
+        "alignas",
+        "alignof",
+        "and",
+        "and_eq",
+        "asm",
+        "auto",
+        "bitand",
+        "bitor",
+        "bool",
+        "break",
+        "case",
+        "catch",
+        "char",
+        "char8_t",
+        "char16_t",
+        "char32_t",
+        "class",
+        "compl",
+        "concept",
+        "const",
+        "consteval",
+        "constexpr",
+        "constinit",
+        "const_cast",
+        "continue",
+        "co_await",
+        "co_return",
+        "co_yield",
+        "decltype",
+        "default",
+        "delete",
+        "do",
+        "double",
+        "dynamic_cast",
+        "else",
+        "enum",
+        "explicit",
+        "export",
+        "extern",
+        "false",
+        "float",
+        "for",
+        "friend",
+        "goto",
+        "if",
+        "inline",
+        "int",
+        "long",
+        "mutable",
+        "namespace",
+        "new",
+        "noexcept",
+        "not",
+        "not_eq",
+        "nullptr",
+        "operator",
+        "or",
+        "or_eq",
+        "private",
+        "protected",
+        "public",
+        "register",
+        "reinterpret_cast",
+        "requires",
+        "return",
+        "short",
+        "signed",
+        "sizeof",
+        "static",
+        "static_assert",
+        "static_cast",
+        "struct",
+        "switch",
+        "template",
+        "this",
+        "thread_local",
+        "throw",
+        "true",
+        "try",
+        "typedef",
+        "typeid",
+        "typename",
+        "union",
+        "unsigned",
+        "using",
+        "virtual",
+        "void",
+        "volatile",
+        "wchar_t",
+        "while",
+        "xor",
+        "xor_eq",
+        "main",
+        "rt",
+        "std",
+        "depth",
     };
     std::string out;
     out.reserve(name.size());
@@ -192,9 +271,8 @@ using camel::core::type::StructType;
 using camel::core::type::TupleType;
 
 const TupleType *asTuple(const Type *type) {
-    return type != nullptr && type->code() == TypeCode::Tuple
-               ? static_cast<const TupleType *>(type)
-               : nullptr;
+    return type != nullptr && type->code() == TypeCode::Tuple ? static_cast<const TupleType *>(type)
+                                                              : nullptr;
 }
 
 } // namespace
@@ -283,6 +361,126 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             decl += std::format("    appendText(out, v.{});\n", members[i].second);
         }
         decl += std::format("    out += \"{}\";\n}}\n\n", isTuple ? ")" : " }");
+        declarations_ += decl;
+        out = name;
+    } else if (t->code() == camel::core::type::EnumType::typeCode()) {
+        const auto *enumType = static_cast<const camel::core::type::EnumType *>(t);
+        if (enumType->pending() || !enumType->complete()) {
+            return std::nullopt; // a prototype, or an instance whose argument is a hole
+        }
+        const auto &variants         = enumType->variants();
+        const std::string &shortName = enumType->decl()->shortName();
+        // A name of its own per instance: `Option_int` for `Option<int>`.
+        std::string base          = cppIdentifier(shortName);
+        const std::string spelled = t->toString();
+        if (spelled != shortName) {
+            base += "_";
+            for (char c : spelled.substr(shortName.size())) {
+                base += (std::isalnum(static_cast<unsigned char>(c)) != 0) ? c : '_';
+            }
+        }
+        const std::string name = names_.unique(cppIdentifier(base));
+        // The payload of each variant is a struct of its own, nested in the enum's: a
+        // tuple variant's fields are `_0`, `_1`, a struct variant's keep their names.
+        std::vector<std::string> payloadNames;
+        std::string decl = std::format("/// {}\nstruct {} {{\n", spelled, name);
+        for (size_t tag = 0; tag < variants.size(); ++tag) {
+            const auto &variant       = variants[tag];
+            const std::string payload = cppIdentifier(variant.name);
+            payloadNames.push_back(payload);
+            decl += std::format("    struct {} {{\n", payload);
+            for (size_t i = 0; i < variant.fieldCount(); ++i) {
+                auto ft = type(variant.fieldTypes[i]);
+                if (!ft) {
+                    return std::nullopt;
+                }
+                const std::string field = variant.shape == camel::core::type::VariantShape::Struct
+                                              ? cppIdentifier(variant.fieldNames[i])
+                                              : std::format("_{}", i);
+                decl += std::format("        {} {};\n", *ft, field);
+            }
+            decl += std::format(
+                "        bool operator==(const {} &) const = default;\n    }};\n",
+                payload);
+        }
+        decl += "    int32_t tag = 0;\n    std::variant<std::monostate";
+        for (const std::string &payload : payloadNames) {
+            decl += ", " + payload;
+        }
+        decl += "> value;\n";
+        decl += std::format("    bool operator==(const {} &) const = default;\n\n", name);
+        // Construction: `Shape::make<1>(2.0, 3.0)`. The tag is a constant of the program.
+        decl += "    template <std::size_t Tag, typename... Fs>\n    static ";
+        decl += std::format("{} make(Fs &&...fs) {{\n        {} out;\n", name, name);
+        decl += "        out.tag = static_cast<int32_t>(Tag);\n";
+        for (size_t tag = 0; tag < variants.size(); ++tag) {
+            decl += std::format(
+                "        {}if constexpr (Tag == {}) {{\n            out.value = "
+                "{}{{std::forward<Fs>(fs)...}};\n        }}\n",
+                tag == 0 ? "" : "else ",
+                tag,
+                payloadNames[tag]);
+        }
+        decl += "        return out;\n    }\n";
+        // Reading a field: `v.get<1, 0>()`. The tag and the index are constants as well.
+        decl += "    template <std::size_t Tag, std::size_t Index>\n    auto get() const {\n";
+        size_t branch = 0; // the first field read is the `if`, the others `else if`
+        for (size_t tag = 0; tag < variants.size(); ++tag) {
+            const auto &variant = variants[tag];
+            for (size_t i = 0; i < variant.fieldCount(); ++i) {
+                const std::string field = variant.shape == camel::core::type::VariantShape::Struct
+                                              ? cppIdentifier(variant.fieldNames[i])
+                                              : std::format("_{}", i);
+                decl += std::format(
+                    "        {}if constexpr (Tag == {} && Index == {}) {{\n            return "
+                    "std::get<{}>(value).{};\n        }}\n",
+                    branch++ == 0 ? "" : "else ",
+                    tag,
+                    i,
+                    tag + 1,
+                    field);
+            }
+        }
+        decl += "    }\n};\n";
+        // Its text, as the interpreter prints it: `Shape::Circle(1.0)`,
+        // `Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`.
+        decl += std::format("inline void appendText(std::string &out, const {} &v) {{\n", name);
+        decl += "    switch (v.tag) {\n";
+        for (size_t tag = 0; tag < variants.size(); ++tag) {
+            const auto &variant = variants[tag];
+            decl += std::format("    case {}:\n", tag);
+            decl += std::format("        out += \"{}::{}\";\n", shortName, variant.name);
+            if (variant.shape == camel::core::type::VariantShape::Tuple) {
+                decl += "        out += \"(\";\n";
+            } else if (variant.shape == camel::core::type::VariantShape::Struct) {
+                decl += variant.fieldCount() == 0 ? "        out += \" {}\";\n"
+                                                  : "        out += \" { \";\n";
+            }
+            for (size_t i = 0; i < variant.fieldCount(); ++i) {
+                if (i > 0) {
+                    decl += "        out += \", \";\n";
+                }
+                const std::string field = variant.shape == camel::core::type::VariantShape::Struct
+                                              ? cppIdentifier(variant.fieldNames[i])
+                                              : std::format("_{}", i);
+                if (variant.shape == camel::core::type::VariantShape::Struct) {
+                    decl += std::format("        out += \"{}: \";\n", variant.fieldNames[i]);
+                }
+                decl += std::format(
+                    "        appendText(out, std::get<{}>(v.value).{});\n",
+                    tag + 1,
+                    field);
+            }
+            if (variant.shape == camel::core::type::VariantShape::Tuple) {
+                decl += "        out += \")\";\n";
+            } else if (
+                variant.shape == camel::core::type::VariantShape::Struct &&
+                variant.fieldCount() > 0) {
+                decl += "        out += \" }\";\n";
+            }
+            decl += "        break;\n";
+        }
+        decl += "    }\n}\n\n";
         declarations_ += decl;
         out = name;
     } else if (t->code() == TypeCode::Function) {
@@ -407,8 +605,7 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
         if (camel::core::rtdata::isNullValue(slot)) {
             return std::format("{}{{}}", *cpp);
         }
-        auto payload =
-            constant(camel::core::rtdata::nullablePayload(slot), tuple->payloadType());
+        auto payload = constant(camel::core::rtdata::nullablePayload(slot), tuple->payloadType());
         return payload ? std::optional(std::format("{}({})", *cpp, *payload)) : std::nullopt;
     } else if (tuple != nullptr && !tuple->isTagged() && !tuple->isCell()) {
         const auto *value = fromSlot<::Tuple *>(slot);
@@ -432,6 +629,22 @@ std::optional<std::string> ProgramValues::constant(slot_t slot, const Type *t) {
             [&](size_t i) { return value->get<slot_t>(i); },
             [&](size_t i) { return record->typeAt(i); });
         return items ? std::optional(hoist(*cpp, *items, "record")) : std::nullopt;
+    }
+    if (t->code() == camel::core::type::EnumType::typeCode()) {
+        const auto *enumType = static_cast<const camel::core::type::EnumType *>(t);
+        const auto *value    = fromSlot<camel::core::rtdata::Variant *>(slot);
+        if (value == nullptr || enumType->pending() || value->tag() >= enumType->variantCount()) {
+            return std::nullopt;
+        }
+        std::string fields;
+        for (size_t i = 0; i < value->fieldCount(); ++i) {
+            auto f = constant(value->get(i), enumType->fieldType(value->tag(), i));
+            if (!f) {
+                return std::nullopt;
+            }
+            fields += (i ? ", " : "") + *f;
+        }
+        return hoist(*cpp, std::format("{}::make<{}>({})", *cpp, value->tag(), fields), "enum");
     }
     return std::nullopt;
 }

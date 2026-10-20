@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,12 +24,11 @@
 #include "camel/core/type/typevar.h"
 
 #include "camel/core/mm.h"
-#include "camel/core/type/storage.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/core/type/composite/union.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
@@ -246,10 +245,6 @@ bool containsTypeVar(Type *type) {
                std::any_of(norm.begin(), norm.end(), containsTypeVar) ||
                (func->hasExitType() && containsTypeVar(func->exitType()));
     }
-    case TypeCode::Union: {
-        const auto &types = static_cast<UnionType *>(type)->types();
-        return std::any_of(types.begin(), types.end(), containsTypeVar);
-    }
     default:
         break;
     }
@@ -310,15 +305,6 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         FunctionTypeFactory factory =
             rebuildFunctionType(static_cast<FunctionType *>(type), bindings, changed);
         return changed ? factory.build() : type;
-    }
-    case TypeCode::Union: {
-        bool changed = false;
-        std::vector<Type *> types;
-        for (Type *member : static_cast<UnionType *>(type)->types()) {
-            types.push_back(substituteTypeVars(member, bindings));
-            changed |= types.back() != member;
-        }
-        return changed ? UnionType::create(types) : type;
     }
     default:
         break;
@@ -477,11 +463,6 @@ void collectTypeVars(Type *type, std::vector<std::string> &names) {
         }
         return;
     }
-    case TypeCode::Union:
-        for (Type *member : static_cast<UnionType *>(type)->types()) {
-            collectTypeVars(member, names);
-        }
-        return;
     default:
         break;
     }
@@ -503,9 +484,10 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     // Nothing left to learn below, or nothing known on the other side.
     std::vector<std::string> names;
     collectTypeVars(pattern, names);
-    if (std::all_of(names.begin(), names.end(), [&](const std::string &name) {
-            return findTypeBinding(bindings, name) != nullptr;
-        }) ||
+    if (std::all_of(
+            names.begin(),
+            names.end(),
+            [&](const std::string &name) { return findTypeBinding(bindings, name) != nullptr; }) ||
         actual->code() == TypeCode::TypeVar) {
         return true;
     }

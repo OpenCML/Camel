@@ -1314,7 +1314,7 @@ any Formatter::visitEnumVariant(cst::EnumVariant context) {
     } else {
         const auto fields = vec(context->all<cst::EnumField>());
         if (!fields.empty()) {
-            result += "{" +
+            result += " {" +
                       formatList(fields, context, ", ", ",", PaddingNL | PaddingSP | PushScope) +
                       "}";
         }
@@ -1338,7 +1338,7 @@ enumTuplePattern
     ;
 */
 any Formatter::visitEnumTuplePattern(cst::EnumTuplePattern context) {
-    return "(" + formatList(vec(context->all<cst::Pattern>()), context, ", ", ",", PaddingSP) +
+    return "(" + formatList(vec(context->all<cst::Pattern>()), context, ", ", ",", 0) +
            (hasTrailingComma(context) ? "," : "") + ")";
 }
 
@@ -1366,7 +1366,10 @@ any Formatter::visitEnumStructPattern(cst::EnumStructPattern context) {
             ++i;
         }
     }
-    return "{" + body + (hasTrailingComma(context) ? "," : "") + "}";
+    if (body.empty()) {
+        return " {}";
+    }
+    return " { " + body + (hasTrailingComma(context) ? "," : "") + " }";
 }
 
 /*
@@ -1376,6 +1379,33 @@ typeList
 */
 any Formatter::visitTypeList(cst::TypeList context) {
     return formatList(vec(context->types()), context, ", ", ",", PaddingNL | PushScope);
+}
+
+/*
+typeArguments
+    : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
+    ;
+*/
+any Formatter::visitTypeArguments(cst::TypeArguments context) {
+    string result = "::<";
+    if (const auto types = context->get<cst::TypeList>()) {
+        result += any_cast<string>(visitTypeList(types));
+    } else {
+        const auto named = vec(context->all<cst::NamedTypeArgument>());
+        result += formatList(named, context, ", ", ",", PaddingNL | PushScope);
+    }
+    result += hasTrailingComma(context) ? "," : "";
+    return result + ">";
+}
+
+/*
+namedTypeArgument
+    : IDENTIFIER '=' typeExpr
+    ;
+*/
+any Formatter::visitNamedTypeArgument(cst::NamedTypeArgument context) {
+    return context->tok(TK::Identifier)->text() + " = " +
+           any_cast<string>(visitType(context->type()));
 }
 
 /*
@@ -1541,6 +1571,8 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(EnumStructPattern)
         CAMEL_FORMAT(TupleType)
         CAMEL_FORMAT(FuncType)
+        CAMEL_FORMAT(TypeArguments)
+        CAMEL_FORMAT(NamedTypeArgument)
 #undef CAMEL_FORMAT
     case NK::IfExpr:
     case NK::MatchExpr:

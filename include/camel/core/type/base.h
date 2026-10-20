@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,8 +81,8 @@ enum class TypeCode : uint32_t {
     Function = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00B),
     Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00C),
     // 0x00D was `any`, removed (design principles 5.10): no value has a type that is
-    // undetermined after compilation.
-    Union = makeTypeCode(TypeFlag::Composite | TypeFlag::Auxiliary, 0x00E),
+    // undetermined after compilation. 0x00E was the union type `A | B`, retired (5.3): a sum
+    // of types is an `enum`.
     // Compile-time only (camel/core/type/typevar.h): a type variable of a generic function
     // or of a parameterised type declaration, and a parameterised type declaration itself.
     // Neither is the type of a node of a graph.

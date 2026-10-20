@@ -1,5 +1,9 @@
 /**
- * Refused: the variable is passed to a call that assigns it.
+ * Exported after inlining: the variable is passed to a call that assigns it, but the inliner
+ * copies that call into the exported function first, so the variable becomes local to the
+ * function and its content is no longer state outside the model. The refusal this case used
+ * to exercise (a variable read or assigned outside the function that declares it) is still
+ * covered by `var_outer.cml`, whose lambda reads a variable of the enclosing function.
  */
 module var_param
 import { Tensor, reshape } from tensor

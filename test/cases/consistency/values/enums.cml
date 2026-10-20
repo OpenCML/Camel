@@ -1,0 +1,46 @@
+// Enums: a variant is constructed, matched, printed and compared, an enum holds another, and
+// the four back ends print it the same. std::cpp translates an enum into a struct of the
+// generated file (see test/plans/feat/trans/cpp.plan.toml, enum_types).
+
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+type Slot = enum {
+    Empty,
+    Full(Shape),
+}
+
+func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+        case Shape::Rect { w, h } => w * h
+        case Shape::Empty => 0.0
+    }
+}
+
+func main(): int sync {
+    let a = Shape::Circle(1.0)
+    let b = Shape::Rect { w: 2.0, h: 3.0 }
+    let c = Shape::Empty
+
+    println(area(a))
+    println(area(b))
+    println(area(c))
+
+    println(a)
+    println(b)
+    println(c)
+
+    println(a == Shape::Circle(1.0))
+    println(a == Shape::Circle(2.0))
+    println(a != b)
+
+    let full = Slot::Full(b)
+    println(full)
+    println(full == Slot::Full(b))
+    println(full == Slot::Empty)
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1148,6 +1148,9 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         typeScope_->erase(typeLoad->ref(), false);
     }
     typeScope_->insert(typeLoad->ref(), type);
+    if (auto *recorder = context_ ? context_->semanticRecorder() : nullptr) {
+        recorder->typeDeclared(ast->load()->origin(), typeLoad->ref().toString(), type);
+    }
     if (exportedRefs_.contains(typeLoad->ref().toString())) {
         // Exported at once: a module that imports this one back may need it before this one
         // is through (see visitModule).
