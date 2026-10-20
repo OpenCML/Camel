@@ -44,8 +44,8 @@ constexpr uint8_t kRegRdi = 8, kRegRsi = 9;
 
 // Virtual register: an "unallocated" value in MIR, assigned a physical register by the unified
 // register allocation stage.
-using VRegId                  = uint16_t;
-constexpr VRegId kInvalidVReg = 0xFFFFu;
+using VRegId                  = uint32_t;
+constexpr VRegId kInvalidVReg = 0xFFFFFFFFu;
 
 inline const char *mirRegName(uint8_t r) {
     static const char *n[] = {"rax", "rcx", "rdx", "rbx", "r8", "r9", "r10", "r11", "rdi", "rsi"};
@@ -237,8 +237,8 @@ constexpr uint32_t kMaxNativeFrameBytes = 2048;
 struct Mir {
     MirOp op{MirOp::Nop};
     // Physical register ids for the fixed-register ops, virtual register ids for V* ops.
-    uint16_t r0{0};
-    uint16_t r1{0};
+    uint32_t r0{0};
+    uint32_t r1{0};
     int32_t disp{0};
     uint32_t imm32{0};
     uint64_t imm64{0};

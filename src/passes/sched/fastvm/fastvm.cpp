@@ -651,7 +651,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
 void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
     const auto &loopExtra    = bc.extra()->loop;
     const MarkOpCode mark    = loopExtra.mark;
-    const auto *words        = reinterpret_cast<const uint64_t *>(&bc + bc.opsize - 3);
+    const auto *words        = reinterpret_cast<const uint64_t *>(&bc + bc.opsize) - 3;
     auto *cond               = reinterpret_cast<camel::runtime::GCGraph *>(words[0]);
     auto *body               = reinterpret_cast<camel::runtime::GCGraph *>(words[1]);
     const bool iterates      = mark != MarkOpCode::LoopWhile;

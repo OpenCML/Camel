@@ -754,7 +754,7 @@ class MirBuilder {
     MirBuffer &buf_;
     uint32_t nextPc_{kMirInvalidPc};
 
-    void push(MirOp op, uint16_t r0, uint16_t r1) {
+    void push(MirOp op, uint32_t r0, uint32_t r1) {
         Mir m;
         m.op = op;
         m.r0 = r0;
