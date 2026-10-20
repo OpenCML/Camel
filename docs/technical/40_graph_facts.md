@@ -133,5 +133,5 @@ of a function value it receives declares `OperatorTraits::inspectsGraphs` (Tiles
 `run_device`, `source`, `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`,
 `with_grad`). On a back end that runs a private lowered copy, every function-typed operand of
 such an operator goes through `:graph/original`, which returns the same function over the
-program's graph (`GCGraph::originalGraph()`): Tiles sees the LOOP of a function on every back end
+program's graph (`Program::original()`): Tiles sees the LOOP of a function on every back end
 (`docs/technical/39_loops.md` section 4).
