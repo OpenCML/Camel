@@ -87,7 +87,11 @@ class VjpBuilder {
 /// One operator call being differentiated.
 struct VjpCall {
     std::string_view uri;
+    /// The call's normal inputs, in order.
     std::span<const vjp_node_t> inputs;
+    /// The call's `with` inputs, in order. Most operators read these as configuration and no
+    /// gradient flows through them, but an operator may take a value this way (`append`).
+    std::span<const vjp_node_t> withInputs;
     vjp_node_t output;
 };
 

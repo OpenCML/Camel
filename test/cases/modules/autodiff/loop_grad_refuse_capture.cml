@@ -1,7 +1,8 @@
 /**
- * Verifies the refusal of a loop whose body captures an array that depends on a differentiated
- * parameter: the loop's rounds would each need a gradient for the array it reads, and an array has
- * no cotangent, so the diagnostic names the loop and the array.
+ * Verifies the gradient of a loop whose body reads an element of a captured array that depends on
+ * the differentiated parameter: the array's tangent is the array of its elements' tangents, and the
+ * reverse of the read scatters the round's element gradient back into the capture. f(w) is
+ * `ys[0] + ys[0]` with ys = [w, 2.0], so the gradient is 2.
  */
 module loop_grad_refuse_capture
 

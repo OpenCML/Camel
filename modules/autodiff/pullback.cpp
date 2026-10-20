@@ -482,13 +482,17 @@ std::string uniqueSuffix() {
 
 // ---------------------------------------------------------------- plans
 
-/// Which ports a plan makes room for: a gradient of an aggregate of such values, or of a type the
-/// derivative registry describes. An array has a tangent *type* (float[]), but nothing can build
-/// or add one — an array has no cotangent (design principles 9.9) — so a loop never makes room for
-/// an array's gradient; a loop over or capturing one is refused instead (LoopArray below).
+/// Which ports a plan makes room for: a gradient of an aggregate or array of such values, or of a
+/// type the derivative registry describes. An array's tangent is the array of its elements'
+/// tangents (design principles 9.9), so a loop carries an array's gradient in a tangent array; an
+/// array whose elements have no tangent has none, and a loop over or capturing one is refused
+/// instead (see LoopArray below).
 bool carriesGradient(Type *type) {
     if (type == nullptr || tangentTypeOf(type) == nullptr) {
         return false;
+    }
+    if (type->code() == TypeCode::Array) {
+        return carriesGradient(tt::as_ptr<type::ArrayType>(type)->elemType());
     }
     if (isAggregate(type)) {
         for (size_t i = 0; i < aggregateSize(type); ++i) {
@@ -553,10 +557,11 @@ PullbackPlan makePlanTypes(
     return plan;
 }
 
-/// An array a differentiated loop reads: the array it iterates over, or one it captures. Such an
-/// array has a tangent, but a loop cannot carry it: the gradient of a value that depends on the
-/// array would have to travel through every round, and an array has no cotangent yet (design
-/// principles 9.9). A loop over or capturing one is refused where it is written.
+/// An array a differentiated loop reads: the array it iterates over, or one it captures. A
+/// captured array now carries a gradient (its tangent is the array of its elements' tangents),
+/// so only an iterated array is refused: the reverse pass does not scatter each round's element
+/// gradient back into it (design principles 9.9). The iterator is recorded so the refusal can
+/// name it where it is written.
 struct LoopArray {
     gc_node_ref_t array = kInvalidNodeRef;
     bool iterated       = false;
@@ -2243,6 +2248,27 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         if ((tangentTypeOf(type) == nullptr && !carrier) || isCellType(type)) {
             refuseActiveCollection(node, type);
             refuseActiveEnum(node, type);
+            // A loop whose value has no tangent cannot be given a tape: no gradient can flow
+            // through the value. It must not be skipped silently when it reads a differentiated
+            // value, because that value's contribution would be dropped without a sign of it.
+            if (kindOf(forward_, node) == GCNodeKind::Loop) {
+                for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+                    for (gc_node_ref_t input : inputs) {
+                        if (active_.contains(input)) {
+                            failAt(
+                                forward_.nodeOrigin(node),
+                                std::format(
+                                    "a 'loop' depends on a differentiated parameter, but its "
+                                    "value of type '{}' has no gradient channel. Gradients cannot "
+                                    "flow through a loop whose value has no tangent{}; make the "
+                                    "loop's value, or the value it reads, something that can carry "
+                                    "a gradient",
+                                    type->toString(),
+                                    whereIs(forward_.nodeOrigin(node))));
+                        }
+                    }
+                }
+            }
             continue;
         }
         if (kindOf(forward_, node) == GCNodeKind::Oper &&
@@ -2594,27 +2620,24 @@ void Backward::visit(gc_node_ref_t node) {
 
 void Backward::visitCallSite(gc_node_ref_t node, const CallSite &site) {
     if (site.loop != nullptr) {
-        // A loop over, or capturing, an array that depends on a differentiated parameter is
-        // refused where it is written (design principles 9.9): the gradient of the value would
-        // have to reach every element, and an array has no cotangent. Both the loop and the
-        // array are located.
+        // Captured arrays now carry a gradient: an array's tangent is the array of its
+        // elements' tangents, so the reverse pass can accumulate into one (design principles
+        // 9.9). Iterating an array is still refused: the body receives one element per round,
+        // and the reverse pass has no per-round scatter of that element's gradient back into the
+        // iterated array. Doing so silently would lose the gradient, so it is located here.
         for (const LoopArray &read : site.loop->arrays) {
-            if (!active_.contains(read.array)) {
+            if (!read.iterated || !active_.contains(read.array)) {
                 continue;
             }
-            // The array itself may be a value the program never named (the elements of a literal
-            // that the loop iterates over): say what the loop does with it, and where it is when
-            // the graph kept a position for it.
             const std::string arrayWhere = whereIs(forward_.nodeOrigin(read.array));
             failAt(
                 forward_.nodeOrigin(site.loop->node),
                 std::format(
-                    "a 'loop' {} an array that depends on a differentiated parameter: {} of "
-                    "type {}{}. Gradients do not flow through an array: the loop's rounds would "
-                    "each have to carry the array's gradient, and an array has no cotangent, so "
-                    "the loop cannot be differentiated. Iterate over, or capture, an array that "
-                    "does not depend on a differentiated parameter",
-                    read.iterated ? "iterates over" : "captures",
+                    "a 'loop' iterates over an array that depends on a differentiated "
+                    "parameter: {} of type {}{}. The gradient of each round's element would "
+                    "have to be scattered back into the array at that round's index, which the "
+                    "loop's reverse pass does not do. Capture the array and read its elements "
+                    "by index inside the loop instead",
                     arrayWhere.empty() ? "an array" : "the array",
                     typeOf(forward_, read.array)->toString(),
                     arrayWhere));
@@ -2676,25 +2699,23 @@ void Backward::visitOper(gc_node_ref_t node) {
     }
     const camel::core::VjpRule rule = DerivativeRegistry::instance().findRule(uri);
     if (rule == nullptr) {
-        // A loop body reading an element of an array it captures: the array is a value of the body's
-        // With ports, and an array has no cotangent, so nothing can be sent back through it and the
-        // gradient stops here. If that array depends on a differentiated parameter the loop itself
-        // refuses when the backward pass reaches it (ForwardRewrite::rewriteLoop recorded the
-        // array), so skipping the read cannot hide a contribution the gradient would have missed.
-        const auto inputs = forward_.normInputsOf(node);
-        if (scope_.role == GraphRole::LoopBody && uri == ":op/idx_arr" && !inputs.empty()) {
-            const auto withPorts = forward_.withPorts();
-            if (std::ranges::find(withPorts, inputs.front()) != withPorts.end()) {
-                return;
-            }
-        }
         fail(std::format("no derivative rule for operator '{}'", uri));
     }
     std::vector<gc_node_ref_t> inputs;
     for (gc_node_ref_t input : forward_.normInputsOf(node)) {
         inputs.push_back(ref(input));
     }
-    rule(*this, VjpCall{.uri = uri, .inputs = inputs, .output = ref(node)});
+    std::vector<gc_node_ref_t> withInputs;
+    for (gc_node_ref_t input : forward_.withInputsOf(node)) {
+        withInputs.push_back(ref(input));
+    }
+    rule(
+        *this,
+        VjpCall{
+            .uri        = uri,
+            .inputs     = inputs,
+            .withInputs = withInputs,
+            .output     = ref(node)});
 }
 
 void Backward::visitAccs(gc_node_ref_t node) {
@@ -2723,8 +2744,36 @@ void Backward::visitFill(gc_node_ref_t node) {
     const auto payload = forward_.payloadOf(node);
     const auto *body   = reinterpret_cast<const rt::GCFillBody *>(payload.data());
     Type *type         = typeOf(forward_, node);
+    if (body->fillKind == rt::GCFillKind::Array) {
+        // An array literal built from active values: the gradient of the array is the array of
+        // its elements' gradients, so each element's gradient is read back out at its position
+        // (design principles 9.9). An array whose element type has no tangent never has a
+        // gradient here.
+        Tangent moved = std::move(gradients_[node]);
+        if (moved.value == kInvalidNodeRef) {
+            return;
+        }
+        const auto values    = copyOf(forward_.withInputsOf(node));
+        const auto slots     = body->slots();
+        const auto *array    = tt::as_ptr<type::ArrayType>(type);
+        Type *elementTangent = tangentTypeOf(array->elemType());
+        if (elementTangent == nullptr) {
+            return;
+        }
+        for (size_t i = 0; i < values.size() && i < slots.size(); ++i) {
+            if (!active_.contains(values[i])) {
+                continue;
+            }
+            const gc_node_ref_t index = target_.materializeStaticValue(
+                toSlot<int64_t>(static_cast<int64_t>(slots[i])), Type::Int64());
+            const std::array<gc_node_ref_t, 2> at{moved.value, index};
+            accumulate(
+                values[i], autodiff::addOper(target_, elementTangent, ":op/idx_arr", at));
+        }
+        return;
+    }
     if (body->fillKind != rt::GCFillKind::Tuple && body->fillKind != rt::GCFillKind::Struct) {
-        fail("cannot differentiate through an array literal yet");
+        fail("cannot differentiate through this kind of literal yet");
     }
     Tangent moved     = std::move(gradients_[node]);
     const auto values = copyOf(forward_.withInputsOf(node));

@@ -164,10 +164,15 @@ round, so that the reverse pass knows how many rounds ran; that slot is not one 
 `LoopDraftView` (`camel/runtime/loop.h`) is how the rewrite reads a decoded loop and writes the two
 it builds, the same accessors `LoopView` gives a consumer.
 
-A loop over, or capturing, an array that depends on a differentiated parameter is refused where it
-is written: the rounds would each have to carry the array's gradient, and an array has no cotangent
-(design principles 9.9). An array that does not depend on one may be read: the gradient stops at
-the read.
+An array has a tangent of its own: the array of its elements' tangents (design principles 9.9). A
+captured array that depends on a differentiated parameter therefore carries a gradient, and the
+reverse of reading `xs[i]` scatters the element's gradient into that array's gradient. An array
+whose elements have no tangent (e.g. `string[]`) has none, and reading it stops the gradient, as
+before. Iterating an array that depends on a differentiated parameter is still refused where it is
+written: the body receives one element per round, and the reverse pass has no per-round scatter of
+that element's gradient back into the iterated array. A loop whose value has no tangent but reads a
+differentiated value is refused at the loop, with its position, instead of being skipped: the
+contribution would be dropped without a sign of it.
 
 ## 4. Back ends
 
@@ -179,7 +184,7 @@ the read.
 | `std::prl` | the private lowering at its entry and when a runtime callback supplies an original graph containing a loop |
 | `std::cpp` | the private lowering at its entry; the generated tail calls are loops |
 | ONNX export | refused where the loop is written (the LOOP to ONNX Loop translation is the next step) |
-| autodiff | refused where the loop is written (forward and backward loops are a later step) |
+| autodiff | differentiated through a synthesized reverse loop (section 3.2); the forward loop collects the tape |
 | debugger | the loop's graphs are arms of their function: folded into its frame by default |
 
 **The lowering** (`camel/runtime/loop_lowering.h`): per loop, three graphs,

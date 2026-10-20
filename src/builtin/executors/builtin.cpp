@@ -271,6 +271,13 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"struct/contains_arr", __contains_arr__},
         {"struct/contains_str", __contains_str__},
 
+        // Tangent arrays, inserted by autodiff into gradient graphs, never written by a program.
+        {"tangent/add_arr", __tangent_add_arr__},
+        {"tangent/zeros_arr", __tangent_zeros_arr__},
+        {"tangent/scatter_add_arr", __tangent_scatter_add_arr__},
+        {"tangent/init_arr", __tangent_init_arr__},
+        {"tangent/last_arr", __tangent_last_arr__},
+
         // profiler
         {"profiler/begin", __profiler_begin__},
         {"profiler/end", __profiler_end__},
@@ -349,6 +356,11 @@ void registerBuiltinOperatorTraits() {
         "struct/extend_arr",
         "struct/contains_arr",
         "struct/contains_str",
+        "tangent/add_arr",
+        "tangent/zeros_arr",
+        "tangent/scatter_add_arr",
+        "tangent/init_arr",
+        "tangent/last_arr",
         "graph/original",
     };
     // Declared never to fault, where the implementation has no fault path at all: integer

@@ -1,0 +1,14 @@
+// A `loop` whose value has no tangent cannot carry a gradient. When it reads a value that
+// depends on a differentiated parameter, that is refused at the loop instead of being skipped:
+// the loop's value would drop the contribution without any sign of it (design principles 9.9).
+import { grad } from autodiff
+
+func f(w: float): float {
+    let n = loop i = 0 for k in [1, 2] do i + (if w > 0.0 then 1 else 0)
+    return w * (n as float)
+}
+
+func main(): int sync {
+    println(grad(f)(2.0))
+    return 0
+}
