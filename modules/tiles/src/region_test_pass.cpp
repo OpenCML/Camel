@@ -163,7 +163,7 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
     std::vector<Argument> args;
     for (auto input : first.parameterInputs) {
         const auto &node = first.nodes.at(input);
-        auto *tensor     = tensor::TensorObject::create(
+        auto *tensor     = tensor::createTensor(
             core::type::TypeCode::Float32,
             node.shape,
             core::mm::autoSpace());

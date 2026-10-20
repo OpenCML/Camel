@@ -52,7 +52,7 @@ namespace tensor = camel::tensor;
 namespace {
 
 void requireRank2LogitsAndTarget(
-    const tensor::TensorObject *logits, const tensor::TensorObject *target, const char *what) {
+    const tensor::Array *logits, const tensor::Array *target, const char *what) {
     if (!logits || logits->rank() != 2) {
         throw std::invalid_argument(std::string(what) + " expects rank-2 logits [batch, classes]");
     }
@@ -73,7 +73,7 @@ void requireRank2LogitsAndTarget(
     }
 }
 
-void requireRank2Logits(const tensor::TensorObject *logits, const char *what) {
+void requireRank2Logits(const tensor::Array *logits, const char *what) {
     if (!logits || logits->rank() != 2) {
         throw std::invalid_argument(std::string(what) + " expects rank-2 logits [batch, classes]");
     }
@@ -87,7 +87,7 @@ void requireRank2Logits(const tensor::TensorObject *logits, const char *what) {
 }
 
 void requireLabels(
-    const tensor::TensorObject *logits, std::span<const int64_t> labels, const char *what) {
+    const tensor::Array *logits, std::span<const int64_t> labels, const char *what) {
     const int64_t rows = logits->dim(0), cols = logits->dim(1);
     if (static_cast<int64_t>(labels.size()) != rows) {
         throw std::invalid_argument(
@@ -104,7 +104,7 @@ void requireLabels(
 } // namespace
 
 double softmaxCrossEntropyLabels(
-    const tensor::TensorObject *logits, std::span<const int64_t> labels) {
+    const tensor::Array *logits, std::span<const int64_t> labels) {
     constexpr const char *kWhat = "softmax_cross_entropy";
     requireRank2Logits(logits, kWhat);
     requireLabels(logits, labels, kWhat);
@@ -136,8 +136,8 @@ double softmaxCrossEntropyLabels(
     return loss / static_cast<double>(rows);
 }
 
-tensor::TensorObject *softmaxCrossEntropyLabelsGradLogits(
-    const tensor::TensorObject *logits, std::span<const int64_t> labels, double dy,
+tensor::Array *softmaxCrossEntropyLabelsGradLogits(
+    const tensor::Array *logits, std::span<const int64_t> labels, double dy,
     tensor::mm::IAllocator &allocator) {
     constexpr const char *kWhat = "softmax_cross_entropy_grad";
     requireRank2Logits(logits, kWhat);
@@ -145,7 +145,7 @@ tensor::TensorObject *softmaxCrossEntropyLabelsGradLogits(
 
     const int64_t rows         = logits->dim(0);
     const int64_t cols         = logits->dim(1);
-    tensor::TensorObject *grad = tensor::TensorObject::create(
+    tensor::Array *grad = tensor::createTensor(
         TypeCode::Float32,
         std::span<const int64_t>(logits->shape(), logits->rank()),
         allocator,
@@ -180,7 +180,7 @@ tensor::TensorObject *softmaxCrossEntropyLabelsGradLogits(
     return grad;
 }
 
-double softmaxCrossEntropy(const tensor::TensorObject *logits, const tensor::TensorObject *target) {
+double softmaxCrossEntropy(const tensor::Array *logits, const tensor::Array *target) {
     constexpr const char *kWhat = "softmax_cross_entropy";
     requireRank2LogitsAndTarget(logits, target, kWhat);
 
@@ -216,15 +216,15 @@ double softmaxCrossEntropy(const tensor::TensorObject *logits, const tensor::Ten
     return loss / static_cast<double>(rows);
 }
 
-tensor::TensorObject *softmaxCrossEntropyGradLogits(
-    const tensor::TensorObject *logits, const tensor::TensorObject *target, double dy,
+tensor::Array *softmaxCrossEntropyGradLogits(
+    const tensor::Array *logits, const tensor::Array *target, double dy,
     mm::IAllocator &allocator) {
     constexpr const char *kWhat = "softmax_cross_entropy_grad";
     requireRank2LogitsAndTarget(logits, target, kWhat);
 
     const int64_t rows         = logits->dim(0);
     const int64_t cols         = logits->dim(1);
-    tensor::TensorObject *grad = tensor::TensorObject::create(
+    tensor::Array *grad = tensor::createTensor(
         TypeCode::Float32,
         std::span<const int64_t>(logits->shape(), logits->rank()),
         allocator,

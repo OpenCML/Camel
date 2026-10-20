@@ -50,40 +50,40 @@ Shape conv2dShape(
     int64_t padding);
 
 /// y = conv2d(x, w) + b. `bias` may be null.
-TensorObject *conv2d(
-    const TensorObject *input, const TensorObject *kernel, const TensorObject *bias, int64_t stride,
+Array *conv2d(
+    const Array *input, const Array *kernel, const Array *bias, int64_t stride,
     int64_t padding, mm::IAllocator &allocator);
 
 /// dL/dx given dL/dy.
-TensorObject *conv2dInputGrad(
-    const TensorObject *input, const TensorObject *kernel, const TensorObject *dy, int64_t stride,
+Array *conv2dInputGrad(
+    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
     int64_t padding, mm::IAllocator &allocator);
 
 /// dL/dw given dL/dy.
-TensorObject *conv2dKernelGrad(
-    const TensorObject *input, const TensorObject *kernel, const TensorObject *dy, int64_t stride,
+Array *conv2dKernelGrad(
+    const Array *input, const Array *kernel, const Array *dy, int64_t stride,
     int64_t padding, mm::IAllocator &allocator);
 
 /// dL/db given dL/dy: sum over N, OH, OW.
-TensorObject *conv2dBiasGrad(const TensorObject *dy, mm::IAllocator &allocator);
+Array *conv2dBiasGrad(const Array *dy, mm::IAllocator &allocator);
 
 enum class PoolKind { Max, Average };
 
 /// Output shape [N, C, OH, OW] of pooling.
 Shape pool2dShape(std::span<const int64_t> input, const Window2d &window);
 
-TensorObject *
-pool2d(PoolKind kind, const TensorObject *input, const Window2d &window, mm::IAllocator &allocator);
+Array *
+pool2d(PoolKind kind, const Array *input, const Window2d &window, mm::IAllocator &allocator);
 
 /// dL/dx for pooling. Max routes each gradient to the first maximal element of its window.
-TensorObject *pool2dGrad(
-    PoolKind kind, const TensorObject *input, const TensorObject *dy, const Window2d &window,
+Array *pool2dGrad(
+    PoolKind kind, const Array *input, const Array *dy, const Window2d &window,
     mm::IAllocator &allocator);
 
 /// y = gamma * (x - mean) / sqrt(var + eps) + beta per channel (axis 1).
-TensorObject *batchNorm(
-    const TensorObject *input, const TensorObject *mean, const TensorObject *var,
-    const TensorObject *gamma, const TensorObject *beta, double eps, mm::IAllocator &allocator);
+Array *batchNorm(
+    const Array *input, const Array *mean, const Array *var,
+    const Array *gamma, const Array *beta, double eps, mm::IAllocator &allocator);
 
 /// Training-mode batch normalization: the batch statistics are computed per channel over the
 /// batch and the trailing (spatial) axes. The normalize uses the BIASED batch variance; the
@@ -91,9 +91,9 @@ TensorObject *batchNorm(
 /// UNBIASED batch variance (M/(M-1) correction) — PyTorch's training-mode semantics. Writes y,
 /// the new running mean and the new running variance (all freshly allocated).
 void batchNormTrain(
-    const TensorObject *input, const TensorObject *gamma, const TensorObject *beta,
-    const TensorObject *runningMean, const TensorObject *runningVar, double momentum, double eps,
-    TensorObject **outY, TensorObject **outRunningMean, TensorObject **outRunningVar,
+    const Array *input, const Array *gamma, const Array *beta,
+    const Array *runningMean, const Array *runningVar, double momentum, double eps,
+    Array **outY, Array **outRunningMean, Array **outRunningVar,
     mm::IAllocator &allocator);
 
 /// Gradients of batchNormTrain wrt the input and the affine parameters:
@@ -101,8 +101,8 @@ void batchNormTrain(
 /// per channel over the batch and spatial axes (xhat the normalized input, inv = 1/sqrt(var+eps)
 /// with the biased batch variance). Writes dx, dgamma, dbeta (freshly allocated).
 void batchNormTrainGrad(
-    const TensorObject *input, const TensorObject *gamma, const TensorObject *dy, double eps,
-    TensorObject **outDx, TensorObject **outDgamma, TensorObject **outDbeta,
+    const Array *input, const Array *gamma, const Array *dy, double eps,
+    Array **outDx, Array **outDgamma, Array **outDbeta,
     mm::IAllocator &allocator);
 
 } // namespace camel::tensor::kernels

@@ -47,7 +47,7 @@ namespace {
 
 slot_t idxKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("idx", [&] {
-        TensorObject *t     = tensorArg(norm, 0);
+        Array *t     = tensorArg(norm, 0);
         const int64_t index = intArg(norm, 1);
         if (t->rank() != 1) {
             throw std::invalid_argument("single-index access requires a rank-1 tensor");
@@ -61,7 +61,7 @@ slot_t idxKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t idx2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("idx2d", [&] {
-        TensorObject *t   = tensorArg(norm, 0);
+        Array *t   = tensorArg(norm, 0);
         const int64_t row = intArg(norm, 1), col = intArg(norm, 2);
         if (t->rank() != 2) {
             throw std::invalid_argument("two-index access requires a rank-2 tensor");
@@ -119,7 +119,7 @@ std::optional<Type *> iterInfer(const InferContext &ctx) {
 
 slot_t iterKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("iter", [&] {
-        TensorObject *t = tensorArg(norm, 0);
+        Array *t = tensorArg(norm, 0);
         if (t->rank() == 0) {
             throw std::invalid_argument("a rank-0 tensor has no first dimension");
         }
@@ -130,7 +130,7 @@ slot_t iterKernel(ArgsView &, ArgsView &norm, context::Context &) {
         auto *arrayType      = ArrayType::create(TensorType::get(t->dtype(), rowShape));
         ::Array *result      = ::Array::create(mm::autoSpace(), static_cast<size_t>(rows));
         for (uint64_t i = 0; i < rows; ++i) {
-            TensorObject *row = TensorObject::createView(t, rowShape, mm::autoSpace(), i * inner);
+            Array *row = viewTensor(t, rowShape, mm::autoSpace(), i * inner);
             result->set<rtdata::Object *>(i, row, arrayType);
         }
         return camel::core::rtdata::toSlot(result);
@@ -141,7 +141,7 @@ std::optional<Type *> voidResult(const InferContext &) { return Type::Void(); }
 
 slot_t showKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("show", [&] {
-        TensorObject *t = tensorArg(norm, 0, true);
+        Array *t = tensorArg(norm, 0, true);
         t->print(std::cout, TensorType::Default());
         std::cout << std::endl;
         return NullSlot;

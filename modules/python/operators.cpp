@@ -143,7 +143,7 @@ py::object camelToPy(camel::core::type::Type *t, slot_t s, camel::core::context:
         Type *elemType             = arrayType->elemType();
         py::list lst;
         for (size_t i = 0; i < arr->size(); ++i)
-            lst.append(camelToPy(elemType, arr->data()[i], ctx));
+            lst.append(camelToPy(elemType, arr->getSlot(i), ctx));
         return std::move(lst);
     }
     case TypeCode::Tuple: {
@@ -286,7 +286,7 @@ slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, camel::core::contex
             if (arr) {
                 args = py::tuple(arr->size());
                 for (size_t i = 0; i < arr->size(); ++i) {
-                    PythonObjectHolder *h = unwrapPyObject(arr->data()[i], ctx);
+                    PythonObjectHolder *h = unwrapPyObject(arr->getSlot(i), ctx);
                     if (!h)
                         return NullSlot;
                     args[i] = py::reinterpret_borrow<py::object>(h->obj);

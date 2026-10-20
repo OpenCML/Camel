@@ -22,6 +22,7 @@
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/core/array/buffer.h"
 #include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
 #include "camel/core/process_exit.h"
@@ -216,6 +217,22 @@ class GcSummaryPass final : public GraphIRPass {
 
     GCGraph *apply(GCGraph *graph, std::ostream &os) override {
         os << camel::core::mm::profiler::summaryToText();
+        return graph;
+    }
+};
+
+class GcBuffersPass final : public GraphIRPass {
+  public:
+    explicit GcBuffersPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        camel::core::array::debugRunBufferSelfTest();
+        os << std::format(
+            "BUFFER_SELFTEST ok live={} peak={} count={} creations={}\n",
+            camel::core::array::bufferBytesLive(),
+            camel::core::array::bufferBytesPeak(),
+            camel::core::array::bufferLiveCount(),
+            camel::core::array::bufferCreations());
         return graph;
     }
 };
@@ -565,6 +582,7 @@ PassScopePtr initPassScope() {
                          {"major", def(PASS(GcMajorPass))},
                          {"config", def(PASS(GcConfigPass))},
                          {"summary", def(PASS(GcSummaryPass))},
+                          {"buffers", def(PASS(GcBuffersPass))},
                          {"remembered_set", def(PASS(GcRememberedSetPass))},
                          {"foreign_resource", def(PASS(GcForeignResourcePass))},
                          {"poison", def(PASS(GcPoisonPass))},
@@ -655,6 +673,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gcmajor", "std::gc::major"},
     {"std::gcconfig", "std::gc::config"},
     {"std::gcsummary", "std::gc::summary"},
+        {"std::gcbuffers", "std::gc::buffers"},
     {"std::gcremembered", "std::gc::remembered_set"},
     {"std::gcforeign", "std::gc::foreign_resource"},
     {"std::gcpoison", "std::gc::poison"},

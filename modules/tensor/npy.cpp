@@ -128,7 +128,7 @@ template <typename T> T readElement(const std::byte *src, bool swap) {
 
 } // namespace
 
-TensorObject *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocator) {
+Array *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocator) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         fail(path, "cannot open file");
@@ -181,7 +181,7 @@ TensorObject *loadNpy(const std::filesystem::path &path, mm::IAllocator &allocat
             std::string("unsupported element type '") + h.kind + std::to_string(h.itemSize) + "'");
     }
 
-    TensorObject *tensor = TensorObject::create(dtype, h.shape, allocator);
+    Array *tensor = createTensor(dtype, h.shape, allocator);
     const uint64_t count = tensor->numel();
     std::vector<std::byte> raw(count * h.itemSize);
     in.read(reinterpret_cast<char *>(raw.data()), static_cast<std::streamsize>(raw.size()));
@@ -293,7 +293,7 @@ NpyStorageView inspectNpyExact(std::string_view bytes) {
     return {dtype, parsed.shape, payload, big};
 }
 
-TensorObject *decodeNpyExact(std::string_view bytes, mm::IAllocator &allocator) {
+Array *decodeNpyExact(std::string_view bytes, mm::IAllocator &allocator) {
     const auto parsed = inspectNpyExact(bytes);
     std::string payload(parsed.payload);
     const size_t itemSize = parsed.dtype == TypeCode::Int64     ? 8
@@ -306,7 +306,7 @@ TensorObject *decodeNpyExact(std::string_view bytes, mm::IAllocator &allocator) 
     return tensorFromLittleEndian(payload, parsed.dtype, parsed.shape, allocator);
 }
 
-void saveNpy(const TensorObject *tensor, const std::filesystem::path &path) {
+void saveNpy(const Array *tensor, const std::filesystem::path &path) {
     const auto encoded =
         encodeNpy(tensor->dtype(), tensor->shapeSpan(), tensorToLittleEndian(tensor));
     std::ofstream out(path, std::ios::binary | std::ios::trunc);

@@ -3247,7 +3247,7 @@ class InputBinder {
     std::pair<Value, type::Type *> bind(const Example &example, const std::string &name, bool top) {
         type::Type *ty = example.type;
         if (const auto *tensorType = tensor::asTensorType(ty); tensorType || isTensor(example)) {
-            const auto *t = rtdata::fromSlot<tensor::TensorObject *>(example.value);
+            const auto *t = rtdata::fromSlot<tensor::Array *>(example.value);
             tensor::StaticShape shape(t->shapeSpan().begin(), t->shapeSpan().end());
             std::vector<size_t> dynamic;
             if (top) {
@@ -3518,7 +3518,7 @@ bindInputs(Emitter &emitter, const ExportOptions &options, std::span<const Examp
             !(example.type && example.type->code() == tensor::TensorType::typeCode())) {
             continue;
         }
-        const auto *t = rtdata::fromSlot<tensor::TensorObject *>(example.value);
+        const auto *t = rtdata::fromSlot<tensor::Array *>(example.value);
         batched += t->shapeSpan().empty() ? 0 : 1;
     }
     const bool sharedBatch = batched <= 1;
@@ -3601,7 +3601,7 @@ type::Type *exactTypeOf(slot_t value, type::Type *declared) {
         return declared;
     }
     if (declared->code() == tensor::TensorType::typeCode()) {
-        const auto *t = rtdata::fromSlot<tensor::TensorObject *>(value);
+        const auto *t = rtdata::fromSlot<tensor::Array *>(value);
         return tensor::TensorType::get(
             t->dtype(),
             tensor::StaticShape(t->shapeSpan().begin(), t->shapeSpan().end()));

@@ -888,14 +888,14 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
     const auto funcSlot   = dataIndexOf(graph, withInputs.front());
     const auto resultSlot = dataIndexOf(graph, nodeRef);
     const size_t arrSize  = currFrame.get<Array *>(arrSlot)->size();
-    Array *res            = Array::create(mm::autoSpace(), arrSize);
     auto *resultType      = currFrame.typeAt<ArrayType>(resultSlot);
+    Array *res            = Array::create(mm::autoSpace(), resultType, arrSize);
     currFrame.set(resultSlot, res);
 
     for (size_t i = 0; i < arrSize; ++i) {
         Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
-        slot_t element = arr->data()[i];
+        slot_t element = arr->getSlot(i);
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
@@ -917,21 +917,21 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
     const size_t arrSize  = currFrame.get<Array *>(arrSlot)->size();
     // Starts empty: Array::create(n) makes n null elements, and the kept ones were appended
     // after them.
-    Array *filtered  = Array::create(mm::autoSpace(), 0);
     auto *resultType = currFrame.typeAt<ArrayType>(resultSlot);
+    Array *filtered  = Array::create(mm::autoSpace(), resultType, 0);
     currFrame.set(resultSlot, filtered);
 
     for (size_t i = 0; i < arrSize; ++i) {
         Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
-        slot_t element = arr->data()[i];
+        slot_t element = arr->getSlot(i);
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         slot_t result = call(func->graph(), frame);
         if (fromSlot<bool>(result)) {
             Array *target = currFrame.get<Array *>(resultSlot);
-            target->append(currFrame.get<Array *>(arrSlot)->data()[i], resultType);
+            target->append(currFrame.get<Array *>(arrSlot)->getSlot(i), resultType);
         }
     }
     currFrame.get<Array *>(resultSlot)->shrinkToFit(resultType);
@@ -960,7 +960,7 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
     for (size_t i = 0; i < arrSize; ++i) {
         Array *arr          = currFrame.get<Array *>(arrSlot);
         Function *func      = currFrame.get<Function *>(funcSlot);
-        const slot_t args[] = {currFrame.get<slot_t>(resultSlot), arr->data()[i]};
+        const slot_t args[] = {currFrame.get<slot_t>(resultSlot), arr->getSlot(i)};
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(args, 2));
@@ -982,7 +982,7 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
     for (size_t i = 0; i < arrSize; ++i) {
         Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
-        slot_t element = arr->data()[i];
+        slot_t element = arr->getSlot(i);
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));

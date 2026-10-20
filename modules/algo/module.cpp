@@ -171,6 +171,8 @@ bool AlgoModule::load() {
         const std::string uri = std::string("algo:") + name;
         table.set(uri + "_in_place", {.stateOnly = true, .mayFault = true});
         table.setInPlaceForm(uri, uri + "_in_place");
+        // The form returns its operand, changed: the one fact the temporary-value analysis needs.
+        table.declareReusesOperand(uri + "_in_place");
     }
     // An in-place form changes the array it is given and returns it (docs/design/op-semantics
     // 8): a read-modify-write of its first operand, an object, whole.

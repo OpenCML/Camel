@@ -48,7 +48,7 @@ namespace tensor = camel::tensor;
 namespace {
 
 void requireEmbeddingInputs(
-    const tensor::TensorObject *table, const tensor::TensorObject *indices, const char *what) {
+    const tensor::Array *table, const tensor::Array *indices, const char *what) {
     if (!table || table->rank() != 2) {
         throw std::invalid_argument(std::string(what) + " expects a rank-2 table [rows, dim]");
     }
@@ -63,7 +63,7 @@ void requireEmbeddingInputs(
     }
 }
 
-int64_t checkedIndex(const tensor::TensorObject *indices, uint64_t offset, int64_t rows) {
+int64_t checkedIndex(const tensor::Array *indices, uint64_t offset, int64_t rows) {
     const int64_t index = indices->getAsInt64(offset);
     if (index < 0 || index >= rows) {
         throw std::invalid_argument("embedding index out of range");
@@ -73,8 +73,8 @@ int64_t checkedIndex(const tensor::TensorObject *indices, uint64_t offset, int64
 
 } // namespace
 
-tensor::TensorObject *embedding(
-    const tensor::TensorObject *table, const tensor::TensorObject *indices,
+tensor::Array *embedding(
+    const tensor::Array *table, const tensor::Array *indices,
     mm::IAllocator &allocator) {
     constexpr const char *kWhat = "embedding";
     requireEmbeddingInputs(table, indices, kWhat);
@@ -82,8 +82,8 @@ tensor::TensorObject *embedding(
     const int64_t count = indices->dim(0);
     const int64_t dim   = table->dim(1);
     int64_t shape[]     = {count, dim};
-    tensor::TensorObject *out =
-        tensor::TensorObject::create(table->dtype(), shape, allocator, false);
+    tensor::Array *out =
+        tensor::createTensor(table->dtype(), shape, allocator, false);
 
     for (int64_t row = 0; row < count; ++row) {
         const int64_t sourceRow = checkedIndex(indices, static_cast<uint64_t>(row), table->dim(0));
@@ -97,9 +97,9 @@ tensor::TensorObject *embedding(
     return out;
 }
 
-tensor::TensorObject *embeddingTableGrad(
-    const tensor::TensorObject *table, const tensor::TensorObject *indices,
-    const tensor::TensorObject *dy, mm::IAllocator &allocator) {
+tensor::Array *embeddingTableGrad(
+    const tensor::Array *table, const tensor::Array *indices,
+    const tensor::Array *dy, mm::IAllocator &allocator) {
     constexpr const char *kWhat = "embedding_table_grad";
     requireEmbeddingInputs(table, indices, kWhat);
     if (!dy || dy->rank() != 2 || dy->dim(0) != indices->dim(0) || dy->dim(1) != table->dim(1)) {
@@ -110,7 +110,7 @@ tensor::TensorObject *embeddingTableGrad(
         throw std::invalid_argument("embedding_table_grad dy must be floating point");
     }
 
-    tensor::TensorObject *grad = tensor::TensorObject::create(
+    tensor::Array *grad = tensor::createTensor(
         table->dtype(),
         std::span<const int64_t>(table->shape(), table->rank()),
         allocator,

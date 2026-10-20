@@ -344,6 +344,24 @@ GrowableFreeListAllocator &graphSpace() {
     return *allocator;
 }
 
+// Numeric array buffers: a free-list space, so a buffer is released as soon as its last array
+// value is gone. It is not the collected heap: data does not move and a pointer handed out
+// stays valid. Freeing reads the size from the block header, so the space keeps no per-block
+// table: buffers are freed in bulk under memory pressure and the table would only grow.
+GrowableFreeListAllocator &bufferSpace() {
+    static auto *allocator = new GrowableFreeListAllocator(([] {
+        GrowableSpaceConfig config = spaceConfig(
+            "buffer",
+            "numeric array buffers",
+            8 * MB,
+            256 * MB,
+            kBufferSpaceLimitEnv);
+        config.sizesFromHeaders = true;
+        return config;
+    })());
+    return *allocator;
+}
+
 // Permanent space: allocate only, never free (types and layouts).
 GrowableBumpAllocator &permSpace() {
     static auto *allocator = new GrowableBumpAllocator(spaceConfig(

@@ -42,7 +42,7 @@
 
 namespace camel::onnx {
 
-using tensor::TensorObject;
+using tensor::Array;
 using tensor::ops::ConstArg;
 using tensor::ops::TensorFacts;
 using type::TypeCode;
@@ -54,11 +54,11 @@ bool isScalarCode(TypeCode code) {
            code == TypeCode::Float64 || code == TypeCode::Bool;
 }
 
-const TensorObject *constantTensor(const Value &value) {
+const Array *constantTensor(const Value &value) {
     if (!value.isConstant() || !tensor::asTensorType(value.ty)) {
         return nullptr;
     }
-    return rtdata::fromSlot<TensorObject *>(value.slot);
+    return rtdata::fromSlot<Array *>(value.slot);
 }
 
 /// The ONNX element dtype an operand of Camel dtype `dtype` takes: float64 survives (a
@@ -184,7 +184,7 @@ TensorFacts factsOf(const Value &value) {
     if (value.isSymbolic()) {
         return {value.dtype, value.shape};
     }
-    if (const TensorObject *t = constantTensor(value)) {
+    if (const Array *t = constantTensor(value)) {
         return {t->dtype(), tensor::StaticShape(t->shapeSpan().begin(), t->shapeSpan().end())};
     }
     if (value.ty && isScalarCode(value.ty->code())) {
@@ -436,7 +436,7 @@ std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode>
     const TypeCode target  = dtype ? operandTarget(*dtype) : *facts.dtype;
     const std::string hint = value.label.empty() ? "const" : value.label;
 
-    if (const TensorObject *t = constantTensor(value)) {
+    if (const Array *t = constantTensor(value)) {
         const std::string key =
             std::format("t:{}:{}", static_cast<const void *>(t), static_cast<uint32_t>(target));
         if (auto it = initializerByKey_.find(key); it != initializerByKey_.end()) {
@@ -457,7 +457,7 @@ std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode>
 
     if (value.ty->code() == TypeCode::Array) {
         // Numeric (nested) arrays become tensors of their inferred dtype and shape.
-        TensorObject *t =
+        Array *t =
             tensor::tensorFromArray(value.slot, value.ty, tensor::ops::resultAllocator());
         retain(t, tensor::TensorType::Default());
         Value asTensor = Value::constant(rtdata::toSlot(t), tensor::TensorType::Default());

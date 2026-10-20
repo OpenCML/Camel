@@ -89,7 +89,8 @@ std::optional<slot_t> shapeFold(const InferContext &ctx, mm::IAllocator &allocat
     if (!shape || std::ranges::any_of(*shape, [](int64_t d) { return d == kUnknownDim; })) {
         return std::nullopt;
     }
-    ::Array *array = ::Array::create(allocator, shape->size());
+    ::Array *array =
+        ::Array::create(allocator, ArrayType::create(Type::Int64()), shape->size());
     for (size_t i = 0; i < shape->size(); ++i) {
         array->set(i, static_cast<camel::core::rtdata::Int64>((*shape)[i]));
     }
@@ -153,7 +154,7 @@ Shape flattenShape(std::span<const int64_t> shape, int64_t axis) {
 
 slot_t flattenKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("flatten", [&] {
-        TensorObject *t    = tensorArg(norm, 0);
+        Array *t    = tensorArg(norm, 0);
         const int64_t axis = hasArg(norm, 1) ? intArg(norm, 1) : 1;
         if (axis < -static_cast<int64_t>(t->rank()) || axis > static_cast<int64_t>(t->rank())) {
             throw std::invalid_argument("flatten axis out of range");
@@ -174,7 +175,7 @@ std::optional<Type *> flattenInfer(const InferContext &ctx) {
 // unsqueeze(t, axis)
 slot_t unsqueezeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("unsqueeze", [&] {
-        TensorObject *t = tensorArg(norm, 0);
+        Array *t = tensorArg(norm, 0);
         Shape shape     = t->shapeVector();
         const int64_t a = normalizeAxisOrThrow(intArg(norm, 1), shape.size() + 1);
         shape.insert(shape.begin() + a, 1);
@@ -238,7 +239,7 @@ std::optional<Type *> permuteInfer(const InferContext &ctx) {
 // concat(a, b, axis)
 slot_t concatKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("concat", [&] {
-        const TensorObject *parts[] = {tensorArg(norm, 0, true), tensorArg(norm, 1, true)};
+        const Array *parts[] = {tensorArg(norm, 0, true), tensorArg(norm, 1, true)};
         return wrap(k::concat(parts, intArg(norm, 2), resultAllocator()));
     });
 }
@@ -283,7 +284,7 @@ slot_t sliceKernel(ArgsView &, ArgsView &norm, context::Context &) {
     // Bounds outside the axis are a located fault, as for an array's slice (design principles
     // 3.9); checked before the kernel so the diagnostic is SliceOutOfRange, not a kernel error.
     // A malformed axis or step is left to the kernel.
-    const TensorObject *input = tensorArg(norm, 0);
+    const Array *input = tensorArg(norm, 0);
     const int64_t axisArg     = intArg(norm, 1);
     const int64_t start = intArg(norm, 2), end = intArg(norm, 3);
     const auto rank     = static_cast<int64_t>(input->rank());
@@ -373,7 +374,7 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
         }
         return parseIntArray(array, type);
     }
-    const TensorObject *tensor = tensorArg(args, index);
+    const Array *tensor = tensorArg(args, index);
     if (tensor->dtype() != TypeCode::Int64 && tensor->dtype() != TypeCode::Int32) {
         reportShapeError(op, "expects integer indices");
     }
@@ -389,7 +390,7 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
 
 // take(t, indices): rows along the first axis, in the order the indices give.
 slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const TensorObject *input = tensorArg(norm, 0);
+    const Array *input = tensorArg(norm, 0);
     if (input->rank() < 1) {
         reportShapeError("take", "expects a tensor with at least one dimension");
     }
@@ -451,7 +452,7 @@ std::optional<Type *> takeInfer(const InferContext &ctx) {
 
 // take_grad(t, indices, dy): scatter-add dy back into t's shape.
 slot_t takeGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const TensorObject *input = tensorArg(norm, 0);
+    const Array *input = tensorArg(norm, 0);
     if (input->rank() < 1) {
         reportShapeError("take_grad", "expects a tensor with at least one dimension");
     }
@@ -466,7 +467,7 @@ slot_t takeGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
                 extent);
         }
     }
-    const TensorObject *dy = tensorArg(norm, 2);
+    const Array *dy = tensorArg(norm, 2);
     return runKernel("take_grad", [&] {
         return wrap(k::takeGrad(input, indices, dy, resultAllocator()));
     });

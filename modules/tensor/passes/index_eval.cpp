@@ -213,7 +213,7 @@ int64_t linearIndex(const StaticShape &shape, std::span<const int64_t> coords) {
     return index;
 }
 
-Data dataOf(const TensorObject *t) {
+Data dataOf(const Array *t) {
     Data d{t->dtype(), t->shapeVector(), {}};
     d.values.reserve(t->numel());
     for (uint64_t k = 0; k < t->numel(); ++k) {
@@ -232,8 +232,8 @@ Data dataOf(const TensorObject *t) {
     return d;
 }
 
-TensorObject *tensorOf(const Data &d) {
-    TensorObject *t = TensorObject::create(d.dtype, d.shape, mm::autoSpace());
+Array *tensorOf(const Data &d) {
+    Array *t = createTensor(d.dtype, d.shape, mm::autoSpace());
     for (size_t k = 0; k < d.values.size(); ++k) {
         switch (d.dtype) {
         case TypeCode::Float32:
@@ -375,7 +375,10 @@ struct Arg {
         case Kind::Bool:
             return camel::core::rtdata::toSlot(flag);
         case Kind::Ints: {
-            ::Array *array = ::Array::create(mm::autoSpace(), ints.size());
+            ::Array *array = ::Array::create(
+                mm::autoSpace(),
+                camel::core::type::ArrayType::create(camel::core::type::Type::Int64()),
+                ints.size());
             for (size_t k = 0; k < ints.size(); ++k) {
                 array->set(k, static_cast<camel::core::rtdata::Int64>(ints[k]));
             }
@@ -1091,7 +1094,7 @@ void runOperator(
             if (resultType && resultType->code() == TypeCode::Float64) {
                 kernelResult = Data{TypeCode::Float64, {}, {f64(camel::core::rtdata::fromSlot<double>(r))}};
             } else {
-                kernelResult = dataOf(camel::core::rtdata::fromSlot<TensorObject *>(r));
+                kernelResult = dataOf(camel::core::rtdata::fromSlot<Array *>(r));
             }
         } catch (...) {
             kernelFault = true;

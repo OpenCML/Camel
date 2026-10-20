@@ -55,10 +55,6 @@ namespace camel::runtime {
 class GCGraph;
 }
 
-namespace camel::tensor {
-class TensorObject;
-}
-
 namespace camel::onnx {
 
 struct ExportOptions {

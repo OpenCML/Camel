@@ -87,7 +87,7 @@ bool TensorModule::load() {
                 if (!tensor::asTensorType(type) || value == NullSlot) {
                     return nullptr;
                 }
-                const auto *t   = camel::core::rtdata::fromSlot<tensor::TensorObject *>(value);
+                const auto *t   = camel::core::rtdata::fromSlot<tensor::Array *>(value);
                 const auto dims = t->shapeSpan();
                 return tensor::TensorType::get(
                     t->dtype(),
@@ -114,7 +114,7 @@ bool TensorModule::load() {
                     throw std::runtime_error(
                         "a Tensor parameter takes a .npy file, and '" + text + "' does not exist");
                 }
-                tensor::TensorObject *t = tensor::loadNpy(path, camel::core::mm::autoSpace());
+                tensor::Array *t = tensor::loadNpy(path, camel::core::mm::autoSpace());
                 const slot_t value =
                     camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Object *>(t));
                 if (const auto *want = tensor::asTensorType(declared)) {
@@ -139,7 +139,7 @@ bool TensorModule::load() {
                     path += ".npy";
                 }
                 camel::tensor::saveNpy(
-                    camel::core::rtdata::fromSlot<camel::tensor::TensorObject *>(value),
+                    camel::core::rtdata::fromSlot<camel::tensor::Array *>(value),
                     path);
                 return camel::utils::pathToUtf8(path);
             });

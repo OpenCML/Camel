@@ -236,6 +236,20 @@ std::optional<std::string> OperatorTable::inPlaceForm(std::string_view uri) cons
     return std::string(symbolText(form));
 }
 
+void OperatorTable::declareReusesOperand(std::string_view uri, bool reuses) {
+    std::unique_lock lock(mutex_);
+    entries_[internLocked(uri)].reusesOperand = reuses;
+}
+
+bool OperatorTable::reusesOperand(std::string_view uri) const {
+    const auto id = lookup(uri);
+    if (!id) {
+        return false;
+    }
+    std::shared_lock lock(mutex_);
+    return entries_[*id].reusesOperand;
+}
+
 void OperatorTable::declareGrant(std::string_view uri, AttrGrant grant) {
     (void)attr::key(grant.key); // validates the name
     auto shared = std::make_shared<const AttrGrant>(std::move(grant));
