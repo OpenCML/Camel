@@ -285,6 +285,9 @@ class GraphDraft {
     gc_node_ref_t resolveForwardedCtrlRef(gc_node_ref_t id) const;
     std::span<std::byte> mutablePayloadOf(gc_node_ref_t id);
     std::span<std::byte> mutablePayloadOf(DraftNode *node);
+    /// Points the OPER node `id` at the operator `uri` names: it runs that operator from now on,
+    /// and the operator pointer the node was created with is dropped (the URI is interned).
+    void retargetOperNode(gc_node_ref_t id, std::string_view uri);
 
     void setFuncType(camel::core::type::FunctionType *funcType) { funcType_ = funcType; }
     void setCaptureNames(std::span<const camel::core::SymId> names) {

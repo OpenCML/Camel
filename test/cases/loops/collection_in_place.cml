@@ -1,0 +1,13 @@
+// A legal program that needs the tape *and* writes its array state in place (design principles
+// 10.5): the loop appends to a state that starts from a literal, so the compiler would write it
+// in place, and `test::loop_collect` gives it two collection slots, so every round's next state
+// lands in a tape. Both cannot hold: an in-place loop appends into one array, and every tape
+// entry would be the same final array. The collector falls back to the copying append instead of
+// refusing the program as an internal error, so the tape holds one array per round — the printed
+// tape shows entries that grow round by round, not the final array repeated.
+func main(): int sync {
+    println(loop ys = [0] while len(ys) < 5 do ys->append<7>)
+    // The `for` shape of the same fallback.
+    println(loop acc = [0] for x in [7, 7, 7, 7] do acc->append<x>)
+    return 0
+}
