@@ -302,7 +302,7 @@ A `sync` written before a block (including the postfix form on a function body, 
   type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
   ```
 
-- When a `match` on an `enum` lists all variants, `case _` need not be written (the same as for `bool`, `T?`, `T!`). Variants are not distinguished by the type of the value (that would be a run-time type test, already excluded). The `A | B` that can be written now but that no value can enter is retired, and `|` is kept only for logical or. No new node kind is added on the graph (see 2.1).
+- When a `match` on an `enum` lists all variants, `case _` need not be written (the same as for `bool`, `T?`, `T!`). Variants are not distinguished by the type of the value (that would be a run-time type test, already excluded). `|` is only logical or. No new node kind is added on the graph (see 2.1).
 
 ### 5.4 Multi-dimensional arrays and dimensions
 
@@ -365,11 +365,10 @@ Type arguments can be written explicitly at a call, in two layers.
 - `f<w>` still means only `with` parameters and partial application; when both are written it is `f::<T><w>(x)`.
 - **Lambda parameter types may come from context**: when a lambda appears where a function type is expected (an argument, a `with` argument, an annotated binding), its unannotated parameter and return types are inferred from that function type, as in `tree_reduce<(count, leaf) => count + numel(leaf)>(model, 0)`; annotations are required when inference fails.
 
-### 5.10 Tightening `any`
+### 5.10 No `any`
 
-- **`any` is only a simplified way of writing**, an opening made temporarily before the type system matures. **`any` is to be tightened step by step**: only when there is a specific need and the expressive power of the type system is temporarily insufficient is an opening made temporarily; wherever there is a clearly recommended form (generics, overloading, a concrete type), `any` is explicitly rejected and the diagnostic gives the recommended form.
-- Already a compile-time error now: `any` as the condition of an `if`, `any` as the subject of a `match`, an unchecked `as any as T`.
-- Camel has no ability to determine a type at run time.
+- **There is no `any` type**: after compilation every value has a definite type. Several types are accepted through type parameters, values of different types sit side by side in tuples or structs, and JSON of a known shape is read with `decode_as`.
+- Camel has no way to test types at run time.
 
 ---
 
