@@ -868,8 +868,26 @@ assert(out.endsWith('55\n2584\n2639'), `unexpected output: ${out}`)
 timeout_ms = 8000
 
 [[tests]]
-name = "simplify_growth_budget.env_override"
-desc = "CAMEL_OPT_GROWTH_BUDGET overrides the budget: with 0 nothing is specialized or inlined and the program keeps its size (fewer than 60 nodes) and its output."
+name = "simplify_growth_budget.parameter_zero"
+desc = "The growth_budget parameter of std::opt sets the budget: with 0 nothing is specialized or inlined and the program keeps its size (fewer than 60 nodes) and its output. It used to be the environment variable CAMEL_OPT_GROWTH_BUDGET."
+kind = "behavior"
+case = "../../../cases/opt/generic/simplify_growth_budget.cml"
+args = ["${case}", "std::opt(growth_budget=0)", "std::stats", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
+assert(stats.nodes < 60, `program grew: ${stats.nodes} nodes`)
+assert(out.endsWith('55\n2584\n2639'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_growth_budget.environment_ignored"
+desc = "CAMEL_OPT_GROWTH_BUDGET is read no more: the very run that used to keep the program below 60 nodes because the variable set the budget to 0 now uses the default budget, so the recursion unrolls again (more than 60 nodes, fewer than 4000) and the output is unchanged. If the environment still applied, the assertion on the node count would fail."
 kind = "behavior"
 case = "../../../cases/opt/generic/simplify_growth_budget.cml"
 args = ["${case}", "std::opt", "std::stats", "std::nvm"]
@@ -880,7 +898,7 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
 const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
-assert(stats.nodes < 60, `program grew: ${stats.nodes} nodes`)
+assert(stats.nodes > 60 && stats.nodes < 4000, `budget not the default: ${stats.nodes} nodes`)
 assert(out.endsWith('55\n2584\n2639'), `unexpected output: ${out}`)
 }
 """
@@ -915,11 +933,11 @@ timeout_ms = 8000
 
 [[tests]]
 name = "perm_space_exhausted.diagnostic"
-desc = "Exhausting the permanent space inside a pass is RuntimeDiag::MemoryExhausted with the stage of the pass, raised before anything executes, naming the space, the limit and the variable that raises it (it used to be a write through null: the guard was an ASSERT, compiled out in release builds; then a PassInternalError). The budget is lifted by CAMEL_OPT_GROWTH_BUDGET to reach the limit, and the space is limited to 2 MB so that the limit is reached in a few seconds (it was 32 MB, the size of the space when it could not grow, until frame layouts were interned, then 16 MB until they moved into the graphs' own blocks: the same run now ends by itself with 2.9 MB in use)."
+desc = "Exhausting the permanent space inside a pass is RuntimeDiag::MemoryExhausted with the stage of the pass, raised before anything executes, naming the space, the limit and the variable that raises it (it used to be a write through null: the guard was an ASSERT, compiled out in release builds; then a PassInternalError). The budget is lifted by std::opt(growth_budget=100000000) to reach the limit, and the space is limited to 2 MB so that the limit is reached in a few seconds (it was 32 MB, the size of the space when it could not grow, until frame layouts were interned, then 16 MB until they moved into the graphs' own blocks: the same run now ends by itself with 2.9 MB in use)."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
-args = ["--output-format", "json", "${case}", "std::opt", "std::nvm"]
-envs = ["CAMEL_OPT_GROWTH_BUDGET=100000000", "CAMEL_PERM_SPACE_LIMIT_MB=2"]
+args = ["--output-format", "json", "${case}", "std::opt(growth_budget=100000000)", "std::nvm"]
+envs = ["CAMEL_PERM_SPACE_LIMIT_MB=2"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

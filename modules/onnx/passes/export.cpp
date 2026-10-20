@@ -480,22 +480,31 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
     const std::string shown  = calleeNameOf(root, call);
     const std::string name   = shown.empty() ? "the called function" : "'" + shown + "'";
     const InlineDeclined *no = callee ? report->find(root->name(), callee->name()) : nullptr;
-    const std::string budget = std::format(
-        "{} nodes, {}",
-        report->growthBudget,
-        report->budgetFromEnvironment ? std::format("set by {}", kGrowthBudgetEnvVar)
-                                      : std::string("the default"));
-    const std::string raise = std::format(
-        "raise the budget by setting the environment variable {} to a larger number of nodes",
-        kGrowthBudgetEnvVar);
+    // The budget is a parameter of the pass that ran the engine (std::opt, std::opt::inline, ...),
+    // not an environment variable; the message says which pass to change when it is known.
+    const std::string source =
+        !report->budgetFromParameter ? std::string("the default")
+        : report->passName.empty()
+            ? std::string("set by the growth_budget parameter")
+            : std::format("set by the growth_budget parameter of {}", report->passName);
+    const std::string raise =
+        report->passName.empty()
+            ? std::string("raise the budget by writing a larger growth_budget on the pass that "
+                          "inlines (std::opt or std::opt::inline)")
+            : std::format(
+                  "raise the budget by writing a larger growth_budget on {} (for example "
+                  "{}(growth_budget=8192))",
+                  report->passName,
+                  report->passName);
+    const std::string budget =
+        std::format("{} nodes, {}", report->growthBudget, source);
     if (no && no->why == InlineDecline::GrowthBudget) {
         return std::format(
             "the inliner ran before onnx::export and left this call because its growth budget "
             "was exhausted: the budget is {} nodes ({}), {} were spent, and inlining {} copies {} "
             "more; {}",
             report->growthBudget,
-            report->budgetFromEnvironment ? std::format("set by {}", kGrowthBudgetEnvVar)
-                                          : std::string("the default"),
+            source,
             report->growthSpent,
             name,
             no->calleeNodes,

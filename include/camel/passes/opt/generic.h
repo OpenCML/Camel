@@ -95,7 +95,7 @@ class ControlReductionPass : public RuntimeGraphRewritePass {
  * prunes the branch, which exposes the next call to specialize and inline), so a recursion of
  * static depth unrolls and a static program reduces to straight-line code. Rounds are bounded:
  * a recursion whose depth is not static would otherwise specialize one level deeper each round.
- * Growth is bounded as well (OptimizeRewriteConfig::growthBudgetNodes, one budget for all
+ * Growth is bounded as well (OptimizeRewriteConfig::growthBudget, one budget for all
  * rounds): a recursion with constant arguments that branches (`fib(15)`) would otherwise unroll
  * into its whole call tree; past the budget the remaining calls stay calls.
  */

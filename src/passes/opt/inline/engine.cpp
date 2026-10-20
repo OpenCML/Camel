@@ -42,7 +42,6 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
-#include <cstdlib>
 #include <format>
 #include <functional>
 #include <optional>
@@ -561,7 +560,7 @@ struct DeclinedCall {
 };
 
 /// The rewritten root, or nullptr when nothing changed. `growthSpent` counts the nodes copied
-/// so far against `growthBudget` (see OptimizeRewriteConfig::growthBudgetNodes). `declinedOut`
+/// so far against `growthBudget` (see OptimizeRewriteConfig::growthBudget). `declinedOut`
 /// receives the direct calls the last round examined and did not inline, with the reason: the
 /// last round of a session that changes nothing examines every call that is left.
 GCGraph *applyRuntimeOptimizeRewrite(
@@ -1031,17 +1030,6 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
 
 } // namespace camel::passes::opt
 
-size_t optimizeGrowthBudget(const OptimizeRewriteConfig &config) {
-    if (const char *text = std::getenv(kGrowthBudgetEnvVar); text && *text) {
-        char *end                      = nullptr;
-        const unsigned long long value = std::strtoull(text, &end, 10);
-        if (end && *end == 0) {
-            return static_cast<size_t>(value);
-        }
-    }
-    return config.growthBudgetNodes;
-}
-
 camel::runtime::GCGraph *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
     std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut) {
@@ -1053,7 +1041,7 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     if (!hasAnyRewritePhaseEnabled(config)) {
         return graph;
     }
-    const size_t growthBudget = optimizeGrowthBudget(config);
+    const size_t growthBudget = config.growthBudget.nodes;
     size_t ownGrowthSpent     = 0;
     size_t &growthSpent       = config.growthSpentNodes ? *config.growthSpentNodes : ownGrowthSpent;
     const bool hadBudget      = growthSpent < growthBudget;
@@ -1079,22 +1067,27 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     }
     if (config.enableInlining && context) {
         // For a later pass that has to explain a call this one left (see InlineReport).
-        auto report                   = std::make_shared<InlineReport>();
-        report->growthBudget          = growthBudget;
-        report->growthSpent           = growthSpent;
-        report->budgetFromEnvironment = growthBudget != config.growthBudgetNodes;
-        report->maxOwnerNodes         = config.inlineConfig.maxOwnerNodes;
-        report->smallNodes            = config.inlineConfig.smallSubgraphMaxNonDataPortNodes;
-        report->declined              = std::move(declined);
+        auto report                 = std::make_shared<InlineReport>();
+        report->growthBudget        = growthBudget;
+        report->growthSpent         = growthSpent;
+        report->budgetFromParameter = config.growthBudget.written;
+        report->passName            = config.growthBudget.passName;
+        report->maxOwnerNodes       = config.inlineConfig.maxOwnerNodes;
+        report->smallNodes          = config.inlineConfig.smallSubgraphMaxNonDataPortNodes;
+        report->declined            = std::move(declined);
         context->setPassFact(kInlineReportFactKey, std::move(report));
     }
     if (hadBudget && growthSpent >= growthBudget) {
+        const std::string where = config.growthBudget.passName.empty()
+                                      ? std::string("the growth_budget parameter")
+                                      : "the growth_budget parameter of " +
+                                            config.growthBudget.passName;
         CAMEL_LOG_WARN_S(
             "OptimizePass",
-            "Growth budget of {} nodes reached ({} overrides it): the remaining calls are "
-            "neither specialized nor inlined.",
+            "Growth budget of {} nodes reached ({}): the remaining calls are neither "
+            "specialized nor inlined.",
             growthBudget,
-            kGrowthBudgetEnvVar);
+            where);
     }
     if (changedOut) {
         *changedOut = changed;

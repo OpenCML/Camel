@@ -3557,10 +3557,11 @@ OptimizeRewriteConfig exportRewriteConfig() {
     // only walked as a value DAG from here on (no execution topo is built), so the sibling
     // JOINs this creates are valid.
     config.enableBranchedCallSplit = true;
-    // An export has to reach straight-line code or it is refused, so it is not held to the
-    // growth bounds that keep an optimization pass cheap (CAMEL_OPT_GROWTH_BUDGET still applies
-    // when set). A graph too large for the runtime representation fails at commit.
-    config.growthBudgetNodes          = std::numeric_limits<size_t>::max();
+    // An export has to reach straight-line code or it is refused, so it is not held to the growth
+    // bounds that keep an optimization pass cheap (the growth_budget parameter belongs to the
+    // pass on the pipeline, and an export that runs after it may be held to it). A graph too
+    // large for the runtime representation fails at commit.
+    config.growthBudget.nodes         = std::numeric_limits<size_t>::max();
     config.inlineConfig.maxOwnerNodes = std::numeric_limits<size_t>::max();
     return config;
 }
