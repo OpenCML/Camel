@@ -73,7 +73,9 @@ def visualize(loss_history: list, images_flat: list, n: int, d: int,
     if show_window:
         plt.show()
     else:
-        out_path = "test/tmp/mnist/mnist_result.png"
+        # The runner gives each test its own scratch directory (CAMEL_TEST_TMPDIR), removed with
+        # the test; the fallback keeps the case usable when it is run by hand.
+        out_path = os.path.join(os.environ.get("CAMEL_TEST_TMPDIR", "test/tmp"), "mnist", "mnist_result.png")
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         fig.savefig(out_path)
         plt.close(fig)
