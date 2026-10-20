@@ -615,6 +615,7 @@ DraftNode *GraphDraft::createDecodedNode(
     draftNode->header.origin           = graph->nodeOrigin(sourceRef);
     draftNode->header.permissions      = graph->nodePermissions(sourceRef);
     draftNode->header.attrs            = graph->nodeAttrs(sourceRef);
+    draftNode->header.region           = graph->nodeRegion(sourceRef);
     draftNode->header.storageCls       = storageClass;
 
     if (sourceNode->kind == GCNodeKind::Brch) {
@@ -738,6 +739,20 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
         }
     };
 
+    // The regions, with their node references in the draft's numbering.
+    if (graph->regionCount() != 0) {
+        draft->regions_.assign(graph->nodePayload()->regionTable,
+                               graph->nodePayload()->regionTable + graph->regionCount());
+        for (GCRegion &region : draft->regions_) {
+            region.owner    = translateNodeRef(region.owner, sourceToDraft);
+            region.result   = translateNodeRef(region.result, sourceToDraft);
+            region.callSite = translateNodeRef(region.callSite, sourceToDraft);
+        }
+        const auto* ports = graph->nodePayload()->regionPorts;
+        for (size_t i = 0; i < graph->nodePayload()->regionPortCount; ++i) {
+            draft->regionPorts_.push_back(translateNodeRef(ports[i], sourceToDraft));
+        }
+    }
     translateVector(graph->normPorts(), draft->normPorts_);
     translateVector(graph->withPorts(), draft->withPorts_);
     translateVector(graph->closureNodes(), draft->closureNodes_);
@@ -940,6 +955,7 @@ gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
     gc_node_ref_t id = static_cast<gc_node_ref_t>(nodesById_.size());
     touchRefs();
     nodesById_.push_back(rebuildNode(id, init));
+    nodesById_[id]->header.region = init.region;
     sourceRefsById_.push_back(kInvalidNodeRef);
     noteNodeKind(id, init.kind);
     liveNodeCount_++;

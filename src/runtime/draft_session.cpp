@@ -647,7 +647,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
         before.funcType() != after.funcType() || before.closureType() != after.closureType() ||
         before.staticDataType() != after.staticDataType() ||
         before.hasNodePermissions() != after.hasNodePermissions() ||
-        before.hasNodeAttrs() != after.hasNodeAttrs()) {
+        before.hasNodeAttrs() != after.hasNodeAttrs() || a->hasRegions != b->hasRegions) {
         return false;
     }
     // The columns, chunk by chunk: a chunk both graphs hold is the same chunk.
@@ -661,9 +661,15 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
             !sameArray(x.nodes(), y.nodes(), x.nodeCount) ||
             !sameArray(x.edges, y.edges, x.edgeCount) ||
             (a->hasPermissions && !sameArray(x.permissions, y.permissions, x.nodeCount)) ||
-            (a->hasAttrs && !sameArray(x.attrs, y.attrs, x.nodeCount))) {
+            (a->hasAttrs && !sameArray(x.attrs, y.attrs, x.nodeCount)) ||
+            (a->hasRegions && !sameArray(x.regions, y.regions, x.nodeCount))) {
             return false;
         }
+    }
+    if (a->regionCount != b->regionCount || a->regionPortCount != b->regionPortCount ||
+        !sameArray(a->regionTable, b->regionTable, a->regionCount) ||
+        !sameArray(a->regionPorts, b->regionPorts, a->regionPortCount)) {
+        return false;
     }
     if (!sameArray(a->normPorts, b->normPorts, a->normPortCount) ||
         !sameArray(a->withPorts, b->withPorts, a->withPortCount) ||

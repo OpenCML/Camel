@@ -107,6 +107,9 @@ struct DraftNodeHeader {
     // Source origin (camel::source::origin_id_t) of the node, 0 when unknown. Rewrites keep it:
     // a node that replaces another inherits its origin, inlined nodes keep the callee's.
     uint64_t origin = 0;
+    // The region the node is in (GCRegion; 0 for the body of the function). Moved with the node
+    // by rewrites that keep it in place; a node a rewrite adds is in the region it names.
+    uint32_t region = 0;
     constexpr size_t usedBytes() const {
         return static_cast<size_t>(payloadBytes) +
                (static_cast<size_t>(normInputCount) + static_cast<size_t>(withInputCount) +
@@ -128,6 +131,7 @@ struct DraftNodeInit {
     uint64_t origin                   = 0;
     uint8_t permissions               = 0; // see DraftNodeHeader::permissions
     uint32_t attrs                    = 0; // see DraftNodeHeader::attrs
+    uint32_t region                   = 0; // see DraftNodeHeader::region; 0 on a rewrite: kept
     std::span<const std::byte> payload{};
     std::span<const gc_node_ref_t> normInputs{};
     std::span<const gc_node_ref_t> withInputs{};
@@ -474,6 +478,30 @@ class GraphDraft {
     /// state and one array per slot. A graph producer that builds such a node calls this; the
     /// source syntax never does. Asserts that `id` is a LOOP node.
     void setLoopCollectionCount(gc_node_ref_t id, uint32_t count);
+    /// Regions (GCRegion). A draft has region 0, the body, once it has any other. Ids are not
+    /// reused.
+    size_t regionCount() const { return regions_.size(); }
+    const GCRegion &region(uint32_t id) const { return regions_[id]; }
+    size_t regionPortCount() const { return regionPorts_.size(); }
+    gc_node_ref_t regionPort(size_t index) const { return regionPorts_[index]; }
+    std::span<const gc_node_ref_t> regionPortsOf(uint32_t id) const {
+        return {regionPorts_.data() + regions_[id].portBegin, regions_[id].portCount};
+    }
+    /// The region node `id` is in, 0 when it is in none but the body.
+    uint32_t nodeRegion(gc_node_ref_t id) const;
+    void setNodeRegion(gc_node_ref_t id, uint32_t region);
+    /// A new region in `parent`; for a control region the node that owns it and its index.
+    uint32_t addRegion(
+        GCRegionKind kind, uint32_t parent, gc_node_ref_t owner = kInvalidNodeRef,
+        uint32_t index = 0);
+    /// An Inline region: the body of `callee`, which replaced the call `callSite`.
+    uint32_t addInlineRegion(uint32_t parent, GraphId callee, gc_node_ref_t callSite);
+    void setRegionResult(uint32_t id, gc_node_ref_t result);
+    void setRegionPorts(uint32_t id, std::span<const gc_node_ref_t> ports);
+    void setRegionOrigin(uint32_t id, uint32_t origin);
+    void setRegionAttrs(uint32_t id, uint32_t attrs);
+    /// True when `inner` is `outer` or lies in it.
+    bool regionWithin(uint32_t inner, uint32_t outer) const;
     /// Source origin of node `id` (see DraftNodeHeader::origin).
     uint64_t nodeOrigin(gc_node_ref_t id) const;
     /// The origin of the first live node that has one, 0 when none has: where to report
@@ -566,6 +594,8 @@ class GraphDraft {
     std::unordered_map<GraphId, uint32_t> payloadGraphIndex_;
     std::vector<DraftNode *> nodesById_;
     std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
+    std::vector<GCRegion> regions_; // empty, or region 0 (the body) then the others
+    std::vector<gc_node_ref_t> regionPorts_;
     std::vector<gc_node_ref_t> sourceRefsById_;
     std::vector<gc_node_ref_t> draftIdsBySourceRef_;
     gc_cnt_t liveNodeCount_ = 0;
