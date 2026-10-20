@@ -1,6 +1,6 @@
 id = "opt.pass_params"
 order = 331
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "pipeline", "pass-parameters"]
 
 # Pass parameters are general pipeline syntax (design principles 9.2): `name(key=value, ...)`

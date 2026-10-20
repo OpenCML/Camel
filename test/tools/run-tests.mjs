@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { performance } from 'perf_hooks'
-import { spawnSync } from 'child_process'
+import { spawn, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { parseTomlFile } from './toml-lite.mjs'
 import { compareGirDotIsomorphic } from './gir-dot.mjs'
@@ -67,6 +67,148 @@ const TIMEOUT_SCALE = (() => {
     return Number.isFinite(scale) && scale > 0 ? scale : 1
 })()
 
+/**
+ * A counting semaphore with FIFO order. A normal test holds one slot; a test marked
+ * `parallel = false` asks for every slot, so it starts only when no other test is running and
+ * no other test starts while it runs. FIFO keeps a queued serial test ahead of tests queued
+ * after it, and no holder ever waits for a slot another holder needs, so the queue cannot
+ * deadlock. A test waiting for another test's result (`priority`) goes to the front: it must
+ * follow its reference, not the whole run.
+ */
+class Slots {
+    constructor(count) {
+        this.free = count
+        this.queue = []
+    }
+
+    /**
+     * `priority` puts a test in front of the queue. A test that waits for another test's result
+     * (a comparison against a reference test, a back-end agreement check) must not queue behind
+     * every other test of the run: it would run last, and the in-order printer would hold back
+     * the whole run's output until then. It queues as soon as its reference is done, which is
+     * after the plan's earlier tests have already taken their slots.
+     */
+    acquire(count, priority = false) {
+        if (count <= this.free && this.queue.length === 0) {
+            this.free -= count
+            return Promise.resolve()
+        }
+        return new Promise((resolve) => {
+            if (priority) this.queue.unshift({ count, resolve })
+            else this.queue.push({ count, resolve })
+        })
+    }
+
+    release(count) {
+        this.free += count
+        while (this.queue.length > 0 && this.queue[0].count <= this.free) {
+            const next = this.queue.shift()
+            this.free -= next.count
+            next.resolve()
+        }
+    }
+}
+
+/**
+ * A test is run alone (`parallel = false`, on the test or on its plan) when it shares something
+ * outside its own scratch directory: a fixed path another test writes, a compiler cache, the
+ * wall clock. A benchmark is run alone as well unless it says otherwise: its numbers mean
+ * nothing next to a machine busy with other tests. A test may say `parallel = true` to opt in.
+ */
+function isSerial(plan, test) {
+    if (test.parallel === true) return false
+    if (test.parallel === false || plan.parallel === false) return true
+    return test.kind === 'benchmark'
+}
+
+/**
+ * Run one child process and collect its output, as `spawnSync` did, but without blocking the
+ * runner: the other tests run while this one waits. The timeout kills the whole process tree
+ * (a test may have started a compiler or an interpreter of its own).
+ */
+function runProcess(command, args, { cwd, env, timeoutMs }) {
+    return new Promise((resolve) => {
+        const started = performance.now()
+        let stdout = ''
+        let stderr = ''
+        let timedOut = false
+        let settled = false
+        let timer = null
+        let child = null
+        const finish = (status, signal, error) => {
+            if (settled) return
+            settled = true
+            if (timer) clearTimeout(timer)
+            resolve({
+                status: typeof status === 'number' ? status : null,
+                signal: signal ?? null,
+                error: error || null,
+                timedOut,
+                wallMs: performance.now() - started,
+                stdout,
+                stderr,
+            })
+        }
+        try {
+            child = spawn(command, args, {
+                cwd,
+                env,
+                stdio: ['ignore', 'pipe', 'pipe'],
+                windowsHide: true,
+                // On POSIX a process group lets the timeout take the whole tree down; on Windows
+                // `taskkill /T` does that.
+                detached: !IS_WINDOWS,
+            })
+        } catch (error) {
+            finish(null, null, error)
+            return
+        }
+        child.stdout.setEncoding('utf8')
+        child.stderr.setEncoding('utf8')
+        child.stdout.on('data', (chunk) => {
+            stdout += chunk
+        })
+        child.stderr.on('data', (chunk) => {
+            stderr += chunk
+        })
+        child.on('error', (error) => finish(null, null, error))
+        child.on('close', (status, signal) => finish(status, signal, null))
+        if (timeoutMs > 0) {
+            timer = setTimeout(() => {
+                timedOut = true
+                killProcessTree(child)
+            }, timeoutMs)
+        }
+    })
+}
+
+function killProcessTree(child) {
+    if (!child || !child.pid) return
+    if (IS_WINDOWS) {
+        const killed = spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+            stdio: 'ignore',
+            windowsHide: true,
+        })
+        if (killed.error || killed.status !== 0) {
+            try {
+                child.kill('SIGKILL')
+            } catch {
+                /* already gone */
+            }
+        }
+        return
+    }
+    try {
+        process.kill(-child.pid, 'SIGKILL')
+    } catch {
+        try {
+            child.kill('SIGKILL')
+        } catch {
+            /* already gone */
+        }
+    }
+}
+
 function walkPlans(entryPath, files = []) {
     const stats = fs.statSync(entryPath)
     if (stats.isFile()) {
@@ -79,10 +221,30 @@ function walkPlans(entryPath, files = []) {
     return files
 }
 
+const DEFAULT_JOBS = (() => {
+    const count = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length
+    return Math.max(1, count || 1)
+})()
+
+const TIERS = new Set(['fast', 'slow', 'all'])
+
+function positiveInteger(value, what) {
+    const parsed = Number(value)
+    if (!Number.isInteger(parsed) || parsed < 1) {
+        throw new Error(`${what} needs a positive integer, got '${value}'`)
+    }
+    return parsed
+}
+
 function parseArgs(argv) {
     const options = {
         updateGolden: false,
-        tier: null,
+        // `fast` is the default layer: the full test set is opt-in (`--tier all`, `npm run test:all`).
+        tier: 'fast',
+        // `--jobs` defaults to the processor count: one test per core, no more. `--jobs 1` gives
+        // exactly the historical serial execution, which is how the runner's own self-test
+        // compares parallel output with serial output.
+        jobs: DEFAULT_JOBS,
         targets: [],
     }
     for (let i = 0; i < argv.length; i++) {
@@ -90,7 +252,17 @@ function parseArgs(argv) {
         if (arg === '--update-golden') {
             options.updateGolden = true
         } else if (arg === '--tier' && i + 1 < argv.length) {
-            options.tier = argv[++i]
+            const tier = argv[++i]
+            if (!TIERS.has(tier)) throw new Error(`--tier must be one of ${[...TIERS].join(', ')}, got '${tier}'`)
+            options.tier = tier
+        } else if (arg.startsWith('--tier=')) {
+            const tier = arg.slice('--tier='.length)
+            if (!TIERS.has(tier)) throw new Error(`--tier must be one of ${[...TIERS].join(', ')}, got '${tier}'`)
+            options.tier = tier
+        } else if (arg === '--jobs' && i + 1 < argv.length) {
+            options.jobs = positiveInteger(argv[++i], '--jobs')
+        } else if (arg.startsWith('--jobs=')) {
+            options.jobs = positiveInteger(arg.slice('--jobs='.length), '--jobs')
         } else {
             options.targets.push(path.resolve(process.cwd(), arg))
         }
@@ -338,16 +510,16 @@ function printRunSummary(summary) {
  * output as the reason; the test is then neither passed nor failed. Use it only for conditions
  * outside the code under test, such as network access for a dataset download.
  */
-function checkPrecondition(test, sharedVars) {
+async function checkPrecondition(test, sharedVars) {
     if (!test.skip_unless || test.skip_unless.length === 0) {
         return null
     }
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
     const [cmd, ...args] = expandArgs(test.skip_unless, { ...sharedVars, case: casePath })
-    const proc = spawnSync(cmd, args, {
+    const proc = await runProcess(cmd, args, {
         cwd: REPO_ROOT,
-        encoding: 'utf8',
-        timeout: test.skip_unless_timeout_ms || 120000,
+        env: process.env,
+        timeoutMs: test.skip_unless_timeout_ms || 120000,
     })
     if (proc.status === 0) {
         return null
@@ -360,12 +532,18 @@ function sanitizeSegment(value) {
     return String(value).replace(/[<>:"/\\|?*]+/g, '_')
 }
 
-/** The fresh scratch directory of one test; it is removed when the test is done. */
+/**
+ * The fresh scratch directory of one test; it is removed when the test is done. The plan's id is
+ * part of the path so that two tests of different plans with the same name (a sweep copies a
+ * test under a prefix, but a future plan may not) cannot share a directory, which in a parallel
+ * run would mean one test reading what another wrote.
+ */
 function createTestScratchDir(test) {
     const base = sanitizeSegment(test.name) || 'test'
-    let dir = path.join(TEST_SCRATCH_RUN, base)
+    const planBase = sanitizeSegment(test.__planId || 'plan') || 'plan'
+    let dir = path.join(TEST_SCRATCH_RUN, planBase, base)
     for (let suffix = 2; fs.existsSync(dir); suffix++) {
-        dir = path.join(TEST_SCRATCH_RUN, `${base}-${suffix}`)
+        dir = path.join(TEST_SCRATCH_RUN, planBase, `${base}-${suffix}`)
     }
     ensureDir(dir)
     return dir
@@ -480,7 +658,7 @@ function verificationConfigOf(test) {
     return null
 }
 
-function runVerification(test, result) {
+async function runVerification(test, result) {
     const config = verificationConfigOf(test)
     if (!config) return null
     if (config.error) {
@@ -549,15 +727,14 @@ function runVerification(test, result) {
     }
     fs.writeFileSync(payloadPath, JSON.stringify(payload, null, 2))
 
-    const proc = spawnSync(process.execPath, [scriptPath, payloadPath], {
+    const proc = await runProcess(process.execPath, [scriptPath, payloadPath], {
         cwd: REPO_ROOT,
         env: process.env,
-        encoding: 'utf8',
-        timeout: (test.verify_timeout_ms || 5000) * TIMEOUT_SCALE,
+        timeoutMs: (test.verify_timeout_ms || 5000) * TIMEOUT_SCALE,
     })
     fs.rmSync(tempDir, { recursive: true, force: true })
 
-    const timedOut = Boolean(proc.error && proc.error.code === 'ETIMEDOUT')
+    const timedOut = proc.timedOut
     return {
         ok: !timedOut && proc.status === 0,
         sourceKind,
@@ -606,7 +783,19 @@ function compareField(field, actual, baseline) {
     throw new Error(`unsupported differential field: ${field}`)
 }
 
-function validateTest(test, result, context) {
+/**
+ * The result a test compares against. Test names are not unique across plans (`shapes.nvm` exists
+ * in both `compile.enum` and `para.handoff`), so the plan's own test wins; `compare_to` that names
+ * a test of another plan falls back to the name. A serial run's map was overwritten as tests
+ * finished, which only gave the right answer because the reference of a plan always ran just
+ * before its dependents; a parallel run must not depend on that.
+ */
+function lookupCompleted(context, name) {
+    const scoped = context.planId ? context.completed.get(`${context.planId}/${name}`) : undefined
+    return scoped ?? context.completed.get(name)
+}
+
+async function validateTest(test, result, context) {
     const failures = []
     const scope = context.scope || {}
     if (typeof test.expect_exit === 'number' && result.exitCode !== test.expect_exit) {
@@ -686,7 +875,7 @@ function validateTest(test, result, context) {
         }
     }
     if (test.kind === 'differential') {
-        const base = context.completed.get(test.compare_to)
+        const base = lookupCompleted(context, test.compare_to)
         if (!base) {
             failures.push(`compare_to target not found: ${test.compare_to}`)
         } else {
@@ -700,7 +889,7 @@ function validateTest(test, result, context) {
     if (test.__backendReference) {
         // A test with `backends`: every back end after the first must agree with the first on
         // the listed fields.
-        const base = context.completed.get(test.__backendReference)
+        const base = lookupCompleted(context, test.__backendReference)
         if (!base) {
             failures.push(`reference back end did not run: ${test.__backendReference}`)
         } else {
@@ -724,14 +913,14 @@ function validateTest(test, result, context) {
             }
         }
     }
-    result.verification = runVerification(test, result)
+    result.verification = await runVerification(test, result)
     if (result.verification && !result.verification.ok) {
         failures.push(...verifyFailureLines(result.verification))
     }
     return failures
 }
 
-function runOneTest(test, sharedVars, logContext) {
+async function runOneTest(test, sharedVars, logContext) {
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
     const toolName = test.tool || 'camel'
     const toolExe = toolName === 'python' ? pythonExecutable() : TOOL_EXES[toolName]
@@ -773,23 +962,20 @@ function runOneTest(test, sharedVars, logContext) {
     const pathKey = IS_WINDOWS ? Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
     env[pathKey] = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env[pathKey] || ''}`
 
-    const started = performance.now()
-    const proc = spawnSync(toolExe, args, {
+    const proc = await runProcess(toolExe, args, {
         cwd: REPO_ROOT,
         env,
-        encoding: 'utf8',
-        timeout: (test.timeout_ms || 10000) * TIMEOUT_SCALE,
+        timeoutMs: (test.timeout_ms || 10000) * TIMEOUT_SCALE,
     })
-    const ended = performance.now()
     const raw = {
         command: `${toolExe} ${args.join(' ')}`.trim(),
-        exitCode: typeof proc.status === 'number' ? proc.status : null,
-        signal: proc.signal ?? null,
-        timedOut: Boolean(proc.error && proc.error.code === 'ETIMEDOUT'),
+        exitCode: proc.status,
+        signal: proc.signal,
+        timedOut: proc.timedOut,
         errorMessage: proc.error ? proc.error.message : null,
-        wallMs: ended - started,
-        stdout: proc.stdout || '',
-        stderr: proc.stderr || '',
+        wallMs: proc.wallMs,
+        stdout: proc.stdout,
+        stderr: proc.stderr,
     }
     raw.output = `${raw.stdout}${raw.stderr}`
 
@@ -816,7 +1002,7 @@ function runOneTest(test, sharedVars, logContext) {
     // The verification reads this test's output: it must run before the scratch directory goes.
     let failures
     try {
-        failures = validateTest(test, result, { ...logContext, scope })
+        failures = await validateTest(test, result, { ...logContext, scope })
     } finally {
         fs.rmSync(scratch, { recursive: true, force: true })
     }
@@ -909,8 +1095,9 @@ function expandBackends(test) {
 
 function loadPlanTests(planPath) {
     const doc = parseTomlFile(planPath)
+    const planId = doc.id || path.basename(planPath, '.plan.toml')
     const tests = (doc.tests || [])
-        .map((test) => ({ ...(doc.defaults || {}), ...test, __planPath: planPath }))
+        .map((test) => ({ ...(doc.defaults || {}), ...test, __planPath: planPath, __planId: planId }))
         .flatMap(expandBackends)
     return { doc, tests }
 }
@@ -942,18 +1129,39 @@ function expandSweeps(doc, planPath) {
         const scale = Number.isFinite(sweep.timeout_scale) ? sweep.timeout_scale : 1
         const prefix = sweep.skip_env_prefix || null
         const rename = (name) => `${sweep.name}:${name}`
+        // `fast_sample = N` keeps N tests per source plan in the fast layer and puts the rest in
+        // the slow one: the default developer run still checks the property against every plan,
+        // and the full sweep (every eligible test) is one `--tier slow`/`--tier all` away. The
+        // sample prefers a test that runs the program to completion, since that is the one that
+        // exercises the most of the collector; a plan of negative tests still contributes one.
+        const fastSample = Number.isInteger(sweep.fast_sample) && sweep.fast_sample > 0 ? sweep.fast_sample : 0
         const sources = sweep.plans
             .flatMap((entry) => walkPlans(path.resolve(path.dirname(planPath), entry)))
             .filter((source) => source !== planPath)
             .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item)))
             .sort()
         for (const source of sources) {
+            const eligible = []
             for (const test of loadPlanTests(source).tests) {
                 if (test.kind !== 'behavior' && test.kind !== 'snapshot') continue
                 if (test.sweep === false || test.__knownFail) continue
                 if ((test.tool || 'camel') !== 'camel') continue
                 const own = (test.envs || []).map((entry) => String(entry))
                 if (prefix && own.some((entry) => entry.startsWith(prefix))) continue
+                eligible.push(test)
+            }
+            const sampled = new Set()
+            if (fastSample > 0) {
+                const preferred = eligible.filter(
+                    (test) => (test.expect_exit === undefined || test.expect_exit === 0) && test.tier !== 'slow'
+                )
+                for (const test of [...preferred, ...eligible]) {
+                    if (sampled.size >= fastSample) break
+                    sampled.add(test)
+                }
+            }
+            for (const test of eligible) {
+                const own = (test.envs || []).map((entry) => String(entry))
                 out.push({
                     ...test,
                     name: rename(test.name),
@@ -962,6 +1170,7 @@ function expandSweeps(doc, planPath) {
                     verify_timeout_ms: (test.verify_timeout_ms || 5000) * scale,
                     __backendReference: test.__backendReference ? rename(test.__backendReference) : null,
                     __sweep: sweep.name,
+                    ...(fastSample > 0 ? { tier: sampled.has(test) ? 'fast' : 'slow' } : {}),
                 })
             }
         }
@@ -969,54 +1178,213 @@ function expandSweeps(doc, planPath) {
     return out
 }
 
+/**
+ * A test's layer: `tier` on the test first, then its plan. Only `slow` is special; anything else
+ * (the old `smoke`/`feat`/`benchmark` labels included) is the fast layer, so a plan written
+ * before the split still runs by default. A test that says `tier` must say one of the two.
+ */
+function testTier(plan, test) {
+    if (test.tier !== undefined) {
+        if (test.tier !== 'fast' && test.tier !== 'slow') {
+            throw new Error(`test '${test.name}' of ${plan.id || plan.__planPath}: tier must be 'fast' or 'slow'`)
+        }
+        return test.tier
+    }
+    return plan.tier === 'slow' ? 'slow' : 'fast'
+}
+
+/**
+ * Select the tests of a layer. `all` keeps everything. A differential test or a back end that
+ * compares against an earlier test needs that test's result, so the earlier test is kept even
+ * when its own layer is the other one: a fast run must not fail because it left out the
+ * reference a selected test compares against.
+ */
+function selectTier(plans, tier) {
+    if (tier === 'all') return plans
+    const order = []
+    for (const plan of plans) {
+        for (const test of plan.tests) order.push({ plan, test })
+    }
+    const indexOfName = new Map()
+    const indexOfPlanName = new Map()
+    order.forEach((entry, index) => {
+        if (!indexOfName.has(entry.test.name)) indexOfName.set(entry.test.name, index)
+        indexOfPlanName.set(`${entry.plan.id}/${entry.test.name}`, index)
+    })
+    const selected = new Set()
+    order.forEach((entry, index) => {
+        if (testTier(entry.plan, entry.test) === tier) selected.add(index)
+    })
+    const pending = [...selected]
+    while (pending.length > 0) {
+        const entry = order[pending.pop()]
+        const test = entry.test
+        const references = []
+        if (test.kind === 'differential' && test.compare_to) references.push(test.compare_to)
+        if (test.__backendReference) references.push(test.__backendReference)
+        for (const reference of references) {
+            const index = indexOfPlanName.get(`${entry.plan.id}/${reference}`) ?? indexOfName.get(reference)
+            if (index !== undefined && !selected.has(index)) {
+                selected.add(index)
+                pending.push(index)
+            }
+        }
+    }
+    const kept = new Set(selected)
+    const selectedPlans = []
+    let cursor = 0
+    for (const plan of plans) {
+        const tests = []
+        for (const test of plan.tests) {
+            if (kept.has(cursor)) tests.push(test)
+            cursor++
+        }
+        if (tests.length > 0) selectedPlans.push({ ...plan, tests })
+    }
+    return selectedPlans
+}
+
 function loadPlans(targets, tier) {
-    const planPaths = targets.length > 0 ? targets.flatMap((target) => walkPlans(target)) : walkPlans(PLANS_ROOT)
+    const discovered = targets.length > 0 ? targets.flatMap((target) => walkPlans(target)) : walkPlans(PLANS_ROOT)
+    // `--all` names the plans root and a plan may also be named explicitly; the same plan must
+    // not run twice.
+    const planPaths = [...new Set(discovered.map((planPath) => path.resolve(planPath)))]
     const plans = planPaths
         .map((planPath) => {
             const { doc, tests: ownTests } = loadPlanTests(planPath)
             const tests = [...ownTests, ...expandSweeps(doc, planPath)]
             return { ...doc, __planPath: planPath, tests }
         })
-        .filter((plan) => !tier || plan.tier === tier)
         .sort((lhs, rhs) => {
             const lhsOrder = Number.isFinite(lhs.order) ? lhs.order : Number.MAX_SAFE_INTEGER
             const rhsOrder = Number.isFinite(rhs.order) ? rhs.order : Number.MAX_SAFE_INTEGER
             if (lhsOrder !== rhsOrder) return lhsOrder - rhsOrder
             return lhs.__planPath.localeCompare(rhs.__planPath)
         })
-    return plans
+    return selectTier(plans, tier)
 }
 
-function main() {
-    const options = parseArgs(process.argv.slice(2))
-    const sharedVars = loadVars()
-    const plans = loadPlans(options.targets, options.tier)
-    ensureDir(LOG_ROOT)
-    const logDir = path.join(LOG_ROOT, timestamp())
-    ensureDir(logDir)
+/** The result of a test the runner itself could not run: its failure is reported like any other. */
+function runnerErrorResult(casePath, message) {
+    return {
+        command: '',
+        exitCode: null,
+        signal: null,
+        timedOut: false,
+        errorMessage: message,
+        wallMs: 0,
+        stdout: '',
+        stderr: '',
+        output: '',
+        normalized: { stdout: '', stderr: '', output: '' },
+        diagnostics: [],
+        benchmark: null,
+        testTmp: null,
+        testTmpRelative: null,
+        verification: null,
+        failures: [`runner error: ${message}`],
+        status: 'fail',
+        casePath,
+    }
+}
 
-    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable: ${CAMEL_EXE}`)
-    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} discovered plans: ${plans.length}`)
+/**
+ * Run every selected test, at most `options.jobs` at a time, and print the results in plan and
+ * test order: a status line, its failure details and its log files are the same as a serial run's,
+ * in the same place, whichever test finishes first. A test that compares against an earlier one
+ * waits for it; a test marked serial (`isSerial`) holds every slot while it runs.
+ */
+async function executePlans(plans, options, sharedVars, logDir) {
+    const entries = []
+    for (const plan of plans) {
+        for (const test of plan.tests) {
+            entries.push({ plan, test, index: entries.length, dependencies: [], settled: false, outcome: null })
+        }
+    }
+    const byName = new Map()
+    const byPlanName = new Map()
+    for (const entry of entries) {
+        if (!byName.has(entry.test.name)) byName.set(entry.test.name, entry)
+        byPlanName.set(`${entry.plan.id}/${entry.test.name}`, entry)
+    }
+    for (const entry of entries) {
+        const references = []
+        if (entry.test.kind === 'differential' && entry.test.compare_to) references.push(entry.test.compare_to)
+        if (entry.test.__backendReference) references.push(entry.test.__backendReference)
+        entry.dependencies = references
+            .map((name) => byPlanName.get(`${entry.plan.id}/${name}`) || byName.get(name))
+            .filter((dependency) => dependency && dependency !== entry)
+    }
 
+    const slots = new Slots(options.jobs)
     const summary = { pass: 0, fail: 0, skip: 0, xfail: 0 }
+    // Results by test name, as a serial run had them: a differential test and a back end after
+    // the first read the result of the test they compare against.
     const completed = new Map()
+    const startedAt = performance.now()
+    let printed = 0
+    let printedPlan = null
 
-    // Files under a fixed scratch path are not this run's output.
-    clearTestScratch()
-    try {
-        for (const plan of plans) {
+    const printResult = (entry) => {
+        const { plan, test, outcome } = entry
+        if (plan !== printedPlan) {
             printPlanHeader(plan)
-            for (const test of plan.tests) {
-                const skipReason = checkPrecondition(test, sharedVars)
+            printedPlan = plan
+        }
+        if (outcome.status === 'skip') {
+            summary.skip++
+            printStatusLine('skip', test.name)
+            printDetailLines([outcome.reason])
+            return
+        }
+        summary[outcome.status]++
+        printStatusLine(outcome.status, test.name, outcome.metric)
+        if (outcome.failures.length > 0) {
+            const note = test.__knownFail ? test.known_fail_note || test.failure_note : test.failure_note
+            if (note) {
+                printDetailLines([`note: ${note}`])
+            }
+            printDetailLines(outcome.failures)
+            if (outcome.status === 'fail') printFailedOutput(outcome.result)
+        }
+        writeLogFiles(plan, test, outcome.result, outcome.status, logDir)
+    }
+
+    // Results are printed strictly in plan and test order: whichever test finishes first, the
+    // output is the serial run's output. A result waits until every earlier one is out.
+    const drain = () => {
+        while (printed < entries.length && entries[printed].settled) {
+            printResult(entries[printed])
+            printed++
+        }
+    }
+
+    for (const entry of entries) {
+        entry.promise = (async () => {
+            if (entry.dependencies.length > 0) {
+                await Promise.all(entry.dependencies.map((dependency) => dependency.promise))
+            }
+            const tokens = isSerial(entry.plan, entry.test) ? options.jobs : 1
+            // A test that needs another test's result queues at the front: it starts right after
+            // its reference instead of behind every test of the run, which would also delay the
+            // in-order printer until the end.
+            await slots.acquire(tokens, entry.dependencies.length > 0)
+            try {
+                const skipReason = await checkPrecondition(entry.test, sharedVars)
                 if (skipReason) {
-                    summary.skip++
-                    printStatusLine('skip', test.name)
-                    printDetailLines([skipReason])
-                    continue
+                    entry.outcome = { status: 'skip', reason: skipReason }
+                    return
                 }
-                const result = runOneTest(test, sharedVars, { options, completed })
-                completed.set(test.name, result)
-                if (test.__knownFail) {
+                let result
+                try {
+                    result = await runOneTest(entry.test, sharedVars, { options, completed, planId: entry.plan.id })
+                } catch (error) {
+                    const casePath = path.resolve(path.dirname(entry.test.__planPath), entry.test.case)
+                    result = runnerErrorResult(casePath, error && error.message ? error.message : String(error))
+                }
+                completed.set(`${entry.plan.id}/${entry.test.name}`, result)
+                completed.set(entry.test.name, result)
+                if (entry.test.__knownFail) {
                     // A known failure that fails is reported and counted apart, and does not fail
                     // the run. One that passes fails the run: the mark is out of date.
                     if (result.status === 'fail') {
@@ -1024,24 +1392,72 @@ function main() {
                     } else {
                         result.status = 'fail'
                         result.failures.push(
-                            `marked known_fail on '${test.__backend}' but passes: remove the mark`
+                            `marked known_fail on '${entry.test.__backend}' but passes: remove the mark`
                         )
                     }
                 }
-                summary[result.status]++
-                const metric = formatMetric(result)
-                printStatusLine(result.status, test.name, metric)
-                if (result.failures.length > 0) {
-                    const note = test.__knownFail ? test.known_fail_note || test.failure_note : test.failure_note
-                    if (note) {
-                        printDetailLines([`note: ${note}`])
-                    }
-                    printDetailLines(result.failures)
-                    if (result.status === 'fail') printFailedOutput(result)
+                entry.outcome = {
+                    status: result.status,
+                    result,
+                    metric: formatMetric(result),
+                    failures: result.failures,
                 }
-                writeLogFiles(plan, test, result, result.status, logDir)
+            } finally {
+                slots.release(tokens)
             }
-        }
+        })()
+            .catch((error) => {
+                // A failure of the runner itself (a precondition helper, a verification script the
+                // scheduler lost) must not lose the output of the tests around it: it becomes the
+                // result of this test and the run continues to its summary.
+                const casePath = path.resolve(path.dirname(entry.test.__planPath), entry.test.case)
+                const result = runnerErrorResult(casePath, error && error.message ? error.message : String(error))
+                entry.outcome = { status: 'fail', result, metric: '', failures: result.failures }
+            })
+            .finally(() => {
+                entry.settled = true
+                drain()
+            })
+    }
+
+    await Promise.all(entries.map((entry) => entry.promise))
+    drain()
+    return { summary, wallMs: performance.now() - startedAt }
+}
+
+async function main() {
+    const options = parseArgs(process.argv.slice(2))
+    // Writing golden files from several tests at once would make the content depend on which
+    // test finished last; update-golden is a deliberate, serial maintenance run.
+    if (options.updateGolden && options.jobs !== 1) {
+        console.log(`${COLORS.cyan}[INFO]${COLORS.reset} --update-golden writes golden files: running serially (--jobs 1)`)
+        options.jobs = 1
+    }
+    const sharedVars = loadVars()
+    const plans = loadPlans(options.targets, options.tier)
+    ensureDir(LOG_ROOT)
+    // The pid keeps two runs started in the same second (the self-test does this) out of one
+    // directory, whose logs and summary.json would otherwise overwrite each other.
+    const logDir = path.join(LOG_ROOT, `${timestamp()}_${process.pid}`)
+    ensureDir(logDir)
+    const testCount = plans.reduce((count, plan) => count + plan.tests.length, 0)
+
+    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable: ${CAMEL_EXE}`)
+    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} discovered plans: ${plans.length}`)
+    console.log(
+        `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
+    )
+    if (testCount === 0 && options.tier !== 'all') {
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} this selection has no ${options.tier} tests: --tier all runs both layers`
+        )
+    }
+
+    // Files under a fixed scratch path are not this run's output.
+    clearTestScratch()
+    let outcome
+    try {
+        outcome = await executePlans(plans, options, sharedVars, logDir)
     } finally {
         // The per-test directories are already gone; this removes what a program wrote under a
         // fixed path of tmp/test or test/tmp, so repeated runs do not accumulate anything.
@@ -1055,17 +1471,26 @@ function main() {
                 generated_at: new Date().toISOString(),
                 camel_exe: CAMEL_EXE,
                 update_golden: options.updateGolden,
-                summary,
+                tier: options.tier,
+                jobs: options.jobs,
+                wall_ms: outcome.wallMs,
+                summary: outcome.summary,
             },
             null,
             2
         )
     )
 
-    printRunSummary(summary)
+    printRunSummary(outcome.summary)
+    console.log(
+        `${COLORS.cyan}[INFO]${COLORS.reset} wall: ${(outcome.wallMs / 1000).toFixed(1)} s, jobs: ${options.jobs}, tier: ${options.tier}`
+    )
 
-    const exitCode = summary.fail > 0 ? 1 : 0
+    const exitCode = outcome.summary.fail > 0 ? 1 : 0
     process.exit(exitCode)
 }
 
-main()
+main().catch((error) => {
+    console.error(error && error.stack ? error.stack : String(error))
+    process.exit(1)
+})

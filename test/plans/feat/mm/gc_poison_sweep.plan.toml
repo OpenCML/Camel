@@ -1,6 +1,6 @@
 id = "mm.gc_poison_sweep"
 order = 369
-tier = "feat"
+tier = "fast"
 tags = ["feat", "mm", "gc", "poison"]
 desc = """
 The handle rules (docs/technical/36_gc_handle_rules.md) checked against what the other plans
@@ -15,6 +15,11 @@ it has a test there. Left out: the slow model tests of autodiff and onnx (run th
 `CAMEL_GC_POISON=1 node scripts/test.js feat/modules/autodiff.plan.toml` when touching those
 modules), tests that choose their own collector settings, benchmarks and differential tests.
 A test that cannot run in the mode says `sweep = false` and why.
+
+`fast_sample = 1` keeps one test per source plan in the fast layer (`npm run test`), preferring
+one that runs its program to completion: the default developer run still poisons a safepoint in
+every plan, so a C++ pointer or a root kept across a safepoint is caught, while the full sweep
+of every test stays in the slow layer (`npm run test:all`, `--tier slow`).
 """
 
 [[sweeps]]
@@ -24,3 +29,4 @@ exclude = ["modules/autodiff", "modules/onnx"]
 envs = ["CAMEL_GC_POISON=1"]
 skip_env_prefix = "CAMEL_GC_"
 timeout_scale = 20
+fast_sample = 1

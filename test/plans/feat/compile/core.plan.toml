@@ -1,6 +1,6 @@
 id = "compile.semantic_negative"
 order = 310
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "semantic"]
 
 [[tests]]

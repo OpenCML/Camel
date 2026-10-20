@@ -1,6 +1,6 @@
 id = "linear.match_patterns"
 order = 343
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "match"]
 
 [[tests]]

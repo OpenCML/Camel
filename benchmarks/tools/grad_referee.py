@@ -518,9 +518,22 @@ def run(args, seed: Optional[int]) -> dict:
 
     model = args.model
     weights, x = draw(model, seed)
+    shrunk = args.batch is not None or args.size is not None
+    if shrunk:
+        if x.ndim != 4:
+            raise SystemExit(f"--batch/--size need a 4-D benchmark input, {model}'s is {x.shape}")
+        batch = args.batch if args.batch is not None else x.shape[0]
+        size = args.size if args.size is not None else x.shape[2]
+        if not (1 <= batch <= x.shape[0]) or not (1 <= size <= x.shape[2]):
+            raise SystemExit(f"cannot take {batch} x {size}x{size} of an input of {x.shape}")
+        x = np.ascontiguousarray(x[:batch, :, :size, :size])
     print(f"\n==== {model}  seed={'benchmark' if seed is None else seed}  activation={args.activation}  torch {torch.__version__}")
+    if shrunk:
+        print(f"  input: the first {x.shape[0]} sample(s), {x.shape[2]}x{x.shape[3]}, of the benchmark input")
     with tempfile.TemporaryDirectory() as tmp:
-        artifacts = write_artifacts(Path(tmp), model, weights, x) if seed is not None else None
+        # The slice must be handed to Camel through artifacts even for the benchmark's own
+        # weights: its environment otherwise names the benchmark's input.npy.
+        artifacts = write_artifacts(Path(tmp), model, weights, x) if (seed is not None or shrunk) else None
         model_file = args.camel_model
         if model_file is None and args.activation != "relu":
             model_file = make_variant(model, args.activation, Path(tmp) / "variant")
@@ -609,6 +622,13 @@ def main() -> int:
     parser.add_argument("--kink-limit", type=int, default=60, help="at most this many candidate units")
     parser.add_argument("--no-fd", action="store_true")
     parser.add_argument("--no-sensitivity", action="store_true")
+    # A smaller input keeps the network and every weight as benchmarked but shortens the run:
+    # the slice is taken from the benchmark input (or from the seed's draw), and Camel reads it
+    # through the same artifacts file PyTorch reads. Used by the slow kink tests of
+    # test/plans/feat/modules/autodiff.plan.toml to fit the full-suite budget; the gradient
+    # rules and the relu-kink criterion are the same.
+    parser.add_argument("--batch", type=int, help="use the first N samples of the input (default: all)")
+    parser.add_argument("--size", type=int, help="crop the input's spatial extent to S x S (default: as benchmarked)")
     parser.add_argument("--json", type=Path, help="write the per-tensor numbers there")
     parser.add_argument("--threads", type=int, default=min(os.cpu_count() or 1, 8), help="PyTorch and Camel threads")
     parser.add_argument("--require", action="store_true", help="exit 1 unless every run's verdict is PASS or PASS-KINK")

@@ -1,6 +1,6 @@
 id = "modules.tensor"
 order = 362
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "tensor"]
 
 [[tests]]

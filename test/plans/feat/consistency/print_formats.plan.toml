@@ -1,6 +1,6 @@
 id = "consistency.print_formats"
 order = 366
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "io", "backends"]
 desc = "`print<fmt>` ends with no line end and `println<fmt>` with one, as without a format (design principles 10.6; the extra line end and the extra empty line were defects of the interpreter). The generated C++ prints the same (feat/trans/cpp.agree_with_fvm runs this program too)."
 

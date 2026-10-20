@@ -1,6 +1,6 @@
 id = "modules.json_value"
 order = 352
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "json", "gc"]
 
 # json.decode gives a `Json!` (design principles 11.2; modules/json/value.h): a value of a

@@ -1,6 +1,6 @@
 id = "compile.gir"
 order = 311
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "gir", "sync"]
 
 [[tests]]

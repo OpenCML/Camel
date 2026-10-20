@@ -1,6 +1,6 @@
 id = "modules.operator_semantics"
 order = 363
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "tensor", "math", "semantics"]
 desc = "The registration and query interface of operator semantics (camel/core/operator_semantics.h, docs/design/op-semantics section 4): the checks a declaration must pass, the version rules of bind, the declaration epoch, and the numeric semantics declared for the built-in scalar arithmetic, the tensor operators and the math module's operators, as `camel inspect --ops` shows them."
 

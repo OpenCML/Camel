@@ -1,6 +1,6 @@
 id = "compile.return_type"
 order = 131
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "diagnostics"]
 
 [[tests]]

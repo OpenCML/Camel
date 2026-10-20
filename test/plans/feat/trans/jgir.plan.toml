@@ -1,6 +1,6 @@
 id = "trans.jgir"
 order = 338
-tier = "feat"
+tier = "fast"
 tags = ["feat", "trans", "dump", "json"]
 
 [[tests]]

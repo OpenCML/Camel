@@ -1,6 +1,6 @@
 id = "compile.operators"
 order = 324
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "semantic", "negative", "ops"]
 desc = "A combination of operator and operand type without an implementation is rejected when the program is compiled, at the operator."
 

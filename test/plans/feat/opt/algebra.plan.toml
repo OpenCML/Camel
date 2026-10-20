@@ -1,6 +1,6 @@
 id = "opt.algebra"
 order = 329
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "numeric", "algebra"]
 
 [defaults]

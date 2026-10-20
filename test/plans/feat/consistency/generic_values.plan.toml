@@ -1,6 +1,6 @@
 id = "consistency.generic_values"
 order = 360
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "compile", "generics", "function-values"]
 desc = "A generic function may stand wherever a function is expected; it is instantiated at compile time once the position fixes its type variables (design principles 5.5)"
 

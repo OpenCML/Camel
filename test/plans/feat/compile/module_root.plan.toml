@@ -1,6 +1,6 @@
 id = "compile.module_root"
 order = 334
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "semantic", "modules", "import"]
 desc = "All modules build into one root graph; a capture is bound to the value it captures, not to its name"
 

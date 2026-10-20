@@ -1,6 +1,6 @@
 id = "consistency.comprehension"
 order = 361
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "compile", "comprehension"]
 desc = "[e for x in xs if c] is filter then map: the same graph as the two calls written out (design principles 4.2)"
 

@@ -1,6 +1,6 @@
 id = "opt.generic"
 order = 321
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "generic"]
 
 [[tests]]

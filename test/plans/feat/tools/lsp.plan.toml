@@ -1,6 +1,6 @@
 id = "tools.lsp"
 order = 900
-tier = "feat"
+tier = "fast"
 tags = ["feat", "tools", "lsp"]
 desc = "camel-ls, the language server. Each test is a script that starts the server, talks LSP to it over stdio (test/tools/lsp/client.mjs) and checks the answers."
 
@@ -32,6 +32,8 @@ case = "../../../cases/tools/lsp/editing.test.mjs"
 name = "lsp.robustness"
 desc = "Malformed frames, empty and half-written documents, positions outside the text, UTF-16 positions on lines with Chinese text and emoji, a document of 20000 lines, a burst of edits, cancellation: every request is answered and the server stays up."
 case = "../../../cases/tools/lsp/robustness.test.mjs"
+# Slow layer: measured 6.2 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 timeout_ms = 180000
 
 [[tests]]

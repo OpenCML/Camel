@@ -14,6 +14,80 @@ Test plans describe how the repository test runner executes Camel cases, compare
 
 When adding a new feature or test case, manually run the case from the command line first, inspect the raw execution flow and stdout/stderr, then write the plan assertions that lock in the intended behavior.
 
+## Running The Tests
+
+- `npm run test` runs the **fast** layer: what a developer runs after a change.
+- `npm run test:all` runs everything, fast and slow (`--tier all`).
+- `node scripts/test.js <plan file or directory>` runs that target; the same layer rules apply,
+  so add `--tier all` to include its slow tests.
+- `--jobs N` sets how many tests run at once (default: the processor count). `--jobs 1` is the
+  serial execution, useful to reproduce a failure or to compare output.
+- `node scripts/test.js --changed` selects the plans a change touches (see "Selecting plans from
+  a change").
+
+The runner prints one line per test and, at the end, `[SUMMARY]` counts and the wall time with
+the job count and layer.
+
+## Layers: fast And slow
+
+`tier` puts a test in one of two layers. It may be set on the plan (the default for all its
+tests) or on one `[[tests]]` entry (an override), with the values `fast` and `slow`:
+
+- `fast` is the default layer and the one `npm run test` runs. It must stay useful for a
+  developer loop: on an 8-core machine a parallel fast run is expected to finish in about two
+  minutes (H10 measured it on a machine that other worktrees were using at the same time, so it
+  took longer; the numbers are in `docs/handover/reports/H10.md`).
+- `slow` is everything whose result is still worth having but whose cost does not belong in
+  the loop: the comparisons against PyTorch, the collector stress and poison scans, the random
+  program checks (progen and fuzzing), the performance benchmarks, and any other single test
+  that takes about five seconds or more.
+
+Rules for a new test:
+
+- It is fast by default: do not mark a test slow to make the default set look fast.
+- If it takes about five seconds or more, it **must** be marked `slow` and say in its `desc` (or
+  in a comment) why the time is inherent. The same applies when a plan's tests are slow as a
+  group: put `tier = "slow"` on the plan itself and say why in the plan's `desc`.
+- A test that needs another test's result (`compare_to`, `backends_agree`) is kept in the same
+  layer as that test. When a layer filter would separate them, the runner keeps the reference
+  too, so a selected test never fails only because its baseline was filtered out.
+- A plan written before the split still works: any `tier` other than `slow` is the fast layer.
+
+## Parallel Execution
+
+Tests run in parallel by default, one per core (`--jobs N` overrides; `--jobs 1` is serial).
+Every test already has its own scratch directory, so files do not collide. What must not run
+next to another test is marked instead of being dropped:
+
+- `parallel = false` on a `[[tests]]` entry, or on the plan to mark all its tests, runs that
+  test alone: no other test runs while it does.
+- `kind = "benchmark"` tests run alone unless they say `parallel = true`, because the machine's
+  load is part of what they measure.
+
+Use `parallel = false` only when a test shares something outside `${test_tmp}`: a fixed path
+another test writes, a compiler cache or a build directory, a port, a global counter file. A
+test that writes a fixed path in the repository for its own purposes is a reason to mark it,
+not to keep a plan serial for everything.
+
+The output is the serial run's output: results are printed in plan and test order, whichever
+test finished first, and the exit code and failure text are the same. The run's log directory
+and `summary.json` land under `test/results/log/` as before.
+
+## Selecting Plans From A Change
+
+`node scripts/test.js --changed` takes the files that differ from `origin/fsh-dev` (committed,
+staged or not) and runs the plans they touch, so a small change does not start the whole fast
+layer. The mapping is `test/plan-selection.json`: a list of rules, each a path prefix and the
+plans it selects, as paths under `test/plans`; a rule with `"self": true` selects the changed
+plan file itself (a change to `test/plans/...` runs that plan). The first rule a file matches
+wins; the union of the rules that matched is run in plan order. When no rule matches, or git
+cannot read the base branch, the whole fast layer runs. `--tier all` combines with `--changed`
+to run the selected plans' slow tests too.
+
+Keep the file short and honest: map the smallest set of plans that would catch a regression in
+that area, specific rules first (`src/passes/sched/` before `src/passes/`). Add a rule when a
+new subsystem gets a plan of its own; do not add a rule that maps every change to every plan.
+
 ## Top-Level Plan Fields
 
 Each plan file may define:
@@ -23,7 +97,9 @@ Each plan file may define:
 - `order`
   Numeric ordering key used when the runner sorts plans.
 - `tier`
-  Logical suite bucket such as `smoke`, `feat`, or `perf`.
+  The plan's default layer, `fast` or `slow` (see "Layers"). A test may override it.
+- `parallel`
+  `false` runs every test of the plan alone; a per-test `parallel` is narrower and preferred.
 - `tags`
   Free-form string array for indexing and search.
 - `desc`
@@ -64,6 +140,11 @@ Every `[[tests]]` entry may use these common fields:
   `skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]`.
 - `skip_unless_timeout_ms`
   Optional timeout for the precondition command. Default is `120000`.
+- `tier`
+  `fast` or `slow`, overriding the plan's layer for this test only.
+- `parallel`
+  `false` runs the test alone (no other test of the run starts while it runs); `true` opts a
+  `kind = "benchmark"` test into the parallel pool. See "Parallel Execution".
 
 ## Plan Defaults
 
@@ -101,8 +182,12 @@ everywhere is written once:
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
 
-`test/tools/selftest/run.mjs` checks these fields on a fixture plan; it runs with the default
-test set (`test/plans/feat/consistency/runner.plan.toml`).
+`test/tools/selftest/run.mjs` checks these fields on fixture plans, together with the parallel
+ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a
+`parallel = false` test overlaps nothing), the tier filter (`fast`, `slow` and `all` select
+the expected tests) and the `--changed` mapping (`src/passes/sched/` selects the scheduler
+plans, `docs/` the documentation checks, a plan file itself, an unknown path nothing); it runs
+with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
 
 ## Supported Normalizers
 
@@ -278,10 +363,13 @@ exclude = ["modules/onnx"]            # substrings of plan paths that are left o
 envs = ["CAMEL_GC_POISON=1"]
 skip_env_prefix = "CAMEL_GC_"         # leave out tests that set such a variable themselves
 timeout_scale = 20                    # their timeouts are multiplied by this
+fast_sample = 1                       # keep one test per source plan in the fast layer
 ```
 
 Only `behavior` and `snapshot` tests of the `camel` tool are taken; a test marked
-`known_fail` or `sweep = false` is left out. Use a sweep for a property that every program
+`known_fail` or `sweep = false` is left out. `fast_sample = N` keeps the first N such tests of
+each source plan (preferring one whose program runs to completion) in the fast layer and puts
+the rest in the slow one; without it every copy follows the plan's layer. Use a sweep for a property that every program
 must keep whatever it computes: `feat/mm/gc_poison_sweep.plan.toml` checks the handle rules
 of the collector (`docs/technical/36_gc_handle_rules.md`) against the tests of the modules,
 so an operator added later is covered as soon as it has a test. A test that cannot run under
@@ -294,6 +382,10 @@ a sweep (it asserts wall-clock time, or which graphs a back end compiles) says
   whole plans under a mode that slows every program down, e.g.
   `CAMEL_GC_POISON=1 CAMEL_TEST_TIMEOUT_SCALE=20 node scripts/test.js feat`.
 - Variables in the environment of the runner reach every test; a test's own `envs` win.
+- `--jobs N` limits the parallel tests; it is an option of the runner process, not an
+  environment variable, so a test cannot change how many of its neighbours run.
+- The timeouts above apply to one test; a parallel run does not relax them, and a test whose
+  time depends on the machine's load belongs alone (`parallel = false`) or in the slow layer.
 
 ## Snapshot Tests
 
@@ -358,7 +450,8 @@ test can name its own output path in an assertion about what a program printed.
 
 Every test runs with its own fresh scratch directory, exposed three ways:
 
-- `${test_tmp}`: its repository-relative path with forward slashes (`tmp/test/run/<run>/<test>`)
+- `${test_tmp}`: its repository-relative path with forward slashes
+  (`tmp/test/run/<run>/<plan id>/<test>`)
 - `CAMEL_TEST_TMPDIR`: its absolute path in the child process environment
 - `test_tmp` / `test_tmp_relative`: the absolute and repository-relative paths in the
   `verify_script` payload (`input.test_tmp`, `input.test_tmp_relative`)
@@ -369,8 +462,10 @@ after the test, and `tmp/test` and `test/tmp` are cleared before and after a run
 do not accumulate files and a stale file cannot be mistaken for this run's output. Files that a
 golden prints keep their fixed path (`tmp/examples`): those plans write there on purpose. A case
 run outside the runner (e.g. a benchmark, which has no private working directory) may keep its
-older fixed path as a fallback when `CAMEL_TEST_TMPDIR` is unset. Two runner instances must not
-run at the same time: they share `tmp/test` (a parallel runner is a separate item).
+older fixed path as a fallback when `CAMEL_TEST_TMPDIR` is unset. Tests run in parallel inside
+one runner, each in its own directory; two runner *instances* must still not run at the same
+time, because both clear `tmp/test` before and after their run and a plan that keeps a fixed
+path (`tmp/examples`) is not safe between them.
 
 ## Field Constraints And Style
 

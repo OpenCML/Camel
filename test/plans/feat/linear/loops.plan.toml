@@ -1,6 +1,6 @@
 id = "linear.loops"
 order = 348
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "loops"]
 desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm natively, fvm/jit/prl through the private lowering to tail recursion, fvm/jit natively under a debugger or with std::fvm(native_loop=true)), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
 

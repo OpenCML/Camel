@@ -1,6 +1,6 @@
 id = "opt.progen"
 order = 322
-tier = "feat"
+tier = "slow"
 tags = ["feat", "opt", "progen", "differential"]
 
 [[tests]]

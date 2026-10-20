@@ -1,6 +1,6 @@
 id = "modules.autodiff_inspection"
 order = 327
-tier = "feat"
+tier = "fast"
 tags = ["feat","modules","autodiff","opt","entry_args"]
 
 [defaults]

@@ -1,6 +1,6 @@
 id = "modules.bytes"
 order = 369
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "bytes"]
 
 [[tests]]

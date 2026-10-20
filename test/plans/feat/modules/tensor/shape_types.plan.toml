@@ -1,6 +1,6 @@
 id = "modules.tensor.shape_types"
 order = 363
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "tensor", "types"]
 
 [[tests]]

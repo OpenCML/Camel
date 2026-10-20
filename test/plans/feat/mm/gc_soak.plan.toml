@@ -1,6 +1,6 @@
 id = "mm.gc_soak"
 order = 368
-tier = "feat"
+tier = "slow"
 tags = ["feat", "mm", "gc", "soak"]
 desc = """
 Soak and scale tests of both collectors, in the sizes that fit the default test set (the

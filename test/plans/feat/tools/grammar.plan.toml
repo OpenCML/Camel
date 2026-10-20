@@ -1,6 +1,6 @@
 id = "tools.grammar"
 order = 380
-tier = "feat"
+tier = "fast"
 tags = ["feat", "tools", "editor", "grammar"]
 desc = "The TextMate grammar of the VS Code extension (editors/vscode): its tables against the lexer, and the scopes it gives representative programs."
 

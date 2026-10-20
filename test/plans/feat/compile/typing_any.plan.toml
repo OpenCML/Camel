@@ -1,6 +1,6 @@
 id = "compile.typing_any"
 order = 140
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "diagnostics", "any"]
 
 # `any` (design principles 5.10; docs/design/any-typing/README.cn.md). A slot typed `any`

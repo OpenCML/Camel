@@ -1,6 +1,6 @@
 id = "compile.not_supported"
 order = 312
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "semantic", "negative"]
 
 [[tests]]

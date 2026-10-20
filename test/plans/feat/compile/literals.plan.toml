@@ -1,6 +1,6 @@
 id = "compile.literals"
 order = 327
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "literals"]
 desc = "Numeric literals."
 

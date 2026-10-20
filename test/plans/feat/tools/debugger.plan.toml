@@ -1,6 +1,6 @@
 id = "tools.debugger"
 order = 910
-tier = "feat"
+tier = "fast"
 tags = ["feat", "tools", "debugger"]
 desc = "camel-db, the debugger. Each test is a script that starts camel-db and talks to it by protocol (test/tools/debugger/client.mjs): the retained HTTP gateway API, or the Debug Adapter Protocol over stdio."
 
@@ -22,12 +22,16 @@ case = "../../../cases/tools/debugger/http_gateway.test.mjs"
 name = "debugger.dap_session"
 desc = "A complete session over the Debug Adapter Protocol (camel-db --dap) on std::fvm and std::nvm: launch, line breakpoints (verified, and unverified with the reason on a line nothing depends on), the stop, the stack, variables (evaluated, not evaluated, a var cell, structured values), evaluate, continue, the program's output before exited and terminated, the exit code, arguments of main."
 case = "../../../cases/tools/debugger/dap_session.test.mjs"
+# Slow layer: measured 8.1 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 timeout_ms = 300000
 
 [[tests]]
 name = "debugger.dap_stepping"
 desc = "Steps over DAP on both back ends: next, stepIn, stepOut by source line in execution order (a line that is never executed is not a stop, and the console says why), the same by graph node (granularity instruction), recursion as one frame per call with the arms folded into the frames of their function or, switched by camel/setFrames or launched with frames subgraphs, as the subgraphs they are, a tail recursion as the one frame it is, and a branch whose untaken arm never stops."
 case = "../../../cases/tools/debugger/dap_stepping.test.mjs"
+# Slow layer: measured 8 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 timeout_ms = 300000
 
 [[tests]]
@@ -52,12 +56,16 @@ timeout_ms = 300000
 name = "debugger.dap_faults"
 desc = "Faults over DAP on both back ends: an uncaught fault stops where it is raised with the diagnostic's text, position, stack and variables, exceptionInfo, and ends the program with exit code 1 when resumed; a fault inside attempt stops only with the isolated filter; no filter, no stop."
 case = "../../../cases/tools/debugger/dap_faults.test.mjs"
+# Slow layer: measured 7.3 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 timeout_ms = 300000
 
 [[tests]]
 name = "debugger.dap_protocol"
 desc = "DAP at its edges: error responses for unknown, malformed, mistimed and ill-formed requests; a program that does not compile; an unknown pass; pause, queries while running, terminate, disconnect and a closed input on a program that never ends; std::jit and std::prl running as std::fvm with a notice; breakpoints and names after optimisation passes; stopOnEntry; zero-based lines."
 case = "../../../cases/tools/debugger/dap_protocol.test.mjs"
+# Slow layer: measured 5 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 timeout_ms = 300000
 
 [[tests]]

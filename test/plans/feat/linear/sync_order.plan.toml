@@ -1,6 +1,6 @@
 id = "linear.sync_order"
 order = 345
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "sync", "order"]
 
 [[tests]]

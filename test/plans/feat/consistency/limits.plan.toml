@@ -1,6 +1,6 @@
 id = "consistency.limits"
 order = 354
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "runtime", "limits"]
 desc = "The configurable limit on non-tail recursion (--max-recursion-depth) and on the macro evaluator (--max-macro-depth)"
 

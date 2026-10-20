@@ -1,6 +1,6 @@
 id = "linear.jit_native"
 order = 352
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "jit", "codegen"]
 
 [[tests]]

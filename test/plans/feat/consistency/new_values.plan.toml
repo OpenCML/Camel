@@ -1,6 +1,6 @@
 id = "consistency.new_values"
 order = 364
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "compile", "collections", "gc"]
 desc = "Library operators return new values and leave their arguments unchanged (design principles 11.3): `append`, `extend`, `apply`, `algo`'s `sort`; the rebinding `acc = acc->append<v>` and its in-place implementation, under collection stress with both collectors; a pure operation whose result is unused is a compile-time error that gives the rebinding as the fix."
 

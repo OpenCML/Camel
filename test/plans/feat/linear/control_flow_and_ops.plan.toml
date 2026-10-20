@@ -1,6 +1,6 @@
 id = "linear.control_flow_and_ops"
 order = 343
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "control_flow", "ops"]
 
 [[tests]]

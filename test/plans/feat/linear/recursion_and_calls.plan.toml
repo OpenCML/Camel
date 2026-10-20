@@ -1,6 +1,6 @@
 id = "linear.recursion_and_calls"
 order = 344
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "recursion", "calls"]
 
 [[tests]]

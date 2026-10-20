@@ -1,6 +1,6 @@
 id = "opt.inline"
 order = 320
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "inline"]
 
 [[tests]]

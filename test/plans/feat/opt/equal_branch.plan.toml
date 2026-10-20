@@ -1,6 +1,6 @@
 id = "opt.equal_branch"
 order = 326
-tier = "feat"
+tier = "fast"
 tags = ["feat","opt","fold","branch"]
 
 [defaults]

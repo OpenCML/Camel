@@ -1,6 +1,6 @@
 id = "parse.rulings"
 order = 306
-tier = "feat"
+tier = "fast"
 tags = ["feat", "parse", "syntax"]
 desc = "The syntax rulings of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block."
 

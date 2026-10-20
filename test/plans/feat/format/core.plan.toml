@@ -1,6 +1,6 @@
 id = "format.core"
 order = 320
-tier = "feat"
+tier = "fast"
 tags = ["feat", "format", "formatter"]
 
 [[tests]]

@@ -1,6 +1,6 @@
 id = "trans.macro"
 order = 331
-tier = "feat"
+tier = "fast"
 tags = ["feat", "trans", "macro"]
 
 [[tests]]

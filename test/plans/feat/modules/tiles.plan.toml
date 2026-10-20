@@ -1,6 +1,6 @@
 id = "modules.tiles"
 order = 367
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "tiles"]
 
 [[tests]]

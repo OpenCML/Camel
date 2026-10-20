@@ -1,6 +1,6 @@
 id = "mm.gc_pacing"
 order = 367
-tier = "feat"
+tier = "slow"
 tags = ["feat", "mm", "gc", "pacing"]
 desc = """
 How often the allocator asks for a collection when a program allocates large objects, and how

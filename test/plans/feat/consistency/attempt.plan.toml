@@ -1,6 +1,6 @@
 id = "consistency.attempt"
 order = 355
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "runtime", "faults", "isolation"]
 desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of external resources when a run ends (design principles 3.9; docs/technical/33_fault_isolation.md)"
 

@@ -1,6 +1,6 @@
 id = "opt.gate_value"
 order = 330
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "control", "autodiff"]
 
 [defaults]
