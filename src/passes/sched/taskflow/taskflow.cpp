@@ -601,8 +601,9 @@ bool TaskflowExecSchedPass::boundedLight(GraphPlan &plan) {
 std::unique_ptr<TaskflowExecSchedPass::GraphPlan>
 TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
     auto plan   = std::make_unique<GraphPlan>();
-    plan->graph = graph;
-    plan->topo  = graph->execPlan().topo;
+    plan->graph  = graph;
+    plan->shared = &graph->execPlan();
+    plan->topo   = plan->shared->topo;
 
     // Tail position, by the rule of the node-by-node evaluator: the tail value must be the
     // last thing in the linear order except for forwarding GATEs.
@@ -1955,7 +1956,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         plan != nullptr && nodeRef < plan->opers.size() && plan->opers[nodeRef].prepared;
     if (prepared) {
         if (const operator_t resolved =
-                graph->execPlan().resolvedOpers[nodeRef].load(std::memory_order_acquire)) {
+                plan->shared->resolvedOpers[nodeRef].load(std::memory_order_acquire)) {
             const PreparedOper &oper = plan->opers[nodeRef];
             const data_arr_t wargs{
                 plan->operArgs.data() + oper.withBegin,
@@ -1983,7 +1984,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         raiseFault(RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri), graph, nodeRef);
     }
     if (prepared) {
-        graph->execPlan().resolvedOpers[nodeRef].store(*opFunc, std::memory_order_release);
+        plan->shared->resolvedOpers[nodeRef].store(*opFunc, std::memory_order_release);
     }
 
     std::vector<runtime_data_idx_t> withIndices;

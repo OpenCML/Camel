@@ -420,6 +420,8 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     static constexpr size_t kNoBytecode = std::numeric_limits<size_t>::max();
     struct GraphPlan {
         camel::runtime::GCGraph *graph = nullptr;
+        // The execution plan of the graph version, shared with the other back ends.
+        const camel::runtime::ExecPlan *shared = nullptr;
         // False: the graph does not fit the scope model (or task graphs are switched off); it
         // is evaluated node by node in linear order, its calls still as task graphs.
         bool structured = false;
