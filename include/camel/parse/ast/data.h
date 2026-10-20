@@ -259,8 +259,15 @@ class LiteralLoad : public DataLoad {
     const Literal &value() const { return value_; }
     const std::string geneCode() const override;
 
+    /// Set on the pattern literal that a formatted string was lowered to (the `'...'` of
+    /// `'...'->format<...>`). A bad format specification is then reported where the
+    /// interpolation is, not at the whole string.
+    bool fromFormattedString() const { return fromFormattedString_; }
+    void setFromFormattedString() { fromFormattedString_ = true; }
+
   private:
     Literal value_;
+    bool fromFormattedString_ = false;
 };
 
 class ArrayDataLoad : public DataLoad {

@@ -1,0 +1,8 @@
+module fstring_cpp
+func main(): int sync {
+    let name = "cpp"
+    let n = 3
+    println(`hello, ${name}! ${n} + ${n} = ${n + n}`)
+    println(`pi = ${3.14159:.2f}`)
+    return 0
+}

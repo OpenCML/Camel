@@ -25,6 +25,24 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 - **A list comprehension** `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>`: `x` has the element type of `xs`, `if c` may be left out, and the result is an array of `e`. On the graph it is exactly what the two calls written out are (two operator nodes, each with the subgraph of its element function), so it has their properties: nothing is promised about the order of the elements (a parallel scheduler may compute them concurrently), and effects in `e` and `c` are treated as in the element functions of `map` and `filter` ([6.10](#610-higher-order-operators)). It nests, and it may stand wherever an expression may. A source that is not an array is `SemanticDiag::ComprehensionSourceRefused`.
 - The spread `...xs` is reserved and not implemented (`SemanticDiag::ConstructNotSupported`). Write `concat(xs, ys)`.
 
+### 6.2.1 Formatted strings
+
+In a backquoted string `` `...` ``, `${expression}` interpolates, optionally with a format specification, `${expression:spec}` (the lexical rules are in [2.5.3.1](02_lexical.md#2531-formatted-strings)). It is **the same tree** as `'...'->format<...>`: each `${...}` becomes a placeholder of `format` (`{}` or `{:spec}`), a `{` or `}` of the literal text is written `{{` or `}}`, and `format` is called with the interpolated expressions as its with-arguments and that text as its ordinary argument.
+
+```cml
+let name = 'Camel'
+let n = 42
+println(`hello, ${name}!`)          // 'hello, {}!'->format<name>
+println(`n = ${n}, twice = ${n * 2}`)
+println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
+```
+
+- An interpolated expression is evaluated where it is written, in the lexical scope there; name lookup, type checking and effects are exactly those of the same expression outside the string. They are the with-arguments of `format`, so when they are evaluated follows the dependency and effect rules ([4.2](04_execution_model.md#42-evaluation-by-dependency)), exactly as if the same expressions were written outside the string.
+- A specification the value's type does not take is a **compile-time** error `SemanticDiag::ArgumentsRejected`, located at that interpolation (the same check `format` makes for a constant format string).
+- A syntax error in an interpolated expression is reported at its position in the file; being inside a string does not swallow it.
+- Being the same tree, every execution mode (`std::nvm`, `std::fvm`, `std::jit`, `std::prl`) and the `std::cpp` translator see a `format` call: their output is byte-identical.
+- The formatter does not change the text of a backquoted string (the interpolated expressions are kept as written); to format code inside an interpolation, write the `format` call or move the expression out.
+
 ## 6.3 Access and subscripts
 
 | Form | Meaning |
@@ -80,7 +98,7 @@ func main(): int sync {
         ->map<(x: int): int => x * x>
         ->filter<(x: int): bool => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
-    println('total = {}'->format<total>)
+    println(`total = ${total}`)
     return 0
 }
 ```

@@ -1,0 +1,97 @@
+id = "compile.fstring"
+order = 922
+tier = "feat"
+tags = ["feat", "compile", "fstring", "interpolation", "format"]
+desc = "A formatted string (backticks) is shorthand for '...'->format<...>: arbitrary expressions interpolate, a format specification is checked at compile time at its interpolation, and the four back ends print the same (design principles 11.5)."
+
+[[tests]]
+name = "fstring_basic"
+desc = "The value of an expression in `${...}`, a format specification, a nested formatted string, literal braces and the escape `\\${`."
+kind = "behavior"
+case = "../../../cases/compile/fstring/basic.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "hello, Camel!",
+  "n = 42, twice = 84",
+  "pi = 3.50",
+  "expr: 9",
+  "nested: <inner 42>",
+  "braces { } are literal; ${not} interpolated",
+  "a backtick ` and a brace { stay",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "fstring_multiline"
+desc = "A formatted string may span lines and keeps them as written."
+kind = "behavior"
+case = "../../../cases/compile/fstring/multiline.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["first line", "second line: 7", "third line"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "fstring_nested"
+desc = "Braces and strings nest inside an interpolation: an if arm block, a struct literal, a string holding a brace, a tuple."
+kind = "behavior"
+case = "../../../cases/compile/fstring/nested.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["block: lt", "struct: 5", "braced string: {}", "tuple: (1, 2, 3)"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "fstring_bad_spec"
+desc = "A specification the type of the interpolation does not take is refused when the program is compiled, at the interpolation (the same check as `format`)."
+kind = "negative"
+case = "../../../cases/compile/fstring/bad_spec.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 23
+expect_output_contains = ["format specifier '{:d}' of an interpolation"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fstring_bad_expr"
+desc = "The expression of an interpolation is Camel source: its syntax error is reported with its position in the file, not swallowed by the string."
+kind = "negative"
+case = "../../../cases/compile/fstring/bad_expr.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedEndOfFile"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 26
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

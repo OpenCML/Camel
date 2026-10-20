@@ -108,6 +108,21 @@ struct LexError {
     uint32_t end   = 0;
 };
 
+/// One `${...}` of a formatted string (`FString` token), as the lexer read it. The lexer finds
+/// the matching `}` by scanning Camel source (strings, comments and nested braces included) and
+/// then lexes the text to split the expression from the optional format specification at the
+/// first `:` outside every bracket.
+struct FStringInterpolation {
+    uint32_t token = 0;     // index of the FString token in TokenBuffer::tokens()
+    uint32_t open  = 0;     // byte offset of the '$' of `${`
+    uint32_t exprBegin = 0; // the expression: just after `${`
+    uint32_t exprEnd   = 0; // at the ':' of the specification, or at the closing '}'
+    uint32_t specBegin = 0; // just after ':' (empty when there is no specification)
+    uint32_t specEnd   = 0; // at the closing '}'
+    uint32_t close     = 0; // the '}' that ends the interpolation
+    bool hasSpec       = false;
+};
+
 /// The tokens of one source text, with the text and its line table.
 class TokenBuffer {
   public:
@@ -117,6 +132,10 @@ class TokenBuffer {
     const std::string &source() const { return source_; }
     const std::vector<Token> &tokens() const { return tokens_; }
     const std::vector<LexError> &errors() const { return errors_; }
+    /// Every `${...}` of every formatted string of this buffer, in source order.
+    const std::vector<FStringInterpolation> &interpolations() const { return interpolations_; }
+    /// The interpolations of the FString token `token`.
+    std::vector<FStringInterpolation> interpolationsOf(uint32_t token) const;
     size_t size() const { return tokens_.size(); }
     const Token &operator[](size_t index) const { return tokens_[index]; }
 
@@ -145,6 +164,7 @@ class TokenBuffer {
     std::string source_;
     std::vector<Token> tokens_;
     std::vector<LexError> errors_;
+    std::vector<FStringInterpolation> interpolations_;
     std::vector<uint32_t> lineStarts_{0};
 };
 

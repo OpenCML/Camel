@@ -43,6 +43,11 @@ class Parser {
     static Tree parse(std::string source);
     /// Parses an already lexed buffer.
     static Tree parse(TokenBuffer tokens);
+    /// Parses one expression and nothing else (the content of a `${...}` of a formatted
+    /// string). The token buffer may cover a range of a larger source; the tree's nodes then
+    /// have the positions of that source. The tree has errors where the text is not one
+    /// expression, and its root is the expression node.
+    static Tree parseExpression(TokenBuffer tokens);
 };
 
 } // namespace camel::parse::syntax

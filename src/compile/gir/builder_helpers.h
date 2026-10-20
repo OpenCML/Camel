@@ -663,4 +663,33 @@ inline void bindGraphScopedFuncNodeDebug(
     }
 }
 
+/// The placeholders of a format string in the order written (`{`, `{:spec}`), each as the
+/// text `format` is asked about. A doubled brace is a literal brace, so it is skipped. This is
+/// only used on the pattern of a formatted string, which is built with placeholders in the
+/// order of the interpolations and no explicit argument index.
+inline std::vector<std::string> formatPlaceholders(std::string_view pattern) {
+    std::vector<std::string> out;
+    for (size_t i = 0; i < pattern.size(); ++i) {
+        const char c = pattern[i];
+        if (c == '{' && i + 1 < pattern.size() && pattern[i + 1] == '{') {
+            ++i;
+            continue;
+        }
+        if (c == '}' && i + 1 < pattern.size() && pattern[i + 1] == '}') {
+            ++i;
+            continue;
+        }
+        if (c != '{') {
+            continue;
+        }
+        const size_t close = pattern.find('}', i + 1);
+        if (close == std::string_view::npos) {
+            break;
+        }
+        out.emplace_back(pattern.substr(i, close - i + 1));
+        i = close;
+    }
+    return out;
+}
+
 } // namespace camel::compile::gir

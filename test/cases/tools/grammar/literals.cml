@@ -45,7 +45,7 @@ two {} lines\n'''
 let multi_double = """a "quoted" word
 and a second line"""
 
-// FSTRING (a token; the compiler rejects it)
+// FSTRING (a token; the AST builder makes it a `format` call)
 let formatted = `value {x} \` done`
 
 // TRUE, FALSE, NULL

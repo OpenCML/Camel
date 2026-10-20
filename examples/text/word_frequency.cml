@@ -15,7 +15,7 @@ func words_of(line: string): string[] {
 }
 
 func show(e: Entry): string {
-    return format<e.0, e.1>('  {:<6} {}')
+    return `  ${e.0:<6} ${e.1}`
 }
 
 func main(): int sync {

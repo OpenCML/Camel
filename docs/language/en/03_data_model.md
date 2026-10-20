@@ -162,6 +162,7 @@ A string is immutable text and is **always valid UTF-8**; length and subscripts 
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Comparison in code point order (the same as UTF-8 byte order); a proper prefix comes first |
 | `string(x)`, `int(s)`, `float(s)`, `parse_int(s)`, `parse_float(s)` | Conversion, see 3.2 |
 | `fmt->format<a, b, ...>` | Formatting: `{}` takes the arguments in order; `{:.2f}`, `{:5d}`, `{:.17g}` and the like specify a format; too few arguments is a fault |
+| `` `x = ${x}` `` | A formatted string, shorthand for `'x = {}'->format<x>` ([2.5.3.1](02_lexical.md#2531-formatted-strings)) |
 | `strs->join<sep>` | Joins an array of strings |
 | `s[i]` | The `i`-th code point; the result is a string containing just that one character; an out-of-range subscript is a fault |
 
