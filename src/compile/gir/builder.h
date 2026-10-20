@@ -49,7 +49,7 @@ using Type         = camel::core::type::Type;
 using FunctionType = camel::core::type::FunctionType;
 
 using compile_graph_ptr_t   = std::shared_ptr<DraftGraphBuilder>;
-using node_handle_t         = draft_node_t *;
+using node_handle_t         = camel::runtime::DraftNodeRef;
 using node_scope_t          = Scope<std::string, node_handle_t>;
 using node_scope_ptr_t      = std::shared_ptr<node_scope_t>;
 using graph_set_t           = std::vector<compile_graph_ptr_t>;
@@ -741,9 +741,8 @@ class Builder {
                         os << "<invalid>";
                         return;
                     }
-                    auto *graph = DraftGraphBuilder::fromDraft(value->header.owner);
-                    os << (graph ? graph->name() : std::string{"<detached>"}) << "#"
-                       << value->header.selfId;
+                    auto *graph = DraftGraphBuilder::fromDraft(value.draft);
+                    os << (graph ? graph->name() : std::string{"<detached>"}) << "#" << value.id;
                 });
             CAMEL_LOG_DEBUG_S("GIR Builder", "Accessing node '{}' from scope {}", name, ss.str());
         });

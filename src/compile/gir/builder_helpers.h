@@ -114,7 +114,7 @@ inline void setGraphReturnFromResult(
 }
 
 inline camel::source::gir_draft_node_key_t draftDebugKey(node_handle_t node) {
-    return node ? static_cast<camel::source::gir_draft_node_key_t>(node->header.selfId) : 0;
+    return node ? static_cast<camel::source::gir_draft_node_key_t>(node.id) : 0;
 }
 
 inline compile_graph_ptr_t
@@ -193,13 +193,13 @@ inline std::optional<slot_t> staticValueOf(node_handle_t node) {
         if (inputs.size() != 1) {
             return std::nullopt;
         }
-        node = nodeDraftOf(node)->node(inputs.front());
+        node = nodeDraftOf(node)->ref(inputs.front());
     }
-    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || node->header.dataIndex >= 0) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || nodeHeaderOf(node)->dataIndex >= 0) {
         return std::nullopt;
     }
     const auto slots = nodeDraftOf(node)->staticSlots();
-    const auto index = static_cast<size_t>(-node->header.dataIndex);
+    const auto index = static_cast<size_t>(-nodeHeaderOf(node)->dataIndex);
     return index < slots.size() ? std::optional<slot_t>(slots[index]) : std::nullopt;
 }
 
@@ -208,7 +208,7 @@ inline node_handle_t throughCopy(node_handle_t node) {
     if (nodeIsKind(node, runtime::GCNodeKind::Copy)) {
         const auto inputs = normInputsOf(node);
         if (inputs.size() == 1) {
-            return nodeDraftOf(node)->node(inputs.front());
+            return nodeDraftOf(node)->ref(inputs.front());
         }
     }
     return node;
@@ -652,7 +652,7 @@ inline void registerNodeOrigin(
         primarySpan);
     if (origin != camel::source::kInvalidOriginId) {
         // The node carries its origin through encoding and runtime rewrites.
-        node->header.origin = origin;
+        nodeDraftOf(node)->setNodeOrigin(nodeIdOf(node), origin);
         sourceContext->bindGirNodeDraftDebug(
             draftDebugKey(node),
             origin,
@@ -693,8 +693,8 @@ inline void bindGraphScopedFuncNodeDebug(
     if (!sc || graphOrigin == camel::source::kInvalidOriginId || node == nullptr) {
         return;
     }
-    if (node->header.origin == 0) {
-        node->header.origin = graphOrigin;
+    if (nodeDraftOf(node)->nodeOrigin(nodeIdOf(node)) == 0) {
+        nodeDraftOf(node)->setNodeOrigin(nodeIdOf(node), graphOrigin);
     }
     if (const auto *graphSemantic = sc->girGraphSemantic(graph->stableId())) {
         sc->bindGirNodeDraftDebug(draftDebugKey(node), graphOrigin, *graphSemantic);

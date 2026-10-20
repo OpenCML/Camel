@@ -49,7 +49,6 @@ namespace {
 using json = nlohmann::json;
 using camel::compile::gir::draft_node_ref_t;
 using camel::compile::gir::DraftGraphBuilder;
-using camel::runtime::DraftNode;
 using camel::runtime::GCNodeKind;
 
 constexpr std::size_t kSourceContextExtraIndex = 3;
@@ -113,8 +112,8 @@ json graphSummary(const DraftGraphBuilder *graph) {
 
 json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
     json j;
-    const auto *node   = graph->draft().node(nodeId);
-    const auto *header = node ? &node->header : nullptr;
+    const auto node    = graph->draft().ref(nodeId);
+    const auto *header = node ? graph->draft().header(nodeId) : nullptr;
     j["id"]            = nodeId;
     j["graphId"]       = graph->stableId();
     j["type"]          = header ? nodeKindName(header->kind) : "DEAD";
@@ -260,24 +259,6 @@ const DraftGraphBuilder *findGraphById(const DraftGraphBuilder *root, const std:
 }
 
 } // namespace
-
-std::string getDebugNodeIdFromCompileNode(const void *opaqueNode) {
-    const auto *node = static_cast<const DraftNode *>(opaqueNode);
-    if (!node) {
-        return {};
-    }
-    auto *graph = DraftGraphBuilder::fromDraft(node->header.owner);
-    return graph ? graph->nodeDebugEntityId(node) : std::string{};
-}
-
-std::string getDebugGraphIdFromCompileNode(const void *opaqueNode) {
-    const auto *node = static_cast<const DraftNode *>(opaqueNode);
-    if (!node) {
-        return {};
-    }
-    auto *graph = DraftGraphBuilder::fromDraft(node->header.owner);
-    return graph ? graph->stableId() : std::string{};
-}
 
 std::pair<std::string, std::string>
 getGirJsonFromCompileGraph(const void *opaqueRootGraph, const std::string &graphId) {

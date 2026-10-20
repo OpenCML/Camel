@@ -158,8 +158,8 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                         continue;
                     }
                     // Reported at the element (the literal itself carries no position).
-                    const camel::source::origin_id_t at = refNodes[i]->header.origin != 0
-                                                              ? refNodes[i]->header.origin
+                    const camel::source::origin_id_t at = nodeDraftOf(refNodes[i])->nodeOrigin(nodeIdOf(refNodes[i])) != 0
+                                                              ? nodeDraftOf(refNodes[i])->nodeOrigin(nodeIdOf(refNodes[i]))
                                                               : gct->origin();
                     diags_->of(SemanticDiag::ElementTypeMismatch)
                         .atOrigin(at)
@@ -350,7 +350,7 @@ std::optional<node_handle_t> Builder::modifierOf(node_handle_t node) const {
     if (it == graphIt->second.end()) {
         return std::nullopt;
     }
-    return graph->draft().node(it->second);
+    return graph->draft().ref(it->second);
 }
 
 void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
@@ -380,7 +380,7 @@ void Builder::recordWrite(
             if (use.isRead) {
                 for (auto users : {normUsersOf(use.node), withUsersOf(use.node)}) {
                     for (draft_node_ref_t user : users) {
-                        before.insert(nodeDraftOf(use.node)->node(user));
+                        before.insert(nodeDraftOf(use.node)->ref(user));
                         taken = true;
                     }
                 }

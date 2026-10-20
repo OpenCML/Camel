@@ -547,10 +547,10 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
         }
         registerNodeOrigin(context_, call, origin, "gir.link.oper");
         for (draft_node_ref_t port : graph->draft().withPorts()) {
-            linkNodes(LinkType::With, graph->draft().node(port), call);
+            linkNodes(LinkType::With, graph->draft().ref(port), call);
         }
         for (draft_node_ref_t port : graph->draft().normPorts()) {
-            linkNodes(LinkType::Norm, graph->draft().node(port), call);
+            linkNodes(LinkType::Norm, graph->draft().ref(port), call);
         }
         setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), opType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
@@ -2105,8 +2105,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // the argument list alone (the GCT call node's own span). A call through a function value
     // made earlier is a CALL node made by createFuncDataNode; either stands for this call.
     if (targetGraph && targetNode &&
-        (targetNode->header.kind == camel::runtime::GCNodeKind::Func ||
-         targetNode->header.kind == camel::runtime::GCNodeKind::Call)) {
+        (nodeKindOf(targetNode) == camel::runtime::GCNodeKind::Func ||
+         nodeKindOf(targetNode) == camel::runtime::GCNodeKind::Call)) {
         registerCallExpressionOrigin(context_, targetNode, gct, "gir.link.func");
     }
 
