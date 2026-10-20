@@ -365,22 +365,36 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
 expect_diagnostic_line = 14
-expect_diagnostic_column = 19
+expect_diagnostic_column = 23
 expect_output_contains = ["'3000000000'", "type 'i32'", "out of range (-2147483648 to 2147483647)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
 name = "context.struct_argument_out_of_range"
-desc = "A field of a struct literal argument takes the field type of the parameter: 1e40 does not fit the f32 of `Point`, and the call is refused with `LiteralNotRepresentable` rather than left a struct of another type."
+desc = "A field of a struct literal argument takes the field type of the parameter: 1e40 does not fit the f32 of `Point`, and the call is refused with `LiteralNotRepresentable` at the field, quoting it as written (`1e40`), rather than left a struct of another type."
 kind = "negative"
 case = "../../../cases/compile/literals/context_struct_argument_out_of_range.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
 expect_diagnostic_line = 13
-expect_diagnostic_column = 16
-expect_output_contains = ["type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]
+expect_diagnostic_column = 21
+expect_output_contains = ["'1e40'", "type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.array_argument_element_text"
+desc = "An element of an array literal argument is quoted as it is written: `1e40` (not the canonical `1e+40`) does not fit the f32 of `firstf([1e40, 2.0])`, and the error is at the element."
+kind = "negative"
+case = "../../../cases/compile/literals/context_array_argument_element_text.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 21
+expect_output_contains = ["'1e40'", "type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

@@ -1,0 +1,27 @@
+/**
+ * Handover H27c: a context argument is a position with an expected type, like an ordinary
+ * argument (design principles 4.4, 5.1). `scale<2>` binds an int literal to `with <k: f32>`,
+ * `at<[7.0, 8.0]>` binds an array literal to `with <xs: f32[]>`, and `offset<{ x: 1, y: 2 }>`
+ * binds a struct literal to `with <p: Point>`; the captured values have the parameter's
+ * type. A name still does not convert (`err_context_argument_name`).
+ */
+module partial_application_context_arguments
+
+with <k: f32>
+func scale(x: f32): f32 { return x * k }
+
+with <xs: f32[]>
+func at(i: int): f32 { return xs[i] }
+
+type Point = { x: f32, y: f32 }
+
+with <p: Point>
+func offset(dx: f32): f32 { return p.x + dx }
+
+func main(): int sync {
+    let s = scale<2>
+    let a = at<[7.0, 8.0]>(1)
+    let o = offset<{ x: 1, y: 2 }>
+    println(s(3.0), a, o(0.5))
+    return 0
+}

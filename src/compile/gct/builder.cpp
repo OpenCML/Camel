@@ -298,9 +298,12 @@ static bool isIntegerPrimitive(Type *type) {
 // of a narrower numeric type (`let b: i32 = 3000000000`), a decimal literal in an integer type
 // (`let x: int = 1.9`), text that is not a number, or a value of another type. One diagnostic
 // says which literal, which type, and why (handover H24).
+// `written` is the element's text as it is in the source, when the caller can read it (design
+// principles 5.1: the message quotes the source's spelling); empty falls back to the value.
 template <typename Diags, typename Range>
-static void
-reportLiteralCastFailure(Diags &diags, const Range &range, const data_ptr_t &data, Type *type) {
+static void reportLiteralCastFailure(
+    Diags &diags, const Range &range, const data_ptr_t &data, Type *type,
+    const std::string &written = {}) {
     std::string reason;
     if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
         reason = "out of range (" + limits + ")";
@@ -314,7 +317,7 @@ reportLiteralCastFailure(Diags &diags, const Range &range, const data_ptr_t &dat
     }
     diags->of(SemanticDiag::LiteralNotRepresentable)
         .at(range)
-        .commit(literalValueText(data), type->toString(), reason);
+        .commit(written.empty() ? literalValueText(data) : written, type->toString(), reason);
 }
 
 node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
@@ -2699,14 +2702,23 @@ static std::optional<literal::Kind> writtenNumberKind(const AST::node_ptr_t &ite
     }
 }
 
-/// The exact value a literal element was written as, when the node is one (design principles
-/// 5.1). A nested composite, a name and a computed element have none of their own.
-static std::optional<literal::Value> writtenLiteralValue(const node_ptr_t &node) {
-    if (node == nullptr || node->type() != NodeKind::DATA) {
-        return std::nullopt;
+/// An element of a composite literal as it was written: the value it was written as, when it
+/// is a numeric literal (design principles 5.1), and the position it was written at, which is
+/// where the element is reported when the type of its position cannot hold it. A nested
+/// composite, a name and a computed element have no value of their own, but they have a
+/// position, and so do the elements inside them.
+static Tree::LiteralElement writtenElement(const node_ptr_t &node) {
+    Tree::LiteralElement element;
+    if (node == nullptr) {
+        return element;
     }
-    const literal::Value *exact = Tree::of(node)->literalValueOf(node);
-    return exact != nullptr ? std::optional<literal::Value>(*exact) : std::nullopt;
+    element.origin = node->origin();
+    if (node->type() == NodeKind::DATA) {
+        if (const literal::Value *exact = Tree::of(node)->literalValueOf(node)) {
+            element.value = *exact;
+        }
+    }
+    return element;
 }
 
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
@@ -2747,9 +2759,10 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
         }
     }
     const bool widenToFloat = hasInteger && hasReal;
-    // The values the elements were written as, in the order the data holds them: the elements
-    // keep their exact values until GIR decides the type of the array (design principles 5.1).
-    std::vector<std::optional<literal::Value>> literalElements;
+    // The values the elements were written as and their positions, in the order the data holds
+    // them: the elements keep their exact values and their places until GIR decides the type
+    // of the array (design principles 5.1).
+    std::vector<Tree::LiteralElement> literalElements;
     literalElements.reserve(items->size());
 
     for (const auto &item : *items) {
@@ -2758,7 +2771,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
             // An integer literal beside a decimal one is a value of the float type, exactly.
             dataNode = literalNodeInType(dataNode, Type::Float(), item);
         }
-        literalElements.push_back(writtenLiteralValue(dataNode));
+        literalElements.push_back(writtenElement(dataNode));
         if (allComputed) {
             auto [refNode, refData] = makeRefData(dataNode);
             *execNode << refNode;
@@ -3033,9 +3046,14 @@ node_ptr_t Builder::literalNodeInType(
     if (exact == nullptr || !type->isPrimitive()) {
         return node;
     }
+    // The element is quoted as it is written (`1e40`, not the canonical `1e+40`), as a literal
+    // in any other position with an expected type is (design principles 5.1).
+    const std::string written = sourceTextAt(
+        context_ != nullptr ? context_->sourceContext() : nullptr,
+        at->load()->origin());
     if (!literal::kindEnters(*exact, type)) {
         // A decimal literal where an integer is asked for: the fraction would be lost.
-        reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type);
+        reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type, written);
         throw BuildAbortException();
     }
     if (auto converted = exact->toData(type); converted.has_value()) {
@@ -3046,7 +3064,7 @@ node_ptr_t Builder::literalNodeInType(
         setOriginFromAst(context_, res, at, camel::source::OriginKind::GctNode, "gct.data");
         return res;
     }
-    reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type);
+    reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type, written);
     throw BuildAbortException();
 }
 
@@ -3165,9 +3183,9 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
     std::unordered_set<string> fieldNames;
-    // The value each field was written as, in the order the data holds them (design
-    // principles 5.1; see visitArrayData).
-    std::vector<std::optional<literal::Value>> literalElements;
+    // The value each field was written as and its position, in the order the data holds them
+    // (design principles 5.1; see visitArrayData).
+    std::vector<Tree::LiteralElement> literalElements;
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
@@ -3178,7 +3196,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
-        literalElements.push_back(writtenLiteralValue(dataNode));
+        literalElements.push_back(writtenElement(dataNode));
         auto [data, _] = extractData(dataNode, execNode, dangling);
         factory.add(name, data);
     }

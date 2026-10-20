@@ -2222,9 +2222,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
     ENTER("LinkExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); i++) {
-        string strOp        = context->child(i * 2 - 1)->text();
-        node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
-        setNodeTokenRangeByContext(linkNode, context);
+        string strOp       = context->child(i * 2 - 1)->text();
         node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
         if (strOp == "?->") {
             // `x ?-> f`: a branch on the tag of `x`; the call is the arm taken when `x` has
@@ -2239,44 +2237,68 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
-        node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
-        setNodeTokenRangeByContext(dataList, context->expr(i));
-        node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
-        setNodeTokenRangeByContext(namedDataList, context->expr(i));
-        *dataList << lhsNode;
-        *linkNode << rhsNode << dataList << namedDataList;
-        registerAstSemanticBundle(
-            linkNode,
-            {
-                semanticPart(
-                    camel::source::SemanticRole::Operator,
-                    deriveAstAnchorOrigin(
-                        linkNode,
-                        tokenOf(context->child(i * 2 - 1)),
-                        "ast.link.operator"),
-                    -1,
-                    strOp),
-                semanticPart(
-                    camel::source::SemanticRole::Callee,
-                    nodeOrigin(rhsNode),
-                    -1,
-                    "callee"),
-                semanticPart(
-                    camel::source::SemanticRole::Receiver,
-                    nodeOrigin(lhsNode),
-                    -1,
-                    "receiver"),
-                semanticPart(
-                    camel::source::SemanticRole::ArgList,
-                    nodeOrigin(dataList),
-                    -1,
-                    "args"),
-                semanticPart(
-                    camel::source::SemanticRole::Argument,
-                    nodeOrigin(lhsNode),
-                    0,
-                    "receiver"),
-            });
+        node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
+        setNodeTokenRangeByContext(linkNode, context);
+        // What the arrow hands on is the receiver of the call, wherever the call is written.
+        node_ptr_t dataList      = nullptr;
+        node_ptr_t calleeNode    = rhsNode;
+        node_ptr_t namedDataList = nullptr;
+        if (rhsNode->type() == LoadType::Data &&
+            rhsNode->loadAs<DataLoad>()->dataType() == DataType::ReservedExpr &&
+            rhsNode->loadAs<ReservedExprLoad>()->op() == ReservedDataOp::Call) {
+            // `x->f(a, b)` is `f(x, a, b)` (design principles 4.4): the receiver is the first
+            // ordinary argument of the call written on the right, not the value its result is
+            // applied to. The call keeps its callee and its named arguments.
+            calleeNode    = rhsNode->at(0);
+            namedDataList = rhsNode->at(2);
+            calleeNode->setParent(nullptr);
+            namedDataList->setParent(nullptr);
+            dataList = createNodeAs<RepeatedLoad>("Data");
+            setNodeTokenRangeBetween(dataList, context->expr(i - 1), context->expr(i));
+            *dataList << lhsNode;
+            // The written arguments move from the call on the right into the merged list; a
+            // node is in one place, so they are detached from it first.
+            node_ptr_t written = rhsNode->at(1);
+            for (const auto &argument : *written) {
+                argument->setParent(nullptr);
+                *dataList << argument;
+            }
+        } else {
+            dataList = createNodeAs<RepeatedLoad>("Data");
+            setNodeTokenRangeByContext(dataList, context->expr(i));
+            namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+            setNodeTokenRangeByContext(namedDataList, context->expr(i));
+            *dataList << lhsNode;
+        }
+        *linkNode << calleeNode << dataList << namedDataList;
+        std::vector<camel::source::SemanticPart> parts = {
+            semanticPart(
+                camel::source::SemanticRole::Operator,
+                deriveAstAnchorOrigin(
+                    linkNode,
+                    tokenOf(context->child(i * 2 - 1)),
+                    "ast.link.operator"),
+                -1,
+                strOp),
+            semanticPart(camel::source::SemanticRole::Callee, nodeOrigin(calleeNode), -1, "callee"),
+            semanticPart(
+                camel::source::SemanticRole::Receiver,
+                nodeOrigin(lhsNode),
+                -1,
+                "receiver"),
+            semanticPart(camel::source::SemanticRole::ArgList, nodeOrigin(dataList), -1, "args"),
+        };
+        // The receiver is argument 0; the arguments written after the arrow follow it.
+        int32_t slot = 0;
+        for (const auto &argument : *dataList) {
+            const char *label = slot == 0 ? "receiver" : "arg";
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::Argument,
+                nodeOrigin(argument),
+                slot++,
+                label));
+        }
+        registerAstSemanticBundle(linkNode, std::move(parts));
         lhsNode = linkNode;
     }
     LEAVE("LinkExpr");
@@ -2810,13 +2832,14 @@ Value Builder::visitFStringData(cst::Literal context) {
     bool failed   = false;
 
     for (const auto &part : interpolations) {
-        pattern += escapeFormatBraces(decodeFStringText(
-            whole.substr(cursor, static_cast<size_t>(part.open) - cursor)));
+        pattern += escapeFormatBraces(
+            decodeFStringText(whole.substr(cursor, static_cast<size_t>(part.open) - cursor)));
 
         if (part.hasSpec) {
-            pattern += "{:" + std::string(whole.substr(
-                                    part.specBegin,
-                                    static_cast<size_t>(part.specEnd) - part.specBegin)) +
+            pattern += "{:" +
+                       std::string(whole.substr(
+                           part.specBegin,
+                           static_cast<size_t>(part.specEnd) - part.specBegin)) +
                        "}";
         } else {
             pattern += "{}";
@@ -2837,8 +2860,8 @@ Value Builder::visitFStringData(cst::Literal context) {
         setTokenRangeDeep(exprNode, token->index(), token->index() + 1);
         args.push_back(exprNode);
     }
-    pattern += escapeFormatBraces(decodeFStringText(
-        whole.substr(cursor, static_cast<size_t>(token->end()) - 1 - cursor)));
+    pattern += escapeFormatBraces(
+        decodeFStringText(whole.substr(cursor, static_cast<size_t>(token->end()) - 1 - cursor)));
 
     if (failed) {
         // The errors are already reported; a placeholder keeps the tree well formed.

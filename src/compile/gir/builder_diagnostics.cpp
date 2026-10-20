@@ -907,6 +907,29 @@ bool isIntegerType(Type *type) {
            (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64);
 }
 
+/// The source text the origin covers (`1e40`), when it is short and on one line; empty
+/// otherwise. An element of a composite literal is quoted as it was written, not as the value
+/// it was lowered to (design principles 5.1).
+std::string textAtOrigin(
+    const camel::source::source_context_ptr_t &sourceContext, camel::source::origin_id_t origin) {
+    const auto *record = sourceContext != nullptr && origin != camel::source::kInvalidOriginId
+                             ? sourceContext->origin(origin)
+                             : nullptr;
+    const auto *span   = record != nullptr ? sourceContext->span(record->primarySpan) : nullptr;
+    const auto *file =
+        span != nullptr && span->valid() ? sourceContext->sourceFile(span->fileId) : nullptr;
+    if (file == nullptr || span->endOffset < span->startOffset ||
+        span->endOffset > file->content.size()) {
+        return {};
+    }
+    std::string text = file->content.substr(span->startOffset, span->endOffset - span->startOffset);
+    if (text.empty() || text.size() > 60 || text.find('\n') != std::string::npos ||
+        text.find('\r') != std::string::npos) {
+        return {};
+    }
+    return text;
+}
+
 /// Whether a numeric literal datum is a whole number (`1.0` is, `1.9` is not): put into an
 /// integer type it either fits or is out of range; a fraction would be truncated.
 bool isWholeNumber(const data_ptr_t &data) {
@@ -951,7 +974,7 @@ void Builder::rejectLiteralValue(
 
 void Builder::rejectLiteralData(
     const data_ptr_t &data, Type *type, camel::source::origin_id_t where,
-    const GCT::node_ptr_t &written) {
+    const GCT::node_ptr_t &written, camel::source::origin_id_t writtenAt) {
     std::string reason;
     if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
         reason = "out of range (" + limits + ")";
@@ -965,8 +988,12 @@ void Builder::rejectLiteralData(
     } else {
         reason = "the value cannot become that type";
     }
-    // The literal as it is written, when the expression it came from is at hand.
+    // The literal as it is written, when the expression it came from is at hand; an element
+    // of a composite literal is quoted from its own position.
     std::string text = sourceTextOf(written);
+    if (text.empty() && writtenAt != camel::source::kInvalidOriginId) {
+        text = textAtOrigin(context_ != nullptr ? context_->sourceContext() : nullptr, writtenAt);
+    }
     if (text.empty()) {
         text = literalValueText(data);
     }
