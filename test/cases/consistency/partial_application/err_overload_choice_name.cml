@@ -1,0 +1,21 @@
+/**
+ * Handover H27d: choosing by exact match first never means a name is converted. `n` is an
+ * int, and neither `with <k: f32>` nor `with <k: float>` takes an int exactly; a name is a
+ * value of its own type and does not convert (design principles 5.1), so `scale<n>` stays a
+ * refused partial application even though the two context parameters could both take a
+ * literal.
+ */
+module partial_application_overload_choice_name
+
+with <k: f32>
+func scale(x: f32): f32 { return x * k }
+
+with <k: float>
+func scale(x: float): float { return x * k }
+
+func main(): int sync {
+    let n = 2
+    let s = scale<n>
+    println(s(3.0))
+    return 0
+}
