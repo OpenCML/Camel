@@ -39,7 +39,7 @@
 | 不同类型的值并排放（`any[]`、`(int, any)`） | 元组或结构体：`(int, string)`、`{ id: int, name: string }` |
 | 值是几种可能之一 | `enum`：`type Shape = enum { Circle(float), Empty }`（见 3.5） |
 | 形状事先知道的 JSON | `json::decode_as(text, shape)`，结果是 `T!` |
-| 形状事先不知道的 JSON | `json::decode(text)` 给出 `Json!`：文字不是 JSON 时是错误值 `JsonParseError`（不是故障，设计原则 11.2），否则是 `Json`，类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），并接受 `Json?` 以便链式取值，例如 `j->get<'server'>->get<'port'>->as_int ?? 8080`；`as_float` 也接受整数，`get<下标>` 越界给 `null`（11.2 定下的访问器设计）。形状已知时用 `decode_as`，目标类型暂由一个“形状值”给出 |
+| 形状事先不知道的 JSON | `json::decode(text)` 给出 `Json!`：文字不是 JSON 时是错误值 `JsonParseError`，嵌套超过深度上限时是 `JsonTooDeep`（都不是故障，设计原则 11.2；上限默认 10000，可用 `CAMEL_JSON_MAX_DEPTH` 调整），否则是 `Json`，类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），并接受 `Json?`、`Json!`（以及 `Json?!`）以便链式取值，例如 `j->get<'server'>->get<'port'>->as_int ?? 8080`；对 `Json!` 取值时错误原样传下去，结果是 `Json?!` 这样的两层，用 `??`、`!!` 拆开；`as_float` 也接受整数，`get<下标>` 越界给 `null`（11.2 定下的访问器设计）。形状已知时用 `decode_as`，目标类型暂由一个“形状值”给出 |
 
 标准库签名说明里的 `T`、`U...`（如 `println: (x: T, ...rest: U...) => T`）只是说明的记法：这些算子由类型规则按实参的类型检查，图上只有具体类型。
 
@@ -239,7 +239,7 @@ error DivByZero: the divisor is zero
 - 两种标记可以组合：`T?!`、`T!?`。同一种不能重复。数组元素等位置需要括号：`(int?)[]`。
 - 与泛型配合：`(typeas T)?` 从可空实参里绑定 `T`（[7.5](07_statements.md#75-泛型函数)）。
 - `let x: int! = v` 中 `!` 与 `=` 之间要有空格。
-- 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`，`json` 模块的 `decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
+- 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
 
 **错误与故障是两回事。** 只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障：程序带位置终止，`!!` 接不住它（见 [4.6](04_execution_model.md#46-故障退出与资源上限)）。
 

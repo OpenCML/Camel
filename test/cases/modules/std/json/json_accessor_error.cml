@@ -1,0 +1,107 @@
+/**
+ * A Json accessor takes a `Json!` and passes its error on unchanged (design principles 11.2):
+ * the value it returns is a `Json?!` (or `int?!`, ...), a null when there is nothing to take,
+ * and the error of the document when it had failed. A document nested deeper than the limit is
+ * the error kind JsonTooDeep, with the line and column of the bracket that goes too deep. The
+ * accessors on a document that has a value work as before, and chain over the two layers.
+ */
+module json_accessor_error
+
+import { Json, decode, decode_as, get, as_bool, as_int, as_float, as_string, as_array, as_object } from json
+
+func repeat(ch: string, n: int): string {
+    let (s, chunk, k) = loop s = '', chunk = ch, k = n while k > 0 do (
+        if k % 2 == 1 then s + chunk else s,
+        chunk + chunk,
+        k / 2)
+    return s
+}
+
+/// The error of a `Json!` that has failed; a NoError of this program when it has not.
+func error_of_doc(f: Json!) {
+    return match f {
+        case error e => e
+        case v => error('NoError', 'the document did not fail')
+    }
+}
+
+/// The accessors of a plain `Json`, which take the `Json?` layer the calls produce and still
+/// give the value: the behaviour of a document that was decoded before H16.
+func report(j: Json): int sync {
+    println(j->get<'a'>->get<0>->as_int ?? 0)
+    println(j->get<'s'>->as_string ?? '?')
+    return 0
+}
+
+func main(): int sync {
+    // ---- a failed document: every accessor passes the same error on ----
+    let bad = decode('{"a": ')
+    let original = error_of_doc(bad)
+    let by_key = match (bad->get<'a'>) {
+        case null => error('NoError', 'get<key> gave null instead of the error')
+        case v => error_of_doc(v)
+    }
+    let by_index = match (bad->get<0>) {
+        case null => error('NoError', 'get<index> gave null instead of the error')
+        case v => error_of_doc(v)
+    }
+    let as_int_error = match (bad->as_int) {
+        case null => error('NoError', 'as_int gave null instead of the error')
+        case v => match v { case error e => e case _ => error('NoError', 'as_int did not fail') }
+    }
+    let as_string_error = match (bad->as_string) {
+        case null => error('NoError', 'as_string gave null instead of the error')
+        case v => match v { case error e => e case _ => error('NoError', 'as_string did not fail') }
+    }
+    let as_array_error = match (bad->as_array) {
+        case null => error('NoError', 'as_array gave null instead of the error')
+        case v => match v { case error e => e case _ => error('NoError', 'as_array did not fail') }
+    }
+    let as_float_error = match (bad->as_float) {
+        case null => error('NoError', 'as_float gave null instead of the error')
+        case v => match v { case error e => e case _ => error('NoError', 'as_float did not fail') }
+    }
+    let as_object_error = match (bad->as_object) {
+        case null => error('NoError', 'as_object gave null instead of the error')
+        case v => match v { case error e => e case _ => error('NoError', 'as_object did not fail') }
+    }
+    println(
+        original == by_key,
+        original == by_index,
+        original == as_int_error,
+        original == as_string_error,
+        original == as_array_error,
+        original == as_float_error,
+        original == as_object_error)
+    println(original.kind, original.location)
+
+    // ---- a document that has a value: the accessors still take parts out, chained ----
+    let good = decode('{"a": [5, 6], "s": "hi", "b": true, "n": 2.5}')
+    println(good->get<'a'>->get<1>->as_int)
+    println(good->get<'s'>->as_string)
+    println(good->get<'b'>->as_bool)
+    println(good->get<'n'>->as_float)
+    // A `Json?!` that holds a value; `??` takes the nullable layer off. Printing it gives back
+    // a `Json!`; the result of println is dropped on purpose, as it is only there for the text.
+    let _ = println(good->get<'a'> ?? decode('null'))
+    // Nothing to take: null, not an error.
+    let _ = println(good->get<'missing'> ?? decode('null'))
+
+    // ---- accessors on a plain Json still take parts out, as before ----
+    let _ = decode('{"a": [5, 6], "s": "hi"}') ?-> report !! 1
+
+    // ---- a document nested deeper than the limit: the error kind JsonTooDeep ----
+    let tooDeep = repeat('[', 10001) + '1' + repeat(']', 10001)
+    let deep = match (decode(tooDeep)) {
+        case error e => e
+        case v => error('NoError', 'the deep document decoded')
+    }
+    println(deep.kind, deep.location)
+    println(deep.message)
+    let typed = match (decode_as(tooDeep, 0)) {
+        case error e => e
+        case v => error('NoError', 'the deep document decoded')
+    }
+    println(typed.kind, typed.location)
+    return 0
+}

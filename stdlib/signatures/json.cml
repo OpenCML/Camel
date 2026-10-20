@@ -24,13 +24,14 @@ inner func encode(value: T, indent: int): string {
 }
 
 /// The value a JSON text describes, as a `Json`: a value of a definite type whose content is
-/// known only when the program runs; an error value when the text is not JSON (design
-/// principles 11.2). Look into a Json with get, as_int, as_array and the other operators below,
-/// each of which gives a value of a definite type and takes a `Json?` as well, so that calls
-/// chain; read a part whose shape is known with decode_as. Prints as its JSON text. In the
-/// examples below, `j` is a Json decoded so.
+/// known only when the program runs; an error value when the text is not JSON or nests deeper
+/// than the limit (design principles 11.2). Look into a Json with get, as_int, as_array and the
+/// other operators below, each of which gives a value of a definite type and takes a `Json?`, a
+/// `Json!` or a `Json?!` as well, so that calls chain (a `Json!` gives the two-layer result and
+/// its error is passed on unchanged); read a part whose shape is known with decode_as. Prints as
+/// its JSON text. In the examples below, `j` is a Json decoded so.
 /// @pure
-/// @fails error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning)
+/// @fails error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 by default, set by `CAMEL_JSON_MAX_DEPTH`; the message gives the line and column of the bracket that goes too deep)
 /// @example decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1    // 80
 inner func decode(text: string): Json! {
     return 'json:decode'
@@ -38,9 +39,10 @@ inner func decode(text: string): Json! {
 
 /// The value a JSON text (or a Json decoded before) describes, decoded to the type of shape;
 /// the value of shape is not read. The result is an error value when the JSON does not have
-/// that type. A part of the shape typed `Json` takes whatever is there.
+/// that type, or when the text nests deeper than the limit. A part of the shape typed `Json`
+/// takes whatever is there.
 /// @pure
-/// @fails error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON
+/// @fails error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit
 /// @example decode_as<[] as Map<string, int>>('{"a": 1}')    // {a: 1}
 with <shape: T>
 inner func decode_as(text: string): T! {
@@ -65,7 +67,8 @@ inner func is_null(j: Json): bool {
 }
 
 /// The member key of an object; null when j is not an object, has no such member, or is null
-/// itself (so that calls chain: j->get<'a'>->get<'b'>).
+/// itself (so that calls chain: j->get<'a'>->get<'b'>). A `Json!` gives a `Json?!`: the null is
+/// the nullable layer, and the error of a document that had failed is passed on unchanged.
 /// @pure
 /// @example j->get<'a'>    // 1, a Json?, for j of '{"a": 1}'
 with <key: string>
@@ -75,9 +78,15 @@ inner func get(j: Json): Json? {
 inner func get(j: Json?): Json? {
     return 'json:get'
 }
+inner func get(j: Json!): Json?! {
+    return 'json:get'
+}
+inner func get(j: Json?!): Json?! {
+    return 'json:get'
+}
 
 /// The element index of an array; null when j is not an array, the index is out of range, or j
-/// is null itself.
+/// is null itself. A `Json!` gives a `Json?!`, as get<key> does.
 /// @pure
 /// @example j->get<1>->as_int ?? 0    // 6, for j of '[5, 6]'
 with <index: int>
@@ -87,8 +96,15 @@ inner func get(j: Json): Json? {
 inner func get(j: Json?): Json? {
     return 'json:get'
 }
+inner func get(j: Json!): Json?! {
+    return 'json:get'
+}
+inner func get(j: Json?!): Json?! {
+    return 'json:get'
+}
 
-/// The bool a Json holds; null for any other kind.
+/// The bool a Json holds; null for any other kind (and a `Json!` gives a `bool?!`, the error of
+/// the document passed on unchanged).
 /// @pure
 /// @example j->as_bool ?? false    // true, for j of 'true'
 inner func as_bool(j: Json): bool? {
@@ -97,8 +113,15 @@ inner func as_bool(j: Json): bool? {
 inner func as_bool(j: Json?): bool? {
     return 'json:as_bool'
 }
+inner func as_bool(j: Json!): bool?! {
+    return 'json:as_bool'
+}
+inner func as_bool(j: Json?!): bool?! {
+    return 'json:as_bool'
+}
 
-/// The integer a Json holds; null for any other kind (a number with a fraction is not an int).
+/// The integer a Json holds; null for any other kind (a number with a fraction is not an int),
+/// and a `Json!` gives an `int?!` with the error of the document passed on unchanged.
 /// @pure
 /// @example j->as_int ?? 0    // 42, for j of '42'
 inner func as_int(j: Json): int? {
@@ -107,8 +130,15 @@ inner func as_int(j: Json): int? {
 inner func as_int(j: Json?): int? {
     return 'json:as_int'
 }
+inner func as_int(j: Json!): int?! {
+    return 'json:as_int'
+}
+inner func as_int(j: Json?!): int?! {
+    return 'json:as_int'
+}
 
-/// The number a Json holds, an integer included; null for any other kind.
+/// The number a Json holds, an integer included; null for any other kind, and a `Json!` gives a
+/// `float?!` with the error of the document passed on unchanged.
 /// @pure
 /// @example j->as_float ?? 0.0    // 2.0, for j of '2'
 inner func as_float(j: Json): float? {
@@ -117,8 +147,15 @@ inner func as_float(j: Json): float? {
 inner func as_float(j: Json?): float? {
     return 'json:as_float'
 }
+inner func as_float(j: Json!): float?! {
+    return 'json:as_float'
+}
+inner func as_float(j: Json?!): float?! {
+    return 'json:as_float'
+}
 
-/// The string a Json holds; null for any other kind.
+/// The string a Json holds; null for any other kind, and a `Json!` gives a `string?!` with the
+/// error of the document passed on unchanged.
 /// @pure
 /// @example j->as_string ?? ''    // 'hi', for j of '"hi"'
 inner func as_string(j: Json): string? {
@@ -127,8 +164,15 @@ inner func as_string(j: Json): string? {
 inner func as_string(j: Json?): string? {
     return 'json:as_string'
 }
+inner func as_string(j: Json!): string?! {
+    return 'json:as_string'
+}
+inner func as_string(j: Json?!): string?! {
+    return 'json:as_string'
+}
 
-/// The elements of a JSON array; null for any other kind.
+/// The elements of a JSON array; null for any other kind, and a `Json!` gives a `Json[]?!` with
+/// the error of the document passed on unchanged.
 /// @pure
 /// @example len(j->as_array ?? [])    // 2, for j of '[1, "a"]'
 inner func as_array(j: Json): Json[]? {
@@ -137,13 +181,26 @@ inner func as_array(j: Json): Json[]? {
 inner func as_array(j: Json?): Json[]? {
     return 'json:as_array'
 }
+inner func as_array(j: Json!): Json[]?! {
+    return 'json:as_array'
+}
+inner func as_array(j: Json?!): Json[]?! {
+    return 'json:as_array'
+}
 
-/// The members of a JSON object, by name; null for any other kind.
+/// The members of a JSON object, by name; null for any other kind, and a `Json!` gives a
+/// `Map<string, Json>?!` with the error of the document passed on unchanged.
 /// @pure
 /// @example keys(j->as_object ?? ([] as Map<string, Json>))    // ['a', 'b'], for j of '{"b": 1, "a": 2}'
 inner func as_object(j: Json): Map<string, Json>? {
     return 'json:as_object'
 }
 inner func as_object(j: Json?): Map<string, Json>? {
+    return 'json:as_object'
+}
+inner func as_object(j: Json!): Map<string, Json>?! {
+    return 'json:as_object'
+}
+inner func as_object(j: Json?!): Map<string, Json>?! {
     return 'json:as_object'
 }
