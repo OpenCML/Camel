@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-167 diagnostics: 150 errors, 17 warnings.
+166 diagnostics: 149 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -165,7 +165,6 @@ prints one entry.
 | `0x04000010` | [RuntimeDiag::EntryArgumentMissing](#entryargumentmissing) | Error |
 | `0x04000011` | [RuntimeDiag::EntryArgumentInvalid](#entryargumentinvalid) | Error |
 | `0x04000012` | [RuntimeDiag::EntryResultNotWritten](#entryresultnotwritten) | Error |
-| `0x04000013` | [RuntimeDiag::GraphTooLarge](#graphtoolarge) | Error |
 | `0x04000014` | [RuntimeDiag::MemoryExhausted](#memoryexhausted) | Error |
 | `0x04000030` | [RuntimeDiag::InvalidNumberText](#invalidnumbertext) | Error |
 | `0x04000031` | [RuntimeDiag::FormatFailed](#formatfailed) | Error |
@@ -4312,41 +4311,6 @@ module undeclared_println
 
 func main() sync {
     println('a')
-}
-```
-
-### GraphTooLarge
-
-`0x04000013` · Error · `RuntimeDiag::GraphTooLarge`
-
-**Message**
-
-```text
-Pass '{0}' cannot build graph '{1}': it needs {2} {3}, and one graph holds at most {4}.
-```
-
-**Help**
-
-```text
-A graph addresses its nodes and its edges with 16 bits. The function is not too large as written: the pass inlined or unrolled more code into this one graph than fits (a recursion unrolled over many steps, a function inlined at many call sites). Keep part of the computation out of the graph (a smaller constant depth, fewer unrolled steps), or run the pipeline without this pass.
-```
-
-**Example** (`test/cases/opt/generic/broken_graph.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/opt/generic/broken_graph.cml test::overgrow_graph std::fvm`)
-
-```camel
-module broken_graph
-
-// Used with the test-only pass test::drop_call_argument, which removes the argument of the call
-// below and commits the broken program. Structural validation at commit must reject it before
-// anything runs.
-func twice(x: int): int {
-    return x + x
-}
-
-func main(): int sync {
-    println('main start')
-    println(twice(21))
-    return 0
 }
 ```
 

@@ -33,7 +33,6 @@
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/trans/json/gir.h"
-#include "camel/runtime/capacity.h"
 #include "macro/macro.h"
 #include "pass_spec.h"
 #include "passes/opt/devirtualize/devirtualize.h"
@@ -917,7 +916,6 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
     static const std::vector<std::pair<std::string, PassFactory>> table = {
         TEST_PASS(kNativeCallbackTestPass, NativeCallbackTestPass),
         TEST_PASS(kDropCallArgumentPass, DropCallArgumentTestPass),
-        TEST_PASS(kOvergrowGraphPass, OvergrowGraphTestPass),
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
         TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
@@ -1240,28 +1238,9 @@ PassApplyResult applyPassesDetailed(
                 ctx->setProcessExitCode(exit.code);
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> exit({})", p, exit.code);
                 return {nullptr, PassApplyStatus::Consumed};
-            } catch (const camel::runtime::GraphCapacityError &e) {
-                // The pass built a graph larger than a graph can be. That is a limit of the
-                // representation the program ran into, not a broken graph: it is reported with
-                // the graph, the quantity, the size reached and the limit, at the function the
-                // graph was compiled from (or at one of its nodes).
-                setPipelineStage("pass:" + specName(p));
-                auto diag = ctx->rtmDiags()->of(RuntimeDiag::GraphTooLarge);
-                if (e.origin() != camel::source::kInvalidOriginId) {
-                    diag.atOrigin(e.origin());
-                }
-                diag.commit(
-                    p,
-                    e.graph().empty() ? std::string("(unnamed)") : e.graph(),
-                    e.size(),
-                    e.quantity(),
-                    e.limit());
-                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (graph too large)", p);
-                return {nullptr, PassApplyStatus::Failed};
             } catch (const camel::core::mm::MemoryExhausted &e) {
-                // A memory space is at its limit, or the host has no memory left. Like a graph
-                // that is too large this is a limit the program (or what the pass made of it)
-                // ran into: it is reported with the space, the usage, the limit and the
+                // A memory space is at its limit, or the host has no memory left. This is a
+                // limit the program (or what the pass made of it) ran into: it is reported with the space, the usage, the limit and the
                 // setting that raises it, at the graph that was being built when one is known.
                 setPipelineStage("pass:" + specName(p));
                 auto diag = ctx->rtmDiags()->of(RuntimeDiag::MemoryExhausted);

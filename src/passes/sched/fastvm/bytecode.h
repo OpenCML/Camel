@@ -163,8 +163,7 @@ inline bool isLoopMark(MarkOpCode mark) {
 
 // 0 means null; positive values are dynamic data indices, negative values are the negated static
 // data indices.
-using data_idx_t = int16_t;
-using arr_size_t = uint16_t;
+using data_idx_t = int32_t;
 
 using data_arr_t = std::span<const data_idx_t>;
 
@@ -178,8 +177,7 @@ template <typename T> inline data_idx_t as_index(T value) {
         if (!isSafeSizeTForIndexT(value)) {
             throw std::runtime_error(
                 std::format(
-                    "FastVM: index {} does not fit the 16-bit operand of a bytecode (one graph "
-                    "with more than 32767 slots or bytecode words)",
+                    "FastVM: index {} does not fit the 32-bit operand of a bytecode",
                     value));
         }
     } else {
@@ -217,38 +215,41 @@ std::string to_string(const MarkOpCode &op);
 struct BytecodeHeader;
 union BytecodeExtra;
 
-// Bytecode layout (Total size = opsize * 8 bytes)
+// Bytecode layout (Total size = opsize * 16 bytes)
 //
 // +-----------------------------+
-// | BytecodeHeader (8 bytes)   |
+// | BytecodeHeader (16 bytes)   |
 // |-----------------------------|
 // | opcode     : 1 byte         |
-// | opsize     : 1 byte         |
-// | result     : 2 bytes        |
-// | fastop[0]  : 2 bytes        |
-// | fastop[1]  : 2 bytes        |
+// | reserved   : 1 byte         |
+// | opsize     : 2 bytes        |
+// | result     : 4 bytes        |
+// | fastop[0]  : 4 bytes        |
+// | fastop[1]  : 4 bytes        |
 // +-----------------------------+
 //
 // +-----------------------------+
 // | BytecodeOperands (optional) |
 // |-----------------------------|
-// | operands[] : 2 bytes each   |
-// | total bytes padded to 8B    |
+// | operands[] : 4 bytes each   |
+// | total bytes padded to 16B   |
 // +-----------------------------+
 //
 // +-----------------------------+
-// | BytecodeExtra (optional, 8B)|
+// | BytecodeExtra (optional)    |
 // |-----------------------------|
-// | union value : 8 bytes       |
+// | 8-byte words, ending where  |
+// | the instruction ends        |
 // +-----------------------------+
 //
-// total_size = opsize * 8 bytes
+// An instruction takes opsize units of 16 bytes (sizeof(Bytecode)); a pc counts units.
 
-struct BytecodeHeader {                  // 8 bytes
+struct BytecodeHeader {                  // 16 bytes
     OpCode opcode        = OpCode::RETN; // 1 byte
-    uint8_t opsize       = 0;            // 1 byte, measured in 8-byte units.
-    data_idx_t result    = 0;            // 2 bytes
-    data_idx_t fastop[2] = {0, 0};       // 4 bytes
+    uint8_t reserved0    = 0;            // 1 byte
+    uint16_t opsize      = 0;            // 2 bytes, measured in 16-byte units.
+    data_idx_t result    = 0;            // 4 bytes
+    data_idx_t fastop[2] = {0, 0};       // 8 bytes
 
     std::string toString() const;
 
@@ -314,13 +315,14 @@ struct BytecodeHeader {                  // 8 bytes
     inline BytecodeExtra *extra() {
         const size_t extraWords = extraWordCount();
         ASSERT(extraWords != 0, "Bytecode has no extra payload.");
-        return reinterpret_cast<BytecodeExtra *>(this + opsize - extraWords);
+        return reinterpret_cast<BytecodeExtra *>(reinterpret_cast<uint64_t *>(this + opsize) - extraWords);
     }
 
     inline const BytecodeExtra *extra() const {
         const size_t extraWords = extraWordCount();
         ASSERT(extraWords != 0, "Bytecode has no extra payload.");
-        return reinterpret_cast<const BytecodeExtra *>(this + opsize - extraWords);
+        return reinterpret_cast<const BytecodeExtra *>(
+            reinterpret_cast<const uint64_t *>(this + opsize) - extraWords);
     }
 
     // FILL uses two extra words. FUNC/TAIL use two extra words in non-JIT builds and three extra
@@ -328,24 +330,24 @@ struct BytecodeHeader {                  // 8 bytes
     inline uint64_t *extra2() {
         const size_t extraWords = extraWordCount();
         ASSERT(extraWords >= 2, "Bytecode has no second extra payload word.");
-        return reinterpret_cast<uint64_t *>(this + opsize - extraWords + 1);
+        return reinterpret_cast<uint64_t *>(this + opsize) - extraWords + 1;
     }
     inline const uint64_t *extra2() const {
         const size_t extraWords = extraWordCount();
         ASSERT(extraWords >= 2, "Bytecode has no second extra payload word.");
-        return reinterpret_cast<const uint64_t *>(this + opsize - extraWords + 1);
+        return reinterpret_cast<const uint64_t *>(this + opsize) - extraWords + 1;
     }
 
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
     inline uint64_t *extra3() {
         const size_t extraWords = extraWordCount();
         ASSERT(extraWords >= 3, "Bytecode has no third extra payload word.");
-        return reinterpret_cast<uint64_t *>(this + opsize - extraWords + 2);
+        return reinterpret_cast<uint64_t *>(this + opsize) - extraWords + 2;
     }
     inline const uint64_t *extra3() const {
         const size_t extraWords = extraWordCount();
         ASSERT(extraWords >= 3, "Bytecode has no third extra payload word.");
-        return reinterpret_cast<const uint64_t *>(this + opsize - extraWords + 2);
+        return reinterpret_cast<const uint64_t *>(this + opsize) - extraWords + 2;
     }
 #endif
 
@@ -362,28 +364,30 @@ struct BytecodeHeader {                  // 8 bytes
     // generic opcode switch is measurable when fib-like code calls through this on every frame.
     inline BytecodeExtra *directCallExtra() {
         ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
-        return reinterpret_cast<BytecodeExtra *>(this + opsize - directCallExtraWordCount());
+        return reinterpret_cast<BytecodeExtra *>(
+            reinterpret_cast<uint64_t *>(this + opsize) - directCallExtraWordCount());
     }
     inline const BytecodeExtra *directCallExtra() const {
         ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
-        return reinterpret_cast<const BytecodeExtra *>(this + opsize - directCallExtraWordCount());
+        return reinterpret_cast<const BytecodeExtra *>(
+            reinterpret_cast<const uint64_t *>(this + opsize) - directCallExtraWordCount());
     }
     inline uint64_t *directCallExtra2() {
         ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
-        return reinterpret_cast<uint64_t *>(this + opsize - directCallExtraWordCount() + 1);
+        return reinterpret_cast<uint64_t *>(this + opsize) - directCallExtraWordCount() + 1;
     }
     inline const uint64_t *directCallExtra2() const {
         ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
-        return reinterpret_cast<const uint64_t *>(this + opsize - directCallExtraWordCount() + 1);
+        return reinterpret_cast<const uint64_t *>(this + opsize) - directCallExtraWordCount() + 1;
     }
 #if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
     inline uint64_t *directCallExtra3() {
         ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
-        return reinterpret_cast<uint64_t *>(this + opsize - directCallExtraWordCount() + 2);
+        return reinterpret_cast<uint64_t *>(this + opsize) - directCallExtraWordCount() + 2;
     }
     inline const uint64_t *directCallExtra3() const {
         ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
-        return reinterpret_cast<const uint64_t *>(this + opsize - directCallExtraWordCount() + 2);
+        return reinterpret_cast<const uint64_t *>(this + opsize) - directCallExtraWordCount() + 2;
     }
 #endif
 };
@@ -407,9 +411,7 @@ union BytecodeExtra {                           // 8 bytes
 
 // FUNC/TAIL:
 // - extra()  : runtime callee graph pointer
-// - extra2() : [targetPc:32 | directCallCount:32]. The pc was 16 bits wide: a program linked
-//                to more than 65535 bytecode words got truncated call targets (a crash in
-//                release builds, where the range ASSERT is compiled out).
+// - extra2() : [targetPc:32 | directCallCount:32]
 // - extra3() : JIT entry pointer (JIT builds only; 0 means interpreter entry)
 inline camel::runtime::GCGraph *getFuncExtraRuntimeGraph(const BytecodeHeader *bc) {
     return bc->directCallExtra()->runtimeGraph;
@@ -419,20 +421,16 @@ inline void setFuncExtraRuntimeGraph(BytecodeHeader *bc, camel::runtime::GCGraph
 }
 
 // JUMP: the target pc. Inside one graph, before linking, it is graph-relative and fits fastop[0]
-// (fastop[1] is 0). The linker makes it absolute, and a linked program can exceed 16 bits: the
-// absolute target is spread over both operands, low 16 bits in fastop[0], high 16 bits in
-// fastop[1]. Every reader of a linked JUMP goes through getJumpTargetPc.
+// (fastop[1] is 0). The linker makes it absolute, and a linked program can exceed 32 bits of
+// operand: the absolute target is spread over both operands, low 32 bits in fastop[0], high 32
+// bits in fastop[1]. Every reader of a linked JUMP goes through getJumpTargetPc.
 inline size_t getJumpTargetPc(const BytecodeHeader *bc) {
-    return static_cast<size_t>(static_cast<uint16_t>(bc->fastop[0])) |
-           (static_cast<size_t>(static_cast<uint16_t>(bc->fastop[1])) << 16);
+    return static_cast<size_t>(static_cast<uint32_t>(bc->fastop[0])) |
+           (static_cast<size_t>(static_cast<uint32_t>(bc->fastop[1])) << 32);
 }
 inline void setJumpTargetPc(BytecodeHeader *bc, size_t targetPc) {
-    if (targetPc > 0xFFFFFFFFull) {
-        throw std::runtime_error(
-            std::format("FastVM: jump target pc {} exceeds the 32-bit range", targetPc));
-    }
-    bc->fastop[0] = static_cast<data_idx_t>(static_cast<uint16_t>(targetPc & 0xFFFF));
-    bc->fastop[1] = static_cast<data_idx_t>(static_cast<uint16_t>(targetPc >> 16));
+    bc->fastop[0] = static_cast<data_idx_t>(static_cast<uint32_t>(targetPc & 0xFFFFFFFFull));
+    bc->fastop[1] = static_cast<data_idx_t>(static_cast<uint32_t>(targetPc >> 32));
 }
 
 constexpr uint64_t kFuncExtraCountMask     = (1ull << 32) - 1;
@@ -483,16 +481,16 @@ inline void setFuncExtraFn(BytecodeHeader *bc, void *fn) {
 }
 #endif
 
-static_assert(sizeof(Bytecode) == 8, "Bytecode must be exactly 8 bytes");
-static_assert(sizeof(BytecodeHeader) == 8, "BytecodeHeader must be exactly 8 bytes");
+static_assert(sizeof(Bytecode) == 16, "Bytecode must be exactly 16 bytes");
+static_assert(sizeof(BytecodeHeader) == 16, "BytecodeHeader must be exactly 16 bytes");
 static_assert(sizeof(BytecodeExtra) == 8, "BytecodeExtra must be exactly 8 bytes");
 
 using bytecode_vec_t = std::vector<Bytecode>;
 
-inline size_t roundUp8(size_t n) { return (n + 7) & ~static_cast<size_t>(7); }
+inline size_t roundUp16(size_t n) { return (n + 15) & ~static_cast<size_t>(15); }
 
 Bytecode *appendBytecode(
     bytecode_vec_t &vec, OpCode opcode, data_idx_t result,
     const std::vector<data_idx_t> &fastops = {}, const std::vector<data_idx_t> &normOperands = {},
     const std::vector<data_idx_t> &withOperands = {}, bool hasExtra = false,
-    const BytecodeExtra &extra = {}, size_t extraUnits = 1);
+    const BytecodeExtra &extra = {}, size_t extraWords = 1);

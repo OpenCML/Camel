@@ -23,7 +23,7 @@
  * `GCGraph` is the immutable execution layout. `GraphDraft` is the editable
  * decode form used by
  * runtime rewrites. The draft intentionally keeps node-
- * centric adjacency and stable 16-bit node
+ * centric adjacency and stable node
  * ids so passes can mutate the graph
  * without invalidating external node pointers.
  * The draft
@@ -72,7 +72,7 @@ struct DraftBrchPayload {
     gc_node_ref_t join       = kInvalidNodeRef;
     gc_cnt_t armCount        = 0;
     gc_node_ref_t defaultArm = kInvalidNodeRef;
-    uint16_t reserved        = 0;
+    uint32_t reserved        = 0;
 };
 static_assert(std::is_trivially_copyable_v<DraftBrchPayload>);
 
@@ -80,8 +80,8 @@ struct DraftNodeHeader {
     class GraphDraft *owner           = nullptr;
     gc_node_ref_t selfId              = kInvalidNodeRef;
     gc_slot_idx_t dataIndex           = 0;
-    uint16_t payloadBytes             = 0;
-    uint16_t capacityBytes            = 0;
+    uint32_t payloadBytes             = 0;
+    uint32_t capacityBytes            = 0;
     camel::core::type::Type *dataType = nullptr;
 
     gc_cnt_t normInputCount = 0;

@@ -588,7 +588,7 @@ static bytecode_vec_t compileRuntimeGraph(
                 true,
                 {.mark = mark},
                 3);
-            auto *words = reinterpret_cast<uint64_t *>(bc + bc->opsize - 3);
+            auto *words = reinterpret_cast<uint64_t *>(bc + bc->opsize) - 3;
             words[0]    = reinterpret_cast<uint64_t>(graph->loopCondGraphOf(runtimeNodeIndex));
             words[1]    = reinterpret_cast<uint64_t>(graph->loopBodyGraphOf(runtimeNodeIndex));
             BytecodeExtra extra{};
@@ -763,7 +763,7 @@ LinkedBytecodeResult compileAndLinkGraphs(
             setFuncExtraTargetPc(&bc, it != offsetMap.end() ? it->second : *known(target));
         } break;
         case OpCode::JUMP: {
-            // Graph-relative before, absolute from here on (and possibly wider than 16 bits).
+            // Graph-relative before, absolute from here on .
             setJumpTargetPc(&bc, getJumpTargetPc(&bc) + offsetMap.at(info.runtimeGraph));
         } break;
         default:

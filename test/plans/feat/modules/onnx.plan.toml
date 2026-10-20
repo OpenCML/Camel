@@ -2199,60 +2199,6 @@ assert(!fs.existsSync(path.join(input.test_tmp, 'refusal_request_in_arm.onnx')),
 timeout_ms = 8000
 
 [[tests]]
-name = "pass_export_refusal_located.graph_too_large"
-desc = "A function that does not fit one runtime graph once the export has inlined every call in it (f13 calls f12 twice, and so on down to f0): the refusal is at the export_model call and names the graph, the quantity, the size it needs and the limit of 65535. It used to be the unlocated PassInternalError '... exceeds the target integral width'."
-kind = "negative"
-case = "../../../cases/modules/onnx/refusals/graph_too_large.cml"
-args = ["${case}", "std::macro", "std::opt", "onnx::export"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 72
-expect_diagnostic_column = 5
-expect_output_contains = ["the exported function does not fit one graph once every call in it is inlined and every recursion of constant depth is unrolled (ONNX has no calls): graph 'f13' needs ", " edges (every input of every node is one)", "and one runtime graph holds at most 65535 (they are addressed with 16 bits)"]
-expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "internal error", "integral width"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 30000
-
-[[tests]]
-name = "pass_export_refusal_located.graph_too_large_json"
-desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:onnx::export, the range of the export_model call, a size above the limit in the message, no model file."
-kind = "behavior"
-case = "../../../cases/modules/onnx/refusals/graph_too_large.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt", "onnx::export"]
-expect_exit = 1
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-async ({ input, assert }) => {
-const fs = await import('fs')
-const path = await import('path')
-const diags = JSON.parse(input.normalized.stdout)
-assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
-const d = diags[0]
-assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
-const m = /graph 'f13' needs (\d+) edges .* holds at most (\d+) /.exec(d.message)
-assert(m && Number(m[2]) === 65535 && Number(m[1]) > 65535, `graph, size and limit are missing: ${d.message}`)
-assert(d.range.start.line === 71 && d.range.start.character === 4, `unexpected range ${JSON.stringify(d.range)}`)
-assert(!fs.existsSync(path.join(input.test_tmp, 'refusal_graph_too_large.onnx')), 'a refused export must not write a model')
-}
-"""
-timeout_ms = 30000
-
-[[tests]]
-name = "export_model_graph_too_large"
-desc = "The same function exported at run time by onnx.export_model: the run stops at the call with the same explanation (graph, size, limit), not with '... exceeds the target integral width'."
-kind = "negative"
-case = "../../../cases/modules/onnx/refusals/graph_too_large.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 72
-expect_output_contains = ["onnx.export_model: the exported function does not fit one graph once every call in it is inlined", "and one runtime graph holds at most 65535 (they are addressed with 16 bits)"]
-expect_output_not_contains = ["integral width"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 30000
-
-[[tests]]
 name = "ort_const_under_as"
 desc = "A constant under `as` stays a constant, and `as` on a model-dependent tensor is a checked assertion: three models (weights converted to shaped types; conversions of computed values that the example's shape proves; with_grad through conversions) are exported by the operator and by the pass from an example that is itself a tensor of literals under `as`. Each passes onnx.checker's full check and matches NumPy on ONNX Runtime within 1e-6. Constant folding used to leave the CAST of a constant in the graph: the pass refused the example as 'a value computed at run time'."
 kind = "behavior"

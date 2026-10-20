@@ -28,7 +28,6 @@
  */
 
 #include "camel/runtime/draft.h"
-#include "camel/runtime/capacity.h"
 #include "runtime/graph_build.h"
 
 #include "camel/core/context/frame.h"
@@ -49,7 +48,7 @@ namespace mm = camel::core::mm;
 
 namespace {
 
-uint16_t capacityBytesForStorageClass(DraftNodeStorageClass storageClass, size_t tailBytes) {
+uint32_t capacityBytesForStorageClass(DraftNodeStorageClass storageClass, size_t tailBytes) {
     switch (storageClass) {
     case DraftNodeStorageClass::Slab64:
         return 64;
@@ -58,8 +57,7 @@ uint16_t capacityBytesForStorageClass(DraftNodeStorageClass storageClass, size_t
     case DraftNodeStorageClass::Slab128:
         return 128;
     case DraftNodeStorageClass::Oversize:
-        return static_cast<uint16_t>(
-            std::min<size_t>(tailBytes, std::numeric_limits<uint16_t>::max()));
+        return static_cast<uint32_t>(tailBytes);
     }
     return 0;
 }
@@ -133,13 +131,12 @@ DraftNodeInit makeInitFromNode(const DraftNode *node) {
 
 void initializeNodeStorage(
     GraphDraft *owner, DraftNode *draftNode, gc_node_ref_t id, const DraftNodeInit &init,
-    DraftNodeStorageClass storageClass, uint16_t capacityBytes) {
+    DraftNodeStorageClass storageClass, uint32_t capacityBytes) {
     ASSERT(draftNode != nullptr, "Draft node storage initialization requires a non-null node.");
     draftNode->header.owner        = owner;
     draftNode->header.selfId       = id;
     draftNode->header.dataIndex    = init.dataIndex;
-    draftNode->header.payloadBytes = static_cast<uint16_t>(
-        std::min<size_t>(init.payload.size_bytes(), std::numeric_limits<uint16_t>::max()));
+    draftNode->header.payloadBytes = static_cast<uint32_t>(init.payload.size_bytes());
     draftNode->header.capacityBytes  = capacityBytes;
     draftNode->header.dataType       = init.dataType;
     draftNode->header.normInputCount = static_cast<gc_cnt_t>(init.normInputs.size());
@@ -655,8 +652,8 @@ DraftNode *GraphDraft::createDecodedNode(
     const auto withUsers  = graph->withOutputsOf(sourceRef);
     const auto ctrlUsers  = graph->ctrlOutputsOf(sourceRef);
 
-    const uint16_t payloadBytes =
-        static_cast<uint16_t>(payloadBytesForSourceNode(graph, sourceRef));
+    const uint32_t payloadBytes =
+        static_cast<uint32_t>(payloadBytesForSourceNode(graph, sourceRef));
     const size_t tailBytes =
         static_cast<size_t>(payloadBytes) + adjacencyBytes(
                                                 static_cast<gc_cnt_t>(normInputs.size()),
@@ -975,14 +972,9 @@ void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
 }
 
 gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
-    // Checked in every build: past this the id below would wrap around and name another
-    // node. (The last id is kInvalidNodeRef.) The node slots count erased nodes too.
-    if (nodesById_.size() >= std::numeric_limits<gc_node_ref_t>::max()) {
-        throw GraphCapacityError(
-            "nodes (counting the ones a rewrite added and removed again)",
-            nodesById_.size() + 1,
-            std::numeric_limits<gc_node_ref_t>::max());
-    }
+    ASSERT(
+        nodesById_.size() < std::numeric_limits<gc_node_ref_t>::max(),
+        "A draft graph has no node id left (the last id is kInvalidNodeRef).");
     gc_node_ref_t id = static_cast<gc_node_ref_t>(nodesById_.size());
     nodesById_.push_back(rebuildNode(id, init));
     sourceRefsById_.push_back(kInvalidNodeRef);
@@ -1315,7 +1307,7 @@ gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
     const size_t slotIndex = runtimeSlotTypes_.size();
     ASSERT(
         slotIndex < static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
-        "Draft runtime slot count exceeds 16-bit data-index capacity.");
+        "Draft runtime slot count exceeds the data-index range.");
     runtimeSlotTypes_.push_back(type);
     return static_cast<gc_slot_idx_t>(slotIndex);
 }
@@ -1335,7 +1327,7 @@ gc_node_ref_t GraphDraft::materializeStaticValue(
     const size_t slotIndex = appendStaticSlot(value, type);
     ASSERT(
         slotIndex <= static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
-        "Draft static slot index exceeds 16-bit data-index capacity.");
+        "Draft static slot index exceeds the data-index range.");
     DraftNodeInit init{
         .dataIndex    = static_cast<gc_slot_idx_t>(-static_cast<int32_t>(slotIndex)),
         .dataType     = type,
@@ -1382,13 +1374,7 @@ GCGraph *GraphDraft::encode(
     if (!staticSlotTypes_.empty()) {
         staticDataType = camel::core::type::TupleType::layout(staticSlotTypes_);
     }
-    const auto payloadShape = [&] {
-        try {
-            return describeDraftNativePayload(*this);
-        } catch (const GraphCapacityError &e) {
-            throw e.inGraph(name, firstNodeOrigin());
-        }
-    }();
+    const auto payloadShape = describeDraftNativePayload(*this);
 
     return GCGraphBuildAccess::create(
         debugRecord,
