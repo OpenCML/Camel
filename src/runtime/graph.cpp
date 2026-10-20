@@ -723,6 +723,7 @@ void emitDraftPayload(
         GCNode &record   = payload.nodes[planned.ref];
         record.kind      = draftHeader->kind;
         record.flags     = draftHeader->runtimeFlags;
+        record.reserved  = 0;
         record.dataIndex = slotOf(planned.draftId);
         record.typeId    = typeIdOf(effectiveDraftNodeType(draft, *draftHeader));
         record.inBegin   = appendInputs(draft.normInputsOf(planned.draftId));
