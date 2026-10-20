@@ -25,6 +25,7 @@
 #include "camel/utils/phase_timer.h"
 
 #include "camel/utils/env.h"
+#include "camel/utils/path.h"
 
 #include <chrono>
 #include <cstdint>
@@ -283,7 +284,7 @@ void report() {
         std::cerr << json << std::flush;
         return;
     }
-    std::ofstream out(r.path, std::ios::binary);
+    std::ofstream out(camel::utils::pathFromUtf8(r.path), std::ios::binary);
     if (!out) {
         std::cerr << "camel: cannot write the phase report to " << r.path << std::endl;
         return;

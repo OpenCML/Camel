@@ -21,6 +21,7 @@
 #include "camel/core/context/context.h"
 #include "camel/utils/dll_path.h"
 #include "camel/utils/log.h"
+#include "camel/utils/path.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -45,7 +46,9 @@ namespace fs = std::filesystem;
 
 void *openDll(const std::string &path) {
 #ifdef _WIN32
-    return static_cast<void *>(LoadLibraryA(path.c_str()));
+    // The path is UTF-8; the loader takes UTF-16, and the process code page would not contain
+    // the file name of a directory outside it.
+    return static_cast<void *>(LoadLibraryW(camel::utils::pathFromUtf8(path).c_str()));
 #else
     return dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
 #endif
@@ -128,7 +131,7 @@ std::vector<fs::path> collectPythonCandidateDirs() {
         venv = getEnv("CONDA_PREFIX");
     }
     if (!venv.empty()) {
-        fs::path root = fs::path(venv);
+        fs::path root = camel::utils::pathFromUtf8(venv);
         dirs.push_back(root);
 #ifdef _WIN32
         dirs.push_back(root / "Scripts");
@@ -165,7 +168,7 @@ std::optional<std::string> detectPythonVersionFromVenvCfg(const fs::path &venvRo
     if (venvRoot.empty()) {
         return std::nullopt;
     }
-    std::ifstream in((venvRoot / "pyvenv.cfg").string());
+    std::ifstream in(venvRoot / "pyvenv.cfg");
     if (!in) {
         return std::nullopt;
     }
@@ -197,7 +200,7 @@ std::optional<std::string> detectPythonVersionFromDllName(const fs::path &dir) {
         if (!entry.is_regular_file()) {
             continue;
         }
-        std::string name = entry.path().filename().string();
+        std::string name = camel::utils::pathToUtf8(entry.path().filename());
         std::string lower(name);
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
         if (lower.rfind("python", 0) == 0 && lower.size() >= 11 &&
@@ -217,26 +220,28 @@ std::optional<std::string> detectPythonVersionFromDllName(const fs::path &dir) {
 std::optional<std::string> detectActivePythonVersionTag() {
     std::string venv = getEnv("VIRTUAL_ENV");
     if (!venv.empty()) {
-        auto fromCfg = detectPythonVersionFromVenvCfg(fs::path(venv));
+        auto fromCfg = detectPythonVersionFromVenvCfg(camel::utils::pathFromUtf8(venv));
         if (fromCfg.has_value()) {
             return fromCfg;
         }
-        auto fromDll = detectPythonVersionFromDllName(fs::path(venv));
+        auto fromDll = detectPythonVersionFromDllName(camel::utils::pathFromUtf8(venv));
         if (fromDll.has_value()) {
             return fromDll;
         }
-        auto fromScripts = detectPythonVersionFromDllName(fs::path(venv) / "Scripts");
+        auto fromScripts =
+            detectPythonVersionFromDllName(camel::utils::pathFromUtf8(venv) / "Scripts");
         if (fromScripts.has_value()) {
             return fromScripts;
         }
     }
     std::string conda = getEnv("CONDA_PREFIX");
     if (!conda.empty()) {
-        auto fromRoot = detectPythonVersionFromDllName(fs::path(conda));
+        auto fromRoot = detectPythonVersionFromDllName(camel::utils::pathFromUtf8(conda));
         if (fromRoot.has_value()) {
             return fromRoot;
         }
-        auto fromBin = detectPythonVersionFromDllName(fs::path(conda) / "Library" / "bin");
+        auto fromBin =
+            detectPythonVersionFromDllName(camel::utils::pathFromUtf8(conda) / "Library" / "bin");
         if (fromBin.has_value()) {
             return fromBin;
         }
@@ -263,7 +268,7 @@ std::vector<std::string> listAvailableBridgeTags(const fs::path &dir) {
         if (!entry.is_regular_file()) {
             continue;
         }
-        std::string name = entry.path().filename().string();
+        std::string name = camel::utils::pathToUtf8(entry.path().filename());
         std::string lower(name);
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 #ifdef _WIN32
@@ -309,7 +314,7 @@ bool tryLoadPythonBridgeForActiveEnv(
             return std::format(
                 "run | python bridge | tag {} | missing {} | other bridge tags under libs: {}",
                 activeTag.value(),
-                bridgePath.string(),
+                camel::utils::pathToUtf8(bridgePath),
                 avail.size());
         });
         if (outError) {
@@ -317,7 +322,8 @@ bool tryLoadPythonBridgeForActiveEnv(
                 avail = listAvailableBridgeTags(libsDir);
             }
             std::ostringstream os;
-            os << "python bridge for active environment not found: " << bridgePath.string();
+            os << "python bridge for active environment not found: "
+               << camel::utils::pathToUtf8(bridgePath);
             if (!avail.empty()) {
                 os << ". Available bridge tag(s): ";
                 for (size_t i = 0; i < avail.size(); ++i) {
@@ -328,10 +334,11 @@ bool tryLoadPythonBridgeForActiveEnv(
         }
         return false;
     }
-    void *bridge = openDll(bridgePath.string());
+    void *bridge = openDll(camel::utils::pathToUtf8(bridgePath));
     if (!bridge) {
         if (outError) {
-            *outError = "failed to load python bridge: " + bridgePath.string() + " (" +
+            *outError = "failed to load python bridge: " + camel::utils::pathToUtf8(bridgePath) +
+                        " (" +
                         lastDlErrorString() + ")";
         }
         return false;
@@ -340,8 +347,8 @@ bool tryLoadPythonBridgeForActiveEnv(
         "Context",
         "run | python bridge | tag {} | loaded {}",
         activeTag.value(),
-        bridgePath.string());
-    ctx->addLoadedDll(bridgePath.string(), bridge);
+        camel::utils::pathToUtf8(bridgePath));
+    ctx->addLoadedDll(camel::utils::pathToUtf8(bridgePath), bridge);
     return true;
 }
 
@@ -354,7 +361,7 @@ void addRuntimeLibrarySearchPath(const fs::path &dir, std::set<std::string> &see
     if (ec || !fs::exists(abs) || !fs::is_directory(abs)) {
         return;
     }
-    std::string key = abs.string();
+    std::string key = camel::utils::pathToUtf8(abs);
     if (!seen.insert(key).second) {
         return;
     }
@@ -363,7 +370,7 @@ void addRuntimeLibrarySearchPath(const fs::path &dir, std::set<std::string> &see
 
 void registerRuntimeSearchDirs(const std::string &moduleName, const std::string &cmoPath) {
     std::set<std::string> seen;
-    const fs::path cmo = fs::path(cmoPath);
+    const fs::path cmo = camel::utils::pathFromUtf8(cmoPath);
     addRuntimeLibrarySearchPath(cmo.parent_path(), seen);
 
     fs::path installRoot = camel::utils::resolveInstallRoot();

@@ -23,6 +23,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/source/manager.h"
 #include "camel/runtime/graph.h"
+#include "camel/utils/path.h"
 
 #include <cctype>
 #include <filesystem>
@@ -110,7 +111,7 @@ camel::source::origin_id_t resolveOriginFromSite(
 
 std::string defaultModuleName(const ExecutionSite &site, const std::string &sourcePath) {
     if (!sourcePath.empty()) {
-        return std::filesystem::path(sourcePath).stem().string();
+        return camel::utils::pathToUtf8(camel::utils::pathFromUtf8(sourcePath).stem());
     }
     if (site.runtimeGraph) {
         return site.runtimeGraph->name();

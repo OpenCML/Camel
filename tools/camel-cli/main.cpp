@@ -35,6 +35,7 @@
 #include "camel/parse/parse.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/operator_instance.h"
+#include "camel/utils/command_line.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
@@ -177,7 +178,7 @@ int runCommand(int argc, char *argv[]) {
         CAMEL_LOG_INFO_S("Main", "Reading from standard input.");
     } else {
         targetFile = Run::resolvedInputPath;
-        auto file  = std::make_unique<std::ifstream>(targetFile);
+        auto file  = std::make_unique<std::ifstream>(camel::utils::pathFromUtf8(targetFile));
         if (!file->is_open()) {
             std::cerr << "Error: Cannot open file " << targetFile << endl;
             return 1;
@@ -221,10 +222,10 @@ int runCommand(int argc, char *argv[]) {
         return runTimeitMode(os, useJsonFormat);
     }
 
-    fs::path entryPath(targetFile);
+    fs::path entryPath = camel::utils::pathFromUtf8(targetFile);
     // if targetFile is relative (or "stdin"), the entryDir is the current working directory
     // if targetFile is absolute, the entryDir is the parent directory of targetFile
-    std::string entryDir = fs::absolute(entryPath).parent_path().string();
+    std::string entryDir = camel::utils::pathToUtf8(fs::absolute(entryPath).parent_path());
     auto searchPaths     = camel::utils::buildModuleSearchPaths(
         entryDir,
         camel::utils::ModuleSearchPathOptions{.stdlibOverride = Run::stdLibPath});
@@ -243,7 +244,7 @@ int runCommand(int argc, char *argv[]) {
                 return std::format(
                     "run | module paths | {} entries | CAMEL_HOME={} | entry_dir={} | stdlib={}",
                     n,
-                    installRoot.string(),
+                    camel::utils::pathToUtf8(installRoot),
                     entryDir,
                     stdlibNote);
             },
@@ -511,13 +512,14 @@ int runCommand(int argc, char *argv[]) {
                         useJsonFormat);
                     static PassDumpState passDump;
                     if (!Run::dumpAfterEachPassDir.empty()) {
-                        passDump.dir = Run::dumpAfterEachPassDir;
+                        passDump.dir = camel::utils::pathFromUtf8(Run::dumpAfterEachPassDir);
                         passDump.ctx = ctx;
                         std::error_code ec;
                         fs::create_directories(passDump.dir, ec);
                         if (ec) {
                             std::cerr << "Error: cannot create snapshot directory "
-                                      << passDump.dir.string() << ": " << ec.message() << endl;
+                                      << camel::utils::pathToUtf8(passDump.dir)
+                                      << ": " << ec.message() << endl;
                             return 1;
                         }
                         writePassDump(passDump, "input", graph);
@@ -668,26 +670,34 @@ int runCommand(int argc, char *argv[]) {
     return 0;
 }
 
+#ifdef _WIN32
+int wmain(int argc, wchar_t *argv[]) {
+#else
 int main(int argc, char *argv[]) {
+#endif
     // Before the first call into libcamel: on Windows the executable loads libcamel.dll lazily
     // (/DELAYLOAD), and initialize() is what adds the directories it is found in. A call made
     // earlier ends the process with "module not found" (0xC06D007E) before any output.
     // initialize() is idempotent; runCommand's ScopedRuntime calls it again.
     camel::initialize();
     phase::enableFromEnvironment();
+    // The command line is UTF-8 from here on: on Windows `wmain` is what receives it as UTF-16,
+    // and the narrow `main` form is decoded in the process code page (see command_line.h).
+    std::vector<std::string> arguments = camel::utils::utf8Arguments(argc, argv);
     // `--time-phases` (report to standard error) and `--time-phases=<file>` are taken out of
     // argv here, before the argument parser runs, so that the report covers the start of the
     // run as well. The file is joined to the option: a separate value would take the program
     // that follows for the file, and the report would be written over the program.
     std::vector<char *> args;
-    for (int i = 0; i < argc; ++i) {
-        const std::string_view arg = argv[i];
+    for (size_t i = 0; i < arguments.size(); ++i) {
+        std::string &arg = arguments[i];
         if (i > 0 && arg == "--time-phases") {
             phase::enable("-");
         } else if (i > 0 && arg.starts_with("--time-phases=")) {
             phase::enable(std::string(arg.substr(std::string_view("--time-phases=").size())));
         } else {
-            args.push_back(argv[i]);
+            // The parser only reads an argument; the strings above outlive the call.
+            args.push_back(arg.data());
         }
     }
     args.push_back(nullptr);

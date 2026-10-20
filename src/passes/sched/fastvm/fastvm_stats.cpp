@@ -43,6 +43,7 @@
 #include "fastvm.h"
 
 #include "camel/execute/executor.h"
+#include "camel/utils/path.h"
 
 #include <cstdlib>
 #include <fstream>
@@ -236,7 +237,7 @@ void FastVMSchedPass::statsWrite() {
         out += "}";
     }
     out += "]}\n";
-    std::ofstream file(stats_->path, std::ios::app);
+    std::ofstream file(camel::utils::pathFromUtf8(stats_->path), std::ios::app);
     file << out;
     opCounts_ = nullptr;
     stats_.reset();
