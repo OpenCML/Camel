@@ -232,6 +232,10 @@ class GraphDraft {
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
     bool empty() const { return liveNodeCount_ == 0; }
+    /// Changes whenever the graphs this draft refers to may have changed: a node was added,
+    /// erased or rewritten, a payload was handed out for writing, a constant or a dependency
+    /// was added. Equal revisions of one draft mean the same references.
+    uint64_t revision() const { return revision_; }
 
     bool containsNode(gc_node_ref_t id) const;
     bool containsNode(const DraftNode *node) const;
@@ -422,6 +426,8 @@ class GraphDraft {
         gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
         gc_node_ref_t newId, bool norm, bool with, bool ctrl);
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
+    /// Records node `id` in the list of its kind when that kind has one (see gateIds_).
+    void noteNodeKind(gc_node_ref_t id, GCNodeKind kind);
 
     camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
@@ -435,6 +441,13 @@ class GraphDraft {
     std::vector<gc_node_ref_t> sourceRefsById_;
     std::vector<gc_node_ref_t> draftIdsBySourceRef_;
     gc_cnt_t liveNodeCount_ = 0;
+    uint64_t revision_      = 0;
+    // The nodes that are, or were, a GATE, a BRCH or a JOIN, by id, each once. Erased nodes stay
+    // in the lists (ids are not reused) and are skipped by whoever walks them. The rewrites that
+    // concern only these kinds walk the list instead of every node.
+    std::vector<gc_node_ref_t> gateIds_;
+    std::vector<gc_node_ref_t> brchIds_;
+    std::vector<gc_node_ref_t> joinIds_;
 
     gc_node_ref_t entry_      = kInvalidNodeRef;
     gc_node_ref_t exit_       = kInvalidNodeRef;
