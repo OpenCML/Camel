@@ -21,6 +21,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/core/type/intern.h"
+#include "camel/core/type/pure.h"
 #include "camel/core/type/storage.h"
 #include "camel/core/type/text.h"
 #include "camel/utils/assert.h"
@@ -36,13 +37,11 @@ ArrayStorage arrayStorageFor(const Type *elementType) {
     if (!elementType) {
         return ArrayStorage::Slots;
     }
-    // A reference element, or an element type the runtime has no fixed-width encoding for, is
-    // a slot. The compact form is only for numbers (the leaf rule).
-    const TypeCode code = elementType->code();
-    if (isCompactElementType(code)) {
-        return ArrayStorage::Compact;
-    }
-    return ArrayStorage::Slots;
+    // A compact array is a run of pure data: bytes the type system has proved contain no
+    // reference, so they can live in a data block, be compared with memcmp and be handed out
+    // without a copy. Numbers, booleans, complex numbers, and structs and tuples made only of
+    // them qualify; a reference (a string, a nested array, a closure, a tagged form) does not.
+    return isPureDataType(elementType) ? ArrayStorage::Compact : ArrayStorage::Slots;
 }
 
 bool isCompactElementType(TypeCode code) {
@@ -53,6 +52,8 @@ bool isCompactElementType(TypeCode code) {
     case TypeCode::Float64:
     case TypeCode::Bool:
     case TypeCode::Byte:
+    case TypeCode::Complex64:
+    case TypeCode::Complex128:
         return true;
     default:
         return false;
@@ -67,6 +68,10 @@ size_t arrayElementSize(TypeCode code) {
     case TypeCode::Int64:
     case TypeCode::Float64:
         return 8;
+    case TypeCode::Complex64:
+        return 8;
+    case TypeCode::Complex128:
+        return 16;
     case TypeCode::Bool:
     case TypeCode::Byte:
         return 1;

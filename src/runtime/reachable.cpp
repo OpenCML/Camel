@@ -62,6 +62,7 @@ uint64_t closureRevision(GCGraph *root) {
     });
     uint64_t h = 0xcbf29ce484222325ULL;
     const auto mix = [&h](uint64_t v) { h = (h ^ v) * 0x100000001b3ULL; };
+    mix(toValue(root->id()));
     for (const GCGraph *graph : graphs) {
         mix(toValue(graph->id()));
         mix(graph->revision());

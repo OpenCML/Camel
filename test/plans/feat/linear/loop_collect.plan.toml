@@ -19,6 +19,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "loops.collect.in_place"
+desc = "A loop that both needs the tape and writes its array state in place: the two cannot hold (an in-place loop appends into one array, so every tape entry would be the same final array), so the collector falls back to the copying append instead of refusing a legal program as an internal error. The tape then holds one array per round, which the printed entry lengths show."
+kind = "behavior"
+case = "../../../cases/loops/collection_in_place.cml"
+args = ["${case}", "test::loop_collect", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "fvm_native_loop", "jit_native_loop"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "([0, 7, 7, 7, 7], [[0, 7], [0, 7, 7], [0, 7, 7, 7], [0, 7, 7, 7, 7]], [[0, 7], [0, 7, 7], [0, 7, 7, 7], [0, 7, 7, 7, 7]])\n([0, 7, 7, 7, 7], [[0, 7], [0, 7, 7], [0, 7, 7, 7], [0, 7, 7, 7, 7]], [[0, 7], [0, 7, 7], [0, 7, 7, 7], [0, 7, 7, 7, 7]])\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "loops.collect.macro"
 desc = "std::macro evaluates a collecting loop ahead of time: a two-value state keeps its first component where the program reads it and the two tapes travel with it."
 kind = "behavior"

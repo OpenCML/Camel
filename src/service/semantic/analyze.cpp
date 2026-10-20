@@ -846,9 +846,10 @@ class ModelBuilder {
             ext.kind = ExternalName::Kind::Value;
             auto *value =
                 static_cast<camel::compile::gir::ExportedValue *>(EntityAccess::node(entity));
-            auto *node = value != nullptr ? value->node : nullptr;
-            if (node != nullptr && node->header.dataType != nullptr) {
-                ext.signatures.push_back(sourceSpelling(node->header.dataType->toString()));
+            const auto node = value != nullptr ? value->node : camel::runtime::DraftNodeRef{};
+            const auto *header = node ? node.draft->header(node.id) : nullptr;
+            if (header != nullptr && header->dataType != nullptr) {
+                ext.signatures.push_back(sourceSpelling(header->dataType->toString()));
             }
         }
         // One function may be bound to a name along several import paths.

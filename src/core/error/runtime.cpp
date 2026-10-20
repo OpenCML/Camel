@@ -260,7 +260,7 @@ bool isIsolatableFault(RuntimeDiag diag) {
         return true;
     default:
         // Defects and limits of the compiler (PassInternalError, UnrecognizedOperatorURI,
-        // UnsupportedBytecode, OperatorNotImplemented, GraphTooLarge, MemoryExhausted, ...),
+        // UnsupportedBytecode, OperatorNotImplemented, MemoryExhausted, ...),
         // diagnostics that are not raised while a graph runs, and everything not listed.
         // DESIGN-QUESTION(attempt-memory-exhausted): memory exhaustion is not isolated (it
         // is an exception of the allocator, not a RuntimeFault, and never gets here either).

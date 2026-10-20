@@ -3069,6 +3069,12 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
     plan.graphs = reserve(plan.name, makePlanTypes(plan.portTypes, plan.stateValueType, carriesGradient));
 
     auto source = GraphDraft::decode(body);
+    // A loop that appends to its array state in place (Builder::markLoopStateInPlace) has one
+    // array that every round writes into, so the tape this body is about to collect would hold
+    // the same final array in every entry. The loop needs the tape, so its body copies instead:
+    // a fallback, not a refusal — the program is legal either way, and the value and the
+    // gradients do not change (test/cases/modules/autodiff/loop_grad_in_place.cml).
+    rt::fallBackToCopyingAppend(*source);
     const GraphScope scope{.role = GraphRole::LoopBody};
     ForwardRewrite rewrite(*this, *source, scope);
     rewrite.run();

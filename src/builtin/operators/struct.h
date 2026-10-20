@@ -35,7 +35,7 @@ slot_t __concat_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Cont
 slot_t __append_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 // A private copy of an array: the first state of a loop whose body only appends to it.
 slot_t __copy_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-// The loop-state form of `append`: may write into the array's own buffer.
+// The loop-state form of `append`: may write into the array's own block.
 slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

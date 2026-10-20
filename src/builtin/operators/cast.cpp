@@ -21,6 +21,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/numeric_convert.h"
+#include "camel/core/rtdata/complex.h"
 
 #include <sstream>
 
@@ -156,3 +157,59 @@ slot_t __atos__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *res = String::from(oss.str(), mm::autoSpace());
     return toSlot(res);
 }
+
+// ---- The complex conversions: c64(x), c128(x) ---------------------------------------------
+//
+// Every real type widens to a complex number (the imaginary part is zero), c64 widens to c128
+// exactly, and c128 narrows to c64 by rounding each part to f32 (the same rule as f32 from a
+// double: a part too large for an f32 becomes an infinity). A complex value does not become a
+// real one: `re(z)` and `im(z)` are the explicit operations.
+
+namespace {
+
+template <typename T>
+slot_t realToComplex(ArgsView &norm, camel::core::type::TypeCode code) {
+    const T value = norm.get<T>(0);
+    return toSlot(Complex::create(static_cast<double>(value), 0.0, code, mm::autoSpace()));
+}
+
+} // namespace
+
+slot_t __itoc__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return realToComplex<Int32>(norm, camel::core::type::TypeCode::Complex64);
+}
+slot_t __ltoc__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return realToComplex<Int64>(norm, camel::core::type::TypeCode::Complex64);
+}
+slot_t __ftoc__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return realToComplex<Float32>(norm, camel::core::type::TypeCode::Complex64);
+}
+slot_t __dtoc__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return realToComplex<Float64>(norm, camel::core::type::TypeCode::Complex64);
+}
+slot_t __ctoc__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
+
+slot_t __ztoc__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const Complex *value = norm.get<Complex *>(0);
+    return toSlot(Complex::create(
+        value->real(), value->imaginary(), camel::core::type::TypeCode::Complex64, mm::autoSpace()));
+}
+
+slot_t __itoz__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return realToComplex<Int32>(norm, camel::core::type::TypeCode::Complex128);
+}
+slot_t __ltoz__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return realToComplex<Int64>(norm, camel::core::type::TypeCode::Complex128);
+}
+slot_t __ftoz__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return realToComplex<Float32>(norm, camel::core::type::TypeCode::Complex128);
+}
+slot_t __dtoz__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return realToComplex<Float64>(norm, camel::core::type::TypeCode::Complex128);
+}
+slot_t __ctoz__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const Complex *value = norm.get<Complex *>(0);
+    return toSlot(Complex::create(
+        value->real(), value->imaginary(), camel::core::type::TypeCode::Complex128, mm::autoSpace()));
+}
+slot_t __ztoz__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }

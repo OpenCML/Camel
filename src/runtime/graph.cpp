@@ -29,7 +29,6 @@
  */
 
 #include "camel/runtime/graph.h"
-#include "camel/runtime/capacity.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/loop.h"
 #include "runtime/graph_build.h"
@@ -169,8 +168,10 @@ GraphArenaLayout planGraphArenaLayout(
                           : camel::core::mm::alignUp(
                                 sizeof(::Tuple) + sizeof(slot_t) * staticSlots.size(),
                                 alignof(::Tuple)),
-        // nodeCount records and the sentinel; a multiple of 16 bytes.
-        .nodeBytes = sizeof(GCNode) * (static_cast<size_t>(payload.nodeCount) + 1),
+        // nodeCount records and the sentinel, padded to the columns that follow.
+        .nodeBytes = camel::core::mm::alignUp(
+            sizeof(GCNode) * (static_cast<size_t>(payload.nodeCount) + 1),
+            alignof(gc_payload_word_t)),
         // The origin column, padded to the payload words that follow it.
         .originBytes = camel::core::mm::alignUp(
             sizeof(uint32_t) * static_cast<size_t>(payload.nodeCount),
@@ -207,7 +208,7 @@ GraphArenaLayout planGraphArenaLayout(
         layout.nodeBytes + layout.originBytes + layout.permissionBytes + layout.attrBytes +
         layout.payloadBytes + layout.inputBytes + layout.normPortBytes + layout.withPortBytes +
         layout.closureBytes + layout.branchArmBytes;
-    // The frame layout comes last. The arrays before it may end at any 2-byte boundary, so the
+    // The frame layout comes last. The arrays before it may end at any 4-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
     if (frameSlots) {
         layout.frameLayoutBytes = camel::core::mm::alignUp(beforeFrameLayout, alignof(TupleType)) -
@@ -243,19 +244,6 @@ template <typename T> void pushUnique(std::vector<T *> &items, T *value) {
     if (value && std::find(items.begin(), items.end(), value) == items.end()) {
         items.push_back(value);
     }
-}
-
-/// `value` as the 16-bit quantity of a runtime graph it is stored as. A graph that needs more
-/// of `what` (a plural noun phrase) than that is too large for the representation, which is
-/// reported as such (see camel/runtime/capacity.h); the caller that knows the graph names it.
-template <typename T, typename U> T narrowIntegral(U value, const char *what) {
-    if (value > static_cast<U>(std::numeric_limits<T>::max())) {
-        throw GraphCapacityError(
-            what,
-            static_cast<size_t>(value),
-            static_cast<size_t>(std::numeric_limits<T>::max()));
-    }
-    return static_cast<T>(value);
 }
 
 bool shouldTraverseStaticSlotType(Type *type) {
@@ -578,14 +566,6 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
-/// The capacities of a runtime graph, as the quantities a GraphCapacityError names. The node
-/// and input counts are 16-bit, and so is the word offset of a payload.
-constexpr const char *kNodes = "nodes";
-constexpr const char *kEdges = "edges (every input of every node is one)";
-constexpr const char *kPayloadWords =
-    "payload words (the 8-byte units of what nodes carry beyond their record: callees, "
-    "operators, constructed positions, branch tables)";
-
 DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     auto requireAlive = [&](gc_node_ref_t owner, gc_node_ref_t ref, std::string_view lane) {
         if (ref == kInvalidNodeRef) {
@@ -607,9 +587,7 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     DraftPayloadPlan plan;
     plan.runtimeRefsByDraftId.assign(draft.nodeSlotCount(), kInvalidNodeRef);
 
-    // Live nodes keep their draft order and take dense NodeIds. A graph that does not fit is
-    // measured to the end, so that the error states what it needs and not where counting
-    // stopped.
+    // Live nodes keep their draft order and take dense NodeIds.
     size_t nodeCount      = 0;
     size_t edgeCount      = 0;
     size_t payloadWords   = 0;
@@ -638,27 +616,21 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         }
         const size_t words = draftPayloadWords(*header);
         // The NodeId kInvalidNodeRef and the payload offset kNoPayload are reserved.
-        if (nodeCount < kInvalidNodeRef && payloadWords + words < kNoPayload) {
-            plan.nodes.push_back(
-                PlannedDraftNode{
-                    .draftId = draftId,
-                    .ref     = static_cast<gc_node_ref_t>(nodeCount),
-                    .payload = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
-                    .payloadWordCount = words,
-                });
-            plan.runtimeRefsByDraftId[draftId] = static_cast<gc_node_ref_t>(nodeCount);
-        }
+        ASSERT(
+            nodeCount < kInvalidNodeRef && payloadWords + words < kNoPayload,
+            "A runtime graph is addressed with 32 bits; this one has no room left.");
+        plan.nodes.push_back(
+            PlannedDraftNode{
+                .draftId = draftId,
+                .ref     = static_cast<gc_node_ref_t>(nodeCount),
+                .payload = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
+                .payloadWordCount = words,
+            });
+        plan.runtimeRefsByDraftId[draftId] = static_cast<gc_node_ref_t>(nodeCount);
         ++nodeCount;
         payloadWords += words;
         edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
                      draft.ctrlInputsOf(draftId).size();
-    }
-    // One NodeId (kInvalidNodeRef) and one payload offset (kNoPayload) are reserved.
-    if (nodeCount >= kInvalidNodeRef) {
-        throw GraphCapacityError(kNodes, nodeCount, kInvalidNodeRef - 1);
-    }
-    if (payloadWords >= kNoPayload) {
-        throw GraphCapacityError(kPayloadWords, payloadWords, kNoPayload - 1);
     }
 
     for (gc_node_ref_t ref : draft.normPorts()) {
@@ -675,20 +647,20 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     requireAlive(kInvalidNodeRef, draft.outputNode(), "output");
     requireAlive(kInvalidNodeRef, draft.returnNode(), "return");
 
-    plan.edgeCount        = narrowIntegral<gc_cnt_t>(edgeCount, kEdges);
+    plan.edgeCount        = static_cast<gc_cnt_t>(edgeCount);
     plan.payloadWordCount = static_cast<gc_cnt_t>(payloadWords);
-    plan.branchArmCount   = narrowIntegral<gc_cnt_t>(branchArmCount, "branch arms");
+    plan.branchArmCount   = static_cast<gc_cnt_t>(branchArmCount);
     return plan;
 }
 
 GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPayloadPlan &plan) {
     return GCGraphPayloadShape{
-        .nodeCount        = narrowIntegral<gc_cnt_t>(plan.nodes.size(), kNodes),
+        .nodeCount        = static_cast<gc_cnt_t>(plan.nodes.size()),
         .edgeCount        = plan.edgeCount,
         .payloadWordCount = plan.payloadWordCount,
-        .normPortCount    = narrowIntegral<gc_cnt_t>(draft.normPorts().size(), "parameters"),
-        .withPortCount    = narrowIntegral<gc_cnt_t>(draft.withPorts().size(), "'with' parameters"),
-        .closureCount   = narrowIntegral<gc_cnt_t>(draft.closureNodes().size(), "captured values"),
+        .normPortCount    = static_cast<gc_cnt_t>(draft.normPorts().size()),
+        .withPortCount    = static_cast<gc_cnt_t>(draft.withPorts().size()),
+        .closureCount   = static_cast<gc_cnt_t>(draft.closureNodes().size()),
         .branchArmCount = plan.branchArmCount,
         .permissions    = std::any_of(
             plan.nodes.begin(),
@@ -705,7 +677,7 @@ void emitDraftPayload(
     const GraphDraft &draft, const DraftPayloadPlan &plan, GCGraphPayloadArena &payload,
     const std::function<GCGraph *(GCGraph *)> &resolveRuntimeGraph) {
     ASSERT(
-        payload.nodeCount == narrowIntegral<gc_cnt_t>(plan.nodes.size(), "nodes"),
+        payload.nodeCount == static_cast<gc_cnt_t>(plan.nodes.size()),
         "Draft payload arena shape does not match the planned node count.");
 
     size_t inputCursor       = 0;
@@ -751,6 +723,7 @@ void emitDraftPayload(
         GCNode &record   = payload.nodes[planned.ref];
         record.kind      = draftHeader->kind;
         record.flags     = draftHeader->runtimeFlags;
+        record.reserved  = 0;
         record.dataIndex = slotOf(planned.draftId);
         record.typeId    = typeIdOf(effectiveDraftNodeType(draft, *draftHeader));
         record.inBegin   = appendInputs(draft.normInputsOf(planned.draftId));
@@ -983,7 +956,9 @@ GCGraphNativePayload
 allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shape) {
     GCGraphNativePayload payload{};
     payload.nodes   = static_cast<GCNode *>(arena.alloc(
-        sizeof(GCNode) * (static_cast<size_t>(shape.nodeCount) + 1),
+        camel::core::mm::alignUp(
+            sizeof(GCNode) * (static_cast<size_t>(shape.nodeCount) + 1),
+            alignof(gc_payload_word_t)),
         alignof(gc_payload_word_t)));
     payload.origins = static_cast<uint32_t *>(arena.alloc(
         camel::core::mm::alignUp(
@@ -1220,7 +1195,7 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
         outerGraph,
         refStorage,
         refRoleStorage,
-        narrowIntegral<gc_cnt_t>(refCount, "graphs referred to"),
+        static_cast<gc_cnt_t>(refCount),
         ownedPayload,
         staticArea);
 

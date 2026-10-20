@@ -200,21 +200,29 @@ std::string BytecodeExtra::toString(OpCode opcode) const {
 Bytecode *appendBytecode(
     bytecode_vec_t &vec, OpCode opcode, data_idx_t result, const std::vector<data_idx_t> &fastops,
     const std::vector<data_idx_t> &normOperands, const std::vector<data_idx_t> &withOperands,
-    bool hasExtra, const BytecodeExtra &extra, size_t extraUnits) {
+    bool hasExtra, const BytecodeExtra &extra, size_t extraWords) {
 
     data_idx_t normCnt = as_index(normOperands.size());
     data_idx_t withCnt = as_index(withOperands.size());
 
-    size_t operandCount = normCnt + withCnt;
+    size_t operandCount = static_cast<size_t>(normCnt) + static_cast<size_t>(withCnt);
 
     size_t operandUnits = 0;
     if (fastops.empty()) {
         size_t operandBytes       = operandCount * sizeof(data_idx_t);
-        size_t paddedOperandBytes = roundUp8(operandBytes);
+        size_t paddedOperandBytes = roundUp16(operandBytes);
         operandUnits              = paddedOperandBytes / sizeof(Bytecode);
     }
 
-    size_t totalUnits = 1 + operandUnits + (hasExtra ? extraUnits : 0);
+    // The extra words are 8 bytes each and end where the instruction ends.
+    const size_t extraUnits =
+        hasExtra ? (extraWords * sizeof(BytecodeExtra) + sizeof(Bytecode) - 1) / sizeof(Bytecode)
+                 : 0;
+    size_t totalUnits = 1 + operandUnits + extraUnits;
+    if (totalUnits > std::numeric_limits<uint16_t>::max()) {
+        throw std::runtime_error(
+            std::format("FastVM: an instruction of {} units does not fit a bytecode", totalUnits));
+    }
 
     // Get the insertion start position in the current vector.
     size_t offset = vec.size();
@@ -223,7 +231,7 @@ Bytecode *appendBytecode(
     // Step 1: write the header.
     BytecodeHeader *header = reinterpret_cast<BytecodeHeader *>(&vec[offset]);
     header->opcode         = opcode;
-    header->opsize         = static_cast<uint8_t>(totalUnits);
+    header->opsize         = static_cast<uint16_t>(totalUnits);
     header->result         = result;
 
     // Step 2: write operands (if there are no fastops).
@@ -235,8 +243,7 @@ Bytecode *appendBytecode(
     } else {
         header->fastop[0] = normCnt;
         header->fastop[1] = withCnt;
-        uint8_t *raw      = reinterpret_cast<uint8_t *>(&vec[offset + 1]);
-        data_idx_t *ops   = reinterpret_cast<data_idx_t *>(raw);
+        data_idx_t *ops   = header->operands();
 
         for (data_idx_t idx : normOperands) {
             *ops++ = idx;
@@ -248,11 +255,11 @@ Bytecode *appendBytecode(
 
     // Step 3: write extra data (if present).
     if (hasExtra) {
-        BytecodeExtra *ex0 =
-            reinterpret_cast<BytecodeExtra *>(&vec[offset + totalUnits - extraUnits]);
-        *ex0 = extra;
-        for (size_t i = 1; i < extraUnits; i++)
-            *reinterpret_cast<uint64_t *>(&vec[offset + totalUnits - extraUnits + i]) = 0;
+        BytecodeExtra *ex0 = header->extra();
+        *ex0               = extra;
+        for (size_t i = 1; i < extraWords; i++) {
+            *(reinterpret_cast<uint64_t *>(ex0) + i) = 0;
+        }
     }
 
     return header;

@@ -1,0 +1,47 @@
+module complex_case
+
+import { abs, conj, exp, im, re } from math
+
+// Complex numbers: imaginary literals, the two types, arithmetic, printing and the accessors
+// (design principles 5.1 and 10.5).
+func main(): int sync {
+    // With no context an imaginary literal is a c128; both parts print.
+    let a = 3 + 4i
+    println(a)
+    println(4.5i)
+    println(-2i)
+    println(a + 1i)
+    println((1 + 2i) * (3 + 4i))
+    println(1i * 1i)
+    println(a == 3 + 4i)
+    println(a == 3 + 5i)
+    println(a != 3 + 5i)
+
+    // A declared type decides the width: the literal becomes c64 exactly.
+    let z: c64 = 1 + 2i
+    println(z)
+    println(z + z)
+    println(z * z)
+    println(z / z)
+    println(-z)
+    println(c64(2))
+    println(c128(z))
+
+    // An array of complex numbers is compact: each element is two parts, read back as a value.
+    let xs = [1 + 2i, 3 + 4i]
+    println(xs)
+    println(xs[0] + xs[1])
+
+    // A compact aggregate with a complex field: the tuple's bytes hold both parts, and the
+    // array of tuples is one run of them.
+    let ts = [(1 + 2i, 3), (3 + 4i, 5)]
+    println(ts)
+
+    // abs, re, im, conj and exp.
+    println(abs(3 + 4i))
+    println(re(3 + 4i))
+    println(im(3 + 4i))
+    println(conj(3 + 4i))
+    println(exp(0 + 1i))
+    return 0
+}

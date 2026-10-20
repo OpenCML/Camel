@@ -9,6 +9,19 @@
  * (scripts/stdlib-reference.mjs).
  */
 
+// ---- memory ----
+//
+// Data blocks (design principles 10.5): the process-wide counters, read between two operations.
+
+/// The data-block counters: blocks allocated so far, freed so far, live now, and the bytes the
+/// live blocks hold. The call is not pure: it reports process state, so the optimizer must not
+/// fold, merge or drop it.
+/// @effect reads the process-wide data-block counters
+/// @example std::mem::blocks().live    // 0 when no block is alive
+inner func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int } {
+    return ':op/mem_blocks'
+}
+
 // ---- conversions ----
 //
 // Numeric types are never converted implicitly; these functions do it. Converting a float to
@@ -132,6 +145,51 @@ inner func f32(x: float): f32 {
 }
 inner func f32(x: string): f32 {
     return ':op/*tof'
+}
+
+/// x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
+/// keeps both parts as they are.
+/// @pure
+/// @example c64(2)    // 2+0i
+inner func c64(x: i32): c64 {
+    return ':op/*toc'
+}
+inner func c64(x: int): c64 {
+    return ':op/*toc'
+}
+inner func c64(x: f32): c64 {
+    return ':op/*toc'
+}
+inner func c64(x: float): c64 {
+    return ':op/*toc'
+}
+inner func c64(x: c64): c64 {
+    return ':op/*toc'
+}
+inner func c64(x: c128): c64 {
+    return ':op/*toc'
+}
+
+/// x as a 128-bit complex number: the real part is x and the imaginary part is zero.
+/// @pure
+/// @example c128(2)    // 2+0i
+inner func c128(x: i32): c128 {
+    return ':op/*toz'
+}
+inner func c128(x: int): c128 {
+    return ':op/*toz'
+}
+inner func c128(x: f32): c128 {
+    return ':op/*toz'
+}
+inner func c128(x: float): c128 {
+    return ':op/*toz'
+}
+inner func c128(x: c64): c128 {
+    return ':op/*toz'
+}
+inner func c128(x: c128): c128 {
+    return ':op/*toz'
 }
 
 /// x as text, as println writes it. A float is written as the shortest text that reads back as

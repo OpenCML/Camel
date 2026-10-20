@@ -19,6 +19,9 @@ Commands:
                                     time and the peak resident memory of the camel process
   threshold <shape> [pass...]       the largest n that compiles and runs (searched up to --max)
   check                             the fixed set the test plan runs (see CHECK)
+  wide [n]                          one function of n independent terms summed in a tree (3n
+                                    nodes, 2n frame slots) on the node VM, the bytecode VM and
+                                    the JIT; a graph is not limited in size (see WIDE_N)
   limit <space> <mb> <shape> <n> [pass...]
                                     run the program with the limit of one space (graph, perm
                                     or meta) set to <mb> megabytes and print what camel
@@ -100,6 +103,36 @@ def program(shape: str, n: int) -> Tuple[str, int]:
     body.append("}")
     parts.append("\n".join(body) + "\n")
     return "\n".join(parts), total
+
+
+WIDE_PARAMS = 100
+
+
+def wide_program(n: int) -> Tuple[str, int]:
+    """The program text and the number it prints: `wide` is a single function whose body is one
+    expression, the n terms `p<i % 100> + i` summed pairwise (a balanced tree, so that no pass
+    recurses n deep). It has 3n nodes and 2n frame slots. The terms read one of 100 parameters
+    each: a node that 30000 nodes read makes the draft rebuild its user list 30000 times."""
+    level = [f"(p{i % WIDE_PARAMS} + {i})" for i in range(n)]
+    while len(level) > 1:
+        upper = [f"({level[j]} + {level[j + 1]})" for j in range(0, len(level) - 1, 2)]
+        if len(level) % 2:
+            upper.append(level[-1])
+        level = upper
+    params = ", ".join(f"p{k}: int" for k in range(WIDE_PARAMS))
+    args = ", ".join("1" for _ in range(WIDE_PARAMS))
+    lines = [
+        f"module scale_wide_{n}",
+        f"func wide({params}): int {{",
+        f"    return {level[0]}",
+        "}",
+        "func main(): int sync {",
+        f"    let total = wide({args})",
+        "    println('scale total={}'->format<total>)",
+        "    return 0",
+        "}",
+    ]
+    return "\n".join(lines) + "\n", sum(1 + i for i in range(n))
 
 
 def camel_exe() -> str:
@@ -236,6 +269,30 @@ CHECK = [
 ]
 
 
+# One function of this many terms has 3 * WIDE_N = 90000 nodes (more than the 70,000 the 16-bit
+# graphs could not hold) and 2 * WIDE_N = 60000 frame slots (the old limit was 32766).
+WIDE_N = 30000
+WIDE_PASSES = [["std::nvm"], ["std::fvm"], ["std::jit"]]
+
+
+def check_wide(n: int) -> int:
+    text, total = wide_program(n)
+    failed = 0
+    with tempfile.TemporaryDirectory(prefix="camel_scale_") as tmp:
+        path = Path(tmp) / f"scale_wide_{n}.cml"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        for passes in WIDE_PASSES:
+            code, out, err, seconds, peak_kb = run_file(path, passes)
+            ok = code == 0 and f"scale total={total}" in out.splitlines()
+            failed += 0 if ok else 1
+            detail = "" if ok else " | ".join((out + err).strip().splitlines()[:3])[:400]
+            print(f"{'ok  ' if ok else 'FAIL'} wide n={n:6} passes=[{' '.join(passes)}] "
+                  f"{seconds:6.2f}s peak={peak_kb // 1024}MB {detail}")
+    print(f"{len(WIDE_PASSES) - failed} of {len(WIDE_PASSES)} wide runs; "
+          f"{'PASS' if failed == 0 else 'FAILED'}")
+    return 0 if failed == 0 else 1
+
+
 def main(argv: List[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -251,6 +308,8 @@ def main(argv: List[str]) -> int:
     t.add_argument("passes", nargs="*")
     t.add_argument("--max", type=int, default=4096)
     sub.add_parser("check")
+    w = sub.add_parser("wide")
+    w.add_argument("n", type=int, nargs="?", default=WIDE_N)
     lim = sub.add_parser("limit")
     lim.add_argument("space", choices=sorted(LIMIT_ENV))
     lim.add_argument("megabytes", type=int)
@@ -270,6 +329,8 @@ def main(argv: List[str]) -> int:
         if res.spaces:
             print(res.spaces)
         return 0 if res.ok else 1
+    if args.cmd == "wide":
+        return check_wide(args.n)
     if args.cmd == "limit":
         return run_limited(args.space, args.megabytes, args.shape, args.n, args.passes)
     if args.cmd == "threshold":

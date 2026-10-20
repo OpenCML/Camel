@@ -60,7 +60,7 @@ node_handle_t Builder::expandTreeCall(
 
     const auto access = [&](node_handle_t parent, size_t index) {
         Type *type = valueTypeOf(nodeTypeOf(parent));
-        auto *out =
+        auto out =
             type->code() == TypeCode::Struct
                 ? currGraph_->addAccsNode(fieldType(type, index), fieldName(type, index))
                 : currGraph_->addAccsNode(fieldType(type, index), static_cast<uint32_t>(index));
@@ -70,7 +70,7 @@ node_handle_t Builder::expandTreeCall(
     };
     const auto pack = [&](Type *shape, const std::vector<node_handle_t> &values) {
         type_vec_t types;
-        for (auto *value : values)
+        for (auto value : values)
             types.push_back(valueTypeOf(nodeTypeOf(value)));
         Type *type;
         if (shape && shape->code() == TypeCode::Struct) {
@@ -87,16 +87,16 @@ node_handle_t Builder::expandTreeCall(
             tuple ? core::rtdata::toSlot(::Tuple::create(values.size(), core::mm::autoSpace()))
                   : core::rtdata::toSlot(::Struct::create(values.size(), core::mm::autoSpace()));
         auto &draft = currGraph_->draft();
-        auto *base  = draft.node(draft.materializeStaticValue(empty, type));
+        auto base  = draft.ref(draft.materializeStaticValue(empty, type));
         std::vector<size_t> slots(values.size());
         std::iota(slots.begin(), slots.end(), 0);
-        auto *out = currGraph_->addFillNode(
+        auto out = currGraph_->addFillNode(
             type,
             runtime::makeFillPayload(
                 tuple ? runtime::GCFillKind::Tuple : runtime::GCFillKind::Struct,
                 slots));
         linkNodes(LinkType::Norm, base, out);
-        for (auto *value : values)
+        for (auto value : values)
             linkNodes(LinkType::With, valueOf(value), out);
         registerTreeOrigin(out, origin, "gir.tree.fill");
         return out;
@@ -123,7 +123,7 @@ node_handle_t Builder::expandTreeCall(
         auto callee = tree_->makeDRef(callback);
         callee->setOrigin(origin->origin());
         *call << callee;
-        for (auto *arg : args) {
+        for (auto arg : args) {
             auto ref = tree_->makeDRef(bindTemporary(valueOf(arg)));
             ref->setOrigin(origin->origin());
             *call << ref;
@@ -132,7 +132,7 @@ node_handle_t Builder::expandTreeCall(
             return visitLinkNode(call);
         } catch (const BuildAbortException &) {
             std::string types;
-            for (auto *arg : args)
+            for (auto arg : args)
                 types += (types.empty() ? "" : ", ") + valueTypeOf(nodeTypeOf(arg))->toString();
             fail(path, "callback is not applicable to (" + types + ")");
         }
@@ -148,12 +148,12 @@ node_handle_t Builder::expandTreeCall(
                           const std::vector<node_handle_t> &values,
                           const std::string &path) -> node_handle_t {
         if (internal(shape)) {
-            for (auto *value : values)
+            for (auto value : values)
                 compatible(shape, valueTypeOf(nodeTypeOf(value)), path);
             std::vector<node_handle_t> children;
             for (size_t i = 0; i < sizeOf(shape); ++i) {
                 std::vector<node_handle_t> inputs;
-                for (auto *value : values)
+                for (auto value : values)
                     inputs.push_back(access(value, i));
                 children.push_back(
                     self(self, fieldType(shape, i), inputs, childPath(path, shape, i)));
@@ -169,7 +169,7 @@ node_handle_t Builder::expandTreeCall(
                     path,
                     "reducer must return its accumulator type " + accumulatorType->toString());
         } else if (paths) {
-            auto *out = currGraph_->addStaticDataNode(std::make_shared<StringData>(path));
+            auto out = currGraph_->addStaticDataNode(std::make_shared<StringData>(path));
             registerTreeOrigin(out, origin, "gir.tree.path");
             return out;
         } else if (unzip) {

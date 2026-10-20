@@ -31,6 +31,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/rtdata/view.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -798,6 +799,8 @@ void writeRuntimeFillSlots(
         auto *tuple     = tt::as_ptr<Tuple>(target);
         auto *tupleType = tt::as_ptr<camel::core::type::TupleType>(targetType);
         for (size_t i = 0; i < values.size(); ++i) {
+            CAMEL_ASSERT_NOT_VIEW(
+                values[i], tupleType->typeAt(slots[i]), "a FILL into a tuple");
             tuple->set<slot_t>(slots[i], values[i], tupleType);
         }
     } break;
@@ -805,6 +808,8 @@ void writeRuntimeFillSlots(
         auto *array     = tt::as_ptr<Array>(target);
         auto *arrayType = tt::as_ptr<camel::core::type::ArrayType>(targetType);
         for (size_t i = 0; i < values.size(); ++i) {
+            CAMEL_ASSERT_NOT_VIEW(
+                values[i], arrayType->elementType(), "a FILL into an array");
             array->set<slot_t>(slots[i], values[i], arrayType);
         }
     } break;
@@ -812,6 +817,8 @@ void writeRuntimeFillSlots(
         auto *str        = tt::as_ptr<Struct>(target);
         auto *structType = tt::as_ptr<camel::core::type::StructType>(targetType);
         for (size_t i = 0; i < values.size(); ++i) {
+            CAMEL_ASSERT_NOT_VIEW(
+                values[i], structType->typeAt(slots[i]), "a FILL into a struct");
             str->set<slot_t>(slots[i], values[i], structType);
         }
     } break;
@@ -821,6 +828,10 @@ void writeRuntimeFillSlots(
         ASSERT(closureData != nullptr, "Runtime FILL function closure storage is null.");
         const auto *tupleType = func->tupleType();
         for (size_t i = 0; i < values.size(); ++i) {
+            // A closure capture is a stored value (H28 review item 1): a view must have been
+            // materialised before it is captured.
+            CAMEL_ASSERT_NOT_VIEW(
+                values[i], tupleType->typeAt(slots[i]), "a closure capture");
             closureData->set<slot_t>(slots[i], values[i], tupleType);
         }
     } break;

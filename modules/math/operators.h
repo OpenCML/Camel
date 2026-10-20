@@ -35,5 +35,8 @@ slot_t __math_bin__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __math_oct__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __math_hex__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __math_sqrt__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __math_re__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __math_im__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __math_conj__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getMathOpsMap();

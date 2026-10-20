@@ -59,12 +59,21 @@ struct NumericType {
     const char *suffix;
     TypeCode type;
     bool isFloat;
+    bool isComplex = false;
 };
 constexpr NumericType kNumericTypes[] = {
     {"i", TypeCode::Int32, false},
     {"l", TypeCode::Int64, false},
     {"f", TypeCode::Float32, true},
     {"d", TypeCode::Float64, true},
+};
+/// A complex number is two IEEE parts: an operation rounds each part once, in the part's own
+/// type (f32 for c64, f64 for c128). No slot bit pattern names a complex zero (a complex value
+/// is a boxed object, and each part has a signed zero), so no complex law declares a neutral
+/// element.
+constexpr NumericType kComplexTypes[] = {
+    {"c", TypeCode::Complex64, true, true},
+    {"z", TypeCode::Complex128, true, true},
 };
 
 /// The bit pattern of `value` in the type: what a neutral element is declared as.
@@ -88,17 +97,23 @@ std::optional<BinaryAlgebra> binaryLaws(const std::string &name, const NumericTy
     if (name == "add") {
         law.commutative      = true;
         law.exactAssociative = !t.isFloat;
-        law.neutralBits = t.isFloat ? (t.type == TypeCode::Float32 ? std::bit_cast<uint32_t>(-0.0f)
-                                                                   : std::bit_cast<uint64_t>(-0.0))
-                                    : 0;
+        law.neutralBits      = t.isComplex
+                                   ? std::nullopt
+                                   : std::optional<uint64_t>(
+                                         t.isFloat ? (t.type == TypeCode::Float32
+                                                          ? std::bit_cast<uint32_t>(-0.0f)
+                                                          : std::bit_cast<uint64_t>(-0.0))
+                                                   : 0);
     } else if (name == "sub") {
         law.subtractionOf = sum;
-        law.neutralBits   = bitsOf(t, 0);
+        law.neutralBits =
+            t.isComplex ? std::nullopt : std::optional<uint64_t>(bitsOf(t, 0));
     } else if (name == "mul") {
         law.commutative      = true;
         law.exactAssociative = !t.isFloat;
-        law.neutralBits      = bitsOf(t, 1);
-        law.distributesOver  = sum;
+        law.neutralBits =
+            t.isComplex ? std::nullopt : std::optional<uint64_t>(bitsOf(t, 1));
+        law.distributesOver = sum;
     } else {
         return std::nullopt;
     }
@@ -271,6 +286,39 @@ void declareBuiltinOperatorSemantics() {
                     t.isFloat ? "IEEE comparison (false when either side is NaN)" : "comparison"),
                 none);
         }
+    }
+    // The complex numbers: `+ - * /` and negation, each part rounded once in its own type. No
+    // ordering and no `%` (cf. design principles 5.1); equality is content equality of the
+    // parts and has no numeric semantics of its own.
+    for (const NumericType &t : kComplexTypes) {
+        const TypeCode part = t.type == TypeCode::Complex64 ? TypeCode::Float32
+                                                            : TypeCode::Float64;
+        NumericSemantics add = rounded(
+            t, kAddMul, "a + b: each part added and rounded once in the part's type");
+        add.compute = part;
+        NumericSemantics sub = rounded(
+            t, kAddMul, "a - b: each part subtracted and rounded once in the part's type");
+        sub.compute = part;
+        NumericSemantics mul = rounded(
+            t, kAddMul, "a * b: (ac - bd) + (ad + bc)i, each part rounded once");
+        mul.compute = part;
+        NumericSemantics div = rounded(
+            t, kDiv, "a / b: each part rounded once; b = 0 + 0i is a fault");
+        div.compute = part;
+        declare("add", t, std::move(add), none);
+        declare("sub", t, std::move(sub), none);
+        declare("mul", t, std::move(mul), std::nullopt);
+        declare("div", t, std::move(div), zeroDivisor);
+        declare(
+            "neg",
+            t,
+            NumericSemantics{
+                .cls         = NumericClass::Exact,
+                .compute     = TypeCode::Void,
+                .sensitiveTo = kFiniteMath,
+                .algorithm   = "-a: the sign of each part flipped",
+            },
+            std::nullopt);
     }
     declareUnorderedReduce();
     declareElementCalls();

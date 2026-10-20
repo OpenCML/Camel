@@ -27,11 +27,11 @@
 
 #pragma once
 
+#include "camel/runtime/node_ref.h"
+
 #include <string>
 
-namespace camel::runtime {
-struct DraftNode;
-}
+
 
 namespace camel::compile::gir {
 
@@ -39,7 +39,7 @@ struct ExportedValue {
     /// The module's name for the value (with its namespaces).
     std::string name;
     /// Its node on the root graph, once built; null before, and when its initializer failed.
-    camel::runtime::DraftNode *node = nullptr;
+    camel::runtime::DraftNodeRef node;
     /// The top-level declaration that binds it (opaque outside the graph builder).
     void *declaration = nullptr;
 };

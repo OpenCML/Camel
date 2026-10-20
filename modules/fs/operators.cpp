@@ -21,6 +21,7 @@
 #include "binary.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm/block.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/bytes.h"
@@ -334,18 +335,35 @@ slot_t __fs_read_chunk__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::streamoff remaining = fileSize - static_cast<std::streamoff>(offset);
     std::streamsize toRead =
         static_cast<std::streamsize>(std::min<int64_t>(size, static_cast<int64_t>(remaining)));
-    std::string buffer(static_cast<size_t>(toRead), '\0');
 
     f.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
-    f.read(buffer.data(), toRead);
-    buffer.resize(static_cast<size_t>(f.gcount()));
-    if (f.bad())
+    if (static_cast<size_t>(toRead) < camel::core::mm::kInlineBlockBytes) {
+        std::string buffer(static_cast<size_t>(toRead), '\0');
+        f.read(buffer.data(), toRead);
+        buffer.resize(static_cast<size_t>(f.gcount()));
+        if (f.bad())
+            throwRuntimeFault(
+                RuntimeDiag::FileSystemError,
+                "fs.read_chunk",
+                std::string(path->view()),
+                "cannot read complete chunk");
+        return toSlot(BytesObject::from(buffer, mm::autoSpace()));
+    }
+
+    // A chunk past the inline threshold is read into the block the Bytes value adopts.
+    camel::core::mm::Block *block = camel::core::mm::Block::create(static_cast<size_t>(toRead));
+    f.read(reinterpret_cast<char *>(block->data()), toRead);
+    const size_t read = static_cast<size_t>(f.gcount());
+    if (f.bad()) {
+        block->release();
         throwRuntimeFault(
             RuntimeDiag::FileSystemError,
             "fs.read_chunk",
             std::string(path->view()),
             "cannot read complete chunk");
-    return toSlot(BytesObject::from(buffer, mm::autoSpace()));
+    }
+    block->setBytes(read);
+    return toSlot(BytesObject::adopt(block, read, mm::autoSpace()));
 }
 
 slot_t __fs_mkdir__(ArgsView &with, ArgsView &norm, Context &ctx) {

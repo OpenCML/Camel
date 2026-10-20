@@ -308,7 +308,7 @@ class OperatorTable {
     std::optional<std::string> inPlaceForm(std::string_view uri) const;
 
     /// Declares that the operator `uri` may return one of its operands, changed in place, when
-    /// the compiler hands it a value no one else holds (design principles 11.3; the buffer must
+    /// the compiler hands it a value no one else holds (design principles 11.3; the block must
     /// also be unshared and Camel-owned at run time, Array::canWriteInPlace). One fact, written
     /// where the operator is registered; the builder's temporary-value analysis reads it.
     void declareReusesOperand(std::string_view uri, bool reuses = true);

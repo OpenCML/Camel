@@ -2177,9 +2177,11 @@ Value Builder::visitUnaryExpr(syn::Node context) {
             // negates the power and `-(2)` the parenthesis.
             const auto literal = cst::Literal(context->expr());
             const bool integer = static_cast<bool>(literal->tok(TK::Integer));
-            if ((integer || literal->tok(TK::Real)) && literal->childCount() == 1) {
+            const bool imaginary = static_cast<bool>(literal->tok(TK::Imaginary));
+            if ((integer || literal->tok(TK::Real) || imaginary) && literal->childCount() == 1) {
                 res = createNodeAs<LiteralLoad>(Literal(
-                    integer ? LiteralType::Integer : LiteralType::Real,
+                    imaginary ? LiteralType::Imaginary
+                              : (integer ? LiteralType::Integer : LiteralType::Real),
                     "-" + literal->text()));
                 setNodeTokenRangeByContext(res, context);
                 break;
@@ -2922,6 +2924,9 @@ Value Builder::visitLiteral(cst::Literal context) {
         type = LiteralType::Integer;
     } else if (context->tok(TK::Real)) {
         type = LiteralType::Real;
+    } else if (context->tok(TK::Imaginary)) {
+        // Keep the trailing `i`: the literal's text is what the GCT reads the value from.
+        type = LiteralType::Imaginary;
     } else if (context->tok(TK::String) || context->tok(TK::FString)) {
         if (context->tok(TK::FString)) {
             // An expression builds a formatted string (visitFStringData); a pattern needs a

@@ -1,0 +1,32 @@
+/**
+ * Verifies that a loop whose array state is written in place can still be differentiated: the
+ * forward loop needs a tape (one array per round), which an in-place write cannot give, so the
+ * body falls back to the copying append. Differentiation is a fallback, never a rejection.
+ *
+ * `growLiteral` starts its state from a literal (the in-place candidate) and `growSeed` from a
+ * parameter (the copying form of the same computation). Their gradients agree: `w` is appended
+ * twice, and both appended elements are read, so the gradient is 2.
+ */
+module loop_grad_in_place
+
+import { grad, with_grad } from autodiff
+
+with <w: float>
+func growLiteral(): float {
+    let xs = loop xs = [0.0] while len(xs) < 3 do xs->append<w>
+    return xs[1] + xs[2]
+}
+
+with <w: float>
+func growSeed(seed: float[]): float {
+    let xs = loop xs = seed while len(xs) < 3 do xs->append<w>
+    return xs[1] + xs[2]
+}
+
+func main(): int sync {
+    let a  = grad(growLiteral)<2.0>()
+    let b  = grad(growSeed)<2.0>([0.0])
+    let va = with_grad(growLiteral)<2.0>()
+    'loop_grad_in_place a={} b={} va={}'->format<a, b, va>->println
+    return 0
+}

@@ -1,0 +1,26 @@
+id = "mm.mem_blocks"
+order = 371
+tier = "fast"
+tags = ["feat", "mm", "array", "block", "diagnostics"]
+desc = "`std::mem::blocks()`: the data-block counters as a struct (`allocs`, `frees`, `live`, `bytes`), callable in every build with no import, so a program can read them between two operations (docs/design-principles 10.5). The counter identity holds, one block-growing loop moves them by one, and the reading is the same on every back end."
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/feat/mm/mem_blocks.cml"
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "blocks.mem_blocks.backends"
+desc = "The counters before and after a loop that grows an array: `allocs - frees == live` both times, one block for the whole loop, and the array is what the loop appended to."
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_stdout_exact = "true\ntrue\n1 1 0 true\n100 7\n"
+
+[[tests]]
+name = "blocks.mem_blocks.optimized"
+desc = "The same reading after the optimizer, which must not fold, merge or drop a call whose value is the counters (it is declared to have effects)."
+args = ["${case}", "std::opt::inline", "std::fvm"]
+expect_stdout_exact = "true\ntrue\n1 1 0 true\n100 7\n"

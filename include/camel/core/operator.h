@@ -35,8 +35,7 @@ class Operator;
 class OperatorIndex;
 class OperatorGroup;
 
-using data_idx_t = int16_t;
-using arr_size_t = uint16_t;
+using data_idx_t = int32_t;
 using data_arr_t = std::span<const data_idx_t>;
 
 namespace type    = camel::core::type;

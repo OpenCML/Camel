@@ -23,7 +23,7 @@
  * `GCGraph` is the immutable execution layout. `GraphDraft` is the editable
  * decode form used by
  * runtime rewrites. The draft intentionally keeps node-
- * centric adjacency and stable 16-bit node
+ * centric adjacency and stable node
  * ids so passes can mutate the graph
  * without invalidating external node pointers.
  * The draft
@@ -43,6 +43,7 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/node_ref.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -72,7 +73,7 @@ struct DraftBrchPayload {
     gc_node_ref_t join       = kInvalidNodeRef;
     gc_cnt_t armCount        = 0;
     gc_node_ref_t defaultArm = kInvalidNodeRef;
-    uint16_t reserved        = 0;
+    uint32_t reserved        = 0;
 };
 static_assert(std::is_trivially_copyable_v<DraftBrchPayload>);
 
@@ -80,8 +81,8 @@ struct DraftNodeHeader {
     class GraphDraft *owner           = nullptr;
     gc_node_ref_t selfId              = kInvalidNodeRef;
     gc_slot_idx_t dataIndex           = 0;
-    uint16_t payloadBytes             = 0;
-    uint16_t capacityBytes            = 0;
+    uint32_t payloadBytes             = 0;
+    uint32_t capacityBytes            = 0;
     camel::core::type::Type *dataType = nullptr;
 
     gc_cnt_t normInputCount = 0;
@@ -251,6 +252,10 @@ class GraphDraft {
     const DraftNode *node(gc_node_ref_t id) const;
     DraftNode *node(gc_node_ref_t id);
     gc_node_ref_t nodeId(const DraftNode *node) const;
+    /// The handle of live node `id`; the null handle when `id` is not a live node.
+    DraftNodeRef ref(gc_node_ref_t id) const {
+        return alive(id) ? DraftNodeRef(const_cast<GraphDraft *>(this), id) : DraftNodeRef();
+    }
     const DraftNodeHeader *header(gc_node_ref_t id) const;
     const DraftNodeHeader *header(const DraftNode *node) const;
     gc_node_ref_t draftIdOfSourceRef(gc_node_ref_t sourceRef) const;
@@ -296,6 +301,9 @@ class GraphDraft {
     gc_node_ref_t resolveForwardedCtrlRef(gc_node_ref_t id) const;
     std::span<std::byte> mutablePayloadOf(gc_node_ref_t id);
     std::span<std::byte> mutablePayloadOf(DraftNode *node);
+    /// Points the OPER node `id` at the operator `uri` names: it runs that operator from now on,
+    /// and the operator pointer the node was created with is dropped (the URI is interned).
+    void retargetOperNode(gc_node_ref_t id, std::string_view uri);
 
     void setFuncType(camel::core::type::FunctionType *funcType) { funcType_ = funcType; }
     void setCaptureNames(std::span<const camel::core::SymId> names) {

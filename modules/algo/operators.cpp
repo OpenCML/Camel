@@ -119,7 +119,7 @@ template <typename T>
 static Array *
 __doSortSlots__(Array *arr, SortAlgo algo, const ArrayType *arrType, bool inPlace, Context &ctx) {
     size_t n = arr->size();
-    // The in-place form is only taken when the buffer is unshared and writable; a view or an
+    // The in-place form is only taken when the block is unshared and writable; a view or an
     // imported (external) buffer means someone else sees the old order.
     Array *target =
         (inPlace && arr->canWriteInPlace()) ? arr : static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));

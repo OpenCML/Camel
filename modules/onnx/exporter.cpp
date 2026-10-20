@@ -52,7 +52,6 @@
 #include "camel/passes/opt/config.h"
 #include "camel/passes/opt/generic.h"
 #include "camel/passes/trans/dot/graphviz.h"
-#include "camel/runtime/capacity.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
@@ -3748,42 +3747,6 @@ Model exportBound(
         preparation);
 }
 
-/// What a graph that outgrew its representation may also be: the unrolling of a recursion that
-/// did not end. That unrolling stops at whichever limit it meets first, the size of one graph
-/// or the space all graphs live in (refuseUnendedUnrolling), and the size of one graph is also
-/// what a recursion of constant depth that is merely too deep runs into. The export cannot tell
-/// the two apart from the failure, so the refusal for the size of one graph names the
-/// recursion and says what to do if its depth depends on the model input. Empty when the
-/// function has no recursion.
-std::string unendedUnrollingHint(core::context::Context &ctx, const GCGraph *received) {
-    const auto call = findRecursiveCall(received);
-    if (!call) {
-        return {};
-    }
-    const uint64_t origin = call->first->nodeOrigin(call->second);
-    std::string location;
-    if (const auto source = ctx.sourceContext();
-        source && origin != camel::source::kInvalidOriginId) {
-        if (const auto *file = source->fileForOrigin(origin)) {
-            const auto range = source->resolveOrigin(origin);
-            location         = std::format(
-                " (at {}:{}:{})",
-                file->path,
-                range.start.line + 1,
-                range.start.character + 1);
-        }
-    }
-    const std::string name = call->first->name().substr(0, call->first->name().find('$'));
-    return std::format(
-        ". If the depth of the recursion{}{} depends on the model input, its unrolling did not "
-        "end instead: every level that was unrolled gave the next call arguments more specific "
-        "than the loop's own (a more precise type, or a constant); give the values the "
-        "recursion carries and the constants it uses types that say their element type and "
-        "shape (`x as Tensor<f32, const [...]>`)",
-        isSourceName(name) ? std::format(" of '{}'", name) : std::string(),
-        location);
-}
-
 /// The export's simplification filled the space graphs live in. With a recursion in the
 /// function that is an unrolling that did not end: said so, with what could not be placed, at
 /// the recursive call. Returns (the caller rethrows `error`) when `error` is something else or
@@ -3890,31 +3853,11 @@ Model translatePrepared(
     } catch (const std::exception &e) {
         // Simplification unrolls a recursion level by level. A function that calls itself
         // twice on one path doubles with every level, and when its depth depends on the model
-        // input nothing ends that before the graph outgrows its representation. Say so, at
+        // input nothing ends that before memory runs out. Say so, at
         // the call, instead of reporting the allocation failure.
         const auto tree = findTreeRecursion(beforeSimplify);
         if (!tree) {
-            // ONNX has no calls, so the export inlines every call and unrolls every recursion
-            // of constant depth into the one graph of the exported function, without the size
-            // bounds of an optimization pass. A function that does not fit one graph that way
-            // is refused as such, at the export_model call (the error names no node).
-            if (const auto *capacity =
-                    dynamic_cast<const camel::runtime::GraphCapacityError *>(&e)) {
-                throw ExportError(
-                    std::format(
-                        "the exported function does not fit one graph once every call in it "
-                        "is inlined and every recursion of constant depth is unrolled (ONNX "
-                        "has no calls): graph '{}' needs {} {}, and one runtime graph holds "
-                        "at most {} (they are addressed with 16 bits); export a smaller "
-                        "function (fewer unrolled steps, or the forward function instead of "
-                        "a training step through all of them){}",
-                        capacity->graph(),
-                        capacity->size(),
-                        capacity->quantity(),
-                        capacity->limit(),
-                        unendedUnrollingHint(ctx, beforeSimplify)));
-            }
-            // The other way an unrolling ends badly: no single graph is too large, but the
+            // The other way an unrolling ends badly: the
             // space all graphs live in is full (a recursion that is unrolled without end).
             refuseUnendedUnrolling(ctx, beforeSimplify, e);
             throw;

@@ -105,7 +105,7 @@ void Builder::buildEntryCall() {
                 rootTypeFactory.addWithArg(name, type, isVar);
                 entryWithArgs.push_back(
                     rootGraph_
-                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, true, isVar));
+                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, true));
             }
             for (size_t i = 0; i < entryType->normTypesCount(); ++i) {
                 const std::string name = nameAt(entryType->withTypesCount() + i, "__n", i);
@@ -114,7 +114,7 @@ void Builder::buildEntryCall() {
                 rootTypeFactory.addNormArg(name, type, isVar);
                 entryNormArgs.push_back(
                     rootGraph_
-                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, false, isVar));
+                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, false));
             }
             rootGraph_->setFuncType(rootTypeFactory.build());
         }
@@ -332,7 +332,7 @@ void Builder::recordDeclaration(
         origin,
         name,
         currGraph_ ? currGraph_->graphId() : runtime::kInvalidGraphId,
-        node->header.origin,
+        nodeDraftOf(node)->nodeOrigin(nodeIdOf(node)),
         nodeTypeOf(node),
         isVariable(node));
 }
@@ -494,8 +494,8 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
 
 void Builder::stampPermissions(node_handle_t operNode) const {
     if (operNode != nullptr) {
-        operNode->header.permissions = numericPermissions_;
-        operNode->header.attrs       = currentAttrs_;
+        nodeDraftOf(operNode)->setNodePermissions(nodeIdOf(operNode), numericPermissions_);
+        nodeDraftOf(operNode)->setNodeAttrs(nodeIdOf(operNode), currentAttrs_);
     }
 }
 
@@ -518,7 +518,7 @@ void Builder::buildFuncBody(
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
         for (size_t i = 0; i < withPorts.size(); ++i) {
-            node_handle_t port = graph->draft().node(withPorts[i]);
+            node_handle_t port = graph->draft().ref(withPorts[i]);
             insertNode(graph->nodePortName(port), port);
             if (i < funcType->withTypesCount() && funcType->withIsVarAt(i)) {
                 variables_.insert(port);
@@ -529,7 +529,7 @@ void Builder::buildFuncBody(
         }
         const auto normPorts = graph->draft().normPorts();
         for (size_t i = 0; i < normPorts.size(); ++i) {
-            node_handle_t port = graph->draft().node(normPorts[i]);
+            node_handle_t port = graph->draft().ref(normPorts[i]);
             insertNode(graph->nodePortName(port), port);
             if (i < funcType->normTypesCount() && funcType->normIsVarAt(i)) {
                 variables_.insert(port);

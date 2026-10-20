@@ -23,6 +23,7 @@
 #include "camel/core/data/composite/func.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
+#include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
@@ -93,6 +94,12 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
     ASSERT(camel::core::type::isGCTraced(typeCode), "Type is not GC traced.");
 
     switch (typeCode) {
+    case TypeCode::Complex64:
+    case TypeCode::Complex128: {
+        auto complexData = tt::as_shared<camel::core::data::ComplexData>(data);
+        return Complex::create(complexData->real(), complexData->imaginary(), typeCode, allocator);
+    }
+
     case TypeCode::String: {
         auto strData = tt::as_shared<camel::core::data::StringData>(data);
         return String::from(strData->data(), allocator);
