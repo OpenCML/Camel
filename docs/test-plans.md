@@ -341,6 +341,7 @@ The case must emit the expected JSON benchmark payload format used by the runner
 
 - `test/vars.toml`
 - the implicit `${case}` variable
+- the implicit `${test_tmp}` variable, described under "Test scratch"
 - the built-in `${python}` variable: the active virtual environment's interpreter, else `python`
   on Windows and `python3` elsewhere (`test/vars.toml` may override it)
 
@@ -349,6 +350,27 @@ Rules:
 - a token equal to `${name}` may expand to one string or many arguments
 - embedded `${name}` inside larger text must resolve to a scalar string
 - missing variables are errors
+
+`${test_tmp}` is also expanded in `envs` values and in the `expect_*` string fields, so that a
+test can name its own output path in an assertion about what a program printed.
+
+## Test Scratch
+
+Every test runs with its own fresh scratch directory, exposed three ways:
+
+- `${test_tmp}`: its repository-relative path with forward slashes (`tmp/test/run/<run>/<test>`)
+- `CAMEL_TEST_TMPDIR`: its absolute path in the child process environment
+- `test_tmp` / `test_tmp_relative`: the absolute and repository-relative paths in the
+  `verify_script` payload (`input.test_tmp`, `input.test_tmp_relative`)
+
+A test that writes a file writes it under `${test_tmp}` (or `CAMEL_TEST_TMPDIR`), never under a
+fixed path that an earlier test or an earlier run could have written. The directory is removed
+after the test, and `tmp/test` and `test/tmp` are cleared before and after a run, so repeated runs
+do not accumulate files and a stale file cannot be mistaken for this run's output. Files that a
+golden prints keep their fixed path (`tmp/examples`): those plans write there on purpose. A case
+run outside the runner (e.g. a benchmark, which has no private working directory) may keep its
+older fixed path as a fallback when `CAMEL_TEST_TMPDIR` is unset. Two runner instances must not
+run at the same time: they share `tmp/test` (a parallel runner is a separate item).
 
 ## Field Constraints And Style
 

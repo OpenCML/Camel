@@ -5,6 +5,7 @@ Local phot stub used by Camel tests so the wrapper can run without an external p
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
 
 _PLOT_ENABLED = False
@@ -41,7 +42,9 @@ def pulse_shaper(signals, up_sampling_factor: int, roll_off: float, total_baud: 
 def constellation_diagram(signals, is_plot: bool = True, isdata: bool = False):
     if not (_PLOT_ENABLED and is_plot):
         return {"points": sum(len(ch) for ch in signals)}
-    out = Path("test/tmp/phot/constellation_diagram.txt")
+    # The runner gives each test its own scratch directory (CAMEL_TEST_TMPDIR), removed with the
+    # test; the fallback keeps the stub usable when it is run by hand.
+    out = Path(os.environ.get("CAMEL_TEST_TMPDIR", "test/tmp")) / "phot" / "constellation_diagram.txt"
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8") as f:
         for idx, channel in enumerate(signals):
