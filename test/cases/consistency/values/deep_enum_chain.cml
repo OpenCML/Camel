@@ -1,0 +1,15 @@
+// A million-node enum chain: built by a loop (a native recursion would be the thing this
+// checks), printed and compared. Printing and equality walk the chain on explicit stacks; the
+// C++ backend boxes the `Chain` field and prints/compares it the same way
+// (camel/standalone/recursive.h). `len(string(a))` keeps the golden a number.
+
+type Chain = enum { Nil, Cons(int, Chain) }
+
+func main(): int sync {
+    let n = 1000000
+    let (i, a) = loop i = 0, a = Chain::Nil while i < n do (i + 1, Chain::Cons(i, a))
+    let (j, b) = loop j = 0, b = Chain::Nil while j < n do (j + 1, Chain::Cons(j, b))
+    println(len(string(a)))
+    println(a == b)
+    return 0
+}

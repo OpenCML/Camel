@@ -18,6 +18,7 @@
  */
 #include <nlohmann/json.hpp>
 
+#include <cstdlib>
 #include <format>
 #include <optional>
 
@@ -52,6 +53,79 @@ using camel::json::JsonValue;
 namespace {
 
 using json = nlohmann::json;
+
+// How deeply a JSON text may nest. nlohmann's parser, its serializer and this module's
+// fromJson/toJson all walk a document with native recursion, so a text deeper than the native
+// stack allows would crash the process instead of failing (docs/design-principles.cn.md 7.7:
+// a limit that a program can reach must be diagnosed). The limit is checked on the text before
+// parsing, so a document deeper than this is an ordinary JsonParseError, never a crash. The
+// default leaves room for the recursive walk on every scheduler's stack; a program that needs
+// deeper documents raises it with CAMEL_JSON_MAX_DEPTH (whole levels, at least 1).
+size_t jsonMaxDepth() {
+    static const size_t limit = [] {
+        const char *text = std::getenv("CAMEL_JSON_MAX_DEPTH");
+        if (text == nullptr || *text == '\0') {
+            return size_t{10000};
+        }
+        char *end             = nullptr;
+        const unsigned long long value = std::strtoull(text, &end, 10);
+        if (end == text || *end != '\0' || value == 0) {
+            return size_t{10000};
+        }
+        return static_cast<size_t>(value);
+    }();
+    return limit;
+}
+
+// Whether `text` nests arrays/objects deeper than `limit`, ignoring brackets inside strings.
+// When it does, `line` and `column` (1-based) are the position of the bracket that goes too
+// deep: the diagnostic points at the text, as a parse error does.
+bool jsonTooDeep(std::string_view text, size_t limit, size_t &line, size_t &column) {
+    size_t depth         = 0;
+    size_t currentLine   = 1;
+    size_t currentColumn = 1;
+    bool inString        = false;
+    bool escaped         = false;
+    for (const char c : text) {
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                inString = false;
+            }
+        } else if (c == '"') {
+            inString = true;
+        } else if (c == '[' || c == '{') {
+            if (++depth > limit) {
+                line   = currentLine;
+                column = currentColumn;
+                return true;
+            }
+        } else if ((c == ']' || c == '}') && depth > 0) {
+            --depth;
+        }
+        if (c == '\n') {
+            ++currentLine;
+            currentColumn = 1;
+        } else if ((static_cast<unsigned char>(c) & 0xC0) != 0x80) {
+            // Columns count characters, not bytes (design principles 11.1: strings are UTF-8).
+            ++currentColumn;
+        }
+    }
+    return false;
+}
+
+std::string jsonTooDeepMessage(size_t limit, size_t line, size_t column) {
+    return std::format(
+        "the text nests deeper than {} levels (at line {}, column {}); decoding a deeper "
+        "document would exhaust the native stack: decode a shallower document or set "
+        "CAMEL_JSON_MAX_DEPTH to a larger limit",
+        limit,
+        line,
+        column);
+}
 
 // 递归：将 Camel 值转为 JSON。失败时返回 nullopt 并报告诊断。
 static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
@@ -412,6 +486,10 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &) {
     static const TupleType *result = TupleType::fallible(JsonType::get());
     String *str                    = norm.get<String *>(0);
     const std::string_view text    = str ? str->view() : std::string_view();
+    size_t line = 0, column = 0;
+    if (const size_t limit = jsonMaxDepth(); jsonTooDeep(text, limit, line, column)) {
+        return makeError("JsonParseError", jsonTooDeepMessage(limit, line, column), "<json::decode>");
+    }
     try {
         return makeOk(toSlot(JsonValue::fromJson(json::parse(text.begin(), text.end()))), result);
     } catch (const json::exception &e) {
@@ -500,8 +578,13 @@ slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
         document = fromSlot<JsonValue *>(norm.slot(0))->toJson();
     } else {
         String *str = norm.get<String *>(0);
+        const std::string_view text = str ? str->view() : std::string_view();
+        size_t line = 0, column = 0;
+        if (const size_t limit = jsonMaxDepth(); jsonTooDeep(text, limit, line, column)) {
+            return makeError("JsonParseError", jsonTooDeepMessage(limit, line, column), kWhere);
+        }
         try {
-            document = json::parse(str ? str->view() : std::string_view());
+            document = json::parse(text);
         } catch (const json::exception &e) {
             std::string what = e.what();
             if (auto close = what.find("] ");
