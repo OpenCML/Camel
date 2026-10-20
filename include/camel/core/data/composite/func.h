@@ -23,8 +23,11 @@
 #include "camel/core/type/composite/func.h"
 #include <list>
 
+#include "camel/runtime/graph_id.h"
+
 namespace camel::runtime {
 class GCGraph;
+class Program;
 }
 
 namespace camel::core::data {
@@ -38,21 +41,27 @@ using func_vec_t  = std::vector<func_ptr_t>;
 using func_list_t = std::initializer_list<func_ptr_t>;
 
 class FunctionData : public CompositeData {
-    // FunctionData is a compile-time boxed function value that already points at the materialized
-    // runtime graph carrier. It no longer depends on compile GIR ownership.
-    camel::runtime::GCGraph *graph_;
+    // FunctionData is a compile-time boxed function value that already names the materialized
+    // runtime graph: the graph of a program, by id. It no longer depends on compile GIR ownership.
+    const camel::runtime::Program *program_;
+    camel::runtime::GraphId graphId_;
     std::vector<std::string> closureRefs_;
     data_vec_t closure_;
 
   public:
-    FunctionData(camel::runtime::GCGraph *graph, std::vector<std::string> closureRefs = {});
+    FunctionData(
+        const camel::runtime::Program *program, camel::runtime::GraphId graph,
+        std::vector<std::string> closureRefs = {});
     virtual ~FunctionData() = default;
 
-    static func_ptr_t
-    create(camel::runtime::GCGraph *graph, std::vector<std::string> closureRefs = {});
+    static func_ptr_t create(
+        const camel::runtime::Program *program, camel::runtime::GraphId graph,
+        std::vector<std::string> closureRefs = {});
 
     std::string name() const;
-    camel::runtime::GCGraph *graph() const { return graph_; }
+    camel::runtime::GCGraph *graph() const;
+    const camel::runtime::Program *program() const { return program_; }
+    camel::runtime::GraphId graphId() const { return graphId_; }
     type::FunctionType *funcType() const;
     bool isMacro() const { return funcType() && funcType()->modifiers().macro(); }
     const data_vec_t &closure() const { return closure_; }

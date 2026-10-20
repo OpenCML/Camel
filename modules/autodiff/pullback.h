@@ -79,9 +79,15 @@ std::string differentiationRefusal(type::FunctionType *function);
 /// (see differentiationRefusal).
 std::optional<GradientSignature> gradientSignature(type::FunctionType *function, bool withValue);
 
-/// Builds the graph of grad(f) (or with_grad(f)) for the graph of f.
-camel::runtime::GCGraph *buildGradientGraph(
-    const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *function,
-    bool withValue);
+/// The graph of a gradient and the program of the graphs built with it.
+struct GradientGraph {
+    const camel::runtime::Program *program = nullptr;
+    camel::runtime::GCGraph *graph         = nullptr;
+};
+
+/// Builds the graph of grad(f) (or with_grad(f)) for the graph `function` of `program`.
+GradientGraph buildGradientGraph(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    camel::runtime::GCGraph *function, bool withValue);
 
 } // namespace camel::autodiff

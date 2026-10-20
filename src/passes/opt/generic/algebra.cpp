@@ -581,10 +581,11 @@ bool mayAlgebra(const camel::runtime::GCGraph &graph) {
 }
 } // namespace camel::passes::generic
 
-camel::runtime::GCGraph *AlgebraPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
+const camel::runtime::Program *
+AlgebraPass::apply(const camel::runtime::Program *program, std::ostream &) {
     return camel::passes::generic::rewriteReachableGraphs(
         context_,
-        graph,
+        program,
         "std::opt::algebra",
         [&](camel::runtime::GraphDraft &draft) {
             return camel::passes::generic::algebraDraft(draft, safeFp_);

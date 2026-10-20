@@ -530,7 +530,7 @@ void writeEntryResultTo(
 
 uint64_t entryFunctionOrigin(const core::context::Context &context) {
     if (const auto source = context.sourceContext()) {
-        return source->debugMap().graphOrigin(kEntryFunctionOriginKey);
+        return source->debugMap().entryOrigin();
     }
     return camel::source::kInvalidOriginId;
 }
@@ -562,8 +562,8 @@ std::vector<BoundEntryArgument> boundEntryArguments() {
     return out;
 }
 
-GCGraph *bindEntryArgumentSpecs(
-    const core::context::context_ptr_t &context, GCGraph *root,
+const camel::runtime::Program *bindEntryArgumentSpecs(
+    const core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::span<const std::string> specs) {
     std::vector<EntryArgument> arguments;
     for (const std::string &spec : specs) {
@@ -579,16 +579,18 @@ GCGraph *bindEntryArgumentSpecs(
         }
         arguments.push_back(std::move(argument));
     }
-    return bindEntryArguments(context, root, arguments);
+    return bindEntryArguments(context, program, arguments);
 }
 
-GCGraph *bindEntryArguments(
-    const core::context::context_ptr_t &context, GCGraph *root,
+const camel::runtime::Program *bindEntryArguments(
+    const core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::span<const EntryArgument> arguments) {
+    GCGraph *root = program ? program->root() : nullptr;
     if (!root || arguments.empty()) {
-        return root;
+        return program;
     }
-    const auto invalid = [&](const std::string &name, const std::string &why) -> GCGraph * {
+    const auto invalid = [&](const std::string &name,
+                             const std::string &why) -> const camel::runtime::Program * {
         auto diag = context->rtmDiags()->of(RuntimeDiag::EntryArgumentInvalid);
         if (const uint64_t origin = entryFunctionOrigin(*context);
             origin != camel::source::kInvalidOriginId) {
@@ -671,7 +673,7 @@ GCGraph *bindEntryArguments(
         }
     }
 
-    camel::runtime::RuntimeGraphDraftSession session(context, root);
+    camel::runtime::RuntimeGraphDraftSession session(context, program);
     camel::runtime::GraphDraft &draft = session.rootDraft();
     for (auto &[formal, loaded] : bound) {
         const gc_node_ref_t port = draft.draftIdOfSourceRef(formal->port);
@@ -712,7 +714,7 @@ GCGraph *bindEntryArguments(
     // A loaded value may have a more exact type than the parameter declares (the shape of a
     // tensor read from a file): the types of the nodes that read it follow.
     (void)camel::runtime::reinferDraftTypes(draft);
-    GCGraph *result = session.commit();
+    const camel::runtime::Program *result = session.commit();
     for (auto &[formal, loaded] : bound) {
         remember(loaded, formal->name);
     }

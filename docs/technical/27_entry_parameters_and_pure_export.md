@@ -28,9 +28,9 @@ program's inputs, and each consumer says what an open parameter means:
 | a scheduling pass | an error: `EntryArgumentMissing` |
 | `onnx::export` | an input of the model |
 
-The origin of `main` is also registered under the fixed key `__entry__`
-(`execute::kEntryFunctionOriginKey`), because passes replace the entry graph and its stable id;
-`execute::entryFunctionOrigin(ctx)` is where a diagnostic about the entry function is located.
+The origin of `main` is also registered apart from the graphs (`DebugMap::registerEntryOrigin`),
+because passes replace the entry graph; `execute::entryFunctionOrigin(ctx)` is where a diagnostic
+about the entry function is located.
 
 ## 2. Binding arguments from outside (`include/camel/execute/entry_args.h`)
 

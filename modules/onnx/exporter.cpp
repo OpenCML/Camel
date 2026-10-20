@@ -3570,22 +3570,23 @@ constexpr size_t kMaxExportRounds = 4096;
 
 /// The simplification onnx.export_model performs on the bound function: macro expansion and
 /// the export simplification, to a fixpoint of the two.
-GCGraph *
-simplifyFully(const core::context::context_ptr_t &context, GCGraph *root, std::ostream &log) {
+const camel::runtime::Program *simplifyFully(
+    const core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    std::ostream &log) {
     const OptimizeRewriteConfig config = exportRewriteConfig();
     constexpr size_t kMaxRounds        = kMaxExportRounds;
     // Macros (grad, with_grad) expand once their arguments are constants, which
     // simplification may be what makes them.
-    root = MacroRewritePass(context).apply(root, log);
+    program = MacroRewritePass(context).apply(program, log);
     while (true) {
-        root              = simplifyGraph(context, root, config, log, kMaxRounds);
-        GCGraph *expanded = MacroRewritePass(context).apply(root, log);
-        if (expanded == root) {
+        program = simplifyGraph(context, program, config, log, kMaxRounds);
+        const camel::runtime::Program *expanded = MacroRewritePass(context).apply(program, log);
+        if (expanded == program) {
             break;
         }
-        root = expanded;
+        program = expanded;
     }
-    return root;
+    return program;
 }
 
 /// The type of a constant with everything its value fixes: a tensor's element type and shape,
@@ -3668,13 +3669,14 @@ enum class Preparation {
     ShapesOnly,
 };
 
-/// The second half of every export: simplifies `root` (a graph whose parameters already have
-/// the types of `inputs`), translates it with its parameters bound to `inputs` and declares
-/// the outputs. `names` are the source names of constant objects, for the initializers.
+/// The second half of every export: simplifies `program` (whose entry graph has parameters that
+/// already have the types of `inputs`), translates its entry with its parameters bound to
+/// `inputs` and declares the outputs. `names` are the source names of constant objects, for the
+/// initializers.
 Model translatePrepared(
-    core::context::Context &ctx, Emitter &emitter, GCGraph *root, std::span<const Value> inputs,
-    std::unordered_map<slot_t, std::string> names, const ExportOptions &options,
-    Preparation preparation);
+    core::context::Context &ctx, Emitter &emitter, const camel::runtime::Program *program,
+    std::span<const Value> inputs, std::unordered_map<slot_t, std::string> names,
+    const ExportOptions &options, Preparation preparation);
 
 Model exportBound(
     core::context::Context &ctx, ::Function *fn, std::span<const Example> captures,
@@ -3707,9 +3709,9 @@ Model exportBound(
     }
     DetachedGraphsGuard guard{ctx};
     const auto context = ctx.shared_from_this();
-    GCGraph *root      = nullptr;
+    const camel::runtime::Program *prepared = nullptr;
     {
-        camel::runtime::RuntimeGraphDraftSession session(context, graph);
+        camel::runtime::RuntimeGraphDraftSession session(context, fn->program(), graph);
         if (!captures.empty()) {
             bindCaptures(session.rootDraft(), captures);
         }
@@ -3722,7 +3724,7 @@ Model exportBound(
             }
         }
         camel::runtime::bindFunctionCall(session.rootDraft(), fn, inputTypes, captureTypes);
-        root = session.commit();
+        prepared = session.commit();
     }
     std::unordered_map<slot_t, std::string> names;
     for (const Example &capture : captures) {
@@ -3735,7 +3737,14 @@ Model exportBound(
             collectNames(captured->get<slot_t>(i), layout->typeAt(i), "", names);
         }
     }
-    return translatePrepared(ctx, emitter, root, inputs, std::move(names), options, preparation);
+    return translatePrepared(
+        ctx,
+        emitter,
+        prepared,
+        inputs,
+        std::move(names),
+        options,
+        preparation);
 }
 
 /// The export's simplification filled the space graphs live in. With a recursion in the
@@ -3812,10 +3821,11 @@ void refuseUnendedUnrolling(
 }
 
 Model translatePrepared(
-    core::context::Context &ctx, Emitter &emitter, GCGraph *root, std::span<const Value> inputs,
-    std::unordered_map<slot_t, std::string> names, const ExportOptions &options,
-    Preparation preparation) {
+    core::context::Context &ctx, Emitter &emitter, const camel::runtime::Program *program,
+    std::span<const Value> inputs, std::unordered_map<slot_t, std::string> names,
+    const ExportOptions &options, Preparation preparation) {
     const auto context = ctx.shared_from_this();
+    GCGraph *root      = program->root();
     std::ostringstream log;
     // The pass entry (ShapesOnly): the preceding passes simplified the program without two
     // things only the export knows: the shapes of the examples (binding their types above
@@ -3833,9 +3843,11 @@ Model translatePrepared(
         std::cerr << "ONNX_PREP_STATS received " << reachableStats(root) << std::endl;
     }
     try {
-        root = preparation == Preparation::ShapesOnly
-                   ? simplifyGraph(context, root, exportRewriteConfig(), log, kMaxExportRounds)
-                   : simplifyFully(context, root, log);
+        program =
+            preparation == Preparation::ShapesOnly
+                ? simplifyGraph(context, program, exportRewriteConfig(), log, kMaxExportRounds)
+                : simplifyFully(context, program, log);
+        root = program->root();
     } catch (const ExportError &) {
         throw;
     } catch (const std::exception &e) {
@@ -3878,7 +3890,7 @@ Model translatePrepared(
         std::cerr << "ONNX_PREP_STATS simplified " << reachableStats(root) << std::endl;
     }
     if (dumpEnabled()) {
-        GraphVizDumpPass(context).apply(root, std::cerr);
+        GraphVizDumpPass(context).apply(program, std::cerr);
     }
 
     Evaluator evaluator(emitter, options, ctx, std::move(names), ctx.sourceContext());
@@ -3994,7 +4006,9 @@ class DeclaredInputBinder {
 } // namespace
 
 Model translateEntryGraph(
-    core::context::Context &ctx, GCGraph *root, const ExportOptions &options) {
+    core::context::Context &ctx, const camel::runtime::Program *program,
+    const ExportOptions &options) {
+    GCGraph *root = program->root();
     Emitter emitter(options.opset, capabilitiesFor(options));
     emitter.graph().name = options.graphName;
 
@@ -4036,7 +4050,7 @@ Model translateEntryGraph(
     return translatePrepared(
         ctx,
         emitter,
-        root,
+        program,
         inputs,
         std::move(names),
         options,

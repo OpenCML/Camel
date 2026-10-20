@@ -367,7 +367,7 @@ uint64_t graphOriginOf(core::context::Context &ctx, const GCGraph *g) {
         return camel::source::kInvalidOriginId;
     }
     if (const auto source = ctx.sourceContext()) {
-        const auto origin = source->debugMap().graphOrigin(g->stableId());
+        const auto origin = source->debugMap().graphOrigin(g->id());
         if (origin != camel::source::kInvalidOriginId) {
             return origin;
         }
@@ -650,7 +650,9 @@ Model translate(core::context::Context &ctx, const Request &request) {
 
 /// The export of a program that makes no request: the computation of `main` is the model.
 void exportEntry(
-    core::context::Context &ctx, GCGraph *root, std::ostream &os, const std::string &out) {
+    core::context::Context &ctx, const camel::runtime::Program *program, std::ostream &os,
+    const std::string &out) {
+    GCGraph *root = program->root();
     if (out.empty()) {
         throw Refusal{
             camel::source::kInvalidOriginId,
@@ -666,7 +668,7 @@ void exportEntry(
     }
     Model model;
     try {
-        model = translateEntryGraph(ctx, root);
+        model = translateEntryGraph(ctx, program);
     } catch (const ExportError &e) {
         std::string message = e.what();
         if (e.kind() == ExportError::Kind::CallRemains) {
@@ -692,12 +694,14 @@ void exportEntry(
 
 } // namespace
 
-GCGraph *OnnxExportPass::apply(GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+OnnxExportPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     try {
         // Every request is translated before any file is written: a refusal leaves no model.
         const std::vector<Request> requests = collectRequests(*context_, graph, out_);
         if (requests.empty()) {
-            exportEntry(*context_, graph, os, out_);
+            exportEntry(*context_, program, os, out_);
             return nullptr;
         }
         if (requests.size() > 1 && !out_.empty()) {

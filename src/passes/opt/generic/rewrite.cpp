@@ -300,11 +300,12 @@ void RewriteMemo::remember(std::string_view passName, const GCGraph *graph) {
     }
 }
 
-GCGraph *rewriteReachableGraphs(
-    const camel::core::context::context_ptr_t &context, GCGraph *graph, std::string_view passName,
-    const std::function<size_t(GraphDraft &)> &rewrite, size_t *rewrites, RewriteMemo *memo,
-    bool (*mayRewrite)(const GCGraph &), bool checkScreens) {
-    camel::runtime::RuntimeGraphDraftSession session(context, graph);
+const camel::runtime::Program *rewriteReachableGraphs(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
+    size_t *rewrites, RewriteMemo *memo, bool (*mayRewrite)(const GCGraph &),
+    bool checkScreens) {
+    camel::runtime::RuntimeGraphDraftSession session(context, program);
     size_t total = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
         if ((mayRewrite && !mayRewrite(*g)) || (memo && memo->leftAlone(passName, g))) {
@@ -328,7 +329,7 @@ GCGraph *rewriteReachableGraphs(
         *rewrites = total;
     }
     if (total == 0) {
-        return graph;
+        return program;
     }
     return session.commit();
 }

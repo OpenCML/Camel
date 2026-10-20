@@ -48,11 +48,13 @@ inline constexpr const char *kExpandDefinitionsTestPass = "test::expand_definiti
 class DefinitionsTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
 class ExpandDefinitionsTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };

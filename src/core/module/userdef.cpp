@@ -93,9 +93,9 @@ const void *camel::core::module::detail::UserDefinedModuleAccess::compileGraphOp
     return camel::compile::gir::compileGraphOpaque(module.compileGraph_);
 }
 
-camel::runtime::GCGraph *camel::core::module::detail::UserDefinedModuleAccess::encodeRuntimeGraph(
-    const UserDefinedModule &module) {
-    return camel::compile::gir::encodeToRuntimeGraph(module.compileGraph_);
+void camel::core::module::detail::UserDefinedModuleAccess::encodeRuntimeProgram(
+    const UserDefinedModule &module, camel::runtime::Program &program) {
+    camel::compile::gir::encodeToRuntimeProgram(module.compileGraph_, program);
 }
 
 bool UserDefinedModule::compile(CompileStage till) {

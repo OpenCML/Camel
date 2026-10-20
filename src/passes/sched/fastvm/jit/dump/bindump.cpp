@@ -80,8 +80,9 @@ static void dumpMachineCodeByInstruction(
 }
 #endif
 
-camel::runtime::GCGraph *
-JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+JitBinaryDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
 #if ENABLE_FASTVM_JIT
     auto linked = compileAndLink(
         context_,

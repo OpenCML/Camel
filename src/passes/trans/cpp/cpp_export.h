@@ -28,7 +28,8 @@ class CppDumpPass : public GraphTranslatePass {
         const camel::core::context::context_ptr_t &ctx, camel::passes::cpp::CppEmitMode mode = camel::passes::cpp::CppEmitMode::Plain)
         : GraphTranslatePass(ctx), mode_(mode) {}
 
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
     camel::passes::cpp::CppEmitMode mode_;

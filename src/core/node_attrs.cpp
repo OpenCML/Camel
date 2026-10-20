@@ -188,8 +188,8 @@ AttrValueId symbol(std::string_view text) {
     return internValue(Value{.kind = ValueKind::Symbol, .text = std::string(text)});
 }
 
-AttrValueId graphRef(std::string_view stableId) {
-    return internValue(Value{.kind = ValueKind::Graph, .text = std::string(stableId)});
+AttrValueId graphRef(camel::runtime::GraphId graph) {
+    return internValue(Value{.kind = ValueKind::Graph, .text = camel::runtime::toText(graph)});
 }
 
 AttrValueId tuple(std::span<const AttrValueId> items) {

@@ -218,12 +218,11 @@ struct MacroEvaluator::ValueRoot {
     Type *type   = nullptr;
 };
 
-MacroEvaluator::MacroEvaluator(const context_ptr_t &context)
-    : context_(context),
-      framePool_(
-          std::max<size_t>(
-              kMacroFramePoolSize,
-              camel::execute::framePoolBytes(camel::execute::macroDepthLimit(*context)))),
+MacroEvaluator::MacroEvaluator(const context_ptr_t &context, const camel::runtime::Program *program)
+    : context_(context), program_(program),
+      framePool_(std::max<size_t>(
+          kMacroFramePoolSize,
+          camel::execute::framePoolBytes(camel::execute::macroDepthLimit(*context)))),
       staticAreas_(std::make_unique<MacroStaticAreaStore>()),
       maxDepth_(camel::execute::macroDepthLimit(*context)) {
     framePool_.registerGcTracer();
@@ -517,7 +516,11 @@ MacroEvaluator::tryExecuteDirectFunc(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
     (void)os;
     CAMEL_LOG_INFO_S("Macro", "Execute direct macro '{}'.", calleeGraph->name());
     const slot_t value = executeFunction(
-        ::Function::create(calleeGraph, ensureMacroClosureType(calleeGraph), mm::autoSpace()),
+        ::Function::create(
+            program_,
+            calleeGraph->id(),
+            ensureMacroClosureType(calleeGraph),
+            mm::autoSpace()),
         [&](Frame *frame, GCGraph *runtimeGraph) {
             bindRuntimeGraphArgs(
                 frame,
@@ -804,8 +807,11 @@ slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t n
         }
         slot_t
         callRound(const camel::execute::LoopShape &shape, GCGraph *callee, const slot_t *element) {
-            auto *funcObj =
-                ::Function::create(callee, ensureMacroClosureType(callee), mm::autoSpace());
+            auto *funcObj = ::Function::create(
+                evaluator.program_,
+                callee->id(),
+                ensureMacroClosureType(callee),
+                mm::autoSpace());
             return evaluator.executeFunction(
                 funcObj,
                 [&](Frame *calleeFrame, GCGraph *) {
@@ -1017,7 +1023,8 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
                 calleeRuntimeGraph != nullptr,
                 "Runtime FUNC node must have a direct runtime callee graph.");
             auto *funcObj = ::Function::create(
-                calleeRuntimeGraph,
+                program_,
+                calleeRuntimeGraph->id(),
                 ensureMacroClosureType(calleeRuntimeGraph),
                 mm::autoSpace());
             slot_t result = executeFunction(

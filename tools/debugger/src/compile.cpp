@@ -106,7 +106,7 @@ getGirJsonByPath(const std::string &path, const std::string &graphId) {
 
 std::pair<std::string, std::string>
 getGirJson(const std::string &path, const std::string &graphId) {
-    // Prefer the run's own compile: graph stableIds and originIds only make sense within the
+    // Prefer the run's own compile: graph ids and originIds only make sense within the
     // SourceContext of the compilation that produced the executed runtime graphs. A fresh
     // compile (byPath) would assign different ids on every call, breaking debugger matching.
     auto fromState = getGirJsonFromCurrentState(graphId);

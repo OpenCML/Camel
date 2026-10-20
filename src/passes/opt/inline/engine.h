@@ -28,6 +28,6 @@
 #include "camel/execute/pass/opt.h"
 #include "config.h"
 
-camel::runtime::GCGraph *applyOptimizeRewritePass(
-    const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
+const camel::runtime::Program *applyOptimizeRewritePass(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::ostream &os, const OptimizeRewriteConfig &config, bool *changed = nullptr);

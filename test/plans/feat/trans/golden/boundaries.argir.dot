@@ -20,16 +20,16 @@ digraph GraphIR {
                 N00 -> N01 [label="0|0", type="NORM"];
             }
             subgraph cluster_F04 {
-                label="__g_6__";
+                label="__g_5__";
                 tooltip="() => Tensor";
                 F04 [label="ARGS", type="ARGS", style=dashed, shape=circle];
                 O04 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-                N02 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor", shape=circle, style=solid, tooltip="t\n__g_6__::node#1"];
-                N03 [label="1", type="DATA", shape=circle, style=solid, value_type="int", origin=201, span="12:50-12:51", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="1\n__g_6__::node#-1"];
-                N04 [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", value_type="float", origin=202, span="12:49-12:50", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\n__g_6__::node#2\nrole scalar-boundary: tensor -> host float"];
-                N05 [label="2.0", type="DATA", shape=circle, style=solid, value_type="float", origin=203, span="12:55-12:58", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="2.0\n__g_6__::node#-2"];
-                N06 [label=":op/\nmul_d", type="OPER", shape=diamond, style=solid, value_type="float", origin=204, span="12:53-12:54", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip=":op/mul_d\n__g_6__::node#3"];
-                N07 [label="tensor:\nmult...", type="OPER", shape=diamond, style="filled,solid", value_type="Tensor", origin=205, span="12:45-12:46", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:multiply\n__g_6__::node#4\nrole scalar-boundary: host float -> tensor"];
+                N02 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor", shape=circle, style=solid, tooltip="t\n__g_5__::node#1"];
+                N03 [label="1", type="DATA", shape=circle, style=solid, value_type="int", origin=201, span="12:50-12:51", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="1\n__g_5__::node#-1"];
+                N04 [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", value_type="float", origin=202, span="12:49-12:50", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\n__g_5__::node#2\nrole scalar-boundary: tensor -> host float"];
+                N05 [label="2.0", type="DATA", shape=circle, style=solid, value_type="float", origin=203, span="12:55-12:58", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="2.0\n__g_5__::node#-2"];
+                N06 [label=":op/\nmul_d", type="OPER", shape=diamond, style=solid, value_type="float", origin=204, span="12:53-12:54", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip=":op/mul_d\n__g_5__::node#3"];
+                N07 [label="tensor:\nmult...", type="OPER", shape=diamond, style="filled,solid", value_type="Tensor", origin=205, span="12:45-12:46", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:multiply\n__g_5__::node#4\nrole scalar-boundary: host float -> tensor"];
                 F04 -> N02 [label="0", type="WITH_PORT", style=dashed, arrowhead=empty];
                 N07 -> O04 [label="0", type="EXIT", style=solid];
                 N02 -> N04 [label="0|0", type="NORM"];
@@ -49,7 +49,7 @@ digraph GraphIR {
             N0D [label="JOIN", type="JOIN", shape=diamond, style="filled,solid", value_type="Tensor", origin=193, span="12:11-12:59", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", fillcolor="#d9d2e9", role="branch-contract", tooltip="JOIN\ngate::node#7\nrole branch-contract: arms: Tensor"];
             N0E [label="BRCH", type="BRCH", shape=diamond, style=solid, value_type="int", origin=192, span="12:11-12:59", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="BRCH\ngate::node#4"];
             N0F [label="__g_4__", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="Tensor", origin=194, span="12:30-12:37", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="__g_4__\ngate::node#5"];
-            N10 [label="__g_6__", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="Tensor", origin=197, span="12:43-12:59", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="__g_6__\ngate::node#6"];
+            N10 [label="__g_5__", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="Tensor", origin=197, span="12:43-12:59", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="__g_5__\ngate::node#6"];
             F02 -> N08 [label="0", type="NORM_PORT", style=solid];
             N0D -> O02 [label="0", type="EXIT", style=solid];
             N08 -> N0A [label="0|0", type="NORM"];

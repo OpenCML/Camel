@@ -300,9 +300,15 @@ const OriginRecord *OriginTable::origin(origin_id_t id) const {
     return &origins_[static_cast<size_t>(id)];
 }
 
-void DebugMap::registerGraphOrigin(const std::string &graphId, origin_id_t origin) {
-    if (!graphId.empty() && origin != kInvalidOriginId) {
-        graphOrigins_[graphId] = origin;
+void DebugMap::registerGraphOrigin(camel::runtime::GraphId graph, origin_id_t origin) {
+    if (camel::runtime::isValid(graph) && origin != kInvalidOriginId) {
+        graphOrigins_[graph] = origin;
+    }
+}
+
+void DebugMap::registerEntryOrigin(origin_id_t origin) {
+    if (origin != kInvalidOriginId) {
+        entryOrigin_ = origin;
     }
 }
 
@@ -324,8 +330,8 @@ void DebugMap::registerRuntimeGraphOrigin(uintptr_t runtimeGraphKey, origin_id_t
     }
 }
 
-origin_id_t DebugMap::graphOrigin(const std::string &graphId) const {
-    auto it = graphOrigins_.find(graphId);
+origin_id_t DebugMap::graphOrigin(camel::runtime::GraphId graph) const {
+    auto it = graphOrigins_.find(graph);
     return it == graphOrigins_.end() ? kInvalidOriginId : it->second;
 }
 
@@ -473,8 +479,10 @@ void SourceContext::registerGctSemantic(origin_id_t origin, SemanticBundle bundl
     gctSemantic_.registerBundle(origin, std::move(bundle));
 }
 
-void SourceContext::registerGirGraphSemantic(const std::string &graphId, SemanticBundle bundle) {
-    girGraphs_.registerBundle(graphId, std::move(bundle));
+void SourceContext::registerGirGraphSemantic(camel::runtime::GraphId graph, SemanticBundle bundle) {
+    if (camel::runtime::isValid(graph)) {
+        girGraphs_[graph] = std::move(bundle);
+    }
 }
 
 const SemanticBundle *SourceContext::astSemantic(origin_id_t origin) const {
@@ -485,8 +493,9 @@ const SemanticBundle *SourceContext::gctSemantic(origin_id_t origin) const {
     return gctSemantic_.bundle(origin);
 }
 
-const SemanticBundle *SourceContext::girGraphSemantic(const std::string &graphId) const {
-    return girGraphs_.bundle(graphId);
+const SemanticBundle *SourceContext::girGraphSemantic(camel::runtime::GraphId graph) const {
+    auto it = girGraphs_.find(graph);
+    return it == girGraphs_.end() ? nullptr : &it->second;
 }
 
 const SemanticBundle *SourceContext::girNodeSemantic(const std::string &entityId) const {
@@ -497,15 +506,15 @@ const SemanticBundle *SourceContext::girNodeSemantic(const std::string &entityId
 }
 
 void SourceContext::cloneGirGraphDebugInfo(
-    const std::string &fromGraphId, const std::string &toGraphId) {
-    if (fromGraphId.empty() || toGraphId.empty() || fromGraphId == toGraphId) {
+    camel::runtime::GraphId from, camel::runtime::GraphId to) {
+    if (!camel::runtime::isValid(from) || !camel::runtime::isValid(to) || from == to) {
         return;
     }
-    if (auto origin = debugMap_.graphOrigin(fromGraphId); origin != kInvalidOriginId) {
-        debugMap_.registerGraphOrigin(toGraphId, origin);
+    if (auto origin = debugMap_.graphOrigin(from); origin != kInvalidOriginId) {
+        debugMap_.registerGraphOrigin(to, origin);
     }
-    if (const auto *bundle = girGraphs_.bundle(fromGraphId)) {
-        girGraphs_.registerBundle(toGraphId, *bundle);
+    if (const auto *bundle = girGraphSemantic(from)) {
+        girGraphs_[to] = *bundle;
     }
 }
 

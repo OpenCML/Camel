@@ -390,7 +390,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         }
         camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
         if (origin == camel::source::kInvalidOriginId && sourceContext) {
-            origin = sourceContext->debugMap().graphOrigin(graph->stableId());
+            origin = sourceContext->debugMap().graphOrigin(graph->graphId());
         }
         diags_->of(SemanticDiag::EffectNotExecuted).atOrigin(origin).commit(subject);
     }
@@ -407,7 +407,7 @@ void Builder::reportUnusedFallibleValues() {
         [&](const compile_graph_ptr_t &graph, node_handle_t node, Type *type, const char *remark) {
             camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
             if (origin == camel::source::kInvalidOriginId && sourceContext) {
-                origin = sourceContext->debugMap().graphOrigin(graph->stableId());
+                origin = sourceContext->debugMap().graphOrigin(graph->graphId());
             }
             diags_->of(SemanticDiag::UnusedFallibleValue)
                 .atOrigin(origin)
@@ -1189,7 +1189,7 @@ void Builder::checkDeclaredReturn(
     if (origin != 0) {
         diag.atOrigin(origin);
     } else if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
-        diag.atOrigin(sourceContext->debugMap().graphOrigin(graph->stableId()));
+        diag.atOrigin(sourceContext->debugMap().graphOrigin(graph->graphId()));
     }
     if (convertible) {
         const std::string text = sourceTextOf(value);

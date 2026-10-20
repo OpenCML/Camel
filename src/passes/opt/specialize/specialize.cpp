@@ -21,12 +21,12 @@
 
 #include "../inline/engine.h"
 
-camel::runtime::GCGraph *
-SpecializeRewritePass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+SpecializeRewritePass::apply(const camel::runtime::Program *program, std::ostream &os) {
     OptimizeRewriteConfig config{};
     config.growthBudget           = growthBudget_;
     config.enableDevirtualization = false;
     config.enableSpecialization   = true;
     config.enableInlining         = false;
-    return applyOptimizeRewritePass(context_, graph, os, config);
+    return applyOptimizeRewritePass(context_, program, os, config);
 }

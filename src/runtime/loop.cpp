@@ -89,12 +89,12 @@ LoopDraftView::LoopDraftView(const GraphDraft &draft, gc_node_ref_t node)
     ASSERT(
         header != nullptr && header->kind == GCNodeKind::Loop,
         "LoopDraftView of a node that is not a LOOP node.");
-    const auto *body  = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(node).data());
-    kind_             = body->kind;
-    cond_             = body->condGraph;
-    body_             = body->bodyGraph;
+    const GCLoopBody body = draft.loopGraphsOf(node);
+    kind_             = body.kind;
+    cond_             = body.condGraph;
+    body_             = body.bodyGraph;
     stateCount_       = draft.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
-    collectionCount_  = body->collectionCount;
+    collectionCount_  = body.collectionCount;
 }
 
 Type *LoopDraftView::valueType() const { return draft_->header(node_)->dataType; }

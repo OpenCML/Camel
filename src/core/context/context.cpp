@@ -25,10 +25,10 @@
 #include <unordered_set>
 
 #include "camel/core/context/context.h"
-#include "camel/core/module/introspect.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
+#include "camel/core/module/introspect.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/execute/executor.h"
@@ -36,6 +36,7 @@
 #include "camel/runtime/definitions.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 #include "camel/utils/path.h"
@@ -702,38 +703,42 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
 }
 
-camel::runtime::GCGraph *Context::runtimeRootGraph() {
-    return currentRuntimeRoot() ? currentRuntimeRoot() : materializeRuntimeRoot();
+const camel::runtime::Program *Context::runtimeProgram() {
+    return currentRuntimeProgram() ? currentRuntimeProgram() : materializeRuntimeProgram();
 }
 
-camel::runtime::GCGraph *Context::materializeRuntimeRoot() {
+const camel::runtime::Program *Context::materializeRuntimeProgram() {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->clear();
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto rootModule = tt::as_shared<UserDefinedModule>(mainModule_);
     camel::utils::phase::Scope phaseScope("encode");
-    camel::runtime::GCGraph *runtimeRoot =
-        camel::core::module::detail::UserDefinedModuleAccess::encodeRuntimeGraph(*rootModule);
-    runtimeGraphMgr_->adoptRoot(runtimeRoot);
-    registerRuntimeGraphDebugInfo(runtimeRoot);
-    return runtimeRoot;
+    camel::runtime::Program *program = runtimeGraphMgr_->reserve();
+    camel::core::module::detail::UserDefinedModuleAccess::encodeRuntimeProgram(
+        *rootModule,
+        *program);
+    runtimeGraphMgr_->adoptRoot(program);
+    registerRuntimeGraphDebugInfo(program);
+    return program;
 }
 
-camel::runtime::GCGraph *Context::installRuntimeRoot(camel::runtime::GCGraph *runtimeRoot) {
+const camel::runtime::Program *
+Context::installRuntimeProgram(const camel::runtime::Program *program) {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
-    runtimeGraphMgr_->replaceRoot(runtimeRoot);
-    registerRuntimeGraphDebugInfo(runtimeRoot);
-    return runtimeRoot;
+    runtimeGraphMgr_->replaceRoot(program);
+    registerRuntimeGraphDebugInfo(program);
+    return program;
 }
 
-camel::runtime::GCGraph *Context::adoptRuntimeRoot(camel::runtime::GCGraph *runtimeRoot) {
+const camel::runtime::Program *
+Context::adoptRuntimeProgram(const camel::runtime::Program *program) {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
-    runtimeGraphMgr_->adoptRoot(runtimeRoot);
-    registerRuntimeGraphDebugInfo(runtimeRoot);
-    return runtimeRoot;
+    runtimeGraphMgr_->adoptRoot(program);
+    registerRuntimeGraphDebugInfo(program);
+    return program;
 }
 
-camel::runtime::GCGraph *Context::currentRuntimeRoot() const {
+const camel::runtime::Program *Context::currentRuntimeProgram() const {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     return runtimeGraphMgr_->root();
 }
@@ -743,14 +748,19 @@ void Context::clearRuntimeGraphs() {
     runtimeGraphMgr_->clear();
 }
 
-void Context::trackDetachedRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs) {
+camel::runtime::Program *Context::reserveProgram() {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
-    runtimeGraphMgr_->trackDetached(graphs);
+    return runtimeGraphMgr_->reserve();
 }
 
-void Context::pinRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs) {
+void Context::trackDetachedRuntimeProgram(const camel::runtime::Program *program) {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
-    runtimeGraphMgr_->pin(graphs);
+    runtimeGraphMgr_->trackDetached(program);
+}
+
+void Context::pinRuntimeProgram(const camel::runtime::Program *program) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->pin(program);
 }
 
 void Context::releaseDetachedRuntimeGraphs() {
@@ -762,20 +772,17 @@ void Context::registerExecutorFactory(std::string name, executor_factory_t fact)
     exeMgr_->registerExecutorFactory(name, fact);
 }
 
-void Context::registerRuntimeGraphDebugInfo(camel::runtime::GCGraph *runtimeRoot) {
-    if (!runtimeRoot || !sourceContext_) {
+void Context::registerRuntimeGraphDebugInfo(const camel::runtime::Program *program) {
+    if (!program || !sourceContext_) {
         return;
     }
     auto &debugMap = sourceContext_->debugMap();
-    camel::runtime::forEachReachableGraph(runtimeRoot, [&](camel::runtime::GCGraph *graph) {
-        if (!graph) {
-            return;
-        }
-        camel::source::origin_id_t origin = debugMap.graphOrigin(graph->stableId());
+    for (camel::runtime::GCGraph *graph : program->graphs()) {
+        camel::source::origin_id_t origin = debugMap.graphOrigin(graph->id());
         if (origin != camel::source::kInvalidOriginId) {
             debugMap.registerRuntimeGraphOrigin(reinterpret_cast<uintptr_t>(graph), origin);
         }
-    });
+    }
 }
 
 } // namespace camel::core::context

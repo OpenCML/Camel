@@ -21,6 +21,7 @@
 
 #include "camel/core/error/diagnostics/range.h"
 #include "camel/core/source/ids.h"
+#include "camel/runtime/graph_id.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -215,19 +216,24 @@ class OriginTable {
 /// It stores no spans, only stable execution-entity -> OriginId mappings.
 class DebugMap {
   public:
-    void registerGraphOrigin(const std::string &graphId, origin_id_t origin);
+    void registerGraphOrigin(camel::runtime::GraphId graph, origin_id_t origin);
+    /// Where `main` is written. The entry graph is rewritten (and renamed) by passes, the
+    /// question "where is main" outlives that.
+    void registerEntryOrigin(origin_id_t origin);
     void registerNodeOrigin(const std::string &nodeId, origin_id_t origin);
     void registerPcOrigin(size_t pc, origin_id_t origin);
     void registerRuntimeGraphOrigin(uintptr_t runtimeGraphKey, origin_id_t origin);
 
-    origin_id_t graphOrigin(const std::string &graphId) const;
+    origin_id_t graphOrigin(camel::runtime::GraphId graph) const;
+    origin_id_t entryOrigin() const { return entryOrigin_; }
     origin_id_t nodeOrigin(const std::string &nodeId) const;
     origin_id_t pcOrigin(size_t pc) const;
     origin_id_t runtimeGraphOrigin(uintptr_t runtimeGraphKey) const;
 
   private:
-    std::unordered_map<std::string, origin_id_t> graphOrigins_;      // graph stableId -> origin
-    std::unordered_map<std::string, origin_id_t> nodeOrigins_;       // node stableId -> origin
+    std::unordered_map<camel::runtime::GraphId, origin_id_t> graphOrigins_; // GraphId -> origin
+    origin_id_t entryOrigin_ = kInvalidOriginId;
+    std::unordered_map<std::string, origin_id_t> nodeOrigins_;       // node entity id -> origin
     std::unordered_map<size_t, origin_id_t> pcOrigins_;              // bytecode pc -> origin
     std::unordered_map<uintptr_t, origin_id_t> runtimeGraphOrigins_; // runtime graph ptr -> origin
 };
@@ -310,16 +316,16 @@ class SourceContext {
 
     void registerAstSemantic(origin_id_t origin, SemanticBundle bundle);
     void registerGctSemantic(origin_id_t origin, SemanticBundle bundle);
-    void registerGirGraphSemantic(const std::string &graphId, SemanticBundle bundle);
+    void registerGirGraphSemantic(camel::runtime::GraphId graph, SemanticBundle bundle);
 
     const SemanticBundle *astSemantic(origin_id_t origin) const;
     const SemanticBundle *gctSemantic(origin_id_t origin) const;
-    const SemanticBundle *girGraphSemantic(const std::string &graphId) const;
+    const SemanticBundle *girGraphSemantic(camel::runtime::GraphId graph) const;
     /// GIR node semantics: draft-time uses draft-node keys, while sealed entities use the stable
     /// entity ID side (`gnode:...`).
     const SemanticBundle *girNodeSemantic(const std::string &entityId) const;
 
-    void cloneGirGraphDebugInfo(const std::string &fromGraphId, const std::string &toGraphId);
+    void cloneGirGraphDebugInfo(camel::runtime::GraphId from, camel::runtime::GraphId to);
     /// Copy debug bindings during GIR clone / inline; the source node may be draft or already
     /// sealed.
     void cloneGirNodeDebugBinding(
@@ -348,7 +354,8 @@ class SourceContext {
     DebugMap debugMap_;             // Fast lookup table for runtime/debugger queries.
     OriginSemanticMap astSemantic_; // AST semantic anchor side table.
     OriginSemanticMap gctSemantic_; // GCT lowering semantic source side table.
-    EntitySemanticMap girGraphs_;   // GIR graph-level semantic source side table.
+    std::unordered_map<camel::runtime::GraphId, SemanticBundle>
+        girGraphs_; // GIR graph-level semantic source side table.
     EntitySemanticMap
         girNodes_; // GIR node-level semantic source side table (stable ID after sealing).
     /// GIR node semantics indexed by origin, matching the draft-node-key mapping to avoid

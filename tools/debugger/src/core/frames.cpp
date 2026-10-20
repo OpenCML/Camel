@@ -164,7 +164,7 @@ DebugCore::Chain DebugCore::chainOf(ShadowFrame &top) {
 json DebugCore::frameJson(const Chain &chain, bool top) {
     const ShadowFrame &f = *chain.front(); // the frame that runs
     // The graph that runs, whatever is shown: the graph view and node breakpoints use it.
-    json j{{"id", f.id}, {"graph", f.info->name}, {"graphId", f.info->stableId}};
+    json j{{"id", f.id}, {"graph", f.info->name}, {"graphId", f.info->graphId}};
     std::string name;
     uint32_t replaced = 0;
     if (foldsFrames()) {
@@ -223,7 +223,7 @@ json DebugCore::frameJson(const Chain &chain, bool top) {
         j["activation"]           = f.activation;
         j["entry"]                = f.atEntry;
         const GraphInfo *function = f.function != nullptr ? f.function : f.info;
-        j["functionId"]           = function->stableId;
+        j["functionId"]           = function->graphId;
         std::unordered_set<std::string> parameters;
         const auto addParameter = [&](gc_node_ref_t ref) {
             if (function->capturePorts.count(ref) == 0) {

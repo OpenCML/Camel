@@ -339,7 +339,7 @@ void DebuggerServer::setGirBreakpointNodeIds(std::unordered_set<uintptr_t> ids) 
     std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
     girBreakpointNodeIds_ = std::move(ids);
     EXEC_WHEN_DEBUG({
-        if (girBreakpointNodeIds_.empty() && girBreakpointStableIds_.empty() &&
+        if (girBreakpointNodeIds_.empty() && girBreakpointNodeKeys_.empty() &&
             girBreakpointOrigins_.empty())
             camel::DebugBreakpoint::DisableType("gir_node");
         else
@@ -350,7 +350,7 @@ void DebuggerServer::setGirBreakpointNodeIds(std::unordered_set<uintptr_t> ids) 
 void DebuggerServer::setGirBreakpointNodeIdsFromStrings(const std::vector<std::string> &nodeIds) {
     std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
     girBreakpointNodeIds_.clear();
-    girBreakpointStableIds_.clear();
+    girBreakpointNodeKeys_.clear();
     for (const std::string &s : nodeIds) {
         if (s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
             size_t pos = 2;
@@ -360,17 +360,17 @@ void DebuggerServer::setGirBreakpointNodeIdsFromStrings(const std::vector<std::s
                     if (pos == s.size())
                         girBreakpointNodeIds_.insert(u);
                     else
-                        girBreakpointStableIds_.insert(s);
+                        girBreakpointNodeKeys_.insert(s);
                 } catch (...) {
-                    girBreakpointStableIds_.insert(s);
+                    girBreakpointNodeKeys_.insert(s);
                 }
             } else
-                girBreakpointStableIds_.insert(s);
+                girBreakpointNodeKeys_.insert(s);
         } else
-            girBreakpointStableIds_.insert(s);
+            girBreakpointNodeKeys_.insert(s);
     }
     EXEC_WHEN_DEBUG({
-        if (girBreakpointNodeIds_.empty() && girBreakpointStableIds_.empty() &&
+        if (girBreakpointNodeIds_.empty() && girBreakpointNodeKeys_.empty() &&
             girBreakpointOrigins_.empty())
             camel::DebugBreakpoint::DisableType("gir_node");
         else
@@ -383,11 +383,11 @@ bool DebuggerServer::isGirBreakpointNode(uintptr_t nodePtr) const {
     return girBreakpointNodeIds_.count(nodePtr) != 0;
 }
 
-bool DebuggerServer::isGirBreakpointNodeStable(const std::string &stableId) const {
-    if (stableId.empty())
+bool DebuggerServer::isGirBreakpointNodeKey(const std::string &nodeKey) const {
+    if (nodeKey.empty())
         return false;
     std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
-    return girBreakpointStableIds_.count(stableId) != 0;
+    return girBreakpointNodeKeys_.count(nodeKey) != 0;
 }
 
 void DebuggerServer::setGirBreakpointOrigins(std::vector<uint64_t> origins) {
@@ -395,7 +395,7 @@ void DebuggerServer::setGirBreakpointOrigins(std::vector<uint64_t> origins) {
     std::lock_guard<std::mutex> lock(girBreakpointNodeIdsMutex_);
     girBreakpointOrigins_ = std::move(set);
     EXEC_WHEN_DEBUG({
-        if (girBreakpointNodeIds_.empty() && girBreakpointStableIds_.empty() &&
+        if (girBreakpointNodeIds_.empty() && girBreakpointNodeKeys_.empty() &&
             girBreakpointOrigins_.empty())
             camel::DebugBreakpoint::DisableType("gir_node");
         else
@@ -429,7 +429,7 @@ std::vector<std::string> DebuggerServer::getGirBreakpointNodeIdsForApi() const {
         hex << "0x" << std::hex << p;
         out.push_back(hex.str());
     }
-    for (const std::string &s : girBreakpointStableIds_)
+    for (const std::string &s : girBreakpointNodeKeys_)
         out.push_back(s);
     return out;
 }

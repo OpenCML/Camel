@@ -118,14 +118,15 @@ bool mayRemoveDead(const camel::runtime::GCGraph &graph);
 bool mayReduceControl(const camel::runtime::GCGraph &graph);
 
 /**
- * Runs `rewrite` on the draft of every graph reachable from `graph` and commits when anything
- * changed. `rewrite` returns the number of rewrites it made (their total is stored in `rewrites`
- * when given). Returns the graph to continue with. A graph for which `mayRewrite` is given and
- * false, or which the `memo` knows the pass to have left alone, is not given to `rewrite`; with
- * `checkScreens` it is, and a rewrite there is an error (a screen that is too strict).
+ * Runs `rewrite` on the draft of every graph reachable from the root of `program` and commits
+ * when anything changed. `rewrite` returns the number of rewrites it made (their total is stored
+ * in `rewrites` when given). Returns the program to continue with. A graph for which
+ * `mayRewrite` is given and false, or which the `memo` knows the pass to have left alone, is not
+ * given to `rewrite`; with `checkScreens` it is, and a rewrite there is an error (a screen that
+ * is too strict).
  */
-camel::runtime::GCGraph *rewriteReachableGraphs(
-    const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
+const camel::runtime::Program *rewriteReachableGraphs(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
     size_t *rewrites = nullptr, RewriteMemo *memo = nullptr,
     bool (*mayRewrite)(const camel::runtime::GCGraph &) = nullptr, bool checkScreens = false);

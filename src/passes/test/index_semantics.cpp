@@ -197,8 +197,8 @@ void lawChecks(std::ostream &os) {
 
 } // namespace
 
-camel::runtime::GCGraph *
-IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+IndexSemanticsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     // ---- Expressions: simplification, interning, text, evaluation. ----
     {
         ExprPool x;
@@ -399,5 +399,5 @@ IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) 
             .coords = {x.floorDiv(x.dim(0), x.constant(5)), x.mod(x.dim(0), x.constant(5))}};
         os << "INDEX view_reshape " << view(reshaped, shape) << "\n";
     }
-    return graph;
+    return program;
 }

@@ -110,9 +110,11 @@ void checkBindingKinds(core::context::Context &context) {
     draft.setOutputNode(output);
     draft.setExitNode(output);
     draft.setReturnNode(output, runtime::GCReturnKind::Self);
-    auto *graph    = draft.encode("tiles.test.binding", "tiles.test.binding", "tiles.test.binding");
+    draft.setId(context.graphIds().allocate());
+    auto *graph    = draft.encode("tiles.test.binding", "tiles.test.binding");
     auto *function = ::Function::create(
-        graph,
+        runtime::makeProgram(context, std::span(&graph, 1)),
+        graph->id(),
         ty::TupleType::create(std::vector<ty::Type *>{}),
         core::mm::autoSpace());
     const auto prototype = compileTypes(function, context.facts());
@@ -187,7 +189,10 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
     (void)prepareProgram(function, args, context.facts(), true);
     if (compilationExtractions() != before + 2)
         throw std::runtime_error("compiled region declaration epoch failed to rebuild once");
-    runtime::RuntimeGraphDraftSession session(context.shared_from_this(), function->graph());
+    runtime::RuntimeGraphDraftSession session(
+        context.shared_from_this(),
+        function->program(),
+        function->graph());
     auto &draft  = session.rootDraft();
     bool changed = false;
     for (runtime::gc_node_ref_t id = 0; id < function->graph()->nodeCount(); ++id) {
@@ -201,9 +206,12 @@ void checkInvalidation(::Function *function, core::context::Context &context) {
     }
     if (!changed)
         throw std::runtime_error("compiled region revision test has no operator");
-    auto *revised = session.commit();
-    auto *revisedFunction =
-        ::Function::create(revised, function->tupleType(), core::mm::autoSpace());
+    const auto *revised   = session.commit();
+    auto *revisedFunction = ::Function::create(
+        revised,
+        revised->root()->id(),
+        function->tupleType(),
+        core::mm::autoSpace());
     if (hasCompiledRegion(revisedFunction, context.facts()))
         throw std::runtime_error("numeric permissions did not invalidate the template");
     (void)prepareProgram(revisedFunction, args, context.facts(), true);
@@ -222,11 +230,12 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
         const core::context::context_ptr_t &context, operator_t run = nullptr,
         std::optional<RegionDeviceOps> device = {})
         : RuntimeGraphRewritePass(context), run_(run), device_(device) {}
-    runtime::GCGraph *apply(runtime::GCGraph *root, std::ostream &os) override {
+    const runtime::Program *apply(const runtime::Program *program, std::ostream &os) override {
         size_t count = 0;
         auto *result = outlineRegions(
             *context_,
-            root,
+            program,
+            program->root(),
             run_,
             run_ == &testNativeCall     ? "tiles:test_call"
             : run_ == &testCompiledCall ? "tiles:test_compiled_call"
@@ -242,7 +251,8 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
             std::vector<::Function *> templates;
             for (auto *graph : session.collectReachableRuntimeGraphs()) {
                 auto *function = ::Function::create(
-                    graph,
+                    result,
+                    graph->id(),
                     core::type::TupleType::create(std::vector<core::type::Type *>{}),
                     core::mm::autoSpace());
                 if (hasCompiledRegion(function, context_->facts()))

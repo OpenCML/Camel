@@ -747,25 +747,25 @@ void emitDraftPayload(
         switch (draftHeader->kind) {
         case GCNodeKind::Func:
             if (!payloadBytes.empty()) {
-                GCFuncBody body = *reinterpret_cast<const GCFuncBody *>(payloadBytes.data());
+                GCGraph *callee = draft.calleeGraphOf(planned.draftId);
                 CAMEL_LOG_INFO_S(
                     "GCGraphBuild",
                     "FUNC node runtimeRef={} placeholder before resolve={}.",
                     planned.ref,
-                    static_cast<const void *>(body.calleeGraph));
+                    static_cast<const void *>(callee));
                 if (resolveRuntimeGraph) {
-                    body.calleeGraph = resolveRuntimeGraph(body.calleeGraph);
+                    callee = resolveRuntimeGraph(callee);
                 }
                 CAMEL_LOG_INFO_S(
                     "GCGraphBuild",
                     "FUNC node runtimeRef={} callee after resolve={}.",
                     planned.ref,
-                    static_cast<const void *>(body.calleeGraph));
+                    static_cast<const void *>(callee));
                 // The frozen node names the callee by its index in the reference table; a
                 // callee that is not in it is a graph the encoder was not told this one calls.
                 const auto *refIndex = payload.refIndex;
                 const auto found =
-                    refIndex ? refIndex->find(body.calleeGraph)
+                    refIndex ? refIndex->find(callee)
                              : std::unordered_map<const GCGraph *, uint32_t>::const_iterator{};
                 if (refIndex == nullptr || found == refIndex->end()) {
                     throw std::runtime_error(
@@ -781,9 +781,9 @@ void emitDraftPayload(
             // The draft holds the two graphs; the frozen node names them by their indexes in
             // the reference table, as a FUNC node names its callee.
             ASSERT(
-                payloadBytes.size_bytes() >= sizeof(GCLoopBody),
+                payloadBytes.size_bytes() >= sizeof(GCLoopRef),
                 "Draft LOOP payload is missing.");
-            GCLoopBody body = *reinterpret_cast<const GCLoopBody *>(payloadBytes.data());
+            GCLoopBody body = draft.loopGraphsOf(planned.draftId);
             if (resolveRuntimeGraph) {
                 body.condGraph = body.condGraph ? resolveRuntimeGraph(body.condGraph) : nullptr;
                 body.bodyGraph = resolveRuntimeGraph(body.bodyGraph);
@@ -938,10 +938,8 @@ void collectStaticGraphRefsRecursive(
     std::vector<GCGraph *> &refs, slot_t slot, Type *type,
     std::unordered_set<const Object *> &visited);
 
-GCGraphDebugRecord *
-createGraphDebugRecord(std::string stableId, std::string mangledName, std::string name) {
+GCGraphDebugRecord *createGraphDebugRecord(std::string mangledName, std::string name) {
     auto *record        = new GCGraphDebugRecord();
-    record->stableId    = std::move(stableId);
     record->mangledName = std::move(mangledName);
     record->name        = std::move(name);
     return record;
@@ -1045,8 +1043,8 @@ void syncPayloadArenaView(GCGraphNativePayload &payload, const GCGraphPayloadAre
 }
 
 GCGraph *GCGraphBuildAccess::create(
-    GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
-    const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
+    GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord,
+    camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
     camel::core::type::TupleType *closureType, GCGraph *outerGraph,
     std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
     std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
@@ -1064,6 +1062,8 @@ GCGraph *GCGraphBuildAccess::create(
     return constructInPlace(
         mem,
         bytes,
+        id,
+        derivation,
         debugRecord,
         funcType,
         frameSlots,
@@ -1093,7 +1093,8 @@ size_t GCGraphBuildAccess::requiredBytes(
 }
 
 GCGraph *GCGraphBuildAccess::constructInPlace(
-    void *memory, size_t bytes, GCGraphDebugRecord *debugRecord,
+    void *memory, size_t bytes, GraphId id, const GCGraphDerivation &derivation,
+    GCGraphDebugRecord *debugRecord,
     camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
     camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
     GCGraph *outerGraph, std::span<GCGraph *const> dependencies,
@@ -1184,6 +1185,8 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     syncPayloadArenaView(ownedPayload, payloadArena);
 
     auto *graph = new (graphMem) GCGraph(
+        id,
+        derivation,
         debugRecord,
         funcType,
         runtimeDataType,
@@ -1231,19 +1234,19 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
 }
 
 GCGraph::GCGraph(
-    GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
+    GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
     camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
     camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **refs,
     uint8_t *refRoles, gc_cnt_t refCount, const GCGraphNativePayload &payload, ::Tuple *staticArea)
-    : debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
+    : id_(id), typeSpecializationRoot_(derivation.typeSpecializationRoot), flags_(derivation.flags),
+      debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
       staticDataType_(staticDataType), closureType_(closureType), outerGraph_(outerGraph),
       refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),
       staticArea_(staticArea) {
-    // A new graph: a lineage and a revision of its own (graph facts, facts.h). A commit that
-    // encoded it as the copy of another graph replaces them (GCGraphBuildAccess::inheritIdentity).
-    static std::atomic<uint64_t> serials{0};
-    serial_  = serials.fetch_add(1, std::memory_order_relaxed) + 1;
-    lineage_ = serial_;
+    // A new graph: a revision of its own (graph facts, facts.h). A commit that encoded it as
+    // the copy of an unchanged graph replaces it (GCGraphBuildAccess::inheritRevision).
+    static std::atomic<uint64_t> revisions{0};
+    revision_ = revisions.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft) {
@@ -1325,10 +1328,6 @@ void validateRuntimeGraphCalls(const GCGraph *graph) {
     }
 }
 
-const std::string &GCGraph::stableId() const {
-    static const std::string kEmpty;
-    return debug_ ? debug_->stableId : kEmpty;
-}
 
 const std::string &GCGraph::mangledName() const {
     static const std::string kEmpty;
@@ -1668,6 +1667,8 @@ camel::core::rtdata::Object *GCGraph::clone(
         throw std::bad_alloc();
     }
     auto *graph = new (mem) GCGraph(
+        id_,
+        GCGraphDerivation{typeSpecializationRoot_, flags_},
         debug_,
         funcType_,
         runtimeDataType_,
@@ -1679,9 +1680,7 @@ camel::core::rtdata::Object *GCGraph::clone(
         refCount_,
         nativePayload_,
         staticArea_);
-    graph->originalGraph_ = originalGraph_;
-    graph->lineage_       = lineage_; // the same content: the same graph and revision
-    graph->serial_        = serial_;
+    graph->revision_ = revision_; // the same content: the same revision
     for (size_t i = 0; i < kExtraSlotCount; ++i) {
         graph->extraSlots_[i] = extraSlots_[i];
     }
@@ -1723,163 +1722,6 @@ void GCGraph::updateRefs(
     for (gc_cnt_t i = 0; i < refCount_; ++i) {
         traceEdge(refs_[i]);
     }
-    traceEdge(originalGraph_);
-}
-
-void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
-    std::lock_guard lock(mutex_);
-    std::vector<GCGraph *> newGraphs =
-        rootGraph ? collectReachableGraphs(rootGraph) : std::vector<GCGraph *>{};
-    std::unordered_set<GCGraph *> keep(newGraphs.begin(), newGraphs.end());
-    // A private copy still tracked (a back end's lowered program) names the program graph it was
-    // copied from (GCGraph::originalGraph): that graph and what it refers to stay, owned as part
-    // of the program, until a later replacement finds no copy pointing at them.
-    for (GCGraph *copy : detached_) {
-        GCGraph *original = copy ? copy->originalGraph_ : nullptr;
-        if (original && !keep.contains(original)) {
-            for (GCGraph *graph : collectReachableGraphs(original)) {
-                if (keep.insert(graph).second) {
-                    newGraphs.push_back(graph);
-                }
-            }
-        }
-    }
-
-    for (GCGraph *graph : graphs_) {
-        if (!graph || keep.contains(graph)) {
-            continue;
-        }
-        delete graph->debug_;
-        graph->~GCGraph();
-        mm::graphSpace().free(graph);
-    }
-
-    root_   = rootGraph;
-    graphs_ = std::move(newGraphs);
-    rebuildGcRoots();
-}
-
-void GCGraphManager::rebuildGcRoots() {
-    gcRoots_.clear();
-    debugRecords_.clear();
-    gcRoots_.reserve(graphs_.size() + detached_.size());
-    for (GCGraph *graph : graphs_) {
-        if (!graph) {
-            continue;
-        }
-        gcRoots_.push_back(graph);
-        if (graph->debug_) {
-            debugRecords_.push_back(graph->debug_);
-        }
-    }
-    for (GCGraph *graph : detached_) {
-        gcRoots_.push_back(graph);
-    }
-    for (GCGraph *graph : pinned_) {
-        gcRoots_.push_back(graph);
-    }
-}
-
-void GCGraphManager::pin(std::span<GCGraph *const> graphs) {
-    mm::NoCollectionScope noCollection;
-    std::lock_guard lock(mutex_);
-    for (GCGraph *graph : graphs) {
-        if (graph && std::find(pinned_.begin(), pinned_.end(), graph) == pinned_.end()) {
-            pinned_.push_back(graph);
-            gcRoots_.push_back(graph);
-        }
-    }
-}
-
-void GCGraphManager::trackDetached(std::span<GCGraph *const> graphs) {
-    mm::NoCollectionScope noCollection;
-    std::lock_guard lock(mutex_);
-    for (GCGraph *graph : graphs) {
-        if (graph && std::find(detached_.begin(), detached_.end(), graph) == detached_.end()) {
-            detached_.push_back(graph);
-            gcRoots_.push_back(graph);
-        }
-    }
-}
-
-void GCGraphManager::releaseDetached() {
-    std::lock_guard lock(mutex_);
-    const std::unordered_set<GCGraph *> owned(graphs_.begin(), graphs_.end());
-    for (GCGraph *graph : detached_) {
-        if (owned.contains(graph)) {
-            continue; // installed as part of the program since
-        }
-        delete graph->debug_;
-        graph->~GCGraph();
-        mm::graphSpace().free(graph);
-    }
-    detached_.clear();
-    rebuildGcRoots();
-}
-
-void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
-    std::lock_guard lock(mutex_);
-    if (root_ || !graphs_.empty()) {
-        replaceRoot(rootGraph);
-        return;
-    }
-
-    root_ = rootGraph;
-    if (!root_) {
-        return;
-    }
-
-    graphs_ = collectReachableGraphs(root_);
-    rebuildGcRoots();
-}
-
-GCGraphManager::~GCGraphManager() {
-    std::lock_guard lock(mutex_);
-    releaseDetached();
-    clear();
-    for (GCGraph *graph : pinned_) {
-        delete graph->debug_;
-        graph->~GCGraph();
-        mm::graphSpace().free(graph);
-    }
-    pinned_.clear();
-    gcRoots_.clear();
-}
-
-std::vector<GCGraph *> GCGraphManager::roots() const {
-    std::lock_guard lock(mutex_);
-    if (!root_) {
-        return {};
-    }
-    return {root_};
-}
-
-std::vector<GCGraph *> GCGraphManager::reachableFromRoots() const {
-    std::lock_guard lock(mutex_);
-    return collectReachableGraphs(root_);
-}
-
-void GCGraphManager::clear() {
-    std::lock_guard lock(mutex_);
-    for (GCGraph *graph : graphs_) {
-        if (!graph) {
-            continue;
-        }
-        delete graph->debug_;
-        graph->~GCGraph();
-        mm::graphSpace().free(graph);
-    }
-    gcRoots_.clear();
-    debugRecords_.clear();
-    graphs_.clear();
-    root_ = nullptr;
-    // The pinned graphs belong to no program: they stay, and stay traced.
-    gcRoots_.insert(gcRoots_.end(), pinned_.begin(), pinned_.end());
-}
-
-GCGraph *GCGraphManager::root() const {
-    std::lock_guard lock(mutex_);
-    return root_;
 }
 
 void collectStaticGraphRefsRecursive(
@@ -1900,7 +1742,7 @@ void collectStaticGraphRefsRecursive(
         if (!funcObj) {
             return;
         }
-        GCGraph *runtimeGraph = funcObj->runtimeGraph();
+        GCGraph *runtimeGraph = funcObj->graph();
         ASSERT(
             runtimeGraph != nullptr,
             "Runtime static graph references must already point to GCGraph carriers.");

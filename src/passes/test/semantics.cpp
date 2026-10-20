@@ -61,8 +61,8 @@ void attempt(
 
 } // namespace
 
-camel::runtime::GCGraph *
-OperatorSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+OperatorSemanticsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     OperatorTable &table = OperatorTable::instance();
 
     // ---- Registration checks (design 4.4): each declaration below breaks one rule. ----
@@ -150,5 +150,5 @@ OperatorSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &o
     }
     os << "SEMANTICS permissions_text ["
        << permissionsText(kReassociate | kContract | kNoNans | kNoInfs) << "]\n";
-    return graph;
+    return program;
 }

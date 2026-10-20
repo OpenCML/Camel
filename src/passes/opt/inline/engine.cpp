@@ -54,7 +54,6 @@
 namespace {
 
 using camel::runtime::gc_node_ref_t;
-using camel::runtime::GCFuncBody;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::kInvalidNodeRef;
@@ -193,12 +192,8 @@ std::vector<const GCGraph *> directCallees(
             if (!header || header->kind != GCNodeKind::Func) {
                 continue;
             }
-            const auto payload = draft->payloadOf(id);
-            if (payload.size_bytes() >= sizeof(GCFuncBody)) {
-                const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-                if (body->calleeGraph) {
-                    callees.push_back(body->calleeGraph);
-                }
+            if (GCGraph *callee = draft->calleeGraphOf(id)) {
+                callees.push_back(callee);
             }
         }
         return callees;
@@ -341,10 +336,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
                 if (!header || header->kind != GCNodeKind::Func) {
                     continue;
                 }
-                const auto payload = draft->payloadOf(id);
-                if (payload.size_bytes() >= sizeof(GCFuncBody)) {
-                    reach(reinterpret_cast<const GCFuncBody *>(payload.data())->calleeGraph);
-                }
+                reach(draft->calleeGraphOf(id));
             }
             const auto slots = draft->staticSlots();
             const auto types = draft->staticSlotTypes();
@@ -687,15 +679,15 @@ class CallBook {
     uint64_t global_ = 0;
 };
 
-/// The rewritten root, or nullptr when nothing changed. `growthSpent` counts the nodes copied
+/// The rewritten program, or nullptr when nothing changed. `growthSpent` counts the nodes copied
 /// so far against `growthBudget` (see OptimizeRewriteConfig::growthBudget). `declinedOut`
 /// receives the direct calls the last round examined and did not inline, with the reason: the
 /// last round of a session that changes nothing examines every call that is left.
-GCGraph *applyRuntimeOptimizeRewrite(
-    const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot,
+const camel::runtime::Program *applyRuntimeOptimizeRewrite(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent,
     std::vector<InlineDeclined> &declinedOut) {
-    camel::runtime::RuntimeGraphDraftSession session(context, runtimeRoot);
+    camel::runtime::RuntimeGraphDraftSession session(context, program);
     bool changed              = false;
     size_t appliedInlineCount = 0;
     std::vector<DeclinedCall> declined;
@@ -839,9 +831,8 @@ GCGraph *applyRuntimeOptimizeRewrite(
                         graphRewritten = true;
                         // The callee after the rewrite is the copy (counted in full even when
                         // an existing copy was reused).
-                        const auto *body = reinterpret_cast<const GCFuncBody *>(
-                            draft.payloadOf(funcNodeId).data());
-                        growthSpent += body->calleeGraph ? body->calleeGraph->nodeCount() : 0;
+                        const GCGraph *copy = draft.calleeGraphOf(funcNodeId);
+                        growthSpent += copy ? copy->nodeCount() : 0;
                     }
                 }
             }
@@ -899,26 +890,22 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 if (draft.sourceRefOf(id) == kInvalidNodeRef) {
                     continue;
                 }
-                const auto payload = draft.payloadOf(id);
-                if (payload.size_bytes() < sizeof(GCFuncBody)) {
-                    continue;
-                }
-                const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-                if (!body->calleeGraph || body->calleeGraph == nextGraph) {
+                GCGraph *const calleeGraph = draft.calleeGraphOf(id);
+                if (!calleeGraph || calleeGraph == nextGraph) {
                     continue;
                 }
                 // Growth: the copy must fit the pass's budget and the owner's size cap. Both are
                 // checked last (below), so that a call they stop is known to be one the engine
                 // would otherwise have inlined.
-                const size_t copied = inlinedNodeCount(body->calleeGraph);
-                const size_t calls  = callBook.calls(body->calleeGraph);
+                const size_t copied = inlinedNodeCount(calleeGraph);
+                const size_t calls  = callBook.calls(calleeGraph);
                 const auto decline = [&](InlineDecline why) {
                     declined.push_back(
-                        {nextGraph, body->calleeGraph, why, copied, draft.nodeCount(), calls});
+                        {nextGraph, calleeGraph, why, copied, draft.nodeCount(), calls});
                 };
                 if (shouldSkipRecursiveInline(
                         nextGraph,
-                        body->calleeGraph,
+                        calleeGraph,
                         sccInfo,
                         config.inlineConfig)) {
                     decline(InlineDecline::Recursive);
@@ -934,22 +921,22 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 // that calls of it can be devirtualized.
                 // Graphs created in this session (specializations, lifted closures) are not in
                 // the call-graph analysis yet; they qualify in the next session.
-                const bool acyclic = sccInfo.componentOf.contains(body->calleeGraph) &&
-                                     !sccInfo.reachesRecursion.contains(body->calleeGraph);
+                const bool acyclic = sccInfo.componentOf.contains(calleeGraph) &&
+                                     !sccInfo.reachesRecursion.contains(calleeGraph);
                 const bool isSmall =
-                    isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig) ||
-                    (acyclic && calls == 1) || (acyclic && returnsClosure(body->calleeGraph)) ||
+                    isSmallRuntimeSubgraphForInline(calleeGraph, config.inlineConfig) ||
+                    (acyclic && calls == 1) || (acyclic && returnsClosure(calleeGraph)) ||
                     (acyclic && calls > 1 &&
                      (calls - 1) * copied <= config.inlineConfig.duplicationBudgetNodes);
                 CAMEL_LOG_INFO_S(
                     "OptimizePass",
                     "Inline probe '{}' -> '{}': small={} acyclic={} calls={} closure={}.",
                     nextGraph->name(),
-                    body->calleeGraph->name(),
-                    isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig),
+                    calleeGraph->name(),
+                    isSmallRuntimeSubgraphForInline(calleeGraph, config.inlineConfig),
                     acyclic,
                     calls,
-                    returnsClosure(body->calleeGraph));
+                    returnsClosure(calleeGraph));
                 const bool isArm = isDraftBranchArmHead(draft, id);
                 const bool suppressNonRecursiveArmInlining =
                     config.inlineConfig.inlineStrategy == InlineTargetStrategy::Hybrid &&
@@ -985,9 +972,7 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 if (!draft.alive(funcNodeId)) {
                     continue;
                 }
-                const size_t copied = inlinedNodeCount(
-                    reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data())
-                        ->calleeGraph);
+                const size_t copied = inlinedNodeCount(draft.calleeGraphOf(funcNodeId));
                 if (!camel::passes::opt::inlineCallInOrder(session, draft, funcNodeId)) {
                     continue;
                 }
@@ -1078,8 +1063,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
     // is spliced; the inliner hands a call's control predecessors to the body.
     // Only a body that has an effect or touches state cares when it runs; a pure
     // callee (most of a tensor program) gets no extra edge.
-    const bool calleeOrdered = mayHaveEffects(
-        reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data())->calleeGraph);
+    const bool calleeOrdered = mayHaveEffects(draft.calleeGraphOf(funcNodeId));
     for (gc_node_ref_t source : argSources) {
         if (!calleeOrdered) {
             break;
@@ -1206,16 +1190,16 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
 
 } // namespace camel::passes::opt
 
-camel::runtime::GCGraph *applyOptimizeRewritePass(
-    const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
+const camel::runtime::Program *applyOptimizeRewritePass(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut) {
     (void)os;
 
-    if (!graph) {
+    if (!program) {
         return nullptr;
     }
     if (!hasAnyRewritePhaseEnabled(config)) {
-        return graph;
+        return program;
     }
     const size_t growthBudget = config.growthBudget.nodes;
     size_t ownGrowthSpent     = 0;
@@ -1228,9 +1212,9 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     bool changed                  = false;
     std::vector<InlineDeclined> declined;
     for (size_t i = 0; i < kMaxSessions; ++i) {
-        GCGraph *rewritten = applyRuntimeOptimizeRewrite(
+        const camel::runtime::Program *rewritten = applyRuntimeOptimizeRewrite(
             context,
-            graph,
+            program,
             config,
             growthBudget,
             growthSpent,
@@ -1239,7 +1223,7 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
             break;
         }
         changed = true;
-        graph   = rewritten;
+        program = rewritten;
     }
     if (config.enableInlining && context) {
         // For a later pass that has to explain a call this one left (see InlineReport).
@@ -1268,5 +1252,5 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     if (changedOut) {
         *changedOut = changed;
     }
-    return graph;
+    return program;
 }

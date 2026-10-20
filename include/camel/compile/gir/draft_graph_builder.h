@@ -72,14 +72,14 @@ class DraftGraphBuilder {
     static DraftGraphBuilder *fromDraft(const runtime::GraphDraft *draft);
     graph_arena_ptr_t arena() const { return arena_; }
     const std::string &name() const { return name_; }
-    const std::string &stableId() const { return stableId_; }
+    /// The graph's identity (camel/runtime/graph_id.h), the id of the runtime graph it encodes to.
+    runtime::GraphId graphId() const { return draft_->id(); }
     camel::core::type::FunctionType *funcType() const { return draft_->funcType(); }
     camel::core::type::TupleType *closureType() const { return draft_->closureType(); }
     bool hasFrameLayout() const { return draft_->hasFrameLayout(); }
     size_t frameSize() const { return draft_->frameSize(); }
     bool parameterized() const { return parameterized_; }
     void setName(std::string name) { name_ = std::move(name); }
-    void setStableId(std::string stableId) { stableId_ = std::move(stableId); }
     void setOuterGraph(const graph_ptr_t &graph) { outerGraph_ = graph; }
     const graph_ptr_t &outerGraph() const { return outerGraph_; }
     void setParameterized(bool parameterized) { parameterized_ = parameterized; }
@@ -204,7 +204,6 @@ class DraftGraphBuilder {
     graph_arena_ptr_t arena_;
     std::unique_ptr<runtime::GraphDraft> draft_;
     std::string name_;
-    std::string stableId_;
     graph_ptr_t outerGraph_;
     bool parameterized_ = false;
 

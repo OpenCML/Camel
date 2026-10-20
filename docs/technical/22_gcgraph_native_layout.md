@@ -221,16 +221,16 @@ node.)
 
 ### 11.3 `FUNC`
 
-In a frozen graph `FUNC` stores the index of its callee in the graph's
-reference table (section 11.8); `GCGraph::directCalleeGraphOf(ref)` resolves it.
+`FUNC` stores the index of its callee in the graph's reference table (section
+11.8); `GCGraph::directCalleeGraphOf(ref)` resolves it. A draft has the same
+payload and a table of the same kind (`GraphDraft::payloadGraphs()`, which starts
+as the `refs()` of the graph it was decoded from); `GraphDraft::calleeGraphOf` and
+`setCalleeGraph` read and write it.
 
 ```cpp
-struct GCFuncRef {         // frozen graph
-    uint32_t ref = 0;      // index into refs()
+struct GCFuncRef {
+    uint32_t ref = kNoLoopGraph;   // index into refs(); kNoLoopGraph: no callee yet
     uint32_t reserved = 0;
-};
-struct GCFuncBody {        // draft: the callee itself; the encoder turns it into a GCFuncRef
-    GCGraph *calleeGraph = nullptr;
 };
 ```
 

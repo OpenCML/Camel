@@ -201,7 +201,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         std::string fullName; // as resolved
         bool verified = false;
         std::string message;
-        std::vector<std::string> graphs; // stable ids
+        std::vector<std::string> graphs; // graph ids
     };
 
     /// What is about to run, for both back ends.
@@ -349,7 +349,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     Step step_;
     uint64_t seenConfig_ = 0;
     std::unordered_map<origin_t, std::vector<int>> lineBreakpointByOrigin_;
-    std::unordered_map<std::string, std::vector<int>> functionBreakpointByGraph_; // stable id
+    std::unordered_map<std::string, std::vector<int>> functionBreakpointByGraph_; // graph id
     std::unordered_set<int> hitBreakpoints_; // ids of the breakpoints this run stopped at
     uint64_t nextActivation_ = 1;
     /// The dropped lines a step has already explained, by activation: said once (4.2).

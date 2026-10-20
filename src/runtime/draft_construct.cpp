@@ -276,7 +276,7 @@ gc_node_ref_t GraphDraft::addFuncNode(
     GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags,
     gc_slot_idx_t dataIndex) {
     dataIndex = ensureValueSlot(*this, type, dataIndex);
-    GCFuncBody body{.calleeGraph = calleeGraph};
+    GCFuncRef body{.ref = payloadGraphIndexOf(calleeGraph)};
     const auto payload = bytesForStruct(body);
     return addNode(
         DraftNodeInit{
@@ -290,8 +290,14 @@ gc_node_ref_t GraphDraft::addFuncNode(
 
 gc_node_ref_t GraphDraft::addLoopNode(
     const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
-    dataIndex          = ensureValueSlot(*this, type, dataIndex);
-    const auto payload = bytesForStruct(body);
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
+    const GCLoopRef ref{
+        .kind            = body.kind,
+        .condRef         = payloadGraphIndexOf(body.condGraph),
+        .bodyRef         = payloadGraphIndexOf(body.bodyGraph),
+        .collectionCount = body.collectionCount,
+    };
+    const auto payload = bytesForStruct(ref);
     return addNode(
         DraftNodeInit{
             .dataIndex = dataIndex,
@@ -441,7 +447,7 @@ void GraphDraft::setLoopCollectionCount(gc_node_ref_t id, uint32_t count) {
     ASSERT(
         draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
         "Only a LOOP node has collection slots.");
-    auto *body            = DraftNodeView::payloadAs<GCLoopBody>(draftNode);
+    auto *body            = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
     body->collectionCount = count;
 }
 

@@ -509,15 +509,14 @@ GCGraph *TaskflowExecSchedPass::executionGraph(GCGraph *graph) {
     if (const auto found = executionGraphs_.find(graph); found != executionGraphs_.end()) {
         return found->second;
     }
-    // Inspect this graph's executable nodes only: tracing originalGraph references
-    // would rediscover the source LOOP of an already lowered private copy.
+    // Inspect this graph's executable nodes only.
     bool hasLoop = false;
     for (gc_node_ref_t ref = 0; !hasLoop && ref < graph->nodeCount(); ++ref) {
         hasLoop = graph->node(ref)->kind == GCNodeKind::Loop;
     }
     GCGraph *target = graph;
     if (hasLoop) {
-        target = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
+        target = camel::runtime::lowerLoopsToTailRecursion(context_, program_, graph)->root();
     }
     executionGraphs_.emplace(graph, target);
     executionGraphs_.emplace(target, target);
@@ -1068,12 +1067,14 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
 // Evaluation
 // ---------------------------------------------------------------------------------------------
 
-camel::runtime::GCGraph *
-TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os*/) {
+const camel::runtime::Program *
+TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostream & /*os*/) {
+    camel::runtime::GCGraph *graph = program->root();
     ASSERT(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
     // Loops run as the tail recursion they mean, on a private copy of the program (the
     // context's program keeps its LOOP nodes: camel/runtime/loop_lowering.h).
-    graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
+    program_ = program;
+    graph    = camel::runtime::lowerLoopsToTailRecursion(context_, program)->root();
 
     forceLinear_ = options_.linear;
     fanOutAll_   = options_.fanOutAll;
@@ -1887,7 +1888,7 @@ void TaskflowExecSchedPass::fillClosureCallFrame(
     Frame *dest, GCGraph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
     // A dynamic source graph may have been privately lowered before allocating
     // this frame. Bind through the actual destination graph, not its source IDs.
-    targetGraph          = dest->runtimeGraph();
+    targetGraph          = dest->graph();
     const auto normPorts = targetGraph->normPorts();
     ASSERT(args.size() == normPorts.size(), "Taskflow closure call norm-arg count mismatch.");
     for (size_t i = 0; i < args.size(); ++i) {
@@ -1924,7 +1925,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
                 try {
                     return callGraph(target, nullptr, region, [&](Frame *dest) {
                         fillClosureCallFrame(dest, target, function->tuple(), normal);
-                        auto *executionTarget = dest->runtimeGraph();
+                        auto *executionTarget = dest->graph();
                         const auto ports      = executionTarget->withPorts();
                         for (size_t i = 0; i < ports.size(); ++i) {
                             dest->set(dataIndexOf(executionTarget, ports[i]), with[i]);

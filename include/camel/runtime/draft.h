@@ -52,6 +52,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace camel::runtime {
@@ -213,6 +214,17 @@ class GraphDraft {
     GraphDraft(const GraphDraft &)            = delete;
     GraphDraft &operator=(const GraphDraft &) = delete;
 
+    /// The graph the draft is a draft of: decode takes the id of the graph it decodes, and the
+    /// graph that encode builds carries it (a draft keeps the id of the graph it edits). A draft
+    /// of a new graph is given one with setId (Context::graphIds) before it is encoded.
+    GraphId id() const { return id_; }
+    void setId(GraphId id) { id_ = id; }
+    /// GCGraph::typeSpecializationRoot and GCGraph::flags of the graph the draft encodes to;
+    /// decode takes them from the graph it decodes.
+    GraphId typeSpecializationRoot() const { return typeSpecializationRoot_; }
+    void setTypeSpecializationRoot(GraphId root) { typeSpecializationRoot_ = root; }
+    uint8_t flags() const { return flags_; }
+    void setFlags(uint8_t flags) { flags_ = flags; }
     camel::core::type::FunctionType *funcType() const { return funcType_; }
     /// The names the function captures, in capture order (GCGraph::captureNames).
     std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
@@ -335,6 +347,19 @@ class GraphDraft {
         gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addCallNode(
         camel::core::type::Type *type, const GCCallBody &body = {}, gc_slot_idx_t dataIndex = 0);
+    /// The graph FUNC node `id` calls, nullptr while it names none.
+    GCGraph *calleeGraphOf(gc_node_ref_t id) const;
+    void setCalleeGraph(gc_node_ref_t id, GCGraph *callee);
+    /// What LOOP node `id` names: its condition graph (nullptr for a For loop), its body graph,
+    /// its form and its collection count.
+    GCLoopBody loopGraphsOf(gc_node_ref_t id) const;
+    void setLoopGraphs(gc_node_ref_t id, GCGraph *cond, GCGraph *body);
+    /// The graphs the payloads of FUNC and LOOP nodes index (GCFuncRef, GCLoopRef): the
+    /// reference table of the graph the draft was decoded from, then the graphs added since.
+    std::span<GCGraph *const> payloadGraphs() const { return payloadGraphs_; }
+    /// The index of `graph` in payloadGraphs(), added when it is not there; kNoLoopGraph for
+    /// nullptr.
+    uint32_t payloadGraphIndexOf(GCGraph *graph);
     gc_node_ref_t addFuncNode(
         GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
         gc_slot_idx_t dataIndex = 0);
@@ -413,8 +438,7 @@ class GraphDraft {
     void addSubGraph(GCGraph *graph);
     void addStaticGraphRef(GCGraph *graph);
 
-    GCGraph *encode(
-        const std::string &stableId, const std::string &mangledName, const std::string &name) const;
+    GCGraph *encode(const std::string &mangledName, const std::string &name) const;
 
   private:
     static gc_node_ref_t
@@ -433,10 +457,14 @@ class GraphDraft {
     void replaceUsesInList(
         gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
         gc_node_ref_t newId, bool norm, bool with, bool ctrl);
+    GCGraph *payloadGraphAt(uint32_t index) const;
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
     /// Records node `id` in the list of its kind when that kind has one (see gateIds_).
     void noteNodeKind(gc_node_ref_t id, GCNodeKind kind);
 
+    GraphId id_                                = kInvalidGraphId;
+    GraphId typeSpecializationRoot_            = kInvalidGraphId;
+    uint8_t flags_                             = 0;
     camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside
@@ -445,6 +473,8 @@ class GraphDraft {
     bool hasFrameLayout_                       = false;
     camel::core::type::TupleType *closureType_ = nullptr;
     DraftNodePool pool_;
+    std::vector<GCGraph *> payloadGraphs_;
+    std::unordered_map<const GCGraph *, uint32_t> payloadGraphIndex_;
     std::vector<DraftNode *> nodesById_;
     std::vector<gc_node_ref_t> sourceRefsById_;
     std::vector<gc_node_ref_t> draftIdsBySourceRef_;

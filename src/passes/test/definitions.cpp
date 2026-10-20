@@ -66,8 +66,8 @@ std::string answer(camel::core::context::Context &context, std::string_view uri)
 
 } // namespace
 
-camel::runtime::GCGraph *
-DefinitionsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+DefinitionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     OperatorTable &table = OperatorTable::instance();
 
     // ---- The definitions the tensor module declares. ----
@@ -145,13 +145,14 @@ DefinitionsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     os << "DEFINITION removed_cycle_recovered " << (cycleCleared ? "yes" : "no") << "\n";
     if (!cycleCleared)
         throw std::runtime_error("definition refusal survived removal of its cycle");
-    return graph;
+    return program;
 }
 
-camel::runtime::GCGraph *
-ExpandDefinitionsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &) {
+const camel::runtime::Program *
+ExpandDefinitionsTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
+    camel::runtime::GCGraph *graph = program->root();
     const auto &table = OperatorTable::instance();
-    rt::RuntimeGraphDraftSession session(context_, graph);
+    rt::RuntimeGraphDraftSession session(context_, program);
     std::map<std::string, size_t> expanded;
     for (rt::GCGraph *g : rt::collectReachableGraphs(graph)) {
         std::vector<rt::gc_node_ref_t> nodes;
