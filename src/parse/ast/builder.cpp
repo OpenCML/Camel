@@ -2712,6 +2712,13 @@ Value Builder::visitRefData(cst::RefData context) {
     return res;
 }
 
+Value Builder::visitConstasData(cst::ConstasData context) {
+    Reference ref(context->get<cst::IdentDef>()->text());
+    node_ptr_t res = createNodeAs<ConstAsLoad>(ref);
+    setNodeTokenRangeByContext(res, context);
+    return res;
+}
+
 Value Builder::visitLiteralData(cst::Literal context) {
     Literal literal = value_cast<Literal>(visitLiteral(context));
     node_ptr_t res  = createNodeAs<LiteralLoad>(literal);
@@ -3317,6 +3324,8 @@ Value Builder::visitExpr(syn::Node context) {
         return visitAccessExpr(cst::AccessExpr(context));
     case NK::RefData:
         return visitRefData(cst::RefData(context));
+    case NK::ConstasData:
+        return visitConstasData(cst::ConstasData(context));
     case NK::Literal:
         return visitLiteralData(cst::Literal(context));
     case NK::ArrayData:

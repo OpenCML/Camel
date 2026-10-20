@@ -153,6 +153,7 @@ class Builder {
     Value visitArrayData(syntax::cst::ArrayData context);
     Value visitTupleData(syntax::cst::TupleData context);
     Value visitRefData(syntax::cst::RefData context);
+    Value visitConstasData(syntax::cst::ConstasData context);
     Value visitLiteralData(syntax::cst::Literal context);
     Value visitLiteral(syntax::cst::Literal context);
     Value visitTypeExpr(syntax::cst::TypeExpr context);

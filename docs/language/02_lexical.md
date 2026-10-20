@@ -46,7 +46,7 @@ let c = a + b
 |---|---|
 | 声明 | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
 | 控制 | `if` `then` `else` `match` `case` `return` `throw` `wait` `sync` `macro` `loop` `while` `do` `for` `in` |
-| 类型与转换 | `as` `typeas` `const` `enum` |
+| 类型与转换 | `as` `typeas` `const` `constas` `enum` |
 | 字面量 | `null` `true` `false` |
 | 保留，尚未实现 | `is` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
 

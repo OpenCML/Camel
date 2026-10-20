@@ -5776,7 +5776,89 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 Modifier::None)
             .has_value();
     };
+    // The dimension names a call binds (design principles 5.4), remembered for the checked
+    // conversion of the returned value below.
+    ExtentValues dimValues;
     const auto enterParameters = [&](FunctionType *funcType) {
+        // The parameter types may write their extents over names the signature binds, e.g.
+        // `func f(x: Tensor<f32, const [constas n]>, y: Tensor<f32, const [n]>)`. Bind each name
+        // from every argument whose extent is statically known; what the arguments leave open is
+        // checked when the call runs, by passing the argument through the checked conversion
+        // (`as`) to the refined parameter type. Nothing here depends on the values at runtime,
+        // and no second instance of the function is built.
+        struct NamedExtentArg {
+            Argument *input;
+            type_vec_t *types;
+            size_t index;
+            Type *param;
+            Type *actual;
+        };
+        std::vector<NamedExtentArg> namedArgs;
+        const auto bindNamedExtents =
+            [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
+                const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
+                for (size_t i = 0; i < inputs.size() && i < count; ++i) {
+                    const bool isVar = with ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i);
+                    Type *param      = with ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
+                    if (isVar || param == nullptr || types[i] == nullptr) {
+                        continue;
+                    }
+                    const auto *named = dynamic_cast<const OtherType *>(param);
+                    std::vector<ExtentForm> forms;
+                    if (named == nullptr || !named->extentForms(forms)) {
+                        continue;
+                    }
+                    bool hasNames = false;
+                    for (const ExtentForm &form : forms) {
+                        hasNames |= form.hasNames();
+                    }
+                    if (!hasNames || types[i]->code() != param->code()) {
+                        continue;
+                    }
+                    const auto *actual = dynamic_cast<const OtherType *>(types[i]);
+                    std::vector<ExtentForm> actualForms;
+                    if (actual == nullptr || !actual->extentForms(actualForms)) {
+                        continue;
+                    }
+                    const size_t nameIndex  = (with ? 0 : funcType->withTypesCount()) + i;
+                    const std::string label = nameIndex < funcType->argNamesCount()
+                                                  ? std::string(funcType->argNameAt(nameIndex))
+                                                  : std::to_string(i + 1);
+                    for (size_t j = 0; j < forms.size() && j < actualForms.size(); ++j) {
+                        if (!actualForms[j].isConstant()) {
+                            continue;
+                        }
+                        if (!forms[j].bind(actualForms[j].constant(), dimValues)) {
+                            diags_->of(SemanticDiag::DimensionMismatch)
+                                .atOrigin(inputs[i].expr->origin())
+                                .commit(label, actualForms[j].toString());
+                            throw BuildAbortException();
+                        }
+                    }
+                    namedArgs.push_back({&inputs[i], &types, i, param, types[i]});
+                }
+            };
+        bindNamedExtents(withInputs, withInputTypes, true);
+        bindNamedExtents(normInputs, normInputTypes, false);
+        for (const NamedExtentArg &arg : namedArgs) {
+            const auto *named = dynamic_cast<const OtherType *>(arg.param);
+            if (named == nullptr) {
+                continue;
+            }
+            OtherType *refined = named->withExtentValues(dimValues);
+            if (refined == nullptr || refined->equals(arg.param)) {
+                continue;
+            }
+            if (refined->assignableFrom(arg.actual)) {
+                (*arg.types)[arg.index] = refined;
+                continue;
+            }
+            if (refined->castSafetyFrom(arg.actual) == CastSafety::Forbidden) {
+                continue;
+            }
+            arg.input->node = castNodeTo(valueOf(arg.input->node), refined, arg.input->expr);
+            (*arg.types)[arg.index] = refined;
+        }
         const auto enter = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
             const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
             for (size_t i = 0; i < inputs.size() && i < count; ++i) {
@@ -6433,6 +6515,27 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
         lastSyncedNode_ = targetNode;
         chainedNodes_.insert(targetNode);
+    }
+    if (targetOperator == nullptr && !dimValues.empty() && targetFuncType != nullptr &&
+        targetFuncType->hasExitType()) {
+        // The return type may speak about the names the parameters bound (`: Tensor<[n, k]>`).
+        // The function still has one graph: what varies with the call is only the static type,
+        // and the value is passed through the checked conversion to it (the same check `as`
+        // makes), so a body that breaks the relation is caught where the call runs.
+        const auto *namedExit = dynamic_cast<const OtherType *>(targetFuncType->exitType());
+        std::vector<ExtentForm> forms;
+        if (namedExit != nullptr && namedExit->extentForms(forms)) {
+            bool hasNames = false;
+            for (const ExtentForm &form : forms) {
+                hasNames |= form.hasNames();
+            }
+            Type *actualExit   = valueTypeOf(nodeTypeOf(targetNode));
+            OtherType *refined = hasNames ? namedExit->withExtentValues(dimValues) : nullptr;
+            if (refined != nullptr && actualExit != nullptr && !refined->equals(actualExit) &&
+                refined->castSafetyFrom(actualExit) != CastSafety::Forbidden) {
+                targetNode = castNodeTo(targetNode, refined, gct);
+            }
+        }
     }
     if (negateResult) {
         // `a != b` through an overload of `==`: `!(a == b)`, which needs a bool from it.

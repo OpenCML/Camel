@@ -1561,6 +1561,13 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::Ref:
         dataNode = visitRefData(ast);
         break;
+    case AST::DataType::ConstAs:
+        // Only the expression of a `const` type argument can hold one, and visitSpecType reads
+        // it before visiting the expression as data.
+        diags_->of(SemanticDiag::ConstasNotAllowed)
+            .at(ast->load()->tokenRange())
+            .commit(ast->loadAs<AST::ConstAsLoad>()->ref().toString());
+        throw BuildAbortException();
     default:
         throw std::runtime_error("Unknown data type");
     }
@@ -3295,6 +3302,27 @@ Type *Builder::visitTupleType(const AST::node_ptr_t &ast) {
 FuncType(Modifier[] modifiers, ImplMark impl, string uri)
     : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
 */
+namespace {
+
+/// The dimension names a parameter type binds with `constas` (design principles 5.4).
+void collectDimensionNames(const AST::node_ptr_t &ast, std::set<std::string> &names) {
+    if (!ast) {
+        return;
+    }
+    if (ast->type() == AST::LoadType::Data) {
+        const auto &data = ast->loadAs<AST::DataLoad>();
+        if (data->dataType() == AST::DataType::ConstAs) {
+            names.insert(ast->loadAs<AST::ConstAsLoad>()->ref().ident());
+            return;
+        }
+    }
+    for (size_t i = 0; i < ast->size(); ++i) {
+        collectDimensionNames(ast->at(i), names);
+    }
+}
+
+} // namespace
+
 Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     ENTER("FuncType");
     // Ensure the AST node is of the expected type (Type)
@@ -3318,6 +3346,38 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     if (signature) {
         typeasAllowed_    = true;
         inDeclReturnType_ = false;
+    }
+    // Named dimensions (design principles 5.4). A declaration gets a scope of its own, and only
+    // its parameter types bind into it; the return type may use the names the parameters bound.
+    // A function type nested in another signature sees those names but binds none of its own.
+    struct DimGuard {
+        Builder &self;
+        std::shared_ptr<std::set<std::string>> names;
+        std::shared_ptr<std::set<std::string>> bound;
+        bool bind;
+        explicit DimGuard(Builder &builder)
+            : self(builder), names(builder.dimNames_), bound(builder.boundDims_),
+              bind(builder.dimBindAllowed_) {}
+        ~DimGuard() {
+            self.dimNames_       = names;
+            self.boundDims_      = bound;
+            self.dimBindAllowed_ = bind;
+        }
+    } dimGuard(*this);
+    if (signature) {
+        dimNames_  = std::make_shared<std::set<std::string>>();
+        boundDims_ = std::make_shared<std::set<std::string>>();
+    }
+    dimBindAllowed_ = false;
+    if (signature) {
+        // A name is bound by the `constas` occurrence anywhere in the parameters, the way
+        // `typeas T` declares a type variable for the whole signature: an extent may write the
+        // name before the parameter that binds it.
+        for (size_t group = 0; group < 2; ++group) {
+            for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(group)) {
+                collectDimensionNames(paramPair->atAs<AST::TypeLoad>(0), *dimNames_);
+            }
+        }
     }
 
     FunctionTypeFactory factory;
@@ -3346,7 +3406,9 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         Type *type         = nullptr;
         {
             TypePositionGuard position(*this, TypePosition::WithParameter);
-            type = visitType(paramPair->atAs<AST::TypeLoad>(0));
+            dimBindAllowed_ = signature;
+            type            = visitType(paramPair->atAs<AST::TypeLoad>(0));
+            dimBindAllowed_ = false;
         }
         data_ptr_t data = nullptr;
 
@@ -3395,7 +3457,9 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         Type *type         = nullptr;
         {
             TypePositionGuard position(*this, TypePosition::Parameter);
-            type = visitType(paramPair->atAs<AST::TypeLoad>(0));
+            dimBindAllowed_ = signature;
+            type            = visitType(paramPair->atAs<AST::TypeLoad>(0));
+            dimBindAllowed_ = false;
         }
         data_ptr_t data = nullptr;
 
@@ -3432,6 +3496,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             inDeclReturnType_ = true;
         }
         TypePositionGuard position(*this, TypePosition::ReturnType);
+        dimBindAllowed_ = false;
         factory.setExitType(visitType(exitTypeNode));
     }
 
@@ -3530,6 +3595,18 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             arguments.push_back(TypeArgument{.type = visitType(child), .data = nullptr});
             continue;
         }
+        if (namesDimension(child)) {
+            // A shape written over dimension names: the extents stay compile-time forms over
+            // the names the signature binds, not a runtime array constant.
+            std::shared_ptr<const std::vector<camel::core::type::ExtentForm>> extents =
+                visitNamedExtents(child);
+            if (!extents) {
+                throw BuildAbortException();
+            }
+            arguments.push_back(
+                TypeArgument{.type = nullptr, .data = nullptr, .extents = std::move(extents)});
+            continue;
+        }
         const data_ptr_t data = extractStaticDataFromNode(visitData(child));
         if (!data) {
             diags_->of(SemanticDiag::InvalidTypeArgument)
@@ -3614,6 +3691,172 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     }
     LEAVE("SpecType");
     return res;
+}
+
+namespace {
+
+using camel::core::type::ExtentForm;
+
+/// `form * factor`: a constant multiple keeps the extent linear.
+ExtentForm scaleExtent(const ExtentForm &form, int64_t factor) {
+    if (form.isUnknown()) {
+        return form;
+    }
+    std::vector<std::pair<std::string, int64_t>> terms;
+    for (const auto &[name, coefficient] : form.terms()) {
+        terms.emplace_back(name, coefficient * factor);
+    }
+    return ExtentForm::linear(form.constant() * factor, std::move(terms));
+}
+
+/// `a + sign * b`.
+ExtentForm addExtents(const ExtentForm &a, const ExtentForm &b, int64_t sign) {
+    if (a.isUnknown() || b.isUnknown()) {
+        return ExtentForm::unknown();
+    }
+    std::vector<std::pair<std::string, int64_t>> terms = a.terms();
+    for (const auto &[name, coefficient] : b.terms()) {
+        terms.emplace_back(name, coefficient * sign);
+    }
+    return ExtentForm::linear(a.constant() + sign * b.constant(), std::move(terms));
+}
+
+} // namespace
+
+bool Builder::namesDimension(const AST::node_ptr_t &ast) const {
+    if (!ast || ast->type() != AST::LoadType::Data) {
+        return false;
+    }
+    const auto &load = ast->loadAs<AST::DataLoad>();
+    if (load->dataType() == AST::DataType::ConstAs) {
+        return true;
+    }
+    if (load->dataType() != AST::DataType::Array || ast->size() != 1) {
+        return false;
+    }
+    // An array of extents written with a plain name anywhere is read as a shape over dimension
+    // names. That is how a name that no parameter binds (a typo, or one written only in the
+    // return type) is reported as a name rather than as a constant the type cannot read.
+    std::function<bool(const AST::node_ptr_t &)> names = [&](const AST::node_ptr_t &node) {
+        if (!node) {
+            return false;
+        }
+        if (node->type() == AST::LoadType::Data) {
+            const auto &data = node->loadAs<AST::DataLoad>();
+            if (data->dataType() == AST::DataType::ConstAs) {
+                return true;
+            }
+            if (data->dataType() == AST::DataType::Ref) {
+                return node->loadAs<AST::RefDataLoad>()->ref().plain();
+            }
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            if (names(node->at(i))) {
+                return true;
+            }
+        }
+        return false;
+    };
+    return names(ast);
+}
+
+std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>
+Builder::visitNamedExtents(const AST::node_ptr_t &ast) {
+    using camel::core::type::ExtentForm;
+    const auto &load = ast->loadAs<AST::DataLoad>();
+    // `[]` is a scalar tensor's shape; a comprehension is not a shape.
+    if (load->dataType() != AST::DataType::Array || ast->size() != 1) {
+        diags_->of(SemanticDiag::InvalidExtentExpression).at(ast->load()->tokenRange()).commit();
+        return nullptr;
+    }
+    auto extents      = std::make_shared<std::vector<ExtentForm>>();
+    const auto &items = ast->atAs<AST::RepeatedLoad>(0);
+    for (const auto &item : *items) {
+        extents->push_back(visitExtent(item));
+    }
+    return extents;
+}
+
+camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
+    using camel::core::type::ExtentForm;
+    const auto report = [&]() -> ExtentForm {
+        diags_->of(SemanticDiag::InvalidExtentExpression).at(ast->load()->tokenRange()).commit();
+        throw BuildAbortException();
+    };
+    if (ast->type() != AST::LoadType::Data) {
+        return report();
+    }
+    const auto &load = ast->loadAs<AST::DataLoad>();
+    switch (load->dataType()) {
+    case AST::DataType::Literal: {
+        const Literal &literal = ast->loadAs<AST::LiteralLoad>()->value();
+        if (literal.type() != LiteralType::Integer) {
+            return report();
+        }
+        const IntegerLiteral parsed = parseIntegerLiteral(literal.data());
+        if (parsed.status != IntegerLiteralStatus::Ok) {
+            return report();
+        }
+        return ExtentForm::constant(parsed.value);
+    }
+    case AST::DataType::ConstAs: {
+        const Reference &ref   = ast->loadAs<AST::ConstAsLoad>()->ref();
+        const std::string name = ref.plain() ? ref.ident() : ref.toString();
+        if (!dimBindAllowed_ || boundDims_ == nullptr) {
+            diags_->of(SemanticDiag::ConstasNotAllowed).at(ast->load()->tokenRange()).commit(name);
+            throw BuildAbortException();
+        }
+        if (!boundDims_->insert(name).second) {
+            diags_->of(SemanticDiag::DimensionNameAlreadyBound)
+                .at(ast->load()->tokenRange())
+                .commit(name);
+            throw BuildAbortException();
+        }
+        return ExtentForm::linear({{name, 1}});
+    }
+    case AST::DataType::Ref: {
+        const Reference &ref = ast->loadAs<AST::RefDataLoad>()->ref();
+        if (ref.plain() && dimNames_ != nullptr && dimNames_->contains(ref.ident())) {
+            return ExtentForm::linear({{ref.ident(), 1}});
+        }
+        diags_->of(SemanticDiag::DimensionNameNotBound)
+            .at(ast->load()->tokenRange())
+            .commit(ref.toString());
+        throw BuildAbortException();
+    }
+    case AST::DataType::UnaryExpr: {
+        const auto &unary = ast->loadAs<AST::UnaryExprLoad>();
+        if (unary->op() != AST::UnaryDataOp::Neg) {
+            return ExtentForm::unknown();
+        }
+        return scaleExtent(visitExtent(ast->at(0)), -1);
+    }
+    case AST::DataType::BinaryExpr: {
+        const auto &binary   = ast->loadAs<AST::BinaryExprLoad>();
+        const ExtentForm lhs = visitExtent(ast->at(0));
+        const ExtentForm rhs = visitExtent(ast->at(1));
+        switch (binary->op()) {
+        case AST::BinaryDataOp::Add:
+            return addExtents(lhs, rhs, 1);
+        case AST::BinaryDataOp::Sub:
+            return addExtents(lhs, rhs, -1);
+        case AST::BinaryDataOp::Mul:
+            // Linear over names means a constant multiple only; a product of two named
+            // dimensions is not linear and stays unknown (design principles 5.4).
+            if (lhs.isConstant() && !rhs.isUnknown()) {
+                return scaleExtent(rhs, lhs.constant());
+            }
+            if (rhs.isConstant() && !lhs.isUnknown()) {
+                return scaleExtent(lhs, rhs.constant());
+            }
+            return ExtentForm::unknown();
+        default:
+            return ExtentForm::unknown();
+        }
+    }
+    default:
+        return report();
+    }
 }
 
 /*
