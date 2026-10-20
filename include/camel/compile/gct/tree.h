@@ -142,6 +142,16 @@ class Tree {
     void setLiteralValue(const Node *node, literal::Value value);
     const literal::Value *literalValueOf(const Node *node) const;
 
+    /// The exact values of the elements of a composite literal, one for each element in the
+    /// order its data holds them: std::nullopt for an element that is not a numeric literal,
+    /// and for one that is a nested composite (whose own entry holds its elements). A literal
+    /// rebuilt in the type of its position (`return [0.1]` under `f32[]`) is rebuilt from
+    /// these, so an element is rounded once, from the value written (design principles 5.1).
+    void setLiteralElements(
+        const data_ptr_t &data, std::vector<std::optional<literal::Value>> elements);
+    const std::vector<std::optional<literal::Value>> *literalElementsOf(
+        const data_ptr_t &data) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -194,6 +204,12 @@ class Tree {
     std::unordered_map<const Node *, std::vector<Reference>> usings_;
     std::unordered_map<const Node *, std::vector<std::string>> namespaces_;
     std::unordered_map<const Node *, literal::Value> literalValues_;
+    // Keyed by the data object: a composite literal's elements are converted from it, and a
+    // nested literal keeps its own entry.
+    std::unordered_map<
+        const camel::core::data::Data *,
+        std::vector<std::optional<literal::Value>>>
+        literalElements_;
 };
 
 } // namespace camel::compile::gct

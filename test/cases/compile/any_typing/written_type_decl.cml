@@ -1,7 +1,0 @@
-module written_type_decl
-
-// A type declaration of `any`: a type that stands for several types is a type function.
-type Payload = { id: int, payload: any }
-func main(): int sync {
-    return 0
-}

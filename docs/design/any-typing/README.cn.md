@@ -1,7 +1,7 @@
 # `any`：现状普查，与"编译之后每个值都有确定类型"的方案（调研稿）
 
-状态：**调研稿；已按设计原则 5.10 落实（2026-10-14）。** 本稿正文保持调研时的样子，所描述的是落实之前的实现；`examples/` 里写了 `any` 的程序今天编译不过（`SemanticDiag::AnyNotAllowed`）。落实的结果：
-- Q1 定为甲（用户写 `any` 是错误，诊断按位置给出推荐写法）；Q2 定为乙（`json.decode` 给出自描述的 `Json`，另有 `decode_as`）；Q4 定为甲（签名说明用类型变量）；Q5 定为甲（不做）；Q6、Q7 照建议。
+状态：**调研稿；已按设计原则 5.10 落实（2026-10-14）。** 本稿正文保持调研时的样子，所描述的是落实之前的实现；`examples/` 里写了 `any` 的程序今天编译不过（`any` 是普通的未知类型名，报 `SemanticDiag::UnresolvedTypeReference`；H27 删去了原来的 `AnyNotAllowed` 与按位置的推荐写法）。落实的结果：
+- Q1 定为甲（用户写 `any` 是错误）；Q2 定为乙（`json.decode` 给出自描述的 `Json`，另有 `decode_as`）；Q4 定为甲（签名说明用类型变量）；Q5 定为甲（不做）；Q6、Q7 照建议。
 - `TypeCode::Any` 与 12 个文件里的特判已删去；附录 B 的 D0–D6 的复现程序都成了回归用例（`test/plans/feat/compile/typing_any.plan.toml`、`test/plans/feat/modules/json_value.plan.toml`）。
 - 图的提交校验加了"图上的类型都已确定"（[图模型设计稿](../graph-model/README.cn.md) 的 I17）。
 依据：`docs/design-principles.cn.md`（5.5、5.6 的泛型与类型函数，10.5 的垃圾回收，5.10 的 `any`，第 15 节；[裁定记录](../../design-principles-log.cn.md) 2.7 的"`<any>`"一条）；`docs/technical/36_gc_handle_rules.md` 第 9 节；`docs/technical/37_generational_gc_report.md` 6.4 与第 7 节；`docs/technical/28_generic_functions_and_type_functions.md`；[计算图的对外数据模型](../graph-model/README.cn.md)。

@@ -60,6 +60,11 @@
 #        ^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #           ^ meta.block.camel keyword.operator.assignment.camel
 #               ^^ meta.block.camel keyword.operator.comparison.camel
+>    let either = eq | ne
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#               ^ meta.block.camel keyword.operator.assignment.camel
+#                    ^ meta.block.camel keyword.operator.logical.camel
 >    return strict && eq || !ne
 #    ^^^^^^ meta.block.camel keyword.control.flow.camel
 #                  ^^ meta.block.camel keyword.operator.logical.camel
@@ -368,13 +373,6 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->type Union = int | string
-#^^^^ meta.type.definition.camel storage.type.type.camel
-#     ^^^^^ meta.type.definition.camel entity.name.type.camel
-#           ^ keyword.operator.assignment.camel
-#             ^^^ support.type.primitive.camel
-#                 ^ keyword.operator.type.camel
-#                   ^^^^^^ support.type.primitive.camel
 >type Both = A & B
 #^^^^ meta.type.definition.camel storage.type.type.camel
 #     ^^^^ meta.type.definition.camel entity.name.type.camel

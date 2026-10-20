@@ -200,7 +200,7 @@
 #             ^ meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
 #              ^ meta.block.camel meta.block.camel string.quoted.single.camel
 #               ^ meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
-#                 ^ meta.block.camel meta.block.camel keyword.operator.type.camel
+#                 ^ meta.block.camel meta.block.camel keyword.operator.logical.camel
 #                   ^ meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
 #                    ^ meta.block.camel meta.block.camel string.quoted.single.camel
 #                     ^ meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel

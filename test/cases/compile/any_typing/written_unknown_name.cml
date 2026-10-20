@@ -1,0 +1,12 @@
+module written_unknown_name
+
+// `any` is not a type: there is no such name in the type scope, so writing it is the
+// ordinary unknown-type error (design principles 5.10; H27 deleted AnyNotAllowed).
+func keep(x: any): any {
+    return x
+}
+
+func main(): int sync {
+    println(keep('abc'))
+    return 0
+}

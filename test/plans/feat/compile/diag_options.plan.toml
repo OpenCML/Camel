@@ -23,6 +23,18 @@ expect_exit = 1
 expect_stderr_contains = ["no warning is named 'bogus'"]
 
 [[tests]]
+name = "option.unknown"
+desc = "An option the parser does not know is reported as an unknown option, not taken for the input file (it used to say 'Cannot open file --bogus')."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--bogus", "${case}"]
+expect_exit = 1
+expect_output_contains = ["unknown option '--bogus'"]
+expect_output_not_contains = ["Cannot open file"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "format.short"
 desc = "--error-format short is the one-line form the tools read: one line per diagnostic with name and code, and no excerpt."
 kind = "behavior"

@@ -110,6 +110,58 @@ assert(out === want, `unexpected output: ${out}`)
 timeout_ms = 8000
 
 [[tests]]
+name = "context.arm_value"
+desc = "The value of an `if` or `match` arm takes the expected type of the whole expression: `let x: float` makes both arms floats (`1`, printed `1.0`), `let z: i32` makes them i32s, and an arm that is an array literal takes the element type of the whole (`[1.0]` is an `f32[]`); a function body whose last expression is a branch is a position too, and so is the value of a `return`."
+kind = "behavior"
+case = "../../../cases/compile/literals/context_arm_value.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1.0 1.0 1",
+  "1.0",
+  "1.0 2.0",
+  "1.0 2.0",
+  "2.0",
+  "1.0 2.0",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "context.composite_rounding"
+desc = "A composite literal keeps the exact value each element was written as, and GIR rebuilds it from those values: a decimal just above the midpoint between 1.0 and the next f32 prints 1.00000012 whether it is returned from an array literal, declared, a struct field or a nested array, not 1.0 from a rounding through a double."
+kind = "behavior"
+case = "../../../cases/compile/literals/context_composite_rounding.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1.00000012",
+  "1.00000012",
+  "1.00000012",
+  "1.00000012",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
 name = "context.arm_exit"
 desc = "A `return` written in a branch arm takes the type of the arm's position, not the declared return type of the function: with nothing expected, `2` in an arm of a float function is an int (printed `2`); with `let v: float`, the same `2` is a float (printed `2.0`), and the function may return an int."
 kind = "behavior"

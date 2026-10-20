@@ -16,7 +16,6 @@ type Shape = Tensor<f32, const [3, 4]>
 type Lookup = Map<string, Set<i64>>
 type Maybe = (int?)[]
 type Words = string[]
-type All = i32 | i64 | f32 | f64 | bool | void
 
 func or_else(x: (typeas T)?, d: T): T {
     return x ?? d

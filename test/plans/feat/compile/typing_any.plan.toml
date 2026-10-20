@@ -3,10 +3,10 @@ order = 140
 tier = "fast"
 tags = ["feat", "compile", "diagnostics", "any"]
 
-# `any` (design principles 5.10; docs/design/any-typing/README.cn.md). A slot typed `any`
-# records nothing about what entered it, so nothing may read it as a type of its own. Each
-# case is a reproducer of a defect of the study (appendix B) that used to crash or retype a
-# value silently.
+# `any` (design principles 5.10; docs/design/any-typing/README.cn.md). It is not a type today:
+# writing it is an ordinary unknown name. The remaining cases are reproducers of defects of the
+# study (appendix B) from when a slot could be typed `any` — it recorded nothing about what
+# entered it, so reading it as a type of its own crashed or retyped a value silently.
 
 [[tests]]
 name = "any_typing.cast_out"
@@ -127,119 +127,18 @@ assert(out === want, `unexpected output: ${out}`)
 timeout_ms = 4000
 
 [[tests]]
-name = "any_typing.written_parameter"
-desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. A parameter typed `any` (it compiled, and its slot was invisible to the collector: docs/design/any-typing, t11)."
+name = "any_typing.written_unknown_name"
+desc = "`any` is an ordinary unknown type name: writing it gives UnresolvedTypeReference, the same as any other name the type scope does not hold (design principles 5.10). There is no diagnostic for it (AnyNotAllowed was deleted)."
 kind = "negative"
-case = "../../../cases/compile/any_typing/written_parameter.cml"
+case = "../../../cases/compile/any_typing/written_unknown_name.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AnyNotAllowed"
-expect_diagnostic_code = "0x030000E2"
+expect_diagnostic_name = "SemanticDiag::UnresolvedTypeReference"
+expect_diagnostic_code = "0x0300000A"
 expect_diagnostic_line = 5
 expect_diagnostic_column = 14
-expect_output_contains = ["'any' is not a type a program can write: a parameter that takes values of several types declares a type parameter where its type is written, 'func f(x: typeas T): T'."]
+expect_output_contains = ["Unresolved type reference: 'any'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "any_typing.written_return"
-desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. A return type `any` (it compiled and printed `<any>`)."
-kind = "negative"
-case = "../../../cases/compile/any_typing/written_return.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AnyNotAllowed"
-expect_diagnostic_code = "0x030000E2"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 20
-expect_output_contains = ["'any' is not a type a program can write: write the type the function returns, or leave the return type out to have it inferred from the body."]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "any_typing.written_cast"
-desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. `e as any`."
-kind = "negative"
-case = "../../../cases/compile/any_typing/written_cast.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AnyNotAllowed"
-expect_diagnostic_code = "0x030000E2"
-expect_diagnostic_line = 6
-expect_diagnostic_column = 18
-expect_output_contains = ["'any' is not a type a program can write: 'as any' converts nothing; leave it out and the value keeps its own type."]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "any_typing.written_with"
-desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. A `with` parameter typed `any`."
-kind = "negative"
-case = "../../../cases/compile/any_typing/written_with.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AnyNotAllowed"
-expect_diagnostic_code = "0x030000E2"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 12
-expect_output_contains = ["'any' is not a type a program can write: a 'with' parameter that takes values of several types declares a type parameter, 'with <tag: typeas T>'."]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "any_typing.written_annotation"
-desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. A `let` annotated `any` (it was FeatureNotSupported: dynamic type casting)."
-kind = "negative"
-case = "../../../cases/compile/any_typing/written_annotation.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AnyNotAllowed"
-expect_diagnostic_code = "0x030000E2"
-expect_diagnostic_line = 6
-expect_diagnostic_column = 12
-expect_output_contains = ["'any' is not a type a program can write: write the type of the value, or leave the annotation out."]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "any_typing.written_type_decl"
-desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. `any` in a type declaration (a struct field)."
-kind = "negative"
-case = "../../../cases/compile/any_typing/written_type_decl.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AnyNotAllowed"
-expect_diagnostic_code = "0x030000E2"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 36
-expect_output_contains = ["'any' is not a type a program can write: a type that stands for several types is a type function, 'type Box<T> = (T, int)'."]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "any_typing.written_function_type"
-desc = "`any` is not a type a program can write (design principles 5.10): AnyNotAllowed, with the form recommended for the position. `any` as the result of a function type: the innermost position decides the advice."
-kind = "negative"
-case = "../../../cases/compile/any_typing/written_function_type.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AnyNotAllowed"
-expect_diagnostic_code = "0x030000E2"
-expect_diagnostic_line = 5
-expect_diagnostic_column = 27
-expect_output_contains = ["'any' is not a type a program can write: write the type the function returns, or leave the return type out to have it inferred from the body."]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "any_typing.recommended_forms"
-desc = "The forms AnyNotAllowed recommends work where `any` used to be written: a type parameter for a parameter, a `with` parameter and the result of a function-typed parameter; an inferred return type; a tuple and a struct for values of different types."
-kind = "behavior"
-case = "../../../cases/compile/any_typing/recommended_forms.cml"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_starts_with = "abc1 2.5\n(1, t) (2, [1, 2])\nn4 true\n3\n(1, one) pq\n"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]

@@ -262,7 +262,7 @@ enumField          : identDef ':' typeExpr
 | 切片下标 `xs[a:b]`、`xs[a:b:c]` | `SemanticDiag::NoMatchingFunction`（没有专门的诊断：按“下标运算符没有接受这些实参的重载”报告） | `xs->slice<a, b>` |
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
 | `typeof e`、`名字 of T` | `FeatureNotSupported` | 无 |
-| `keyof`、`enum` | 语法错误 | 无 |
+| `keyof` | 语法错误 | 无 |
 | 修饰符 `atomic`、`shared`、`inner`、`outer` | 无诊断；没有语义 | 不写 |
 
 此外有一处“能写出来但目前用不了”：带函数类型的声明 `let f: (x: int) => int = g`。
