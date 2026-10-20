@@ -210,6 +210,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 
 - **No `break` and `continue`.** Finishing early is written as a continue condition in the loop header (like `found` above).
 - A loop header must have `for` or `while`; `for … while` tests the condition first in each round and then takes the next element; `for` iterates only arrays for now, strings, maps and tensors will be added later; the type of the state is the type of the initial value, tensor shapes are not widened automatically, and a type annotation is written when needed.
+- **A loop can collect per-round outputs**: besides its final state, a `LOOP` node can have outputs that produce one value per round, collected by round into an array (the scan outputs of ONNX `Loop`). This is a graph-level capability with no source syntax; its first user is automatic differentiation (9.9).
 
 ---
 
@@ -530,6 +531,11 @@ Design motivation: the dynamism of the Python language itself determines its fle
 
 - **Automatic differentiation is a library built on the pass mechanism, not the language core.** It has constraints of its own: a graph on which no macro has been executed does not carry enough information for differentiation, so using `grad` and the like needs `std::macro` in the pipeline. This is a precondition of the library, not a constraint of the language core; when it is not met, the library should give a clear diagnostic.
 - For a function being differentiated and `var`, see 3.5.
+- **Differentiating through loops**: the reverse pass needs the intermediate values (residuals) of every forward round. The forward loop keeps each round's residuals as collected outputs (values, not closures), with a manifest saying which slot holds which residual; the reverse pass is a loop over the rounds in reverse order. O(1) per round, O(n) in total. The forward loop's round count may depend on its condition.
+- **Residuals are not bounded**: as with any growing array, running out of memory is reported as resource exhaustion with a location; no separate round limit. A recomputation tag (checkpointing) may later bring memory down to O(√n); the residual design does not preclude it.
+- **A loop whose iterated or captured array depends on the differentiated parameters is refused**, with a located diagnostic naming the `loop` and the array (arrays have no tangents; dropping the gradient silently would give a wrong result).
+- **Effects in a loop's body or condition follow the existing rule**: effects run in the forward pass only and the reverse pass is pure; the check "reading a `var` of a differentiable type is refused" extends to the loop's condition and body, the diagnostic naming the `loop`.
+- **ONNX export of gradients with loops is a separate item**: residuals are values and map to `Loop` scan outputs and a reverse `Loop` (with ONNX sequence types for ragged nested loops when needed).
 
 ### 9.10 Schedulers, back ends and releases
 
