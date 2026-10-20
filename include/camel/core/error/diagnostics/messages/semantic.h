@@ -166,6 +166,8 @@ enum class SemanticDiag : uint32_t {
     // Rulings of 2026-10-19 (design principles log 2.13): the enum, 0x130 and up.
     EnumVariantCaseRepeated = 0x100130,
     MatchCaseAfterWildcard  = 0x100131,
+    // `case _` after every variant is matched: the wildcard can never be taken.
+    MatchWildcardRedundant = 0x100132,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

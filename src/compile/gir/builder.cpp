@@ -445,7 +445,8 @@ gctSemantic(const context_ptr_t &context, const GCT::node_ptr_t &gct) {
 
 inline camel::source::origin_id_t deriveGirOrigin(
     const context_ptr_t &context, const GCT::node_ptr_t &gct, camel::source::OriginKind kind,
-    const std::string &label, std::vector<camel::source::origin_id_t> inputs = {}) {
+    const std::string &label, std::vector<camel::source::origin_id_t> inputs = {},
+    camel::source::span_id_t primarySpan = camel::source::kInvalidSpanId) {
     // GIR is a more execution-oriented lowering than GCT.
     // We do not rebuild fresh source spans for every GIR node; instead, we keep
     // deriving from the GCT primary origin, so multiple GIR nodes expanded from
@@ -466,9 +467,53 @@ inline camel::source::origin_id_t deriveGirOrigin(
         camel::source::OriginStage::GIR,
         kind,
         label,
-        camel::source::kInvalidSpanId,
+        primarySpan,
         false,
         std::move(inputs));
+}
+
+/// The span of the whole call expression a GCT call node stands for.
+///
+/// A node's own span covers what the node was made from -- a call's is its argument list
+/// (`(x * 0.5)`), an operator's is the operator token -- and the expression is the union with
+/// its operands (see `sourceTextOf`). A node that stands for the whole call, rather than for
+/// the operation inside it, therefore covers `f(x * 0.5)`: the callee and the argument list.
+/// Spans of another file are ignored: such a span has no union, and the node's own span is a
+/// correct (if shorter) answer.
+inline camel::source::span_id_t
+callExpressionSpan(const context_ptr_t &context, const GCT::node_ptr_t &gct) {
+    auto *sourceContext = context ? context->sourceContext().get() : nullptr;
+    if (sourceContext == nullptr || gct == nullptr) {
+        return camel::source::kInvalidSpanId;
+    }
+    camel::source::source_file_id_t fileId = camel::source::kInvalidSourceFileId;
+    size_t start = 0, end = 0;
+    const auto cover = [&](const GCT::node_ptr_t &node) {
+        if (node == nullptr) {
+            return;
+        }
+        const auto *record = sourceContext->origin(node->origin());
+        const auto *span   = record ? sourceContext->span(record->primarySpan) : nullptr;
+        if (span == nullptr || !span->valid() || span->endOffset <= span->startOffset) {
+            return;
+        }
+        if (fileId == camel::source::kInvalidSourceFileId) {
+            fileId = span->fileId;
+            start  = span->startOffset;
+            end    = span->endOffset;
+        } else if (fileId == span->fileId) {
+            start = std::min(start, span->startOffset);
+            end   = std::max(end, span->endOffset);
+        }
+    };
+    cover(gct);
+    for (size_t i = 0; i < gct->size(); ++i) {
+        cover(gct->at(i));
+    }
+    if (fileId == camel::source::kInvalidSourceFileId) {
+        return camel::source::kInvalidSpanId;
+    }
+    return sourceContext->createSpan(fileId, start, end);
 }
 
 inline camel::source::SemanticBundle makeGirSemanticBundle(
@@ -525,7 +570,8 @@ inline void registerNodeOrigin(
     const context_ptr_t &context, node_handle_t node, const GCT::node_ptr_t &gct,
     const std::string &label = "gir.node", std::vector<camel::source::SemanticPart> extraParts = {},
     std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
-    const std::string &syntheticReason = "") {
+    const std::string &syntheticReason   = "",
+    camel::source::span_id_t primarySpan = camel::source::kInvalidSpanId) {
     if (!context || node == nullptr) {
         return;
     }
@@ -533,8 +579,13 @@ inline void registerNodeOrigin(
     if (!sourceContext) {
         return;
     }
-    auto origin =
-        deriveGirOrigin(context, gct, camel::source::OriginKind::GirNode, label, mergedInputs);
+    auto origin = deriveGirOrigin(
+        context,
+        gct,
+        camel::source::OriginKind::GirNode,
+        label,
+        mergedInputs,
+        primarySpan);
     if (origin != camel::source::kInvalidOriginId) {
         // The node carries its origin through encoding and runtime rewrites.
         node->header.origin = origin;
@@ -550,6 +601,25 @@ inline void registerNodeOrigin(
                 synthetic,
                 syntheticReason));
     }
+}
+
+/// The origin of the node that stands for a call expression: `f(x)`, `x->f`, `g(x)` where
+/// `g` is a function value. Its primary span is the whole call, while its semantic bundle is
+/// the one of the GCT call node, as for any other GIR node.
+inline void registerCallExpressionOrigin(
+    const context_ptr_t &context, node_handle_t node, const GCT::node_ptr_t &gct,
+    const std::string &label, std::vector<camel::source::SemanticPart> extraParts = {},
+    std::vector<camel::source::origin_id_t> mergedInputs = {}) {
+    registerNodeOrigin(
+        context,
+        node,
+        gct,
+        label,
+        std::move(extraParts),
+        std::move(mergedInputs),
+        false,
+        "",
+        callExpressionSpan(context, gct));
 }
 
 inline void bindGraphScopedFuncNodeDebug(
@@ -5754,6 +5824,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
         targetNode = currGraph_->addCallNode(factoryType->exitType());
         linkNodes(LinkType::With, decoratorInvoke, targetNode);
+        // The call is written in the program: it is located where it is written, not where
+        // the function's decorators left it.
+        registerCallExpressionOrigin(context_, targetNode, gct, "gir.link.call");
         targetFuncType = factoryType;
     };
 
@@ -6213,7 +6286,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 callInputs.push_back(calleeOrigin);
             }
         }
-        registerNodeOrigin(context_, invokeNode, gct, "gir.link.call", {}, std::move(callInputs));
+        registerCallExpressionOrigin(
+            context_,
+            invokeNode,
+            gct,
+            "gir.link.call",
+            {},
+            std::move(callInputs));
         targetNode     = invokeNode;
         targetFuncType = funcType;
     }
@@ -6230,9 +6309,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             targetOperator ? targetOperator->uri() : std::string(),
             targetFuncType);
     }
-    // A direct call is located at the call expression, not at the callee's definition.
-    if (targetGraph && targetNode && targetNode->header.kind == camel::runtime::GCNodeKind::Func) {
-        registerNodeOrigin(context_, targetNode, gct, "gir.link.func");
+    // A call is located at the call expression -- the callee and its argument list together --
+    // not at the callee's definition (a FUNC node is made with its graph's origin) and not at
+    // the argument list alone (the GCT call node's own span). A call through a function value
+    // made earlier is a CALL node made by createFuncDataNode; either stands for this call.
+    if (targetGraph && targetNode &&
+        (targetNode->header.kind == camel::runtime::GCNodeKind::Func ||
+         targetNode->header.kind == camel::runtime::GCNodeKind::Call)) {
+        registerCallExpressionOrigin(context_, targetNode, gct, "gir.link.func");
     }
 
     std::string targetName = targetGraph
@@ -7134,13 +7218,37 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
             break; // the last case
         }
         if (caseNode->caseType() != CaseType::Enum) {
+            // A bare name is a binding pattern everywhere else (`case v` over `T?` / `T!`), so
+            // `case Empty` over an enum is read as a binding, not as the unit variant: say what
+            // the name refers to and how the variant is written, instead of only that a case
+            // must name a variant.
+            std::string written = "case";
+            std::string reason =
+                "every case of a match over an enum names a variant, and the value a case "
+                "does not name falls to 'case _'";
+            if (caseNode->caseType() == CaseType::Bind) {
+                written        = caseNode->binding();
+                const auto tag = type->decl()->findVariant(written);
+                if (tag.has_value()) {
+                    const EnumVariant &variant = type->decl()->variants()[*tag];
+                    const std::string how = variant.shape == VariantShape::Unit    ? "'"
+                                            : variant.shape == VariantShape::Tuple ? "(...)'"
+                                                                                   : " { ... }'";
+                    reason = "'" + written +
+                             "' is a variant of this enum, and a bare name in a pattern is a "
+                             "binding; write the variant qualified: 'case " +
+                             type->decl()->shortName() + "::" + written + how +
+                             ", or 'case _' for every other value";
+                } else {
+                    reason = "'" + written +
+                             "' is a bare name, and a bare name in a pattern is a binding; a "
+                             "match over an enum names a variant: write 'case " +
+                             type->decl()->shortName() + "::<variant>', or 'case _'";
+                }
+            }
             diags_->of(SemanticDiag::EnumPatternMismatch)
                 .atOrigin(caseNode->origin())
-                .commit(
-                    "case",
-                    type->toString(),
-                    "every case of a match over an enum names a variant, and the value a case "
-                    "does not name falls to 'case _'");
+                .commit(written, type->toString(), reason);
             throw BuildAbortException();
         }
         const GCT::Node::EnumCase &pattern = caseNode->enumCase();
@@ -7267,6 +7375,21 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
                 .atOrigin(gct->origin())
                 .commit(type->toString(), missing);
             throw BuildAbortException();
+        }
+    } else {
+        // Naming every variant already covers every value: the wildcard is a case that can
+        // never be taken. It stays in the graph (the request asked for it), but say so.
+        bool everyVariantCovered = true;
+        for (bool each : covered) {
+            if (!each) {
+                everyVariantCovered = false;
+                break;
+            }
+        }
+        if (everyVariantCovered) {
+            diags_->of(SemanticDiag::MatchWildcardRedundant)
+                .atOrigin(wildcard->origin())
+                .commit(type->toString());
         }
     }
 

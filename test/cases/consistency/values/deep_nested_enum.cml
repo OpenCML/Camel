@@ -1,0 +1,14 @@
+// A hundred thousand levels of nesting through an array: `Nest::More([...])` around
+// `Nest::Leaf(7)`. The value is printed and compared on explicit stacks, so no native stack
+// depth follows the data. `len(string(a))` keeps the golden a number.
+
+type Nest = enum { Leaf(int), More(Nest[]) }
+
+func main(): int sync {
+    let n = 100000
+    let (i, a) = loop i = 0, a = Nest::Leaf(7) while i < n do (i + 1, Nest::More([a]))
+    let (j, b) = loop j = 0, b = Nest::Leaf(7) while j < n do (j + 1, Nest::More([b]))
+    println(a == b)
+    println(len(string(a)))
+    return 0
+}

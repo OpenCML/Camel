@@ -26,12 +26,14 @@
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/rtdata/variant.h"
+#include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <charconv>
@@ -39,6 +41,8 @@
 #include <format>
 #include <limits>
 #include <system_error>
+#include <unordered_set>
+#include <vector>
 
 namespace camel::passes::cpp {
 
@@ -275,6 +279,74 @@ const TupleType *asTuple(const Type *type) {
                                                               : nullptr;
 }
 
+/// Whether `root` is `owner` or contains it through the fields of a composite or the variants
+/// of an enum. A recursive enum closes the graph, so the walk keeps a visited set; it is an
+/// explicit stack because a type's nesting is not bounded by anything but the source.
+bool containsEnumType(const Type *root, const Type *owner) {
+    if (root == nullptr) {
+        return false;
+    }
+    std::vector<const Type *> work{root};
+    std::unordered_set<const Type *> seen;
+    while (!work.empty()) {
+        const Type *type = work.back();
+        work.pop_back();
+        if (type == nullptr) {
+            continue;
+        }
+        if (type == owner) {
+            return true;
+        }
+        if (!seen.insert(type).second) {
+            continue;
+        }
+        switch (type->code()) {
+        case TypeCode::Array:
+            work.push_back(static_cast<const ArrayType *>(type)->elemType());
+            break;
+        case TypeCode::Tuple:
+            for (const Type *member : static_cast<const TupleType *>(type)->types()) {
+                work.push_back(member);
+            }
+            break;
+        case TypeCode::Struct:
+            for (const Type *member : static_cast<const StructType *>(type)->types()) {
+                work.push_back(member);
+            }
+            break;
+        case TypeCode::Function: {
+            const auto *fn = static_cast<const FunctionType *>(type);
+            for (const Type *member : fn->withTypesSpan()) {
+                work.push_back(member);
+            }
+            for (const Type *member : fn->normTypesSpan()) {
+                work.push_back(member);
+            }
+            if (fn->hasExitType()) {
+                work.push_back(fn->exitType());
+            }
+            break;
+        }
+        default:
+            break;
+        }
+        if (const auto *coll = camel::core::type::asCollectionTypeOrPrototype(type)) {
+            for (const Type *member : coll->paramsSpan()) {
+                work.push_back(member);
+            }
+        }
+        if (const auto *enumType =
+                camel::core::type::asEnumTypeOrPrototype(const_cast<Type *>(type))) {
+            for (const auto &variant : enumType->variants()) {
+                for (const Type *member : variant.fieldTypes) {
+                    work.push_back(member);
+                }
+            }
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 std::optional<std::string> ProgramValues::type(const Type *t) {
@@ -363,7 +435,7 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         decl += std::format("    out += \"{}\";\n}}\n\n", isTuple ? ")" : " }");
         declarations_ += decl;
         out = name;
-    } else if (t->code() == camel::core::type::EnumType::typeCode()) {
+} else if (t->code() == camel::core::type::EnumType::typeCode()) {
         const auto *enumType = static_cast<const camel::core::type::EnumType *>(t);
         if (enumType->pending() || !enumType->complete()) {
             return std::nullopt; // a prototype, or an instance whose argument is a hole
@@ -380,107 +452,312 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             }
         }
         const std::string name = names_.unique(cppIdentifier(base));
-        // The payload of each variant is a struct of its own, nested in the enum's: a
-        // tuple variant's fields are `_0`, `_1`, a struct variant's keep their names.
+        // The name is registered before the fields are walked: a recursive enum's field names
+        // the enum itself, and that lookup must find the name being declared (see text.h).
+        types_.emplace(key, name);
+        // The payload of each variant is a struct of its own, nested in the enum's: a tuple
+        // variant's fields are `_0`, `_1`, a struct variant's keep their names. A field whose
+        // type contains this enum cannot be held by value (the type would be infinite); it is
+        // held through `std::shared_ptr`, the one indirection C++ needs for a recursive type.
+        struct FieldPlan {
+            bool boxed = false;
+            bool direct = false; // the field is the enum itself: print/compare iteratively
+            std::string cppType;
+            std::string field;
+            const Type *type = nullptr;
+        };
+        std::vector<std::vector<FieldPlan>> plans;
+        bool anyBoxed  = false;
+        bool anyDirect = false;
+        for (size_t tag = 0; tag < variants.size(); ++tag) {
+            const auto &variant = variants[tag];
+            plans.emplace_back();
+            for (size_t i = 0; i < variant.fieldCount(); ++i) {
+                const Type *fieldType = variant.fieldTypes[i];
+                auto ft               = type(fieldType);
+                if (!ft) {
+                    return std::nullopt;
+                }
+                FieldPlan plan;
+                plan.direct = fieldType == enumType;
+                plan.boxed  = plan.direct || containsEnumType(fieldType, enumType);
+                plan.cppType = plan.boxed ? std::format("std::shared_ptr<{}>", *ft) : *ft;
+                plan.field   = variant.shape == camel::core::type::VariantShape::Struct
+                                   ? cppIdentifier(variant.fieldNames[i])
+                                   : std::format("_{}", i);
+                plan.type    = fieldType;
+                anyBoxed |= plan.boxed;
+                anyDirect |= plan.direct;
+                plans.back().push_back(std::move(plan));
+            }
+        }
         std::vector<std::string> payloadNames;
         std::string decl = std::format("/// {}\nstruct {} {{\n", spelled, name);
         for (size_t tag = 0; tag < variants.size(); ++tag) {
             const auto &variant       = variants[tag];
             const std::string payload = cppIdentifier(variant.name);
             payloadNames.push_back(payload);
-            decl += std::format("    struct {} {{\n", payload);
-            for (size_t i = 0; i < variant.fieldCount(); ++i) {
-                auto ft = type(variant.fieldTypes[i]);
-                if (!ft) {
-                    return std::nullopt;
-                }
-                const std::string field = variant.shape == camel::core::type::VariantShape::Struct
-                                              ? cppIdentifier(variant.fieldNames[i])
-                                              : std::format("_{}", i);
-                decl += std::format("        {} {};\n", *ft, field);
+            bool payloadBoxed = false;
+            for (const FieldPlan &plan : plans[tag]) {
+                payloadBoxed |= plan.boxed;
             }
-            decl += std::format(
-                "        bool operator==(const {} &) const = default;\n    }};\n",
-                payload);
+            decl += std::format("    struct {} {{\n", payload);
+            for (const FieldPlan &plan : plans[tag]) {
+                decl += std::format("        {} {};\n", plan.cppType, plan.field);
+            }
+            // A boxed member may hold a type that is only complete once the enum is; its
+            // defaulted `==` would instantiate that type where the payload is defined. The
+            // enum's own operator== compares boxed members itself.
+            if (!payloadBoxed) {
+                decl += std::format(
+                    "        bool operator==(const {} &) const = default;\n", payload);
+            }
+            decl += "    };\n";
         }
         decl += "    int32_t tag = 0;\n    std::variant<std::monostate";
         for (const std::string &payload : payloadNames) {
             decl += ", " + payload;
         }
         decl += "> value;\n";
-        decl += std::format("    bool operator==(const {} &) const = default;\n\n", name);
+        if (!anyBoxed) {
+            decl += std::format("    bool operator==(const {} &) const = default;\n", name);
+        }
         // Construction: `Shape::make<1>(2.0, 3.0)`. The tag is a constant of the program.
         decl += "    template <std::size_t Tag, typename... Fs>\n    static ";
-        decl += std::format("{} make(Fs &&...fs) {{\n        {} out;\n", name, name);
+        decl += std::format("{} make(Fs &&...fs) {{\n", name);
+        decl += "        auto args = std::make_tuple(std::forward<Fs>(fs)...);\n";
+        decl += std::format("        {} out;\n", name);
         decl += "        out.tag = static_cast<int32_t>(Tag);\n";
         for (size_t tag = 0; tag < variants.size(); ++tag) {
+            const auto &variant = variants[tag];
+            std::string init = payloadNames[tag] + "{";
+            for (size_t i = 0; i < plans[tag].size(); ++i) {
+                if (i > 0) {
+                    init += ", ";
+                }
+                const FieldPlan &plan = plans[tag][i];
+                if (plan.boxed) {
+                    const std::string boxed = plan.cppType.substr(
+                        std::string("std::shared_ptr<").size(),
+                        plan.cppType.size() - std::string("std::shared_ptr<").size() - 1);
+                    init += std::format("rt::box<{}>(std::get<{}>(args))", boxed, i);
+                } else {
+                    init += std::format("std::get<{}>(args)", i);
+                }
+            }
+            init += "}";
             decl += std::format(
                 "        {}if constexpr (Tag == {}) {{\n            out.value = "
-                "{}{{std::forward<Fs>(fs)...}};\n        }}\n",
+                "{};\n        }}\n",
                 tag == 0 ? "" : "else ",
                 tag,
-                payloadNames[tag]);
+                init);
         }
         decl += "        return out;\n    }\n";
-        // Reading a field: `v.get<1, 0>()`. The tag and the index are constants as well.
+        // Reading a field: `v.get<1, 0>()`. The tag and the index are constants as well; a
+        // boxed field is given back by value, as the graph's `:enum/field` gives it.
         decl += "    template <std::size_t Tag, std::size_t Index>\n    auto get() const {\n";
         size_t branch = 0; // the first field read is the `if`, the others `else if`
         for (size_t tag = 0; tag < variants.size(); ++tag) {
-            const auto &variant = variants[tag];
-            for (size_t i = 0; i < variant.fieldCount(); ++i) {
-                const std::string field = variant.shape == camel::core::type::VariantShape::Struct
-                                              ? cppIdentifier(variant.fieldNames[i])
-                                              : std::format("_{}", i);
+            for (size_t i = 0; i < variants[tag].fieldCount(); ++i) {
+                const FieldPlan &plan = plans[tag][i];
+                const std::string access =
+                    std::format("std::get<{}>(value).{}", tag + 1, plan.field);
+                const std::string result = plan.boxed ? "*" + access : access;
                 decl += std::format(
                     "        {}if constexpr (Tag == {} && Index == {}) {{\n            return "
-                    "std::get<{}>(value).{};\n        }}\n",
+                    "{};\n        }}\n",
                     branch++ == 0 ? "" : "else ",
                     tag,
                     i,
-                    tag + 1,
-                    field);
+                    result);
             }
         }
-        decl += "    }\n};\n";
+        decl += "    }\n";
+        // A recursive value frees its children without native recursion: the destructor hands
+        // each boxed child to the runtime's pending list and the outermost destructor drains it
+        // (camel/standalone/recursive.h).
+        if (anyBoxed) {
+            decl += "    ~" + name + "() {\n        const bool outermost = rt::beginDestroy();\n";
+            decl += "        switch (tag) {\n";
+            for (size_t tag = 0; tag < variants.size(); ++tag) {
+                const bool hasBoxed = std::any_of(
+                    plans[tag].begin(), plans[tag].end(), [](const FieldPlan &plan) {
+                        return plan.boxed;
+                    });
+                if (!hasBoxed) {
+                    continue;
+                }
+                decl += std::format("        case {}:\n", tag);
+                for (const FieldPlan &plan : plans[tag]) {
+                    if (plan.boxed) {
+                        decl += std::format(
+                            "            rt::boxToStack(std::get<{}>(value).{});\n",
+                            tag + 1,
+                            plan.field);
+                    }
+                }
+                decl += "            break;\n";
+            }
+            decl += "        }\n        if (outermost) {\n            rt::drainDestroyed();\n";
+            decl += "        }\n        rt::endDestroy();\n    }\n";
+        }
+        // Equality by content: a boxed child is compared through the pointer, and a chain of
+        // them is compared on an explicit stack, so a very long chain does not recurse.
+        if (anyBoxed) {
+            decl += std::format("    bool operator==(const {} &other) const {{\n", name);
+            decl += "        std::vector<std::pair<const ";
+            decl += name + " *, const " + name + " *>> pending{{this, &other}};\n";
+            decl += "        while (!pending.empty()) {\n";
+            decl += "            const auto [a, b] = pending.back();\n";
+            decl += "            pending.pop_back();\n";
+            decl += "            if (a == b) continue;\n";
+            decl += "            if (a->tag != b->tag) return false;\n";
+            decl += "            switch (a->tag) {\n";
+            for (size_t tag = 0; tag < variants.size(); ++tag) {
+                if (plans[tag].empty()) {
+                    continue;
+                }
+                decl += std::format("            case {}: {{\n", tag);
+                for (const FieldPlan &plan : plans[tag]) {
+                    const std::string left =
+                        std::format("std::get<{}>(a->value).{}", tag + 1, plan.field);
+                    const std::string right =
+                        std::format("std::get<{}>(b->value).{}", tag + 1, plan.field);
+                    if (plan.direct) {
+                        decl += "                {\n";
+                        decl += std::format("                    auto &x = {};\n", left);
+                        decl += std::format("                    auto &y = {};\n", right);
+                        decl += "                    if (!x || !y) {\n";
+                        decl += "                        if (x != y) return false;\n";
+                        decl += "                    } else {\n";
+                        decl += "                        pending.emplace_back(x.get(), y.get());\n";
+                        decl += "                    }\n";
+                        decl += "                }\n";
+                    } else if (plan.boxed) {
+                        decl += std::format(
+                            "                if (!rt::boxedEqual({}, {})) return false;\n",
+                            left,
+                            right);
+                    } else {
+                        decl += std::format(
+                            "                if (!({} == {})) return false;\n", left, right);
+                    }
+                }
+                decl += "                break;\n            }\n";
+            }
+            decl += "        }\n        }\n        return true;\n    }\n";
+        }
+        decl += "};\n";
         // Its text, as the interpreter prints it: `Shape::Circle(1.0)`,
-        // `Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`.
-        decl += std::format("inline void appendText(std::string &out, const {} &v) {{\n", name);
-        decl += "    switch (v.tag) {\n";
-        for (size_t tag = 0; tag < variants.size(); ++tag) {
-            const auto &variant = variants[tag];
-            decl += std::format("    case {}:\n", tag);
-            decl += std::format("        out += \"{}::{}\";\n", shortName, variant.name);
-            if (variant.shape == camel::core::type::VariantShape::Tuple) {
-                decl += "        out += \"(\";\n";
-            } else if (variant.shape == camel::core::type::VariantShape::Struct) {
-                decl += variant.fieldCount() == 0 ? "        out += \" {}\";\n"
-                                                  : "        out += \" { \";\n";
-            }
-            for (size_t i = 0; i < variant.fieldCount(); ++i) {
-                if (i > 0) {
-                    decl += "        out += \", \";\n";
+        // `Shape::Rect { w: 2.0, h: 3.0 }`, `Shape::Empty`. A direct recursive field is printed
+        // from an explicit work list, so a long chain does not recurse.
+        decl += std::format("inline void appendText(std::string &out, const {} &root) {{\n", name);
+        if (anyDirect) {
+            decl += "    std::vector<std::function<void()>> todo;\n";
+            decl += std::format("    std::function<void(const {} &)> emit = [&](const {} &v) {{\n",
+                                name, name);
+            decl += "        switch (v.tag) {\n";
+            for (size_t tag = 0; tag < variants.size(); ++tag) {
+                const auto &variant = variants[tag];
+                decl += std::format("        case {}: {{\n", tag);
+                std::string prefix = std::format("{}::{}", shortName, variant.name);
+                if (variant.shape == camel::core::type::VariantShape::Tuple) {
+                    prefix += "(";
+                } else if (variant.shape == camel::core::type::VariantShape::Struct) {
+                    prefix += variant.fieldCount() == 0 ? " {}" : " { ";
                 }
-                const std::string field = variant.shape == camel::core::type::VariantShape::Struct
-                                              ? cppIdentifier(variant.fieldNames[i])
-                                              : std::format("_{}", i);
-                if (variant.shape == camel::core::type::VariantShape::Struct) {
-                    decl += std::format("        out += \"{}: \";\n", variant.fieldNames[i]);
+                decl += std::format("            out += \"{}\";\n", prefix);
+                std::string suffix;
+                if (variant.shape == camel::core::type::VariantShape::Tuple) {
+                    suffix = ")";
+                } else if (
+                    variant.shape == camel::core::type::VariantShape::Struct &&
+                    variant.fieldCount() > 0) {
+                    suffix = " }";
                 }
-                decl += std::format(
-                    "        appendText(out, std::get<{}>(v.value).{});\n",
-                    tag + 1,
-                    field);
+                if (!suffix.empty()) {
+                    decl += std::format(
+                        "            todo.push_back([&out] {{ out += \"{}\"; }});\n", suffix);
+                }
+                for (size_t i = variant.fieldCount(); i-- > 0;) {
+                    const FieldPlan &plan = plans[tag][i];
+                    std::string lead;
+                    if (i > 0) {
+                        lead = ", ";
+                    }
+                    if (variant.shape == camel::core::type::VariantShape::Struct) {
+                        lead += std::string(variant.fieldNames[i]) + ": ";
+                    }
+                    const std::string access =
+                        std::format("std::get<{}>(v.value).{}", tag + 1, plan.field);
+                    if (plan.direct) {
+                        decl += std::format(
+                            "            todo.push_back([&out, &emit, p = {}.get()] "
+                            "{{ out += \"{}\"; if (p) {{ emit(*p); }} else {{ out += \"null\"; }} "
+                            "}});\n",
+                            access,
+                            lead);
+                    } else if (plan.boxed) {
+                        decl += std::format(
+                            "            todo.push_back([&out, &v] {{ out += \"{}\"; appendText(out, "
+                            "*{}); }});\n",
+                            lead,
+                            access);
+                    } else {
+                        decl += std::format(
+                            "            todo.push_back([&out, &v] {{ out += \"{}\"; appendText(out, "
+                            "{}); }});\n",
+                            lead,
+                            access);
+                    }
+                }
+                decl += "            break;\n        }\n";
             }
-            if (variant.shape == camel::core::type::VariantShape::Tuple) {
-                decl += "        out += \")\";\n";
-            } else if (
-                variant.shape == camel::core::type::VariantShape::Struct &&
-                variant.fieldCount() > 0) {
-                decl += "        out += \" }\";\n";
+            decl += "        }\n    };\n";
+            decl += "    emit(root);\n";
+            decl += "    while (!todo.empty()) {\n";
+            decl += "        auto action = std::move(todo.back());\n";
+            decl += "        todo.pop_back();\n";
+            decl += "        action();\n";
+            decl += "    }\n";
+        } else {
+            decl += "    switch (root.tag) {\n";
+            for (size_t tag = 0; tag < variants.size(); ++tag) {
+                const auto &variant = variants[tag];
+                decl += std::format("    case {}:\n", tag);
+                decl += std::format("        out += \"{}::{}\";\n", shortName, variant.name);
+                if (variant.shape == camel::core::type::VariantShape::Tuple) {
+                    decl += "        out += \"(\";\n";
+                } else if (variant.shape == camel::core::type::VariantShape::Struct) {
+                    decl += variant.fieldCount() == 0 ? "        out += \" {}\";\n"
+                                                      : "        out += \" { \";\n";
+                }
+                for (size_t i = 0; i < variant.fieldCount(); ++i) {
+                    if (i > 0) {
+                        decl += "        out += \", \";\n";
+                    }
+                    const FieldPlan &plan = plans[tag][i];
+                    if (variant.shape == camel::core::type::VariantShape::Struct) {
+                        decl += std::format("        out += \"{}: \";\n", variant.fieldNames[i]);
+                    }
+                    const std::string access =
+                        std::format("std::get<{}>(root.value).{}", tag + 1, plan.field);
+                    decl += std::format(
+                        "        appendText(out, {});\n", plan.boxed ? "*" + access : access);
+                }
+                if (variant.shape == camel::core::type::VariantShape::Tuple) {
+                    decl += "        out += \")\";\n";
+                } else if (
+                    variant.shape == camel::core::type::VariantShape::Struct &&
+                    variant.fieldCount() > 0) {
+                    decl += "        out += \" }\";\n";
+                }
+                decl += "        break;\n";
             }
-            decl += "        break;\n";
+            decl += "    }\n";
         }
-        decl += "    }\n}\n\n";
+        decl += "}\n\n";
         declarations_ += decl;
         out = name;
     } else if (t->code() == TypeCode::Function) {

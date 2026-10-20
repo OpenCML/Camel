@@ -81,7 +81,7 @@ digraph GraphIR {
         N17 [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=326, span="18:20-18:41", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="float[]"];
         N18 [label="[4]", type="DATA", origin=327, span="18:43-18:46", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int[]"];
         N19 [label="tensor:reshape", type="OPER", origin=328, span="18:12-18:19", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="Tensor<float32, [4]>"];
-        N1A [label="gate", type="FUNC", origin=330, span="19:16-19:19", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="Tensor"];
+        N1A [label="gate", type="FUNC", origin=330, span="19:12-19:19", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="Tensor"];
         N1B [label="0", type="DATA", origin=334, span="20:39-20:40", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int"];
         N1C [label="tensor:idx", type="OPER", role="scalar-boundary", origin=335, span="20:38-20:39", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="float"];
         N1D [label="1", type="DATA", origin=337, span="20:45-20:46", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int"];

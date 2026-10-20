@@ -725,7 +725,7 @@ name = "refuse_onnx"
 desc = "onnx::export does not translate a model whose input goes through a map: a located TranslationRefused, no model file."
 kind = "negative"
 case = "../../../cases/compile/collections/refuse_onnx.cml"
-args = ["${case}", 'onnx::export(out="refuse_onnx_never_written.onnx")']
+args = ["${case}", 'onnx::export(out="${test_tmp}/refuse_onnx_never_written.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 9

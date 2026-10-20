@@ -278,8 +278,9 @@ func area(s: Shape): float {
 ```
 
 - 元组变体的模式给出全部位置，不要的字段写 `_`：`case Shape::Circle(_)`；结构体变体的模式只写要绑定的字段，没写的字段忽略，可以改名 `{ w: width }`，简写 `{ w }` 绑定同名变量；无数据的变体只写名字 `case Shape::Empty`；`case _` 匹配剩下的所有值。
-- **穷尽**：列全了所有变体就不必写 `case _`；漏了变体又没有 `case _` 是编译期错误 `EnumMatchNotExhaustive`，诊断列出漏掉的变体名。已被前面的臂覆盖的变体再写一次给警告（`EnumVariantCaseRepeated`）；`case _` 之后的臂永远不执行，给警告（`MatchCaseAfterWildcard`）。
+- **穷尽**：列全了所有变体就不必写 `case _`；漏了变体又没有 `case _` 是编译期错误 `EnumMatchNotExhaustive`，诊断列出漏掉的变体名。已被前面的臂覆盖的变体再写一次给警告（`EnumVariantCaseRepeated`）；`case _` 之后的臂永远不执行，给警告（`MatchCaseAfterWildcard`）；列全所有变体之后还写 `case _`，这个通配符永远不会命中，给警告（`MatchWildcardRedundant`）。
 - 模式必须写现在匹配的类型的变体，前缀（`Shape::`）与变体名都要对：写错是 `EnumPatternMismatch`，诊断列出该类型声明的变体。
+- **模式里不带 `::` 的名字是绑定名**（`case v` 用于 `T?`／`T!`），不是变体：单元变体要写全限定名 `case Shape::Empty`。写成 `case Empty` 是 `EnumPatternMismatch`，诊断指出 `Empty` 是该枚举的变体、并给出 `case Shape::Empty`。
 - **第一版不支持嵌套模式**：`case Shape::Circle(0.0)` 这种把模式写在字段位置的写法给出"暂不支持"（`ConstructNotSupported`），要求为每个字段写名字或 `_`，在臂里再匹配。
 - `match` 的值可以是任意表达式，包括返回 `enum` 的调用；各臂结果类型的统一与现有的 `match` 相同（[6.8.2](06_expressions.md#682-match)）。
 
@@ -287,7 +288,7 @@ func area(s: Shape): float {
 
 **泛型。** `Option<int>` 与 `Option<float>` 是两个不同的类型，各是各的值。字段类型可以再用参数：`type Pair<A, B> = enum { Both(A, B), Neither }`，`Pair<int, string>` 的 `Both` 收一个 `int` 和一个 `string`。
 
-**图上。** 不增加节点种类：构造是"装入一个标签和数据"，`match` 是"取标签、按标签分支、在臂里取出数据"，与 `T?`、`T!` 相同。取标签与取字段是普通的内部算子（`__enum_tag__`、`__enum_field__`），调度器不对它们按名字特判。`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::macro` 都支持 `enum`；`std::cpp` 与 ONNX 导出、自动微分暂时给出带位置的拒绝。
+**图上。** 不增加节点种类：构造是"装入一个标签和数据"，`match` 是"取标签、按标签分支、在臂里取出数据"，与 `T?`、`T!` 相同。取标签与取字段是普通的内部算子（`__enum_tag__`、`__enum_field__`），调度器不对它们按名字特判。`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::macro` 与 `std::cpp` 都支持 `enum`；ONNX 导出与自动微分暂时给出带位置的拒绝。
 
 **已退役。** 类型位置上的 `A | B` 已退役：一个值只有一种类型，值是几种可能之一时写 `enum`（`SemanticDiag::UnionTypeRetired`，`|` 只留给逻辑或）；`T ? U` 同样退役（`SemanticDiag::ReservedTypeQuestionRetired`）。
 

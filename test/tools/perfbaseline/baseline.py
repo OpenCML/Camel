@@ -15,6 +15,11 @@ For every program of the list below, on this machine and with the build in out/l
     python3 test/tools/perfbaseline/baseline.py [--rounds N] [--only NAME[,NAME...]]
                                                 [--json FILE] [--markdown FILE]
 
+A program whose input files are not in the checkout (the training artifacts under
+benchmarks/artifacts are gitignored) is reported as skipped and the rest still runs, so one
+command always prints a table on a fresh clone. Only a failed `camel` run or a missing build
+fails the script.
+
 The peak working set is read from the process after it ended: Windows keeps the process object
 alive while a handle to it is open, so the number is exact, not sampled. Elsewhere the peak is
 reported as "n/a".
@@ -49,14 +54,37 @@ MLP_ENV = {
     "CAMEL_BENCH_REPS": "1",
 }
 
-# name, arguments after `camel`, extra environment
+# name, arguments after `camel`, extra environment, input files/directories that must exist.
+# The MLP artifacts are generated locally and gitignored, so a fresh clone (and CI) skips that
+# row instead of failing.
 PROGRAMS = [
-    ("fib.deep", [os.path.join(CASES, "perf", "fib_recursive.cml")], {}),
-    ("alloc_small", [os.path.join(CASES, "perf", "gc", "alloc_small.cml"), "--arg", "reps=200000"], {}),
-    ("map_chain", [os.path.join(CASES, "perf", "gc", "map_chain.cml"), "--arg", "n=2000", "--arg", "reps=20"], {}),
-    ("build_tree", [os.path.join(CASES, "perf", "gc", "build_tree.cml"), "--arg", "depth=12", "--arg", "reps=5"], {}),
-    ("jit_const", [os.path.join(CASES, "perf", "gc", "jit_const.cml"), "--arg", "n=24"], {}),
-    ("train.mlp", [os.path.join(ROOT, "benchmarks", "mlp", "model.cml")], MLP_ENV),
+    ("fib.deep", [os.path.join(CASES, "perf", "fib_recursive.cml")], {}, []),
+    (
+        "alloc_small",
+        [os.path.join(CASES, "perf", "gc", "alloc_small.cml"), "--arg", "reps=200000"],
+        {},
+        [],
+    ),
+    (
+        "map_chain",
+        [os.path.join(CASES, "perf", "gc", "map_chain.cml"), "--arg", "n=2000", "--arg", "reps=20"],
+        {},
+        [],
+    ),
+    (
+        "build_tree",
+        [os.path.join(CASES, "perf", "gc", "build_tree.cml"), "--arg", "depth=12", "--arg", "reps=5"],
+        {},
+        [],
+    ),
+    ("jit_const", [os.path.join(CASES, "perf", "gc", "jit_const.cml"), "--arg", "n=24"], {}, []),
+    (
+        "train.mlp",
+        [os.path.join(ROOT, "benchmarks", "mlp", "model.cml")],
+        MLP_ENV,
+        [os.path.join(ROOT, "benchmarks", "artifacts", "mlp", "weights"),
+         os.path.join(ROOT, "benchmarks", "artifacts", "mlp", "input.npy")],
+    ),
 ]
 
 
@@ -197,8 +225,15 @@ def main():
         raise SystemExit(f"no camel binary at {CAMEL}; run npm run build first")
 
     rows = []
-    for name, args, env in PROGRAMS:
+    skipped = []
+    for name, args, env, required in PROGRAMS:
         if only and name not in only:
+            continue
+        missing = [path for path in required if not os.path.exists(path)]
+        if missing:
+            reason = ", ".join(os.path.relpath(path, ROOT) for path in missing)
+            sys.stderr.write(f"[baseline] skip {name}: missing {reason}\n")
+            skipped.append({"name": name, "missing": missing})
             continue
         sys.stderr.write(f"[baseline] {name}\n")
         stats = run(args + ["std::stats", "std::null"], env)
@@ -247,6 +282,10 @@ def main():
             + " / ".join(f"{megabytes(p)} MB" for p in peaks)
             + " |"
         )
+    notes = []
+    for entry in skipped:
+        reason = ", ".join(os.path.relpath(path, ROOT) for path in entry["missing"])
+        notes.append(f"- `{entry['name']}` skipped: missing {reason}")
     markdown = "\n".join(
         [
             f"机器：{info['machine']}，{info['cpu']} × {info['cores']}，Python {info['python']}。",
@@ -254,6 +293,7 @@ def main():
             header,
             divider,
             *lines,
+            *(["", "未测量（输入不在检出中）：", *notes] if notes else []),
             "",
         ]
     )
@@ -263,7 +303,11 @@ def main():
             file.write(markdown)
     if options.json:
         with open(options.json, "w", encoding="utf-8", newline="\n") as file:
-            json.dump({"machine": info, "rounds": options.rounds, "programs": rows}, file, indent=2)
+            json.dump(
+                {"machine": info, "rounds": options.rounds, "programs": rows, "skipped": skipped},
+                file,
+                indent=2,
+            )
             file.write("\n")
 
 

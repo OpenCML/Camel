@@ -22,6 +22,8 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/utils/env.h"
+#include "camel/utils/path.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -31,15 +33,18 @@ using namespace camel::core::context;
 using namespace camel::core::rtdata;
 
 slot_t __sys_get_env__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    String *key     = norm.get<String *>(0);
-    const char *val = std::getenv(key->c_str());
-    if (!val)
+    String *key = norm.get<String *>(0);
+    // The variable's name and value are UTF-8; `camel::utils::getEnv` is the one place that reads
+    // them through the wide interface on Windows, where a Chinese name or value is not text in
+    // the process code page.
+    const std::string val = ::getEnv(key->c_str());
+    if (val.empty())
         return toSlot(String::from("", mm::autoSpace()));
     return toSlot(checkedString(val, mm::autoSpace(), "sys.get_env"));
 }
 
 slot_t __sys_get_cwd__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    std::string cwd = std::filesystem::current_path().string();
+    const std::string cwd = camel::utils::currentDirectory();
     return toSlot(checkedString(cwd, mm::autoSpace(), "sys.get_cwd"));
 }
 

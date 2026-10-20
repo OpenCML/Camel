@@ -29,6 +29,20 @@
 python3 test/tools/perfbaseline/baseline.py --rounds 5 --json tmp/perf-baseline.json
 ```
 
+一条命令就能跑完并打印表格（`--rounds 3` 是 CI 用的短版）。输入不在检出中的程序（`train.mlp` 的训练产物在 `benchmarks/artifacts/` 下，被 gitignore）在表下记一行"未测量"并跳过，其余照常运行；只有 `camel` 重试后仍失败或没有构建产物才让脚本以非零退出。
+
+## CI 可选作业
+
+`.github/workflows/perf-baseline.yml`（名称 **Performance baseline**）只在手动触发时运行（Run workflow → Performance baseline；`rounds` 默认 3），不随 push、tag 或 PR 触发，因此不进入主流水线。它用与 CI 相同的 Linux x64 工具链构建 Release，然后执行：
+
+```bash
+python test/tools/perfbaseline/baseline.py --rounds "$ROUNDS" --markdown perf-baseline.md --json perf-baseline.json
+```
+
+表格打印在作业日志里，同时写进该次运行的 Summary，并作为 `perf-baseline` 产物保留 90 天。**没有阈值判断**：数字变化只是这次运行的结果，不会让作业失败；只有构建失败、脚本异常或某个 `camel` 运行三次都失败才会失败（脚本对偶发访问冲突的重试见"已知的测量噪声"）。
+
+Linux 上"峰值"列是 `n/a`（精确峰值工作集用的是 Windows 的 `GetProcessMemoryInfo`）；跨平台只应比较与时间无关的列，例如字节/节点。
+
 程序清单（`test/tools/perfbaseline/baseline.py` 里的 `PROGRAMS`，改清单就是改基线口径）：
 
 | 程序 | 是什么 |

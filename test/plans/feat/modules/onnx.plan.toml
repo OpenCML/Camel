@@ -9,7 +9,7 @@ desc = "Export folds weights, shape arithmetic, and constant-driven recursion; o
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_fold.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_fold.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_fold.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -19,7 +19,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_fold.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_fold.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') === 3 && count('Relu') === 3 && count('Mul') === 3, `expected 3 unrolled steps, got ${model.ops}`)
 assert(count('Reshape') === 1 && count('Identity') === 1, `unexpected tail ops ${model.ops}`)
@@ -36,7 +36,7 @@ desc = "An input-dependent operator without an ONNX lowering (a training loss) i
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_unsupported.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_unsupported.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_unsupported.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -55,7 +55,7 @@ desc = "Impure operators inside the exported function are rejected at their sour
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_impure.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_impure.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_impure.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -74,7 +74,7 @@ desc = "A branch on a condition computed from the input (t[0] > 0.5) exports as 
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_branch.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_branch.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_branch.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["camel gate=2.0 0.0 6.0 1.0", "exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -84,7 +84,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_branch.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_branch.onnx'))
 assert(model.ops.join() === 'Gather,Greater,If,Identity', `unexpected top-level ops ${model.ops}`)
 }
 """
@@ -96,7 +96,7 @@ desc = "dynamic_axes = [0] keeps the batch symbolic: Shape/Gather/Concat/Constan
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_dynamic.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_dynamic.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_dynamic.onnx"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -105,7 +105,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_dynamic.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_dynamic.onnx'))
 assert(JSON.stringify(model.inputDims[0]) === '["batch",2]', `input dims ${JSON.stringify(model.inputDims)}`)
 for (const op of ['Shape', 'Gather', 'Concat', 'ConstantOfShape', 'Reshape']) {
     assert(model.ops.includes(op), `missing ${op} in ${model.ops}`)
@@ -122,7 +122,7 @@ desc = "Importing onnx before tensor keeps a single tensor module (one operator 
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_import_order.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_import_order.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_import_order.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -134,7 +134,7 @@ desc = "A training step (value_and_grad + sgd) exports with the parameter struct
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -144,7 +144,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -162,7 +162,7 @@ desc = "A conv net training step exports with conv2d gradients as ConvTranspose 
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_conv.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_conv.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_conv.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -172,7 +172,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_conv.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_conv.onnx'))
 assert(model.inputs.join() === 'conv1_w,conv1_b,conv2_w,conv2_b,fc_w,fc_b,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_conv1_w,output_1_conv1_b,output_1_conv2_w,output_1_conv2_b,output_1_fc_w,output_1_fc_b', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -193,7 +193,7 @@ desc = "M2: stop_gradient freezes a parameter through export — the graph carri
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_frozen.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_frozen.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_frozen.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -203,7 +203,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_frozen.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_frozen.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -220,7 +220,7 @@ desc = "T3: an Adam training step exports with the optimizer state (moment trees
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_adam.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_adam.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_adam.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -230,7 +230,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_adam.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_adam.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,adam_m_w1,adam_m_b1,adam_m_w2,adam_m_b2,adam_v_w1,adam_v_b1,adam_v_w2,adam_v_b2,adam_t,input2', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2,output_2_m_w1,output_2_m_b1,output_2_m_w2,output_2_m_b2,output_2_v_w1,output_2_v_b1,output_2_v_w2,output_2_v_b2,output_2_t', `unexpected outputs ${model.outputs}`)
 assert(model.inputDims[model.inputs.indexOf('adam_t')].join() === '', `adam_t must be a rank-0 step counter, got ${JSON.stringify(model.inputDims)}`)
@@ -255,7 +255,7 @@ desc = "T4: a conv+batch_norm (training mode) training step exports with the run
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_bn.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_bn.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_bn.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -265,7 +265,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_bn.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_bn.onnx'))
 assert(model.inputs.join() === 'conv1_w,conv1_b,bn1_g,bn1_b,conv2_w,conv2_b,bn2_g,bn2_b,fc_w,fc_b,bn1_rm,bn1_rv,bn2_rm,bn2_rv,input2', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_conv1_w,output_1_conv1_b,output_1_bn1_g,output_1_bn1_b,output_1_conv2_w,output_1_conv2_b,output_1_bn2_g,output_1_bn2_b,output_1_fc_w,output_1_fc_b,output_2_bn1_rm,output_2_bn1_rv,output_2_bn2_rm,output_2_bn2_rv', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -291,7 +291,7 @@ desc = "A training step whose loss takes a data-dependent branch (if s > 1.0) ex
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_branch.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -301,7 +301,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_branch.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -319,7 +319,7 @@ desc = "E13/T5: a branched training step whose predicate is a dead intermediate 
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch_scalar.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_scalar.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_branch_scalar.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -329,7 +329,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_scalar.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_branch_scalar.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -345,7 +345,7 @@ desc = "E13/T5 (fixed): a branched training step with TENSOR arms exports — th
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_tensor.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_branch_tensor.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -355,7 +355,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_tensor.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_branch_tensor.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -373,7 +373,7 @@ desc = "E13/T5 (fixed): a branched training step whose arms use DISJOINT paramet
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch_disjoint.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_disjoint.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_branch_disjoint.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -383,7 +383,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_disjoint.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_branch_disjoint.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,w3,b3,wo,bo,we,be,input1', `weights must be graph inputs: ${model.inputs}`)
 assert(model.outputs.length === 11, `loss and 10 updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -399,7 +399,7 @@ desc = "E13/T5: the training step of a recurrent network whose cell update branc
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_step.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_gated_gru_step.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_gated_gru_step.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -410,7 +410,7 @@ const url = await import('url')
 const fs = await import('fs')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const file = path.join(input.repo_root, 'tmp/test/onnx/export_gated_gru_step.onnx')
+const file = path.join(input.test_tmp, 'export_gated_gru_step.onnx')
 const model = readOnnxModel(file)
 const weights = 'w_ir,w_iz,w_in,w_hr,w_hz,w_hn,b_ir,b_iz,b_in,b_hr,b_hz,b_hn,fc_w,fc_b'
 assert(model.inputs.join() === weights + ',input1', `weights and the input must be graph inputs: ${model.inputs}`)
@@ -449,7 +449,7 @@ desc = "E14/T7: a training step (value_and_grad + sgd) exports with a dynamic ba
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_dynamic.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_dynamic.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_dynamic.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -459,7 +459,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_dynamic.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_dynamic.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 assert(JSON.stringify(model.inputDims[model.inputs.indexOf('input1')]) === '["batch",2]', `data input must keep a symbolic batch, got ${JSON.stringify(model.inputDims)}`)
@@ -483,7 +483,7 @@ desc = "E14/T7 (boundary removed): the canonical mean(y*y) batch mean exports wi
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_dynamic_mean.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_dynamic_mean.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_dynamic_mean.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -493,7 +493,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_dynamic_mean.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_dynamic_mean.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('Size') === 1, `the element count of the dynamic batch is one Size node: ${model.ops}`)
 assert(model.outputs.length === 5, `loss and four updated parameters: ${model.outputs}`)
@@ -507,7 +507,7 @@ desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence 
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_forward.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_gated_gru_forward.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_gated_gru_forward.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -518,7 +518,7 @@ const url = await import('url')
 const fs = await import('fs')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const file = path.join(input.repo_root, 'tmp/test/onnx/export_gated_gru_forward.onnx')
+const file = path.join(input.test_tmp, 'export_gated_gru_forward.onnx')
 const model = readOnnxModel(file)
 assert(model.ops.join() === 'Slice,Reshape,Abs,ReduceMean,Greater,If,MatMul,Add,Mul,ReduceMean,Identity', `unexpected top-level ops ${model.ops}`)
 assert(model.inputs.join() === 'w_ir,w_iz,w_in,w_hr,w_hz,w_hn,b_ir,b_iz,b_in,b_hr,b_hz,b_hn,fc_w,fc_b,input1', `unexpected inputs ${model.inputs}`)
@@ -539,7 +539,7 @@ desc = "Tail recursion whose depth depends on the input cannot unroll; it is exp
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_dynamic_recursion.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_dynamic_recursion.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_dynamic_recursion.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -549,11 +549,11 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_dynamic_recursion.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_dynamic_recursion.onnx'))
 // Loops may sit inside an If (the first call is peeled): count every NodeProto op_type
 // (field 4 -> key 0x22, length 4) equal to "Loop" in the file.
 const fs = await import('fs')
-const buf = fs.readFileSync(path.join(input.repo_root, 'tmp/test/onnx/export_dynamic_recursion.onnx'))
+const buf = fs.readFileSync(path.join(input.test_tmp, 'export_dynamic_recursion.onnx'))
 const mark = Buffer.from([0x22, 0x04, 0x4c, 0x6f, 0x6f, 0x70])
 let loops = 0, at = 0
 while ((at = buf.indexOf(mark, at)) !== -1) { loops += 1; at += 1 }
@@ -568,7 +568,7 @@ desc = "Relu on int64 is valid ONNX but ONNX Runtime's CPU provider has no kerne
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_capability.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_capability.onnx", "ONNX_OUT_UNCHECKED=tmp/test/onnx/export_capability_unchecked.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_capability.onnx", "ONNX_OUT_UNCHECKED=${test_tmp}/export_capability_unchecked.onnx"]
 expect_exit = 1
 expect_stdout_contains = ["written without the check"]
 expect_output_contains = ["(CPUExecutionProvider) has no kernel for Relu on int64 tensors at opset 17", "it has one at opset 18"]
@@ -664,9 +664,9 @@ name = "pass_export_fold"
 desc = "onnx::export as the last pass: `std::macro std::opt onnx::export` writes the same model shape as export_model for the forward export (weights as named initializers, three unrolled steps, shape arithmetic folded) without executing the program."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_fold.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_fold.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_fold.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_fold.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_fold.onnx"]
 expect_output_not_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -675,7 +675,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_fold.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'pass_export_fold.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') === 3 && count('Relu') === 3 && count('Mul') === 3, `expected 3 unrolled steps, got ${model.ops}`)
 assert(model.ops.length === 14, `shape arithmetic must fold away, got ${model.ops}`)
@@ -690,7 +690,7 @@ name = "pass_export_refuses_without_simplify"
 desc = "onnx::export only translates: with no preceding pass the entry graph still calls main, and the pass refuses with TranslationRefused at main, naming std::opt, and writes no file."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_train_step.cml"
-args = ["${case}", 'onnx::export(out="tmp/test/onnx/pass_export_refused_a.onnx")']
+args = ["${case}", 'onnx::export(out="${test_tmp}/pass_export_refused_a.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -703,7 +703,7 @@ verify_script = """
 async ({ input, assert }) => {
 const fs = await import('fs')
 const path = await import('path')
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_refused_a.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_refused_a.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 4000
@@ -713,7 +713,7 @@ name = "pass_export_refuses_without_macro"
 desc = "Without std::macro the training step still contains value_and_grad: onnx::export refuses with TranslationRefused at the macro call, naming std::macro, and writes no file."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_train_step.cml"
-args = ["${case}", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_refused_b.onnx")']
+args = ["${case}", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_refused_b.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -726,7 +726,7 @@ verify_script = """
 async ({ input, assert }) => {
 const fs = await import('fs')
 const path = await import('path')
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_refused_b.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_refused_b.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 4000
@@ -740,7 +740,7 @@ case = "../../../cases/modules/onnx/pass_export.py"
 args = ["${case}", "refuse"]
 skip_unless = ["${python}", "-c", "import json"]
 expect_exit = 0
-expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:84 file written: False", "onnx::export refuse: PASS"]
+expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:80 file written: False", "onnx::export refuse: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
@@ -764,7 +764,7 @@ desc = "An effect that is only on the control path of the exported function (a p
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_ctrl_effect.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_ctrl_effect.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_ctrl_effect.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -776,7 +776,7 @@ assert(text.includes("impure operator ':io/println' cannot be exported"), 'missi
 assert(/at [^ ]*export_ctrl_effect[.]cml:14:5[)]/.test(text), 'missing source position of the println')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 assert(!text.includes('EFFECT'), 'the exported function must not be executed')
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/export_ctrl_effect.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'export_ctrl_effect.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 4000
@@ -786,7 +786,7 @@ name = "pass_export_ctrl_effect_json"
 desc = "onnx::export refuses the same control-path effect: TranslationRefused, stage pass:onnx::export, the range of the println, no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_ctrl_effect.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_ctrl_effect.onnx")']
+args = ["--output-format", "json", "${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_ctrl_effect.onnx")']
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -799,7 +799,7 @@ const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.message.includes("impure operator ':io/println' cannot be exported"), `unexpected message: ${d.message}`)
 assert(d.range.start.line === 13 && d.range.start.character === 4 && d.range.end.character > d.range.start.character, `unexpected range ${JSON.stringify(d.range)}`)
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_ctrl_effect.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_ctrl_effect.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 4000
@@ -810,7 +810,7 @@ desc = "The effect is in a function that is still called after simplification (r
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_ctrl_effect_callee.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_ctrl_effect_callee.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_ctrl_effect_callee.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -821,7 +821,7 @@ const text = input.normalized.output
 assert(text.includes("impure operator ':io/println' cannot be exported"), 'missing impure-operator detail')
 assert(/at [^ ]*export_ctrl_effect_callee[.]cml:14:5[)]/.test(text), 'missing source position of the println')
 assert(!text.includes('unreachable') && !text.includes('EFFECT'), 'neither the statement after the export nor the exported function may run')
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 4000
@@ -831,7 +831,7 @@ name = "pass_export_ctrl_effect_in_callee_json"
 desc = "onnx::export finds the effect inside a function the exported one calls and reports the println there (the pass inlines the callee, as export_model does, so the position is the same on both entries); no model file."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_ctrl_effect_callee.cml"
-args = ["--output-format", "json", "${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_ctrl_effect_callee.onnx")']
+args = ["--output-format", "json", "${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_ctrl_effect_callee.onnx")']
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -844,7 +844,7 @@ const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.message.includes("impure operator ':io/println' cannot be exported"), `unexpected message: ${d.message}`)
 assert(d.range.start.line === 13 && d.range.start.character === 4, `unexpected range ${JSON.stringify(d.range)}`)
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 4000
@@ -855,7 +855,7 @@ desc = "The training step of export_train_step exports the same model after tens
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step.cml"
 args = ["${case}", "tensor::fuse", "std::nvm"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step.fuse.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step.fuse.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -865,7 +865,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step.fuse.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step.fuse.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -883,7 +883,7 @@ desc = "The training step of export_train_step exports the same model after tens
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step.cml"
 args = ["${case}", "tensor::fuse", "std::opt", "std::nvm"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step.fuse_simplify.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step.fuse_simplify.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -893,7 +893,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step.fuse_simplify.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step.fuse_simplify.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -911,7 +911,7 @@ desc = "The training step of export_train_step exports the same model after tens
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step.cml"
 args = ["${case}", "tensor::fuse", "std::fvm"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step.fuse_fvm.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step.fuse_fvm.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -921,7 +921,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step.fuse_fvm.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step.fuse_fvm.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -938,7 +938,7 @@ name = "pass_export_refusal_located.two_calls"
 desc = "the out parameter with two export_model calls: the refusal is located at the second call (it had no source position)."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/two_calls.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/refusal_one.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/refusal_one.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -971,7 +971,7 @@ desc = "After std::opt::devirtualize the call of main is a direct call without a
 kind = "negative"
 case = "../../../cases/modules/onnx/export_fold.cml"
 args = ["${case}", "std::opt::devirtualize", "onnx::export"]
-envs = ["ONNX_OUT=tmp/test/onnx/refusal_unused.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/refusal_unused.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -1068,7 +1068,7 @@ desc = "export_model of a function with a local variable (`var acc = x * 2.0; ac
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_var_local.cml"
 args = ["${case}", "std::macro"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_var_local.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_var_local.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1078,7 +1078,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_var_local.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_var_local.onnx'))
 const ops = model.ops.filter((o) => o !== 'Identity').join(' ')
 assert(ops === 'Mul Add Relu', `a local variable is the chain of its values, got ${model.ops}`)
 assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
@@ -1091,9 +1091,9 @@ name = "pass_export_var_local"
 desc = "The same function through `std::macro std::opt onnx::export`."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_var_local.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_var_local.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_var_local.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_var_local.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_var_local.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1101,7 +1101,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_var_local.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'pass_export_var_local.onnx'))
 const ops = model.ops.filter((o) => o !== 'Identity').join(' ')
 assert(ops === 'Mul Add Relu', `a local variable is the chain of its values, got ${model.ops}`)
 assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
@@ -1114,7 +1114,7 @@ name = "pass_export_refusal_var_arm"
 desc = "onnx::export refuses, with a located diagnostic that states why, a variable assigned in the arms of a branch: its content would be state outside the model."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/var_arm.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_refusal_var_arm.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_refusal_var_arm.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
@@ -1126,7 +1126,7 @@ name = "pass_export_var_param_inlined"
 desc = "A variable passed to a call that assigns it is exported after the inliner copies the call into the exported function: the variable is then local to the function, so its content is not state outside the model. (Before the inliner handled this call, onnx::export refused the graph; var_outer.cml still covers that refusal.)"
 kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/var_param.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_var_param.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_var_param.onnx")']
 expect_exit = 0
 expect_stdout_contains = ["onnx::export: wrote"]
 expect_output_not_contains = ["error", ":?:?:"]
@@ -1138,7 +1138,7 @@ name = "pass_export_refusal_var_outer"
 desc = "onnx::export refuses, with a located diagnostic that states why, a variable declared in the enclosing function and read by the exported lambda: its content would be state outside the model."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/var_outer.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_refusal_var_outer.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_refusal_var_outer.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
@@ -1151,7 +1151,7 @@ desc = "A float array literal whose elements depend on the model input (`reshape
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_float_array.cml"
 args = ["${case}", "std::macro"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_float_array.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_float_array.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1161,7 +1161,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_float_array.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_float_array.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('Unsqueeze') === 3 && count('Concat') === 1 && count('Reshape') === 1 && count('ReduceSum') === 2, `unexpected operators ${model.ops}`)
 }
@@ -1173,9 +1173,9 @@ name = "pass_export_float_array"
 desc = "A float array literal whose elements depend on the model input (`reshape([sum(x * 2.0), 1.5, sum(x)], [3])`) is exported as the 1-D tensor it stands for: three Unsqueeze, one Concat, then the Reshape."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_float_array.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_float_array.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_float_array.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_float_array.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_float_array.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1183,7 +1183,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_float_array.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'pass_export_float_array.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('Unsqueeze') === 3 && count('Concat') === 1 && count('Reshape') === 1 && count('ReduceSum') === 2, `unexpected operators ${model.ops}`)
 }
@@ -1196,7 +1196,7 @@ desc = "The branched training step with tensor arms also exports after the optim
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
 args = ["${case}", "std::macro", "std::opt", "std::nvm"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_tensor.macro_simplify.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_branch_tensor.macro_simplify.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1206,7 +1206,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_tensor.macro_simplify.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_branch_tensor.macro_simplify.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -1224,7 +1224,7 @@ desc = "The branched training step with tensor arms also exports after the optim
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
 args = ["${case}", "std::macro", "std::opt", "std::opt::fold", "std::nvm"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_branch_tensor.macro_opt_fold.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_branch_tensor.macro_opt_fold.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1234,7 +1234,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_branch_tensor.macro_opt_fold.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_branch_tensor.macro_opt_fold.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inputs: ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
@@ -1252,7 +1252,7 @@ desc = "A value and gradient through `mean` over an axis and over all elements e
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_grad_mean.cml"
 args = ["${case}", "std::macro"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_grad_mean.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_grad_mean.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1262,7 +1262,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_grad_mean.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_grad_mean.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('ReduceMean') >= 2, `the forward means are in the model: ${model.ops}`)
 assert(count('Shape') === 0 && count('Size') === 0 && count('Gather') === 0, `static extents must be constants: ${model.ops}`)
@@ -1276,9 +1276,9 @@ name = "pass_export_grad_mean"
 desc = "A value and gradient through `mean` over an axis and over all elements export: the gradient rules ask for `tensor:dim` and `tensor:numel` of values that depend on the model input; with static shapes both are constants of the model (no Shape, Gather or Size node)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_grad_mean.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_grad_mean.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_grad_mean.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_grad_mean.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_grad_mean.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1286,7 +1286,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_grad_mean.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'pass_export_grad_mean.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('ReduceMean') >= 2, `the forward means are in the model: ${model.ops}`)
 assert(count('Shape') === 0 && count('Size') === 0 && count('Gather') === 0, `static extents must be constants: ${model.ops}`)
@@ -1301,7 +1301,7 @@ desc = "The gradient of matmul exports when an operand is a vector (matrix @ vec
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_grad_matmul_vector.cml"
 args = ["${case}", "std::macro"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_grad_matmul_vector.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_grad_matmul_vector.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1311,7 +1311,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_grad_matmul_vector.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_grad_matmul_vector.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') >= 6, `three products and their gradients: ${model.ops}`)
 assert(count('Squeeze') >= 2 && count('Unsqueeze') >= 4, `vector operands are widened and narrowed: ${model.ops}`)
@@ -1325,9 +1325,9 @@ name = "pass_export_grad_matmul_vector"
 desc = "The gradient of matmul exports when an operand is a vector (matrix @ vector, vector @ matrix, vector @ vector): the operand and the incoming gradient get the axis matmul adds for a vector, and the gradient of a vector operand loses it again. Checked by hand against NumPy and on ONNX Runtime."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_grad_matmul_vector.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_grad_matmul_vector.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_grad_matmul_vector.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_grad_matmul_vector.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_grad_matmul_vector.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1335,7 +1335,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_grad_matmul_vector.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'pass_export_grad_matmul_vector.onnx'))
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('MatMul') >= 6, `three products and their gradients: ${model.ops}`)
 assert(count('Squeeze') >= 2 && count('Unsqueeze') >= 4, `vector operands are widened and narrowed: ${model.ops}`)
@@ -1350,7 +1350,7 @@ desc = "Two tail recursions whose depth depends on the model input (one bounded 
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop.cml"
 args = ["${case}", "std::macro"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_loop.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_loop.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1360,11 +1360,11 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_loop.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_loop.onnx'))
 // Loops may sit inside an If (the first call is peeled): count every NodeProto op_type
 // (field 4 -> key 0x22, length 4) equal to "Loop" in the file.
 const fs = await import('fs')
-const buf = fs.readFileSync(path.join(input.repo_root, 'tmp/test/onnx/export_loop.onnx'))
+const buf = fs.readFileSync(path.join(input.test_tmp, 'export_loop.onnx'))
 const mark = Buffer.from([0x22, 0x04, 0x4c, 0x6f, 0x6f, 0x70])
 let loops = 0, at = 0
 while ((at = buf.indexOf(mark, at)) !== -1) { loops += 1; at += 1 }
@@ -1379,9 +1379,9 @@ name = "pass_export_loop"
 desc = "Two tail recursions whose depth depends on the model input (one bounded by the data alone, one a counter against a data-dependent bound with an argument that never changes) export as two ONNX Loops; the unchanged argument is not a carried value."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_loop.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_loop.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_loop.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_loop.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1389,11 +1389,11 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_loop.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'pass_export_loop.onnx'))
 // Loops may sit inside an If (the first call is peeled): count every NodeProto op_type
 // (field 4 -> key 0x22, length 4) equal to "Loop" in the file.
 const fs = await import('fs')
-const buf = fs.readFileSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_loop.onnx'))
+const buf = fs.readFileSync(path.join(input.test_tmp, 'pass_export_loop.onnx'))
 const mark = Buffer.from([0x22, 0x04, 0x4c, 0x6f, 0x6f, 0x70])
 let loops = 0, at = 0
 while ((at = buf.indexOf(mark, at)) !== -1) { loops += 1; at += 1 }
@@ -1409,7 +1409,7 @@ desc = "A recursion whose depth depends on the model input, whose recursive call
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_nontail_recursion.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_nontail_recursion.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_nontail_recursion.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1428,7 +1428,7 @@ desc = "A function that calls itself twice on one path with a depth that depends
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_tree_recursion.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_tree_recursion.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_tree_recursion.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1447,7 +1447,7 @@ desc = "A recursion over the time axis that stops early on the data exports: the
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_slice_loop.cml"
 args = ["${case}", "std::macro"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_slice_loop.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_slice_loop.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1456,7 +1456,7 @@ async ({ input, assert }) => {
 const path = await import('path')
 const fs = await import('fs')
 // Slices may sit inside a Loop or an If: count op_type "Slice" (key 0x22, length 5) in the file.
-const buf = fs.readFileSync(path.join(input.repo_root, 'tmp/test/onnx/export_slice_loop.onnx'))
+const buf = fs.readFileSync(path.join(input.test_tmp, 'export_slice_loop.onnx'))
 const mark = Buffer.from([0x22, 0x05, 0x53, 0x6c, 0x69, 0x63, 0x65])
 let slices = 0, at = 0
 while ((at = buf.indexOf(mark, at)) !== -1) { slices += 1; at += 1 }
@@ -1470,16 +1470,16 @@ name = "pass_export_slice_loop"
 desc = "A recursion over the time axis that stops early on the data exports: the slice of step t takes a start and an end that depend on the model input (inputs of the ONNX Slice; they had to be export-time constants)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_slice_loop.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_slice_loop.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_slice_loop.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_slice_loop.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_slice_loop.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
 const path = await import('path')
 const fs = await import('fs')
 // Slices may sit inside a Loop or an If: count op_type "Slice" (key 0x22, length 5) in the file.
-const buf = fs.readFileSync(path.join(input.repo_root, 'tmp/test/onnx/pass_export_slice_loop.onnx'))
+const buf = fs.readFileSync(path.join(input.test_tmp, 'pass_export_slice_loop.onnx'))
 const mark = Buffer.from([0x22, 0x05, 0x53, 0x6c, 0x69, 0x63, 0x65])
 let slices = 0, at = 0
 while ((at = buf.indexOf(mark, at)) !== -1) { slices += 1; at += 1 }
@@ -1606,7 +1606,7 @@ desc = "A tail recursion whose depth depends on the model input and which return
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_values_array.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_loop_values_array.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_loop_values_array.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1618,7 +1618,7 @@ assert(text.includes('returns an int array whose elements depend on the model in
 assert(text.includes('it can return tensors and scalars (float, int, bool) and tuples or structs of them'), 'missing what is accepted: ' + text)
 assert(/[(]at [^ ]*export_loop_values_array[.]cml:12:68[)]/.test(text), 'missing source position of the recursive call: ' + text)
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/export_loop_values_array.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_values_array.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 8000
@@ -1629,7 +1629,7 @@ desc = "A tail recursion whose depth depends on the model input and whose state 
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_tuple_argument.cml"
 args = ["${case}"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_loop_tuple_argument.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_loop_tuple_argument.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1641,7 +1641,7 @@ assert(text.includes("in 'walk': argument 1 of a recursion whose depth depends o
 assert(text.includes('is a tuple, struct or array that a recursive call changes; a loop carries tensors and scalars: pass the elements as separate arguments'), 'missing condition: ' + text)
 assert(/[(]at [^ ]*export_loop_tuple_argument[.]cml:18:48[)]/.test(text), 'missing source position of the call: ' + text)
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/export_loop_tuple_argument.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_tuple_argument.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 8000
@@ -1652,7 +1652,7 @@ desc = "A training step (value_and_grad + sgd) through a function declared with 
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_vjp.cml"
 args = ["${case}", "std::macro"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_train_step_vjp.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_train_step_vjp.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1662,7 +1662,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_train_step_vjp.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_vjp.onnx'))
 assert(model.outputs.length === 3, `loss and two updated parameters: ${model.outputs}`)
 assert(model.inputs.join() === 'w,b,input1', `unexpected inputs ${model.inputs}`)
 }
@@ -1674,9 +1674,9 @@ name = "pass_export_train_step_vjp"
 desc = "A training step (value_and_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_vjp.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_train_step_vjp.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_train_step_vjp.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_train_step_vjp.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_train_step_vjp.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1684,7 +1684,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_train_step_vjp.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'pass_export_train_step_vjp.onnx'))
 assert(model.outputs.length === 3, `loss and two updated parameters: ${model.outputs}`)
 assert(model.inputs.join() === 'w,b,input1', `unexpected inputs ${model.inputs}`)
 }
@@ -1697,7 +1697,7 @@ desc = "Local scalar variables with typed and compound assignments (`k += 2`, `s
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_var_compound.cml"
 args = ["${case}", "std::macro"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_var_compound.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_var_compound.onnx"]
 expect_exit = 0
 expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1707,7 +1707,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/export_var_compound.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'export_var_compound.onnx'))
 const ops = model.ops.filter((o) => o !== 'Identity').join(' ')
 assert(ops === 'ReduceSum Add Mul Sub Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
 }
@@ -1719,9 +1719,9 @@ name = "pass_export_var_compound"
 desc = "Local scalar variables with typed and compound assignments (`k += 2`, `s += sum(x)`, `s *= 2.0`, `s -= 1.0`) export: a compound assignment writes the content it finds combined with its operand; the integer variable folds to a constant."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_var_compound.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/pass_export_var_compound.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_var_compound.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/pass_export_var_compound.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/pass_export_var_compound.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1729,7 +1729,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/pass_export_var_compound.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'pass_export_var_compound.onnx'))
 const ops = model.ops.filter((o) => o !== 'Identity').join(' ')
 assert(ops === 'ReduceSum Add Mul Sub Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
 }
@@ -1741,7 +1741,7 @@ name = "pass_export_refusal_located.no_request_effect"
 desc = "The same program with the out parameter set: `main` prints, so it is not a computation the pass can translate as a whole; the refusal is at the println (line 10) and says that a program doing more than computing exports a function with onnx.export_model. No file is written."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/no_request.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/no_request_effect.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/no_request_effect.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -1753,7 +1753,7 @@ verify_script = """
 async ({ input, assert }) => {
 const fs = await import('fs')
 const path = await import('path')
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/no_request_effect.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'no_request_effect.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 8000
@@ -1763,9 +1763,9 @@ name = "pass_export_entry.forward"
 desc = "A pure program (no export_model request, no `import onnx`) exported by pass composition: the model is the computation of `main`. One input per parameter, named like it and shaped by its declared type (the negative extent of x is a dynamic axis), one output, no initializers. Naming onnx::export on the command line loads the onnx module."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/forward.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_forward.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_forward.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_forward.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/entry_forward.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1773,7 +1773,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/entry_forward.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'entry_forward.onnx'))
 assert(model.inputs.join() === 'x,w' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
 assert(JSON.stringify(model.inputDims) === JSON.stringify([['x_dim0', 3], [3, 4]]), `input shapes from the declared types, got ${JSON.stringify(model.inputDims)}`)
 assert(model.ops.join(' ') === 'MatMul Tanh Identity', `unexpected ops ${model.ops}`)
@@ -1787,9 +1787,9 @@ name = "pass_export_entry.without_simplify"
 desc = "The pass alone (`camel forward.cml onnx::export`) writes the same model: it inlines the call of main itself, as it finishes the simplification of an export_model request."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/forward.cml"
-args = ["${case}", 'onnx::export(out="tmp/test/onnx/entry_forward_alone.onnx")']
+args = ["${case}", 'onnx::export(out="${test_tmp}/entry_forward_alone.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_forward_alone.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/entry_forward_alone.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1797,7 +1797,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/entry_forward_alone.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'entry_forward_alone.onnx'))
 assert(model.inputs.join() === 'x,w' && model.ops.join(' ') === 'MatMul Tanh Identity', `unexpected model ${model.inputs} ${model.ops}`)
 }
 """
@@ -1808,9 +1808,9 @@ name = "pass_export_entry.bound_argument_is_initializer"
 desc = "A parameter given a value at export (--arg w=<file>) is a constant of the graph: it becomes the initializer `w`, and only x is left as a model input."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/forward.cml"
-args = ["${case}", "--arg", "w=test/cases/compile/entry_args/w.npy", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_forward_bound.onnx")']
+args = ["${case}", "--arg", "w=test/cases/compile/entry_args/w.npy", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_forward_bound.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_forward_bound.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/entry_forward_bound.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1818,7 +1818,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/entry_forward_bound.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'entry_forward_bound.onnx'))
 assert(model.inputs.join() === 'x' && model.initializers.join() === 'w', `x input and w initializer expected, got ${model.inputs} / ${model.initializers}`)
 }
 """
@@ -1829,9 +1829,9 @@ name = "pass_export_entry.tuple"
 desc = "A tuple result is expanded: one output per element (output_0, output_1)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/tuple.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_tuple.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_tuple.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_tuple.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/entry_tuple.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1839,7 +1839,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/entry_tuple.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'entry_tuple.onnx'))
 assert(model.inputs.join() === 'x,w' && model.outputs.join() === 'output_0,output_1', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
 }
 """
@@ -1850,9 +1850,9 @@ name = "pass_export_entry.constant"
 desc = "A `main` without parameters gives a model without inputs: its value is a constant."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/constant.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_constant.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_constant.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_constant.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/entry_constant.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1860,7 +1860,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/entry_constant.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'entry_constant.onnx'))
 assert(model.inputs.length === 0 && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
 assert(model.ops.join(' ') === 'Identity' && model.initializers.length === 1, `one constant expected, got ${model.ops} / ${model.initializers}`)
 }
@@ -1872,9 +1872,9 @@ name = "pass_export_entry.weights_as_inputs"
 desc = "`with` parameters are the weights: exported without values, each leaf of the struct is a model input named by its path (p_fc_w, p_fc_b), before the data input."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/weights.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_weights.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_weights.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_weights.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/entry_weights.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1882,7 +1882,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/entry_weights.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'entry_weights.onnx'))
 assert(model.inputs.join() === 'p_fc_w,p_fc_b,x' && model.initializers.length === 0, `weights and data as inputs expected, got ${model.inputs} / ${model.initializers}`)
 }
 """
@@ -1893,9 +1893,9 @@ name = "pass_export_entry.weights_as_initializers"
 desc = "The same program exported with `--arg p=<directory>`: the weights are known, so they are the initializers w and b (named by field) and x is the only input."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/weights.cml"
-args = ["${case}", "--arg", "p=test/cases/compile/entry_args/model", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_weights_init.onnx")']
+args = ["${case}", "--arg", "p=test/cases/compile/entry_args/model", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_weights_init.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_weights_init.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/entry_weights_init.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1903,7 +1903,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/entry_weights_init.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'entry_weights_init.onnx'))
 assert(model.inputs.join() === 'x' && model.initializers.slice().sort().join() === 'b,w', `x input and w, b initializers expected, got ${model.inputs} / ${model.initializers}`)
 }
 """
@@ -1914,9 +1914,9 @@ name = "pass_export_entry.train_step"
 desc = "A training step as `main` (weights as `with` parameters, value_and_grad, sgd): the weights are inputs (p_w, p_b) and, updated, outputs (output_1_w, output_1_b) next to the loss (output_0)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/train_step.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_train_step.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_train_step.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_train_step.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/entry_train_step.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1924,7 +1924,7 @@ const path = await import('path')
 const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
-const model = readOnnxModel(path.join(input.repo_root, 'tmp/test/onnx/entry_train_step.onnx'))
+const model = readOnnxModel(path.join(input.test_tmp, 'entry_train_step.onnx'))
 assert(model.inputs.join() === 'p_w,p_b,x,y' && model.outputs.join() === 'output_0,output_1_w,output_1_b', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
 }
 """
@@ -1935,7 +1935,7 @@ name = "pass_export_entry.train_step_without_macro"
 desc = "Without std::macro the training step still contains value_and_grad: refused at the macro call, naming std::macro, as for an export_model request."
 kind = "negative"
 case = "../../../cases/modules/onnx/entry/train_step.cml"
-args = ["${case}", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_train_step_refused.onnx")']
+args = ["${case}", "std::opt", 'onnx::export(out="${test_tmp}/entry_train_step_refused.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_line = 22
@@ -1949,7 +1949,7 @@ name = "pass_export_entry.unknown_shape"
 desc = "A parameter declared `Tensor` (no element type, no shape) cannot be a model input: the refusal is located at main and names the parameter. No file is written."
 kind = "negative"
 case = "../../../cases/modules/onnx/entry/unknown_shape.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_unknown_shape.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_unknown_shape.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -1962,7 +1962,7 @@ verify_script = """
 async ({ input, assert }) => {
 const fs = await import('fs')
 const path = await import('path')
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/entry_unknown_shape.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'entry_unknown_shape.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 8000
@@ -1972,9 +1972,9 @@ name = "pass_export_entry.unknown_shape_given"
 desc = "The same program with the value of x given at export: its shape is known from the file, x is a constant of the model and the export succeeds."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/unknown_shape.cml"
-args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_unknown_shape_given.onnx")']
+args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_unknown_shape_given.onnx")']
 expect_exit = 0
-expect_stdout_contains = ["onnx::export: wrote tmp/test/onnx/entry_unknown_shape_given.onnx"]
+expect_stdout_contains = ["onnx::export: wrote ${test_tmp}/entry_unknown_shape_given.onnx"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -1983,7 +1983,7 @@ name = "pass_export_entry.effect"
 desc = "A `main` with an effect the model cannot express (println) is refused at the effect (line 10); the message says what the pass translates. No file is written."
 kind = "negative"
 case = "../../../cases/modules/onnx/entry/effect.cml"
-args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="tmp/test/onnx/entry_effect.onnx")']
+args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_effect.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
@@ -1996,7 +1996,7 @@ verify_script = """
 async ({ input, assert }) => {
 const fs = await import('fs')
 const path = await import('path')
-assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/entry_effect.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'entry_effect.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 8000
@@ -2111,6 +2111,30 @@ expect_diagnostic_line = 19
 expect_diagnostic_column = 12
 expect_output_contains = ["request_in_arm.cml:20:9 is made in an arm of this branch, and the condition of the branch (a value computed by ':op/eq_s') is not known at compile time", "onnx::export does not run the program, so it cannot tell whether the request is made", "write the export_model call outside the branch, or make the condition a constant"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "the example argument of onnx.export_model", "run std::opt before it so that it folds"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_export_refusal_located.request_in_arm_and_target"
+desc = "The request is in a run-time arm and its example is not a graph constant: both reasons are reported, the branch (the program's structure) first, then the unreadable argument (review of H8: user-written structure before target capability, both when both hold)."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/request_in_arm_and_target.cml"
+args = ["${case}", "std::macro", "std::opt", "onnx::export"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_code = "0x0400000B"
+expect_diagnostic_line = 17
+expect_diagnostic_column = 12
+expect_output_contains = ["is made in an arm of this branch, and the condition of the branch (a value computed by ':op/eq_s') is not known at compile time", "the request cannot be read either: the example argument of onnx.export_model is a value computed by 'tensor:zeros', not a constant of the graph"]
+expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.output
+const branch = text.indexOf('is made in an arm of this branch')
+const target = text.indexOf('the request cannot be read either')
+assert(branch >= 0 && target > branch, `the branch reason must come first: ${text}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -2424,7 +2448,7 @@ desc = "export_model of a function that grows an array variable with `acc = acc-
 kind = "negative"
 case = "../../../cases/modules/onnx/export_var_append.cml"
 args = ["${case}", "std::macro"]
-envs = ["ONNX_OUT=tmp/test/onnx/export_var_append.onnx"]
+envs = ["ONNX_OUT=${test_tmp}/export_var_append.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_diagnostic_line = 22

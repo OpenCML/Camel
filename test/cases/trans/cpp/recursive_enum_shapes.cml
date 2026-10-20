@@ -1,0 +1,32 @@
+// Recursive enums in the shapes the C++ backend boxes: a generic tree with two direct fields,
+// a field of `T?`, and a field of `T[]`. The enum itself is held through std::shared_ptr; the
+// program is built and run against std::fvm by test/tools/cppexec/run.py.
+
+type Tree<T> = enum {
+    Leaf(T),
+    Node { left: Tree<T>, right: Tree<T> },
+}
+
+type Maybe = enum {
+    None,
+    Some(Maybe?),
+}
+
+type Nest = enum {
+    Leaf(int),
+    More(Nest[]),
+}
+
+func main(): int sync {
+    let t1: Tree<int> = Tree::Node { left: Tree::Leaf(1), right: Tree::Leaf(2) }
+    let t2: Tree<int> = Tree::Node { left: Tree::Leaf(1), right: Tree::Leaf(3) }
+    println(t1)
+    println(t1 == t2)
+    let m = Maybe::Some(Maybe::Some(Maybe::None))
+    println(m)
+    println(m == Maybe::Some(Maybe::Some(Maybe::None)))
+    let n = Nest::More([Nest::More([Nest::Leaf(3)])])
+    println(n)
+    println(n == Nest::More([Nest::More([Nest::Leaf(3)])]))
+    return 0
+}

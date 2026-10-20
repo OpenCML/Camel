@@ -41,6 +41,7 @@
 #include "camel/passes/opt/config.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
+#include "camel/utils/path.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -290,22 +291,31 @@ std::string locationOf(const core::context::Context &ctx, uint64_t origin) {
     return std::format("{}:{}:{}", file->path, range.start.line + 1, range.start.character + 1);
 }
 
-/// Reads the request `node` of the entry graph. A request the pass cannot read because it is
-/// made in the arm of a branch decided at run time is refused at that branch: what the arm
-/// computes is not a constant of the graph (it waits for the branch), and that, not the
-/// argument the reading stumbled on, is what the program has to change. A refusal about the
-/// request's own target (the function cannot be exported at all) is more specific and is kept.
+/// Reads the request `node` of the entry graph. A request made in the arm of a branch decided
+/// at run time is refused at that branch: what the arm computes is not a constant of the graph
+/// (it waits for the branch), and that is the reason the program has to change first. When the
+/// request cannot be read either (its own target or an argument is not constant), the two
+/// reasons are reported together, the branch one first (review of H8, "导出拒绝的诊断优先级").
 Request readEntryRequest(
     const core::context::Context &ctx, GCGraph *g, gc_node_ref_t node, const std::string &out) {
-    // A refusal about the request's own target (the function cannot be exported at all) is more
-    // specific than the branch it sits in, so it propagates as it is.
-    const Request request = readRequest(g, node, out);
+    // The request may be unreadable for its own reason; that reason is kept and joined with the
+    // branch one when the request also sits in a runtime arm.
+    std::optional<Refusal> unreadable;
+    std::optional<Request> request;
+    try {
+        request = readRequest(g, node, out);
+    } catch (const Refusal &refusal) {
+        unreadable = refusal;
+    }
     // Whether the arm runs is decided at run time: the pass cannot tell whether the request is
     // made, so a readable request in such an arm is refused too. Its arguments are constants of
     // the arm, not of the graph, and would otherwise look like a request made unconditionally.
     const auto brch = runtimeBranchOver(g, node);
     if (!brch) {
-        return request;
+        if (unreadable) {
+            throw *unreadable;
+        }
+        return *request;
     }
     const auto cond            = g->normInputsOf(*brch);
     const std::string location = locationOf(ctx, originNear(g, node));
@@ -313,16 +323,18 @@ Request readEntryRequest(
     if (origin == camel::source::kInvalidOriginId) {
         origin = originNear(g, node);
     }
-    throw Refusal{
-        origin,
-        std::format(
-            "the onnx.export_model call{} is made in an arm of this branch, and the "
-            "condition of the branch{} is not known at compile time; onnx::export does not "
-            "run the program, so it cannot tell whether the request is made, and what the "
-            "arm computes is not a constant of the graph; write the export_model call "
-            "outside the branch, or make the condition a constant",
-            location.empty() ? std::string() : " at " + location,
-            cond.empty() ? std::string() : std::format(" ({})", describeNode(g, cond.front())))};
+    std::string message = std::format(
+        "the onnx.export_model call{} is made in an arm of this branch, and the "
+        "condition of the branch{} is not known at compile time; onnx::export does not "
+        "run the program, so it cannot tell whether the request is made, and what the "
+        "arm computes is not a constant of the graph; write the export_model call "
+        "outside the branch, or make the condition a constant",
+        location.empty() ? std::string() : " at " + location,
+        cond.empty() ? std::string() : std::format(" ({})", describeNode(g, cond.front())));
+    if (unreadable) {
+        message += "; the request cannot be read either: " + unreadable->message;
+    }
+    throw Refusal{origin, std::move(message)};
 }
 
 /// The function a call node of `g` calls, when it is statically known.
@@ -662,7 +674,7 @@ void exportEntry(
         throw Refusal{e.origin(), std::move(message)};
     }
     try {
-        writeModelFile(model, out);
+        writeModelFile(model, camel::utils::pathFromUtf8(out));
     } catch (const std::runtime_error &e) {
         throw Refusal{camel::source::kInvalidOriginId, e.what()};
     }
@@ -694,7 +706,7 @@ GCGraph *OnnxExportPass::apply(GCGraph *graph, std::ostream &os) {
         }
         for (size_t i = 0; i < requests.size(); ++i) {
             try {
-                writeModelFile(models[i], requests[i].path);
+                writeModelFile(models[i], camel::utils::pathFromUtf8(requests[i].path));
             } catch (const std::runtime_error &e) {
                 throw Refusal{requests[i].origin, e.what()};
             }

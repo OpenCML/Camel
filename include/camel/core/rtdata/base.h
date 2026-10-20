@@ -233,55 +233,16 @@ inline void printSlotSafe(std::ostream &os, const slot_t data, camel::core::type
     }
 }
 
+/// Prints one value (rtdata/print.cpp). The composites (array, tuple, struct, enum, map and set)
+/// are walked with an explicit stack there, so the depth of the data does not consume the native
+/// stack; scalars and the remaining object-backed types are printed directly.
+void printValue(std::ostream &os, slot_t data, camel::core::type::Type *t);
+
 /// The text of a value as `println`, `string(x)` and a `{}` of `format` write it. A float has one
 /// text, the shortest that reads back as the same number (camel::utils::floatText; design
 /// principles 7.7), also as an element of an array, a tuple, a struct, a map or a set.
 inline void printSlot(std::ostream &os, const slot_t data, camel::core::type::Type *t) {
-    ASSERT(
-        data != DeadSlot,
-        std::format("Accessing uninitialized slot in printSlot: {}", t->toString()));
-    // GCTraced types (including OtherTypes like Tensor) hold Object*: use object->print.
-    // Check isGCTraced before isOtherType so Tensor/other Object-backed types print properly.
-    if (t->isGCTraced()) {
-        if (data == NullSlot) {
-            os << "null";
-            return;
-        }
-        reinterpret_cast<const Object *>(data)->print(os, t);
-    } else if (t->isOtherType()) {
-        os << "<" << t->toString() << ">";
-    } else {
-        // Non-reference types: print according to the type code.
-        switch (t->code()) {
-        case camel::core::type::TypeCode::Int32:
-            os << fromSlot<Int32>(data);
-            break;
-        case camel::core::type::TypeCode::Int64:
-            os << fromSlot<Int64>(data);
-            break;
-        case camel::core::type::TypeCode::Float32:
-            os << camel::utils::floatText(fromSlot<Float32>(data));
-            break;
-        case camel::core::type::TypeCode::Float64:
-            os << camel::utils::floatText(fromSlot<Float64>(data));
-            break;
-        case camel::core::type::TypeCode::Bool:
-            os << (fromSlot<Bool>(data) ? "true" : "false");
-            break;
-        case camel::core::type::TypeCode::Byte:
-            os << "0x" << std::hex << static_cast<uint64_t>(data) << std::dec;
-            break;
-        case camel::core::type::TypeCode::Void:
-            os << "null";
-            break;
-        case camel::core::type::TypeCode::Ref:
-            os << "ref";
-            break;
-        default:
-            os << std::format("<{}>", t->toString());
-            break;
-        }
-    }
+    printValue(os, data, t);
 }
 
 } // namespace camel::core::rtdata

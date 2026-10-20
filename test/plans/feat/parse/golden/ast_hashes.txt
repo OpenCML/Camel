@@ -1529,7 +1529,7 @@ d91092e026f0f841 ok test/cases/modules/onnx/refusals/var_arm.cml
 d02bf5329e412d30 ok test/cases/modules/onnx/refusals/var_param.cml
 d1107a262096b1bc ok test/cases/modules/std/algo/basic.cml
 3666dc6396a32e7d ok test/cases/modules/std/crypto/basic.cml
-056c4e2e9fd4fec6 ok test/cases/modules/std/fs/basic.cml
+dd426dd95f71426a ok test/cases/modules/std/fs/basic.cml
 801f5bc8610ae608 ok test/cases/modules/std/io/basic.cml
 e2139f77a26c1fad ok test/cases/modules/std/json/decode.cml
 9ac4eb6d169fb9ab ok test/cases/modules/std/json/decode_as.cml
@@ -1540,8 +1540,8 @@ e8e4cf2aa28ab9b5 ok test/cases/modules/std/json/json_gc_macro.cml
 e79d623c9efaf51a ok test/cases/modules/std/json/json_value.cml
 49e5f9206998d5b5 ok test/cases/modules/std/math/basic.cml
 a78204f746fd3efe ok test/cases/modules/std/os/basic.cml
-984a0614e1feec65 ok test/cases/modules/std/pyplot/main.cml
-28635dfc8b953500 ok test/cases/modules/std/pyplot/simple.cml
+e99fcea43d4b5e69 ok test/cases/modules/std/pyplot/main.cml
+6ebdeec37a7ccd43 ok test/cases/modules/std/pyplot/simple.cml
 606e5c8d28967099 ok test/cases/modules/std/python/basic.cml
 7c35eaa8ac9c05f3 ok test/cases/modules/std/python/main.cml
 8dad7d36224bae1c ok test/cases/modules/std/python/phot.cml

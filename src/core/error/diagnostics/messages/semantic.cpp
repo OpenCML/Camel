@@ -1054,6 +1054,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "before the wildcard.",
             },
         },
+        {
+            SemanticDiag::MatchWildcardRedundant,
+            {
+                "MatchWildcardRedundant",
+                "Every variant of '{0}' is matched before 'case _': the wildcard is never taken.",
+                "Naming every variant already covers every value of the enum. Remove 'case _', or "
+                "remove the case it was meant to stand in for.",
+            },
+        },
     };
 
     return infoMap;

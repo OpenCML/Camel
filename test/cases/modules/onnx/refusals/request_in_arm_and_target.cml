@@ -1,0 +1,22 @@
+/**
+ * The export request sits in an arm of a branch decided at run time and its example argument
+ * is not a constant of the graph either. Both reasons are reported, the branch one first: it is
+ * the structure the program has to change.
+ */
+module request_in_arm_and_target
+
+import { Tensor, zeros } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func double(t: Tensor): Tensor {
+    return t * 2.0
+}
+
+func main(): int sync {
+    return if get_env('P7_MODE') == 'export' then sync {
+        let shape: int[] = [len(get_env('P7_INPUT')), 2]
+        export_model(double, zeros(shape), 'tmp/test/onnx/refusal_request_in_arm_and_target.onnx')
+        return 0
+    } else 0
+}

@@ -145,6 +145,89 @@ inline bool isScalarValue(int64_t cp) noexcept {
     return cp >= 0 && cp <= 0x10FFFF && !(cp >= 0xD800 && cp <= 0xDFFF);
 }
 
+inline void encodeOne(uint32_t cp, std::string &out);
+
+/**
+ * The wide form of a text: what a `wchar_t` string holds, and what the Windows interfaces take
+ * (`GetEnvironmentVariableW`, a `wmain` argument, the wide form of a `std::filesystem::path`).
+ * On Windows a `wchar_t` is 16 bits and a code point above U+FFFF becomes a surrogate pair; on
+ * the other platforms it is 32 bits and holds the code point itself.
+ *
+ * A byte that is not valid UTF-8 becomes U+FFFD, the way a Windows conversion treats it, so
+ * this never fails. A Camel `string` is valid by construction (design principles 11.1); the
+ * replacement only concerns text the system handed back.
+ */
+inline std::wstring toWide(std::string_view s) {
+    std::wstring out;
+    out.reserve(s.size());
+    size_t i = 0;
+    while (i < s.size()) {
+        const auto first = static_cast<unsigned char>(s[i]);
+        if (first < 0x80) {
+            out.push_back(static_cast<wchar_t>(first));
+            ++i;
+            continue;
+        }
+        const size_t length = sequenceLength(first);
+        uint32_t value      = first & (0xFFu >> (length + 1));
+        size_t continuation = 1;
+        bool valid          = i + length <= s.size();
+        for (; valid && continuation < length; ++continuation) {
+            const auto next = static_cast<unsigned char>(s[i + continuation]);
+            if ((next & 0xC0) != 0x80) {
+                valid = false;
+            } else {
+                value = (value << 6) | (next & 0x3F);
+            }
+        }
+        // The same rejection rules as invalidOffset: an overlong form, a surrogate, a value above
+        // U+10FFFF. One replacement character, then decoding resumes at the next byte.
+        const uint32_t least = length == 2 ? 0x80 : length == 3 ? 0x800 : 0x10000;
+        if (!valid || value < least || value > 0x10FFFF || (value >= 0xD800 && value <= 0xDFFF)) {
+            out.push_back(static_cast<wchar_t>(0xFFFD));
+            ++i;
+            continue;
+        }
+        i += length;
+        if constexpr (sizeof(wchar_t) == 2) {
+            if (value >= 0x10000) {
+                value -= 0x10000;
+                out.push_back(static_cast<wchar_t>(0xD800 + (value >> 10)));
+                out.push_back(static_cast<wchar_t>(0xDC00 + (value & 0x3FF)));
+            } else {
+                out.push_back(static_cast<wchar_t>(value));
+            }
+        } else {
+            out.push_back(static_cast<wchar_t>(value));
+        }
+    }
+    return out;
+}
+
+/// The UTF-8 form of a wide text. A lone surrogate becomes U+FFFD.
+inline std::string fromWide(std::wstring_view w) {
+    std::string out;
+    out.reserve(w.size());
+    for (size_t i = 0; i < w.size(); ++i) {
+        uint32_t value = static_cast<uint32_t>(w[i]);
+        if constexpr (sizeof(wchar_t) == 2) {
+            if (value >= 0xD800 && value <= 0xDBFF) {
+                const uint32_t low = i + 1 < w.size() ? static_cast<uint32_t>(w[i + 1]) : 0;
+                if (low >= 0xDC00 && low <= 0xDFFF) {
+                    value = 0x10000 + ((value - 0xD800) << 10) + (low - 0xDC00);
+                    ++i;
+                } else {
+                    value = 0xFFFD;
+                }
+            } else if (value >= 0xDC00 && value <= 0xDFFF) {
+                value = 0xFFFD;
+            }
+        }
+        encodeOne(value > 0x10FFFF || (value >= 0xD800 && value <= 0xDFFF) ? 0xFFFD : value, out);
+    }
+    return out;
+}
+
 inline void encodeOne(uint32_t cp, std::string &out) {
     if (cp < 0x80) {
         out.push_back(static_cast<char>(cp));

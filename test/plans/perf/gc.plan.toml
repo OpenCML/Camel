@@ -15,7 +15,67 @@ of 4,096 rows): generational 6 s, mark-sweep 8 s, peak resident size 1.7 GB with
 The assertions are on what must not depend on the length of the run: the size of the old
 spaces and the number of promoted objects. The comparison itself is made with
 `python3 test/tools/gcbench/gcbench.py`.
+
+The two `gc_timeit_cycles` tests run the command that was seen to end in an access violation
+(docs/handover/reports/H9.md, section 2) once per collector: `--timeit std::nvm/10` rebuilds and
+destroys the module, the graph and the Context ten times in one process, which is the cycle the
+crash was in. They expect exit 0 and check from the allocator's statistics that the collector of
+the test really collected during those ten iterations (10 minor collections for the generational
+collector, 10 major ones for mark-sweep), so a run that somehow skipped collection does not pass
+silently. The longer hunt, thousands of processes with the frequency written down, is
+`python3 test/tools/timeitloop/timeitloop.py`.
 """
+
+[[tests]]
+name = "gc_timeit_cycles.generational"
+desc = "Ten --timeit cycles of alloc_small on the generational collector: every cycle runs and the moving collector collects and moves."
+kind = "behavior"
+case = "../../cases/perf/gc/alloc_small.cml"
+args = ["--timeit", "std::nvm/10", "${case}", "--arg", "reps=200000", "--output-format", "json"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.stdout.includes('"kind": "timeit"'), `no timeit summary on stdout: ${input.stdout}`)
+assert(/"iterations": 10/.test(input.stdout), `not every cycle ran: ${input.stdout}`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('minor') >= 10, `the young generation was collected in every cycle: ${line[0]}`)
+assert(field('moved') > 0, `the moving collector moved nothing: ${line[0]}`)
+}
+"""
+timeout_ms = 300000
+
+[[tests]]
+name = "gc_timeit_cycles.mark_sweep"
+desc = "Ten --timeit cycles of alloc_small on mark-sweep: every cycle runs and the collector sweeps."
+kind = "behavior"
+case = "../../cases/perf/gc/alloc_small.cml"
+args = ["--timeit", "std::nvm/10", "${case}", "--arg", "reps=200000", "--output-format", "json"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.stdout.includes('"kind": "timeit"'), `no timeit summary on stdout: ${input.stdout}`)
+assert(/"iterations": 10/.test(input.stdout), `not every cycle ran: ${input.stdout}`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('major') >= 10, `mark-sweep did not collect in every cycle: ${line[0]}`)
+}
+"""
+timeout_ms = 300000
 
 [[tests]]
 name = "gc_soak_long.generational"
