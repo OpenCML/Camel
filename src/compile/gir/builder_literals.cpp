@@ -134,6 +134,13 @@ foldedValueOf(const std::string &group, const std::vector<literal::Value> &value
 /// The value a comparison of two exact values gives; nothing for any other group.
 std::optional<bool> foldedComparison(
     const std::string &group, const literal::Value &left, const literal::Value &right) {
+    // A complex number has no order: `<`, `<=`, `>` and `>=` over an imaginary value are
+    // not folded (and the operator table has no overload for them either).
+    if (left.hasImaginaryPart() || right.hasImaginaryPart()) {
+        if (group != "__eq__" && group != "__neq__") {
+            return std::nullopt;
+        }
+    }
     const int order = left.compare(right);
     if (group == "__eq__") {
         return order == 0;
@@ -184,7 +191,17 @@ std::optional<literal::Value> Builder::literalValueOfExpr(const GCT::node_ptr_t 
 // The default type of a literal of this kind: `int` for an integer, `float` for a decimal or
 // exponent form (design principles 5.1, 02_lexical).
 Type *Builder::defaultTypeOf(const literal::Value &value) {
-    return value.kind() == literal::Kind::Integer ? Type::Int() : Type::Float();
+    switch (value.kind()) {
+    case literal::Kind::Integer:
+        return Type::Int();
+    case literal::Kind::Float:
+        return Type::Float();
+    case literal::Kind::Imaginary:
+    case literal::Kind::Complex:
+        // Design principles 5.1: an imaginary literal with no context is a c128.
+        return Type::Complex128();
+    }
+    return Type::Float();
 }
 
 node_handle_t Builder::literalInType(
@@ -313,10 +330,13 @@ void Builder::adaptLiteralOperands(
                 continue;
             }
             Type *candidate = valueTypeOf(types[j]);
-            if (candidate != nullptr && candidate->isPrimitive() &&
+            if (candidate != nullptr &&
+                (candidate->isPrimitive() ||
+                 camel::core::type::isComplex(candidate->code())) &&
                 (candidate->code() == TypeCode::Int32 || candidate->code() == TypeCode::Int64 ||
                  candidate->code() == TypeCode::Float32 ||
-                 candidate->code() == TypeCode::Float64)) {
+                 candidate->code() == TypeCode::Float64 ||
+                 camel::core::type::isComplex(candidate->code()))) {
                 other = candidate;
             }
         }

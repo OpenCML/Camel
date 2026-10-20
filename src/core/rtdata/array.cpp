@@ -25,6 +25,7 @@
 #include "camel/core/rtdata/array.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/rtdata/tuple.h"
@@ -307,7 +308,7 @@ using camel::core::type::TypeCode;
 
 /// Reads one pure-data leaf from its compact bytes. The slot carries the same low bytes that
 /// rtdata::toSlot gives the value, so this is the inverse of writeLeaf.
-slot_t readLeaf(const std::byte *at, TypeCode code) {
+slot_t readLeaf(const std::byte *at, TypeCode code, camel::core::mm::IAllocator &allocator) {
     switch (code) {
     case TypeCode::Int32: {
         int32_t value = 0;
@@ -333,6 +334,18 @@ slot_t readLeaf(const std::byte *at, TypeCode code) {
     case TypeCode::Byte: {
         const uint8_t value = *reinterpret_cast<const uint8_t *>(at);
         return rtdata::toSlot(value);
+    }
+    case TypeCode::Complex64: {
+        float real = 0.0f, imaginary = 0.0f;
+        std::memcpy(&real, at, sizeof(real));
+        std::memcpy(&imaginary, at + sizeof(real), sizeof(imaginary));
+        return rtdata::toSlot(rtdata::Complex::create(real, imaginary, code, allocator));
+    }
+    case TypeCode::Complex128: {
+        double real = 0.0, imaginary = 0.0;
+        std::memcpy(&real, at, sizeof(real));
+        std::memcpy(&imaginary, at + sizeof(real), sizeof(imaginary));
+        return rtdata::toSlot(rtdata::Complex::create(real, imaginary, code, allocator));
     }
     default:
         ASSERT(false, "Not a pure-data leaf type");
@@ -372,6 +385,28 @@ void writeLeaf(std::byte *at, TypeCode code, slot_t slot) {
     case TypeCode::Byte: {
         const uint8_t value = rtdata::fromSlot<uint8_t>(slot);
         std::memcpy(at, &value, sizeof(value));
+        break;
+    }
+    case TypeCode::Complex64: {
+        float real = 0.0f, imaginary = 0.0f;
+        if (slot != NullSlot) {
+            const auto *value = rtdata::fromSlot<const rtdata::Complex *>(slot);
+            real              = value->realF();
+            imaginary         = value->imaginaryF();
+        }
+        std::memcpy(at, &real, sizeof(real));
+        std::memcpy(at + sizeof(real), &imaginary, sizeof(imaginary));
+        break;
+    }
+    case TypeCode::Complex128: {
+        double real = 0.0, imaginary = 0.0;
+        if (slot != NullSlot) {
+            const auto *value = rtdata::fromSlot<const rtdata::Complex *>(slot);
+            real              = value->real();
+            imaginary         = value->imaginary();
+        }
+        std::memcpy(at, &real, sizeof(real));
+        std::memcpy(at + sizeof(real), &imaginary, sizeof(imaginary));
         break;
     }
     default:
@@ -451,7 +486,10 @@ materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core
     for (size_t i = 0; i < layout->fieldCount; ++i) {
         const type::DataLayout *fieldLayout = type::pureDataLayout(fieldType(i));
         ASSERT(fieldLayout != nullptr, "A pure-data field has a layout");
-        hasNested = hasNested || fieldLayout->aggregate;
+        // A complex leaf allocates its box while the parent exists: that is a nested
+        // allocation too, so the parent must be rooted across it.
+        hasNested = hasNested || fieldLayout->aggregate ||
+                    camel::core::type::isComplex(fieldLayout->scalar);
     }
 
     // A nested field is materialized by an allocation after the parent exists. Root the parent
@@ -475,7 +513,7 @@ materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core
             const slot_t value = fieldLayout->aggregate
                                      ? rtdata::toSlot(static_cast<rtdata::Object *>(
                                            rtdata::materializeAggregate(fieldBytes, field, allocator)))
-                                     : readLeaf(fieldBytes, fieldLayout->scalar);
+                                     : readLeaf(fieldBytes, fieldLayout->scalar, allocator);
             if (root) {
                 object = root->getAs<::Struct>();
             }
@@ -497,7 +535,7 @@ materializeAggregate(const std::byte *bytes, const type::Type *type, camel::core
         const slot_t value          = fieldLayout->aggregate
                                           ? rtdata::toSlot(static_cast<rtdata::Object *>(
                                                 rtdata::materializeAggregate(fieldBytes, field, allocator)))
-                                          : readLeaf(fieldBytes, fieldLayout->scalar);
+                                          : readLeaf(fieldBytes, fieldLayout->scalar, allocator);
         if (root) {
             object = root->getAs<::Tuple>();
         }
@@ -525,6 +563,9 @@ slot_t Array::getSlotSlow(uint64_t flatIndex) const {
         return rtdata::toSlot(
             static_cast<rtdata::Object *>(rtdata::materializeAggregate(copy.data(), elemType_, *allocator_)));
     }
+    if (type::isComplex(elemTypeCode_)) {
+        return rtdata::readPureComplex(at, elemTypeCode_);
+    }
     if (elementSize_ == sizeof(slot_t)) {
         return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
     }
@@ -550,6 +591,7 @@ slot_t Array::getSlotSlow(uint64_t flatIndex) const {
 void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType *arrayType) {
     ASSERT(flatIndex < numel_, "Array flat index out of range");
     if (isSlots()) {
+        CAMEL_ASSERT_NOT_VIEW(value, elemType_, "an array element");
         rtdata::Object *owner =
             fixedArray_ != nullptr ? static_cast<rtdata::Object *>(fixedArray_)
                                    : static_cast<rtdata::Object *>(this);
@@ -583,6 +625,10 @@ void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType 
             std::memset(at, 0, elementSize_);
         }
         storeAggregate(at, elemType_, value);
+        return;
+    }
+    if (type::isComplex(elemTypeCode_)) {
+        writeLeaf(at, elemTypeCode_, value);
         return;
     }
     if (elementSize_ == sizeof(slot_t)) {
@@ -988,6 +1034,35 @@ bool Array::compactEqualsElements(const Array *other, bool deep) const {
         if (extents_[i] != other->extents_[i]) {
             return false;
         }
+    }
+    if (type::isComplex(elemTypeCode_)) {
+        // Value equality, not byte equality: -0 == 0 and NaN != NaN are the complex number's
+        // equality (the same rules as the scalar == operator), while a memcmp would compare
+        // the bit patterns.
+        for (uint64_t i = 0; i < numel_; ++i) {
+            const std::byte *a = dataPtr_ + i * elementSize_;
+            const std::byte *b = other->dataPtr_ + i * elementSize_;
+            if (elemTypeCode_ == TypeCode::Complex64) {
+                float ar = 0.0f, ai = 0.0f, br = 0.0f, bi = 0.0f;
+                std::memcpy(&ar, a, sizeof(ar));
+                std::memcpy(&ai, a + sizeof(ar), sizeof(ai));
+                std::memcpy(&br, b, sizeof(br));
+                std::memcpy(&bi, b + sizeof(br), sizeof(bi));
+                if (!(ar == br && ai == bi)) {
+                    return false;
+                }
+            } else {
+                double ar = 0.0, ai = 0.0, br = 0.0, bi = 0.0;
+                std::memcpy(&ar, a, sizeof(ar));
+                std::memcpy(&ai, a + sizeof(ar), sizeof(ai));
+                std::memcpy(&br, b, sizeof(br));
+                std::memcpy(&bi, b + sizeof(br), sizeof(bi));
+                if (!(ar == br && ai == bi)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
     return byteSize() == 0 || std::memcmp(dataPtr_, other->dataPtr_, byteSize()) == 0;
 }

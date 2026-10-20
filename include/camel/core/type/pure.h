@@ -66,8 +66,14 @@ struct DataLayout {
     size_t fieldCount = 0;
     /// fieldCount byte offsets into an element; null for a leaf.
     const size_t *fieldOffsets = nullptr;
-    /// True when every field is an 8-byte leaf with no padding, so the compact bytes equal the
-    /// slot data of a real Struct/Tuple (a bulk copy is then possible).
+    /// True when the compact bytes of one value are exactly the bytes a slot holds for it: the
+    /// leaf types (i32, i64, f32, f64, bool, byte) qualify, an aggregate or a complex
+    /// number does not. This is a property of the type, not of `size`: c64 is 8 bytes but is not
+    /// slot-resident, so a struct of c64 fields must not be bulk-copied from slots.
+    bool slotResident = false;
+    /// True when every field is slot-resident and exactly one slot wide with no padding, so the
+    /// compact bytes equal the slot data of a real Struct/Tuple (a bulk copy is then possible).
+    /// Derived from the field types' `slotResident`, never from the element size alone.
     bool slotShaped = false;
 };
 

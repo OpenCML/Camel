@@ -285,7 +285,8 @@ class ParserImpl {
     void parseTypeArguments();
     bool literalSignAhead() const {
         if ((cur_ != TK::Minus && cur_ != TK::Plus) ||
-            (peek(1) != TK::Integer && peek(1) != TK::Real)) {
+            (peek(1) != TK::Integer && peek(1) != TK::Real &&
+             peek(1) != TK::Imaginary)) {
             return false;
         }
         return true;

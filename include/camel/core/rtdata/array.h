@@ -52,6 +52,7 @@
 
 #include "base.h"
 #include "camel/core/mm/block.h"
+#include "camel/core/rtdata/aggregate.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/rtdata/view.h"
 #include "camel/core/type/pure.h"
@@ -353,6 +354,14 @@ class Array : public rtdata::Object {
                (elemType_->code() == camel::core::type::TypeCode::Struct ||
                 elemType_->code() == camel::core::type::TypeCode::Tuple);
     }
+    /// True when one element is exactly the bytes of one slot (i64, f64): the type-level test
+    /// that the slot fast paths may use. c64 is 8 bytes but is not slot-resident, so it must
+    /// not be read as a slot.
+    bool isSlotResidentElement() const {
+        const camel::core::type::DataLayout *layout =
+            elemType_ != nullptr ? camel::core::type::pureDataLayout(elemType_) : nullptr;
+        return layout != nullptr && layout->slotResident;
+    }
 
     // ---- Storage access ------------------------------------------------------------------
 
@@ -360,13 +369,13 @@ class Array : public rtdata::Object {
     /// use dataAs<T>() or the get/set accessors otherwise.
     slot_t *data() {
         ASSERT(
-            isSlots() || (elementSize_ == sizeof(slot_t) && !isAggregateElement()),
+            isSlots() || isSlotResidentElement(),
             "Use dataAs<T>() for this element type");
         return reinterpret_cast<slot_t *>(dataPtr_);
     }
     const slot_t *data() const {
         ASSERT(
-            isSlots() || (elementSize_ == sizeof(slot_t) && !isAggregateElement()),
+            isSlots() || isSlotResidentElement(),
             "Use dataAs<T>() for this element type");
         return reinterpret_cast<const slot_t *>(dataPtr_);
     }
@@ -397,7 +406,8 @@ class Array : public rtdata::Object {
         if (isSlots()) {
             return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
         }
-        if (!isAggregateElement() && elementSize_ == sizeof(slot_t)) {
+        if (!isAggregateElement() && isSlotResidentElement() &&
+            elementSize_ == sizeof(slot_t)) {
             return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
         }
         return getSlotSlow(flatIndex);
@@ -425,14 +435,14 @@ class Array : public rtdata::Object {
     /// compact array, whose own element type is enough.
     void setSlot(uint64_t flatIndex, slot_t value, const camel::core::type::ArrayType *arrayType = nullptr) {
         if (isCompact() && slotShaped_ && value != NullSlot &&
-            !camel::core::rtdata::isAggregateView(value)) {
+            !camel::core::rtdata::isViewSlot(value, elemType_)) {
             ASSERT(flatIndex < numel_, "Array flat index out of range");
             std::memcpy(
                 dataPtr_ + flatIndex * elementSize_,
                 camel::core::rtdata::aggregateSlots(value), elementSize_);
             return;
         }
-        if (isCompact() && !isAggregateElement() && elementSize_ == sizeof(slot_t)) {
+        if (isCompact() && isSlotResidentElement() && elementSize_ == sizeof(slot_t)) {
             ASSERT(flatIndex < numel_, "Array flat index out of range");
             reinterpret_cast<slot_t *>(dataPtr_)[flatIndex] = value;
             return;
@@ -519,7 +529,7 @@ class Array : public rtdata::Object {
             // setSlot's fast path for a slot-shaped aggregate, with the storage-class tests
             // already folded into the class.
             if (slotShaped_ && value != NullSlot &&
-                !camel::core::rtdata::isAggregateView(value)) {
+                !camel::core::rtdata::isViewSlot(value, elemType_)) {
                 ASSERT(flatIndex < numel_, "Array flat index out of range");
                 std::memcpy(
                     dataPtr_ + flatIndex * elementSize_,
