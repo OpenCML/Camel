@@ -273,7 +273,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **Diagnostics and the graph use the type names in the source** (`first<int>`, not `first<i64>`).
 - **Literals take their type from context** (as Go's untyped constants): in order, the expected type (declaration, parameter, return position, one side of a binary operation or comparison), the type of the other operand of a binary operation, then the default (`int` for integers, `float` for decimals and exponent forms, `c128` for imaginary); operations between literals are computed exactly at compile time, with no intermediate overflow and no rounding before the target type is known; a value that does not fit the target type is a compile-time error, `SemanticDiag::LiteralNotRepresentable` (the message quotes what was written and gives the reason: out of range, would be truncated), located at the position that gave the type. Variables are still never converted implicitly. Example: in `x * 2 + 1` with `x` of type `f32`, `2` and `1` are `f32`; `0.1 + 0.2` is the double nearest to 0.3 and `9223372036854775807 + 1 - 1` is the largest integer; `1 / 2` is 0 by integer division and `1.0 / 2` is 0.5.
 - **Complex numbers**: core numeric types `c64` and `c128`, stored compactly in arrays. An imaginary literal is a number immediately followed by the suffix `i`: `4i`, `4.0i`, `1e-3i` (not on hexadecimal or binary literals); `3 + 4i` is `c128`, `let w: c64 = 1 - 2i`. Printed as `3+4i`.
-- **"Positions with an expected type" include**: declarations, parameters, return positions (the last expression of a function body, and a `return` inside a branch arm, which takes the expected type of the arm's position, unrelated to the function's return type), the other side of a binary operation, elements of an array literal, fields of a struct literal, `match` patterns (taking the scrutinee's type). Without an expected type, the literals in one array take the widest of "integer < decimal < imaginary" (`[1, 2.0]` is `float[]`). Arithmetic between literals (the unary `~` included) is computed exactly at compile time, and a folded expression that is out of range reports at the whole expression; `&&` and `||` are not folded that way (they are short-circuit branches). A value that does not fit reports `LiteralNotRepresentable`. A value bound by `let` has a fixed type and, like a variable, is never converted implicitly afterwards.
+- **"Positions with an expected type" include**: declarations, parameters, return positions (the last expression of a function body, and a `return` inside a branch arm, which takes the expected type of the arm's position, unrelated to the function's return type), the other side of a binary operation, elements of an array literal, fields of a struct literal, `match` patterns (taking the scrutinee's type), and the values of the arms of `if`/`match` (taking the expected type of the whole expression, as in `let x: float = if c then 1 else 2`). Without an expected type, the literals in one array take the widest of "integer < decimal < imaginary" (`[1, 2.0]` is `float[]`). Arithmetic between literals (the unary `~` included) is computed exactly at compile time, and a folded expression that is out of range reports at the whole expression; `&&` and `||` are not folded that way (they are short-circuit branches). A value that does not fit reports `LiteralNotRepresentable`. A value bound by `let` has a fixed type and, like a variable, is never converted implicitly afterwards.
 
 ### 5.2 Named types and structural types
 
@@ -302,7 +302,7 @@ A `sync` written before a block (including the postfix form on a function body, 
   type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
   ```
 
-- When a `match` on an `enum` lists all variants, `case _` need not be written (the same as for `bool`, `T?`, `T!`). Variants are not distinguished by the type of the value (that would be a run-time type test, already excluded). The `A | B` that can be written now but that no value can enter is retired, and `|` is kept only for logical or. No new node kind is added on the graph (see 2.1).
+- When a `match` on an `enum` lists all variants, `case _` need not be written (the same as for `bool`, `T?`, `T!`). Variants are not distinguished by the type of the value (that would be a run-time type test, already excluded). `|` is only logical or. No new node kind is added on the graph (see 2.1).
 
 ### 5.4 Multi-dimensional arrays and dimensions
 
@@ -365,11 +365,10 @@ Type arguments can be written explicitly at a call, in two layers.
 - `f<w>` still means only `with` parameters and partial application; when both are written it is `f::<T><w>(x)`.
 - **Lambda parameter types may come from context**: when a lambda appears where a function type is expected (an argument, a `with` argument, an annotated binding), its unannotated parameter and return types are inferred from that function type, as in `tree_reduce<(count, leaf) => count + numel(leaf)>(model, 0)`; annotations are required when inference fails.
 
-### 5.10 Tightening `any`
+### 5.10 No `any`
 
-- **`any` is only a simplified way of writing**, an opening made temporarily before the type system matures. **`any` is to be tightened step by step**: only when there is a specific need and the expressive power of the type system is temporarily insufficient is an opening made temporarily; wherever there is a clearly recommended form (generics, overloading, a concrete type), `any` is explicitly rejected and the diagnostic gives the recommended form.
-- Already a compile-time error now: `any` as the condition of an `if`, `any` as the subject of a `match`, an unchecked `as any as T`.
-- Camel has no ability to determine a type at run time.
+- **There is no `any` type**: after compilation every value has a definite type. Several types are accepted through type parameters, values of different types sit side by side in tuples or structs, and JSON of a known shape is read with `decode_as`.
+- Camel has no way to test types at run time.
 
 ---
 
