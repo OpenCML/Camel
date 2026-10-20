@@ -1,0 +1,29 @@
+id = "perf.showcase_c2_mlp_mnist"
+order = 900
+tier = "benchmark"
+tags = ["showcase", "slow", "c2", "mlp", "mnist"]
+
+# The small configuration of showcase/c2-mlp-mnist (H13): a deterministic synthetic
+# stand-in for MNIST (no dataset download), 1000 training samples, 200 steps of Adam,
+# a 200-row validation set.  It runs both implementations of the showcase (the Camel
+# program and the PyTorch baseline) and fails when they disagree beyond the numeric
+# tolerances, so the example cannot rot silently.  The full numbers in
+# showcase/c2-mlp-mnist/RESULTS.md come from `--profile standard`, which uses MNIST when
+# the repository cache holds it and regenerates the synthetic stand-in otherwise.
+#
+# The plan lives in the `benchmark` tier because that is the existing bucket the default
+# `npm run test` does not run and `npm run test:all` does; the fast/slow split (H10) has
+# not landed yet.  Move it to the slow tier when that split exists.
+
+[[tests]]
+name = "small"
+desc = "C2 small configuration: compare.py runs the Camel MLP and its PyTorch counterpart on the same deterministic synthetic data and checks the initial loss, every logged training loss, the final validation loss and accuracy, and the checkpoint round trip; it exits non-zero when one bound is exceeded."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/c2-mlp-mnist/compare.py"
+args = ["${case}", "--profile", "small", "--data", "tmp/c2-showcase-small", "--results", "tmp/c2-showcase-small/RESULTS.md"]
+skip_unless = ["${python}", "-c", "import numpy, torch, psutil"]
+expect_exit = 0
+expect_stdout_contains = ["c2 compare: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 180000

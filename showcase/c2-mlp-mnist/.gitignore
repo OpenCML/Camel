@@ -1,0 +1,7 @@
+# Generated data, checkpoints and comparison output.  RESULTS.md is committed on purpose:
+# it is the reviewed record of the measured run.
+artifacts/
+*.npy
+*.pt
+checkpoint/
+checkpoint-torch.pt
