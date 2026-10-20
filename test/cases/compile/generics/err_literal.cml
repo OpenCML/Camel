@@ -1,7 +1,7 @@
 module err_literal
 
 func zero_of(x: typeas T): T {
-    let z: T = 0
+    let z: T = 0.5
     return z
 }
 

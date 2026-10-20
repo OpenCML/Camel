@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 13, 2026
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 20, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -91,6 +91,15 @@ const std::vector<std::string> *Tree::namespaceOf(const Node *node) const {
 const std::vector<Reference> *Tree::usingsOf(const Node *node) const {
     const auto it = usings_.find(node);
     return it == usings_.end() ? nullptr : &it->second;
+}
+
+void Tree::setLiteralValue(const Node *node, literal::Value value) {
+    literalValues_[node] = std::move(value);
+}
+
+const literal::Value *Tree::literalValueOf(const Node *node) const {
+    const auto it = literalValues_.find(node);
+    return it == literalValues_.end() ? nullptr : &it->second;
 }
 
 Tree *Tree::of(const Node *node) {
@@ -333,6 +342,10 @@ node_ptr_t Tree::clone(const Node *node) {
     switch (node->kind_) {
     case NodeKind::DATA:
         copy->payload_.data = &constants_.emplace_back(*node->payload_.data);
+        // A literal keeps its exact value through a copy: the copy is the same literal.
+        if (const literal::Value *exact = Tree::of(node)->literalValueOf(node)) {
+            literalValues_[copy] = *exact;
+        }
         break;
     case NodeKind::DECL:
     case NodeKind::FUNC:

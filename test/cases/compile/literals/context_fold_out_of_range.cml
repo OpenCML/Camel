@@ -1,0 +1,12 @@
+/**
+ * An expression of literals only is computed with its exact value and then put into its type
+ * (design principles 5.1): `9223372036854775807 + 1` is 9223372036854775808, which an `int`
+ * does not hold, so the program is refused when it is compiled. A run-time add of the same
+ * numbers would wrap to the smallest `int` instead (`let m: int = 9223372036854775807` then
+ * `m + 1`).
+ */
+func main(): int sync {
+    let a: int = 9223372036854775807 + 1
+    println(a)
+    return 0
+}

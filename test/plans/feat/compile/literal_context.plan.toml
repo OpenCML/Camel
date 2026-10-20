@@ -1,0 +1,119 @@
+id = "compile.literal_context"
+order = 328
+tier = "feat"
+tags = ["feat", "compile", "literals"]
+desc = "A literal takes its type from the context: the expected type, the other operand, then the default type (design principles 5.1)."
+
+# The rule, its order and its arithmetic, printed on every scheduler.
+[[tests]]
+name = "context.order"
+desc = "A literal takes the type of the position it is written in (declaration, parameter, return, the other operand of an operator), else its default type; an expression of literals only is computed with its exact value (0.1 + 0.2 is 0.3, 2 ^ 63 - 1 has no room to overflow); integer and real stay apart (1 / 3 is 0)."
+kind = "behavior"
+case = "../../../cases/compile/literals/literal_context.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "2.0 1.0 3",
+  "7.0 2.5 0.0",
+  "2.0 2.0",
+  "3.0 2.5 4",
+  "3 3.0 x true",
+  "true false",
+  "9223372036854775807 9223372036854775807",
+  "2000000000",
+  "0 0.3333333333333333 1024 1024.0",
+  "0.33333334 0.3",
+  "3 -3 1 -1",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+# The rule is a compile-time rule: a value that does not fit the type it is given is an error at
+# the position that gave it the type, not a fault at run time (and not a wrap-around).
+
+[[tests]]
+name = "context.fold_out_of_range"
+desc = "`9223372036854775807 + 1` is 9223372036854775808 exactly and does not fit an int: an error, where a run-time add would wrap."
+kind = "negative"
+case = "../../../cases/compile/literals/context_fold_out_of_range.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 9
+expect_output_contains = ["'9223372036854775808'", "type 'int'", "-9223372036854775808 to 9223372036854775807"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.argument_out_of_range"
+desc = "A literal argument takes the parameter's type: 3000000000 does not fit the i32 of `take`."
+kind = "negative"
+case = "../../../cases/compile/literals/context_argument_out_of_range.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 18
+expect_output_contains = ["'3000000000'", "type 'i32'", "-2147483648 to 2147483647"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.operand_out_of_range"
+desc = "A literal operand takes the other operand's type: `t + 3000000000` is an i32 sum, and 3000000000 does not fit an i32."
+kind = "negative"
+case = "../../../cases/compile/literals/context_operand_out_of_range.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 17
+expect_output_contains = ["'3000000000'", "type 'i32'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# What the rule must not do: convert a variable.
+
+[[tests]]
+name = "context.variable_declaration"
+desc = "`let y: float = n` with `n` an int is still an error: the expected type moves a literal, never a variable."
+kind = "negative"
+case = "../../../cases/compile/literals/context_variable_declaration.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 7
+expect_output_contains = ["type 'int'", "declared type 'float'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.variable_operator"
+desc = "`a + b` with `a` an i32 and `b` an int is still an error: variables of two numeric types do not meet in an operator."
+kind = "negative"
+case = "../../../cases/compile/literals/context_variable_operator.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["context_variable_operator.cml:8:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(i32, int)", "operator '+' is not defined"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.literal_operand_mismatch"
+desc = "`n + 1.0` with `n` an int is still an error: the real literal does not become an int because the other operand is one."
+kind = "negative"
+case = "../../../cases/compile/literals/context_literal_operand_mismatch.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["context_literal_operand_mismatch.cml:7:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(int, float)", "operator '+' is not defined"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

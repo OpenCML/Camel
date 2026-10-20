@@ -263,14 +263,14 @@ A `sync` written before a block (including the postfix form on a function body, 
 
 ### 5.1 Basic types and numeric types
 
-- **Numeric types are not converted implicitly.** An integer does not automatically become a float (for parameters and return values alike); write `float(x)` explicitly when needed.
-- **A literal with an exponent or a decimal point is always a float.** `1e5` is `100000.0`.
+- **Numeric types are not converted implicitly.** An integer does not automatically become a float, and no other two numeric types convert either (for parameters, return values and variables alike); write `float(x)` explicitly when needed. The one thing that moves is a **literal**, which takes its type from the context (see the end of this section).
+- **A literal with an exponent or a decimal point has `float` as its default type** (it is an `f32` when the context asks for one): with no context, `1e5` is `100000.0`.
 - **Faults of conversion**: `int('12abc')` is a fault, the whole string must be one number, and to parse safely use `parse_int`, which returns `int!`; a conversion whose value does not fit the target type is a fault: `int(1e30)`, `int(nan)`, `i32(5000000000)`.
 - **Overflow of integer addition, subtraction and multiplication, and the minimum integer divided by -1, keep wrapping around.**
 - **Converting a value to its own type is legal and does nothing**: `xs as int[]` (`xs: int[]`) passes, as does `p as A` through an alias.
 - There should be no type that is still undetermined at run time: after compilation every value has a determined type (for `any` see 5.10).
 - **Diagnostics and the graph use the type names in the source** (`first<int>`, not `first<i64>`).
-- **Literals take their type from context** (as Go's untyped constants): in order, the expected type (declaration, parameter, return position), the type of the other operand of a binary operation, then the default (`int` for integers, `float` for decimals, `c128` for imaginary); operations between literals are computed exactly at compile time; a value that does not fit the target type is a compile-time error. Variables are still never converted implicitly. Example: in `x * 2 + 1` with `x` of type `f32`, `2` and `1` are `f32`.
+- **Literals take their type from context** (as Go's untyped constants): in order, the expected type (declaration, parameter, return position, one side of a binary operation or comparison), the type of the other operand of a binary operation, then the default (`int` for integers, `float` for decimals and exponent forms, `c128` for imaginary); operations between literals are computed exactly at compile time, with no intermediate overflow and no rounding before the target type is known; a value that does not fit the target type is a compile-time error, `SemanticDiag::LiteralOutOfRange`, located at the position that gave the type. Variables are still never converted implicitly. Example: in `x * 2 + 1` with `x` of type `f32`, `2` and `1` are `f32`; `0.1 + 0.2` is the double nearest to 0.3 and `9223372036854775807 + 1 - 1` is the largest integer; `1 / 2` is 0 by integer division and `1.0 / 2` is 0.5.
 - **Complex numbers**: core numeric types `c64` and `c128`, stored compactly in arrays. An imaginary literal is a number immediately followed by the suffix `i`: `4i`, `4.0i`, `1e-3i` (not on hexadecimal or binary literals); `3 + 4i` is `c128`, `let w: c64 = 1 - 2i`. Printed as `3+4i`.
 
 ### 5.2 Named types and structural types

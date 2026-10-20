@@ -23,8 +23,8 @@
  */
 
 #include "builder.h"
-#include "builder_support.h"
 #include "builder_helpers.h"
+#include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/numeric_convert.h"
@@ -898,6 +898,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             return built;
         }
     }
+    // An expression of literals only is computed now, exactly (design principles 5.1):
+    // `1 + 2`, `2 ^ 10`, `0.1 + 0.2 == 0.3`. Its value takes the type this position expects,
+    // and the default type of its kind when nothing does.
+    if (node_handle_t folded = foldLiteralCall(gct, expectedResult)) {
+        LEAVE("LINK");
+        return folded;
+    }
     genericCalleeAllowed_ = gct->at(0)->type() == GCT::NodeKind::DREF ||
                             gct->at(0)->type() == GCT::NodeKind::WITH ||
                             gct->at(0)->type() == GCT::NodeKind::TAPP;
@@ -1109,14 +1116,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // target type before a resolver has accepted the arguments (`append(xs, 5)` with
     // `xs: (int?)[]` still needs `5 as int?`, and `len([])` keeps `[]` without an element
     // type). The alternative is to let a resolver name the type it would accept.
-    const auto enteringTypes = [](FunctionType *funcType, const type_vec_t &types, bool with) {
+    const auto enteringTypes = [&](FunctionType *funcType,
+                                   const std::vector<Argument> &inputs,
+                                   const type_vec_t &types,
+                                   bool with) {
         type_vec_t entered = types;
         const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
         for (size_t i = 0; i < entered.size() && i < count; ++i) {
             Type *param      = with ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
             const bool isVar = with ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i);
-            if (!isVar && param != nullptr && !param->assignableFrom(entered[i]) &&
-                entersImplicitly(param, entered[i])) {
+            if (isVar || param == nullptr || param->assignableFrom(entered[i])) {
+                continue;
+            }
+            if (entersImplicitly(param, entered[i])) {
+                entered[i] = param;
+                continue;
+            }
+            // A literal takes the parameter's type when its value can be one of it (design
+            // principles 5.1); whether the value fits is checked when the CAST is made.
+            std::optional<literal::Value> value;
+            if (i < inputs.size()) {
+                value = literalValueOfExpr(inputs[i].expr);
+            }
+            if (value.has_value() && literal::kindEnters(*value, param)) {
                 entered[i] = param;
             }
         }
@@ -1129,8 +1151,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
         return resolver
             .resolve(
-                enteringTypes(funcType, withInputTypes, true),
-                enteringTypes(funcType, normInputTypes, false),
+                enteringTypes(funcType, withInputs, withInputTypes, true),
+                enteringTypes(funcType, normInputs, normInputTypes, false),
                 Modifier::None)
             .has_value();
     };
@@ -1443,6 +1465,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     }
                 }
             }
+            // Design principles 5.1: a literal operand takes the type of the other operand
+            // (`x * 2 + 1` with `x: f32`). Done before the resolvers see the arguments,
+            // because a resolver matches types exactly. Only a binary arithmetic or
+            // comparison operator relates its operands so: the operands of a tuple or an
+            // array are independent, and a with-argument has a parameter of its own.
+            if (withInputs.empty() && normInputs.size() == 2) {
+                adaptLiteralOperands(ops->name(), normInputs, normInputTypes, gct);
+            }
             // Constant arguments (shape literals, axes) let operators refine their result type.
             std::vector<StaticArg> normStatics;
             normStatics.reserve(normInputs.size());
@@ -1621,7 +1651,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                                         continue;
                                     }
                                     const auto part = callSpec->checkFormat(
-                                        placeholders[i], type_vec_t{formatted[i]});
+                                        placeholders[i],
+                                        type_vec_t{formatted[i]});
                                     if (!part) {
                                         continue;
                                     }
