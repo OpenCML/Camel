@@ -130,6 +130,10 @@ The body of `main` is a synchronous block, so the two calls to `log` execute in 
 - **The purity of an operator must be declared.** An operator without a declaration is treated as having side effects (at worst less optimization, never a wrong result); the standard library modules in the repository must declare operator by operator, and for third-party modules a hint is given when a declaration is missing.
 - **Whether an operator may fault is not required to be declared one by one**: module authors declare as needed, and an operator without a declaration is treated as possibly faulting.
 - Precedents and trade-offs: inference rather than mandatory annotation (the lesson of Java's checked exceptions); the resources of higher-order functions are determined by instantiation, without Koka-style row polymorphism; no effect handlers are provided; distinguishing resources by concrete object (such as a file handle) is not done for now, except `var`.
+- **Unordered resources**: effects on a resource declared `resource net unordered` keep no written order among themselves and may run at the same time when independent; "order does not matter" is the declaring library's promise. When order is needed, write the calls in a `sync` block, or use a handle.
+- **Handle types (per-object resources)**: for a type tagged `#resource`, each value is a resource of its own; operations write `uses parameter` in their signatures (such as `func next(s: Stream<T>): T? uses s`), as `var` parameters do. Operations on the same handle follow the written order, different handles constrain nothing; the compiler infers at the call which value is used. Used for streams, sessions, file handles and the like.
+- **Concurrency needs no `async`/`await`**: independent computations and effects on unordered or different resources may run at the same time; while an effect waits (network, disk, subprocess, a model call), the runtime runs other ready nodes of the graph. This is implementation; the meaning equals executing one by one in some valid order, and `std::nvm` may block one at a time.
+- **Cancellation**: only effects on resources or operators declared `cancellable` can be cancelled, leaving no inconsistent state (the library's responsibility); others complete and their results are discarded. The standard `first_of(a, b, …)` takes the result of the first to succeed and cancels the rest; its result depends on completion order, a nondeterminism stated in its declaration.
 
 ### 3.4 `sync` blocks
 
@@ -194,6 +198,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **Out of bounds**: when the length is known at compile time (especially for types of fixed length), an out-of-bounds `slice` or subscript should be a compile-time error, not silent truncation or something left to run time. A run-time out-of-bounds `slice` is a fault, consistent with an out-of-bounds subscript; `take` and `drop` truncate by definition and are not affected; a `slice` whose start is after its end (`xs->slice<2, 1>`) gives an empty array and is not a fault.
 - **Recursion depth**: tail recursion is to be optimized, and programs should as far as possible be written as tail recursion or as loops; for non-tail recursion there is a configurable limit, whose default is 1000 uniformly on all schedulers, counted by the parallel scheduler too.
 - For numeric faults see 5.1, for the faults of reductions see 7.7.
+- **A timeout is a parameter of the call and returns an error value** (`T!`), not a fault, as in `http::get(url, timeout: 5.0)`.
 
 ### 3.10 Loops
 
@@ -317,6 +322,8 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **The text of standard-library signatures uses type variables, not `any`** (such as `print<T>(x: T)`). Camel functions with a variable number of parameters of different types are not done for now.
 - **Operations that expand by type are written with generics, not built into the compiler.** Operations like `tree_map`, "whose shape is decided by the type and which expand at compile time", will finally be written in the library as Camel generic functions; for this, generics must be able to recurse over the fields of structs and tuples at compile time (the design is to be discussed separately). Until then no more such built-ins are added, and no transitional mechanism is made. The kernel of a native operator does not read the static type of the call at run time; whatever must vary with the type is expanded at compile time.
 - `macro` has nothing to do with type computation; do not build type functions on top of `macro`.
+- **Writing expansion by structure** (design A, see [Generics over structure](design/generic-structure/README.cn.md)): `match type T { case struct => …; case tuple => …; case #leaf => …; case _ => … }` picks a branch by the shape of the type at instantiation; `static for (n, F) in fields T => …` unrolls over the fields at instantiation (the position says what each binding is, so no `constas`/`typeas`; write `(n, F, tags)` when the field's tags are needed); compile-time field access `t.[n]`; comprehensions `{ … => [n]: e }` and `( … => e )`; `static loop acc = init for (n, F) in fields T do …` is a fold unrolled at compile time; variadic `..ts` with spread calls `f(t, ..ts)`, the arity fixed at compile time and possibly 0.
+- Instances containing `match type` or `static for` are **inlined automatically** into their callers; an expansion failure reports an **instantiation chain** with the static bindings (the field names along the chain form the path); libraries may write `static error "…"`; the instantiation depth limit is adjustable; values produced by the expansion such as paths are run-time values (folded to constants), not compile-time parameters.
 
 ### 5.6 Type functions and primitives
 
@@ -677,6 +684,7 @@ See [Training infrastructure design](design/training/README.cn.md) for details.
 
 - Deployment sets up no separate format: the formats of the existing back ends are enough, and a frozen program can also be exported directly as `.cml` and run.
 - Data pipelines need nothing new at the language level; the standard library provides tools for reading and batching.
+- **Networking and streams**: modules `net` and `http` (C++ primitives underneath); `Stream<T>` is a standard library type (a handle type): pulled on demand, possibly unbounded, iterable with `for`, with lazy `map`, `filter` and the like, backpressure following from pulling; windows, keyed aggregation, merging and batching come from the library. Tables follow the Arrow C data interface for zero-copy exchange with Pandas, Polars and DuckDB. The long-term direction is a multi-machine runtime with one model for batch and stream processing. See [Networking, concurrency of long effects, and streams](design/io-concurrency-streams/README.cn.md).
 
 ---
 
