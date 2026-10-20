@@ -154,7 +154,7 @@ ExpandDefinitionsTestPass::apply(const camel::runtime::Program *program, std::os
     const auto &table = OperatorTable::instance();
     rt::RuntimeGraphDraftSession session(context_, program);
     std::map<std::string, size_t> expanded;
-    for (rt::GCGraph *g : rt::collectReachableGraphs(graph)) {
+    for (rt::GCGraph *g : rt::collectReachableGraphs(*program, graph)) {
         std::vector<rt::gc_node_ref_t> nodes;
         for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
             if (g->node(ref)->kind != rt::GCNodeKind::Oper) {

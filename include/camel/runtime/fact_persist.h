@@ -60,7 +60,7 @@ namespace camel::runtime::fact {
  * traits, a static constant by its type and value (a scalar by its bits, an object by its
  * printed form). Source positions do not enter it.
  */
-uint64_t portableGraphHash(const GCGraph *graph);
+uint64_t portableGraphHash(const Program &program, const GCGraph *graph);
 
 /// One fact in the form a cache would hold it.
 struct PortableFact {
@@ -83,7 +83,7 @@ std::optional<PortableFact> parsePortableFact(std::string_view line);
 
 /// The facts about the graphs reachable from `root` a cache could keep: every valid stored fact
 /// of a Derived kind that encodes, and every GraphContent value of a kind that encodes.
-std::vector<PortableFact> exportFacts(FactStore &store, GCGraph *root);
+std::vector<PortableFact> exportFacts(FactStore &store, const Program &program);
 
 /// What loading one PortableFact did.
 enum class ImportResult : uint8_t {
@@ -100,6 +100,6 @@ enum class ImportResult : uint8_t {
 std::string_view importResultName(ImportResult result);
 
 /// Loads `fact` into `store` against the program of `root` (see the file comment).
-ImportResult importFact(FactStore &store, GCGraph *root, const PortableFact &fact);
+ImportResult importFact(FactStore &store, const Program &program, const PortableFact &fact);
 
 } // namespace camel::runtime::fact

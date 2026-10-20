@@ -51,9 +51,9 @@
  * activation of the condition graph and one of the body graph.
  *
  * Ownership. A LoopView is a view: it holds the graph and the node, and is valid as long as the
- * frozen graph is (camel/runtime/graph.h). Graphs are named by GCGraph pointers, nodes by their
- * NodeIds (gc_node_ref_t), types by Type pointers: the design's GraphId and TypeId spelled the
- * way this runtime spells them today (graph-model step 5 brings GraphId).
+ * frozen graph and the Program it was made in are (camel/runtime/graph.h, program.h). The two
+ * graphs of the loop are the ones the Program holds; nodes are named by their NodeIds
+ * (gc_node_ref_t), types by Type pointers.
  *
  * Lowering. lowerLoopsToTailRecursion (camel/runtime/loop_lowering.h) rewrites every LOOP of a
  * program into the tail recursion it means. It is applied only by a back end, on a private copy
@@ -66,6 +66,7 @@
 #include "camel/core/loop_kind.h"
 #include "camel/runtime/effects.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 #include <optional>
 #include <span>
@@ -76,8 +77,8 @@ using camel::core::LoopKind;
 
 class LoopView {
   public:
-    /// The LOOP node `node` of `graph`; asserts that it is one.
-    LoopView(const GCGraph &graph, gc_node_ref_t node);
+    /// The LOOP node `node` of `graph`, a graph of `program`; asserts that it is one.
+    LoopView(const Program &program, const GCGraph &graph, gc_node_ref_t node);
 
     const GCGraph &graph() const { return *graph_; }
     gc_node_ref_t node() const { return node_; }
@@ -156,13 +157,14 @@ class LoopView {
 
     // ---- Effects ----
 
-    EffectSummary condEffects() const { return effectSummaryOf(cond_); }
-    EffectSummary bodyEffects() const { return effectSummaryOf(body_); }
+    EffectSummary condEffects() const { return effectSummaryOf(*program_, cond_); }
+    EffectSummary bodyEffects() const { return effectSummaryOf(*program_, body_); }
     /// The LOOP node's own: the union of the two graphs', and "may fault" and "may not
     /// terminate" (a loop may not end; design of loops 4.8).
     EffectSummary effects() const;
 
   private:
+    const Program *program_;
     const GCGraph *graph_;
     gc_node_ref_t node_;
     LoopKind kind_;
@@ -172,8 +174,10 @@ class LoopView {
     GCGraph *body_;
 };
 
-/// The LOOP node `node` of `graph` (asserts that it is one).
-inline LoopView loopOf(const GCGraph &graph, gc_node_ref_t node) { return LoopView(graph, node); }
+/// The LOOP node `node` of `graph`, a graph of `program` (asserts that it is one).
+inline LoopView loopOf(const Program &program, const GCGraph &graph, gc_node_ref_t node) {
+    return LoopView(program, graph, node);
+}
 
 class GraphDraft;
 
@@ -184,8 +188,8 @@ class GraphDraft;
 /// reads them. One place, so a producer never re-derives the layout either.
 class LoopDraftView {
   public:
-    /// The LOOP node `node` of `draft`; asserts that it is one.
-    LoopDraftView(const GraphDraft &draft, gc_node_ref_t node);
+    /// The LOOP node `node` of `draft`, whose graphs `program` holds; asserts that it is one.
+    LoopDraftView(const Program &program, const GraphDraft &draft, gc_node_ref_t node);
 
     gc_node_ref_t node() const { return node_; }
 
@@ -246,7 +250,7 @@ slot_t loopCollectedValue(const LoopView &loop, slot_t value, size_t c);
 /// With inputs, of the same types; each first value can be assigned to its state; the element
 /// port has the iterated array's element type. I20 holds by construction (EffectSummary is
 /// computed from the nodes).
-void validateRuntimeLoopInterface(const GCGraph *graph, gc_node_ref_t node);
+void validateRuntimeLoopInterface(const Program &program, const GCGraph *graph, gc_node_ref_t node);
 
 /// Gives up the in-place write of a loop body's array state: every `:struct/append_arr_owned`
 /// in `body` (the form Builder::markLoopStateInPlace leaves, design principles 10.5) becomes the

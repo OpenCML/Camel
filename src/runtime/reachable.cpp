@@ -34,7 +34,8 @@
 
 namespace camel::runtime {
 
-void forEachReachableGraph(GCGraph *root, const std::function<void(GCGraph *)> &visitor) {
+void forEachReachableGraph(
+    const Program &program, GCGraph *root, const std::function<void(GCGraph *)> &visitor) {
     if (!root) {
         return;
     }
@@ -51,12 +52,12 @@ void forEachReachableGraph(GCGraph *root, const std::function<void(GCGraph *)> &
         }
 
         visitor(graph);
-        graph->traceGraphs([&](GCGraph *next) { worklist.push(next); });
+        program.traceGraphs(*graph, [&](GCGraph *next) { worklist.push(next); });
     }
 }
 
-uint64_t closureRevision(GCGraph *root) {
-    std::vector<GCGraph *> graphs = collectReachableGraphs(root);
+uint64_t closureRevision(const Program &program, GCGraph *root) {
+    std::vector<GCGraph *> graphs = collectReachableGraphs(program, root);
     std::sort(graphs.begin(), graphs.end(), [](const GCGraph *a, const GCGraph *b) {
         return toValue(a->id()) < toValue(b->id());
     });
@@ -70,9 +71,13 @@ uint64_t closureRevision(GCGraph *root) {
     return h;
 }
 
-std::vector<GCGraph *> collectReachableGraphs(GCGraph *root) {
+std::vector<GCGraph *> collectReachableGraphs(const Program &program) {
+    return collectReachableGraphs(program, program.root());
+}
+
+std::vector<GCGraph *> collectReachableGraphs(const Program &program, GCGraph *root) {
     std::vector<GCGraph *> graphs;
-    forEachReachableGraph(root, [&](GCGraph *graph) { graphs.push_back(graph); });
+    forEachReachableGraph(program, root, [&](GCGraph *graph) { graphs.push_back(graph); });
     return graphs;
 }
 

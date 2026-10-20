@@ -76,8 +76,7 @@ std::string describeNode(const camel::runtime::GCGraph *graph, gc_node_ref_t ref
         extra = std::format(",op={}", graph->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
         break;
     case camel::runtime::GCNodeKind::Func: {
-        const auto *callee = graph->directCalleeGraphOf(ref);
-        extra = std::format(",callee={}", callee ? callee->name() : std::string{"<null>"});
+        extra = std::format(",callee={}", camel::runtime::toText(graph->calleeIdOf(ref)));
     } break;
     default:
         break;

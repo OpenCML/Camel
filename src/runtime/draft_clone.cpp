@@ -98,7 +98,7 @@ std::vector<std::byte> clonePayloadBytes(
     if (sourceNode->kind == GCNodeKind::Func) {
         // The index is into the source graph's reference table: the owner's has its own.
         const GCFuncRef callee{
-            .ref = owner.payloadGraphIndexOf(sourceGraph->directCalleeGraphOf(sourceRef))};
+            .ref = owner.payloadGraphIndexOf(sourceGraph->calleeIdOf(sourceRef))};
         std::vector<std::byte> bytes(sizeof(GCFuncRef));
         std::memcpy(bytes.data(), &callee, sizeof(callee));
         return bytes;
@@ -163,7 +163,7 @@ std::vector<std::byte> clonePayloadBytes(
     }
 
     if (sourceNode->kind == GCNodeKind::Func) {
-        const GCFuncRef callee{.ref = owner.payloadGraphIndexOf(sourceDraft.calleeGraphOf(sourceRef))};
+        const GCFuncRef callee{.ref = owner.payloadGraphIndexOf(sourceDraft.calleeIdOf(sourceRef))};
         std::vector<std::byte> bytes(sizeof(GCFuncRef));
         std::memcpy(bytes.data(), &callee, sizeof(callee));
         return bytes;
@@ -216,13 +216,13 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
     // Inline-style clone should preserve the source graph's cross-graph registry.
     // The owner draft may already reference some of them, so GraphDraft keeps the
     // vectors de-duplicated.
-    for (GCGraph *graph : sourceGraph->dependencies()) {
+    for (GraphId graph : sourceGraph->dependencies()) {
         owner.addDependency(graph);
     }
-    for (GCGraph *graph : sourceGraph->subGraphs()) {
+    for (GraphId graph : sourceGraph->subGraphs()) {
         owner.addSubGraph(graph);
     }
-    for (GCGraph *graph : sourceGraph->staticGraphRefs()) {
+    for (GraphId graph : sourceGraph->staticGraphRefs()) {
         owner.addStaticGraphRef(graph);
     }
     CAMEL_LOG_INFO_S("DraftClone", "Clone copied cross-graph registries.");
@@ -393,13 +393,13 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
 }
 
 DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDraft &sourceDraft) {
-    for (GCGraph *graph : sourceDraft.dependencies()) {
+    for (GraphId graph : sourceDraft.dependencies()) {
         owner.addDependency(graph);
     }
-    for (GCGraph *graph : sourceDraft.subGraphs()) {
+    for (GraphId graph : sourceDraft.subGraphs()) {
         owner.addSubGraph(graph);
     }
-    for (GCGraph *graph : sourceDraft.staticGraphRefs()) {
+    for (GraphId graph : sourceDraft.staticGraphRefs()) {
         owner.addStaticGraphRef(graph);
     }
 

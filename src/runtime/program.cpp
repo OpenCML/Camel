@@ -52,16 +52,40 @@ void GCGraphManager::freeGraph(GCGraph *graph) {
     mm::graphSpace().free(graph);
 }
 
-const Program *
-makeProgram(camel::core::context::Context &context, std::span<GCGraph *const> graphs) {
+const Program *makeProgram(
+    camel::core::context::Context &context, const Program *base, std::span<GCGraph *const> graphs) {
     Program *program = context.reserveProgram();
+    if (base != nullptr) {
+        *program = *base;
+    }
+    program->makeSatellite();
     for (GCGraph *graph : graphs) {
-        program->bind(graph->id(), graph);
+        program->bindOwn(graph->id(), graph);
     }
     if (!graphs.empty()) {
         program->setRoot(graphs.front());
     }
+    context.retainRuntimeGraphs(graphs);
     return program;
+}
+
+void GCGraphManager::retain(std::span<GCGraph *const> graphs) {
+    mm::NoCollectionScope noCollection;
+    std::lock_guard lock(mutex_);
+    for (GCGraph *graph : graphs) {
+        retained_.push_back(graph);
+        gcRoots_.push_back(graph);
+    }
+}
+
+const Program *GCGraphManager::programOf(const GCGraph *graph) const {
+    std::lock_guard lock(mutex_);
+    for (auto program = programs_.rbegin(); program != programs_.rend(); ++program) {
+        if ((*program)->contains(graph)) {
+            return program->get();
+        }
+    }
+    return nullptr;
 }
 
 Program *GCGraphManager::reserve() {
@@ -142,10 +166,11 @@ void GCGraphManager::trackDetached(const Program *program) {
 
 void GCGraphManager::releaseDetached() {
     std::lock_guard lock(mutex_);
-    const std::unordered_set<GCGraph *> owned(owned_.begin(), owned_.end());
+    // Programs share the graphs a commit left as they were: each is freed once.
+    std::unordered_set<GCGraph *> kept(owned_.begin(), owned_.end());
     for (const Program *program : detached_) {
         for (GCGraph *graph : program->graphs()) {
-            if (!owned.contains(graph)) { // else installed as part of the program since
+            if (kept.insert(graph).second) { // else installed as part of the program since
                 freeGraph(graph);
             }
         }
@@ -183,6 +208,7 @@ void GCGraphManager::rebuildGcRoots() {
             gcRoots_.push_back(graph);
         }
     }
+    gcRoots_.insert(gcRoots_.end(), retained_.begin(), retained_.end());
 }
 
 GCGraphManager::~GCGraphManager() {
@@ -195,6 +221,10 @@ GCGraphManager::~GCGraphManager() {
         }
     }
     pinned_.clear();
+    for (GCGraph *graph : retained_) {
+        freeGraph(graph);
+    }
+    retained_.clear();
     gcRoots_.clear();
 }
 

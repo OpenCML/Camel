@@ -401,15 +401,15 @@ int runCommand(int argc, char *argv[]) {
                 (void)pass.apply(ctx->runtimeProgram(), os);
             }
             if (Inspect::dumpInstances) {
-                if (auto *root = ctx->runtimeProgram()->root()) {
-                    camel::runtime::dumpOperatorInstances(root, os);
+                if (ctx->runtimeProgram()->root()) {
+                    camel::runtime::dumpOperatorInstances(*ctx->runtimeProgram(), os);
                 }
             }
             if (Inspect::dumpFacts) {
-                if (auto *root = ctx->runtimeProgram()->root()) {
+                if (ctx->runtimeProgram()->root()) {
                     camel::runtime::fact::FactStore &facts = ctx->facts();
-                    camel::runtime::fact::computeFacts(facts, root);
-                    camel::runtime::fact::dumpFacts(facts, root, os);
+                    camel::runtime::fact::computeFacts(facts, *ctx->runtimeProgram());
+                    camel::runtime::fact::dumpFacts(facts, *ctx->runtimeProgram(), os);
                 }
             }
             if (Inspect::dumpOps) {
@@ -487,7 +487,7 @@ int runCommand(int argc, char *argv[]) {
                     const auto *program = ctx->runtimeProgram();
                     if (phase::enabled()) {
                         // The size of the program as the passes receive it.
-                        const GraphStats stats = collectGraphStats(ctx, program->root());
+                        const GraphStats stats = collectGraphStats(*program, program->root());
                         phase::count("graph.graphs", stats.graphs);
                         phase::count("graph.nodes", stats.nodes);
                         phase::count("graph.edges", stats.edges);

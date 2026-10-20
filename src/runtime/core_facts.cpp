@@ -260,7 +260,7 @@ std::optional<LoopDomain> computeLoopDomain(std::span<const Anchor> anchors) {
     if (anchors.size() != 2 || graph.node(anchors[0].node)->kind != GCNodeKind::Loop) {
         return std::nullopt;
     }
-    const LoopView loop(graph, anchors[0].node);
+    const LoopView loop(*anchors[0].program, graph, anchors[0].node);
     if (anchors[1].graph != loop.bodyGraph()) {
         return std::nullopt;
     }
@@ -273,16 +273,19 @@ std::optional<LoopDomain> computeLoopDomain(std::span<const Anchor> anchors) {
     return domain;
 }
 
-std::vector<std::vector<Anchor>> loopAnchors(const GCGraph &graph) {
+std::vector<std::vector<Anchor>> loopAnchors(const Program &program, const GCGraph &graph) {
     std::vector<std::vector<Anchor>> all;
     for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
         if (graph.node(ref)->kind != GCNodeKind::Loop) {
             continue;
         }
-        const LoopView loop(graph, ref);
+        const LoopView loop(program, graph, ref);
         all.push_back(
-            {Anchor{&graph, ref},
-             Anchor{loop.bodyGraph(), loop.bodyElementParam().value_or(kInvalidNodeRef)}});
+            {Anchor{&program, &graph, ref},
+             Anchor{
+                 &program,
+                 loop.bodyGraph(),
+                 loop.bodyElementParam().value_or(kInvalidNodeRef)}});
     }
     return all;
 }
@@ -321,16 +324,16 @@ CoreKinds registerCoreKinds() {
         .encode  = encodeReorder,
         .decode  = decodeReorder,
     });
-    k.effects = registerKind(KindSpec<EffectSummary>{
-        .key   = "core.effects",
-        .owner = "core",
-        .scope = Scope::Graph,
-        .compute = [](std::span<const Anchor> anchors) -> std::optional<EffectSummary> {
-            return effectSummaryOf(anchors[0].graph);
+    k.effects     = registerKind(KindSpec<EffectSummary>{
+            .key     = "core.effects",
+            .owner   = "core",
+            .scope   = Scope::Graph,
+            .compute = [](std::span<const Anchor> anchors) -> std::optional<EffectSummary> {
+            return effectSummaryOf(*anchors[0].program, anchors[0].graph);
         },
-        .print  = [](const EffectSummary &e) { return toString(e); },
-        .encode = encodeEffects,
-        .decode = decodeEffects,
+            .print  = [](const EffectSummary &e) { return toString(e); },
+            .encode = encodeEffects,
+            .decode = decodeEffects,
     });
     k.loopDomain = registerKind(KindSpec<LoopDomain>{
         .key       = "core.loopDomain",
@@ -354,20 +357,20 @@ CoreKinds registerCoreKinds() {
             return value && *value > 0 && *value < 256 ? std::optional<int>(int(*value)) : std::nullopt;
         },
     });
-    k.resources = registerKind(KindSpec<NodeResources>{
-        .key   = "core.resources",
-        .owner = "core",
-        .compute = [](std::span<const Anchor> anchors) -> std::optional<NodeResources> {
-            NodeResources r = resourcesOf(*anchors[0].graph, anchors[0].node);
+    k.resources   = registerKind(KindSpec<NodeResources>{
+          .key     = "core.resources",
+          .owner   = "core",
+          .compute = [](std::span<const Anchor> anchors) -> std::optional<NodeResources> {
+            NodeResources r = resourcesOf(*anchors[0].program, *anchors[0].graph, anchors[0].node);
             return r.none() ? std::nullopt : std::optional<NodeResources>(std::move(r));
         },
-        .print = [](const NodeResources &r) { return toString(r); },
-        .anchorsIn =
-            [](const GCGraph &graph) {
+          .print = [](const NodeResources &r) { return toString(r); },
+          .anchorsIn =
+            [](const Program &program, const GCGraph &graph) {
                 std::vector<std::vector<Anchor>> all;
                 for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
-                    if (!resourcesOf(graph, ref).none()) {
-                        all.push_back({Anchor{&graph, ref}});
+                    if (!resourcesOf(program, graph, ref).none()) {
+                        all.push_back({Anchor{&program, &graph, ref}});
                     }
                 }
                 return all;

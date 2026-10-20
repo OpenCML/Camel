@@ -86,7 +86,7 @@ Function *gpuFunction(
     auto *graph =
         draft.encode("tiles.gpu/" + source->graph()->mangledName(), source->graph()->name());
     auto *result = ::Function::create(
-        rt::makeProgram(context, std::span(&graph, 1)),
+        rt::makeProgram(context, source->program(), std::span(&graph, 1)),
         graph->id(),
         closureType,
         core::mm::autoSpace());
