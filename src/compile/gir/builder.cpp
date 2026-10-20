@@ -7134,13 +7134,37 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
             break; // the last case
         }
         if (caseNode->caseType() != CaseType::Enum) {
+            // A bare name is a binding pattern everywhere else (`case v` over `T?` / `T!`), so
+            // `case Empty` over an enum is read as a binding, not as the unit variant: say what
+            // the name refers to and how the variant is written, instead of only that a case
+            // must name a variant.
+            std::string written = "case";
+            std::string reason =
+                "every case of a match over an enum names a variant, and the value a case "
+                "does not name falls to 'case _'";
+            if (caseNode->caseType() == CaseType::Bind) {
+                written        = caseNode->binding();
+                const auto tag = type->decl()->findVariant(written);
+                if (tag.has_value()) {
+                    const EnumVariant &variant = type->decl()->variants()[*tag];
+                    const std::string how = variant.shape == VariantShape::Unit    ? "'"
+                                            : variant.shape == VariantShape::Tuple ? "(...)'"
+                                                                                   : " { ... }'";
+                    reason = "'" + written +
+                             "' is a variant of this enum, and a bare name in a pattern is a "
+                             "binding; write the variant qualified: 'case " +
+                             type->decl()->shortName() + "::" + written + how +
+                             ", or 'case _' for every other value";
+                } else {
+                    reason = "'" + written +
+                             "' is a bare name, and a bare name in a pattern is a binding; a "
+                             "match over an enum names a variant: write 'case " +
+                             type->decl()->shortName() + "::<variant>', or 'case _'";
+                }
+            }
             diags_->of(SemanticDiag::EnumPatternMismatch)
                 .atOrigin(caseNode->origin())
-                .commit(
-                    "case",
-                    type->toString(),
-                    "every case of a match over an enum names a variant, and the value a case "
-                    "does not name falls to 'case _'");
+                .commit(written, type->toString(), reason);
             throw BuildAbortException();
         }
         const GCT::Node::EnumCase &pattern = caseNode->enumCase();
@@ -7267,6 +7291,21 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
                 .atOrigin(gct->origin())
                 .commit(type->toString(), missing);
             throw BuildAbortException();
+        }
+    } else {
+        // Naming every variant already covers every value: the wildcard is a case that can
+        // never be taken. It stays in the graph (the request asked for it), but say so.
+        bool everyVariantCovered = true;
+        for (bool each : covered) {
+            if (!each) {
+                everyVariantCovered = false;
+                break;
+            }
+        }
+        if (everyVariantCovered) {
+            diags_->of(SemanticDiag::MatchWildcardRedundant)
+                .atOrigin(wildcard->origin())
+                .commit(type->toString());
         }
     }
 

@@ -1,0 +1,16 @@
+type Shape = enum {
+    Circle(float),
+    Empty,
+}
+
+func f(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => r
+        case Shape::Empty => 0.0
+        case _ => -1.0
+    }
+}
+
+func main(): void sync {
+    println(f(Shape::Circle(1.0)))
+}
