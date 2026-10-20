@@ -621,7 +621,7 @@ bool DebugCore::stepReached(const ShadowFrame &f, const Arrival &a) const {
         return false;
     case StepKind::Node:
         if (!step_.graph.empty()) {
-            return f.info->stableId == step_.graph;
+            return f.info->graphId == step_.graph;
         }
         return step_.into || depth < step_.depth || (depth == step_.depth && frame == step_.frame);
     case StepKind::Line:
@@ -695,7 +695,7 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
         // The first located node of an activation: the entry of its function (3.3).
         f.awaitingEntry           = false;
         const GraphInfo *function = f.function != nullptr ? f.function : f.info;
-        if (auto it = functionBreakpointByGraph_.find(function->stableId);
+        if (auto it = functionBreakpointByGraph_.find(function->graphId);
             it != functionBreakpointByGraph_.end() && reason.empty()) {
             reason                   = "breakpoint";
             details["breakpointIds"] = it->second;
@@ -1071,11 +1071,11 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
     std::vector<const Binding *> bindings;
     std::unordered_set<std::string> chainGraphs;
     for (const ShadowFrame *f : chain) {
-        chainGraphs.insert(f->info->stableId);
+        chainGraphs.insert(f->info->graphId);
     }
     // An arm that replaced the function's frame by a tail call holds only what it uses.
     const bool functionReplaced = folded && chain.back()->info != function;
-    std::unordered_map<std::string, bool> armGraphs; // by stable id: a running arm
+    std::unordered_map<std::string, bool> armGraphs; // by graph id: a running arm
     std::unordered_set<origin_t> built;              // nodes in the graph before the passes
     {
         std::lock_guard lock(indexMutex_);
@@ -1107,12 +1107,12 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
             if (!ofThisChain && armGraphs[b->graph]) {
                 continue; // a name of an arm that is not running
             }
-            if (!ofThisChain && !functionInChain && b->graph == function->stableId &&
+            if (!ofThisChain && !functionInChain && b->graph == function->graphId &&
                 !functionReplaced) {
                 continue; // in the view by subgraphs: a name of the function's own frame
             }
             std::string note;
-            if (functionReplaced && b->graph == function->stableId) {
+            if (functionReplaced && b->graph == function->graphId) {
                 note = "<not held: the arm that runs replaced the function's frame and does not "
                        "use it>";
             } else if (built.count(b->node) == 0) {
@@ -1574,7 +1574,7 @@ json DebugCore::graphJson(uint64_t frameId) {
     json out{
         {"ok", true},
         {"graph", f->info->name},
-        {"graphId", f->info->stableId},
+        {"graphId", f->info->graphId},
         {"frame", f->id},
         {"nodes", std::move(nodes)},
         {"edges", std::move(edges)},

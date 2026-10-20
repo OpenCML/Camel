@@ -89,9 +89,10 @@ struct RawFact {
     Type *type        = nullptr;
     bool flag         = false;
     std::string name;
-    std::string graph;
+    camel::runtime::GraphId graph = camel::runtime::kInvalidGraphId;
     std::string uri;
     std::vector<std::string> list;
+    std::vector<camel::runtime::GraphId> graphs;
 };
 
 // Stores what the builders report, in the order reported. Nothing is interpreted while the
@@ -129,12 +130,13 @@ class Recorder : public camel::compile::SemanticRecorder {
              .name  = name});
     }
     void functionReferenced(
-        origin_id_t ref, const std::string &name, std::vector<std::string> graphs) override {
+        origin_id_t ref, const std::string &name,
+        std::vector<camel::runtime::GraphId> graphs) override {
         facts.push_back(
-            {.kind = RawFact::Kind::FunctionReferenced,
-             .at   = ref,
-             .name = name,
-             .list = std::move(graphs)});
+            {.kind   = RawFact::Kind::FunctionReferenced,
+             .at     = ref,
+             .name   = name,
+             .graphs = std::move(graphs)});
     }
     void genericReferenced(origin_id_t ref, const std::string &name, origin_id_t decl) override {
         facts.push_back(
@@ -149,7 +151,7 @@ class Recorder : public camel::compile::SemanticRecorder {
              .list = std::move(signatures)});
     }
     void callResolved(
-        origin_id_t call, origin_id_t callee, const std::string &graph,
+        origin_id_t call, origin_id_t callee, camel::runtime::GraphId graph,
         const std::string &operatorUri, FunctionType *type) override {
         facts.push_back(
             {.kind  = RawFact::Kind::CallResolved,
@@ -160,7 +162,7 @@ class Recorder : public camel::compile::SemanticRecorder {
              .uri   = operatorUri});
     }
     void functionBuilt(
-        origin_id_t func, const std::string &name, const std::string &graph,
+        origin_id_t func, const std::string &name, camel::runtime::GraphId graph,
         FunctionType *type) override {
         facts.push_back(
             {.kind  = RawFact::Kind::FunctionBuilt,
@@ -425,11 +427,11 @@ class ModelBuilder {
         }
         return std::nullopt;
     }
-    std::optional<Location> functionOfGraph(const std::string &graphId) {
-        if (graphId.empty() || sc_ == nullptr) {
+    std::optional<Location> functionOfGraph(camel::runtime::GraphId graph) {
+        if (!camel::runtime::isValid(graph) || sc_ == nullptr) {
             return std::nullopt;
         }
-        auto where = locate(sc_->debugMap().graphOrigin(graphId));
+        auto where = locate(sc_->debugMap().graphOrigin(graph));
         if (!where) {
             return std::nullopt;
         }
@@ -712,7 +714,7 @@ class ModelBuilder {
                 if (auto ref = findRef(*where)) {
                     RefFacts &rf = file.refFacts[*ref];
                     rf.resolved  = true;
-                    for (const std::string &graph : fact.list) {
+                    for (const camel::runtime::GraphId graph : fact.graphs) {
                         if (auto target = functionOfGraph(graph)) {
                             addUnique(rf.targets, *target);
                         }
@@ -822,7 +824,7 @@ class ModelBuilder {
                         ext.signatures.push_back(sourceSpelling(graph->funcType()->toString()));
                         ext.macro = ext.macro || graph->funcType()->modifiers().macro();
                     }
-                    if (auto where = functionOfGraph(graph->stableId())) {
+                    if (auto where = functionOfGraph(graph->graphId())) {
                         addUnique(ext.definitions, *where);
                     }
                 }

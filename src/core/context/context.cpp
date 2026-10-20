@@ -778,7 +778,7 @@ void Context::registerRuntimeGraphDebugInfo(const camel::runtime::Program *progr
     }
     auto &debugMap = sourceContext_->debugMap();
     for (camel::runtime::GCGraph *graph : program->graphs()) {
-        camel::source::origin_id_t origin = debugMap.graphOrigin(graph->stableId());
+        camel::source::origin_id_t origin = debugMap.graphOrigin(graph->id());
         if (origin != camel::source::kInvalidOriginId) {
             debugMap.registerRuntimeGraphOrigin(reinterpret_cast<uintptr_t>(graph), origin);
         }

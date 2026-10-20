@@ -339,8 +339,8 @@ class EncodeSession {
         }
         for (auto &prepared : prepared_) {
             preparedBySource_.emplace(prepared.source.get(), &prepared);
-            if (!prepared.source->stableId().empty()) {
-                preparedByStableId_.emplace(prepared.source->stableId(), &prepared);
+            if (runtime::isValid(prepared.source->graphId())) {
+                preparedById_.emplace(prepared.source->graphId(), &prepared);
             }
         }
         preallocateRuntimeGraphs();
@@ -366,9 +366,8 @@ class EncodeSession {
         if (auto it = preparedBySource_.find(graph.get()); it != preparedBySource_.end()) {
             return it->second;
         }
-        if (!graph->stableId().empty()) {
-            if (auto it = preparedByStableId_.find(graph->stableId());
-                it != preparedByStableId_.end()) {
+        if (runtime::isValid(graph->graphId())) {
+            if (auto it = preparedById_.find(graph->graphId()); it != preparedById_.end()) {
                 return it->second;
             }
         }
@@ -380,9 +379,8 @@ class EncodeSession {
         if (auto it = preparedBySource_.find(graph.get()); it != preparedBySource_.end()) {
             return it->second;
         }
-        if (!graph->stableId().empty()) {
-            if (auto it = preparedByStableId_.find(graph->stableId());
-                it != preparedByStableId_.end()) {
+        if (runtime::isValid(graph->graphId())) {
+            if (auto it = preparedById_.find(graph->graphId()); it != preparedById_.end()) {
                 return it->second;
             }
         }
@@ -391,18 +389,18 @@ class EncodeSession {
                 CAMEL_LOG_WARN_S(
                     "GIREncode",
                     "Compile graph identity fallback matched by name only: requested='{}' "
-                    "stableId='{}'.",
+                    "id={}.",
                     graph->name(),
-                    graph->stableId());
+                    runtime::toValue(graph->graphId()));
                 return &prepared;
             }
         }
         ASSERT(
             false,
             std::format(
-                "Compile graph '{}' (stableId='{}') is not part of the prepared encode set.",
+                "Compile graph '{}' (id={}) is not part of the prepared encode set.",
                 graph->name(),
-                graph->stableId()));
+                runtime::toValue(graph->graphId())));
         return nullptr;
     }
 
@@ -878,8 +876,7 @@ class EncodeSession {
                 }
             }
         }
-        auto *debugRecord =
-            createGraphDebugRecord(source->stableId(), source->name(), source->name());
+        auto *debugRecord = createGraphDebugRecord(source->name(), source->name());
         recordDraftDebugData(debugRecord, *prepared.draft);
 
         const auto &deps = source->dependencyGraphs();
@@ -1049,7 +1046,7 @@ class EncodeSession {
     camel::runtime::GraphIdAllocator *freshIds_;
     std::vector<PreparedGraph> prepared_;
     std::unordered_map<DraftGraphBuilder *, PreparedGraph *> preparedBySource_;
-    std::unordered_map<std::string, PreparedGraph *> preparedByStableId_;
+    std::unordered_map<runtime::GraphId, PreparedGraph *> preparedById_;
 };
 
 } // namespace

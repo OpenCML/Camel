@@ -164,7 +164,7 @@ node_handle_t Builder::createFuncDataNode(
     currGraph_->addDependencyGraph(graph);
 
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-    auto graphOrigin   = sourceContext ? sourceContext->debugMap().graphOrigin(graph->stableId())
+    auto graphOrigin   = sourceContext ? sourceContext->debugMap().graphOrigin(graph->graphId())
                                        : camel::source::kInvalidOriginId;
     auto markMacroNode = [&](node_handle_t node) {
         if (node != nullptr && isMacroGraph(graph)) {
@@ -538,11 +538,10 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
     compile_graph_ptr_t graph = enterScope(type);
     try {
         auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-        auto targetOrigin  = sourceContext
-                                 ? sourceContext->debugMap().graphOrigin(target->stableId())
-                                 : camel::source::kInvalidOriginId;
+        auto targetOrigin = sourceContext ? sourceContext->debugMap().graphOrigin(target->graphId())
+                                          : camel::source::kInvalidOriginId;
         if (sourceContext && targetOrigin != camel::source::kInvalidOriginId) {
-            sourceContext->debugMap().registerGraphOrigin(graph->stableId(), targetOrigin);
+            sourceContext->debugMap().registerGraphOrigin(graph->graphId(), targetOrigin);
         }
         bodyStates_[graph.get()] = BodyState::Open;
         graph->addDependencyGraph(target);

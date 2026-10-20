@@ -965,10 +965,8 @@ void collectStaticGraphRefsRecursive(
     std::vector<GCGraph *> &refs, slot_t slot, Type *type,
     std::unordered_set<const Object *> &visited);
 
-GCGraphDebugRecord *
-createGraphDebugRecord(std::string stableId, std::string mangledName, std::string name) {
+GCGraphDebugRecord *createGraphDebugRecord(std::string mangledName, std::string name) {
     auto *record        = new GCGraphDebugRecord();
-    record->stableId    = std::move(stableId);
     record->mangledName = std::move(mangledName);
     record->name        = std::move(name);
     return record;
@@ -979,6 +977,8 @@ void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
         return;
     }
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
+    record->typeSpecializationRoot = draft.typeSpecializationRoot();
+    record->flags                  = draft.flags();
 }
 
 GCGraphNativePayload
@@ -1266,11 +1266,10 @@ GCGraph::GCGraph(
       staticDataType_(staticDataType), closureType_(closureType), outerGraph_(outerGraph),
       refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),
       staticArea_(staticArea) {
-    // A new graph: a lineage and a revision of its own (graph facts, facts.h). A commit that
-    // encoded it as the copy of another graph replaces them (GCGraphBuildAccess::inheritIdentity).
-    static std::atomic<uint64_t> serials{0};
-    serial_  = serials.fetch_add(1, std::memory_order_relaxed) + 1;
-    lineage_ = serial_;
+    // A new graph: a revision of its own (graph facts, facts.h). A commit that encoded it as
+    // the copy of an unchanged graph replaces it (GCGraphBuildAccess::inheritRevision).
+    static std::atomic<uint64_t> revisions{0};
+    revision_ = revisions.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft) {
@@ -1352,10 +1351,11 @@ void validateRuntimeGraphCalls(const GCGraph *graph) {
     }
 }
 
-const std::string &GCGraph::stableId() const {
-    static const std::string kEmpty;
-    return debug_ ? debug_->stableId : kEmpty;
+GraphId GCGraph::typeSpecializationRoot() const {
+    return debug_ ? debug_->typeSpecializationRoot : kInvalidGraphId;
 }
+
+uint8_t GCGraph::flags() const { return debug_ ? debug_->flags : 0; }
 
 const std::string &GCGraph::mangledName() const {
     static const std::string kEmpty;
@@ -1707,8 +1707,7 @@ camel::core::rtdata::Object *GCGraph::clone(
         refCount_,
         nativePayload_,
         staticArea_);
-    graph->lineage_       = lineage_; // the same content: the same graph and revision
-    graph->serial_        = serial_;
+    graph->revision_ = revision_; // the same content: the same revision
     for (size_t i = 0; i < kExtraSlotCount; ++i) {
         graph->extraSlots_[i] = extraSlots_[i];
     }

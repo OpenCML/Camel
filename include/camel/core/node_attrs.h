@@ -40,9 +40,8 @@
  *   Flags    a set of bit indices, of any width
  *   Int      a 64-bit integer (an enum member, a small id)
  *   Symbol   a string
- *   Graph    a reference to a graph that stays valid across processes. Until graphs have
- *            stable identities (docs/design/graph-model, step 5) it is the graph's stable id
- *            (GCGraph::stableId); then it becomes the GraphId, and the printed form with it.
+ *   Graph    a reference to a graph of the program: its GraphId (camel/runtime/graph_id.h),
+ *            printed as its decimal digits.
  *   Tuple    a sequence of values (a group: a choice and a group id; a chain: the inlined
  *            function and the call site, nested)
  *
@@ -56,6 +55,8 @@
  */
 
 #pragma once
+
+#include "camel/runtime/graph_id.h"
 
 #include <cstdint>
 #include <functional>
@@ -98,8 +99,8 @@ AttrValueId flags(std::span<const uint32_t> bits);
 AttrValueId flagWords(std::vector<uint64_t> words);
 AttrValueId integer(int64_t value);
 AttrValueId symbol(std::string_view text);
-/// A reference to the graph whose stable id is `stableId` (see Graph above).
-AttrValueId graphRef(std::string_view stableId);
+/// A reference to the graph `graph` (see Graph above).
+AttrValueId graphRef(camel::runtime::GraphId graph);
 AttrValueId tuple(std::span<const AttrValueId> items);
 
 /// The value of `id`; a Unit value for kNoValue.

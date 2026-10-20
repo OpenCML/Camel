@@ -530,7 +530,7 @@ void writeEntryResultTo(
 
 uint64_t entryFunctionOrigin(const core::context::Context &context) {
     if (const auto source = context.sourceContext()) {
-        return source->debugMap().graphOrigin(kEntryFunctionOriginKey);
+        return source->debugMap().entryOrigin();
     }
     return camel::source::kInvalidOriginId;
 }

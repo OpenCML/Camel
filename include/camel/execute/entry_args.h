@@ -160,6 +160,5 @@ std::vector<BoundEntryArgument> boundEntryArguments();
 uint64_t entryFunctionOrigin(const core::context::Context &context);
 
 /// The key under which the Builder registers the origin of `main` in the debug map.
-inline constexpr const char *kEntryFunctionOriginKey = "__entry__";
 
 } // namespace camel::execute

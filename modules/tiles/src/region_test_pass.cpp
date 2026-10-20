@@ -111,7 +111,7 @@ void checkBindingKinds(core::context::Context &context) {
     draft.setExitNode(output);
     draft.setReturnNode(output, runtime::GCReturnKind::Self);
     draft.setId(context.graphIds().allocate());
-    auto *graph    = draft.encode("tiles.test.binding", "tiles.test.binding", "tiles.test.binding");
+    auto *graph    = draft.encode("tiles.test.binding", "tiles.test.binding");
     auto *function = ::Function::create(
         runtime::makeProgram(context, std::span(&graph, 1)),
         graph->id(),

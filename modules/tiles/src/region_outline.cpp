@@ -128,9 +128,9 @@ const runtime::Program *outlineRegions(
         std::vector<std::pair<rt::gc_node_ref_t, rt::gc_node_ref_t>> replacements;
         for (const auto &region : analysis.regions) {
             auto extracted  = extractRegion(*graph, region);
-            const auto name = graph->stableId() + "/tiles.region/" + std::to_string(count++);
+            const auto name = graph->name() + "/tiles.region/" + std::to_string(count++);
             extracted.graph->setId(context.graphIds().allocate());
-            auto *callee = extracted.graph->encode(name, name, name);
+            auto *callee = extracted.graph->encode(name, name);
             auto *fn     = ::Function::create(
                 rt::makeProgram(context, std::span(&callee, 1)),
                 callee->id(),
@@ -138,7 +138,7 @@ const runtime::Program *outlineRegions(
                 core::mm::autoSpace());
             if (run) {
                 // Publish the owned compiled template as a graph fact. Draft commit
-                // preserves this unedited callee's lineage/revision, including copies.
+                // preserves this unedited callee's id and revision, including copies.
                 try {
                     (void)compileTypes(fn, context.facts());
                 } catch (const UnsupportedComputation &) {

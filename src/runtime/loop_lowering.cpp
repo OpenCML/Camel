@@ -597,11 +597,10 @@ const Program *lowerLoopsToTailRecursion(
         if (base.ends_with(".body")) {
             base.resize(base.size() - 5);
         }
-        const std::string id = loop.body->stableId() + "$lowered";
         Members m{
-            .rec  = group.reserve(id + ".rec", base + ".rec", base + ".rec"),
-            .next = group.reserve(id + ".next", base + ".next", base + ".next"),
-            .done = group.reserve(id + ".done", base + ".done", base + ".done"),
+            .rec  = group.reserve(base + ".rec", base + ".rec"),
+            .next = group.reserve(base + ".next", base + ".next"),
+            .done = group.reserve(base + ".done", base + ".done"),
         };
         group.define(m.rec, buildRec(loop, m.next, m.done));
         group.define(m.next, buildNext(loop, m.rec));

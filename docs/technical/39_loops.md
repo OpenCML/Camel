@@ -211,7 +211,7 @@ function value it receives instead of calling it (Tiles' `run`, `run_device`, `s
 `OperatorTraits::inspectsGraphs`. The lowering passes every operand of function type of such an
 operator through `:graph/original` (`src/builtin/operators/graph.h`), which turns a function
 value of the private copy into the same function over the program's graph it was copied from
-(`GCGraph::originalGraph()`, recorded by the detached commit; the closure is kept, a copy has its
+(`Program::original()`, recorded by the detached commit; the closure is kept, a copy has its
 original's ports). So Tiles sees a function's LOOP, and the ONNX export refuses it where it is
 written, on every back end (`modules.tiles` `loop_structure_*`, `linear.loops`
 `loops.onnx_refused_lowered`). autodiff differentiates a function's own LOOP node instead of

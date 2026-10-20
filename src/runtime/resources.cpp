@@ -25,8 +25,8 @@
  * recursive graphs depend on each other. They are computed as a least fixpoint: a graph met
  * again while its own footprint is being collected contributes what is known of it so far,
  * and the walk is repeated until no footprint grows (each one is a set over a finite domain,
- * so it ends). A footprint that came out of a finished walk is cached by the graph's serial
- * (GCGraph::serial: a new one whenever the graph or a graph it refers to changes) and the
+ * so it ends). A footprint that came out of a finished walk is cached by the graph's revision
+ * (GCGraph::revision: a new one whenever the graph or a graph it refers to changes) and the
  * operator declaration epoch, which together fix everything it was computed from.
  */
 
@@ -101,7 +101,7 @@ const ::Function *staticFunctionOf(const GCGraph &graph, gc_node_ref_t ref) {
 
 struct FootprintCache {
     std::mutex mutex;
-    /// (serial, declaration epoch) -> footprint of a finished walk.
+    /// (revision, declaration epoch) -> footprint of a finished walk.
     std::map<std::pair<uint64_t, uint64_t>, GraphFootprint> entries;
 };
 
@@ -113,7 +113,7 @@ FootprintCache &footprintCache() {
 std::optional<GraphFootprint> cachedFootprint(const GCGraph *graph, uint64_t epoch) {
     FootprintCache &cache = footprintCache();
     std::lock_guard lock(cache.mutex);
-    if (auto it = cache.entries.find({graph->serial(), epoch}); it != cache.entries.end()) {
+    if (auto it = cache.entries.find({graph->revision(), epoch}); it != cache.entries.end()) {
         return it->second;
     }
     return std::nullopt;
@@ -178,7 +178,7 @@ class FootprintWalk {
         FootprintCache &cache = footprintCache();
         std::lock_guard lock(cache.mutex);
         for (const auto &[g, fp] : memo_) {
-            cache.entries.insert_or_assign({g->serial(), epoch_}, fp);
+            cache.entries.insert_or_assign({g->revision(), epoch_}, fp);
         }
         return memo_[graph];
     }

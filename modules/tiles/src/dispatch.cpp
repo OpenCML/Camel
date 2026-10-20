@@ -83,10 +83,8 @@ Function *gpuFunction(
     draft.setExitNode(output);
     draft.setReturnNode(output, rt::GCReturnKind::Self);
     draft.setId(context.graphIds().allocate());
-    auto *graph = draft.encode(
-        "tiles.gpu/" + source->graph()->stableId(),
-        "tiles.gpu/" + source->graph()->mangledName(),
-        source->graph()->name());
+    auto *graph =
+        draft.encode("tiles.gpu/" + source->graph()->mangledName(), source->graph()->name());
     auto *result = ::Function::create(
         rt::makeProgram(context, std::span(&graph, 1)),
         graph->id(),

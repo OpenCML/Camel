@@ -136,7 +136,7 @@ class ProgramIndex::Recorder final : public camel::compile::SemanticRecorder {
     struct Bound {
         origin_id_t decl;
         std::string name;
-        std::string graph; // stable id of the graph the node was made in
+        std::string graph; // id of the graph the node was made in
         origin_id_t node;
         Type *type;
         bool variable;
@@ -144,7 +144,7 @@ class ProgramIndex::Recorder final : public camel::compile::SemanticRecorder {
     struct Built {
         origin_id_t func;
         std::string name;
-        std::string graph; // stable id
+        std::string graph; // graph id
     };
     std::vector<Bound> bound;
     std::vector<Built> built;
@@ -153,21 +153,22 @@ class ProgramIndex::Recorder final : public camel::compile::SemanticRecorder {
     void valueDeclared(origin_id_t, const std::string &, Type *, bool) override {}
     void expressionTyped(origin_id_t, Type *) override {}
     void valueReferenced(origin_id_t, const std::string &, origin_id_t, Type *) override {}
-    void functionReferenced(origin_id_t, const std::string &, std::vector<std::string>) override {}
+    void functionReferenced(
+        origin_id_t, const std::string &, std::vector<camel::runtime::GraphId>) override {}
     void genericReferenced(origin_id_t, const std::string &, origin_id_t) override {}
     void operatorReferenced(origin_id_t, const std::string &, std::vector<std::string>) override {}
     void callResolved(
-        origin_id_t, origin_id_t, const std::string &, const std::string &,
+        origin_id_t, origin_id_t, camel::runtime::GraphId, const std::string &,
         FunctionType *) override {}
     void functionBuilt(
-        origin_id_t func, const std::string &name, const std::string &graph,
+        origin_id_t func, const std::string &name, camel::runtime::GraphId graph,
         FunctionType *) override {
-        built.push_back({func, name, graph});
+        built.push_back({func, name, camel::runtime::toText(graph)});
     }
     void valueBound(
-        origin_id_t decl, const std::string &name, const std::string &graph, origin_id_t node,
+        origin_id_t decl, const std::string &name, camel::runtime::GraphId graph, origin_id_t node,
         Type *type, bool variable) override {
-        bound.push_back({decl, name, graph, node, type, variable});
+        bound.push_back({decl, name, camel::runtime::toText(graph), node, type, variable});
     }
 };
 
@@ -193,12 +194,12 @@ void ProgramIndex::begin(const camel::core::context::context_ptr_t &ctx) {
     initialLines_.clear();
     runningLines_.clear();
     initialOrigins_.clear();
-    liveStableIds_.clear();
+    liveGraphIds_.clear();
     liveOrigins_.clear();
     initialGraphs_.clear();
     runningGraphs_.clear();
-    runningStableIds_.clear();
-    armStableIds_.clear();
+    runningGraphIds_.clear();
+    armGraphIds_.clear();
     armOwners_.clear();
     inheritedPortNames_.clear();
     moduleByFile_.clear();
@@ -427,20 +428,20 @@ void ProgramIndex::running(GCGraph *root) {
     inheritedPortNames_.clear();
     graphs_.clear(); // graphs of an earlier run may be gone
     collect(root, runningLines_, runningGraphs_, nullptr, &armOwners_);
-    runningStableIds_.clear();
+    runningGraphIds_.clear();
     for (GCGraph *g : runningGraphs_) {
-        runningStableIds_.insert(g->stableId());
+        runningGraphIds_.insert(camel::runtime::toText(g->id()));
     }
-    armStableIds_.clear();
+    armGraphIds_.clear();
     for (const auto &[arm, owners] : armOwners_) {
-        armStableIds_.insert(arm->stableId());
+        armGraphIds_.insert(camel::runtime::toText(arm->id()));
     }
     findLiveGraphs(root);
     runningKnown_ = true;
 }
 
 void ProgramIndex::findLiveGraphs(GCGraph *root) {
-    liveStableIds_.clear();
+    liveGraphIds_.clear();
     liveOrigins_.clear();
     if (root == nullptr) {
         return;
@@ -453,7 +454,7 @@ void ProgramIndex::findLiveGraphs(GCGraph *root) {
     while (!queue.empty()) {
         GCGraph *g = queue.front();
         queue.pop_front();
-        liveStableIds_.insert(g->stableId());
+        liveGraphIds_.insert(camel::runtime::toText(g->id()));
         if (g->hasNodePayload()) {
             for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
                 if (const origin_t o = g->nodeOrigin(it.ref()); o != 0) {
@@ -528,9 +529,9 @@ const std::string &ProgramIndex::moduleOfFile(int file) {
 }
 
 void ProgramIndex::nameFunctions() {
-    std::unordered_map<std::string, GCGraph *> byStableId;
+    std::unordered_map<std::string, GCGraph *> byGraphId;
     for (GCGraph *g : initialGraphs_) {
-        byStableId.emplace(g->stableId(), g);
+        byGraphId.emplace(camel::runtime::toText(g->id()), g);
     }
     for (const auto &b : recorder_->built) {
         const SourceLoc &l = loc(b.func);
@@ -541,11 +542,11 @@ void ProgramIndex::nameFunctions() {
             if (f.file != l.file || f.startByte != l.startByte || f.endByte != l.endByte) {
                 continue;
             }
-            const auto graph = byStableId.find(b.graph);
-            if (graph == byStableId.end()) {
+            const auto graph = byGraphId.find(b.graph);
+            if (graph == byGraphId.end()) {
                 break; // no graph of it is in the program (yet: another instance may be)
             }
-            if (liveStableIds_.count(b.graph) != 0) {
+            if (liveGraphIds_.count(b.graph) != 0) {
                 f.reachable = true;
             }
             // The builder names the graph with the full name (the module of another module's
@@ -580,7 +581,7 @@ std::string ProgramIndex::capturedName(GCGraph *graph, std::string_view shown) {
     // name), with the module unless it is the entry module.
     int file = -1;
     if (auto sc = ctx_ ? ctx_->sourceContext() : nullptr) {
-        file = loc(sc->debugMap().graphOrigin(graph->stableId())).file;
+        file = loc(sc->debugMap().graphOrigin(graph->id())).file;
     }
     const std::string &module = moduleOfFile(file);
     if (module.empty() || topLevelNames_.count(module + "::" + std::string(shown)) == 0) {
@@ -635,8 +636,8 @@ FunctionResolution ProgramIndex::resolveFunction(const std::string &written) con
         }
         bool called = false;
         for (GCGraph *g : chosen) {
-            out.graphs.push_back(g->stableId());
-            called = called || liveStableIds_.count(g->stableId()) != 0;
+            out.graphs.push_back(camel::runtime::toText(g->id()));
+            called = called || liveGraphIds_.count(camel::runtime::toText(g->id())) != 0;
         }
         if (!called) {
             out.message = "Nothing in the program calls `" + out.fullName + "`.";
@@ -816,7 +817,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     auto info      = std::make_unique<GraphInfo>();
     info->graph    = g;
     info->name     = g->name();
-    info->stableId = g->stableId();
+    info->graphId  = camel::runtime::toText(g->id());
 
     // Names of the ports. A function's ports are its declared `with` parameters, its other
     // parameters, and one port per value it captures: a closure node, or, for a function that
@@ -957,7 +958,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     // The function of the source the graph was built from: the one whose span is the span
     // of the graph's origin; for a graph without one, where most of its nodes were written.
     if (auto sc = ctx_ ? ctx_->sourceContext() : nullptr) {
-        origin_t graphOrigin = sc->debugMap().graphOrigin(info->stableId);
+        origin_t graphOrigin = sc->debugMap().graphOrigin(g->id());
         if (graphOrigin == 0) {
             graphOrigin = sc->debugMap().runtimeGraphOrigin(reinterpret_cast<uintptr_t>(g));
         }

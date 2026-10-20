@@ -582,11 +582,15 @@ GCGraph *encodeSpecializedGraph(
     std::string_view tag, size_t nonce) {
     ASSERT(baseGraph != nullptr, "Specialized graph encoding requires a base graph.");
     const std::string suffix      = std::format("${}{}", tag, nonce);
-    const std::string stableId    = std::string(baseGraph->stableId()) + suffix;
     const std::string mangledName = std::string(baseGraph->mangledName()) + suffix;
     const std::string name        = std::string(baseGraph->name()) + suffix;
     draft.setId(session.context()->graphIds().allocate());
-    return draft.encode(stableId, mangledName, name);
+    // A type-only specialization derives from the first function of the chain that is not one;
+    // what derives from a specialization keeps what the specialization has.
+    if (tag == kTypeSpecializationTag && !isValid(draft.typeSpecializationRoot())) {
+        draft.setTypeSpecializationRoot(baseGraph->id());
+    }
+    return draft.encode(mangledName, name);
 }
 
 RuntimeSpecializationKey makeRuntimeSpecializationKey(
@@ -890,14 +894,16 @@ bool specializeDirectFuncInDraft(
     if (boundedTypeSpecialization &&
         !session.findSpecialization(
             makeRuntimeSpecializationKey(funcBody->calleeGraph, bindings))) {
-        const std::string root = typeSpecializationRoot(funcBody->calleeGraph->stableId());
+        const GraphId root = isValid(funcBody->calleeGraph->typeSpecializationRoot())
+                                 ? funcBody->calleeGraph->typeSpecializationRoot()
+                                 : funcBody->calleeGraph->id();
         if (session.typeSpecializationCount(root) >= kMaxTypeSpecializationsPerRecursiveFunction) {
             CAMEL_LOG_INFO_S(
                 "DraftOpt",
                 "FUNC node {} keeps callee '{}': '{}' has {} type specializations.",
                 funcNodeId,
                 funcBody->calleeGraph->name(),
-                root,
+                toText(root),
                 kMaxTypeSpecializationsPerRecursiveFunction);
             return false;
         }

@@ -62,11 +62,11 @@ namespace {
 void reportFunctionReference(
     camel::compile::SemanticRecorder *recorder, const GCT::node_ptr_t &gct, const std::string &name,
     const std::optional<graph_set_ptr_t> &graphs) {
-    std::vector<std::string> ids;
+    std::vector<runtime::GraphId> ids;
     if (graphs.has_value() && *graphs) {
         for (const auto &g : **graphs) {
             if (g) {
-                ids.push_back(g->stableId());
+                ids.push_back(g->graphId());
             }
         }
     }

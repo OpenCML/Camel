@@ -217,6 +217,12 @@ class GraphDraft {
     /// of a new graph is given one with setId (Context::graphIds) before it is encoded.
     GraphId id() const { return id_; }
     void setId(GraphId id) { id_ = id; }
+    /// GCGraph::typeSpecializationRoot and GCGraph::flags of the graph the draft encodes to;
+    /// decode takes them from the graph it decodes.
+    GraphId typeSpecializationRoot() const { return typeSpecializationRoot_; }
+    void setTypeSpecializationRoot(GraphId root) { typeSpecializationRoot_ = root; }
+    uint8_t flags() const { return flags_; }
+    void setFlags(uint8_t flags) { flags_ = flags; }
     camel::core::type::FunctionType *funcType() const { return funcType_; }
     /// The names the function captures, in capture order (GCGraph::captureNames).
     std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
@@ -406,8 +412,7 @@ class GraphDraft {
     void addSubGraph(GCGraph *graph);
     void addStaticGraphRef(GCGraph *graph);
 
-    GCGraph *encode(
-        const std::string &stableId, const std::string &mangledName, const std::string &name) const;
+    GCGraph *encode(const std::string &mangledName, const std::string &name) const;
 
   private:
     static gc_node_ref_t
@@ -429,6 +434,8 @@ class GraphDraft {
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
 
     GraphId id_                                = kInvalidGraphId;
+    GraphId typeSpecializationRoot_            = kInvalidGraphId;
+    uint8_t flags_                             = 0;
     camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside

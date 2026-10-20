@@ -50,7 +50,6 @@ namespace camel::runtime {
 
 struct RuntimeDraftIdentity {
     GCGraph *sourceGraph = nullptr;
-    std::string stableId;
     std::string mangledName;
     std::string name;
 };
@@ -100,12 +99,9 @@ class GraphSpaceExhausted : public camel::core::mm::MemoryExhausted {
     std::string graph_;
 };
 
-/// Suffix tag of a specialization that binds no value and only refines parameter types
-/// (`loop$tspec3`): the stable id up to the first such tag names the function it derives from.
+/// Suffix tag of the name of a specialization that binds no value and only refines parameter
+/// types (`loop$tspec3`); GCGraph::typeSpecializationRoot records what it derives from.
 inline constexpr std::string_view kTypeSpecializationTag = "tspec";
-
-/// The stable id of the function a (possibly type-specialized) graph derives from.
-std::string typeSpecializationRoot(std::string_view stableId);
 
 struct RuntimeSpecializationKeyHasher {
     size_t operator()(const RuntimeSpecializationKey &key) const;
@@ -137,10 +133,10 @@ class RuntimeGraphDraftSession {
     GCGraph *findSpecialization(const RuntimeSpecializationKey &key) const;
     void rememberSpecialization(RuntimeSpecializationKey key, GCGraph *graph);
 
-    /// Type-only specializations (see kTypeSpecializationTag) of the function `rootStableId`
-    /// that the program holds: those reachable when first asked, plus those noted since.
-    size_t typeSpecializationCount(const std::string &rootStableId);
-    void noteTypeSpecialization(const std::string &rootStableId);
+    /// Type-only specializations (see kTypeSpecializationTag) of the function `root` that the
+    /// program holds: those reachable when first asked, plus those noted since.
+    size_t typeSpecializationCount(GraphId root);
+    void noteTypeSpecialization(GraphId root);
 
     std::vector<GCGraph *> collectReachableRuntimeGraphs() const;
     /// Encodes the edited closure into a new program and returns it. A session over the
@@ -157,7 +153,7 @@ class RuntimeGraphDraftSession {
 
     GraphDraft &ensureDraft(GCGraph *graph);
     std::vector<GCGraph *> collectCommitClosure() const;
-    /// The graphs of `closure` whose copy gets a new revision (GCGraph::serial): edited, or
+    /// The graphs of `closure` whose copy gets a new revision (GCGraph::revision): edited, or
     /// referring at any depth to an edited one.
     std::unordered_set<GCGraph *> changedGraphs(const std::vector<GCGraph *> &closure) const;
 
@@ -170,7 +166,7 @@ class RuntimeGraphDraftSession {
     std::unordered_set<GCGraph *> edited_;
     std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
         specializationCache_;
-    std::unordered_map<std::string, size_t> typeSpecializationCounts_;
+    std::unordered_map<GraphId, size_t> typeSpecializationCounts_;
     bool typeSpecializationCountsReady_ = false;
 };
 
@@ -188,7 +184,7 @@ class GraphDraftGroup {
     GraphDraftGroup &operator=(const GraphDraftGroup &) = delete;
 
     /// Reserves a member with an empty draft and returns its key.
-    GCGraph *reserve(std::string stableId, std::string mangledName, std::string name);
+    GCGraph *reserve(std::string mangledName, std::string name);
     /// The draft of a member.
     GraphDraft &draft(GCGraph *key);
     /// Replaces the draft of a member.

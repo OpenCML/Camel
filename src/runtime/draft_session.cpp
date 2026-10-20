@@ -82,7 +82,6 @@ RuntimeDraftIdentity makeRuntimeDraftIdentity(GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime draft identity requires a non-null source graph.");
     return RuntimeDraftIdentity{
         .sourceGraph = graph,
-        .stableId    = graph->stableId(),
         .mangledName = graph->mangledName(),
         .name        = graph->name(),
     };
@@ -542,8 +541,7 @@ GCGraph *encodeDraftGraph(
         bytes,
         draft.id(),
         [&] {
-            auto *record =
-                createGraphDebugRecord(identity.stableId, identity.mangledName, identity.name);
+            auto *record = createGraphDebugRecord(identity.mangledName, identity.name);
             recordDraftDebugData(record, draft);
             return record;
         }(),
@@ -593,7 +591,7 @@ uint64_t draftGraphOrigin(
     const GraphDraft &draft) {
     uint64_t origin = 0;
     if (const auto source = context ? context->sourceContext() : nullptr) {
-        origin = source->debugMap().graphOrigin(identity.stableId);
+        origin = source->debugMap().graphOrigin(draft.id());
     }
     return origin != 0 ? origin : draft.firstNodeOrigin();
 }
@@ -682,7 +680,7 @@ bool sameStaticValue(slot_t before, slot_t after, Type *type, const GraphMap &re
  * layout, the same
  * static values and the same graphs referred to (each by its copy). Source positions do not
  * count. A pass that asked to edit a graph and changed nothing leaves it the same graph to the
- * fact store (GCGraph::serial). Conservative: what it cannot compare counts as a change.
+ * fact store (GCGraph::revision). Conservative: what it cannot compare counts as a change.
  */
 bool sameContent(const GCGraph &before, const GCGraph &after, const GraphMap &rewritten) {
     const GCGraphNativePayload *a = before.nodePayload();
@@ -846,8 +844,8 @@ GraphDraft &RuntimeGraphDraftSession::rootDraft() { return edit(runtimeRoot_); }
 
 std::unordered_set<GCGraph *>
 RuntimeGraphDraftSession::changedGraphs(const std::vector<GCGraph *> &closure) const {
-    // A graph changed when it was edited, or when a graph it refers to changed (the serial is
-    // transitive, see GCGraph::serial): walk the references backwards from the edited ones.
+    // A graph changed when it was edited, or when a graph it refers to changed (the revision is
+    // transitive, see GCGraph::revision): walk the references backwards from the edited ones.
     std::unordered_map<GCGraph *, std::vector<GCGraph *>> referrers;
     for (GCGraph *graph : closure) {
         visitDraftGraphs(context_, *drafts_.at(graph)->draft, [&](GCGraph *ref) {
@@ -890,30 +888,24 @@ void RuntimeGraphDraftSession::rememberSpecialization(
     specializationCache_.insert_or_assign(std::move(key), graph);
 }
 
-std::string typeSpecializationRoot(std::string_view stableId) {
-    const std::string marker = "$" + std::string(kTypeSpecializationTag);
-    return std::string(stableId.substr(0, stableId.find(marker)));
-}
-
-size_t RuntimeGraphDraftSession::typeSpecializationCount(const std::string &rootStableId) {
+size_t RuntimeGraphDraftSession::typeSpecializationCount(GraphId root) {
     if (!typeSpecializationCountsReady_) {
         // Earlier sessions (and earlier passes) leave their specializations in the program; the
         // bound is on what the program holds, so it is read from the program, not remembered.
         typeSpecializationCountsReady_ = true;
         for (const GCGraph *graph : collectCommitClosure()) {
-            const std::string root = typeSpecializationRoot(graph->stableId());
-            if (root.size() != graph->stableId().size()) {
-                ++typeSpecializationCounts_[root];
+            if (isValid(graph->typeSpecializationRoot())) {
+                ++typeSpecializationCounts_[graph->typeSpecializationRoot()];
             }
         }
     }
-    const auto it = typeSpecializationCounts_.find(rootStableId);
+    const auto it = typeSpecializationCounts_.find(root);
     return it == typeSpecializationCounts_.end() ? 0 : it->second;
 }
 
-void RuntimeGraphDraftSession::noteTypeSpecialization(const std::string &rootStableId) {
-    (void)typeSpecializationCount(rootStableId);
-    ++typeSpecializationCounts_[rootStableId];
+void RuntimeGraphDraftSession::noteTypeSpecialization(GraphId root) {
+    (void)typeSpecializationCount(root);
+    ++typeSpecializationCounts_[root];
 }
 
 std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
@@ -1008,7 +1000,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     });
     const std::unordered_set<GCGraph *> changed = changedGraphs(closure);
     for (GCGraph *graph : closure) {
-        GCGraphBuildAccess::inheritIdentity(rewritten.at(graph), graph, changed.contains(graph));
+        GCGraphBuildAccess::inheritRevision(rewritten.at(graph), graph, changed.contains(graph));
     }
 
     // A session over the program's root replaces it. A session over another root (a detached
@@ -1038,7 +1030,7 @@ GraphDraftGroup::GraphDraftGroup(const camel::core::context::context_ptr_t &cont
 
 GraphDraftGroup::~GraphDraftGroup() = default;
 
-GCGraph *GraphDraftGroup::reserve(std::string stableId, std::string mangledName, std::string name) {
+GCGraph *GraphDraftGroup::reserve(std::string mangledName, std::string name) {
     auto member      = std::make_unique<Member>();
     member->draft    = std::make_unique<GraphDraft>();
     member->id       = context_->graphIds().allocate();
@@ -1047,7 +1039,6 @@ GCGraph *GraphDraftGroup::reserve(std::string stableId, std::string mangledName,
     program_->bind(member->id, key);
     member->identity = RuntimeDraftIdentity{
         .sourceGraph = nullptr,
-        .stableId    = std::move(stableId),
         .mangledName = std::move(mangledName),
         .name        = std::move(name),
     };

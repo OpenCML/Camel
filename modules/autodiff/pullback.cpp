@@ -1613,14 +1613,13 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // They are reserved (not encoded) now; the group re-points the graph references their payloads
     // hold when it encodes them, as it does for every member the transformation adds.
     const std::string key = bodyPlan.name + ".reverse";
-    GCGraph *const condKey = engine_.group().reserve(
-        "autodiff.loop/" + key + ".cond", "autodiff.loop/" + key + ".cond", key + ".cond");
+    GCGraph *const condKey =
+        engine_.group().reserve("autodiff.loop/" + key + ".cond", key + ".cond");
     engine_.group().define(condKey, buildReverseCond(reverse));
-    GCGraph *const bodyKey = engine_.group().reserve(
-        "autodiff.loop/" + key + ".body", "autodiff.loop/" + key + ".body", key + ".body");
+    GCGraph *const bodyKey =
+        engine_.group().reserve("autodiff.loop/" + key + ".body", key + ".body");
     engine_.group().define(bodyKey, buildReverseBody(reverse));
-    GCGraph *const closureKey = engine_.group().reserve(
-        "autodiff.loop/" + key, "autodiff.loop/" + key, key);
+    GCGraph *const closureKey = engine_.group().reserve("autodiff.loop/" + key, key);
     // What the reverse pass captures, in order: the tape, then the captures whose gradient it
     // starts from zero.
     std::vector<Type *> closureTypes = bodyPlan.collectionTypes;
@@ -2843,14 +2842,8 @@ std::vector<gc_node_ref_t> Backward::finishCaptures() {
 PullbackPlan Engine::reserve(const std::string &name, const PullbackPlan &types) {
     PullbackPlan plan = types;
     const auto suffix = uniqueSuffix();
-    plan.forward      = group_.reserve(
-        "autodiff.fwd/" + name + suffix,
-        "autodiff.fwd/" + name + suffix,
-        name + ".fwd");
-    plan.pullback = group_.reserve(
-        "autodiff.pb/" + name + suffix,
-        "autodiff.pb/" + name + suffix,
-        name + ".pb");
+    plan.forward      = group_.reserve("autodiff.fwd/" + name + suffix, name + ".fwd");
+    plan.pullback     = group_.reserve("autodiff.pb/" + name + suffix, name + ".pb");
     return plan;
 }
 
@@ -3206,7 +3199,6 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
 
     const std::string suffix = uniqueSuffix();
     GCGraph *key             = group_.reserve(
-        "autodiff.grad/" + function->stableId() + suffix,
         "autodiff.grad/" + function->mangledName() + suffix,
         "grad(" + function->name() + ")");
     group_.define(key, std::move(draft));

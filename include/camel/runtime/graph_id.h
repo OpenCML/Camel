@@ -31,6 +31,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <string>
 
 namespace camel::runtime {
 
@@ -40,6 +41,9 @@ inline constexpr GraphId kInvalidGraphId = GraphId::Invalid;
 
 constexpr uint32_t toValue(GraphId id) { return static_cast<uint32_t>(id); }
 constexpr bool isValid(GraphId id) { return id != GraphId::Invalid; }
+
+/// The id as tools show and take it: the decimal digits of its value.
+inline std::string toText(GraphId id) { return std::to_string(toValue(id)); }
 
 /// Hands out the GraphIds of one program: 1, 2, 3, ... in the order of the requests. May be
 /// called from any thread.

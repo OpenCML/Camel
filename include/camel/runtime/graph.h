@@ -168,6 +168,13 @@ struct GCBranchArm {
 /// (src/builtin/operators/graph.h); a program cannot name it.
 inline constexpr std::string_view kGraphOriginalUri = ":graph/original";
 
+/// Properties a graph has besides its nodes (GCGraph::flags).
+enum GCGraphFlag : uint8_t {
+    /// The graph is a function that carries a vjp rule as its last closure value
+    /// (autodiff::attachRule).
+    kGraphFlagCarriesRule = 1 << 0,
+};
+
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
 inline constexpr gc_off_t kNoPayload = static_cast<gc_off_t>(-1);
 
@@ -406,7 +413,6 @@ class GCGraph : public camel::core::rtdata::Object {
 
     // These accessors expose cold compile/debug metadata only. Runtime passes
     // should derive execution semantics from the native payload instead.
-    const std::string &stableId() const;
     /// The graph's identity within its program, the same for every version of the graph
     /// (graph_id.h).
     GraphId id() const { return id_; }
@@ -437,15 +443,17 @@ class GCGraph : public camel::core::rtdata::Object {
     size_t frameSize() const;
     bool isMacro() const;
     GCGraph *outerGraph() const;
-    /// The graph's identity across rewrites, standing in for the design's GraphId until
-    /// graph-model step 5 (graph facts, camel/runtime/facts.h): a commit gives the copy it
-    /// encodes of a graph that graph's lineage; any other new graph gets a new one.
-    uint64_t lineage() const { return lineage_; }
-    /// The graph's revision, standing in for the design's Revision until graph-model step 5
-    /// (facts.h): a process-wide serial number. A commit keeps it for a graph it did not change
-    /// and gives a new one to a graph it changed: one a pass edited into different content, or
-    /// one that refers (at any depth) to a graph that changed. Equal serials mean equal content.
-    uint64_t serial() const { return serial_; }
+    /// The graph's revision (graph facts, camel/runtime/facts.h): a process-wide number. A
+    /// commit keeps it for a graph it did not change and gives a new one to a graph it changed:
+    /// one a pass edited into different content, or one that refers (at any depth) to a graph
+    /// that changed. Equal revisions of one GraphId mean equal content.
+    uint64_t revision() const { return revision_; }
+    /// The function this graph is a type-only specialization of, or was derived from a
+    /// specialization of (std::opt's recursion bound counts them): the first function in the
+    /// chain that is not one itself. kInvalidGraphId for a graph that has no such ancestor.
+    GraphId typeSpecializationRoot() const;
+    /// GCGraphFlag bits.
+    uint8_t flags() const;
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
     uintptr_t extraSlot(size_t index) const;
@@ -619,8 +627,7 @@ class GCGraph : public camel::core::rtdata::Object {
     camel::core::type::TupleType *staticDataType_  = nullptr;
     camel::core::type::TupleType *closureType_     = nullptr;
     GCGraph *outerGraph_                           = nullptr;
-    uint64_t lineage_                              = 0;       // see lineage()
-    uint64_t serial_                               = 0;       // see serial()
+    uint64_t revision_                             = 0; // see revision()
     GCGraph **refs_                                = nullptr;
     uint8_t *refRoles_                             = nullptr;
     gc_cnt_t refCount_                             = 0;

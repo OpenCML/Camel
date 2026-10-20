@@ -60,10 +60,9 @@ constexpr std::string_view kRulePrefix = "autodiff.vjp/";
     draft->setClosureType(withRule);
 
     draft->setId(context->graphIds().allocate());
-    rt::GCGraph *graph = draft->encode(
-        std::string(kRulePrefix) + source->stableId(),
-        std::string(kRulePrefix) + source->mangledName(),
-        source->name());
+    draft->setFlags(draft->flags() | rt::kGraphFlagCarriesRule);
+    rt::GCGraph *graph =
+        draft->encode(std::string(kRulePrefix) + source->mangledName(), source->name());
     auto *result = ::Function::create(
         rt::makeProgram(*context, std::span(&graph, 1)),
         graph->id(),
@@ -80,7 +79,7 @@ constexpr std::string_view kRulePrefix = "autodiff.vjp/";
 }
 
 bool carriesRule(const camel::runtime::GCGraph *graph) {
-    return graph != nullptr && graph->stableId().starts_with(kRulePrefix);
+    return graph != nullptr && (graph->flags() & camel::runtime::kGraphFlagCarriesRule) != 0;
 }
 
 ::Function *ruleOf(const ::Function *function) {

@@ -19,7 +19,7 @@ namespace camel::tiles {
 namespace rt = runtime;
 namespace {
 // This is an in-process CUDA-policy artifact, not a second semantic identity.
-// Graph lineage/revision and the declaration epoch are supplied by FactStore.
+// Graph id/revision and the declaration epoch are supplied by FactStore.
 // Changing the lowering policy must change this hash; device-specific machine
 // compilation remains in the backend's context-local source cache.
 constexpr uint64_t compiledRegionTarget = 0x74696c6573000004ULL;

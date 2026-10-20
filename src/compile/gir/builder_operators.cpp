@@ -2096,7 +2096,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         recorder_->callResolved(
             gct->origin(),
             gct->at(0)->origin(),
-            targetGraph ? targetGraph->stableId() : std::string(),
+            targetGraph ? targetGraph->graphId() : runtime::kInvalidGraphId,
             targetOperator ? targetOperator->uri() : std::string(),
             targetFuncType);
     }

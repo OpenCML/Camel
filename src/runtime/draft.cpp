@@ -739,6 +739,8 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
         graph->nodeCount());
     auto draft       = std::make_unique<GraphDraft>();
     draft->id_       = graph->id();
+    draft->typeSpecializationRoot_ = graph->typeSpecializationRoot();
+    draft->flags_                  = graph->flags();
     draft->funcType_ = graph->funcType();
     draft->captureNames_.assign(graph->captureNames().begin(), graph->captureNames().end());
     if (const auto *layout = graph->runtimeDataType()) {
@@ -1375,9 +1377,8 @@ void GraphDraft::addStaticGraphRef(GCGraph *graph) {
     }
 }
 
-GCGraph *GraphDraft::encode(
-    const std::string &stableId, const std::string &mangledName, const std::string &name) const {
-    auto *debugRecord = createGraphDebugRecord(stableId, mangledName, name);
+GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &name) const {
+    auto *debugRecord = createGraphDebugRecord(mangledName, name);
     recordDraftDebugData(debugRecord, *this);
     camel::core::type::TupleType *staticDataType = nullptr;
     if (!staticSlotTypes_.empty()) {
