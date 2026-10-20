@@ -30,12 +30,25 @@
  *   payload       the form, the condition graph c (While, ForWhile) and the body graph b.
  * The condition graph takes s1 ... sk (Norm ports) and the m captures (With ports) and returns
  * a bool; the body graph takes (x,) s1 ... sk and the same m captures and returns the next
- * state: the value when k = 1, the k-tuple when k > 1. The LOOP node's value is the last state.
+ * value of each slot the loop collects (see below), after the k state values. Without collection
+ * slots the body returns the next state alone: the value when k = 1, the k-tuple when k > 1.
+ * The LOOP node's value is the last state.
+ *
+ * Collection slots. A graph producer (no source syntax exists for this yet; the H4d design)
+ * may give a LOOP node s typed collection slots. Each round the body then also produces one
+ * value per slot, and the loop collects them into one array per slot, in round order. The
+ * node's value is (state_1, ..., state_k, array_1, ..., array_s): the state components first,
+ * so a consumer that does not care about the tape can read the state where it used to. The
+ * payload's collectionCount is s; the element type of slot c is the s-th trailing component
+ * of the body graph's exit tuple; and the node's value type is the tuple that names both. The
+ * count is explicit because the state type alone cannot tell e.g. k = 2 from k = 1 plus a
+ * collection slot of the same type.
  *
  * Semantics: s = (a1, ..., ak); each round: [While, ForWhile] if !c(s) stop; [For, ForWhile]
- * if no element is left stop, else x = the next element; s = b([x,] s). The rounds run strictly
- * one after the other; each is one activation of the condition graph and one of the body
- * graph.
+ * if no element is left stop, else x = the next element; v = b([x,] s), which is the next state
+ * (the k-tuple) followed by the s collected values; s = the first k of v; the collected values
+ * are appended to their arrays. The rounds run strictly one after the other; each is one
+ * activation of the condition graph and one of the body graph.
  *
  * Ownership. A LoopView is a view: it holds the graph and the node, and is valid as long as the
  * frozen graph is (camel/runtime/graph.h). Graphs are named by GCGraph pointers, nodes by their
@@ -74,8 +87,23 @@ class LoopView {
     size_t stateCount() const { return stateCount_; }
     /// The type of the j-th value of the state (the type of the body graph's j-th state port).
     camel::core::type::Type *stateType(size_t j) const;
-    /// The type of the loop's value: the state type when k = 1, the k-tuple when k > 1.
+    /// s, the number of typed values the loop collects into arrays each round (0 unless a graph
+    /// producer gave the node collection slots; the source syntax never does).
+    size_t collectionCount() const { return collectionCount_; }
+    /// True when the loop's value is a tuple: k > 1, or the loop collects (k + s components).
+    bool valueIsTuple() const { return stateCount_ > 1 || collectionCount_ > 0; }
+    /// The type of the loop's value: the state type when k = 1 and s = 0; otherwise the tuple
+    /// (state_0, ..., state_{k-1}, array_0, ..., array_{s-1}).
     camel::core::type::Type *valueType() const { return graph_->node(node_)->dataType(); }
+    /// k + s: the number of components of the loop's value when valueIsTuple().
+    size_t valueComponentCount() const { return stateCount_ + collectionCount_; }
+    /// The index of the j-th state value in the loop's value tuple.
+    size_t stateValueIndex(size_t j) const { return j; }
+    /// The index of the array collected by slot c in the loop's value tuple.
+    size_t collectionValueIndex(size_t c) const { return stateCount_ + c; }
+    /// Slot c's array type (an ArrayType) and the type of the values it holds.
+    camel::core::type::Type *collectionArrayType(size_t c) const;
+    camel::core::type::Type *collectionElemType(size_t c) const;
 
     // ---- Inputs of the LOOP node (in the graph it is written in) ----
 
@@ -104,13 +132,27 @@ class LoopView {
     gc_node_ref_t condCapturePort(size_t c) const;
     gc_node_ref_t bodyCapturePort(size_t c) const;
 
-    // ---- The next state ----
+    // ---- The next state and the collected values ----
 
-    /// The body graph's result node: the next state (a k-tuple when k > 1).
+    /// The body graph's result node: the next state, followed by the s collected values when
+    /// the loop collects (so a tuple whenever valueIsTuple(); otherwise the state itself when
+    /// k = 1).
     gc_node_ref_t nextState() const;
-    /// k > 1 and the body builds its result with a tuple FILL: the body node that fills
-    /// position j; otherwise nullopt (the consumer projects nextState() with ACCS).
+    /// True when the body builds its result with a tuple FILL: k > 1 or the loop collects.
+    bool nextStateIsTuple() const { return valueIsTuple(); }
+    /// The body node that fills position j of the result tuple (the j-th state value); nullopt
+    /// unless nextStateIsTuple() and the body result is a tuple FILL: a consumer may otherwise
+    /// project nextState() with ACCS.
     std::optional<gc_node_ref_t> nextStateComponent(size_t j) const;
+    /// The body node that produces the value collected by slot c this round (result position
+    /// k + c); nullopt unless the loop collects and the body result is a tuple FILL.
+    std::optional<gc_node_ref_t> nextCollectionComponent(size_t c) const;
+    /// The type of the body graph's result: the state type when it does not collect, the
+    /// (state_0, ..., state_{k-1}, elem_0, ..., elem_{s-1}) tuple when it does.
+    camel::core::type::Type *bodyResultType() const { return body_->funcType()->exitType(); }
+    /// The index of the j-th state value (the c-th collected value) in the body result tuple.
+    size_t bodyStateResultIndex(size_t j) const { return j; }
+    size_t bodyCollectionResultIndex(size_t c) const { return stateCount_ + c; }
 
     // ---- Effects ----
 
@@ -125,12 +167,21 @@ class LoopView {
     gc_node_ref_t node_;
     LoopKind kind_;
     size_t stateCount_;
+    size_t collectionCount_;
     GCGraph *cond_;
     GCGraph *body_;
 };
 
 /// The LOOP node `node` of `graph` (asserts that it is one).
 inline LoopView loopOf(const GCGraph &graph, gc_node_ref_t node) { return LoopView(graph, node); }
+
+/// Reads component `index` of a finished loop's value (the layout LoopView describes): the value
+/// itself for a loop that does not wrap it, else the tuple's component. One place so consumers
+/// such as autodiff never re-derive the layout.
+slot_t loopValueComponent(const LoopView &loop, slot_t value, size_t index);
+/// The j-th state value of a finished loop, and the array collected by slot c.
+slot_t loopStateValue(const LoopView &loop, slot_t value, size_t j);
+slot_t loopCollectedValue(const LoopView &loop, slot_t value, size_t c);
 
 /// Checks the LOOP node `node` of `graph` against its graphs and throws std::runtime_error with
 /// what is wrong (docs/design/graph-model I13; op-semantics I18, I19): the condition graph has

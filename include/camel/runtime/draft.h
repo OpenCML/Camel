@@ -361,6 +361,11 @@ class GraphDraft {
     void setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type);
     void setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex);
     void setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags);
+    /// Gives LOOP node `id` `count` collection slots (camel/runtime/loop.h): its body must then
+    /// return the next state followed by the values to collect, and its value type must name the
+    /// state and one array per slot. A graph producer that builds such a node calls this; the
+    /// source syntax never does. Asserts that `id` is a LOOP node.
+    void setLoopCollectionCount(gc_node_ref_t id, uint32_t count);
     /// Source origin of node `id` (see DraftNodeHeader::origin).
     uint64_t nodeOrigin(gc_node_ref_t id) const;
     /// The origin of the first live node that has one, 0 when none has: where to report

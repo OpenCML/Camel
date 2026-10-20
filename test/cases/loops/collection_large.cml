@@ -1,0 +1,8 @@
+// A collecting loop of a hundred thousand rounds: the two tapes are grown in place, so the run
+// takes memory linear in the rounds and time linear too, not quadratic. The summary pass prints
+// the last state and the lengths of the tapes, not their elements.
+func main(): int sync {
+    println(loop i = 0 while i < 100000 do i + 1)
+    println(loop acc = 0 for x in range(0, 100000) do acc + 1)
+    return 0
+}
