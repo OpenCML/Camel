@@ -599,7 +599,10 @@ void FastVMSchedPass::evalMarkedOperator(
 void FastVMSchedPass::evalMarkedOperator_map_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     Array *source = currFrame.get<Array *>(nargs[0]);
-    const bool useViews = source->isCompact() && source->isAggregateElement();
+    // One decision for the whole call (Array::elementRead): whether an element is read as a
+    // view into the array's block, out of the slot layout, or out of its own width.
+    const Array::ElementRead readClass = source->elementRead();
+    const bool useViews                = readClass == Array::ElementRead::View;
     const type::DataLayout *viewLayout =
         useViews ? type::pureDataLayout(source->elemType()) : nullptr;
     if (useViews) {
@@ -612,24 +615,31 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
     Array *res = Array::create(mm::autoSpace(), resultType, arrSize);
     currFrame.set(self, res);
 
-    for (size_t i = 0; i < arrSize; ++i) {
-        Array *arr                     = currFrame.get<Array *>(nargs[0]);
-        Function *func                 = currFrame.get<Function *>(wargs[0]);
-        const HigherOrderCallSite site = higherOrderCallSite(func);
-        slot_t element                 = useViews ? arr->getElementView(i, viewLayout) : arr->getSlot(i);
-        requireNestedCallRoom(&currFrame);
-        Frame *frame = framePool_.acquire(site.runtimeGraph);
-        populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
+    // The source's read class and the result's write class are fixed here, once; the arrays are
+    // re-read on every round because an element callback is a safepoint and may move them.
+    dispatchElementAccess(readClass, res->elementWrite(), [&](auto readTag, auto writeTag) {
+        constexpr Array::ElementRead kRead   = readTag.value;
+        constexpr Array::ElementWrite kWrite = writeTag.value;
+        for (size_t i = 0; i < arrSize; ++i) {
+            Array *arr                     = currFrame.get<Array *>(nargs[0]);
+            Function *func                 = currFrame.get<Function *>(wargs[0]);
+            const HigherOrderCallSite site = higherOrderCallSite(func);
+            slot_t element                 = arr->readElement<kRead>(i, viewLayout);
+            requireNestedCallRoom(&currFrame);
+            Frame *frame = framePool_.acquire(site.runtimeGraph);
+            populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
-        slot_t result = callElement(site, frame);
-        currFrame.get<Array *>(self)->set<slot_t>(i, result, resultType);
-    }
+            slot_t result = callElement(site, frame);
+            currFrame.get<Array *>(self)->writeElement<kWrite>(i, result, resultType);
+        }
+    });
 }
 
 void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     Array *source = currFrame.get<Array *>(nargs[0]);
-    const bool useViews = source->isCompact() && source->isAggregateElement();
+    const Array::ElementRead readClass = source->elementRead();
+    const bool useViews                = readClass == Array::ElementRead::View;
     const type::DataLayout *viewLayout =
         useViews ? type::pureDataLayout(source->elemType()) : nullptr;
     if (useViews) {
@@ -643,24 +653,26 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     Array *filtered = Array::create(mm::autoSpace(), resultType, 0);
     currFrame.set(self, filtered);
 
-    for (size_t i = 0; i < arrSize; ++i) {
-        Array *arr                     = currFrame.get<Array *>(nargs[0]);
-        Function *func                 = currFrame.get<Function *>(wargs[0]);
-        const HigherOrderCallSite site = higherOrderCallSite(func);
-        slot_t element                 = useViews ? arr->getElementView(i, viewLayout) : arr->getSlot(i);
-        requireNestedCallRoom(&currFrame);
-        Frame *frame = framePool_.acquire(site.runtimeGraph);
-        populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
+    dispatchElementRead(readClass, [&](auto readTag) {
+        constexpr Array::ElementRead kRead = readTag.value;
+        for (size_t i = 0; i < arrSize; ++i) {
+            Array *arr                     = currFrame.get<Array *>(nargs[0]);
+            Function *func                 = currFrame.get<Function *>(wargs[0]);
+            const HigherOrderCallSite site = higherOrderCallSite(func);
+            slot_t element                 = arr->readElement<kRead>(i, viewLayout);
+            requireNestedCallRoom(&currFrame);
+            Frame *frame = framePool_.acquire(site.runtimeGraph);
+            populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
-        slot_t result = callElement(site, frame);
+            slot_t result = callElement(site, frame);
 
-        if (fromSlot<bool>(result)) {
-            currFrame.get<Array *>(self)->append(
-                useViews ? currFrame.get<Array *>(nargs[0])->getElementView(i, viewLayout)
-                         : currFrame.get<Array *>(nargs[0])->getSlot(i),
-                resultType);
+            if (fromSlot<bool>(result)) {
+                currFrame.get<Array *>(self)->append(
+                    currFrame.get<Array *>(nargs[0])->readElement<kRead>(i, viewLayout),
+                    resultType);
+            }
         }
-    }
+    });
 
     currFrame.get<Array *>(self)->shrinkToFit(resultType);
 }
@@ -742,7 +754,8 @@ void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     Array *source = currFrame.get<Array *>(nargs[0]);
-    const bool useViews = source->isCompact() && source->isAggregateElement();
+    const Array::ElementRead readClass = source->elementRead();
+    const bool useViews                = readClass == Array::ElementRead::View;
     const type::DataLayout *viewLayout =
         useViews ? type::pureDataLayout(source->elemType()) : nullptr;
     if (useViews) {
@@ -759,23 +772,27 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
 
     currFrame.set(self, init);
 
-    for (size_t i = 0; i < arrSize; ++i) {
-        Array *arr                     = currFrame.get<Array *>(nargs[0]);
-        Function *func                 = currFrame.get<Function *>(wargs[0]);
-        const HigherOrderCallSite site = higherOrderCallSite(func);
-        const slot_t args[]            = {currFrame.get<slot_t>(self), useViews ? arr->getElementView(i, viewLayout) : arr->getSlot(i)};
-        requireNestedCallRoom(&currFrame);
-        Frame *frame = framePool_.acquire(site.runtimeGraph);
-        populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
+    dispatchElementRead(readClass, [&](auto readTag) {
+        constexpr Array::ElementRead kRead = readTag.value;
+        for (size_t i = 0; i < arrSize; ++i) {
+            Array *arr                     = currFrame.get<Array *>(nargs[0]);
+            Function *func                 = currFrame.get<Function *>(wargs[0]);
+            const HigherOrderCallSite site = higherOrderCallSite(func);
+            const slot_t args[]            = {currFrame.get<slot_t>(self), arr->readElement<kRead>(i, viewLayout)};
+            requireNestedCallRoom(&currFrame);
+            Frame *frame = framePool_.acquire(site.runtimeGraph);
+            populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
 
-        currFrame.set(self, callElement(site, frame));
-    }
+            currFrame.set(self, callElement(site, frame));
+        }
+    });
 }
 
 void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
     Array *source = currFrame.get<Array *>(nargs[0]);
-    const bool useViews = source->isCompact() && source->isAggregateElement();
+    const Array::ElementRead readClass = source->elementRead();
+    const bool useViews                = readClass == Array::ElementRead::View;
     const type::DataLayout *viewLayout =
         useViews ? type::pureDataLayout(source->elemType()) : nullptr;
     if (useViews) {
@@ -783,17 +800,20 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     }
     const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
 
-    for (size_t i = 0; i < arrSize; ++i) {
-        Array *arr                     = currFrame.get<Array *>(nargs[0]);
-        Function *func                 = currFrame.get<Function *>(wargs[0]);
-        const HigherOrderCallSite site = higherOrderCallSite(func);
-        slot_t element                 = useViews ? arr->getElementView(i, viewLayout) : arr->getSlot(i);
-        requireNestedCallRoom(&currFrame);
-        Frame *frame = framePool_.acquire(site.runtimeGraph);
-        populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
+    dispatchElementRead(readClass, [&](auto readTag) {
+        constexpr Array::ElementRead kRead = readTag.value;
+        for (size_t i = 0; i < arrSize; ++i) {
+            Array *arr                     = currFrame.get<Array *>(nargs[0]);
+            Function *func                 = currFrame.get<Function *>(wargs[0]);
+            const HigherOrderCallSite site = higherOrderCallSite(func);
+            slot_t element                 = arr->readElement<kRead>(i, viewLayout);
+            requireNestedCallRoom(&currFrame);
+            Frame *frame = framePool_.acquire(site.runtimeGraph);
+            populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
-        callElement(site, frame);
-    }
+            callElement(site, frame);
+        }
+    });
 
     // foreach has no aggregate return value.
     currFrame.set(self, NullSlot);

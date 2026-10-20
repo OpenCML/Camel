@@ -65,6 +65,32 @@ Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &or
 
 namespace {
 
+/// The value a body hands on, read on the graph rather than by how the source spelled it.
+///
+/// A name is not a computation: `let r = (xs->append<7>, n + 1)` followed by `r` leaves the
+/// tuple's own FILL as the body's value, exactly as writing the tuple in place does, so a name
+/// needs no case of its own here. What a block can add around the value is an anchor: a GATE
+/// that orders the value after the block's effects forwards it unchanged (`sync { …; r }` ends
+/// in one), and the criterion is the value behind it. A CALL is not looked through: what a call
+/// returns is computed in another graph (a function's, or an arm graph of a branch), whose state
+/// this is not — a loop state is only written in place when the graph that returns it also
+/// builds it.
+node_handle_t loopStateValueOf(node_handle_t node) {
+    // A gate chain is at most the number of blocks the value passed through; a bound keeps a
+    // malformed cycle from looping forever.
+    for (size_t depth = 0; node != nullptr && depth < 16; ++depth) {
+        if (!nodeIsKind(node, runtime::GCNodeKind::Gate)) {
+            return node;
+        }
+        const auto inputs = normInputsOf(node);
+        if (inputs.size() != 1) {
+            return node; // a gate that waits on nothing has no value to forward
+        }
+        node = nodeDraftOf(node)->node(inputs.front());
+    }
+    return node;
+}
+
 /// The exact value of a literal primitive datum: an integer or a real. A literal element
 /// (field) of a composite is converted from it, so that an integer is one rounding from the
 /// value written rather than the same double rounded again.
@@ -1858,7 +1884,7 @@ void Builder::markLoopStateInPlace(
         draft.returnNode() == runtime::kInvalidNodeRef) {
         return;
     }
-    node_handle_t returned = draft.node(draft.returnNode());
+    node_handle_t returned = loopStateValueOf(draft.node(draft.returnNode()));
     if (returned == nullptr) {
         return;
     }
