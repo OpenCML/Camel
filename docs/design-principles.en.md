@@ -255,7 +255,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **A `with` parameter is not a generic parameter.** It is a context parameter; do not use it to declare type parameters or compile-time parameters.
 - **A generic function can appear in any position that expects a function**, including being passed to another generic function (see 5.5).
 - **Angle brackets are only for "configuration"**: configuration is whatever "decides which function this is" (the mapping function of `map`, the predicate of `filter`, a model's weights, hyperparameters) and is a `with` parameter, keeping the pipeline style `xs->map<f>`; the data flowing through a function, and the function a transformation transforms (such as the function `grad` differentiates), are ordinary parameters: `grad(loss)`, `with_grad(loss)`. When a function passed as an ordinary argument is known at compile time, the compiler still specialises for it (an optimisation, not semantics). This distinction gives transformations their defaults: `grad` differentiates the weights (`with` parameters), batch mapping maps over the data (ordinary parameters) with weights shared, and sharding splits the data and replicates the weights.
-- **A pipeline call may take extra arguments**: `x->f(a, b)` means `f(x, a, b)`; `x->f` and `x->f<w>` are unchanged.
+- **A pipeline call may take extra arguments**: `x->f(a, b)` means `f(x, a, b)`; `x->f` and `x->f<w>` are unchanged; in a chain of calls the receiver enters the first call of the name after `->`, so `x->g(1)(2)` means `g(x, 1)(2)`.
 
 ---
 
