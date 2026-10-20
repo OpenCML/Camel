@@ -995,8 +995,10 @@ cc3f438335451aa9 ok test/cases/consistency/partial_application/context_arguments
 6a974542e71f4455 ok test/cases/consistency/partial_application/err_configured_twice.cml
 81845b33a8cc8dde ok test/cases/consistency/partial_application/err_context_argument_name.cml
 d129e3a5a5d4c38a ok test/cases/consistency/partial_application/err_context_argument_out_of_range.cml
+458457fdb28a5d2b ok test/cases/consistency/partial_application/err_overload_choice_name.cml
 dc66f9a3b30af3d6 ok test/cases/consistency/partial_application/err_var_parameter.cml
 5c3024f8d11e6cec ok test/cases/consistency/partial_application/graph.cml
+e8b8c53cd02c54bf ok test/cases/consistency/partial_application/overload_choice.cml
 444e6ddc322d7a4a ok test/cases/consistency/partial_application/values.cml
 1deb0f6987e78c4c ok test/cases/consistency/surface/lambda_call.cml
 685c979fd7a61501 ok test/cases/consistency/surface/member_chain.cml
@@ -1209,7 +1211,7 @@ ccbfb354f7dda082 ok test/cases/loops/onnx_refused.cml
 f9591fe68a90c170 ok test/cases/loops/recursion.cml
 a910f1e9cdce417e ok test/cases/loops/refuse_loop_no_channel.cml
 cba7b09e77a994a5 ok test/cases/loops/shapes.cml
-6c09b344e55d3c65 ok test/cases/loops/state_in_place.cml
+ab1a59fa8f563f1a ok test/cases/loops/state_in_place.cml
 63e444a96478d95f ok test/cases/loops/tuple_destructure.cml
 de8066e46383fc72 ok test/cases/macro/hof_calls.cml
 a58dd440e290b13d ok test/cases/modules/bytes_text_reject.cml
@@ -1824,6 +1826,7 @@ f3875ddc8d0d6b42 ok test/cases/trans/port_fill_metadata.cml
 060c9e37e16da8fb ok test/cases/trans/annotated/boundaries.cml
 1235cae4c47855a2 ok test/cases/trans/cpp/exec_mod_scalar.cml
 d832457679ac549b ok test/cases/trans/cpp/fstring.cml
+bf705a16bb502154 ok test/cases/trans/cpp/loop_state_in_place.cml
 6d8e4c50b7986f36 ok test/cases/trans/cpp/main_io.cml
 2d3348fd597bc963 ok test/cases/trans/cpp/math_scalar.cml
 63abfcb9afe7cf04 ok test/cases/trans/cpp/mod_scalar.cml

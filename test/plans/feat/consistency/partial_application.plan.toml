@@ -148,6 +148,37 @@ assert(out === "6.0 8.0 1.5", `unexpected output: ${out}`)
 timeout_ms = 30000
 
 [[tests]]
+name = "partial_application.overload_choice"
+desc = "A context argument chooses its overload as an ordinary call does (design principles 4.4, 5.1): exact match first, and only when there is none does the literal enter a parameter type. `scale<2>` with `with <k: int>` and `with <k: f32>` is the int one, `at<[7.0, 8.0]>` with `with <xs: float[]>` and `with <xs: f32[]>` is the float[] one, and `half<3>` with only `with <k: f32>` still takes the literal as an f32. The four back ends agree."
+kind = "behavior"
+case = "../../../cases/consistency/partial_application/overload_choice.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === "6\n16.0\n4.5", `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "partial_application.err_overload_choice_name"
+desc = "Exact match first never means a name is converted: `n` is an int and neither `with <k: f32>` nor `with <k: float>` takes an int exactly, so `scale<n>` is refused (design principles 5.1)."
+kind = "negative"
+case = "../../../cases/consistency/partial_application/err_overload_choice_name.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_overload_choice_name.cml:18:18:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float"]
+
+[[tests]]
 name = "partial_application.err_context_argument_name"
 desc = "A name bound as a context argument is a value of its own type and does not convert: `scale<n>` with `n: int` and `with <k: f32>` is still a refused partial application (design principles 5.1)."
 kind = "negative"

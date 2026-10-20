@@ -270,7 +270,15 @@ node_handle_t Builder::partialApplicationOf(
     }
     // The one function the callee stands for with these `with` arguments (and, when the
     // position says which function it wants, with the parameters that are left).
-    const auto fits = [&](FunctionType *type) {
+    //
+    // A context argument chooses its overload exactly as an ordinary call does (design
+    // principles 4.4, 5.1; H27d): a function whose `with` parameters take the bound values
+    // exactly is tried first, and only when no function takes them exactly may a literal
+    // enter a parameter type. With `with <k: int>` and `with <k: f32>` both declared,
+    // `scale<2>` is the `int` one; `half<2>` with only `with <k: f32>` still binds the
+    // literal as an f32. A name never converts, so a name no parameter takes exactly leaves
+    // the binding refused.
+    const auto fits = [&](FunctionType *type, bool entering) {
         if (type == nullptr || !type->hasExitType() || type->withTypesCount() < bound.size()) {
             return false;
         }
@@ -279,11 +287,20 @@ node_handle_t Builder::partialApplicationOf(
             if (param == nullptr) {
                 return false;
             }
+            // Exactly: the bound value already has the parameter's type. This is the first
+            // pass an ordinary call makes, with the argument types as they are, before any
+            // literal takes a context type (enteringTypes, builder_operators.cpp).
+            if (param->assignableFrom(boundTypes[i])) {
+                continue;
+            }
+            if (!entering) {
+                return false;
+            }
             // A `with` parameter is a position with an expected type, like an ordinary
             // parameter (design principles 4.4, 5.1): `scale<2>` with `with <k: f32>` and
             // `at<[7.0, 8.0]>` with `with <xs: f32[]>` bind, and the values are converted
-            // below. A name still does not convert.
-            if (param->assignableFrom(boundTypes[i]) || entersImplicitly(param, boundTypes[i])) {
+            // below.
+            if (entersImplicitly(param, boundTypes[i])) {
                 continue;
             }
             if (const std::optional<literal::Value> value = literalValueOfExpr(bound[i].expr);
@@ -315,16 +332,15 @@ node_handle_t Builder::partialApplicationOf(
         }
         return true;
     };
-    FunctionType *calleeType = nullptr;
+    // The functions the name stands for, in declaration order.
+    std::vector<FunctionType *> candidates;
     if (nodeIsKind(target, runtime::GCNodeKind::Dref)) {
         const auto &drefTarget = nodeGraphOf(target)->drefTarget(target);
-        size_t candidates      = 0;
         if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
             if (auto graphs = asCompileGraphVec(drefTarget)) {
                 for (const auto &g : *graphs) {
-                    if (!decoratedOf_.contains(g.get()) && fits(g->funcType())) {
-                        calleeType = g->funcType();
-                        ++candidates;
+                    if (!decoratedOf_.contains(g.get())) {
+                        candidates.push_back(g->funcType());
                     }
                 }
             }
@@ -334,22 +350,37 @@ node_handle_t Builder::partialApplicationOf(
             // called, so its binding cannot stand alone.
             for (const auto &[uri, resolver] :
                  std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
-                FunctionType *fixed = resolver->fixedSignature();
-                if (fixed && fits(fixed)) {
-                    calleeType = fixed;
-                    ++candidates;
+                if (FunctionType *fixed = resolver->fixedSignature()) {
+                    candidates.push_back(fixed);
                 }
             }
         }
-        if (candidates != 1) {
-            return nullptr;
-        }
     } else if (
-        Type *type = valueTypeOf(nodeTypeOf(target)); type != nullptr &&
-                                                      type->code() == TypeCode::Function &&
-                                                      fits(tt::as_ptr<FunctionType>(type))) {
-        calleeType = tt::as_ptr<FunctionType>(type);
-    } else {
+        Type *type = valueTypeOf(nodeTypeOf(target));
+        type != nullptr && type->code() == TypeCode::Function) {
+        candidates.push_back(tt::as_ptr<FunctionType>(type));
+    }
+    // Exact matches first; a literal enters a parameter type only when there is none. More
+    // than one candidate in the pass that is tried is still refused: a partial application
+    // used as a value has no declaration-order tie-break (H27c's refusal), and a type given
+    // by the position (`expected`) settles the choice before either pass.
+    FunctionType *calleeType = nullptr;
+    for (const bool entering : {false, true}) {
+        std::vector<FunctionType *> fitted;
+        for (FunctionType *candidate : candidates) {
+            if (fits(candidate, entering)) {
+                fitted.push_back(candidate);
+            }
+        }
+        if (fitted.empty()) {
+            continue;
+        }
+        if (fitted.size() == 1) {
+            calleeType = fitted.front();
+        }
+        break;
+    }
+    if (calleeType == nullptr) {
         return nullptr;
     }
     for (size_t i = 0; i < calleeType->withTypesCount(); ++i) {
