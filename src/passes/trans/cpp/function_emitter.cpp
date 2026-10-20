@@ -351,7 +351,7 @@ Block FunctionEmitter::lowerMember(const Member &member) {
     }
     Block body = lowerSequence(
         top,
-        camel::execute::buildReachableExecutionTopoIndices(member.graph),
+        member.graph->execPlan().topo,
         resultOf(member.graph),
         Tail{Tail::Kind::Return, {}});
     current_ = nullptr;
@@ -413,7 +413,7 @@ size_t FunctionEmitter::liveUses(const GCGraph *graph, gc_node_ref_t ref) {
         auto &order = orders_[graph];
         if (order.empty()) {
             order =
-                camel::execute::buildReachableExecutionTopoIndices(const_cast<GCGraph *>(graph));
+                graph->execPlan().topo;
         }
         std::unordered_set<gc_node_ref_t> live(order.begin(), order.end());
         for (gc_node_ref_t n : order) {
@@ -998,8 +998,7 @@ bool FunctionEmitter::lowerBranch(
     if (brchAt != order.end() && joinAt != order.end()) {
         const size_t joinPos = static_cast<size_t>(joinAt - order.begin());
         for (size_t k = 0; k < arms.size(); ++k) {
-            const gc_node_ref_t entry =
-                camel::execute::resolveRuntimeBranchArmEntry(g, brch, k, order);
+            const gc_node_ref_t entry = g->execPlan().branchArmEntriesOfNode(brch)[k];
             const auto at = std::find(brchAt, joinAt, entry);
             entries[k]    = at == joinAt ? joinPos : static_cast<size_t>(at - order.begin());
         }
@@ -1104,7 +1103,7 @@ Block FunctionEmitter::lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail
     inlining_.insert(arm);
     Block body = lowerSequence(
         inner,
-        camel::execute::buildReachableExecutionTopoIndices(arm),
+        arm->execPlan().topo,
         resultOf(arm),
         tail);
     inlining_.erase(arm);

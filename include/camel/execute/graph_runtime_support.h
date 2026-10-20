@@ -32,6 +32,7 @@
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
 
 #include <vector>
@@ -45,11 +46,8 @@ struct RuntimeBranchArmRegion {
     std::vector<camel::runtime::gc_node_ref_t> topoIndices;
 };
 
-/// The order the live nodes of `graph` run in (a copy of the execution plan's `topo`).
-std::vector<camel::runtime::gc_node_ref_t>
-buildReachableExecutionTopoIndices(camel::runtime::GCGraph *graph);
-/// Computes that order from the graph; the execution plan (camel/runtime/exec_plan.h) calls it
-/// once per graph version.
+/// Computes the order the live nodes of `graph` run in. Back ends do not call it: they read the
+/// execution plan (camel/runtime/exec_plan.h), which calls it once per graph version.
 std::vector<camel::runtime::gc_node_ref_t>
 computeExecutionOrder(const camel::runtime::GCGraph *graph);
 camel::runtime::gc_node_ref_t

@@ -85,7 +85,7 @@ TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream 
     ostringstream oss;
 
     for (auto *runtimeGraph : sortedGraphs) {
-        auto sortedNodes     = camel::execute::buildReachableExecutionTopoIndices(runtimeGraph);
+        const auto &sortedNodes = runtimeGraph->execPlan().topo;
         auto formatNodeIdent = [&](gc_node_ref_t nodeRef) {
             return pointerToIdent(requireNode(runtimeGraph, nodeRef));
         };

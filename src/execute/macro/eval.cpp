@@ -867,7 +867,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     if (recursionDepth_ > maxDepth_) {
         throw MacroExecutionError(tooManyNestedCalls(maxDepth_, runtimeGraph->name()));
     }
-    auto runtimeTopoIndices = camel::execute::buildReachableExecutionTopoIndices(runtimeGraph);
+    const auto &runtimeTopoIndices = runtimeGraph->execPlan().topo;
     std::optional<uint32_t> tillRuntimeIndex;
     std::optional<uint32_t> skipRuntimeIndex;
     std::optional<uint32_t> joinRuntimeIndex;
@@ -1125,11 +1125,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             const auto *body =
                 runtimeGraph->nodeBodyAs<camel::runtime::GCBrchBody>(runtimeNodeIndex);
             ASSERT(jumpIdx < arms.size(), "Macro BRCH arm index is out of range.");
-            const auto entry = camel::execute::resolveRuntimeBranchArmEntry(
-                runtimeGraph,
-                runtimeNodeIndex,
-                jumpIdx,
-                runtimeTopoIndices);
+            const auto entry = runtimeGraph->execPlan().branchArmEntriesOfNode(runtimeNodeIndex)[jumpIdx];
             if (skipRuntimeIndex.has_value()) {
                 enclosingArms.emplace_back(*skipRuntimeIndex, joinRuntimeIndex);
             }

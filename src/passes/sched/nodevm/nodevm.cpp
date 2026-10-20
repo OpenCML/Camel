@@ -546,15 +546,15 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             } break;
 
             case GCNodeKind::Oper: {
-                auto *body =
-                    const_cast<GCOperBody *>(currRuntimeGraph->nodeBodyAs<GCOperBody>(nodeRef));
-                operator_t opFunc = body->op;
+                const auto *body = currRuntimeGraph->nodeBodyAs<GCOperBody>(nodeRef);
+                operator_t opFunc =
+                    currPlan->resolvedOpers[nodeRef].load(std::memory_order_relaxed);
                 if (!opFunc) {
                     const std::string uri(body->uri());
                     auto found = context_->execMgr().find(uri);
                     if (found) {
-                        opFunc   = *found;
-                        body->op = opFunc;
+                        opFunc = *found;
+                        currPlan->resolvedOpers[nodeRef].store(opFunc, std::memory_order_relaxed);
                     } else {
                         if (camel::core::OperatorTable::instance().isMarked(body->oper)) {
                             evalMarkedOperator(body->oper, currRuntimeGraph, nodeRef, *currFrame);

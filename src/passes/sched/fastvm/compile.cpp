@@ -18,6 +18,7 @@
  */
 
 #include "compile.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
@@ -153,7 +154,8 @@ static bytecode_vec_t compileRuntimeGraph(
         graph->hasNodePayload(),
         std::format("Runtime graph '{}' has no node payload.", graph->name()));
 
-    auto topoSortedIndices        = camel::execute::buildReachableExecutionTopoIndices(graph);
+    const auto &plan              = graph->execPlan();
+    const auto &topoSortedIndices = plan.topo;
     const auto returnNodeRef      = graph->returnNodeRef();
     const auto *returnNode        = graph->returnNode();
     const bool expectsValueReturn = graph->funcType() && graph->funcType()->hasExitType() &&
@@ -412,11 +414,7 @@ static bytecode_vec_t compileRuntimeGraph(
             appendBytecode(bytecodes, OpCode::BRCH, record->dataIndex, {}, normOps, withOps);
             const auto branchArms = graph->branchArmsOf(runtimeNodeIndex);
             for (size_t armIndex = 0; armIndex < branchArms.size(); ++armIndex) {
-                const auto armEntry = camel::execute::resolveRuntimeBranchArmEntry(
-                    graph,
-                    runtimeNodeIndex,
-                    armIndex,
-                    topoSortedIndices);
+                const auto armEntry = plan.branchArmEntriesOf(i)[armIndex];
                 ASSERT(
                     armEntry != camel::runtime::kInvalidNodeRef,
                     std::format(

@@ -131,11 +131,6 @@ gc_node_ref_t findRuntimeMatchedJoinIndex(camel::runtime::GCGraph *graph, gc_nod
 
 } // namespace
 
-std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GCGraph *graph) {
-    ASSERT(graph != nullptr, "Runtime graph is null in execution topo construction.");
-    return graph->execPlan().topo;
-}
-
 std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph is null in execution topo construction.");
     ASSERT(

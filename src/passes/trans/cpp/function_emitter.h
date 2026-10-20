@@ -22,7 +22,7 @@
  * section 6).
  *
  * The statements follow the execution order std::fvm compiles the graph in
- * (buildReachableExecutionTopoIndices): only live nodes, every edge (data, `with`, control)
+ * (ExecPlan::topo): only live nodes, every edge (data, `with`, control)
  * respected, the arms of each branch laid out as contiguous ranges. A branch is an if /
  * else-if / else statement at the place of its BRCH, its arms the statements of their nodes:
  * in the form the front end gives (each arm a graph of its own, called by a FUNC node) the arm

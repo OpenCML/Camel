@@ -54,6 +54,11 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     plan->directCallArgOffsets.resize(count + 1, 0);
     plan->branchArmEntryOffsets.resize(count + 1, 0);
     plan->dataIndexByRef.resize(graph.nodeCount(), 0);
+    plan->resolvedOpers = std::make_unique<std::atomic<operator_t>[]>(graph.nodeCount());
+    plan->topoIndexByRef.assign(graph.nodeCount(), ExecPlan::kNotInPlan);
+    for (size_t idx = 0; idx < count; ++idx) {
+        plan->topoIndexByRef[plan->topo[idx]] = static_cast<uint32_t>(idx);
+    }
     plan->tailValueRef = hasValueReturn ? camel::execute::resolveRuntimeTailValueRef(mutableGraph)
                                         : kInvalidNodeRef;
     const GCNode *tailValueNode =

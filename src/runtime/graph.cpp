@@ -1382,22 +1382,6 @@ GCGraph *GCGraph::outerGraph() const { return outerGraph_; }
 
 bool GCGraph::isRoot() const { return outerGraph_ == nullptr; }
 
-uintptr_t GCGraph::extraSlot(size_t index) const {
-    ASSERT(index < kExtraSlotCount, "GCGraph extra slot index out of range.");
-    return extraSlots_[index];
-}
-
-void GCGraph::setExtraSlot(size_t index, uintptr_t value) {
-    ASSERT(index < kExtraSlotCount, "GCGraph extra slot index out of range.");
-    extraSlots_[index] = value;
-}
-
-void GCGraph::clearExtraSlots() {
-    for (uintptr_t &slot : extraSlots_) {
-        slot = 0;
-    }
-}
-
 std::vector<GCGraph *> GCGraph::refsWithRole(uint8_t role) const {
     std::vector<GCGraph *> graphs;
     for (gc_cnt_t i = 0; i < refCount_; ++i) {
@@ -1702,9 +1686,6 @@ camel::core::rtdata::Object *GCGraph::clone(
         nativePayload_,
         staticArea_);
     graph->revision_ = revision_; // the same content: the same revision
-    for (size_t i = 0; i < kExtraSlotCount; ++i) {
-        graph->extraSlots_[i] = extraSlots_[i];
-    }
     return graph;
 }
 

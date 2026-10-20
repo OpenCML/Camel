@@ -404,8 +404,6 @@ class GCGraph;
 
 class GCGraph : public camel::core::rtdata::Object {
   public:
-    static constexpr size_t kExtraSlotCount = 8;
-
     // These accessors expose cold compile/debug metadata only. Runtime passes
     // should derive execution semantics from the native payload instead.
     /// The graph's identity within its program, the same for every version of the graph
@@ -451,9 +449,6 @@ class GCGraph : public camel::core::rtdata::Object {
     uint8_t flags() const { return flags_; }
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
-    uintptr_t extraSlot(size_t index) const;
-    void setExtraSlot(size_t index, uintptr_t value);
-    void clearExtraSlots();
 
     /// The reference table: every graph this one refers to, once each (see the file comment).
     std::span<GCGraph *const> refs() const { return {refs_, refCount_}; }
@@ -641,7 +636,6 @@ class GCGraph : public camel::core::rtdata::Object {
     mutable std::atomic<GCUseIndex *> uses_{nullptr};
     // Built by execPlan() on first demand, owned by the graph.
     mutable std::atomic<class ExecPlan *> execPlan_{nullptr};
-    uintptr_t extraSlots_[kExtraSlotCount]{};
 };
 
 /// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.
