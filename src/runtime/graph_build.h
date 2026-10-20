@@ -38,13 +38,10 @@ namespace camel::runtime {
 
 class GraphDraft;
 
-/// The graph's cold data: its names, the names it captures and how it was derived.
+/// The graph's cold data: its names and the names it captures.
 struct GCGraphDebugRecord {
     std::string mangledName;
     std::string name;
-    // GCGraph::typeSpecializationRoot and GCGraph::flags.
-    GraphId typeSpecializationRoot = kInvalidGraphId;
-    uint8_t flags                  = 0;
     // The names the graph captures, in the order it captured them (GCGraph::captureNames).
     std::vector<camel::core::SymId> captureNames;
 };
@@ -103,6 +100,13 @@ GCGraphDebugRecord *createGraphDebugRecord(std::string mangledName, std::string 
 /// commit.
 void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft);
 
+/// How a graph was derived, besides what its nodes say (GCGraph::typeSpecializationRoot,
+/// GCGraph::flags).
+struct GCGraphDerivation {
+    GraphId typeSpecializationRoot = kInvalidGraphId;
+    uint8_t flags                  = 0;
+};
+
 /// The frame layout of a graph being built: the slot types, slot 0 included, or nullopt for a
 /// graph without one. The encoder builds the layout inside the graph's block
 /// (TupleType::constructFrameLayout).
@@ -115,7 +119,8 @@ struct GCGraphBuildAccess {
         std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots);
 
     static GCGraph *constructInPlace(
-        void *memory, size_t bytes, GraphId id, GCGraphDebugRecord *debugRecord,
+        void *memory, size_t bytes, GraphId id, const GCGraphDerivation &derivation,
+        GCGraphDebugRecord *debugRecord,
         camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
         camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
         GCGraph *outerGraph, std::span<GCGraph *const> dependencies,
@@ -125,8 +130,8 @@ struct GCGraphBuildAccess {
         std::span<const slot_t> staticSlots);
 
     static GCGraph *create(
-        GraphId id, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
-        const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
+        GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord,
+        camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
         camel::core::type::TupleType *closureType, GCGraph *outerGraph,
         std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
         std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payloadShape,

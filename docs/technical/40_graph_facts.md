@@ -50,7 +50,7 @@ The core's kinds (`core_facts.h`):
 `clear`, `forEach`, `counts`.
 
 A fact is indexed by its first anchor's `(GraphId, node)` and the kind; any number of anchors is
-allowed. Its stamp holds `(GraphId, revision)` of each anchored graph, the declaration epoch when
+allowed. Its stamp holds `(GraphId, closure revision)` of each anchored graph, the declaration epoch when
 the kind reads declarations, the target hash, and the cone hash for `Cone` kinds. Every read
 compares them, in release builds too; a stale fact reads as absent and is dropped.
 
@@ -64,15 +64,14 @@ compares them, in release builds too; a stale fact reads as absent and is droppe
   (`RuntimeGraphDraftSession::edit`/`rootDraft`) or whose unordered gates the commit dissolved,
   and that the commit did not encode back to the same content (`sameContent`: records, edges,
   payloads, ports, permissions, frame and static layout, static values, the graphs referred to,
-  each by its copy; source positions do not count), or one that refers (at any depth: callee,
-  nested graph, graph of a function constant) to one that changed
-  (`RuntimeGraphDraftSession::changedGraphs`). `std::opt` asks to edit every graph; only those
-  it really changes get a new revision.
+  each by its copy; source positions do not count). `std::opt` asks to edit every graph; only
+  those it really changes get a new revision. The revision is that of one graph.
 
-Because the revision is transitive, the revision of a fact's anchored graphs covers every graph
-the fact read through them: a fact reads its anchors' graphs and graphs they refer to. This is the
-conservative rule of design 10.3, coarser than per-node revisions: an edit of a callee makes the
-facts on its callers stale too.
+A fact reads its anchors' graphs and graphs they refer to, so its stamp holds, per anchored graph,
+`closureRevision` (`reachable.h`): a hash of the `(GraphId, revision)` of everything reachable
+from it. This is the conservative rule of design 10.3, coarser than per-node revisions: an edit
+of a callee makes the facts on its callers stale too. The footprint cache of `core.resources`
+is keyed the same way.
 
 ## 4. Rewrites
 

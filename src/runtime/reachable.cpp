@@ -28,6 +28,7 @@
 
 #include "camel/runtime/reachable.h"
 
+#include <algorithm>
 #include <queue>
 #include <unordered_set>
 
@@ -52,6 +53,20 @@ void forEachReachableGraph(GCGraph *root, const std::function<void(GCGraph *)> &
         visitor(graph);
         graph->traceGraphs([&](GCGraph *next) { worklist.push(next); });
     }
+}
+
+uint64_t closureRevision(GCGraph *root) {
+    std::vector<GCGraph *> graphs = collectReachableGraphs(root);
+    std::sort(graphs.begin(), graphs.end(), [](const GCGraph *a, const GCGraph *b) {
+        return toValue(a->id()) < toValue(b->id());
+    });
+    uint64_t h = 0xcbf29ce484222325ULL;
+    const auto mix = [&h](uint64_t v) { h = (h ^ v) * 0x100000001b3ULL; };
+    for (const GCGraph *graph : graphs) {
+        mix(toValue(graph->id()));
+        mix(graph->revision());
+    }
+    return h;
 }
 
 std::vector<GCGraph *> collectReachableGraphs(GCGraph *root) {

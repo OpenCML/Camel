@@ -1395,6 +1395,7 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
     ASSERT(isValid(id_), "Encoding a graph draft requires its GraphId.");
     return GCGraphBuildAccess::create(
         id_,
+        GCGraphDerivation{typeSpecializationRoot_, flags_},
         debugRecord,
         funcType_,
         frameSlotTypes(),

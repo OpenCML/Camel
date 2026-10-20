@@ -211,7 +211,7 @@ std::string factJson(
             "{}{{\"graph\":{},\"revision\":{}}}",
             i ? "," : "",
             jsonString(graphs[i]->name()),
-            graphs[i]->revision());
+            closureRevision(const_cast<GCGraph *>(graphs[i])));
     }
     out += std::format("],\"epoch\":{},\"target\":{}", stamp->declarationEpoch, stamp->targetHash);
     if (kind.dependency == Dependency::Cone) {
@@ -313,7 +313,7 @@ void FactStore::checkType(KindId kind, const std::type_info &type) {
 Stamp FactStore::stampNow(const KindInfo &kind, std::span<const Anchor> anchors, uint64_t targetHash) {
     Stamp stamp;
     for (const GCGraph *graph : graphsOf(anchors)) {
-        stamp.graphs.emplace_back(graph->id(), graph->revision());
+        stamp.graphs.emplace_back(graph->id(), closureRevision(const_cast<GCGraph *>(graph)));
     }
     stamp.declarationEpoch =
         kind.readsDeclarations ? camel::core::OperatorTable::instance().declarationEpoch() : 0;
@@ -342,7 +342,8 @@ FactStore::find(KindId kind, std::span<const Anchor> anchors, uint64_t targetHas
     bool revisions = graphs.size() == it->stamp.graphs.size();
     for (size_t i = 0; revisions && i < graphs.size(); ++i) {
         revisions = it->stamp.graphs[i] ==
-                    std::pair<GraphId, uint64_t>(graphs[i]->id(), graphs[i]->revision());
+                    std::pair<GraphId, uint64_t>(
+                        graphs[i]->id(), closureRevision(const_cast<GCGraph *>(graphs[i])));
     }
     const bool epoch =
         !info.readsDeclarations ||

@@ -45,7 +45,7 @@ for (const l of [
   'FACTS verify_wrong differs', 'FACTS verify_right equal',
   'FACTS unchanged_revision_main kept', 'FACTS unchanged_main valid',
   'FACTS id_main kept', 'FACTS id_f kept', 'FACTS id_root kept',
-  'FACTS revision_main new', 'FACTS revision_f kept', 'FACTS revision_root new',
+  'FACTS revision_main new', 'FACTS revision_f kept', 'FACTS revision_root kept',
   'FACTS after_commit_main stale', 'FACTS after_commit_root stale', 'FACTS after_commit_f valid',
   'FACTS after_commit_cross_graph stale', 'FACTS after_commit_cone revalidated',
   'FACTS after_declaration_reads_declarations stale', 'FACTS after_declaration_reads_none valid',

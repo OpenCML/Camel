@@ -54,12 +54,11 @@
  *   - A graph is named by its GraphId, which every commit keeps for the rewritten copy of a
  *     graph.
  *   - Its revision is GCGraph::revision(), a process-wide number: a commit keeps it for a
- *     graph it did not change and gives a new one to a graph it changed. The revision is
- *     transitive: a graph is changed when it was edited or when a graph it refers to (callee,
- *     nested graph, graph of a function constant, at any depth) was changed. A fact reads its
- *     anchors' graphs and, through them, only graphs they refer to; so the anchors' revisions
- *     are the revisions of every graph it read, and the stamp holds one revision per anchored
- *     graph (the conservative rule: any change anywhere below makes the fact stale).
+ *     graph it did not change and gives a new one to a graph it changed: the revision of one
+ *     graph. A fact reads its anchors' graphs and, through them, graphs they refer to (callee,
+ *     nested graph, graph of a function constant, at any depth); the stamp holds, per anchored
+ *     graph, closureRevision (reachable.h) of it, which changes when any graph below it does
+ *     (the conservative rule: any change anywhere below makes the fact stale).
  * A kind with Dependency::Cone also stores a hash of what it read (its dependency cone); when a
  * revision changed, the cone is hashed again and, when it is equal, the fact stays valid with a
  * new stamp (the precise rule, design 10.3).

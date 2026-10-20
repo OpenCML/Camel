@@ -34,6 +34,11 @@ namespace camel::runtime {
  */
 std::vector<GCGraph *> collectReachableGraphs(GCGraph *root);
 
+/// A number that changes when the revision of `root` or of any graph reachable from it does
+/// (a hash of their (GraphId, revision) pairs in the order of the ids): what a fact or a cache
+/// about `root` and everything it refers to is stamped with.
+uint64_t closureRevision(GCGraph *root);
+
 void forEachReachableGraph(GCGraph *root, const std::function<void(GCGraph *)> &visitor);
 
 } // namespace camel::runtime

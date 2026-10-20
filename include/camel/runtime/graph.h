@@ -404,6 +404,7 @@ class GCUseIndex {
 };
 
 struct GCGraphDebugRecord;
+struct GCGraphDerivation;
 struct GCGraphBuildAccess;
 class GCGraph;
 
@@ -444,16 +445,16 @@ class GCGraph : public camel::core::rtdata::Object {
     bool isMacro() const;
     GCGraph *outerGraph() const;
     /// The graph's revision (graph facts, camel/runtime/facts.h): a process-wide number. A
-    /// commit keeps it for a graph it did not change and gives a new one to a graph it changed:
-    /// one a pass edited into different content, or one that refers (at any depth) to a graph
-    /// that changed. Equal revisions of one GraphId mean equal content.
+    /// commit keeps it for a graph it did not change and gives a new one to a graph a pass edited
+    /// into different content. It says nothing about the graphs this one refers to
+    /// (closureRevision in reachable.h does). Equal revisions of one GraphId mean equal content.
     uint64_t revision() const { return revision_; }
     /// The function this graph is a type-only specialization of, or was derived from a
     /// specialization of (std::opt's recursion bound counts them): the first function in the
     /// chain that is not one itself. kInvalidGraphId for a graph that has no such ancestor.
-    GraphId typeSpecializationRoot() const;
+    GraphId typeSpecializationRoot() const { return typeSpecializationRoot_; }
     /// GCGraphFlag bits.
-    uint8_t flags() const;
+    uint8_t flags() const { return flags_; }
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
     uintptr_t extraSlot(size_t index) const;
@@ -614,13 +615,15 @@ class GCGraph : public camel::core::rtdata::Object {
     friend struct GCGraphBuildAccess;
 
     GCGraph(
-        GraphId id, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
+        GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
         camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
         camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **refs,
         uint8_t *refRoles, gc_cnt_t refCount, const GCGraphNativePayload &payload,
         ::Tuple *staticArea);
 
     GraphId id_                                    = kInvalidGraphId;
+    GraphId typeSpecializationRoot_                = kInvalidGraphId; // see typeSpecializationRoot()
+    uint8_t flags_                                 = 0;               // see flags()
     GCGraphDebugRecord *debug_                     = nullptr;
     camel::core::type::FunctionType *funcType_     = nullptr;
     camel::core::type::TupleType *runtimeDataType_ = nullptr;

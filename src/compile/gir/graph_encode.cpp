@@ -1008,6 +1008,7 @@ class EncodeSession {
             prepared.memory,
             prepared.bytes,
             prepared.draft->id(),
+            GCGraphDerivation{},
             debugRecord,
             prepared.draft->funcType(),
             prepared.draft->frameSlotTypes(),

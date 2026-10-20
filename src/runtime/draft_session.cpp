@@ -540,6 +540,7 @@ GCGraph *encodeDraftGraph(
         target,
         bytes,
         draft.id(),
+        GCGraphDerivation{draft.typeSpecializationRoot(), draft.flags()},
         [&] {
             auto *record = createGraphDebugRecord(identity.mangledName, identity.name);
             recordDraftDebugData(record, draft);
@@ -842,39 +843,6 @@ GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) {
 
 GraphDraft &RuntimeGraphDraftSession::rootDraft() { return edit(runtimeRoot_); }
 
-std::unordered_set<GCGraph *>
-RuntimeGraphDraftSession::changedGraphs(const std::vector<GCGraph *> &closure) const {
-    // A graph changed when it was edited, or when a graph it refers to changed (the revision is
-    // transitive, see GCGraph::revision): walk the references backwards from the edited ones.
-    std::unordered_map<GCGraph *, std::vector<GCGraph *>> referrers;
-    for (GCGraph *graph : closure) {
-        visitDraftGraphs(context_, *drafts_.at(graph)->draft, [&](GCGraph *ref) {
-            if (ref) {
-                referrers[ref].push_back(graph);
-            }
-        });
-    }
-    std::unordered_set<GCGraph *> changed;
-    std::vector<GCGraph *> work;
-    for (GCGraph *graph : closure) {
-        if (edited_.contains(graph) && changed.insert(graph).second) {
-            work.push_back(graph);
-        }
-    }
-    while (!work.empty()) {
-        GCGraph *graph = work.back();
-        work.pop_back();
-        if (auto it = referrers.find(graph); it != referrers.end()) {
-            for (GCGraph *referrer : it->second) {
-                if (changed.insert(referrer).second) {
-                    work.push_back(referrer);
-                }
-            }
-        }
-    }
-    return changed;
-}
-
 GCGraph *RuntimeGraphDraftSession::findSpecialization(const RuntimeSpecializationKey &key) const {
     if (auto it = specializationCache_.find(key); it != specializationCache_.end()) {
         return it->second;
@@ -992,15 +960,15 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     for (GCGraph *graph : closure) {
         validateRuntimeGraphCalls(rewritten.at(graph));
     }
-    // The copy is the same graph to the fact store; a new revision only where it changed: a
-    // graph edited (and not encoded back to the same content), or one referring to such a graph.
+    // The copy is the same graph to the fact store; a new revision only for a graph that was
+    // edited and not encoded back to the same content (what a graph refers to is the fact
+    // engine's business: closureRevision).
     std::erase_if(edited_, [&](GCGraph *graph) {
         auto it = rewritten.find(graph);
         return it != rewritten.end() && sameContent(*graph, *it->second, rewritten);
     });
-    const std::unordered_set<GCGraph *> changed = changedGraphs(closure);
     for (GCGraph *graph : closure) {
-        GCGraphBuildAccess::inheritRevision(rewritten.at(graph), graph, changed.contains(graph));
+        GCGraphBuildAccess::inheritRevision(rewritten.at(graph), graph, edited_.contains(graph));
     }
 
     // A session over the program's root replaces it. A session over another root (a detached

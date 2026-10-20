@@ -977,8 +977,6 @@ void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
         return;
     }
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
-    record->typeSpecializationRoot = draft.typeSpecializationRoot();
-    record->flags                  = draft.flags();
 }
 
 GCGraphNativePayload
@@ -1070,8 +1068,8 @@ void syncPayloadArenaView(GCGraphNativePayload &payload, const GCGraphPayloadAre
 }
 
 GCGraph *GCGraphBuildAccess::create(
-    GraphId id, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
-    const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
+    GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord,
+    camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
     camel::core::type::TupleType *closureType, GCGraph *outerGraph,
     std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
     std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
@@ -1090,6 +1088,7 @@ GCGraph *GCGraphBuildAccess::create(
         mem,
         bytes,
         id,
+        derivation,
         debugRecord,
         funcType,
         frameSlots,
@@ -1119,7 +1118,8 @@ size_t GCGraphBuildAccess::requiredBytes(
 }
 
 GCGraph *GCGraphBuildAccess::constructInPlace(
-    void *memory, size_t bytes, GraphId id, GCGraphDebugRecord *debugRecord,
+    void *memory, size_t bytes, GraphId id, const GCGraphDerivation &derivation,
+    GCGraphDebugRecord *debugRecord,
     camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
     camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
     GCGraph *outerGraph, std::span<GCGraph *const> dependencies,
@@ -1211,6 +1211,7 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
 
     auto *graph = new (graphMem) GCGraph(
         id,
+        derivation,
         debugRecord,
         funcType,
         runtimeDataType,
@@ -1258,11 +1259,12 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
 }
 
 GCGraph::GCGraph(
-    GraphId id, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
+    GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
     camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
     camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **refs,
     uint8_t *refRoles, gc_cnt_t refCount, const GCGraphNativePayload &payload, ::Tuple *staticArea)
-    : id_(id), debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
+    : id_(id), typeSpecializationRoot_(derivation.typeSpecializationRoot), flags_(derivation.flags),
+      debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
       staticDataType_(staticDataType), closureType_(closureType), outerGraph_(outerGraph),
       refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),
       staticArea_(staticArea) {
@@ -1351,11 +1353,6 @@ void validateRuntimeGraphCalls(const GCGraph *graph) {
     }
 }
 
-GraphId GCGraph::typeSpecializationRoot() const {
-    return debug_ ? debug_->typeSpecializationRoot : kInvalidGraphId;
-}
-
-uint8_t GCGraph::flags() const { return debug_ ? debug_->flags : 0; }
 
 const std::string &GCGraph::mangledName() const {
     static const std::string kEmpty;
@@ -1696,6 +1693,7 @@ camel::core::rtdata::Object *GCGraph::clone(
     }
     auto *graph = new (mem) GCGraph(
         id_,
+        GCGraphDerivation{typeSpecializationRoot_, flags_},
         debug_,
         funcType_,
         runtimeDataType_,

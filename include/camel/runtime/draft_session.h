@@ -153,9 +153,6 @@ class RuntimeGraphDraftSession {
 
     GraphDraft &ensureDraft(GCGraph *graph);
     std::vector<GCGraph *> collectCommitClosure() const;
-    /// The graphs of `closure` whose copy gets a new revision (GCGraph::revision): edited, or
-    /// referring at any depth to an edited one.
-    std::unordered_set<GCGraph *> changedGraphs(const std::vector<GCGraph *> &closure) const;
 
     camel::core::context::context_ptr_t context_;
     const Program *program_ = nullptr;

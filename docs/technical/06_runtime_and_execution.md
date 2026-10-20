@@ -39,7 +39,7 @@ Camel 的运行时围绕 **Frame**（栈帧）、**Context**（全局/模块上�
 
 ### 4.1 GraphSchedulePass
 
-- 基类：`execute/sched.h` 中的 **GraphSchedulePass**，继承 **GraphIRPass**，接口为 `apply(graph, os)`，返回（可能改写后的）图。
+- 基类：`execute/sched.h` 中的 **GraphSchedulePass**，继承 **GraphIRPass**，接口为 `apply(program, os)`（`Program` 见 04 号文档），返回（可能改写后的）程序。
 - 具体调度器实现「如何执行图」：线性调度会驱动解释器或字节码 VM，并行调度会构建 DAG 并提交任务。
 
 ### 4.2 线性调度（Linear）
