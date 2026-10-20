@@ -216,6 +216,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **No `break` and `continue`.** Finishing early is written as a continue condition in the loop header (like `found` above).
 - A loop header must have `for` or `while`; `for … while` tests the condition first in each round and then takes the next element; `for` iterates only arrays for now, strings, maps and tensors will be added later; the type of the state is the type of the initial value, tensor shapes are not widened automatically, and a type annotation is written when needed.
 - **A loop can collect per-round outputs**: besides its final state, a `LOOP` node can have outputs that produce one value per round, collected by round into an array (the scan outputs of ONNX `Loop`). This is a graph-level capability with no source syntax; its first user is automatic differentiation (9.9).
+- **Collecting a value per round in source needs no new syntax**: keep an array in the loop state and append each round (`losses + [l]`); the guaranteed in-place update at count 1 (10.5) avoids copying; the compiler recognises "append one value per round to a state array" as the graph-level collected output, which autodiff and export use as scan outputs.
 
 ---
 
@@ -307,6 +308,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **An array of unknown shape entering a position that declares a shape**: not let through implicitly; convert explicitly with `as`, checked at the conversion.
 - **Shape checking belongs to the core**; elementwise operations, matmul, reductions and the like are library functions whose facts are standard tags on their declarations (6.6). Sparse, quantized, distributed and tabular data are named types defined by libraries, built from core arrays, with common interfaces expressed through generics.
 - Details and reasons: [Native multi-dimensional arrays, memory management and interop](design/arrays-memory/README.cn.md).
+- **Indexing and slicing**: `t[i]` takes the `i`-th along the first dimension (a row when multi-dimensional); `t[a:b]` slices the first dimension half-open, `a` and `b` optional, with an optional step `t[a:b:s]`; multi-dimensional forms are `t[:, 0]`, `t[a:b, c]`; `t[idx]` with an integer array `idx` takes rows by index, i.e. `take`. A slice is a view sharing the buffer. **No negative indices** (a negative index is a fault); the last element is `last(t)`.
 
 ### 5.5 Generics
 
@@ -357,6 +359,7 @@ Type arguments can be written explicitly at a call, in two layers.
 - **The first layer**: a type parameter that appears only in the return type is inferred from the expected type (the annotation of a `let`, the type of a formal parameter, a return position), such as `let cfg: Config! = json::decode_as(text)`; this is an extension of the "generic instantiation deferred until the context can determine it" of 5.5.
 - **The second layer**: when it cannot be inferred, write `f::<T>(x)` (the same form as Rust), such as `json::decode_as::<Config>(text)`, `empty::<int>()`. By position, the order is the order in which the type variables first appear in the signature; they can also be written by name, `f::<T = int>`, independent of position.
 - `f<w>` still means only `with` parameters and partial application; when both are written it is `f::<T><w>(x)`.
+- **Lambda parameter types may come from context**: when a lambda appears where a function type is expected (an argument, a `with` argument, an annotated binding), its unannotated parameter and return types are inferred from that function type, as in `tree_reduce<(count, leaf) => count + numel(leaf)>(model, 0)`; annotations are required when inference fails.
 
 ### 5.10 Tightening `any`
 
@@ -542,6 +545,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 - **A loop whose iterated or captured array depends on the differentiated parameters is refused**, with a located diagnostic naming the `loop` and the array (arrays have no tangents; dropping the gradient silently would give a wrong result).
 - **Effects in a loop's body or condition follow the existing rule**: effects run in the forward pass only and the reverse pass is pure; the check "reading a `var` of a differentiable type is refused" extends to the loop's condition and body, the diagnostic naming the `loop`.
 - **ONNX export of gradients with loops is a separate item**: residuals are values and map to `Loop` scan outputs and a reverse `Loop` (with ONNX sequence types for ragged nested loops when needed).
+- **Model parameters are ordinary parameters**: `grad(f)` and `value_and_grad(f)` differentiate with respect to the **first parameter** of `f` (as in JAX), e.g. `value_and_grad(loss)(m, x, y)` gives `(loss, a gradient of the same type as m)`; to differentiate another parameter, wrap in a lambda that reorders. Model parameters do not go in `with` angle brackets (4.4: angle brackets are only for configuration).
 
 ### 9.10 Schedulers, back ends and releases
 
