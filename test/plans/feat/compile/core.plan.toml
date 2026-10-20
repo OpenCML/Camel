@@ -107,3 +107,17 @@ assert(input.stderr === '', 'stderr empty')
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 4000
+
+[[tests]]
+name = "semantic.assign_to_temporary"
+desc = "An assignment whose target is a temporary (`point().x = 9`): a path must start at a variable, so the store would go nowhere. The message now says a path from a variable is a target, since a field or an element of one is (H23)."
+kind = "negative"
+case = "../../../cases/compile/semantic/assign_to_temporary.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AssignmentTargetNotVariable"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 17
+expect_output_contains = ["must be a variable, or a path from one", "'var p = { x: 1 }; p.x = 2'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

@@ -321,6 +321,13 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         }
         table.declareResources(uri, std::move(spec));
     }
+    // The in-place element set of a path assignment: it changes the array it was given (the
+    // `:var/take` of the variable's own array) and returns it, whole.
+    table.declareResources(
+        ":op/set_index_in_place",
+        ResourceSpec{
+            .accesses = {operandAccess(ResourceClass::Object, 0, AccessMode::ReadModifyWrite)},
+            .result   = ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0}});
     // The console and the profiler: state outside the values, visible outside the program.
     for (const char *uri : {":io/print", ":io/println"}) {
         table.declareResources(

@@ -25,6 +25,7 @@
 #include "builtin/operators/enum.h"
 #include "builtin/operators/ops.h"
 #include "builtin/operators/tagged.h"
+#include "builtin/operators/set_value.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
@@ -1807,6 +1808,10 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     }
     // The lowering targets of the enum (design principles 5.3).
     for (const auto &group : getEnumOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // The `set` operators a path assignment lowers to (design principles 3.5).
+    for (const auto &group : getSetValueOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }

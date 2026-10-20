@@ -1422,24 +1422,28 @@ func main(): int sync {
 **Message**
 
 ```text
-The target of an assignment must be a variable.
+The target of an assignment must be a variable, or a path from one.
 ```
 
 **Help**
 
 ```text
-A field, an element or any other expression cannot be assigned: the store would go to a temporary. Assign a new value to the whole variable instead.
+A path is a variable followed by any number of fields and elements: 'var p = { x: 1 }; p.x = 2' and 'var xs = [1, 2]; xs[0] = 2' are assignments of the whole variable (design principles 3.5). Any other expression is a temporary, and a store into it would go nowhere: assign the value to the whole variable instead.
 ```
 
-**Example** (`test/cases/linear/byref/field_assigned.cml`, run as `camel test/cases/linear/byref/field_assigned.cml`)
+**Example** (`test/cases/compile/semantic/assign_to_temporary.cml`, run as `camel -E short test/cases/compile/semantic/assign_to_temporary.cml`)
 
 ```camel
-module field_assigned
+module assign_to_temporary
+
+type P = { x: int, y: int }
+
+func point(): P {
+    return { x: 1, y: 2 }
+}
 
 func main(): int sync {
-    var p = { x: 1, y: 2 }
-    wait p.x = 9
-    println(p)
+    wait point().x = 9
     return 0
 }
 ```
@@ -2773,23 +2777,23 @@ func main(): int sync {
 **Message**
 
 ```text
-The type '{0}' is part of a cycle of types across modules: {1}.
+The type '{0}' is part of a cycle of types: {1}.
 ```
 
 **Help**
 
 ```text
-Each of these types needs the next one to be declared first, and the last needs the first: none of them can be. Remove one of the references that close the cycle.
+Each of these types needs the next one to be declared first, and the last needs the first: none of them can be. Remove one of the references that close the cycle. A type may contain itself only through an array, a map, a set or an enum (design principles 5.2).
 ```
 
-**Example** (`test/cases/compile/modules_213/type_cycle.cml`, run as `camel -E short test/cases/compile/modules_213/type_cycle.cml`)
+**Example** (`test/cases/compile/semantic/type_contains_itself.cml`, run as `camel -E short test/cases/compile/semantic/type_contains_itself.cml`)
 
 ```camel
-// Design principles 10.1: types that form a cycle across modules are reported with the cycle
-// (ModuleTypeCycle), not as names that are not resolved.
-import { A } from cycle_a
+module type_contains_itself
 
-func main(): int sync {
+type A = { a: A }
+
+func main(): int {
     return 0
 }
 ```
@@ -3912,17 +3916,15 @@ Index {0} is out of range for {1} of length {2}.
 Ensure the index is within the valid range of the collection.
 ```
 
-**Example** (`test/cases/consistency/faults/index_out_of_range.cml`, run as `camel `)
+**Example** (`test/cases/consistency/faults/element_assigned_out_of_range.cml`, run as `camel `)
 
 ```camel
-module index_out_of_range
-
-func at(xs: int[], i: int): int { return xs[i] }
+module element_assigned_out_of_range
 
 func main(): int sync {
-    let xs = [10, 20, 30]
-    println(at(xs, 2))
-    println(at(xs, 3))
+    var xs = [1, 2, 3]
+    println('before')
+    xs[5] = 1
     println('not reached')
     return 0
 }

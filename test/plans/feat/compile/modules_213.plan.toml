@@ -49,7 +49,7 @@ kind = "negative"
 case = "../../../cases/compile/modules_213/type_cycle.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["name=SemanticDiag::ModuleTypeCycle", "The type 'A' is part of a cycle of types across modules: cycle_a::A -> cycle_b::B -> cycle_a::A."]
+expect_output_contains = ["name=SemanticDiag::ModuleTypeCycle", "The type 'A' is part of a cycle of types: cycle_a::A -> cycle_b::B -> cycle_a::A."]
 expect_output_not_contains = ["UnresolvedTypeReference"]
 
 [[tests]]

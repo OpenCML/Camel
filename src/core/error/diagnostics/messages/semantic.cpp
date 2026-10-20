@@ -271,9 +271,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::AssignmentTargetNotVariable,
             {
                 "AssignmentTargetNotVariable",
-                "The target of an assignment must be a variable.",
-                "A field, an element or any other expression cannot be assigned: the store "
-                "would go to a temporary. Assign a new value to the whole variable instead.",
+                "The target of an assignment must be a variable, or a path from one.",
+                "A path is a variable followed by any number of fields and elements: 'var p = {{ x: 1 }}; "
+                "p.x = 2' and 'var xs = [1, 2]; xs[0] = 2' are assignments of the whole "
+                "variable (design principles 3.5). Any other expression is a temporary, and a "
+                "store into it would go nowhere: assign the value to the whole variable instead.",
             },
         },
         {
@@ -852,10 +854,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::ModuleTypeCycle,
             {
                 "ModuleTypeCycle",
-                "The type '{0}' is part of a cycle of types across modules: {1}.",
+                "The type '{0}' is part of a cycle of types: {1}.",
                 "Each of these types needs the next one to be declared first, and the last needs "
                 "the first: none of them can be. Remove one of the references that close the "
-                "cycle.",
+                "cycle. A type may contain itself only through an array, a map, a set or an "
+                "enum (design principles 5.2).",
             },
         },
         {

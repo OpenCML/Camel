@@ -39,6 +39,7 @@ using namespace camel::core::rtdata;
 #include "../operators/ops.h"
 #include "../operators/other.h"
 #include "../operators/profiler.h"
+#include "../operators/set_value.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
 #include "../operators/tagged.h"
@@ -113,6 +114,12 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // `acc = acc->append<v>` as a statement; not a group a program can name.
         {"op/assn_append", __builtin__assn_append__},
         {"op/assn_owned", __builtin__assn_owned__},
+
+        // The `set` operators a path assignment lowers to (Builder::pathAssignmentOf) and the
+        // in-place form of the element set, which only the compiler names.
+        {"op/set_field", __builtin__set_field__},
+        {"op/set_index", __builtin__set_index__},
+        {"op/set_index_in_place", __builtin__set_index_in_place__},
 
         {"op/assn_add_i", __builtin__assn_add_i__},
         {"op/assn_add_l", __builtin__assn_add_l__},
@@ -421,6 +428,12 @@ void registerBuiltinOperatorTraits() {
     registry.set(":var/get", {.stateOnly = true});
     registry.set(":var/peek", {.stateOnly = true});
     registry.set(":var/take", {.stateOnly = true});
+    // The in-place element set of a path assignment (Builder::pathAssignmentOf) writes the
+    // array `:var/take` handed it and returns it; it changes nothing outside the program's own
+    // variables, and an index out of bounds is a fault.
+    registry.set(":op/set_index_in_place", {.stateOnly = true, .mayFault = true});
+    registry.setInPlaceForm(":op/set_index", ":op/set_index_in_place");
+    registry.declareReusesOperand(":op/set_index_in_place");
     // What the compiler does at a call because of the operator (design principles log 2.17).
     registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
     registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});

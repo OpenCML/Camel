@@ -482,7 +482,9 @@ If the element function of `foreach` is to produce side effects, its body must b
 
 ## 6.11 Assignment and `wait`
 
-- `x = e`, `x += e` and so on are expressions whose value is the value assigned. The target must be a `var` variable or a `var` parameter itself ([3.7](03_data_model.md#37-let-var-and-references)).
+- `x = e`, `x += e` and so on are expressions; their value is described below. The target is a `var` variable or a `var` parameter itself, or a **path** that starts at one: fields, indices, any combination ([3.7](03_data_model.md#37-let-var-and-references)). `p.x = e`, `xs[0] = e` and `m[i].f = e` all rebind the whole of `p`, `xs`, `m`: `xs[i].f = e` is `xs = set(xs, i, set(xs[i], f, e))`, where `set` is a pure operator that returns the value with one place changed. A path assignment may therefore appear in any expression position; when the root of the target is not a variable (`f().x = e`, `{ x: 1 }.x = e`) the diagnostic is `AssignmentTargetNotVariable`, and an index out of range is the fault `IndexOutOfRange`.
+- The value of a path assignment is the **whole value rebound**: `xs = xs->append<…>` gives the new array, and `xs[0] = 5` gives that `xs` as it is now, not `5`. Only when the target is the variable itself is the value the value assigned.
+- In a `sync` body, writing one element of a `var` array **does not copy** it: the store back asks the same "not shared" criterion as `xs = xs->sort` ([10.5](../design-principles.en.md#105-in-place-modification)), that is `:var/take` hands out a copy only after the variable has been read elsewhere. So after `let a = xs`, writing `xs[0]` copies and `a` stays as it was; when `xs` has not been read, its own storage is written.
 - Types for which compound assignment is available:
 
   | Operator | Types |
@@ -493,7 +495,7 @@ If the element function of `foreach` is to produce side effects, its body must b
   | `&=`, `\|=` | `bool` (`a = a & b`, `a = a \| b`: the right side is always evaluated) |
   | `@=` | None of the built-in types |
 
-- **A compound assignment changes nothing in place.** `x op= e` computes the new value and binds `x` to it. A type defined by a module (a tensor), and a type for which the program overloads an operator ([7.4.5](07_statements.md#745-operator-overloading)), has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, `&=`, `|=`, wherever the binary operator is defined for the types): after `let a = t`, `t += u` leaves `a` unchanged. To change a value in place, use an explicit operator.
+- **A compound assignment computes the new value first, then rebinds.** `x op= e` computes the new value and binds `x` to it, so numerically it is `x = x op e`. A compound assignment on a path (`xs[0] += 1`, `p.n += 1`) writes the new value back to that place, and the write back follows the in-place rule above: after `let a = xs`, `xs[0] += 1` copies and `a` is unchanged. A type defined by a module (a tensor), and a type for which the program overloads an operator ([7.4.5](07_statements.md#745-operator-overloading)), has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, `&=`, `|=`, wherever the binary operator is defined for the types).
 
 - For `wait e` see [4.4](04_execution_model.md#44-var-references-and-wait).
 

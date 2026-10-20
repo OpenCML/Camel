@@ -108,7 +108,7 @@ Key points:
 - Types are static and can usually be inferred, so you do not have to write them. The basic types are `int`, `float`, `bool` and `string`; the compound types are arrays `T[]`, tuples `(A, B)` and structs `{ x: A }`. `type` gives a type a name.
 - **There is no implicit conversion between numeric types.** `n * ratio` is a compile-time error; write `float(n) * ratio`.
 - `let` is an immutable name, and `var` is a mutable variable. Camel favours immutability: most programs hardly ever need `var`.
-- **Fields and elements cannot be assigned to** (`p.x = 5` and `xs[0] = 5` are errors). To "modify" something, build a new value: `{ x: 5, y: p.y }`, `concat(xs, [4])`.
+- **A variable can be assigned to, and so can one of its fields or elements** (`p.x = 5` and `xs[0] = 5` both work): that gives the whole variable a new value with the change in it, and after `let a = p`, changing `p` leaves `a` as it was. Without `var` you can also build a new value directly: `{ x: 5, y: p.y }`, `concat(xs, [4])`.
 - Strings can use either single or double quotes. Strings are measured in bytes: `len('中文')` is 6. Functions for splitting, trimming, searching and so on are in the `str` module (section 12).
 - Two details of how code is written: the parenthesis of a call must directly follow the function name (`f(1)`, not `f (1)`); and when a statement is continued on the next line, leave the operator at the end of the line, or start the next line with an operator that can only be binary such as `->`, `.`, `*`, `&&` (a line that starts with `-` or `+` is a new statement).
 

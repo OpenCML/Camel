@@ -1,0 +1,13 @@
+/**
+ * A struct that mentions itself through an array: legal by the rule (design principles 5.2 —
+ * recursion is through an array, a map, a set or an enum), but the representation cannot hold
+ * it yet, so the declaration says so instead of leaving the name unresolved. The enum form of
+ * the same recursion works: `type Nest = enum { Leaf(int), More(Nest[]) }`.
+ */
+module type_recursion_through_array
+
+type Node = { value: int, children: Node[] }
+
+func main(): int {
+    return 0
+}

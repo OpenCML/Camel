@@ -1271,29 +1271,98 @@ timeout_ms = 4000
 
 [[tests]]
 name = "field_assigned"
-desc = "A store into a field of a `var` struct: the target is not a variable. It is a compile-time error."
-kind = "negative"
+desc = "A store into a field of a `var` struct: the whole variable is rebound to the struct with that field changed (design principles 3.5, 6.11). It was an error before H23."
+kind = "behavior"
 case = "../../../cases/linear/byref/field_assigned.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AssignmentTargetNotVariable"
-expect_diagnostic_line = 10
-expect_diagnostic_column = 10
-expect_output_contains = ["must be a variable"]
+expect_exit = 0
+expect_stdout = "{ x: 9, y: 2 }\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
 name = "element_assigned"
-desc = "A store into an element of a `var` array: the target is not a variable. It is a compile-time error."
-kind = "negative"
+desc = "A store into an element of a `var` array: the whole variable is rebound to the array with that element changed, in place when it is not shared (design principles 3.5, 6.11). It was an error before H23."
+kind = "behavior"
 case = "../../../cases/linear/byref/element_assigned.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AssignmentTargetNotVariable"
-expect_diagnostic_line = 10
-expect_diagnostic_column = 13
-expect_output_contains = ["must be a variable"]
+expect_exit = 0
+expect_stdout = "[9, 2, 3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+# A path assignment on a `var` array does not copy. The graph says so: the store is the
+# rebinding in place -- `:op/assn_owned(arr, :op/set_index_in_place(:var/take(arr), 0, 9))` --
+# which is the shape `src/builtin/operators/ops.cpp` documents for `xs = xs->sort`, and the
+# copying form (`:op/set_index`) is nowhere in it. Whether the array is copied is decided by
+# the cell's "not shared" mark when :var/take runs; `element_assigned_copy` and
+# `path_assigned.allocs` show the copy that follows a read, counted with `std::mem::buffers()`.
+[[tests]]
+name = "element_assigned.in_place_form"
+desc = "The lowering of `arr[0] = 9` on a `var` array is the in-place rebinding: :op/set_index_in_place takes its array from :var/take of the cell, and :op/assn_owned stores the result in that cell. The copying form :op/set_index is not in the graph."
+kind = "behavior"
+case = "../../../cases/linear/byref/element_assigned.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const gir = JSON.parse(input.stdout)
+const graph = gir.graphs.find((g) => g.name === 'main')
+assert(graph, 'the main graph is in the dump')
+const labels = new Map(graph.nodes.map((n) => [n.id, n.label]))
+const inputEdge = (id, index) =>
+  graph.edges.find((e) => e.target === id && e.kind === 'normal' && e.targetIndex === index)
+const out = graph.nodes.find((n) => n.label === ':op/set_index_in_place')
+assert(out, 'the in-place form is in the graph')
+const first = inputEdge(out.id, 0)
+assert(first, 'the in-place form has a first operand')
+assert(labels.get(first.source) === ':var/take', 'the array comes from :var/take, got ' + labels.get(first.source))
+assert(!graph.nodes.some((n) => n.label === ':op/set_index'), 'no copying form is in the graph')
+const stored = graph.edges
+  .filter((e) => e.source === out.id && e.kind === 'normal' && e.sourceIndex === 0)
+  .map((e) => labels.get(e.target))
+assert(stored.includes(':op/assn_owned'), 'the new array is stored by :op/assn_owned, got ' + stored)
+const take = inputEdge(first.source, 0)
+assert(take && labels.get(take.source) === ':var/new', 'take reads the variable cell itself')
+}
+"""
+
+# The same claim, counted rather than argued from the graph: `std::mem::buffers()` reads the
+# numeric array buffer counters (the pattern of `loops.state_in_place`), so the writes can be
+# asked what they allocate. The array is 40 ints — past the 256 bytes an array may keep in its
+# value — so a copy really does take a buffer.
+[[tests]]
+name = "path_assigned.allocs"
+desc = "A path assignment on an unshared `var` array does not copy: 30 writes in a loop allocate nothing (the delta of `std::mem::buffers().allocs`), while the control of 10 rounds that read the variable in between allocates 10 (one copy each). The first write after `var v = [...]` allocates one, since `:var/new` does not mark the cell as owning its array; after `let kept = v` a write allocates one and `kept` is unchanged."
+kind = "behavior"
+case = "../../../cases/linear/byref/path_assigned_allocs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1 0 0\n10 11 39 3\n1\n10 100\n10\n9 19\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "path_assigned"
+desc = "A path assignment: fields and elements in any combination, and the compound forms, through nested structs and arrays (design principles 3.5, 6.11)."
+kind = "behavior"
+case = "../../../cases/linear/byref/path_assigned.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "[{ x: 9, y: 2 }, { x: 3, y: 4 }]\n{ a: [1, 7, 3], b: 0 }\n[[1, 2], [8, 4]]\n[11, 2, 3]\n{ x: 6 }\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "element_assigned_copy"
+desc = "A path assignment into a shared value copies: after `let a = v`, writing `v[0]` leaves `a` as it was (design principles 3.5, 10.5)."
+kind = "behavior"
+case = "../../../cases/linear/byref/element_assigned_copy.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "[1, 2, 3]\n[9, 2, 3]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

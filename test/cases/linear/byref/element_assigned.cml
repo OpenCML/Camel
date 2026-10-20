@@ -1,7 +1,7 @@
 /**
- * A store into an element of a `var` array: the target is not a variable.
- * Rejected at compile time (docs/design-principles.cn.md 3.5: a side effect
- * must be declared, and only a `var` can be changed).
+ * A store into an element of a `var` array: the whole variable is rebound to the array with
+ * that element changed (docs/design-principles.cn.md 3.5, 6.11). An array that is not shared
+ * is changed in place; `arr` itself is not copied.
  */
 module element_assigned
 

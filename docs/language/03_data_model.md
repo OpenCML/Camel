@@ -368,7 +368,7 @@ func main(): int sync {
 ## 3.7 `let`、`var` 与引用
 
 - `let` 引入不可变的名字，`var` 引入可变的变量。同一个作用域里同一个名字不能声明两次（`SemanticDiag::Redeclaration`）。
-- **只能给整个变量赋值。** 字段与元素不可赋值：`p.x = 5`、`xs[0] = 5` 是编译期错误 `SemanticDiag::AssignmentTargetNotVariable`。给变量一个新的值：`p = { x: 5, y: p.y }`。
+- **可以给变量赋值，也可以给从它出发的一条路径赋值。** 路径是变量本身加任意多个字段与下标：`p.x = 5`、`xs[0] = 5`、`m[i].f = 5`、`xs[0].values[1].n = 5` 都合法，复合赋值同样（`xs[0] += 1`）。它们是给整个变量重新绑定：`xs[i].f = e` 就是 `xs = set(xs, i, set(xs[i], f, e))`（[6.11](06_expressions.md#611-赋值与-wait)）。不是变量的根（`f().x = 5`、`{ x: 1 }.x = 5`）才是编译期错误 `SemanticDiag::AssignmentTargetNotVariable`；下标越界是故障 `IndexOutOfRange`。在 `sync` 里，写 `var` 数组的一个元素不复制——除非这个数组被别处读过（`let a = xs`），此时先复制，`a` 不变。
 - 对 `let` 赋值、或把 `let` 传给 `var` 形参，是编译期错误 `SemanticDiag::ImmutablePassedToVarParam`。这是编译期的检查，不是对内存上锁。
 - **一切值按引用传递。** `var` 形参是引用：函数对它的写入就是对调用方变量的写入。lambda 与分支对变量的捕获也是引用。
 

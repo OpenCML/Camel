@@ -1,7 +1,7 @@
 /**
- * A store into a field of a `var` struct: the target is not a variable.
- * Rejected at compile time (docs/design-principles.cn.md 3.5: a side effect
- * must be declared, and only a `var` can be changed).
+ * A store into a field of a `var` struct: the whole variable is rebound to the struct with
+ * that field changed (docs/design-principles.cn.md 3.5, 6.11). A path from a `var` is a
+ * target, and the store happens in place when the value is not shared.
  */
 module field_assigned
 

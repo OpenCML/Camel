@@ -364,7 +364,7 @@ For the implementation and trade-offs see [technical document 31](../../technica
 ## 3.7 `let`, `var` and references
 
 - `let` introduces an immutable name, `var` a mutable variable. The same name cannot be declared twice in the same scope (`SemanticDiag::Redeclaration`).
-- **Only a whole variable can be assigned to.** Fields and elements are not assignable: `p.x = 5` and `xs[0] = 5` are the compile-time error `SemanticDiag::AssignmentTargetNotVariable`. Give the variable a new value: `p = { x: 5, y: p.y }`.
+- **A variable can be assigned to, and so can a path from one.** A path is the variable itself followed by any number of fields and indices: `p.x = 5`, `xs[0] = 5`, `m[i].f = 5`, `xs[0].values[1].n = 5` are all legal, and so are their compound forms (`xs[0] += 1`). They rebind the whole variable: `xs[i].f = e` is `xs = set(xs, i, set(xs[i], f, e))` ([6.11](06_expressions.md#611-assignment-and-wait)). Only a root that is not a variable (`f().x = 5`, `{ x: 1 }.x = 5`) is the compile-time error `SemanticDiag::AssignmentTargetNotVariable`; an index out of range is the fault `IndexOutOfRange`. In a `sync` body, writing one element of a `var` array does not copy it — unless the array has been read elsewhere (`let a = xs`), in which case it is copied first and `a` is unchanged.
 - Assigning to a `let`, or passing a `let` to a `var` parameter, is the compile-time error `SemanticDiag::ImmutablePassedToVarParam`. This is a compile-time check, not a lock on memory.
 - **All values are passed by reference.** A `var` parameter is a reference: a write to it by the function is a write to the caller's variable. Captures of variables by lambdas and branches are references too.
 
