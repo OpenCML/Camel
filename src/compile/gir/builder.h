@@ -477,6 +477,32 @@ class Builder {
     // The source text of the expression `expr` when it is short and on one line; empty
     // otherwise. For diagnostics that suggest source text.
     std::string sourceTextOf(const GCT::node_ptr_t &expr) const;
+    // The position of the whole expression `expr`: its own span and those of everything below
+    // it. A folded expression's own origin covers only its last operand, so a value it computes
+    // to that does not fit its type is reported at the whole expression (design principles
+    // 5.1). `expr->origin()` when no span can be made.
+    camel::source::origin_id_t expressionPositionOf(const GCT::node_ptr_t &expr) const;
+    // Reports SemanticDiag::LiteralNotRepresentable at `expr` for a literal (or a folded
+    // expression of literals) whose value `type` cannot hold, and aborts: the literal as it is
+    // written, the exact value when it was folded, the type, and why.
+    [[noreturn]] void rejectLiteralValue(
+        const camel::compile::literal::Value &value, camel::core::type::Type *type,
+        const GCT::node_ptr_t &expr);
+    // The same, for a literal whose value is the data `data` (a written literal the GCT
+    // converted or kept): reported at `where` and aborted. `written` is the expression the
+    // literal was written as, when it is at hand (its source text is quoted).
+    [[noreturn]] void rejectLiteralData(
+        const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
+        camel::source::origin_id_t where, const GCT::node_ptr_t &written = nullptr);
+
+    // ---- The value of a body (design principles 5.1: a return position) ----
+    // The last statement of a body is the value the body hands on, so it is a position with an
+    // expected type: the body's declared type when it has one (`func f(): void! { if … }`), else
+    // the type the place the body stands at asks for (a branch arm's `if`). A `return` written
+    // in an arm of that statement takes the type from there, not from the function's declared
+    // return type (handover H24).
+    Type *ownDeclaredExitType() const;
+    Type *tailPositionType() const;
     // See the definition: the hint for a call that put with-arguments in the parentheses.
     std::string withArgumentsHint(
         const std::string &name, const std::vector<Argument> &arguments, size_t normCount) const;
@@ -606,6 +632,10 @@ class Builder {
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
     Type *expectedValueType_   = nullptr;
+    // The body statement whose last value is in a position (see tailPositionType), and the type
+    // that position expects.
+    const GCT::Node *tailExpectedFor_ = nullptr;
+    Type *tailExpectedType_           = nullptr;
     struct ExpectedValueScope {
         Type *&current;
         Type *outer;
@@ -812,7 +842,7 @@ class Builder {
         const std::string &group, const GCT::node_ptr_t &gct,
         const std::vector<Argument> &operands);
     /// An error at `call` when the conversion `group` (`int`, `i32`, `float`, ...) is given
-    /// a literal that does not fit the type (LiteralOutOfRange, LiteralStaticCastFailed).
+    /// a literal that does not fit the type (LiteralNotRepresentable).
     void rejectLiteralConversion(
         const std::string &group, FunctionType *funcType, const std::vector<Argument> &operands,
         const GCT::node_ptr_t &call);
@@ -1149,10 +1179,29 @@ class Builder {
     /// itself when its type is assignable; otherwise the value put into `T?` / `T!` (one
     /// CAST per level), `null` as a `T?`, or the empty literal `[]` given the element type of
     /// `target`. A literal whose value the target type can hold takes the target type (design
-    /// principles 5.1: `let x: float = 1`, `return 2` under `f32`). nullptr when the value
-    /// does not enter (camel::core::type::entersImplicitly).
+    /// principles 5.1: `let x: float = 1`, `return 2` under `f32`), and so does an array or
+    /// struct literal: its elements (fields) are positions with an expected type.
+    /// nullptr when the value does not enter (camel::core::type::entersImplicitly).
     node_handle_t
     coerceTo(node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// The constant an array / struct literal written at `origin` becomes when the position
+    /// gives its elements / fields the type `target` (design principles 5.1): `f([1, 2])` with
+    /// `f(xs: float[])`, `return { a: 1 }` under `{ a: float }`. nullptr when `node` is not a
+    /// literal of that shape, or when a part of it cannot take the type it is given (a literal
+    /// the type cannot hold is reported here).
+    node_handle_t compositeLiteralInType(
+        node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// `data` with every element (field) in `type`, recursively; nullptr when a part of it is
+    /// not a value of the type.
+    camel::core::data::data_ptr_t compositeDataInType(
+        const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
+        const GCT::node_ptr_t &origin);
+    /// One element (field) of a composite literal as a value of `type`: the value itself when
+    /// the type accepts it, the exact conversion when it is a literal, nullptr for a type a
+    /// literal cannot be given this way (`T?` / `T!`, a shape that does not match).
+    camel::core::data::data_ptr_t literalElementInType(
+        const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
+        const GCT::node_ptr_t &origin);
     // ---- Literals: the value as written, until the context gives it a type (5.1) ----
     /// The exact value of the expression `expr` when it is a literal: a numeric literal
     /// written in the program, or an expression of literals only that folds to one. A name
@@ -1160,9 +1209,10 @@ class Builder {
     std::optional<camel::compile::literal::Value> literalValueOfExpr(const GCT::node_ptr_t &expr);
     /// The exact value of `gct`, a literal of the construction tree, when it has one.
     static const camel::compile::literal::Value *literalValueOfGct(const GCT::node_ptr_t &gct);
-    /// The value as a constant of `type`. Reports SemanticDiag::LiteralOutOfRange at `origin`
-    /// and aborts when the type cannot hold it (a literal that does not fit its context is an
-    /// error, not a value cut to size).
+    /// The value as a constant of `type`. Reports SemanticDiag::LiteralNotRepresentable at the
+    /// whole expression (the literal, or the expression it was folded from) and aborts when the
+    /// type cannot hold it (a literal that does not fit its context is an error, not a value
+    /// cut to size).
     node_handle_t makeLiteralNode(
         const camel::compile::literal::Value &value, camel::core::type::Type *type,
         const GCT::node_ptr_t &origin);
@@ -1196,6 +1246,14 @@ class Builder {
     /// The return type the function around the current position declares (looking out of
     /// branch arms), or nullptr when it declares none.
     camel::core::type::Type *declaredExitTypeHere() const;
+    /// The type a `return` here is expected to have (design principles 5.1): the declared
+    /// return type of the function, or, for a `return` in a branch arm, the type the arm's
+    /// position expects (the branch's expected type; nullptr when nothing expects one, and
+    /// then the other arms decide through the join). The declared return type of the function
+    /// is not the expected type of an arm's `return`: the value of an arm is the branch's, and
+    /// the declared type is checked where the function itself returns (language reference
+    /// 7.3, handover H24).
+    camel::core::type::Type *expectedExitTypeHere() const;
     /// What `return value` / `throw value` hands back: the value put into the declared
     /// `T?` / `T!`, or the failed form of the declared `T!`.
     node_handle_t adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t value);

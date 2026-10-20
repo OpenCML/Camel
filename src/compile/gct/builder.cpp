@@ -329,27 +329,34 @@ void Builder::initInnerTypes() {
 /*
 Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 */
-// A literal that could not be converted to the type its position asks for: out of the range
-// of a narrower numeric type (`let b: i32 = 3000000000`), or not convertible at all.
-template <typename Diags, typename Range>
-static void
-reportLiteralCastFailure(Diags &diags, const Range &range, const data_ptr_t &data, Type *type) {
-    if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
-        diags->of(SemanticDiag::LiteralOutOfRange)
-            .at(range)
-            .commit(literalValueText(data), type->toString(), limits);
-        return;
-    }
-    diags->of(SemanticDiag::LiteralStaticCastFailed)
-        .at(range)
-        .commit(data->toString(), type->toString());
-}
-
 // A primitive type whose values are integers (`i32`, `int`): a float literal is not converted
 // to one by itself (design principles 5.1, "数值类型不做隐式转换").
 static bool isIntegerPrimitive(Type *type) {
     return type != nullptr && type->isPrimitive() &&
            (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64);
+}
+
+// A literal that could not be converted to the type its position asks for: out of the range
+// of a narrower numeric type (`let b: i32 = 3000000000`), a decimal literal in an integer type
+// (`let x: int = 1.9`), text that is not a number, or a value of another type. One diagnostic
+// says which literal, which type, and why (handover H24).
+template <typename Diags, typename Range>
+static void
+reportLiteralCastFailure(Diags &diags, const Range &range, const data_ptr_t &data, Type *type) {
+    std::string reason;
+    if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
+        reason = "out of range (" + limits + ")";
+    } else if (data->type()->isPrimitive() && isIntegerPrimitive(type)) {
+        // A numeric type that is not an integer keeps its fraction (`1.9` -> `int`).
+        reason = "the value would be truncated";
+    } else if (data->type()->code() == TypeCode::String) {
+        reason = "the text is not a number";
+    } else {
+        reason = "the value cannot become that type";
+    }
+    diags->of(SemanticDiag::LiteralNotRepresentable)
+        .at(range)
+        .commit(literalValueText(data), type->toString(), reason);
 }
 
 node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
@@ -2572,9 +2579,10 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         // (`9223372036854775808` was the smallest int, as was `1e400`).
         const IntegerLiteral parsed = parseIntegerLiteral(str);
         if (parsed.status == IntegerLiteralStatus::OutOfRange) {
-            diags_->of(SemanticDiag::LiteralOutOfRange)
+            diags_->of(SemanticDiag::LiteralNotRepresentable)
                 .at(ast->load()->tokenRange())
-                .commit(str, "int", "-9223372036854775808 to 9223372036854775807");
+                .commit(
+                    str, "int", "out of range (-9223372036854775808 to 9223372036854775807)");
             throw BuildAbortException();
         }
         if (parsed.status == IntegerLiteralStatus::Invalid) {
@@ -2603,9 +2611,9 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         try {
             data = makeDataFromLiteral(parseNumber<double>(str));
         } catch (const std::overflow_error &) {
-            diags_->of(SemanticDiag::LiteralOutOfRange)
+            diags_->of(SemanticDiag::LiteralNotRepresentable)
                 .at(ast->load()->tokenRange())
-                .commit(str, "float", "at most about 1.8e308 in magnitude");
+                .commit(str, "float", "out of range (at most about 1.8e308 in magnitude)");
             throw BuildAbortException();
         } catch (const std::invalid_argument &) {
             diags_->of(SemanticDiag::InvalidLiteral)
@@ -2655,6 +2663,25 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
 /*
 ArrayData() : Data* data ;
 */
+/// The kind of the number literal written directly as an element of an array literal; nothing
+/// for any other element (a name, a call, a nested literal, a string).
+static std::optional<literal::Kind> writtenNumberKind(const AST::node_ptr_t &item) {
+    if (item == nullptr || item->type() != AST::LoadType::Data) {
+        return std::nullopt;
+    }
+    if (item->loadAs<AST::DataLoad>()->dataType() != AST::DataType::Literal) {
+        return std::nullopt;
+    }
+    switch (item->loadAs<AST::LiteralLoad>()->value().type()) {
+    case LiteralType::Integer:
+        return literal::Kind::Integer;
+    case LiteralType::Real:
+        return literal::Kind::Float;
+    default:
+        return std::nullopt;
+    }
+}
+
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ENTER("ArrayData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
@@ -2681,8 +2708,25 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     }
     const bool allComputed = hasNullLiteral && items->size() > 1;
 
+    // With no context to say which type they have, the number literals of one array take the
+    // widest kind among them (design principles 5.1; as in Go): `[1, 2.0]` is a `float[]`.
+    // The order of the kinds is integer < decimal (< imaginary, once complex literals exist).
+    bool hasInteger = false, hasReal = false;
+    for (const auto &item : *items) {
+        if (const std::optional<literal::Kind> kind = writtenNumberKind(item);
+            kind.has_value()) {
+            hasInteger |= *kind == literal::Kind::Integer;
+            hasReal |= *kind == literal::Kind::Float;
+        }
+    }
+    const bool widenToFloat = hasInteger && hasReal;
+
     for (const auto &item : *items) {
         node_ptr_t dataNode = visitData(item);
+        if (widenToFloat && writtenNumberKind(item) == literal::Kind::Integer) {
+            // An integer literal beside a decimal one is a value of the float type, exactly.
+            dataNode = literalNodeInType(dataNode, Type::Float(), item);
+        }
         if (allComputed) {
             auto [refNode, refData] = makeRefData(dataNode);
             *execNode << refNode;
@@ -2780,6 +2824,34 @@ Type *taggedElementTarget(Type *type) {
 
 } // namespace
 
+namespace {
+
+/// The source text the origin of a literal covers (`1.0e39`), when it is short and on one
+/// line; empty otherwise. A diagnostic that quotes a literal quotes what was written.
+std::string sourceTextAt(
+    const camel::source::source_context_ptr_t &context, camel::source::origin_id_t origin) {
+    const auto *sourceContext = context.get();
+    const auto *record = sourceContext != nullptr && origin != camel::source::kInvalidOriginId
+                             ? sourceContext->origin(origin)
+                             : nullptr;
+    const auto *span = record != nullptr ? sourceContext->span(record->primarySpan) : nullptr;
+    const auto *file = span != nullptr && span->valid()
+                           ? sourceContext->sourceFile(span->fileId)
+                           : nullptr;
+    if (file == nullptr || span->endOffset < span->startOffset ||
+        span->endOffset > file->content.size()) {
+        return {};
+    }
+    std::string text =
+        file->content.substr(span->startOffset, span->endOffset - span->startOffset);
+    if (text.size() > 60 || text.find('\n') != std::string::npos) {
+        return {};
+    }
+    return text;
+}
+
+} // namespace
+
 node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST::node_ptr_t &ast) {
     // A literal of the declared type, converted now (`let x: float = 1`). A declared `T?` /
     // `T!` and a type written with a type variable (decided when the generic function is
@@ -2802,16 +2874,32 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
                 reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
                 throw BuildAbortException();
             }
-            diags_->of(SemanticDiag::LiteralOutOfRange)
+            const camel::source::source_context_ptr_t sourceContext =
+                context_ != nullptr ? context_->sourceContext() : nullptr;
+            std::string written = sourceTextAt(sourceContext, value->origin());
+            if (written.empty()) {
+                written = exact->kind() == literal::Kind::Float ? exact->toFloatText()
+                                                               : exact->toString();
+            }
+            diags_->of(SemanticDiag::LiteralNotRepresentable)
                 .at(ast->load()->tokenRange())
-                .commit(exact->toString(), type->toString(), literal::rangeText(type));
+                .commit(
+                    written,
+                    type->toString(),
+                    "out of range (" + literal::rangeText(type) + ")");
             throw BuildAbortException();
         }
-        if (data_ptr_t converted = value->data()->convertTo(type)) {
-            return tree_->makeData(converted);
+        // An unresolved literal (`[n, m]`, `{ a: x, b: 2.0 }`: some elements are values) takes
+        // the declared type through the annotation CAST below, where its elements are made the
+        // element (field) type — they are positions with an expected type too (design
+        // principles 5.1). Converting its data now would keep the type its values give it.
+        if (!isUnresolvedLiteral(value->data())) {
+            if (data_ptr_t converted = value->data()->convertTo(type)) {
+                return tree_->makeData(converted);
+            }
+            reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
+            throw BuildAbortException();
         }
-        reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
-        throw BuildAbortException();
     }
     // Any other expression: an annotation CAST (see the declaration). An expression of the
     // declared type used to be refused here as "dynamic type casting" (`var acc: V = p`
@@ -2825,6 +2913,23 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
 node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &entered) {
     entered        = false;
     Type *elemType = taggedElementTarget(type);
+    if (type != nullptr && elemType == nullptr && !containsTypeVar(type) &&
+        asTagged(type) == nullptr && ast->type() == AST::LoadType::Data) {
+        // Design principles 5.1: the elements of an array literal and the fields of a struct
+        // literal are positions with an expected type, like a declaration's. They are built
+        // with the type the position gives them (`let xs: float[] = [1, 2.0]`, `let p: P = {
+        // a: 1, b: 2.0 }`), so a literal element is converted now, exactly, and an `int`
+        // array is never stored where a `float[]` was declared.
+        const auto &load = ast->loadAs<AST::DataLoad>();
+        if (load->dataType() == AST::DataType::Array) {
+            const auto &items = *ast->atAs<AST::RepeatedLoad>(0);
+            if (!items.empty() && type->code() == TypeCode::Array) {
+                return visitArrayInto(ast, type, entered);
+            }
+        } else if (load->dataType() == AST::DataType::Struct && type->code() == TypeCode::Struct) {
+            return visitStructInto(ast, type, entered);
+        }
+    }
     if (elemType == nullptr || ast->type() != AST::LoadType::Data ||
         ast->loadAs<AST::DataLoad>()->dataType() != AST::DataType::Array ||
         ast->atAs<AST::RepeatedLoad>(0)->size() == 0) {
@@ -2864,6 +2969,138 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
     }
     *execNode << tree_->makeData(factory.build());
     return execNode;
+}
+
+node_ptr_t Builder::literalNodeInType(
+    const node_ptr_t &node, Type *type, const AST::node_ptr_t &at) {
+    if (node == nullptr || type == nullptr || node->type() != NodeKind::DATA) {
+        return node;
+    }
+    const data_ptr_t &data = node->data();
+    if (type->equals(data->type())) {
+        return node;
+    }
+    // The value the literal was written as, exactly (design principles 5.1): an integer
+    // literal becomes the float type its position asks for without being rounded twice.
+    const literal::Value *exact = Tree::of(node)->literalValueOf(node);
+    if (exact == nullptr || !type->isPrimitive()) {
+        return node;
+    }
+    if (!literal::kindEnters(*exact, type)) {
+        // A decimal literal where an integer is asked for: the fraction would be lost.
+        reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type);
+        throw BuildAbortException();
+    }
+    if (auto converted = exact->toData(type); converted.has_value()) {
+        node_ptr_t res = tree_->makeData(*converted);
+        setOriginFromAst(context_, res, at, camel::source::OriginKind::GctNode, "gct.data");
+        return res;
+    }
+    reportLiteralCastFailure(diags_, at->load()->tokenRange(), data, type);
+    throw BuildAbortException();
+}
+
+node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, bool &entered) {
+    ENTER("ArrayData");
+    entered        = false;
+    Type *elemType = tt::as_ptr<ArrayType>(arrayType)->elemType();
+    if (elemType == nullptr || containsTypeVar(elemType)) {
+        LEAVE("ArrayData");
+        return visitData(ast);
+    }
+    ArrayDataFactory factory;
+    // The position names the element type: the literal is that array even where an element is
+    // a computed value (`[[a, b]]` for an `int[][]`), so the type is not left to the elements
+    // to fix (and a nested literal is not read as the type of an outer position, H24).
+    factory.setElemType(elemType);
+    bool dangling       = false;
+    node_ptr_t execNode = makeExec(false, true);
+    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+        bool nested         = false;
+        node_ptr_t dataNode = visitDataInto(item, elemType, nested);
+        if (!nested) {
+            dataNode = literalNodeInType(dataNode, elemType, item);
+        }
+        auto [data, _] = extractData(dataNode, execNode, dangling);
+        try {
+            factory.add(data);
+        } catch (Diagnostic &d) {
+            // The element that does not fit the others: the data layer knows the types, the
+            // position is known here.
+            d.range = item->load()->tokenRange();
+            diags_->add(std::move(d));
+            throw BuildAbortException();
+        }
+    }
+    const data_ptr_t built = factory.build();
+    node_ptr_t res         = tree_->makeData(built);
+    // The literal is the value of the type asked for when the two types are the same. When
+    // they are not (a named struct type, say), the caller still applies the declared value or
+    // the annotation CAST, which attaches that type as it does for any value.
+    entered = arrayType->equals(built->type());
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    LEAVE("ArrayData");
+    return res;
+}
+
+node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType, bool &entered) {
+    ENTER("StructData");
+    entered            = false;
+    auto *sType        = tt::as_ptr<StructType>(structType);
+    const auto &fields = *ast->atAs<AST::RepeatedLoad>(0);
+    // A literal that does not write exactly the fields of the type is built as usual and
+    // reported by the conversion that finds it of another type.
+    if (fields.size() != sType->size()) {
+        LEAVE("StructData");
+        return visitData(ast);
+    }
+    for (const auto &child : fields) {
+        const auto &named = child->loadAs<AST::NamedDataLoad>();
+        if (!sType->findField(named->ref().ident()).has_value()) {
+            LEAVE("StructData");
+            return visitData(ast);
+        }
+    }
+    StructDataFactory factory;
+    bool dangling       = false;
+    node_ptr_t execNode = makeExec(false, true);
+    for (const auto &child : fields) {
+        const auto &named      = child->loadAs<AST::NamedDataLoad>();
+        const std::string name = named->ref().ident();
+        Type *fieldType        = sType->typeAt(*sType->findField(name));
+        const auto &valueAst   = child->atAs<AST::DataLoad>(0);
+        bool nested            = false;
+        node_ptr_t fieldNode   = visitDataInto(valueAst, fieldType, nested);
+        if (asTagged(fieldType) != nullptr) {
+            // A field of `T?` / `T!`: the value enters the form, as it does at any position
+            // whose type is written (design principles 3.8).
+            node_ptr_t castNode = tree_->makeCast(fieldType, true);
+            *castNode << fieldNode;
+            setOriginFromAst(
+                context_,
+                castNode,
+                valueAst,
+                camel::source::OriginKind::GctNode,
+                "gct.cast");
+            fieldNode = castNode;
+        } else if (!nested) {
+            fieldNode = literalNodeInType(fieldNode, fieldType, valueAst);
+        }
+        auto [data, _] = extractData(fieldNode, execNode, dangling);
+        factory.add(name, data);
+    }
+    const data_ptr_t built = factory.build();
+    node_ptr_t res         = tree_->makeData(built);
+    entered                = structType->equals(built->type());
+    if (dangling) {
+        *execNode << res;
+        res = execNode;
+    }
+    LEAVE("StructData");
+    return res;
 }
 
 /*

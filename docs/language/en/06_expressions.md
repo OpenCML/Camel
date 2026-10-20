@@ -20,8 +20,8 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 (x: int): int => x + 1      // lambda, see 6.9
 ```
 
-- The elements of an array literal must have the same type. The element type of the empty array `[]` comes from the context: `let xs: int[] = []`, `[] as Map<string, int>`.
-- The keys of a struct literal are identifiers.
+- The elements of an array literal must have the same type. An element is **a position with an expected type** ([3.3.1](03_data_model.md#331-arrays)): with a context every element takes that type, so the elements of `let xs: float[] = [1, 2.0]` are `float`; with none, the number literals of one array take the widest kind (integer < decimal), so `[1, 2.0]` is a `float[]` (as Go's untyped constants do). The element type of the empty array `[]` comes from the context: `let xs: int[] = []`, `[] as Map<string, int>`.
+- The keys of a struct literal are identifiers. A field is such a position too: in `let p: P = { a: 1, b: 2.0 }` (`P = { a: float, b: float }`) the `1` is a `float`. A field written as a name is a variable, not converted: a type it does not fit is `SemanticDiag::DeclaredTypeMismatch`.
 - **A list comprehension** `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>`: `x` has the element type of `xs`, `if c` may be left out, and the result is an array of `e`. On the graph it is exactly what the two calls written out are (two operator nodes, each with the subgraph of its element function), so it has their properties: nothing is promised about the order of the elements (a parallel scheduler may compute them concurrently), and effects in `e` and `c` are treated as in the element functions of `map` and `filter` ([6.10](#610-higher-order-operators)). It nests, and it may stand wherever an expression may. A source that is not an array is `SemanticDiag::ComprehensionSourceRefused`.
 - The spread `...xs` is reserved and not implemented (`SemanticDiag::ConstructNotSupported`). Write `concat(xs, ys)`.
 
@@ -298,6 +298,8 @@ note: the value of this 'if' is not used
 
 So there is no "early return" in Camel: write the branch as the last expression of the function body, or write `return` before it. When several conditions are tested in turn, join `if ... else if ... else ...` into one expression. The warning can be turned off with `-Wno-exit-in-unused-branch`. `return null` and a `return` without a value are reported too: an arm does not need one to make the types fit, so one written there was most likely meant to leave the function.
 
+A `return` in an arm takes its type from **the position the arm stands at**, like any other expression in the arm ([3.3.1](03_data_model.md#331-arrays), design principles 5.1): in `let v: float = if c then { return 1 } else { 2.0 }` the `1` is a `float` (the position is the declaration of `v`), while in `let v = if c then { return 1 } else { 2 }` it is an `int` (the position has no type, so the arms decide). The declared return type of the function is **not** the expected type of such a `return`: in `func f(c: bool): float { let v = if c then { return 2 } else { 3 } … }` the `v` is an `int`, and the function converts where it needs to. The last expression of a function body (a whole `if`/`match` included) is the position of the function's return value: its type is the declared return type, and a `return` in its arms reads it from there.
+
 ### 6.8.2 `match`
 
 ```
@@ -308,8 +310,8 @@ match name {
 ```
 
 - What is matched may be any expression (`match f(x) { ... }`), not only a name.
-- A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **Each pattern must be a value the type of the matched value accepts** (design principles 3.7): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
-- The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`.
+- A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **A pattern literal takes the type of the matched value** (it is a position with an expected type, design principles 5.1): with `x: f32`, the `3` of `case 3` is an `f32`; with `x: int`, `case 5000000000` is `SemanticDiag::LiteralNotRepresentable`. **Each pattern must be a value the type of the matched value accepts** (design principles 3.7): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
+- The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`, and takes its type from the position of the arm (see 6.8.1).
 
 ```cml
 func kind(c: string): string {

@@ -86,7 +86,7 @@ expect_output_not_contains = ["gt", "Error"]
 
 [[tests]]
 name = "surface.array_element_type"
-desc = "An array literal with an element of another type is reported at that element (it had no position)."
+desc = "An array literal with an element of another type is reported at that element (it had no position). An integer and a decimal literal in one array widen to the decimal type instead (design principles 5.1, `context.data_literal`)."
 kind = "negative"
 case = "../../../cases/compile/surface/array_element_type.cml"
 args = ["-E", "short", "${case}"]

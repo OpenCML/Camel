@@ -214,12 +214,13 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::LiteralStaticCastFailed,
+            SemanticDiag::LiteralNotRepresentable,
             {
-                "LiteralStaticCastFailed",
-                "Failed to static cast literal data '{0}' to type '{1}'.",
-                "Ensure the literal value is compatible with the target type or use an appropriate "
-                "conversion.",
+                "LiteralNotRepresentable",
+                "The literal '{0}' cannot be represented as type '{1}': {2}.",
+                "A literal the type cannot hold is not wrapped around or cut off, and a value is "
+                "never cut to fit a type. Write a value the type holds, or give the literal a "
+                "wider type.",
             },
         },
         {
@@ -327,15 +328,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Where the value is known to fit, write the conversion: {2}. A conversion "
                 "written with 'as' is checked when it runs; a value that does not fit stops the "
                 "program at that position.",
-            },
-        },
-        {
-            SemanticDiag::LiteralOutOfRange,
-            {
-                "LiteralOutOfRange",
-                "The literal '{0}' is out of the range of type '{1}' ({2}).",
-                "A literal that its type cannot hold is not wrapped around or cut off. Write a "
-                "value in the range, or give the literal a wider type.",
             },
         },
         {

@@ -59,8 +59,10 @@ namespace camel::compile::gir {
 namespace {
 
 /// The operators whose value over literals is computed here. `&&`, `||` and the branches are
-/// not calls; the bit operators are left to run time (their value over ints is the machine's,
-/// and losing that would be a change of semantics, not a fold).
+/// not calls. `~` is the one bitwise operator of the language (`&` and `|` are the eager
+/// logical operators, `^` is a power, and `bit_and`, `shl` and the rest are functions of the
+/// `math` module): its value over an integer literal is `-x - 1` whatever the width is
+/// (`~5` is `-6` in an `int` and in an `i32`), so it is exact and folds like `-`.
 bool isFoldedOperator(const std::string &group) {
     static const std::unordered_set<std::string> kGroups = {
         "__add__",
@@ -70,6 +72,7 @@ bool isFoldedOperator(const std::string &group) {
         "__mod__",
         "__pow__",
         "__neg__",
+        "__inv__",
         "__eq__",
         "__neq__",
         "__lt__",
@@ -90,7 +93,19 @@ bool isComparisonOperator(const std::string &group) {
 std::optional<literal::Value>
 foldedValueOf(const std::string &group, const std::vector<literal::Value> &values) {
     if (values.size() == 1) {
-        return group == "__neg__" ? literal::Value::negate(values[0]) : std::nullopt;
+        if (group == "__neg__") {
+            return literal::Value::negate(values[0]);
+        }
+        if (group == "__inv__" && values[0].kind() == literal::Kind::Integer) {
+            // `~x` is `-x - 1` in two's complement, at every width: exact, and independent of
+            // the type the literal will take.
+            std::optional<literal::Value> negated = literal::Value::negate(values[0]);
+            if (!negated.has_value()) {
+                return std::nullopt;
+            }
+            return literal::Value::sub(*negated, literal::Value::fromInt64(1));
+        }
+        return std::nullopt;
     }
     if (values.size() != 2) {
         return std::nullopt;
@@ -182,10 +197,9 @@ node_handle_t Builder::literalInType(
         if (!report) {
             return nullptr;
         }
-        diags_->of(SemanticDiag::LiteralOutOfRange)
-            .atOrigin(origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId)
-            .commit(value.toString(), type->toString(), literal::rangeText(type));
-        throw BuildAbortException();
+        // The literal as it is written — or the whole expression it was folded from, with the
+        // value it came to (design principles 5.1).
+        rejectLiteralValue(value, type, origin);
     }
     node_handle_t node = currGraph_->addStaticDataNode(*data);
     registerNodeOrigin(context_, node, origin, "gir.data.literal");

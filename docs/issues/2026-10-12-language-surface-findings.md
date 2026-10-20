@@ -55,7 +55,7 @@ func show(u: int | string): string { return 'u' }
 func main(): int sync { println(show(2)); return 0 }
 ```
 
-当前：`[Error]: No matching function found for argument types: <> (i64). ... show: (u: Union<string, i64>) => string`。`let a: int | string = 1` 是 `LiteralStaticCastFailed`。
+当前：`[Error]: No matching function found for argument types: <> (i64). ... show: (u: Union<string, i64>) => string`。`let a: int | string = 1` 是 `LiteralNotRepresentable`。
 
 期望：联合类型要么可用，要么在声明处被拒绝。**与未决问题有关**：设计原则 3.8“不做通用联合类型的运行时分辨”、第 15 节“类型表达式语言的具体内容”。
 
@@ -149,7 +149,7 @@ func main(): int sync { println(depth(100000)); return 0 }
 - 字符串下标 `s[i]` 运行时故障：现在按字节取出单字节字符串（结果是字符串还是数值，尚待裁定）。
 - `stdlib/signatures/globals.cml` 列出不存在的函数：签名文件现已与实现对齐，并由 `scripts/stdlib-reference.mjs --verify-ops` 约束。
 - 第 6 条 `n-1` 是语法错误（更严重的表现是 `let b = a-1` 把 `b` 绑定为 `a`、静默丢掉 `-1`）：词法的数字记号不再带正负号，两个操作数之间的 `-`、`+` 总是二元运算符；在需要操作数的位置上紧跟着数字的符号由语法规则 `literal` 读作字面量的符号（`-1`、`case -1 =>`、`-9223372036854775808` 不变）。同一根源的 `t.0.1`（`0.1` 被读成一个浮点数）也已可用。测试：`test/plans/feat/consistency/surface.plan.toml`、`test/plans/feat/parse/numbers.plan.toml`。
-- 第 2 条中超出范围的字面量静默回绕（`9223372036854775808`、`1e400` 得到最小整数，`let b: i32 = 3000000000` 截断，`1.0e400` 输出裸的异常文本）：现在是带位置的 `SemanticDiag::LiteralOutOfRange`；`-9223372036854775808` 仍然合法。测试：`test/plans/feat/compile/literals.plan.toml` 的 `literal_range.*`。
+- 第 2 条中超出范围的字面量静默回绕（`9223372036854775808`、`1e400` 得到最小整数，`let b: i32 = 3000000000` 截断，`1.0e400` 输出裸的异常文本）：现在是带位置的 `SemanticDiag::LiteralNotRepresentable`；`-9223372036854775808` 仍然合法。测试：`test/plans/feat/compile/literals.plan.toml` 的 `literal_range.*`。
 - 第 1 条 函数组合 `f..g`：在含义确定之前是 `SemanticDiag::ConstructNotSupported`（按原“期望”的第二种）；组合的语义没有实现，仍待裁定。
 - 第 5 条 直接调用括号里的 lambda 与把内建算子当值：`((x: int): int => x + 1)(3)`、`3->(x: int): int => x + 1` 现在可用；`println(println)`、`println(len<1>)` 是带位置的 `SemanticDiag::FunctionNameAsValue`。
 - 第 10 条 没有 `else` 的 `if`：规则未改（臂必须没有值），诊断改为 `SemanticDiag::IfArmValueWithoutElse`，说明原因与写法。是否允许臂不写 `return null` 仍待裁定。
