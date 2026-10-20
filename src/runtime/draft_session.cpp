@@ -474,6 +474,10 @@ std::vector<GCGraph *> collectDraftStaticGraphRefs(
     return staticGraphRefs;
 }
 
+uint64_t draftGraphOrigin(
+    const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
+    const GraphDraft &draft);
+
 // Encodes `draft` into `target` (`bytes` reserved), rewriting every graph reference through
 // `rewritten`, which must cover all graphs the draft refers to.
 GCGraph *encodeDraftGraph(
@@ -525,6 +529,8 @@ GCGraph *encodeDraftGraph(
     }
 
     const auto payloadShape = describeDraftNativePayload(draft);
+    // The node chunks are blocks of their own: the graph space can run out while they are made.
+    try {
     return GCGraphBuildAccess::constructInPlace(
         target,
         bytes,
@@ -546,6 +552,13 @@ GCGraph *encodeDraftGraph(
         payloadShape,
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(draft, payload, remapGraph); },
         staticSlots);
+    } catch (const mm::MemoryExhausted &e) {
+        throw GraphSpaceExhausted(
+            e,
+            bytes,
+            identity.name,
+            draftGraphOrigin(context, identity, draft));
+    }
 }
 
 size_t draftGraphBytes(
@@ -681,14 +694,25 @@ bool sameContent(const GCGraph &before, const GCGraph &after, const GraphMap &re
         before.hasNodeAttrs() != after.hasNodeAttrs()) {
         return false;
     }
-    if (!sameArray(a->nodes, b->nodes, size_t(a->nodeCount) + 1) ||
-        !sameArray(a->inputs, b->inputs, a->edgeCount) ||
-        !sameArray(a->normPorts, b->normPorts, a->normPortCount) ||
+    // The columns, chunk by chunk: a chunk both graphs hold is the same chunk.
+    for (gc_cnt_t c = 0; c < a->chunkCount; ++c) {
+        const GCNodeChunk &x = *a->chunks[c];
+        const GCNodeChunk &y = *b->chunks[c];
+        if (&x == &y) {
+            continue;
+        }
+        if (x.nodeCount != y.nodeCount || x.edgeCount != y.edgeCount ||
+            !sameArray(x.nodes(), y.nodes(), x.nodeCount) ||
+            !sameArray(x.edges, y.edges, x.edgeCount) ||
+            (a->hasPermissions && !sameArray(x.permissions, y.permissions, x.nodeCount)) ||
+            (a->hasAttrs && !sameArray(x.attrs, y.attrs, x.nodeCount))) {
+            return false;
+        }
+    }
+    if (!sameArray(a->normPorts, b->normPorts, a->normPortCount) ||
         !sameArray(a->withPorts, b->withPorts, a->withPortCount) ||
         !sameArray(a->closure, b->closure, a->closureCount) ||
-        !sameArray(a->branchArms, b->branchArms, a->branchArmCount) ||
-        (before.hasNodePermissions() && !sameArray(a->permissions, b->permissions, a->nodeCount)) ||
-        (before.hasNodeAttrs() && !sameArray(a->attrs, b->attrs, a->nodeCount))) {
+        !sameArray(a->branchArms, b->branchArms, a->branchArmCount)) {
         return false;
     }
     // Payloads, node by node: an OPER's cached implementation pointer is not content.

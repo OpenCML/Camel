@@ -47,6 +47,7 @@ namespace mm = camel::core::mm;
 
 void GCGraphManager::freeGraph(GCGraph *graph) {
     delete graph->debug_;
+    graph->releaseNodeChunks();
     graph->~GCGraph();
     mm::graphSpace().free(graph);
 }

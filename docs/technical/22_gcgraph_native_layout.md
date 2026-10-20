@@ -79,6 +79,19 @@ using gc_cnt_t = uint32_t;       // count of a graph-local array
 A graph has no size limit other than the index `0xFFFFFFFF`, which is `kInvalidNodeRef`
 and `kNoPayload`.
 
+## 5a. Node Chunks
+
+The per-node columns are cut into chunks of 256 consecutive nodes (`GCNodeChunk`,
+one block of the graph space each): the node records, the source positions, the
+permissions and attributes (when some node has any), the input table of those
+nodes and their payload words. NodeId `ref` is node `ref & 255` of chunk
+`ref >> 8`; `GCGraph` holds the directory of chunks. Offsets inside a record
+(`inBegin`, `withBegin`, `ctrlBegin`, `payload`) are offsets in the arrays of the
+node's own chunk; node references everywhere are NodeIds of the graph. A chunk
+counts the graph versions that hold it (`shares`), so a version can share the
+chunks it did not change; the last one that lets go frees it
+(`GCGraphManager::freeGraph`).
+
 ## 6. Edges: the Input Table
 
 Each edge is stored **once**, as an entry of the input table:
