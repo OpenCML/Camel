@@ -86,6 +86,7 @@ JitBinaryDumpPass::apply(const camel::runtime::Program *program, std::ostream &o
 #if ENABLE_FASTVM_JIT
     auto linked = compileAndLink(
         context_,
+        *program,
         graph,
         {
             .enableTailCallDetection = true,

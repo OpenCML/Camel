@@ -271,7 +271,7 @@ gc_node_ref_t GraphDraft::addCallNode(
 }
 
 gc_node_ref_t GraphDraft::addFuncNode(
-    GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags,
+    GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags,
     gc_slot_idx_t dataIndex) {
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     GCFuncBody body{.calleeGraph = calleeGraph};

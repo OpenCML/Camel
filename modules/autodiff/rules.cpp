@@ -47,7 +47,7 @@ constexpr std::string_view kRulePrefix = "autodiff.vjp/";
     using camel::core::type::Type;
 
     rt::GCGraph *source = function->graph();
-    auto draft          = rt::GraphDraft::decode(source);
+    auto draft          = rt::GraphDraft::decode(*function->program(), source);
     Type *ruleType      = rule->graph()->funcType();
     const auto slot     = draft->allocateRuntimeSlot(ruleType);
     const auto capture  = draft->addPortNode(ruleType, slot);
@@ -64,7 +64,7 @@ constexpr std::string_view kRulePrefix = "autodiff.vjp/";
     rt::GCGraph *graph =
         draft->encode(std::string(kRulePrefix) + source->mangledName(), source->name());
     auto *result = ::Function::create(
-        rt::makeProgram(*context, std::span(&graph, 1)),
+        rt::makeProgram(*context, function->program(), std::span(&graph, 1)),
         graph->id(),
         withRule,
         camel::core::mm::autoSpace());

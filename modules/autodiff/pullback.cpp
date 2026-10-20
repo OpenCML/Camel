@@ -229,17 +229,12 @@ std::vector<gc_node_ref_t> orderingOf(const GraphDraft &draft, gc_node_ref_t nod
     return function != nullptr && function->graph() != nullptr ? function : nullptr;
 }
 
-gc_node_ref_t funcCallee(const GraphDraft &draft, gc_node_ref_t node, GCGraph **callee) {
-    const auto payload = draft.payloadOf(node);
-    ASSERT(payload.size_bytes() >= sizeof(rt::GCFuncBody), "autodiff: FUNC payload missing.");
-    *callee = reinterpret_cast<const rt::GCFuncBody *>(payload.data())->calleeGraph;
-    return node;
-}
-
+/// The graph the FUNC node `node` calls, as the program of the draft holds it.
 GCGraph *calleeOf(const GraphDraft &draft, gc_node_ref_t node) {
-    GCGraph *callee = nullptr;
-    funcCallee(draft, node, &callee);
-    return callee;
+    ASSERT(
+        draft.payloadOf(node).size_bytes() >= sizeof(rt::GCFuncBody),
+        "autodiff: FUNC payload missing.");
+    return draft.calleeOf(node);
 }
 
 gc_node_ref_t addAccs(GraphDraft &draft, Type *type, gc_node_ref_t source, size_t index) {
@@ -306,12 +301,11 @@ gc_node_ref_t addAggregate(GraphDraft &draft, Type *type, std::span<const gc_nod
     return addFill(draft, type, kind, source, values);
 }
 
-/// A closure of `graph` (a graph key of the current group) capturing `captures`.
+/// A closure of `graph` (a graph of the current group) capturing `captures`.
 gc_node_ref_t addClosure(
-    rt::GraphDraftGroup &group, GraphDraft &draft, GCGraph *graph, FunctionType *type,
+    rt::GraphDraftGroup &group, GraphDraft &draft, rt::GraphId graph, FunctionType *type,
     TupleType *closureType, std::span<const gc_node_ref_t> captures) {
-    auto *function =
-        ::Function::create(group.program(), group.idOf(graph), closureType, mm::autoSpace());
+    auto *function = ::Function::create(group.program(), graph, closureType, mm::autoSpace());
     const gc_node_ref_t source = draft.materializeStaticValue(toSlot<::Function *>(function), type);
     return addFill(draft, type, rt::GCFillKind::FunctionClosure, source, captures);
 }
@@ -516,8 +510,8 @@ bool hasTangentType(Type *type) { return tangentTypeOf(type) != nullptr; }
 /// the pullback graph, with their types. Tangents are ordered like the function's ports (with
 /// ports, then norm ports), skipping ports without a tangent.
 struct PullbackPlan {
-    GCGraph *forward  = nullptr; // group key
-    GCGraph *pullback = nullptr; // group key
+    rt::GraphId forward  = rt::kInvalidGraphId; // a graph of the group
+    rt::GraphId pullback = rt::kInvalidGraphId; // a graph of the group
     std::vector<Type *> portTypes;
     Type *valueType             = nullptr;
     TupleType *tangentsType     = nullptr;
@@ -832,7 +826,7 @@ class Engine {
     Engine(
         const camel::core::context::context_ptr_t &context, const rt::Program *program,
         GCGraph *function)
-        : context_(context), group_(context), inlining_(context, program, function),
+        : context_(context), group_(context, program), inlining_(context, program, function),
           outerSource_(currentSource) {
         currentSource = context ? context->sourceContext() : nullptr;
     }
@@ -844,6 +838,12 @@ class Engine {
     /// The session the inlining helpers of the runtime layer work in. Nothing is committed
     /// through it: it only holds the lifted copies of closure graphs they make on the way.
     rt::RuntimeGraphDraftSession &inlining() { return inlining_; }
+    /// The graph of a function value, which may have been made in another program (the
+    /// gradient a nested grad built): the graphs it calls are read from now on.
+    GCGraph *graphOf(const ::Function *function) {
+        inlining_.adoptProgram(*function->program());
+        return function->graph();
+    }
     /// Whether one more call may be brought into a graph to follow a function value. The bound
     /// is on the whole transformation, so following ends for a recursion that passes on
     /// function values without end.
@@ -952,7 +952,7 @@ void ForwardRewrite::followFunctionValues() {
             GCGraph *const function =
                 kind == GCNodeKind::Func
                     ? calleeOf(draft_, id)
-                    : evidentFunction(draft_, draft_.withInputsOf(id).front())->graph();
+                    : engine_.graphOf(evidentFunction(draft_, draft_.withInputsOf(id).front()));
             if (scope_.enclosing.contains(function)) {
                 engine_.noteRecursion(function);
                 left.insert(id);
@@ -1024,7 +1024,7 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
         if (function == nullptr || opaque(function->graph())) {
             return false;
         }
-        graph = function->graph();
+        graph = engine_.graphOf(function);
         // Captured values: those the function value holds, and those filled in here.
         if (const auto *held = function->tupleType()) {
             for (size_t i = 0; i < held->size(); ++i) {
@@ -1171,7 +1171,8 @@ struct ReverseLoop {
     Type *stateValueType    = nullptr;   // what the body returns: the state (the k-tuple if k > 1)
     Type *dyType            = nullptr;   // the tangent of stateValueType
     TupleType *tangentsType = nullptr;   // the tangents of the site's ports, in port order
-    GCGraph *bodyPullback   = nullptr;   // the forward body's pullback, run once per round
+    rt::GraphId bodyPullback =
+        rt::kInvalidGraphId; // the forward body's pullback, run once per round
     uint64_t origin         = 0;
     /// The position of a state's / a capture's gradient in the body pullback's result, if it
     /// has one.
@@ -1409,7 +1410,7 @@ std::unique_ptr<GraphDraft> buildReverseBody(const ReverseLoop &loop) {
 /// that ran no round leaves the state's gradient as it came and every capture's zero, which is
 /// what a sum over no round contributes.
 std::unique_ptr<GraphDraft> buildReverseClosure(
-    const ReverseLoop &loop, TupleType *closureType, GCGraph *cond, GCGraph *body,
+    const ReverseLoop &loop, TupleType *closureType, rt::GraphId cond, rt::GraphId body,
     std::vector<gc_node_ref_t> captures) {
     const std::vector<Type *> stateTypes = reverseStateTypes(loop);
     auto draft                           = std::make_unique<GraphDraft>();
@@ -1496,7 +1497,7 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
 }
 
 void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
-    const LoopDraftView view(draft_, loop);
+    const LoopDraftView view(*draft_.program(), draft_, loop);
     ASSERT(
         view.collectionCount() == 0,
         "autodiff: a 'loop' that already collects values reached the forward rewrite.");
@@ -1613,13 +1614,13 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // They are reserved (not encoded) now; the group re-points the graph references their payloads
     // hold when it encodes them, as it does for every member the transformation adds.
     const std::string key = bodyPlan.name + ".reverse";
-    GCGraph *const condKey =
+    const rt::GraphId condKey =
         engine_.group().reserve("autodiff.loop/" + key + ".cond", key + ".cond");
     engine_.group().define(condKey, buildReverseCond(reverse));
-    GCGraph *const bodyKey =
+    const rt::GraphId bodyKey =
         engine_.group().reserve("autodiff.loop/" + key + ".body", key + ".body");
     engine_.group().define(bodyKey, buildReverseBody(reverse));
-    GCGraph *const closureKey = engine_.group().reserve("autodiff.loop/" + key, key);
+    const rt::GraphId closureKey = engine_.group().reserve("autodiff.loop/" + key, key);
     // What the reverse pass captures, in order: the tape, then the captures whose gradient it
     // starts from zero.
     std::vector<Type *> closureTypes = bodyPlan.collectionTypes;
@@ -1677,6 +1678,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         auto *target     = base ? fromSlot<::Function *>(*base) : nullptr;
         if (body->fillKind == rt::GCFillKind::FunctionClosure && target != nullptr &&
             target->graph() != nullptr) {
+            engine_.graphOf(target);
             const auto slots  = body->slots();
             const auto values = draft_.withInputsOf(fill);
             const size_t n    = target->graph()->closureNodes().size();
@@ -1701,7 +1703,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     }
     GCGraph *graph = nullptr;
     if (function != nullptr && function->graph() != nullptr) {
-        graph = function->graph();
+        graph = engine_.graphOf(function);
         std::vector<gc_node_ref_t> inputs(withInputs.begin() + 1, withInputs.end());
         for (gc_node_ref_t input : draft_.normInputsOf(call)) {
             inputs.push_back(input);
@@ -1742,7 +1744,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         return std::nullopt; // a function computed at run time
     }
     // A static capture-free function: call its graph directly.
-    const gc_node_ref_t direct = draft_.addFuncNode(graph, typeOf(draft_, call));
+    const gc_node_ref_t direct = draft_.addFuncNode(graph->id(), typeOf(draft_, call));
     draft_.setWithInputs(direct, std::span(withInputs).subspan(1));
     draft_.setNormInputs(direct, copyOf(draft_.normInputsOf(call)));
     // The call ran after its callee value was there; keep what that value waited for.
@@ -1797,7 +1799,7 @@ void ForwardRewrite::rewriteClosureCall(
     }
     const PullbackPlan &plan = engine_.planForClosure(graph);
 
-    const gc_node_ref_t direct = draft_.addFuncNode(graph, typeOf(draft_, call));
+    const gc_node_ref_t direct = draft_.addFuncNode(graph->id(), typeOf(draft_, call));
     draft_.setNodeOrigin(direct, draft_.nodeOrigin(call));
     draft_.setWithInputs(direct, std::span(withInputs).subspan(1));
     draft_.setNormInputs(direct, norm);
@@ -1964,7 +1966,7 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
     PullbackPlan joined;
     for (gc_node_ref_t arm : arms) {
         GCGraph *armGraph                          = calleeOf(draft_, arm);
-        auto variant                               = GraphDraft::decode(armGraph);
+        auto variant = GraphDraft::decode(engine_.inlining().work(), armGraph);
         const std::vector<gc_node_ref_t> oldPorts  = copyOf(variant->withPorts());
         const std::vector<gc_node_ref_t> oldInputs = copyOf(draft_.withInputsOf(arm));
         for (gc_node_ref_t port : oldPorts) {
@@ -2853,13 +2855,12 @@ const PullbackPlan &Engine::planFor(GCGraph *callee) {
     }
     PullbackPlan plan =
         reserve(callee->name(), makePlanTypes(portTypesOf(callee), callee->funcType()->exitType()));
-    pending_.push_back(
-        Pending{
-            .plan   = plan,
-            .source = GraphDraft::decode(callee),
-            .scope  = GraphScope{.role = GraphRole::Callee},
-            .graph  = callee,
-        });
+    pending_.push_back(Pending{
+        .plan   = plan,
+        .source = GraphDraft::decode(inlining_.work(), callee),
+        .scope  = GraphScope{.role = GraphRole::Callee},
+        .graph  = callee,
+    });
     return plans_.emplace(callee, plan).first->second;
 }
 
@@ -2869,7 +2870,7 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
     }
     // The function's graph with its captured values as trailing norm ports: calling it with
     // the captures as extra arguments equals calling the closure.
-    auto lifted        = GraphDraft::decode(graph);
+    auto lifted        = GraphDraft::decode(inlining_.work(), graph);
     FunctionType *type = lifted->funcType();
     param_vec_t withParams, normParams;
     for (size_t i = 0; i < type->withTypesCount(); ++i) {
@@ -3068,7 +3069,7 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
     plan.name   = body->name() + ".tape";
     plan.graphs = reserve(plan.name, makePlanTypes(plan.portTypes, plan.stateValueType, carriesGradient));
 
-    auto source = GraphDraft::decode(body);
+    auto source = GraphDraft::decode(inlining_.work(), body);
     // A loop that appends to its array state in place (Builder::markLoopStateInPlace) has one
     // array that every round writes into, so the tape this body is about to collect would hold
     // the same final array in every entry. The loop needs the tape, so its body copies instead:
@@ -3168,7 +3169,7 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     }
 
     const GraphScope scope{.role = GraphRole::Differentiated};
-    auto draft = GraphDraft::decode(function);
+    auto draft = GraphDraft::decode(inlining_.work(), function);
     ForwardRewrite rewrite(*this, *draft, scope);
     rewrite.run();
     const gc_node_ref_t value              = valueNode(*draft);
@@ -3204,7 +3205,7 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     draft->setFuncType(signature->functionType);
 
     const std::string suffix = uniqueSuffix();
-    GCGraph *key             = group_.reserve(
+    const rt::GraphId key    = group_.reserve(
         "autodiff.grad/" + function->mangledName() + suffix,
         "grad(" + function->name() + ")");
     group_.define(key, std::move(draft));
@@ -3224,6 +3225,8 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     if (!refusals_.empty()) {
         refuse();
     }
+    // The graphs the inlining made on the way are called by members of the group.
+    group_.adopt(inlining_.work());
     group_.encode();
     return group_.encoded(key);
 }

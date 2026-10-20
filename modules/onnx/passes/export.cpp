@@ -337,10 +337,20 @@ Request readEntryRequest(
     throw Refusal{origin, std::move(message)};
 }
 
+/// The program that holds `g`: a graph the pass reads is always one of the context's.
+const camel::runtime::Program &programOfGraph(const core::context::Context &ctx, const GCGraph *g) {
+    const camel::runtime::Program *program = ctx.programOfRuntimeGraph(g);
+    if (program == nullptr) {
+        throw std::logic_error("the ONNX export met a graph that belongs to no program");
+    }
+    return *program;
+}
+
 /// The function a call node of `g` calls, when it is statically known.
-const GCGraph *calleeGraphOf(const GCGraph *g, gc_node_ref_t ref) {
+const GCGraph *
+calleeGraphOf(const camel::runtime::Program &program, const GCGraph *g, gc_node_ref_t ref) {
     if (g->node(ref)->kind == GCNodeKind::Func) {
-        return g->directCalleeGraphOf(ref);
+        return program.calleeOf(*g, ref);
     }
     if (const auto with = g->withInputsOf(ref); !with.empty()) {
         if (const auto fn = constantOf(g, with.front());
@@ -352,8 +362,9 @@ const GCGraph *calleeGraphOf(const GCGraph *g, gc_node_ref_t ref) {
 }
 
 /// A source-level name of the function a call node of `g` calls, when it is statically known.
-std::string calleeNameOf(const GCGraph *g, gc_node_ref_t ref) {
-    const GCGraph *callee = calleeGraphOf(g, ref);
+std::string
+calleeNameOf(const camel::runtime::Program &program, const GCGraph *g, gc_node_ref_t ref) {
+    const GCGraph *callee = calleeGraphOf(program, g, ref);
     if (!callee || callee->name().empty() || callee->name().starts_with("__")) {
         return {};
     }
@@ -393,7 +404,8 @@ uint64_t entryOriginOf(core::context::Context &ctx, const GCGraph *root) {
         if (n == nullptr || (n->kind != GCNodeKind::Func && n->kind != GCNodeKind::Call)) {
             continue;
         }
-        const uint64_t origin = graphOriginOf(ctx, calleeGraphOf(root, it.ref()));
+        const uint64_t origin =
+            graphOriginOf(ctx, calleeGraphOf(programOfGraph(ctx, root), root, it.ref()));
         if (origin != camel::source::kInvalidOriginId) {
             return origin;
         }
@@ -421,8 +433,8 @@ bool holdsRequest(const GCGraph *g) {
 
 /// Whether an export request is written somewhere in the program (in a function the entry
 /// graph reaches), though none is visible in the entry graph itself.
-bool requestIsReachable(GCGraph *root) {
-    for (GCGraph *g : camel::runtime::collectReachableGraphs(root)) {
+bool requestIsReachable(const camel::runtime::Program &program, GCGraph *root) {
+    for (GCGraph *g : camel::runtime::collectReachableGraphs(program, root)) {
         if (g != nullptr && g != root && holdsRequest(g)) {
             return true;
         }
@@ -432,7 +444,9 @@ bool requestIsReachable(GCGraph *root) {
 
 /// Whether `g` holds an export request or reaches, through calls of statically known
 /// functions, a graph that does.
-bool leadsToRequest(const GCGraph *g, std::unordered_set<const GCGraph *> &seen) {
+bool leadsToRequest(
+    const camel::runtime::Program &program, const GCGraph *g,
+    std::unordered_set<const GCGraph *> &seen) {
     if (g == nullptr || !seen.insert(g).second) {
         return false;
     }
@@ -442,7 +456,7 @@ bool leadsToRequest(const GCGraph *g, std::unordered_set<const GCGraph *> &seen)
     for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
         const auto *n = *it;
         if (n && (n->kind == GCNodeKind::Func || n->kind == GCNodeKind::Call) &&
-            leadsToRequest(calleeGraphOf(g, it.ref()), seen)) {
+            leadsToRequest(program, calleeGraphOf(program, g, it.ref()), seen)) {
             return true;
         }
     }
@@ -451,14 +465,15 @@ bool leadsToRequest(const GCGraph *g, std::unordered_set<const GCGraph *> &seen)
 
 /// The call of the entry graph behind which the export request sits, when the calls from
 /// there to the request are all calls of statically known functions.
-std::optional<gc_node_ref_t> callLeadingToRequest(const GCGraph *root) {
+std::optional<gc_node_ref_t>
+callLeadingToRequest(const camel::runtime::Program &program, const GCGraph *root) {
     for (auto it = root->nodes().begin(); it != root->nodes().end(); ++it) {
         const auto *n = *it;
         if (!n || (n->kind != GCNodeKind::Func && n->kind != GCNodeKind::Call)) {
             continue;
         }
         std::unordered_set<const GCGraph *> seen{root};
-        if (leadsToRequest(calleeGraphOf(root, it.ref()), seen)) {
+        if (leadsToRequest(program, calleeGraphOf(program, root, it.ref()), seen)) {
             return it.ref();
         }
     }
@@ -476,8 +491,9 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
         return "run std::opt before onnx::export (after std::macro when the program "
                "uses macros such as grad)";
     }
-    const GCGraph *callee    = calleeGraphOf(root, call);
-    const std::string shown  = calleeNameOf(root, call);
+    const auto &program      = programOfGraph(ctx, root);
+    const GCGraph *callee    = calleeGraphOf(program, root, call);
+    const std::string shown  = calleeNameOf(program, root, call);
     const std::string name   = shown.empty() ? "the called function" : "'" + shown + "'";
     const InlineDeclined *no = callee ? report->find(root->name(), callee->name()) : nullptr;
     // The budget is a parameter of the pass that ran the engine (std::opt, std::opt::inline, ...),
@@ -592,10 +608,11 @@ collectRequests(const core::context::Context &ctx, GCGraph *root, const std::str
     if (!requests.empty()) {
         return requests;
     }
-    if (firstCall && requestIsReachable(root)) {
+    if (firstCall && requestIsReachable(programOfGraph(ctx, root), root)) {
         // The call behind which the request sits, when that is known; the first call else.
-        const gc_node_ref_t call = callLeadingToRequest(root).value_or(*firstCall);
-        const std::string callee = calleeNameOf(root, call);
+        const auto &program      = programOfGraph(ctx, root);
+        const gc_node_ref_t call = callLeadingToRequest(program, root).value_or(*firstCall);
+        const std::string callee = calleeNameOf(program, root, call);
         throw Refusal{
             originNear(root, call),
             std::format(
@@ -661,7 +678,7 @@ void exportEntry(
                 "onnx::export translates 'main' itself, and the model file is not named: give "
                 "it as the parameter out, onnx::export(out=\"model.onnx\")")};
     }
-    for (GCGraph *g : camel::runtime::collectReachableGraphs(root)) {
+    for (GCGraph *g : camel::runtime::collectReachableGraphs(*program, root)) {
         if (g != nullptr) {
             refuseUnexpandedMacros(g);
         }

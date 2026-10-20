@@ -23,26 +23,20 @@
  * two nodes. The declarations are the operators' (camel/core/resource_semantics.h); this file
  * resolves them in a graph.
  *
- *   resourcesOf(graph, node)     the accesses of one node, each with the node of the same graph
- *                                whose value names the resource. An OPER: its operator's
- *                                declaration, or the conservative reading. A FUNC, a LOOP, a
- *                                CALL whose callee is known: what the graphs it runs do to
- *                                resources they receive (their footprint), mapped onto the
- *                                node's inputs; a CALL through an unknown value: conservative.
- *                                Other nodes touch nothing.
- *   footprintOf(graph)           what running a graph once does to resources it does not make
- *                                itself: through its ports, its captures, ambient state.
- *   originOf / mayAlias          where a resource value comes from within one activation of its
- *                                graph (a fresh allocation of a node, a port, or unknown), and
- *                                whether two values may be one resource.
- *   resourceConflict(a, b)       whether two nodes touch overlapping parts of one resource with
- *                                at least one write, or both have external effects: they must
- *                                then run in the order the program gives them.
- *   dependsOn(later, earlier)    computation dependence: the data edges (Norm, With) only.
- *   orderedBefore(a, b)          any path, control edges included (the order the front end
- *                                gave conflicting effects, design principles 3.3).
- *   requiredOrderings(graph)     every pair of nodes of a graph that conflict, with whether and
- *                                how the graph orders them.
+ *   resourcesOf(program, graph, node)     the accesses of one node, each with the node of the same
+ * graph whose value names the resource. An OPER: its operator's declaration, or the conservative
+ * reading. A FUNC, a LOOP, a CALL whose callee is known: what the graphs it runs do to resources
+ * they receive (their footprint), mapped onto the node's inputs; a CALL through an unknown value:
+ * conservative. Other nodes touch nothing. footprintOf(program, graph)           what running a
+ * graph once does to resources it does not make itself: through its ports, its captures, ambient
+ * state. originOf / mayAlias          where a resource value comes from within one activation of
+ * its graph (a fresh allocation of a node, a port, or unknown), and whether two values may be one
+ * resource. resourceConflict(a, b)       whether two nodes touch overlapping parts of one resource
+ * with at least one write, or both have external effects: they must then run in the order the
+ * program gives them. dependsOn(later, earlier)    computation dependence: the data edges (Norm,
+ * With) only. orderedBefore(a, b)          any path, control edges included (the order the front
+ * end gave conflicting effects, design principles 3.3). requiredOrderings(graph)     every pair of
+ * nodes of a graph that conflict, with whether and how the graph orders them.
  *
  * Computation dependence, resource conflict and asynchronous completion are three different
  * things (design 8.2): the first is the graph's data edges, the second is answered here, the
@@ -103,7 +97,7 @@ struct NodeResources {
 };
 
 /// The resources of node `node` of `graph` (see the file comment).
-NodeResources resourcesOf(const GCGraph &graph, gc_node_ref_t node);
+NodeResources resourcesOf(const Program &program, const GCGraph &graph, gc_node_ref_t node);
 
 /// What running `graph` once does to resources it receives (bindings Norm, With and Capture are
 /// its norm ports, with ports and closure ports), to ambient state, and outside the program.
@@ -119,7 +113,7 @@ struct GraphFootprint {
     bool operator==(const GraphFootprint &) const = default;
 };
 
-GraphFootprint footprintOf(const GCGraph *graph);
+GraphFootprint footprintOf(const Program &program, const GCGraph *graph);
 
 /// Where a value comes from within one activation of its graph, seen through GATEs.
 struct ValueOrigin {
@@ -180,7 +174,8 @@ struct ResourceConflict {
 };
 
 /// Whether nodes `a` and `b` of `graph` conflict (see ConflictKind). Symmetric.
-ResourceConflict resourceConflict(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b);
+ResourceConflict
+resourceConflict(const Program &program, const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b);
 
 /// Computation dependence: `later` uses the value of `earlier`, directly or not, through Norm
 /// and With edges only.
@@ -204,7 +199,7 @@ struct RequiredOrdering {
 /// one branch (they never both run). A pair the graph does not order (ordered = false) is two
 /// effects on one resource the program left unordered (design principles 15, undecided: writes
 /// through references outside a sync block without `wait`).
-std::vector<RequiredOrdering> requiredOrderings(const GCGraph &graph);
+std::vector<RequiredOrdering> requiredOrderings(const Program &program, const GCGraph &graph);
 
 /// The text forms (core.resources, test output).
 std::string toString(const NodeAccess &access);

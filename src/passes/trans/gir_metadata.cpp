@@ -120,8 +120,8 @@ string recordTooltip(camel::runtime::GCGraph *graph, const camel::runtime::GCNod
 }
 
 string recordLabel(
-    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-    const camel::runtime::GCNode &record) {
+    const camel::runtime::Program &program, camel::runtime::GCGraph *graph,
+    camel::runtime::gc_node_ref_t nodeRef, const camel::runtime::GCNode &record) {
     switch (record.kind) {
     case camel::runtime::GCNodeKind::Data: {
         const string value = formatStaticDataValue(graph, record);
@@ -153,7 +153,7 @@ string recordLabel(
     case camel::runtime::GCNodeKind::Call:
         return "CALL";
     case camel::runtime::GCNodeKind::Func: {
-        auto *callee = graph->directCalleeGraphOf(nodeRef);
+        auto *callee = program.calleeOf(*graph, nodeRef);
         return callee ? callee->name() : "FUNC";
     }
     case camel::runtime::GCNodeKind::Oper:
@@ -167,8 +167,8 @@ string recordLabel(
         return "GATE";
     case camel::runtime::GCNodeKind::Loop: {
         // `LOOP while cond=f.loop1.cond body=f.loop1.body` (graph model 3.5, the LOOP card).
-        const auto *cond = graph->loopCondGraphOf(nodeRef);
-        const auto *body = graph->loopBodyGraphOf(nodeRef);
+        const auto *cond = program.loopCondOf(*graph, nodeRef);
+        const auto *body = program.loopBodyOf(*graph, nodeRef);
         std::string text =
             std::format("LOOP {}", camel::core::loopKindName(graph->loopKindOf(nodeRef)));
         if (cond) {

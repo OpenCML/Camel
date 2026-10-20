@@ -52,6 +52,49 @@ class Program {
         const size_t index = toValue(id);
         return index < byId_.size() ? byId_[index] : nullptr;
     }
+    /// The graphs a graph refers to, read in this program (graph.h, GCGraph::refs): the graph
+    /// of FUNC node `ref`; of LOOP node `ref` the condition (nullptr for a For loop) and the
+    /// body; the graph a graph is written in. nullptr where the id names no graph of the
+    /// program.
+    GCGraph *calleeOf(const GCGraph &graph, gc_node_ref_t ref) const {
+        return this->graph(graph.calleeIdOf(ref));
+    }
+    GCGraph *loopCondOf(const GCGraph &graph, gc_node_ref_t ref) const {
+        return this->graph(graph.loopCondIdOf(ref));
+    }
+    GCGraph *loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) const {
+        return this->graph(graph.loopBodyIdOf(ref));
+    }
+    GCGraph *outerOf(const GCGraph &graph) const { return this->graph(graph.outerGraphId()); }
+    /// The graphs `ids` name that the program holds, in order.
+    std::vector<GCGraph *> resolve(std::span<const GraphId> ids) const {
+        std::vector<GCGraph *> graphs;
+        graphs.reserve(ids.size());
+        for (GraphId id : ids) {
+            if (GCGraph *found = this->graph(id)) {
+                graphs.push_back(found);
+            }
+        }
+        return graphs;
+    }
+    /// Views of the reference table of `graph` by role (GCGraphRefRole), resolved.
+    std::vector<GCGraph *> dependencies(const GCGraph &graph) const {
+        return resolve(graph.dependencies());
+    }
+    std::vector<GCGraph *> subGraphs(const GCGraph &graph) const {
+        return resolve(graph.subGraphs());
+    }
+    std::vector<GCGraph *> staticGraphRefs(const GCGraph &graph) const {
+        return resolve(graph.staticGraphRefs());
+    }
+    /// Calls `visitor` for every graph of the reference table of `graph`.
+    template <typename Visitor> void traceGraphs(const GCGraph &graph, Visitor &&visitor) const {
+        for (GraphId id : graph.refs()) {
+            if (GCGraph *found = this->graph(id)) {
+                visitor(found);
+            }
+        }
+    }
     /// True when `graph` is the version this program holds of its graph.
     bool contains(const GCGraph *graph) const {
         return graph != nullptr && this->graph(graph->id()) == graph;
@@ -104,9 +147,10 @@ class Program {
 };
 
 /// A program of its own, owned by `context`, for graphs created while the program runs and
-/// belonging to no commit (the gradient of a function, an outlined region): it holds exactly
-/// `graphs`, the first being its root.
-const Program *
-makeProgram(camel::core::context::Context &context, std::span<GCGraph *const> graphs);
+/// belonging to no commit (the gradient of a function, an outlined region): the graphs of
+/// `base` and `graphs`, the first of them its root. The graphs are rooted for the context's
+/// lifetime.
+const Program *makeProgram(
+    camel::core::context::Context &context, const Program *base, std::span<GCGraph *const> graphs);
 
 } // namespace camel::runtime

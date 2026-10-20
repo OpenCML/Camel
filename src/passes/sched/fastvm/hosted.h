@@ -54,7 +54,9 @@ class FastVMHostImage {
     /// under direct calls: every graph a listed graph calls with FUNC or TAIL is listed. Called
     /// once, by one thread, before any interpreter over the image runs. Also registers the
     /// source origin of every pc in the context's debug map (fault positions).
-    void build(const ctx::context_ptr_t &context, std::span<camel::runtime::GCGraph *const> graphs);
+    void build(
+        const ctx::context_ptr_t &context, const camel::runtime::Program &program,
+        std::span<camel::runtime::GCGraph *const> graphs);
 
     /// The entry pc of every compiled graph.
     const std::unordered_map<camel::runtime::GCGraph *, size_t> &entries() const {

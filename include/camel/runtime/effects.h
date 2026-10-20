@@ -26,6 +26,7 @@
 #pragma once
 
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 namespace camel::runtime {
 
@@ -55,7 +56,7 @@ struct EffectSummary {
     bool operator==(const EffectSummary &) const = default;
 };
 
-/// The effects of running `graph` once (nullptr: none).
-EffectSummary effectSummaryOf(const GCGraph *graph);
+/// The effects of running `graph`, a graph of `program`, once (nullptr: none).
+EffectSummary effectSummaryOf(const Program &program, const GCGraph *graph);
 
 } // namespace camel::runtime

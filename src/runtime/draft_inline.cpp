@@ -426,15 +426,25 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
     return resolved;
 }
 
+/// The graph of `function`, which the session reads from now on (the function may have been
+/// made in another program).
+GCGraph *functionGraph(RuntimeGraphDraftSession &session, const ::Function *function) {
+    GCGraph *graph = function ? function->graph() : nullptr;
+    if (graph != nullptr) {
+        session.adoptProgram(*function->program());
+    }
+    return graph;
+}
+
 /// True when `graph` can call itself again through direct calls (it lies on a call cycle).
-bool onCallCycle(const GCGraph *graph) {
+bool onCallCycle(const Program &program, const GCGraph *graph) {
     std::unordered_set<const GCGraph *> seen;
     std::vector<const GCGraph *> work{graph};
     while (!work.empty()) {
         const GCGraph *g = work.back();
         work.pop_back();
         for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
-            const GCGraph *callee = g->directCalleeGraphOf(it.ref());
+            const GCGraph *callee = program.calleeOf(*g, it.ref());
             if (!callee) {
                 continue;
             }
@@ -556,7 +566,8 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
     // constant would unroll forever: it gets type refinements only.
     const bool bindsValues =
         std::ranges::any_of(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); });
-    if (bindsValues && insideBranchArm(draft, funcNodeId) && onCallCycle(calleeGraph)) {
+    if (bindsValues && insideBranchArm(draft, funcNodeId) &&
+        onCallCycle(*draft.program(), calleeGraph)) {
         std::erase_if(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); });
     }
     return bindings;
@@ -590,7 +601,9 @@ GCGraph *encodeSpecializedGraph(
     if (tag == kTypeSpecializationTag && !isValid(draft.typeSpecializationRoot())) {
         draft.setTypeSpecializationRoot(baseGraph->id());
     }
-    return draft.encode(mangledName, name);
+    GCGraph *encoded = draft.encode(mangledName, name);
+    session.adoptGraph(encoded);
+    return encoded;
 }
 
 RuntimeSpecializationKey makeRuntimeSpecializationKey(
@@ -640,7 +653,7 @@ GCGraph *specializeGraphWithBindings(
         return cached;
     }
 
-    auto draft        = GraphDraft::decode(baseGraph);
+    auto draft        = GraphDraft::decode(session.work(), baseGraph);
     bool refinesTypes = false;
     for (const DraftFormalBinding &binding : bindings) {
         const gc_node_ref_t formalDraftId = draft->draftIdOfSourceRef(binding.formalNodeId);
@@ -705,10 +718,10 @@ namespace {
 
 GCGraph *specializeClosureBoundGraph(
     RuntimeGraphDraftSession &session, const Function *function, size_t nonce) {
-    if (!function || !function->graph()) {
+    GCGraph *targetGraph = functionGraph(session, function);
+    if (targetGraph == nullptr) {
         return nullptr;
     }
-    GCGraph *targetGraph = function->graph();
     const Tuple *closure = function->tuple();
     if (!closure) {
         return targetGraph;
@@ -868,17 +881,19 @@ bool specializeDirectFuncInDraft(
         return false;
     }
     const auto *funcBody = reinterpret_cast<const GCFuncBody *>(payloadBytes.data());
-    if (!funcBody->calleeGraph) {
+    const GCGraph *callee =
+        isValid(funcBody->calleeGraph) ? draft.program()->graph(funcBody->calleeGraph) : nullptr;
+    if (callee == nullptr) {
         return false;
     }
 
     const std::vector<DraftFormalBinding> bindings =
-        collectDirectFuncSpecializations(draft, funcNodeId, funcBody->calleeGraph);
+        collectDirectFuncSpecializations(draft, funcNodeId, callee);
     CAMEL_LOG_INFO_S(
         "DraftOpt",
         "Specialize FUNC node {} callee='{}' bindings={}.",
         funcNodeId,
-        funcBody->calleeGraph->name(),
+        callee->name(),
         bindings.size());
     if (bindings.empty()) {
         return false;
@@ -890,19 +905,18 @@ bool specializeDirectFuncInDraft(
         std::ranges::none_of(
             bindings,
             [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
-        onCallCycle(funcBody->calleeGraph);
+        onCallCycle(*draft.program(), callee);
     if (boundedTypeSpecialization &&
-        !session.findSpecialization(
-            makeRuntimeSpecializationKey(funcBody->calleeGraph, bindings))) {
-        const GraphId root = isValid(funcBody->calleeGraph->typeSpecializationRoot())
-                                 ? funcBody->calleeGraph->typeSpecializationRoot()
-                                 : funcBody->calleeGraph->id();
+        !session.findSpecialization(makeRuntimeSpecializationKey(callee, bindings))) {
+        const GraphId root = isValid(callee->typeSpecializationRoot())
+                                 ? callee->typeSpecializationRoot()
+                                 : callee->id();
         if (session.typeSpecializationCount(root) >= kMaxTypeSpecializationsPerRecursiveFunction) {
             CAMEL_LOG_INFO_S(
                 "DraftOpt",
                 "FUNC node {} keeps callee '{}': '{}' has {} type specializations.",
                 funcNodeId,
-                funcBody->calleeGraph->name(),
+                callee->name(),
                 toText(root),
                 kMaxTypeSpecializationsPerRecursiveFunction);
             return false;
@@ -912,7 +926,7 @@ bool specializeDirectFuncInDraft(
 
     GCGraph *specializedGraph = specializeGraphWithBindings(
         session,
-        funcBody->calleeGraph,
+        callee,
         bindings,
         boundedTypeSpecialization ? kTypeSpecializationTag : std::string_view("spec"),
         specializationNonce++);
@@ -926,7 +940,7 @@ bool specializeDirectFuncInDraft(
         draft.withInputsOf(funcNodeId).begin(),
         draft.withInputsOf(funcNodeId).end());
 
-    const size_t normCount = funcBody->calleeGraph->normPorts().size();
+    const size_t normCount = callee->normPorts().size();
     std::vector<gc_node_ref_t> boundActuals; // arguments the call no longer passes
     for (auto it = bindings.rbegin(); it != bindings.rend(); ++it) {
         if (!it->bindsValue()) {
@@ -944,7 +958,7 @@ bool specializeDirectFuncInDraft(
         }
     }
 
-    GCFuncBody newBody{.calleeGraph = specializedGraph};
+    GCFuncBody newBody{.calleeGraph = specializedGraph->id()};
     std::array<std::byte, sizeof(GCFuncBody)> newPayload{};
     std::memcpy(newPayload.data(), &newBody, sizeof(newBody));
     init.payload    = std::span<const std::byte>(newPayload.data(), newPayload.size());
@@ -1040,7 +1054,7 @@ GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size
     if (GCGraph *cached = session.findSpecialization(key)) {
         return cached;
     }
-    auto draft                            = GraphDraft::decode(base);
+    auto draft                            = GraphDraft::decode(session.work(), base);
     camel::core::type::FunctionType *type = draft->funcType();
     if (!type) {
         return nullptr;
@@ -1088,7 +1102,7 @@ bool devirtualizeClosureCallInDraft(
         return false;
     }
     ::Function *function = camel::core::rtdata::fromSlot<::Function *>(source.value);
-    GCGraph *base        = function ? function->graph() : nullptr;
+    GCGraph *base        = functionGraph(session, function);
     if (!base) {
         return false;
     }
@@ -1122,7 +1136,7 @@ bool devirtualizeClosureCallInDraft(
         draft.normInputsOf(callNodeId).end());
     normInputs.insert(normInputs.end(), captures.begin(), captures.end());
     const std::vector<gc_node_ref_t> directWith(withInputs.begin() + 1, withInputs.end());
-    GCFuncBody funcBody{.calleeGraph = lifted};
+    GCFuncBody funcBody{.calleeGraph = lifted->id()};
     std::array<std::byte, sizeof(GCFuncBody)> payload{};
     std::memcpy(payload.data(), &funcBody, sizeof(funcBody));
     init.kind                       = GCNodeKind::Func;
@@ -1229,7 +1243,7 @@ bool devirtualizeStaticCallInDraft(
     }
 
     DraftNodeInit init = snapshotNodeInit(draft, callNodeId);
-    GCFuncBody funcBody{.calleeGraph = targetGraph};
+    GCFuncBody funcBody{.calleeGraph = targetGraph->id()};
     std::array<std::byte, sizeof(GCFuncBody)> newPayload{};
     std::memcpy(newPayload.data(), &funcBody, sizeof(funcBody));
     init.kind    = GCNodeKind::Func;
@@ -1274,7 +1288,8 @@ bool draftReaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to)
 /// The graph a per-arm call of `elem` runs when the arm tuple's callee element is statically
 /// known: a closure FILL in this graph (every capture filled here), or a static Function
 /// carrier. nullptr otherwise.
-GCGraph *resolveBranchedArmCalleeGraph(const GraphDraft &draft, gc_node_ref_t elem) {
+GCGraph *resolveBranchedArmCalleeGraph(
+    RuntimeGraphDraftSession &session, const GraphDraft &draft, gc_node_ref_t elem) {
     const DraftNodeHeader *header = draft.header(elem);
     if (!header) {
         return nullptr;
@@ -1293,7 +1308,7 @@ GCGraph *resolveBranchedArmCalleeGraph(const GraphDraft &draft, gc_node_ref_t el
         return nullptr;
     }
     ::Function *function = camel::core::rtdata::fromSlot<::Function *>(fn.value);
-    GCGraph *base        = function ? function->graph() : nullptr;
+    GCGraph *base        = functionGraph(session, function);
     if (!base) {
         return nullptr;
     }
@@ -1532,7 +1547,7 @@ bool devirtualizeBranchedCallInDraft(
     // matching call arity (the same checks devirtualizeStaticCallInDraft performs).
     const auto callNorm = draft.normInputsOf(callNodeId);
     for (gc_node_ref_t callee : armCallees) {
-        GCGraph *target = resolveBranchedArmCalleeGraph(draft, callee);
+        GCGraph *target = resolveBranchedArmCalleeGraph(session, draft, callee);
         if (!target || target->withPorts().size() != callWith.size() - 1 ||
             target->normPorts().size() != callNorm.size()) {
             return false;
@@ -1845,7 +1860,9 @@ DraftInlineResult inlineCallableInDraft(
         return result;
     }
     const auto *funcBody = reinterpret_cast<const GCFuncBody *>(payloadBytes.data());
-    if (!funcBody->calleeGraph) {
+    const GCGraph *callee =
+        isValid(funcBody->calleeGraph) ? draft.program()->graph(funcBody->calleeGraph) : nullptr;
+    if (callee == nullptr) {
         CAMEL_LOG_INFO_S(
             "DraftInline",
             "Inline splice node {} rejected: null callee graph.",
@@ -1853,10 +1870,10 @@ DraftInlineResult inlineCallableInDraft(
         return result;
     }
 
-    const GraphDraft *calleeDraftView             = session.tryDraft(funcBody->calleeGraph);
+    const GraphDraft *calleeDraftView             = session.tryDraft(callee);
     const std::vector<gc_node_ref_t> actualInputs = orderedFuncActualInputs(draft, funcNodeId);
     const auto formalNodes = calleeDraftView ? orderedDirectCallFormalNodes(*calleeDraftView)
-                                             : orderedDirectCallFormalNodes(funcBody->calleeGraph);
+                                             : orderedDirectCallFormalNodes(callee);
     if (actualInputs.size() != formalNodes.size()) {
         CAMEL_LOG_INFO_S(
             "DraftInline",
@@ -1867,9 +1884,9 @@ DraftInlineResult inlineCallableInDraft(
         return DraftInlineResult{};
     }
     const gc_node_ref_t calleeEntry =
-        calleeDraftView ? calleeDraftView->entryNode() : funcBody->calleeGraph->entryNodeRef();
+        calleeDraftView ? calleeDraftView->entryNode() : callee->entryNodeRef();
     const gc_node_ref_t calleeOutput =
-        calleeDraftView ? calleeDraftView->outputNode() : funcBody->calleeGraph->outputNodeRef();
+        calleeDraftView ? calleeDraftView->outputNode() : callee->outputNodeRef();
     if (calleeEntry == kInvalidNodeRef || calleeOutput == kInvalidNodeRef) {
         CAMEL_LOG_INFO_S(
             "DraftInline",
@@ -1884,7 +1901,7 @@ DraftInlineResult inlineCallableInDraft(
         "DraftInline",
         "Inline splice node {} validated callee graph {:p}.",
         funcNodeId,
-        static_cast<void *>(funcBody->calleeGraph));
+        static_cast<const void *>(callee));
 
     // What the body has to wait on: the control predecessors of the call, and the arguments
     // that place the call inside a branch arm (see armPlacingArguments).
@@ -1901,7 +1918,7 @@ DraftInlineResult inlineCallableInDraft(
 
     DraftGraphCloneResult cloned = calleeDraftView
                                        ? cloneDraftGraphIntoDraft(draft, *calleeDraftView)
-                                       : cloneRuntimeGraphIntoDraft(draft, funcBody->calleeGraph);
+                                       : cloneRuntimeGraphIntoDraft(draft, callee);
     CAMEL_LOG_INFO_S(
         "DraftInline",
         "Inline splice node {} cloned {} nodes from callee.",
@@ -1909,7 +1926,7 @@ DraftInlineResult inlineCallableInDraft(
         cloned.clonedNodes.size());
     const std::vector<gc_node_ref_t> entryRoots =
         calleeDraftView ? collectExecutableEntryRoots(*calleeDraftView, cloned.sourceToCloned)
-                        : collectExecutableEntryRoots(funcBody->calleeGraph, cloned.sourceToCloned);
+                        : collectExecutableEntryRoots(callee, cloned.sourceToCloned);
     CAMEL_LOG_INFO_S(
         "DraftInline",
         "Inline splice node {} collected {} executable entry roots.",
@@ -1918,7 +1935,7 @@ DraftInlineResult inlineCallableInDraft(
 
     const auto clonedFormalNodes =
         calleeDraftView ? orderedClonedDirectCallFormalNodes(cloned, *calleeDraftView)
-                        : orderedClonedDirectCallFormalNodes(cloned, funcBody->calleeGraph);
+                        : orderedClonedDirectCallFormalNodes(cloned, callee);
     ASSERT(
         clonedFormalNodes.size() == formalNodes.size(),
         "Runtime inline formal-node planning diverged between source and cloned graphs.");
@@ -2003,12 +2020,8 @@ DraftInlineResult inlineCallableInDraft(
         draft.setCtrlInputs(gateId, gateCtrl);
     }
 
-    result.valueExit = resolveInlineValueExit(
-        draft,
-        cloned,
-        funcBody->calleeGraph,
-        calleeDraftView,
-        boundActualInputs);
+    result.valueExit =
+        resolveInlineValueExit(draft, cloned, callee, calleeDraftView, boundActualInputs);
     if (result.valueExit == kInvalidNodeRef) {
         return DraftInlineResult{};
     }
@@ -2022,14 +2035,10 @@ DraftInlineResult inlineCallableInDraft(
                 result.valueExit,
                 draft.header(result.valueExit) ? draft.header(result.valueExit)->dataIndex : 0,
                 "<draft>",
-                funcBody->calleeGraph ? funcBody->calleeGraph->name() : "<null>"));
+                callee->name()));
     }
-    result.ctrlExit = resolveInlineCtrlExit(
-        draft,
-        cloned,
-        funcBody->calleeGraph,
-        calleeDraftView,
-        boundActualInputs);
+    result.ctrlExit =
+        resolveInlineCtrlExit(draft, cloned, callee, calleeDraftView, boundActualInputs);
     if (result.ctrlExit == kInvalidNodeRef) {
         result.ctrlExit = result.valueExit;
     }

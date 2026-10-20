@@ -51,16 +51,39 @@ void GCGraphManager::freeGraph(GCGraph *graph) {
     mm::graphSpace().free(graph);
 }
 
-const Program *
-makeProgram(camel::core::context::Context &context, std::span<GCGraph *const> graphs) {
+const Program *makeProgram(
+    camel::core::context::Context &context, const Program *base, std::span<GCGraph *const> graphs) {
     Program *program = context.reserveProgram();
+    if (base != nullptr) {
+        *program = *base;
+    }
     for (GCGraph *graph : graphs) {
         program->bind(graph->id(), graph);
     }
     if (!graphs.empty()) {
         program->setRoot(graphs.front());
     }
+    context.retainRuntimeGraphs(graphs);
     return program;
+}
+
+void GCGraphManager::retain(std::span<GCGraph *const> graphs) {
+    mm::NoCollectionScope noCollection;
+    std::lock_guard lock(mutex_);
+    for (GCGraph *graph : graphs) {
+        retained_.push_back(graph);
+        gcRoots_.push_back(graph);
+    }
+}
+
+const Program *GCGraphManager::programOf(const GCGraph *graph) const {
+    std::lock_guard lock(mutex_);
+    for (auto program = programs_.rbegin(); program != programs_.rend(); ++program) {
+        if ((*program)->contains(graph)) {
+            return program->get();
+        }
+    }
+    return nullptr;
 }
 
 Program *GCGraphManager::reserve() {
@@ -182,6 +205,7 @@ void GCGraphManager::rebuildGcRoots() {
             gcRoots_.push_back(graph);
         }
     }
+    gcRoots_.insert(gcRoots_.end(), retained_.begin(), retained_.end());
 }
 
 GCGraphManager::~GCGraphManager() {
@@ -194,6 +218,10 @@ GCGraphManager::~GCGraphManager() {
         }
     }
     pinned_.clear();
+    for (GCGraph *graph : retained_) {
+        freeGraph(graph);
+    }
+    retained_.clear();
     gcRoots_.clear();
 }
 

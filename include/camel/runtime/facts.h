@@ -72,6 +72,7 @@
 #pragma once
 
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 #include <cstdint>
 #include <functional>
@@ -110,9 +111,12 @@ using KindId = uint32_t;
 inline constexpr KindId kNoKind = UINT32_MAX;
 
 /// What a fact is about: a node of a graph, or the graph as a whole (node == kInvalidNodeRef).
+/// `program` is the program the graph is read in: the graphs it refers to are the ones that
+/// program holds.
 struct Anchor {
-    const GCGraph *graph = nullptr;
-    gc_node_ref_t node   = kInvalidNodeRef;
+    const Program *program = nullptr;
+    const GCGraph *graph   = nullptr;
+    gc_node_ref_t node     = kInvalidNodeRef;
 };
 
 /// The value of a fact, type-erased; the kind records the type (KindInfo::payload).
@@ -149,7 +153,7 @@ struct KindInfo {
     /// The anchors in `graph` at which the kind has a fact to compute (computeFacts): by
     /// default every node (Node) or the graph (Graph); CrossNode and CrossGraph kinds that
     /// want to be computed in bulk say where.
-    std::function<std::vector<std::vector<Anchor>>(const GCGraph &)> anchorsIn;
+    std::function<std::vector<std::vector<Anchor>>(const Program &, const GCGraph &)> anchorsIn;
 };
 
 /**
@@ -177,7 +181,7 @@ template <typename T> struct KindSpec {
     std::function<uint64_t(std::span<const Anchor>)> cone;
     std::function<std::string(const T &)> encode;
     std::function<std::optional<T>(std::string_view)> decode;
-    std::function<std::vector<std::vector<Anchor>>(const GCGraph &)> anchorsIn;
+    std::function<std::vector<std::vector<Anchor>>(const Program &, const GCGraph &)> anchorsIn;
 };
 
 /// Registers a kind, type-erased (see registerKind<T>). Throws std::invalid_argument naming the
@@ -373,7 +377,7 @@ class FactStore {
 /// kind that has compute and is not GraphContent, at every anchor the kind names
 /// (KindInfo::anchorsIn): what a consumer would obtain one by one. Facts already stored and
 /// valid are kept.
-void computeFacts(FactStore &store, GCGraph *root);
+void computeFacts(FactStore &store, const Program &program);
 
 /**
  * `camel inspect --facts`: one line `FACT {json}` per fact about the graphs reachable from
@@ -384,6 +388,6 @@ void computeFacts(FactStore &store, GCGraph *root);
  * GraphContent). Stale facts are not printed (and are dropped). Ordered by kind, then graph and
  * node.
  */
-void dumpFacts(FactStore &store, GCGraph *root, std::ostream &os);
+void dumpFacts(FactStore &store, const Program &program, std::ostream &os);
 
 } // namespace camel::runtime::fact

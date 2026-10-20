@@ -701,7 +701,7 @@ DraftNode *GraphDraft::createDecodedNode(
     } else if (sourceNode->kind == GCNodeKind::Func) {
         // A frozen FUNC names its callee by reference-table index; a draft holds the callee.
         *DraftNodeView::payloadAs<GCFuncBody>(draftNode) =
-            GCFuncBody{.calleeGraph = graph->directCalleeGraphOf(sourceRef)};
+            GCFuncBody{.calleeGraph = graph->calleeIdOf(sourceRef)};
     } else if (sourceNode->kind == GCNodeKind::Loop) {
         *DraftNodeView::payloadAs<GCLoopBody>(draftNode) = loopBodyOf(*graph, sourceRef);
     } else if (const auto body = graph->nodePayloadBytes(sourceRef); !body.empty()) {
@@ -727,7 +727,7 @@ DraftNode *GraphDraft::createDecodedNode(
     return draftNode;
 }
 
-std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
+std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph draft decode requires a non-null graph.");
     CAMEL_LOG_INFO_S(
         "GraphDraft",
@@ -736,6 +736,8 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
         graph->nodeCount());
     auto draft       = std::make_unique<GraphDraft>();
     draft->id_       = graph->id();
+    draft->outerGraphId_           = graph->outerGraphId();
+    draft->program_                = &program;
     draft->typeSpecializationRoot_ = graph->typeSpecializationRoot();
     draft->flags_                  = graph->flags();
     draft->funcType_ = graph->funcType();
@@ -1345,15 +1347,16 @@ void GraphDraft::setStaticSlot(size_t index, slot_t value) {
     staticSlots_[index] = value;
 }
 
-void GraphDraft::addDependency(GCGraph *graph) {
-    if (graph &&
+void GraphDraft::addDependency(GraphId graph) {
+    if (isValid(graph) &&
         std::find(dependencies_.begin(), dependencies_.end(), graph) == dependencies_.end()) {
         dependencies_.push_back(graph);
     }
 }
 
-void GraphDraft::addSubGraph(GCGraph *graph) {
-    if (graph && std::find(subGraphs_.begin(), subGraphs_.end(), graph) == subGraphs_.end()) {
+void GraphDraft::addSubGraph(GraphId graph) {
+    if (isValid(graph) &&
+        std::find(subGraphs_.begin(), subGraphs_.end(), graph) == subGraphs_.end()) {
         subGraphs_.push_back(graph);
     }
 }
@@ -1362,11 +1365,19 @@ void GraphDraft::addCaptureName(std::string_view name) {
     captureNames_.push_back(camel::core::internSymbol(name));
 }
 
-void GraphDraft::addStaticGraphRef(GCGraph *graph) {
-    if (graph && std::find(staticGraphRefs_.begin(), staticGraphRefs_.end(), graph) ==
-                     staticGraphRefs_.end()) {
+void GraphDraft::addStaticGraphRef(GraphId graph) {
+    if (isValid(graph) && std::find(staticGraphRefs_.begin(), staticGraphRefs_.end(), graph) ==
+                              staticGraphRefs_.end()) {
         staticGraphRefs_.push_back(graph);
     }
+}
+
+GCGraph *GraphDraft::calleeOf(gc_node_ref_t id) const {
+    const DraftNodeHeader *h = header(id);
+    if (program_ == nullptr || h == nullptr || h->kind != GCNodeKind::Func) {
+        return nullptr;
+    }
+    return program_->graph(reinterpret_cast<const GCFuncBody *>(payloadOf(id).data())->calleeGraph);
 }
 
 GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &name) const {
@@ -1387,7 +1398,7 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
         frameSlotTypes(),
         staticDataType,
         closureType_,
-        nullptr,
+        outerGraphId_,
         dependencies_,
         subGraphs_,
         staticGraphRefs_,

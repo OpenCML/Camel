@@ -44,6 +44,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_ref.h"
+#include "camel/runtime/program.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -205,7 +206,19 @@ class DraftNodePool {
 
 class GraphDraft {
   public:
-    static std::unique_ptr<GraphDraft> decode(const GCGraph *graph);
+    /// A draft of `graph`, a graph of `program`: the draft reads the graphs it refers to (the
+    /// callees of its FUNC nodes) in `program`. Graphs are named in a draft by GraphId.
+    static std::unique_ptr<GraphDraft> decode(const Program &program, const GCGraph *graph);
+
+    /// The program the draft resolves the graphs it refers to in; null for a draft the front
+    /// end builds, whose graphs do not exist yet.
+    const Program *program() const { return program_; }
+    void setProgram(const Program *program) { program_ = program; }
+    /// The graph the draft's graph is written in (GCGraph::outerGraphId).
+    GraphId outerGraphId() const { return outerGraphId_; }
+    void setOuterGraphId(GraphId outer) { outerGraphId_ = outer; }
+    /// The callee of FUNC node `id` and the two graphs of LOOP node `id`, read in program().
+    GCGraph *calleeOf(gc_node_ref_t id) const;
 
     GraphDraft()  = default;
     ~GraphDraft() = default;
@@ -277,9 +290,9 @@ class GraphDraft {
 
     std::span<const slot_t> staticSlots() const { return staticSlots_; }
     std::span<camel::core::type::Type *const> staticSlotTypes() const { return staticSlotTypes_; }
-    const std::vector<GCGraph *> &dependencies() const { return dependencies_; }
-    const std::vector<GCGraph *> &subGraphs() const { return subGraphs_; }
-    const std::vector<GCGraph *> &staticGraphRefs() const { return staticGraphRefs_; }
+    const std::vector<GraphId> &dependencies() const { return dependencies_; }
+    const std::vector<GraphId> &subGraphs() const { return subGraphs_; }
+    const std::vector<GraphId> &staticGraphRefs() const { return staticGraphRefs_; }
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> normInputsOf(const DraftNode *node) const;
@@ -343,7 +356,7 @@ class GraphDraft {
     gc_node_ref_t addCallNode(
         camel::core::type::Type *type, const GCCallBody &body = {}, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addFuncNode(
-        GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
+        GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
         gc_slot_idx_t dataIndex = 0);
     /// A LOOP node calling `body.condGraph` and `body.bodyGraph` (camel/runtime/loop.h); the
     /// caller links its inputs and keeps the two graphs among the draft's dependencies.
@@ -416,9 +429,9 @@ class GraphDraft {
     gc_node_ref_t
     materializeStaticValue(slot_t value, camel::core::type::Type *type, uint8_t runtimeFlags = 0);
     void setStaticSlot(size_t index, slot_t value);
-    void addDependency(GCGraph *graph);
-    void addSubGraph(GCGraph *graph);
-    void addStaticGraphRef(GCGraph *graph);
+    void addDependency(GraphId graph);
+    void addSubGraph(GraphId graph);
+    void addStaticGraphRef(GraphId graph);
 
     GCGraph *encode(const std::string &mangledName, const std::string &name) const;
 
@@ -442,6 +455,8 @@ class GraphDraft {
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
 
     GraphId id_                                = kInvalidGraphId;
+    GraphId outerGraphId_                      = kInvalidGraphId;
+    const Program *program_                    = nullptr;
     GraphId typeSpecializationRoot_            = kInvalidGraphId;
     uint8_t flags_                             = 0;
     camel::core::type::FunctionType *funcType_ = nullptr;
@@ -468,9 +483,9 @@ class GraphDraft {
     std::vector<gc_node_ref_t> closureNodes_;
     std::vector<slot_t> staticSlots_;
     std::vector<camel::core::type::Type *> staticSlotTypes_;
-    std::vector<GCGraph *> dependencies_;
-    std::vector<GCGraph *> subGraphs_;
-    std::vector<GCGraph *> staticGraphRefs_;
+    std::vector<GraphId> dependencies_;
+    std::vector<GraphId> subGraphs_;
+    std::vector<GraphId> staticGraphRefs_;
 };
 
 } // namespace camel::runtime

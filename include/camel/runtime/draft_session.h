@@ -119,6 +119,13 @@ class RuntimeGraphDraftSession {
 
     /// The program the session rewrites; after a commit, the program it produced.
     const Program *program() const { return program_; }
+    /// The program the drafts of the session read the graphs they refer to in: `program()`
+    /// and what the session added to it (the graphs of function values of other programs it
+    /// met, the specializations it made). Not a published program.
+    const Program &work() const { return *work_; }
+    /// Makes the graphs of `program` that `work()` lacks, and `graph`, visible to the drafts.
+    void adoptProgram(const Program &program) const;
+    void adoptGraph(GCGraph *graph) const;
     GCGraph *runtimeRoot() const { return runtimeRoot_; }
     /// The context of the program the session rewrites.
     const camel::core::context::context_ptr_t &context() const { return context_; }
@@ -156,7 +163,8 @@ class RuntimeGraphDraftSession {
 
     camel::core::context::context_ptr_t context_;
     const Program *program_ = nullptr;
-    GCGraph *runtimeRoot_   = nullptr;
+    mutable std::unique_ptr<Program> work_;
+    GCGraph *runtimeRoot_ = nullptr;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
     /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself.
     /// The commit drops those it encodes back to the same content (sameContent).
@@ -168,51 +176,50 @@ class RuntimeGraphDraftSession {
 };
 
 /// Encodes new graphs that may refer to one another, such as the mutually recursive graphs a
-/// transform synthesizes. Each member is reserved first: the returned key stands for the graph
-/// wherever a GCGraph pointer goes in the drafts (FUNC callees, static Function values), and
-/// encode() replaces every such reference with the encoded graph. A key is never dereferenced
-/// and must not escape the drafts of its group.
+/// transform synthesizes. Each member is reserved first: the returned GraphId is the graph's,
+/// wherever a graph is named in the drafts (FUNC callees, static Function values), and encode()
+/// builds the graphs. The members form a program with the graphs of the one the group is made
+/// over (program()).
 class GraphDraftGroup {
   public:
-    explicit GraphDraftGroup(const camel::core::context::context_ptr_t &context);
+    GraphDraftGroup(const camel::core::context::context_ptr_t &context, const Program *base);
     ~GraphDraftGroup();
 
     GraphDraftGroup(const GraphDraftGroup &)            = delete;
     GraphDraftGroup &operator=(const GraphDraftGroup &) = delete;
 
-    /// Reserves a member with an empty draft and returns its key.
-    GCGraph *reserve(std::string mangledName, std::string name);
+    /// Reserves a member with an empty draft and returns its id.
+    GraphId reserve(std::string mangledName, std::string name);
     /// The draft of a member.
-    GraphDraft &draft(GCGraph *key);
+    GraphDraft &draft(GraphId id);
     /// Replaces the draft of a member.
-    void define(GCGraph *key, std::unique_ptr<GraphDraft> draft);
+    void define(GraphId id, std::unique_ptr<GraphDraft> draft);
 
+    /// Makes the graphs of `program` that the group's program lacks visible to the members (the
+    /// specializations and copies the transformation made on the way, which members call).
+    void adopt(const Program &program);
     /// Encodes all members.
     void encode();
-    /// The graph encoded for `key`.
-    GCGraph *encoded(GCGraph *key) const;
-    /// The program of the members, the first one reserved as its root. A function value of a
-    /// member made before encode() names its graph in it by the member's id (idOf); the graph
-    /// is the member's key until the group is encoded.
+    /// The graph encoded for `id`.
+    GCGraph *encoded(GraphId id) const;
+    /// The program of the group: the graphs of the program it is made over, and the members
+    /// once encoded, the first one reserved as its root. A function value made for a member
+    /// before encode() can name it in this program; it resolves once the group is encoded.
     const Program *program() const { return program_; }
-    /// The id the graph of the member `key` has.
-    GraphId idOf(GCGraph *key) const { return member(key).id; }
 
   private:
     struct Member {
         RuntimeDraftIdentity identity;
-        GraphId id = kInvalidGraphId;
         std::unique_ptr<GraphDraft> draft;
         GCGraph *encoded = nullptr;
-        std::byte keyStorage{};
     };
 
-    Member &member(GCGraph *key);
-    const Member &member(GCGraph *key) const;
+    Member &member(GraphId id);
+    const Member &member(GraphId id) const;
 
     camel::core::context::context_ptr_t context_;
-    std::unordered_map<GCGraph *, std::unique_ptr<Member>> members_;
-    std::vector<GCGraph *> order_;
+    std::unordered_map<GraphId, std::unique_ptr<Member>> members_;
+    std::vector<GraphId> order_;
     Program *program_ = nullptr;
     bool encoded_     = false;
 };

@@ -62,6 +62,7 @@ namespace {
 /// What the three graphs of one lowered loop need to know about it.
 struct LoopShape {
     GCGraph *owner         = nullptr; // the graph the LOOP node is in
+    const Program *program = nullptr; // the program that holds the graphs
     gc_node_ref_t node     = kInvalidNodeRef;
     LoopKind kind          = LoopKind::While;
     GCGraph *cond          = nullptr;
@@ -136,7 +137,7 @@ gc_node_ref_t addOper(
 }
 
 gc_node_ref_t addCall(
-    GraphDraft &draft, GCGraph *callee, Type *type, std::span<const gc_node_ref_t> norm,
+    GraphDraft &draft, GraphId callee, Type *type, std::span<const gc_node_ref_t> norm,
     std::span<const gc_node_ref_t> with) {
     const gc_node_ref_t node = draft.addFuncNode(callee, type);
     draft.setNormInputs(node, norm);
@@ -200,7 +201,7 @@ gc_node_ref_t addAccs(GraphDraft &draft, gc_node_ref_t tuple, Type *type, uint32
 /// `next(S; c, i, xs) = rec(i + 1, body(xs[i], S; c); c, xs)`; a collecting loop's body also
 /// produces the values of the slots, which are appended to the tapes the state carries (one
 /// `:loop/collect` per slot), and the next state is the (state…, tape…) tuple.
-std::unique_ptr<GraphDraft> buildNext(const LoopShape &loop, GCGraph *rec) {
+std::unique_ptr<GraphDraft> buildNext(const LoopShape &loop, GraphId rec) {
     auto draft = std::make_unique<GraphDraft>();
     std::vector<NamedParam> withParams{{kStateName, loop.stateType}};
     for (auto &param : captureParams(loop)) {
@@ -236,7 +237,8 @@ std::unique_ptr<GraphDraft> buildNext(const LoopShape &loop, GCGraph *rec) {
         bodyArgs.push_back(value);
     }
     Type *producedType           = loop.collectionCount != 0 ? loop.bodyType : loop.stateType;
-    const gc_node_ref_t produced = addCall(*draft, loop.body, producedType, bodyArgs, captures);
+    const gc_node_ref_t produced =
+        addCall(*draft, loop.body->id(), producedType, bodyArgs, captures);
 
     gc_node_ref_t nextState = produced;
     if (loop.collectionCount != 0) {
@@ -283,7 +285,7 @@ std::unique_ptr<GraphDraft> buildNext(const LoopShape &loop, GCGraph *rec) {
 }
 
 /// `rec(i, S; c, xs) = if go then next(...) else done(S)`, the arms as graphs under a BRCH.
-std::unique_ptr<GraphDraft> buildRec(const LoopShape &loop, GCGraph *next, GCGraph *done) {
+std::unique_ptr<GraphDraft> buildRec(const LoopShape &loop, GraphId next, GraphId done) {
     auto draft                         = std::make_unique<GraphDraft>();
     std::vector<NamedParam> withParams = captureParams(loop), normParams;
     if (loop.iterates()) {
@@ -309,7 +311,7 @@ std::unique_ptr<GraphDraft> buildRec(const LoopShape &loop, GCGraph *next, GCGra
     // Whether to go on: the condition first (it sees the state), then an element left.
     gc_node_ref_t go = kInvalidNodeRef;
     if (loopHasCondition(loop.kind)) {
-        go = addCall(*draft, loop.cond, Type::Bool(), unpackState(*draft, loop, s), captures);
+        go = addCall(*draft, loop.cond->id(), Type::Bool(), unpackState(*draft, loop, s), captures);
     }
     if (loop.iterates()) {
         const gc_node_ref_t length = addOper(
@@ -362,10 +364,11 @@ std::unique_ptr<GraphDraft> buildRec(const LoopShape &loop, GCGraph *next, GCGra
     return draft;
 }
 
-LoopShape shapeOf(GCGraph *owner, gc_node_ref_t node) {
-    const LoopView view(*owner, node);
+LoopShape shapeOf(const Program &program, GCGraph *owner, gc_node_ref_t node) {
+    const LoopView view(program, *owner, node);
     LoopShape loop;
     loop.owner           = owner;
+    loop.program         = &program;
     loop.node            = node;
     loop.kind            = view.kind();
     loop.cond            = view.condGraph();
@@ -396,7 +399,7 @@ LoopShape shapeOf(GCGraph *owner, gc_node_ref_t node) {
 }
 
 /// Replaces the LOOP node of `loop` in `draft` (the draft of loop.owner) by a call of `rec`.
-void replaceLoop(GraphDraft &draft, const LoopShape &loop, GCGraph *rec) {
+void replaceLoop(GraphDraft &draft, const LoopShape &loop, GraphId rec) {
     const gc_node_ref_t id = draft.draftIdOfSourceRef(loop.node);
     ASSERT(id != kInvalidNodeRef, "A lowered loop's node is not in its graph's draft.");
     const auto norm = draft.normInputsOf(id);
@@ -555,9 +558,9 @@ void handOriginalsToGraphReaders(RuntimeGraphDraftSession &session) {
 
 } // namespace
 
-bool programHasLoops(GCGraph *root) {
+bool programHasLoops(const Program &program, GCGraph *root) {
     bool found = false;
-    forEachReachableGraph(root, [&](GCGraph *graph) {
+    forEachReachableGraph(program, root, [&](GCGraph *graph) {
         for (gc_node_ref_t ref = 0; !found && ref < graph->nodeCount(); ++ref) {
             found = graph->node(ref)->kind == GCNodeKind::Loop;
         }
@@ -572,7 +575,7 @@ const Program *lowerLoopsToTailRecursion(
 
 const Program *lowerLoopsToTailRecursion(
     const camel::core::context::context_ptr_t &context, const Program *program, GCGraph *root) {
-    if (program == nullptr || root == nullptr || !programHasLoops(root)) {
+    if (program == nullptr || root == nullptr || !programHasLoops(*program, root)) {
         return program;
     }
     RuntimeGraphDraftSession session(context, program, root);
@@ -580,15 +583,15 @@ const Program *lowerLoopsToTailRecursion(
     for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
         for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
             if (graph->node(ref)->kind == GCNodeKind::Loop) {
-                loops.push_back(shapeOf(graph, ref));
+                loops.push_back(shapeOf(session.work(), graph, ref));
             }
         }
     }
 
     // The new graphs of every loop, in one group: rec and next refer to each other.
-    GraphDraftGroup group(context);
+    GraphDraftGroup group(context, program);
     struct Members {
-        GCGraph *rec, *next, *done;
+        GraphId rec, next, done;
     };
     std::vector<Members> members;
     for (const LoopShape &loop : loops) {
@@ -608,9 +611,14 @@ const Program *lowerLoopsToTailRecursion(
         members.push_back(m);
     }
     group.encode();
+    for (const Members &m : members) {
+        session.adoptGraph(group.encoded(m.rec));
+        session.adoptGraph(group.encoded(m.next));
+        session.adoptGraph(group.encoded(m.done));
+    }
 
     for (size_t i = 0; i < loops.size(); ++i) {
-        replaceLoop(session.edit(loops[i].owner), loops[i], group.encoded(members[i].rec));
+        replaceLoop(session.edit(loops[i].owner), loops[i], members[i].rec);
     }
     handOriginalsToGraphReaders(session);
     return session.commit(/*detached=*/true);

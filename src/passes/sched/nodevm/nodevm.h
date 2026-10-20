@@ -26,6 +26,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
+#include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/runtime_sched.h"
 #include "camel/runtime/graph.h"
@@ -62,6 +63,8 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     // Activations of call() on the native stack, the entry graph's included.
     size_t currRecursionDepth_ = 0;
     ctx::FramePool framePool_;
+    // The programs whose graphs this run executes (a frozen graph names its callees by id).
+    camel::execute::RunPrograms programs_;
     std::vector<std::unique_ptr<NodeVMGraphCache>> graphCaches_;
     std::vector<std::unique_ptr<NodeVMCallLayoutCache>> callLayoutCaches_;
     std::vector<runtime_data_idx_t> operIndices_;

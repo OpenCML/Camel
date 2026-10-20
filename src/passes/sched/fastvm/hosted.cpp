@@ -51,13 +51,15 @@ void fastVmSafepointSlowPath() {
 }
 
 void FastVMHostImage::build(
-    const ctx::context_ptr_t &context, std::span<camel::runtime::GCGraph *const> graphs) {
+    const ctx::context_ptr_t &context, const camel::runtime::Program &program,
+    std::span<camel::runtime::GCGraph *const> graphs) {
     ASSERT(codes_.empty() && entries_.empty(), "A host image is built once.");
     if (graphs.empty()) {
         return;
     }
     auto linked = compileAndLinkGraphs(
         context,
+        program,
         graphs,
         kHostedCompileStrategy,
         [](camel::runtime::GCGraph *) { return std::optional<size_t>{}; },

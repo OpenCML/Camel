@@ -94,11 +94,11 @@ const runtime::Program *outlineRegions(
     std::unordered_map<rt::GCGraph *, RegionAnalysis> analyses;
     std::unordered_set<rt::GCGraph *> claimedBodies;
     for (auto *graph : graphs) {
-        auto analysis = analyzeRegions(*graph, context.facts());
+        auto analysis = analyzeRegions(*program, *graph, context.facts());
         for (const auto &region : analysis.regions)
             for (auto id : region.members)
                 if (graph->node(id)->kind == rt::GCNodeKind::Loop)
-                    claimedBodies.insert(rt::LoopView(*graph, id).bodyGraph());
+                    claimedBodies.insert(rt::LoopView(*program, *graph, id).bodyGraph());
         analyses.emplace(graph, std::move(analysis));
     }
     for (auto *graph : graphs) {
@@ -132,7 +132,7 @@ const runtime::Program *outlineRegions(
             extracted.graph->setId(context.graphIds().allocate());
             auto *callee = extracted.graph->encode(name, name);
             auto *fn     = ::Function::create(
-                rt::makeProgram(context, std::span(&callee, 1)),
+                rt::makeProgram(context, program, std::span(&callee, 1)),
                 callee->id(),
                 core::type::TupleType::create(std::vector<core::type::Type *>{}),
                 core::mm::autoSpace());

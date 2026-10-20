@@ -274,7 +274,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         }
     }
 
-    graph->traceGraphs([&](camel::runtime::GCGraph *dep) {
+    program_->traceGraphs(*graph, [&](camel::runtime::GCGraph *dep) {
         if (!dep) {
             return;
         }
@@ -358,7 +358,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         if (!node || node->kind == camel::runtime::GCNodeKind::Port) {
             continue;
         }
-        string label   = recordLabel(graph, nodeRef, *node);
+        string label   = recordLabel(*program_, graph, nodeRef, *node);
         string tooltip = recordTooltip(graph, *node);
         string shape   = recordShape(*node);
         string style   = recordStyle(*node);
@@ -643,7 +643,11 @@ GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context)
 GraphVizDumpPass::GraphVizDumpPass(const context_ptr_t &context, GraphVizDumpConfig config)
     : RuntimeGraphTranslatePass(context), config_(std::move(config)) {}
 
-std::string GraphVizDumpPass::dumpDot(camel::runtime::GCGraph *graph) { return dumpGraph(graph); }
+std::string GraphVizDumpPass::dumpDot(camel::runtime::GCGraph *graph) {
+    program_ = context_->programOfRuntimeGraph(graph);
+    ASSERT(program_ != nullptr, "A graph to dump belongs to no program of the context.");
+    return dumpGraph(graph);
+}
 
 std::string dumpCompactRuntimeGraph(camel::runtime::GCGraph *graph, const context_ptr_t &ctx) {
     if (!graph || !graph->hasNodePayload()) {
@@ -657,6 +661,7 @@ std::string dumpCompactRuntimeGraph(camel::runtime::GCGraph *graph, const contex
 const camel::runtime::Program *
 GraphVizDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     camel::runtime::GCGraph *graph = program->root();
+    program_                       = program;
     os << dumpGraph(graph);
     return nullptr;
 }

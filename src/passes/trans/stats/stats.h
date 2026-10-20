@@ -31,6 +31,7 @@
 
 #include "camel/execute/pass/opt.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 #include <string>
 
@@ -55,6 +56,8 @@ struct GraphStats {
 /// Statistics of every graph reachable from `root`.
 GraphStats collectGraphStats(
     const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *root);
+/// The same for a graph of `program`.
+GraphStats collectGraphStats(const camel::runtime::Program &program, camel::runtime::GCGraph *root);
 
 class GraphStatsPass : public RuntimeGraphRewritePass {
   public:
