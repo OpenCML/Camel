@@ -102,7 +102,7 @@ camel showcase\c2-mlp-mnist\train.cml `
 ## 并排对照的要点
 
 - **参数就是类型**：Camel 的 `type Mlp = { w1, b1, w2, b2 }` 同时是初始权重、梯度和优化器
-  状态的类型；`value_and_grad(loss)<m>(x, y)` 直接给出同形状的梯度树，`adam(m, g, state, lr)`
+  状态的类型；`value_and_grad(loss)(m, x, y)` 直接给出同形状的梯度树，`adam(m, g, state, lr)`
   直接吃这棵树，程序里没有一处按名字数叶子。PyTorch 要 `nn.Module` + `optimizer` 对象 +
   `state_dict` 三套东西来分别表达同一件事。
 - **训练是表达式**：整个训练是一次 `loop`，状态（模型、优化器状态、步数）显式列出，不需要

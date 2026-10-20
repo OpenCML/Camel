@@ -698,7 +698,7 @@ args = ["${case}", 'onnx::export(out="${test_tmp}/pass_export_refused_a.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 29
+expect_diagnostic_line = 28
 expect_diagnostic_column = 1
 expect_output_contains = ["run std::opt before onnx::export"]
 expect_output_not_contains = ["exported"]
@@ -721,7 +721,7 @@ args = ["${case}", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_refuse
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 25
+expect_diagnostic_line = 24
 expect_diagnostic_column = 14
 expect_output_contains = ["macro operator 'autodiff:value_and_grad' is not expanded; run std::macro"]
 expect_output_not_contains = ["exported"]
@@ -744,7 +744,7 @@ case = "../../../cases/modules/onnx/pass_export.py"
 args = ["${case}", "refuse"]
 skip_unless = ["${python}", "-c", "import json"]
 expect_exit = 0
-expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:80 file written: False", "onnx::export refuse: PASS"]
+expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:28:1 file written: False", "stage pass:onnx::export at export_train_step.cml:24:14 file written: False", "at export_nontail_recursion.cml:12:80 file written: False", "onnx::export refuse: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
@@ -1974,7 +1974,7 @@ case = "../../../cases/modules/onnx/entry/train_step.cml"
 args = ["${case}", "std::opt", 'onnx::export(out="${test_tmp}/entry_train_step_refused.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 22
+expect_diagnostic_line = 23
 expect_output_contains = ["macro operator 'autodiff:value_and_grad' is not expanded", "run std::macro"]
 expect_output_not_contains = ["onnx::export: wrote"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

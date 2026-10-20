@@ -81,14 +81,15 @@ class GradResolver final : public type::FuncTypeResolver {
             return std::nullopt;
         }
         return std::format(
-            "cannot differentiate a function of type {}: it must return a float and take a "
-            "parameter that has a gradient (a float, a tensor, or a struct or tuple of them)",
-            norm[0]->toString());
+            "cannot differentiate a function of type {}: {}",
+            norm[0]->toString(),
+            differentiationRefusal(tt::as_ptr<FunctionType>(norm[0])));
     }
 
     std::string signature() const override {
-        return withValue_ ? "(f: <W...>(N...) => float) => <W...>(N...) => (float, gradient)"
-                          : "(f: <W...>(N...) => float) => <W...>(N...) => gradient";
+        return withValue_
+                   ? "(f: <W...>(N...) => float) => <W...>(N...) => (float, gradient of N0)"
+                   : "(f: <W...>(N...) => float) => <W...>(N...) => gradient of N0";
     }
 
   private:

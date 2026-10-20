@@ -148,24 +148,34 @@ expression.
 type Linear = { w: Tensor, b: Tensor }
 type Mlp    = { l1: Linear, l2: Linear }
 
-with <m: Mlp>
-func loss(x: Tensor, y: Tensor): float {
-    return mse(forward<m>(x), y)
+func loss(m: Mlp, x: Tensor, y: Tensor): float {
+    return mse(forward(m, x), y)
 }
 
-let g        = grad(loss)              // macro: <m: Mlp> (x, y) => Mlp'
-let dm       = g<model>(x, y)          // gradients, structured like the model
-let (l, dm2) = value_and_grad(loss)<model>(x, y)
+let g        = grad(loss)              // <with config> (m, x, y) => Mlp'
+let dm       = g(model, x, y)          // gradient shaped like the first normal parameter (m)
+let (l, dm2) = value_and_grad(loss)(model, x, y)
 let model2   = sgd(model, dm, 0.01)    // optimizers are functions over trees
 ```
 
-- Differentiation is with respect to the `with` parameters by default: they
-  are the model, exactly like `forward<m>`. A variant can target norm
-  arguments.
+- Differentiation is with respect to the **first normal parameter** (design
+  principles 9.9); model parameters are ordinary parameters, as in JAX. The
+  other normal parameters are data and are not perturbed.
+- **`with` parameters are configuration** (4.4): they are never differentiated.
+  The gradient function keeps them as `with` parameters, so a call supplies
+  them with angle brackets, `grad(loss)<cfg>(model, x, y)`; the differentiated
+  function's own `with` parameters are passed through unchanged.
 - **Tangent types** are derived statically: `Tensor -> Tensor`,
   `float -> float`, `int`/`bool`/`string` have no tangent,
   structs/tuples/arrays map element-wise and drop non-differentiable members.
-  `grad(loss)` therefore type-checks at compile time.
+  `grad(loss)` therefore type-checks at compile time: the first normal
+  parameter must not be a `var` and must have a tangent, and the function must
+  have at least one normal parameter. Otherwise the call is refused at
+  signature resolution and the message names which condition failed.
+- The gradient has the shape of the first normal parameter, and
+  `value_and_grad` returns `(value, gradient)`. To differentiate another
+  parameter, reorder it to the front with a lambda:
+  `grad((y: Tensor): float => loss(m, x, y))(y)`.
 - `apply_gradients` was removed; a training step is `value_and_grad` + `sgd`.
 
 ## 4. The Transformation
@@ -367,14 +377,15 @@ mutable parameter objects.
 - **Layers are Camel code in a library:** a struct type plus functions, e.g.
   `type Linear = { w, b }`, `func linear(l: Linear, x: Tensor)`,
   `init_linear(in, out)`.
-- **`with <m: Model>` is the implicit `self`.** `forward<m>(x)` threads the
-  whole tree without naming parameters.
+- **A model is a normal parameter.** `forward(m, x)` names the whole tree, and
+  `grad` differentiates it because it is first (9.9). `with <cfg: ...>` is
+  configuration only (4.4): helpers can read it, `grad` never differentiates it.
 - **Gradients have the same shape as the model** (tangent types, §3), so
   optimizers are generic tree functions: `sgd(tree, grads, lr)`, and
   `adam(tree, grads, state, ...)` with a state tree of the same shape. They are
   implemented once over `Struct`/`Tuple`/`Array` values with tensor leaves.
-- **Freezing** uses `stop_gradient(t)`, or differentiation restricted to a
-  subtree.
+- **Freezing** uses `stop_gradient(t)`, or a lambda whose first normal
+  parameter is the subtree to update.
 - **`Parameter` objects** were removed; models are plain trees.
 
 ## 7. ONNX as a Thin Translation Pass

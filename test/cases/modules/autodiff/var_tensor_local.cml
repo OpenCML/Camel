@@ -9,8 +9,7 @@ import { value_and_grad } from autodiff
 
 type P = { p0: Tensor }
 
-with <m: P>
-func loss(x: Tensor): float sync {
+func loss(m: P, x: Tensor): float sync {
     var t = m.p0 * x
     t = t * 2.0
     return sum(t)
@@ -19,7 +18,7 @@ func loss(x: Tensor): float sync {
 func main(): int sync {
     let x = reshape([1.0, 2.0], [2])
     let m = { p0: reshape([0.5, 0.25], [2]) }
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = value_and_grad(loss)(m, x)
     println("value {} grad {}"->format<vg.0, sum(vg.1.p0)>)
     return 0
 }

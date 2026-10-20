@@ -1,0 +1,12 @@
+/** Refused: the first normal parameter is a function value, which has no tangent (9.9). */
+module grad_refuse_function
+import { grad } from autodiff
+
+func apply(f: (t: float) => float, x: float): float {
+    return f(x)
+}
+
+func main(): int sync {
+    println(grad(apply)((t: float): float => t * t, 2.0))
+    return 0
+}

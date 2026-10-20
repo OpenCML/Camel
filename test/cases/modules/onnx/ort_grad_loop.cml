@@ -5,6 +5,9 @@
  * unrolls it into paired Loops. Run by ort_grad_loop.py: w.npy and x.npy are read from the
  * working directory, the native value and gradient are saved there, and the step is exported
  * when ONNX_OUT is set.
+ *
+ * The model is the first normal parameter of each loss (9.9), so the recursion threads it as a
+ * normal parameter too.
  */
 module ort_grad_loop
 import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
@@ -15,35 +18,32 @@ import { get_env } from sys
 type P = { w: Tensor }
 
 // A: a loop whose length depends on the data.
-with <m: P>
-func iterate(i: int, n: int, v: Tensor): Tensor {
-    return if i >= n then v else iterate<m>(i + 1, n, tanh(v @ m.w) + v * 0.5)
+func iterate(m: P, i: int, n: int, v: Tensor): Tensor {
+    return if i >= n then v else iterate(m, i + 1, n, tanh(v @ m.w) + v * 0.5)
 }
 
-with <m: P>
-func loss_a(x: Tensor): float {
-    return sum(iterate<m>(0, int(sum(x * x) * 0.5), x))
+func loss_a(m: P, x: Tensor): float {
+    return sum(iterate(m, 0, int(sum(x * x) * 0.5), x))
 }
 
 // B: the same with a data-dependent branch in the body.
-with <m: P>
-func iterate_b(i: int, n: int, v: Tensor): Tensor {
-    return if i >= n then v else iterate_b<m>(
+func iterate_b(m: P, i: int, n: int, v: Tensor): Tensor {
+    return if i >= n then v else iterate_b(
+        m,
         i + 1,
         n,
         if sum(v) > 0.0 then tanh(v @ m.w) + v * 0.5 else v * 0.8 - (v @ m.w) * 0.1
     )
 }
 
-with <m: P>
-func loss_b(x: Tensor): float {
-    return sum(iterate_b<m>(0, int(sum(x * x) * 0.5), x))
+func loss_b(m: P, x: Tensor): float {
+    return sum(iterate_b(m, 0, int(sum(x * x) * 0.5), x))
 }
 
 func step(w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor) {
     let m = { w: w }
-    let a = value_and_grad(loss_a)<m>(x)
-    let b = value_and_grad(loss_b)<m>(x)
+    let a = value_and_grad(loss_a)(m, x)
+    let b = value_and_grad(loss_b)(m, x)
     return (reshape([a.0], [1]), a.1.w, reshape([b.0], [1]), b.1.w)
 }
 

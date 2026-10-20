@@ -21,8 +21,7 @@ type CnnBn = {
 
 type BnStats = { bn1_rm: Tensor, bn1_rv: Tensor, bn2_rm: Tensor, bn2_rv: Tensor }
 
-with <m: CnnBn>
-func forward(x: Tensor, s: BnStats): (Tensor, BnStats) {
+func forward(m: CnnBn, x: Tensor, s: BnStats): (Tensor, BnStats) {
     let r1 = batch_norm_train(conv2d(x, m.conv1_w, m.conv1_b, 1, 1), m.bn1_g, m.bn1_b, s.bn1_rm, s.bn1_rv, 0.1, 0.00001)
     let h1 = relu(r1.0)
     let r2 = batch_norm_train(conv2d(h1, m.conv2_w, m.conv2_b, 1, 1), m.bn2_g, m.bn2_b, s.bn2_rm, s.bn2_rv, 0.1, 0.00001)
@@ -30,15 +29,14 @@ func forward(x: Tensor, s: BnStats): (Tensor, BnStats) {
     return (flatten(g) @ m.fc_w + m.fc_b, {bn1_rm: r1.1, bn1_rv: r1.2, bn2_rm: r2.1, bn2_rv: r2.2})
 }
 
-with <m: CnnBn>
-func loss(x: Tensor, s: BnStats): float {
-    let r = forward<m>(x, s)
+func loss(m: CnnBn, x: Tensor, s: BnStats): float {
+    let r = forward(m, x, s)
     return mean(r.0 * r.0)
 }
 
 func step(m: CnnBn, s: BnStats, x: Tensor): (float, CnnBn, BnStats) {
-    let vg = value_and_grad(loss)<m>(x, s)
-    let r = forward<m>(x, s)
+    let vg = value_and_grad(loss)(m, x, s)
+    let r = forward(m, x, s)
     return (vg.0, sgd(m, vg.1, 0.01), r.1)
 }
 

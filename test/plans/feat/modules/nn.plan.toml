@@ -5,7 +5,7 @@ tags = ["feat", "modules", "nn"]
 
 [[tests]]
 name = "with_context_step_demo"
-desc = "Trains a with-context Linear model: value_and_grad through a with-context helper, then one functional sgd step."
+desc = "Trains a Linear model passed as the loss's first normal parameter (9.9); the remaining `with` parameter is a scale (configuration), and one functional sgd step lowers the loss."
 kind = "behavior"
 case = "../../../cases/modules/nn/with_context_step_demo.cml"
 args = ["${case}", "std::macro", "std::nvm"]
@@ -32,7 +32,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "autograd_linear_demo"
-desc = "Differentiates a loss with two with-parameters: grad returns a tuple of gradients, and .0 drives sgd and a recursive train loop."
+desc = "Differentiates a loss whose first normal parameter is the model (9.9): grad returns one Linear-shaped gradient (the targets are data), and it drives sgd and a recursive train loop."
 kind = "behavior"
 case = "../../../cases/modules/nn/autograd_linear_demo.cml"
 args = ["${case}", "std::macro", "std::nvm"]
@@ -53,8 +53,6 @@ match(/autograd_linear_demo w1=tensor/, out)
 const nums = (line) => (line.match(/-?[0-9]+[.]?[0-9]*(e[-+]?[0-9]+)?/g) || []).map(Number)
 const weightGrad = nums(match(/autograd_linear_demo weight_grad=(.*)/, out)[1])
 assert(approx(weightGrad[0], -2, 1e-6), `expected weight gradient -2, got ${weightGrad[0]}`)
-const yGrad = nums(match(/autograd_linear_demo y_grad=(.*)/, out)[1])
-assert(approx(yGrad[0], 0.5, 1e-6), `expected gradient w.r.t. the y with-parameter 0.5, got ${yGrad[0]}`)
 }
 """
 timeout_ms = 4000

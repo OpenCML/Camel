@@ -1,5 +1,13 @@
 # NN Autograd Architecture
 
+> **Obsolete: this note describes the retired tape-based `nn.apply_gradients` / `Parameter`
+> prototype.** That API was removed. Current autodiff is the reverse-mode graph rewrite
+> described in [`26_autodiff_as_graph_rewrite.md`](26_autodiff_as_graph_rewrite.md): `grad(f)` /
+> `value_and_grad(f)` differentiate the **first normal parameter** of `f` (design principles
+> 9.9), models are ordinary parameters, `with` parameters are configuration, and a training step
+> is `value_and_grad` + `sgd`/`adam` over trees. The text below is kept for history; do not use
+> it as an API reference.
+
 本文档记录当前 `nn`/`tensor` 小型自动求导实现。当前主入口是
 `nn.apply_gradients(loss)`；旧的 `compile_step` 入口和 tensor-only 线性 MSE
 模板已经移除，不再作为公共 API 或兼容路径保留。

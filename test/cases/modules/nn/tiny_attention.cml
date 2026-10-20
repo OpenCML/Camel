@@ -2,6 +2,8 @@
  * Tiny single-head attention block trained with autodiff through the row-wise softmax pullback:
  * value_and_grad of the loss gives an AttentionModel-shaped gradient, one sgd step lowers the
  * loss, and a recursive train loop repeats the step.
+ *
+ * The model is the first normal parameter of the loss (9.9).
  */
 module tiny_attention
 
@@ -16,24 +18,21 @@ type AttentionModel = {
     wo: Tensor
 }
 
-with <weight: Tensor>
-func linear(x: Tensor): Tensor {
+func linear(x: Tensor, weight: Tensor): Tensor {
     return x @ weight
 }
 
-with <model: AttentionModel>
-func attend(x: Tensor): Tensor {
-    let q = x->linear<model.wq>
-    let k = x->linear<model.wk>
-    let v = x->linear<model.wv>
+func attend(model: AttentionModel, x: Tensor): Tensor {
+    let q = linear(x, model.wq)
+    let k = linear(x, model.wk)
+    let v = linear(x, model.wv)
     let scores = (q @ transpose(k)) * 0.5
     let weights = softmax(scores)
     return weights @ v
 }
 
-with <model: AttentionModel>
-func predict(x: Tensor): Tensor {
-    return x->attend<model> @ model.wo
+func predict(model: AttentionModel, x: Tensor): Tensor {
+    return attend(model, x) @ model.wo
 }
 
 func mse_loss(pred: Tensor, target: Tensor): float {
@@ -41,9 +40,8 @@ func mse_loss(pred: Tensor, target: Tensor): float {
     return sum(diff * diff) / float(shape(pred)[0])
 }
 
-with <model: AttentionModel>
-func model_loss(x: Tensor, target: Tensor): float {
-    let pred = x->predict<model>
+func model_loss(model: AttentionModel, x: Tensor, target: Tensor): float {
+    let pred = predict(model, x)
     return mse_loss(pred, target)
 }
 
@@ -57,7 +55,7 @@ func init(): AttentionModel {
 }
 
 func train(model: AttentionModel, x: Tensor, target: Tensor, steps: int): AttentionModel {
-    return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(x, target), 0.5), x, target, steps - 1)
+    return if steps == 0 then model else train(sgd(model, grad(model_loss)(model, x, target), 0.5), x, target, steps - 1)
 }
 
 func main(): int sync {
@@ -65,12 +63,12 @@ func main(): int sync {
     let x = reshape([1.0, 0.0, 0.0, 1.0], [2, 2])
     let target = reshape([1.0, 0.0], [2, 1])
 
-    let before = model_loss<model>(x, target)
-    let vg = value_and_grad(model_loss)<model>(x, target)
+    let before = model_loss(model, x, target)
+    let vg = value_and_grad(model_loss)(model, x, target)
     let stepped = sgd(model, vg.1, 0.5)
-    let after = model_loss<stepped>(x, target)
+    let after = model_loss(stepped, x, target)
     let trained = train(model, x, target, 10)
-    let after_train = model_loss<trained>(x, target)
+    let after_train = model_loss(trained, x, target)
 
     'tiny_attention metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
     'tiny_attention wq={}'->format<stepped.wq>->println
