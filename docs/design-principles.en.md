@@ -23,7 +23,7 @@ Camel's most central characteristic is that it is graph-native. Its other proper
 - **Only one language.** Computing types from types, and generating code from the structure of a type, are written in the main language: a type is a compile-time value, and a type function is an ordinary function that runs at compile time, using the same constructs as the value level (see [Generics by structure](design/generic-structure/README.cn.md)). There is no separate type-level language (such as TypeScript's conditional types, mapped types and `infer`). Graph transformations, rules and schedules are likewise written in Camel itself.
 - **Shorthands may exist, but there is only one semantics.** A shorthand (such as a decorator) is a mechanism for library authors; it may exist, but it can only be another way of writing the same semantics and must not carry rules of its own.
 - **Red lines are few, and each has an enforcement mechanism;** everything else is a tendency or a quality requirement and is recorded as such. The current list of red lines is in section 4 of the [refactoring blueprint](design/blueprint/README.cn.md).
-- **No compatibility cost is considered during the internal-testing stage.** An old form is retired directly, with a diagnostic that points to the new form; there is no transition layer.
+- **No compatibility cost is considered during the internal-testing stage.** An old form is deleted outright: no alias, no transition layer, and no diagnostic or note pointing to the new form; once deleted it is simply an unknown name or a syntax error.
 - **Our own libraries are written in Camel as far as possible**, to expose the language's shortcomings and absorb them into the core (see 10.4).
 
 ---
