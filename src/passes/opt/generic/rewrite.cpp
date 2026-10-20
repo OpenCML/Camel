@@ -31,6 +31,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <format>
+#include <stdexcept>
 #include <vector>
 
 namespace camel::passes::generic {
@@ -301,11 +303,18 @@ void RewriteMemo::remember(std::string_view passName, const GCGraph *graph) {
 GCGraph *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, GCGraph *graph, std::string_view passName,
     const std::function<size_t(GraphDraft &)> &rewrite, size_t *rewrites, RewriteMemo *memo,
-    bool (*mayRewrite)(const GCGraph &)) {
+    bool (*mayRewrite)(const GCGraph &), bool checkScreens) {
     camel::runtime::RuntimeGraphDraftSession session(context, graph);
     size_t total = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
         if ((mayRewrite && !mayRewrite(*g)) || (memo && memo->leftAlone(passName, g))) {
+            if (checkScreens && rewrite(session.edit(g)) != 0) {
+                throw std::runtime_error(
+                    std::format(
+                        "{} rewrote graph '{}', which its screen or memo had skipped.",
+                        passName,
+                        g->name()));
+            }
             continue;
         }
         const size_t made = rewrite(session.edit(g));

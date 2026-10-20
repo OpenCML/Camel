@@ -1020,7 +1020,8 @@ GCGraph *simplifyGraph(
             [](GraphDraft &draft) { return camel::runtime::reduceControlDependencies(draft); },
             nullptr,
             &memo,
-            mayReduceControl);
+            mayReduceControl,
+            config.checkScreens);
     };
     for (size_t round = 0; round < maxRounds; ++round) {
         bool optChanged = false;
@@ -1034,7 +1035,8 @@ GCGraph *simplifyGraph(
             [&](GraphDraft &draft) { return foldDraft(draft, *context, roots); },
             &folded,
             &memo,
-            mayFold);
+            mayFold,
+            config.checkScreens);
         graph = rewriteReachableGraphs(
             context,
             graph,
@@ -1042,7 +1044,8 @@ GCGraph *simplifyGraph(
             cseDraft,
             &merged,
             &memo,
-            mayMerge);
+            mayMerge,
+            config.checkScreens);
         graph = rewriteReachableGraphs(
             context,
             graph,
@@ -1050,7 +1053,8 @@ GCGraph *simplifyGraph(
             [&](GraphDraft &draft) { return algebraDraft(draft, config.safeFloatingPoint); },
             &simplified,
             &memo,
-            mayAlgebra);
+            mayAlgebra,
+            config.checkScreens);
         graph = rewriteReachableGraphs(
             context,
             graph,
@@ -1058,7 +1062,8 @@ GCGraph *simplifyGraph(
             dceDraft,
             &removed,
             &memo,
-            mayRemoveDead);
+            mayRemoveDead,
+            config.checkScreens);
         if (!optChanged && folded == 0 && merged == 0 && simplified == 0 && removed == 0) {
             CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
             return finish(graph);
