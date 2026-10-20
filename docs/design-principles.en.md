@@ -541,7 +541,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 
 ### 9.9 Automatic differentiation
 
-- **Automatic differentiation is a library built on the pass mechanism, not the language core.** It has constraints of its own: a graph on which no macro has been executed does not carry enough information for differentiation, so using `grad` and the like needs `std::macro` in the pipeline. This is a precondition of the library, not a constraint of the language core; when it is not met, the library should give a clear diagnostic.
+- **Automatic differentiation is a library built on the pass mechanism, not the language core.** It works on the graph it is given and does not require `std::macro` earlier in the pipeline; a structure it cannot handle (an unexpanded compile-time construct, say) is refused at its location with a diagnostic. These are the library's preconditions, not constraints of the language core.
 - For a function being differentiated and `var`, see 3.5.
 - **Differentiating through loops**: the reverse pass needs the intermediate values (residuals) of every forward round. The forward loop keeps each round's residuals as collected outputs (values, not closures), with a manifest saying which slot holds which residual; the reverse pass is a loop over the rounds in reverse order. O(1) per round, O(n) in total. The forward loop's round count may depend on its condition.
 - **Residuals are not bounded**: as with any growing array, running out of memory is reported as resource exhaustion with a location; no separate round limit. A recomputation tag (checkpointing) may later bring memory down to O(√n); the residual design does not preclude it.
