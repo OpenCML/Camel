@@ -128,6 +128,11 @@ enum class GCNodeKind : uint8_t {
     // that do not run it natively lower it to a tail recursion first
     // (lowerLoopsToTailRecursion), never in the shared program.
     Loop = 15,
+    // The place of a node a rewrite removed. A graph keeps the NodeIds of the version it came
+    // from, so a removed node leaves a record with this kind and no inputs, which every
+    // consumer that walks the nodes skips (GCGraph::nodes() does); ids are not reused. A
+    // graph without removed nodes has none.
+    Dead = 255,
 };
 
 enum class GCReturnKind : uint8_t {
@@ -501,8 +506,10 @@ class GCGraph : public camel::core::rtdata::Object {
 
     bool hasNodePayload() const;
     const GCGraphNativePayload *nodePayload() const;
-    /// Number of nodes; NodeIds are 0 .. nodeCount() - 1.
+    /// Number of node places: NodeIds are 0 .. nodeCount() - 1, and some of them may be Dead.
     gc_cnt_t nodeCount() const { return nativePayload_.nodeCount; }
+    /// Number of nodes that are not Dead.
+    gc_cnt_t liveNodeCount() const;
     /// Number of edges (input table entries).
     gc_cnt_t edgeCount() const { return nativePayload_.edgeCount; }
     gc_cnt_t branchArmCount() const;
@@ -589,11 +596,14 @@ class GCGraph : public camel::core::rtdata::Object {
 
     class NodeIterator {
       public:
-        NodeIterator(const GCGraph *graph, gc_node_ref_t ref) : graph_(graph), ref_(ref) {}
+        NodeIterator(const GCGraph *graph, gc_node_ref_t ref) : graph_(graph), ref_(ref) {
+            skipDead();
+        }
 
         const GCNode *operator*() const { return graph_->node(ref_); }
         NodeIterator &operator++() {
             ++ref_;
+            skipDead();
             return *this;
         }
         bool operator==(const NodeIterator &other) const {
@@ -603,6 +613,13 @@ class GCGraph : public camel::core::rtdata::Object {
         gc_node_ref_t ref() const { return ref_; }
 
       private:
+        void skipDead() {
+            while (graph_ && ref_ < graph_->nodeCount() &&
+                   graph_->node(ref_)->kind == GCNodeKind::Dead) {
+                ++ref_;
+            }
+        }
+
         const GCGraph *graph_ = nullptr;
         gc_node_ref_t ref_    = 0;
     };

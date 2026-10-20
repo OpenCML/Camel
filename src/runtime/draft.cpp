@@ -689,8 +689,9 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
     std::vector<gc_node_ref_t> sourceToDraft(graph->nodeCount(), kInvalidNodeRef);
     draft->nodesById_.reserve(graph->nodeCount());
     draft->sourceRefsById_.reserve(graph->nodeCount());
-    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-        const gc_node_ref_t sourceRef = it.ref();
+    draft->decoded_ = true;
+    draft->base_    = graph;
+    for (gc_node_ref_t sourceRef = 0; sourceRef < graph->nodeCount(); ++sourceRef) {
         ASSERT(sourceRef < sourceToDraft.size(), "Runtime node ref is out of draft decode range.");
         const gc_node_ref_t draftId = static_cast<gc_node_ref_t>(draft->nodesById_.size());
         sourceToDraft[sourceRef]    = draftId;
@@ -825,19 +826,35 @@ void GraphDraft::removeUserRef(
     if (node(id) == nullptr || id >= users_.size() || !users_[id]) {
         return;
     }
-    const auto eraseOne = [userId](std::vector<gc_node_ref_t> &items) {
-        // The user that was linked last is the one most often unlinked first.
+    DraftUserLists &lists = *users_[id];
+    const auto eraseOne = [&](DraftEdgeKind kind) {
+        auto &items = lists.of(kind);
+        if (auto *place = lists.index(kind)) {
+            const auto found = place->find(userId);
+            if (found == place->end()) {
+                return;
+            }
+            const uint32_t at = found->second;
+            place->erase(found);
+            if (at + 1 != items.size()) {
+                items[at]              = items.back();
+                (*place)[items[at]]    = at;
+            }
+            items.pop_back();
+            return;
+        }
+        // A short list keeps its order; the user linked last is the one most often unlinked first.
         auto it = std::find(items.rbegin(), items.rend(), userId);
         if (it != items.rend()) {
             items.erase(std::next(it).base());
         }
     };
     if (norm)
-        eraseOne(users_[id]->norm);
+        eraseOne(DraftEdgeKind::Norm);
     if (with)
-        eraseOne(users_[id]->with);
+        eraseOne(DraftEdgeKind::With);
     if (ctrl)
-        eraseOne(users_[id]->ctrl);
+        eraseOne(DraftEdgeKind::Ctrl);
 }
 
 void GraphDraft::appendUserRef(
@@ -846,24 +863,17 @@ void GraphDraft::appendUserRef(
     if (node(id) == nullptr) {
         return;
     }
-    // Called once the user reads `id` in the group: the user is in the list already when the
-    // group holds `id` more than once, or the list says so.
     const auto appendUnique = [&](DraftEdgeKind kind) {
         auto &items = userListOf(id, kind);
+        DraftUserLists &lists = *users_[id];
         if (!items.empty() && items.back() == userId) {
             return;
         }
-        if (items.size() > 32) {
-            const auto inputs = kind == DraftEdgeKind::Norm   ? normInputsOf(userId)
-                                : kind == DraftEdgeKind::With ? withInputsOf(userId)
-                                                              : ctrlInputsOf(userId);
-            if (inputs.size() <= 64) {
-                if (std::count(inputs.begin(), inputs.end(), id) > 1) {
-                    return;
-                }
+        if (auto *place = lists.index(kind)) {
+            if (place->emplace(userId, static_cast<uint32_t>(items.size())).second) {
                 items.push_back(userId);
-                return;
             }
+            return;
         }
         if (std::find(items.begin(), items.end(), userId) == items.end()) {
             items.push_back(userId);

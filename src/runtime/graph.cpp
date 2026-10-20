@@ -339,6 +339,9 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                     -node->dataIndex,
                     staticSlotCount));
         }
+        if (node->kind == GCNodeKind::Dead) {
+            continue;
+        }
         if (node->kind == GCNodeKind::Dref) {
             throw std::runtime_error(
                 std::format(
@@ -504,6 +507,7 @@ branchSliceView(const GCBranchArm *storage, gc_off_t offset, gc_cnt_t count, gc_
 }
 
 struct PlannedDraftNode {
+    bool dead               = false; // the place of an erased node (ids are kept)
     gc_node_ref_t draftId   = kInvalidNodeRef;
     gc_node_ref_t ref       = kInvalidNodeRef;
     gc_off_t payload        = kNoPayload; // word offset in the payload area
@@ -559,11 +563,14 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
             throw std::runtime_error(
                 std::format(
                     "Draft payload planning found dead node ref {} in {} list of node {} "
-                    "(kind={}).",
+                    "(kind={}; the draft has {} places, {} nodes, keeps ids: {}).",
                     ref,
                     lane,
                     owner,
-                    ownerHeader ? static_cast<int>(ownerHeader->kind) : -1));
+                    ownerHeader ? static_cast<int>(ownerHeader->kind) : -1,
+                    draft.nodeSlotCount(),
+                    draft.nodeCount(),
+                    draft.keepsNodeIds()));
         }
     };
 
@@ -575,8 +582,19 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     size_t edgeCount      = 0;
     size_t payloadWords   = 0;
     size_t branchArmCount = 0;
+    const bool keepIds = draft.keepsNodeIds();
     for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
         if (!draft.alive(draftId)) {
+            if (keepIds) {
+                // The place stays, as a Dead record, so that the others keep their ids.
+                plan.nodes.push_back(
+                    PlannedDraftNode{
+                        .dead    = true,
+                        .draftId = draftId,
+                        .ref     = static_cast<gc_node_ref_t>(nodeCount),
+                    });
+                ++nodeCount;
+            }
             continue;
         }
         const DraftNodeHeader *header = draft.header(draftId);
@@ -653,6 +671,7 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
             plan.nodes.begin(),
             plan.nodes.end(),
             [&](const auto &planned) { return draft.nodeAttrs(planned.draftId) != 0; }),
+        .base = draft.baseGraph(),
     };
 }
 
@@ -693,6 +712,14 @@ void emitDraftPayload(
     };
 
     for (const PlannedDraftNode &planned : plan.nodes) {
+        if (planned.dead) {
+            GCNode &record   = payload.nodes[planned.ref];
+            record.kind      = GCNodeKind::Dead;
+            record.inBegin   = static_cast<gc_off_t>(inputCursor);
+            record.withBegin = record.inBegin;
+            record.ctrlBegin = record.inBegin;
+            continue;
+        }
         const DraftNodeHeader *draftHeader = draft.header(planned.draftId);
         ASSERT(draftHeader != nullptr, "Draft payload emission requires a non-null node header.");
         CAMEL_LOG_INFO_S(
@@ -850,8 +877,13 @@ void emitDraftPayload(
         payload.closure[i] = plan.runtimeRefsByDraftId[draft.closureNodes()[i]];
     }
 
+    // A graph without an entry starts at its first node.
+    const auto firstNode = std::find_if(
+        plan.nodes.begin(),
+        plan.nodes.end(),
+        [](const PlannedDraftNode &planned) { return !planned.dead; });
     payload.entryNode  = draft.entryNode() == kInvalidNodeRef
-                             ? (plan.nodes.empty() ? kInvalidNodeRef : plan.nodes.front().ref)
+                             ? (firstNode == plan.nodes.end() ? kInvalidNodeRef : firstNode->ref)
                              : plan.runtimeRefsByDraftId[draft.entryNode()];
     payload.exitNode   = draft.exitNode() == kInvalidNodeRef
                              ? kInvalidNodeRef
@@ -988,6 +1020,36 @@ void releaseNodeChunk(GCNodeChunk *chunk) {
     }
 }
 
+/// Whether `chunk` has exactly the content the staged nodes [first, first + count) would be cut
+/// into: the same records (with their offsets in the chunk), columns, input table and payload.
+bool chunkHolds(
+    const GCNodeChunk &chunk, const PayloadStaging &staging, size_t first, size_t count,
+    uint32_t edgeBegin, size_t edges, uint32_t payBegin, size_t words) {
+    if (chunk.nodeCount != count || chunk.edgeCount != edges || chunk.payloadWordCount != words) {
+        return false;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        GCNode record = staging.nodes[first + i];
+        record.inBegin -= edgeBegin;
+        record.withBegin -= edgeBegin;
+        record.ctrlBegin -= edgeBegin;
+        if (record.hasPayload()) {
+            record.payload -= payBegin;
+        }
+        if (std::memcmp(&record, chunk.nodes() + i, sizeof(GCNode)) != 0) {
+            return false;
+        }
+    }
+    const auto same = [](const auto *x, const auto *y, size_t n) {
+        return n == 0 || std::memcmp(x, y, n * sizeof(*x)) == 0;
+    };
+    return same(chunk.origins, staging.origins.data() + first, count) &&
+           (!chunk.permissions || same(chunk.permissions, staging.permissions.data() + first, count)) &&
+           (!chunk.attrs || same(chunk.attrs, staging.attrs.data() + first, count)) &&
+           same(chunk.edges, staging.inputs.data() + edgeBegin, edges) &&
+           same(chunk.payload, staging.payload.data() + payBegin, words);
+}
+
 /// Cuts the staged arrays into chunks of kNodeChunkNodes nodes, in the graph space. Offsets of
 /// a chunk's records become offsets in that chunk's arrays.
 void buildNodeChunks(
@@ -1004,6 +1066,12 @@ void buildNodeChunks(
     const auto align8 = [](size_t bytes) {
         return camel::core::mm::alignUp(bytes, alignof(gc_payload_word_t));
     };
+    // The chunks of the graph the draft came from can stand for the new ones that equal them,
+    // when the two graphs have the same columns.
+    const GCGraphNativePayload *old = shape.base ? shape.base->nodePayload() : nullptr;
+    if (old && (old->hasPermissions != shape.permissions || old->hasAttrs != shape.attrs)) {
+        old = nullptr;
+    }
     size_t built = 0;
     try {
         for (; built < payload.chunkCount; ++built) {
@@ -1015,6 +1083,15 @@ void buildNodeChunks(
             const uint32_t payEnd    = nextPayload[first + count];
             const size_t edges       = edgeEnd - edgeBegin;
             const size_t words       = payEnd - payBegin;
+
+            if (old && built < old->chunkCount) {
+                GCNodeChunk *known = old->chunks[built];
+                if (chunkHolds(*known, staging, first, count, edgeBegin, edges, payBegin, words)) {
+                    known->shares.fetch_add(1, std::memory_order_relaxed);
+                    payload.chunks[built] = known;
+                    continue;
+                }
+            }
 
             const size_t recordsAt = sizeof(GCNodeChunk);
             const size_t originsAt = align8(recordsAt + count * sizeof(GCNode));
@@ -1203,6 +1280,25 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
             refRoleStorage[it->second] |= role;
         }
     };
+    // A graph made from another keeps the order of that graph's table for the graphs it still
+    // refers to, so that payloads which index the table (FUNC, LOOP) stay the same and the
+    // node chunks that hold them can be shared.
+    if (payloadShape.base) {
+        std::unordered_set<GraphId> named;
+        for (const auto list : {dependencies, subGraphs, staticGraphRefs}) {
+            named.insert(list.begin(), list.end());
+        }
+        for (GraphId ref : payloadShape.base->refs()) {
+            if (isValid(ref) && named.contains(ref)) {
+                const auto [it, added] = refIndex.emplace(ref, static_cast<uint32_t>(refCount));
+                if (added) {
+                    refStorage[refCount]     = ref;
+                    refRoleStorage[refCount] = 0;
+                    ++refCount;
+                }
+            }
+        }
+    }
     addRefs(dependencies, kGraphRefCallee);
     addRefs(subGraphs, kGraphRefNested);
     addRefs(staticGraphRefs, kGraphRefStatic);
@@ -1495,6 +1591,17 @@ const GCNode *GCGraph::returnNode() const { return node(returnNodeRef()); }
 gc_node_ref_t GCGraph::returnNodeRef() const { return nativePayload_.returnNode; }
 
 GCReturnKind GCGraph::returnKind() const { return nativePayload_.returnKind; }
+
+gc_cnt_t GCGraph::liveNodeCount() const {
+    gc_cnt_t live = 0;
+    for (gc_cnt_t c = 0; c < nativePayload_.chunkCount; ++c) {
+        const GCNodeChunk &chunk = *nativePayload_.chunks[c];
+        for (uint32_t i = 0; i < chunk.nodeCount; ++i) {
+            live += chunk.nodes()[i].kind != GCNodeKind::Dead;
+        }
+    }
+    return live;
+}
 
 gc_node_ref_t GCGraph::nodeRef(const GCNode *nodePtr) const {
     for (gc_cnt_t c = 0; c < nativePayload_.chunkCount; ++c) {
