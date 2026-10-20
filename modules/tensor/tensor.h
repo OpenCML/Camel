@@ -75,12 +75,15 @@ class TensorObject : public rtdata::Object {
         bool zeroInit = false);
 
     /**
-     * A tensor with `source`'s elements and dtype and the given shape (same element count),
-     * sharing `source`'s buffer instead of copying it. It keeps the buffer's owner alive. Only
-     * the collected heap (mm::autoSpace) can hold a view; for any other allocator this copies.
+     * A tensor with `source`'s elements and dtype and the given shape, starting at element
+     * `elementOffset` of `source` (which must leave at least the shape's element count).
+     * It shares `source`'s buffer instead of copying it. It keeps the buffer's owner alive.
+     * Only the collected heap (mm::autoSpace) can hold a view; for any other allocator this
+     * copies the elements.
      */
-    static TensorObject *
-    createView(const TensorObject *source, std::span<const int64_t> shape, mm::IAllocator &allocator);
+    static TensorObject *createView(
+        const TensorObject *source, std::span<const int64_t> shape, mm::IAllocator &allocator,
+        uint64_t elementOffset = 0);
 
     /// True when this tensor reads another tensor's buffer.
     bool isView() const { return owner_ != nullptr; }

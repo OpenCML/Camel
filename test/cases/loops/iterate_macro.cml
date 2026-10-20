@@ -1,0 +1,10 @@
+// std::macro runs the loop of a macro function over a string at compile time: the two calls
+// fold to 2 and 3 (the code points of '中a' and of 'abc').
+macro func count(s: string): int {
+    return loop n = 0 for c in s do n + 1
+}
+
+func main(): int sync {
+    println(count('中a'), count('abc'))
+    return 0
+}

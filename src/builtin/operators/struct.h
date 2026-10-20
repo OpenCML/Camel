@@ -23,6 +23,7 @@
 #include "camel/core/type.h"
 
 slot_t __len_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __iter_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __len_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

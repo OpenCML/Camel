@@ -1,0 +1,6 @@
+// `for` takes the elements of an array, a string, a map or a tensor; an int is none of them.
+func main(): int sync {
+    let n = loop s = 0 for x in 42 do s + x
+    println(n)
+    return 0
+}

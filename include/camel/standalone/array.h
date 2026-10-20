@@ -235,6 +235,21 @@ inline Str join(const Array<Str> &xs, const Str &separator) {
     return Str(out);
 }
 
+/// `for c in s` (:struct/iter_str): the code points of `s`, each a one-character string, in
+/// order — what `s[i]` gives for every `i` (design principles 11.1).
+inline Array<Str> chars(const Str &s) {
+    const std::string_view text = s.view();
+    Array<Str> out;
+    out.reserve(camel::utf8::count(text));
+    std::size_t at = 0;
+    while (at < text.size()) {
+        const std::size_t start = at;
+        (void)camel::utf8::decodeOne(text, at);
+        out.push(Str(text.substr(start, at - start)));
+    }
+    return out;
+}
+
 /// `range(start, stop[, step])` (:struct/range): a step of 0 is InvalidArgument at `site`
 /// (values: "range", what is wrong).
 inline Array<int64_t> range(int64_t start, int64_t stop, int64_t step, const Site &site) {

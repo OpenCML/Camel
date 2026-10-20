@@ -2,7 +2,7 @@ id = "linear.loops"
 order = 348
 tier = "feat"
 tags = ["feat", "linear", "loops"]
-desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm natively, fvm/jit/prl through the private lowering to tail recursion, fvm/jit natively under a debugger or with std::fvm(native_loop=true)), its diagnostics, and the refusals of the consumers that do not handle it yet."
+desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm natively, fvm/jit/prl through the private lowering to tail recursion, fvm/jit natively under a debugger or with std::fvm(native_loop=true)), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
 
 [[tests]]
 name = "loops.native_callback"
@@ -100,6 +100,108 @@ expect_exit = 0
 expect_stdout_contains = ["7 5 832040 [1, 4, 9, 16, 25] 2999997"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "loops.iterate_string"
+desc = "`for` over a string takes its code points, one one-character string each (11.1): 3 rounds for 'abc' and 3 for '中文🙂' (10 bytes), the characters the same values `s[i]` gives, the empty string, a loop over a character inside the body, and `for ... while` stopping after three characters."
+kind = "behavior"
+case = "../../../cases/loops/iterate_string.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["3 3 中文 2 7 2 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.iterate_map"
+desc = "`for` over a map takes its (key, value) pairs in key order (11.3), not insertion order: the literal is written out of order and the keys still come out ascending; string keys, the empty map, and `for ... while` over two pairs."
+kind = "behavior"
+case = "../../../cases/loops/iterate_map.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["abc 3 1 6 ab 9 3 ab"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.iterate_tensor"
+desc = "`for` over a tensor takes its elements along the first dimension: the rank-1 rows of a rank-2 tensor (views of the same data), the rank-0 sub-tensors of a rank-1 tensor, a tensor whose first extent is 0, a loop over a row inside the body, and a function whose parameter is a `Tensor` of unknown rank (its elements have type `Tensor`)."
+kind = "behavior"
+case = "../../../cases/loops/iterate_tensor.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["21 3 3 6 7 21 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.iterate_empty"
+desc = "An empty string, an empty map, a tensor whose first extent is 0, an empty array and a `for ... while` whose condition is false at once run no round: the value is the first state."
+kind = "behavior"
+case = "../../../cases/loops/iterate_empty.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["1 2 3 4 5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.iterate_string.macro"
+desc = "std::macro runs a macro function's loop over a string at compile time: the calls with '中a' and 'abc' fold to the constants 2 and 3."
+kind = "behavior"
+case = "../../../cases/loops/iterate_macro.cml"
+args = ["${case}", "std::macro", "std::rgir"]
+expect_exit = 0
+expect_stdout_contains = ["label=\"2\", type=\"DATA\"", "label=\"3\", type=\"DATA\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.iterate_string.native_loop"
+desc = "The native loop instruction of std::fvm and std::jit takes the elements of a string the same way the lowering does."
+kind = "behavior"
+case = "../../../cases/loops/iterate_string.cml"
+args = ["${case}", "${backend}"]
+backends = ["fvm_native_loop", "jit_native_loop"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["3 3 中文 2 7 2 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.iterate_map.native_loop"
+desc = "The native loop instruction of std::fvm and std::jit over a map's key-ordered pairs."
+kind = "behavior"
+case = "../../../cases/loops/iterate_map.cml"
+args = ["${case}", "${backend}"]
+backends = ["fvm_native_loop", "jit_native_loop"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["abc 3 1 6 ab 9 3 ab"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.iterate_tensor.native_loop"
+desc = "The native loop instruction of std::fvm and std::jit over a tensor's first-dimension elements."
+kind = "behavior"
+case = "../../../cases/loops/iterate_tensor.cml"
+args = ["${case}", "${backend}"]
+backends = ["fvm_native_loop", "jit_native_loop"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["21 3 3 6 7 21 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 
 [[tests]]
 name = "loops.not_recursion"
@@ -240,14 +342,40 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "loops.err_not_array"
-desc = "`for` over a string."
+name = "loops.err_not_iterable"
+desc = "`for` over an int: not an array, a string, a map or a tensor. (It used to be `for` over a string, which is iterable now.)"
 kind = "negative"
-case = "../../../cases/loops/err_not_array.cml"
+case = "../../../cases/loops/err_not_iterable.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::LoopSequenceNotArray"
-expect_diagnostic_line = 2
+expect_diagnostic_name = "SemanticDiag::LoopSequenceNotIterable"
+expect_diagnostic_line = 3
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.err_tensor_rank0"
+desc = "`for` over a rank-0 tensor: it has no first dimension. The shape is a constant, so the refusal is at compile time (`Tensor<f32, []>`)."
+kind = "negative"
+case = "../../../cases/loops/err_tensor_rank0.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopSequenceNotIterable"
+expect_diagnostic_line = 10
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.fault_tensor_rank0"
+desc = "`for` over a tensor whose rank is only 0 at run time: the fault is reported at the loop's sequence on nvm and on the lowered fvm."
+kind = "negative"
+case = "../../../cases/loops/fault_tensor_rank0.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["iter: a rank-0 tensor has no first dimension"]
+expect_diagnostic_line = 16
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

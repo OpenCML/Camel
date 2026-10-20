@@ -117,7 +117,7 @@ prints one entry.
 | `0x03000110` | [SemanticDiag::DeclaredTypeMismatch](#declaredtypemismatch) | Error |
 | `0x03000111` | [SemanticDiag::ModuleTypeCycle](#moduletypecycle) | Error |
 | `0x03000112` | [SemanticDiag::InvalidAnnotation](#invalidannotation) | Error |
-| `0x03000120` | [SemanticDiag::LoopSequenceNotArray](#loopsequencenotarray) | Error |
+| `0x03000120` | [SemanticDiag::LoopSequenceNotIterable](#loopsequencenotiterable) | Error |
 | `0x03000121` | [SemanticDiag::LoopBodyTypeMismatch](#loopbodytypemismatch) | Error |
 | `0x03000122` | [SemanticDiag::LoopStateWithoutType](#loopstatewithouttype) | Error |
 | `0x03000123` | [SemanticDiag::LoopConditionNotBool](#loopconditionnotbool) | Error |
@@ -2878,27 +2878,28 @@ func main(): int sync {
 }
 ```
 
-### LoopSequenceNotArray
+### LoopSequenceNotIterable
 
-`0x03000120` · Error · `SemanticDiag::LoopSequenceNotArray`
+`0x03000120` · Error · `SemanticDiag::LoopSequenceNotIterable`
 
 **Message**
 
 ```text
-'for' takes the elements of an array; '{0}' has type '{1}'.
+'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'.
 ```
 
 **Help**
 
 ```text
-A loop's 'for x in xs' visits the elements of the array xs in order (design principles 3.10). 'range(a, b)' is the array of the integers from a to b; a string, a map or a tensor is not iterated by 'for'.
+A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'range(a, b)' is the array of the integers from a to b.
 ```
 
-**Example** (`test/cases/loops/err_not_array.cml`, run as `camel -E short test/cases/loops/err_not_array.cml`)
+**Example** (`test/cases/loops/err_not_iterable.cml`, run as `camel -E short test/cases/loops/err_not_iterable.cml`)
 
 ```camel
+// `for` takes the elements of an array, a string, a map or a tensor; an int is none of them.
 func main(): int sync {
-    let n = loop s = 0 for c in 'abc' do s + 1
+    let n = loop s = 0 for x in 42 do s + x
     println(n)
     return 0
 }

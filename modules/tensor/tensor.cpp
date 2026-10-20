@@ -78,14 +78,20 @@ TensorObject *TensorObject::create(
 }
 
 TensorObject *TensorObject::createView(
-    const TensorObject *source, std::span<const int64_t> shape, mm::IAllocator &allocator) {
-    if (numelOf(shape) != source->numel_) {
-        throw std::invalid_argument("Tensor view must keep the element count");
+    const TensorObject *source, std::span<const int64_t> shape, mm::IAllocator &allocator,
+    uint64_t elementOffset) {
+    const uint64_t elements = numelOf(shape);
+    if (elementOffset > source->numel_ || elements > source->numel_ - elementOffset) {
+        throw std::invalid_argument("Tensor view must stay within its source");
     }
+    const uint64_t dataBytes = elements * elementSize(source->dtype_);
     if (&allocator != &mm::autoSpace()) {
         TensorObject *copy = create(source->dtype_, shape, allocator, false);
-        if (source->byteSize_ > 0) {
-            std::memcpy(copy->data_, source->data_, static_cast<size_t>(source->byteSize_));
+        if (dataBytes > 0) {
+            std::memcpy(
+                copy->data_,
+                source->data_ + elementOffset * elementSize(source->dtype_),
+                static_cast<size_t>(dataBytes));
         }
         return copy;
     }
@@ -95,14 +101,14 @@ TensorObject *TensorObject::createView(
     if (!memory) {
         throw std::bad_alloc();
     }
-    auto *view = new (memory) TensorObject(
-        source->dtype_,
-        static_cast<uint32_t>(shape.size()),
-        source->numel_,
-        source->byteSize_);
-    view->owner_           = const_cast<TensorObject *>(owner);
-    view->ownerDataOffset_ = static_cast<size_t>(
-        owner->data_ - reinterpret_cast<const std::byte *>(owner));
+    auto *view = new (memory)
+        TensorObject(source->dtype_, static_cast<uint32_t>(shape.size()), elements, dataBytes);
+    view->owner_ = const_cast<TensorObject *>(owner);
+    // The source may itself be a view: start where its buffer starts, then move `elementOffset`
+    // elements into it.
+    view->ownerDataOffset_ =
+        static_cast<size_t>(source->data_ - reinterpret_cast<const std::byte *>(owner)) +
+        static_cast<size_t>(elementOffset * elementSize(source->dtype_));
     view->refreshPointers();
     if (!shape.empty()) {
         std::memcpy(view->shape_, shape.data(), shapeBytes);
