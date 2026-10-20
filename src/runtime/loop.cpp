@@ -18,8 +18,8 @@
  */
 
 /*
- * LoopView, the effect summary of a graph, and the commit-time check of a LOOP node against
- * its two graphs (camel/runtime/loop.h).
+ * LoopView, LoopDraftView, the effect summary of a graph, and the commit-time check of a LOOP
+ * node against its two graphs (camel/runtime/loop.h).
  */
 
 #include "camel/runtime/loop.h"
@@ -27,6 +27,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/runtime/draft.h"
 #include "camel/utils/assert.h"
 
 #include <format>
@@ -81,6 +82,87 @@ fillComponent(const GCGraph *graph, gc_node_ref_t result, size_t slot) {
 }
 
 } // namespace
+
+LoopDraftView::LoopDraftView(const GraphDraft &draft, gc_node_ref_t node)
+    : draft_(&draft), node_(node) {
+    const DraftNodeHeader *header = draft.header(node);
+    ASSERT(
+        header != nullptr && header->kind == GCNodeKind::Loop,
+        "LoopDraftView of a node that is not a LOOP node.");
+    const auto *body  = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(node).data());
+    kind_             = body->kind;
+    cond_             = body->condGraph;
+    body_             = body->bodyGraph;
+    stateCount_       = draft.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
+    collectionCount_  = body->collectionCount;
+}
+
+Type *LoopDraftView::valueType() const { return draft_->header(node_)->dataType; }
+
+Type *LoopDraftView::stateType(size_t j) const { return body_->node(bodyStateParam(j))->dataType(); }
+
+Type *LoopDraftView::collectionArrayType(size_t c) const {
+    ASSERT(c < collectionCount_, "LoopDraftView: the loop has no such collection slot.");
+    const auto *value = static_cast<const TupleType *>(valueType());
+    ASSERT(
+        value != nullptr && value->size() == stateCount_ + collectionCount_,
+        "LoopDraftView: the loop's value type does not have the k + s components its shape says.");
+    return value->typeAt(collectionValueIndex(c));
+}
+
+Type *LoopDraftView::collectionElemType(size_t c) const {
+    const Type *array = collectionArrayType(c);
+    ASSERT(
+        array != nullptr && array->code() == TypeCode::Array,
+        "LoopDraftView: a collection slot's value type is not an array.");
+    return static_cast<const ArrayType *>(array)->elemType();
+}
+
+std::optional<gc_node_ref_t> LoopDraftView::iterable() const {
+    if (!loopHasIterable(kind_)) {
+        return std::nullopt;
+    }
+    return draft_->normInputsOf(node_).front();
+}
+
+gc_node_ref_t LoopDraftView::initialState(size_t j) const {
+    ASSERT(j < stateCount_, "LoopDraftView: no such value of the state.");
+    return draft_->normInputsOf(node_)[j + (loopHasIterable(kind_) ? 1 : 0)];
+}
+
+std::span<const gc_node_ref_t> LoopDraftView::captures() const {
+    return draft_->withInputsOf(node_);
+}
+
+gc_node_ref_t LoopDraftView::condStateParam(size_t j) const {
+    ASSERT(cond_ != nullptr && j < stateCount_, "LoopDraftView: no such condition parameter.");
+    return cond_->normPorts()[j];
+}
+
+std::optional<gc_node_ref_t> LoopDraftView::bodyElementParam() const {
+    if (!loopHasIterable(kind_)) {
+        return std::nullopt;
+    }
+    return body_->normPorts().front();
+}
+
+gc_node_ref_t LoopDraftView::bodyStateParam(size_t j) const {
+    ASSERT(j < stateCount_, "LoopDraftView: no such body parameter.");
+    return body_->normPorts()[j + (loopHasIterable(kind_) ? 1 : 0)];
+}
+
+gc_node_ref_t LoopDraftView::condCapturePort(size_t c) const {
+    ASSERT(cond_ != nullptr, "LoopDraftView: a For loop has no condition graph.");
+    return capturePortsOf(cond_)[c];
+}
+
+gc_node_ref_t LoopDraftView::bodyCapturePort(size_t c) const {
+    return capturePortsOf(body_)[c];
+}
+
+gc_node_ref_t LoopDraftView::nextState() const { return body_->returnNodeRef(); }
+
+Type *LoopDraftView::bodyResultType() const { return body_->funcType()->exitType(); }
 
 LoopView::LoopView(const GCGraph &graph, gc_node_ref_t node) : graph_(&graph), node_(node) {
     const GCNode *record = graph.node(node);

@@ -1,0 +1,18 @@
+/**
+ * Verifies a loop that runs no round: the tape is empty, so the reverse pass does not run at all
+ * and the gradient of the parameter the body would have used is zero, not the seed.
+ */
+module loop_grad_zero_rounds
+
+import { grad, value_and_grad } from autodiff
+
+func f(w: float): float {
+    let xs: float[] = []
+    return loop acc = 0.0 for x in xs do acc + w * x
+}
+
+func main(): int sync {
+    let vg = value_and_grad(f)(2.0)
+    'loop_grad_zero_rounds vg={}'->format<vg>->println
+    return 0
+}
