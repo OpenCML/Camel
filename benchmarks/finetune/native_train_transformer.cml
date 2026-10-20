@@ -12,7 +12,7 @@ module native_train_transformer
 import {
     Tensor, layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean, load_npy
 } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from sys
 import { sqrt } from math
@@ -64,7 +64,7 @@ func loss(x: Tensor): float {
 
 /// One training step: the loss and the updated parameters (as exported to ONNX).
 func step(m: Block, x: Tensor): (float, Block) {
-    let vg = value_and_grad(loss)<m>(x)
+    let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 

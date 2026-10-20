@@ -1,32 +1,33 @@
 /**
  * A tail recursion whose depth depends on the model input and which returns the state together
  * with the number of steps, `(Tensor, int)`: forward as one ONNX Loop with the counter as an
- * int64 output, and its gradient (value_and_grad of a loss over the returned state) as paired
- * Loops. The model is the loss's first normal parameter (9.9); the data follows it. Numbers are
- * checked by ort_loop_values.py and ort_grad_loop_values.py; this program is the one both
- * export entries are compared on (pass_export.py equiv).
+ * int64 output, and its gradient (with_grad of a loss over the returned state) as paired
+ * Loops. Numbers are checked by ort_loop_values.py and ort_grad_loop_values.py; this program is
+ * the one both export entries are compared on (pass_export.py equiv).
  */
 module export_loop_values
 import { Tensor, reshape, sum, tanh } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from sys
 
 type P = { w: Tensor }
 
-func walk(m: P, h: Tensor, k: int): (Tensor, int) {
-    return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk(m, tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
+with <m: P>
+func walk(h: Tensor, k: int): (Tensor, int) {
+    return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
-func loss(m: P, x: Tensor): float {
-    let (h, k) = walk(m, x, 0)
+with <m: P>
+func loss(x: Tensor): float {
+    let (h, k) = walk<m>(x, 0)
     return sum(h * h) * (1.0 + 0.5 * float(k))
 }
 
 func model(w: Tensor, x: Tensor): (Tensor, int, Tensor, Tensor) {
     let m = { w: w }
-    let (h, k) = walk(m, x, 0)
-    let g = value_and_grad(loss)(m, x)
+    let (h, k) = walk<m>(x, 0)
+    let g = with_grad(loss)<m>(x)
     return (h, k, reshape([g.0], [1]), g.1.w)
 }
 

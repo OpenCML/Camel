@@ -668,7 +668,7 @@ class ForwardRewrite {
         gc_node_ref_t call, GCGraph *graph, std::vector<gc_node_ref_t> captures,
         gc_node_ref_t calleeValue);
     /// The function `callee` computes when it applies one of autodiff's own macros (grad,
-    /// value_and_grad, vjp) to static functions, else nullptr.
+    /// with_grad, vjp) to static functions, else nullptr.
     ::Function *macroCallee(gc_node_ref_t callee);
     /// Makes `node` return `plan`'s (value, pullback) and splits the pair for its users.
     void split(gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs);
@@ -1693,7 +1693,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         }
     }
     if (function == nullptr) {
-        // grad(f), value_and_grad(f) or vjp<rule>(f) of static functions that std::macro has
+        // grad(f), with_grad(f) or vjp<rule>(f) of static functions that std::macro has
         // not expanded (autodiff applied inside a function being differentiated).
         function = macroCallee(fill);
     }
@@ -1834,7 +1834,7 @@ void ForwardRewrite::rewriteClosureCall(
     static const camel::core::OperId kGrad =
         camel::core::OperatorTable::instance().intern("autodiff:grad");
     static const camel::core::OperId kValueAndGrad =
-        camel::core::OperatorTable::instance().intern("autodiff:value_and_grad");
+        camel::core::OperatorTable::instance().intern("autodiff:with_grad");
     static const camel::core::OperId kVjp =
         camel::core::OperatorTable::instance().intern("autodiff:vjp");
     const camel::core::OperId oper = body->oper;
@@ -3151,13 +3151,11 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
 GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     FunctionType *type   = function->funcType();
     const auto signature = gradientSignature(type, withValue);
+    // A function the compiler refused (NotDifferentiable) has no signature. Reaching this point
+    // with one means the compile-time check was bypassed: an internal defect, not a user error.
+    ASSERT(signature.has_value(), "autodiff: a function the compiler accepted has no gradient.");
     if (!signature) {
-        fail(
-            std::format(
-                "cannot differentiate '{}' of type {}: {}",
-                function->name(),
-                type->toString(),
-                differentiationRefusal(type)));
+        fail("autodiff: internal error: a function without a gradient reached the run time.");
     }
 
     const GraphScope scope{.role = GraphRole::Differentiated};
@@ -3174,9 +3172,9 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     backward.seed(value, draft->materializeStaticValue(one, type->exitType()));
     backward.run(order);
 
-    // The differential form differentiates the first normal parameter (9.9); the others are
-    // data, and `with` parameters are configuration.
-    gc_node_ref_t result = backward.gradient(draft->normPorts().front());
+    // The differential form differentiates the first `with` parameter (9.9); the other `with`
+    // parameters are constants and the ordinary parameters are data.
+    gc_node_ref_t result = backward.gradient(draft->withPorts().front());
     if (withValue) {
         const std::array<gc_node_ref_t, 2> pair{value, result};
         result = addAggregate(*draft, signature->functionType->exitType(), pair);
@@ -3231,24 +3229,23 @@ std::string differentiationRefusal(FunctionType *function) {
         return std::format(
             "it returns {}, not a float", valueType ? valueType->toString() : "nothing");
     }
-    // `grad` differentiates f's first normal parameter (9.9). `with` parameters are
-    // configuration and play no part in the choice.
-    if (function->normTypesCount() == 0) {
-        return "it has no normal parameter, and grad differentiates the first normal parameter";
+    // grad differentiates f's first `with` parameter (9.9); the ordinary parameters are data.
+    if (function->withTypesCount() == 0) {
+        return "it has no `with` parameter, and grad differentiates the first `with` parameter";
     }
-    Type *first = function->normTypeAt(0);
+    Type *first = function->withTypeAt(0);
     if (first == nullptr) {
-        return "its first normal parameter has no known type";
+        return "its first `with` parameter has no known type";
     }
-    if (function->normIsVarAt(0)) {
+    if (function->withIsVarAt(0)) {
         return std::format(
-            "its first normal parameter is a `var` of type {}; gradients do not flow through "
+            "its first `with` parameter is a `var` of type {}; gradients do not flow through "
             "variables (design principles 3.5)",
             first->toString());
     }
     if (tangentTypeOf(first) == nullptr) {
         return std::format(
-            "its first normal parameter has type {}, which has no gradient (a float, a tensor, "
+            "its first `with` parameter has type {}, which has no gradient (a float, a tensor, "
             "or a struct or tuple of them)",
             first->toString());
     }
@@ -3260,10 +3257,10 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
         return std::nullopt;
     }
     GradientSignature signature;
-    // The first normal parameter is the differentiated one; every other parameter is passed
+    // The first `with` parameter is the differentiated one; every other parameter is passed
     // through so the gradient function runs the function. A `var` parameter stays one, so its
     // caller passes the variable and the function's writes reach it.
-    signature.gradientType = tangentTypeOf(function->normTypeAt(0));
+    signature.gradientType = tangentTypeOf(function->withTypeAt(0));
     Type *valueType        = function->exitType();
     Type *result           = withValue
                                  ? TupleType::create(std::vector<Type *>{valueType, signature.gradientType})

@@ -1,17 +1,21 @@
 // The gradient of an array (design principles 9.9): the tangent of `T[]` is the array of the
 // tangents of its elements, and the reverse of reading `xs[i]` is a scatter-add into that array.
 // So `xs[0] + xs[2]` gives [1, 0, 1], and a struct array sends each element's gradient back to
-// its place with the fields of the tangent struct.
+// its place with the fields of the tangent struct. The array is the first `with` parameter.
 import { grad } from autodiff
 
 type P = { x: float, y: float }
 
-func pick(xs: float[]): float { return xs[0] + xs[2] }
+with <xs: float[]>
+func pick(): float { return xs[0] + xs[2] }
 
-func pick_x(ps: P[]): float { return ps[0].x + ps[1].x }
+with <ps: P[]>
+func pick_x(): float { return ps[0].x + ps[1].x }
 
 func main(): int sync {
-    println(grad(pick)([1.0, 2.0, 3.0]))
-    println(grad(pick_x)([{ x: 1.0, y: 10.0 }, { x: 2.0, y: 20.0 }]))
+    let xs = [1.0, 2.0, 3.0]
+    let ps = [{ x: 1.0, y: 10.0 }, { x: 2.0, y: 20.0 }]
+    println(grad(pick)<xs>())
+    println(grad(pick_x)<ps>())
     return 0
 }

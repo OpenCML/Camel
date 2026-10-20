@@ -5,15 +5,16 @@
  */
 module loop_grad_capture_table
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 
-func f(w: float): float {
+with <w: float>
+func f(): float {
     let table = [1.5, 2.5]
     return loop acc = 0.0 for k in [1, 2] do acc + table[0] * w
 }
 
 func main(): int sync {
-    let vg = value_and_grad(f)(2.0)
+    let vg = with_grad(f)<2.0>()
     'loop_grad_capture_table vg={}'->format<vg>->println
     return 0
 }

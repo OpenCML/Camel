@@ -11,13 +11,15 @@ module grad_function_values_arms
 import { Tensor, reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
-func loss1(p: Tensor): float {
+with <p: Tensor>
+func loss1(): float {
     let s = sum(p)
     let g = (t: Tensor): Tensor => tanh(t * s)
     return if s > 0.0 then sum(g(p)) else sum(g(p * 2.0)) * 0.5
 }
 
-func loss2(p: Tensor): float {
+with <p: Tensor>
+func loss2(): float {
     let s = sum(p)
     let g = (t: Tensor): Tensor => tanh(t * s)
     return if s < 0.0 then sum(g(p)) else sum(g(p * 2.0)) * 0.5
@@ -25,7 +27,7 @@ func loss2(p: Tensor): float {
 
 func main(): int sync {
     let x = reshape([0.5, 0.25, -0.35], [3])
-    println(grad(loss1)(x))
-    println(grad(loss2)(x))
+    println(grad(loss1)<x>())
+    println(grad(loss2)<x>())
     return 0
 }

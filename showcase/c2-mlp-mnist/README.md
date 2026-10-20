@@ -12,7 +12,7 @@ set, and are compared against one set of tolerances. Every number is produced by
 
 ```
 showcase/c2-mlp-mnist/
-  train.cml                the Camel implementation (parameter tree, value_and_grad, loop, save_tree)
+  train.cml                the Camel implementation (parameter tree, with_grad, loop, save_tree)
   baseline/train_torch.py  the PyTorch counterpart (nn.Linear, F.cross_entropy, torch.optim.Adam, state_dict)
   make_data.py             writes the data and the starting weights (MNIST or a deterministic stand-in)
   compare.py               runs both sides, compares, measures, writes RESULTS.md; exits non-zero on failure
@@ -125,7 +125,7 @@ configuration (synthetic stand-in) differs at the `1e-5` level.
 
 - **The parameters are a type.** Camel's `type Mlp = { w1, b1, w2, b2 }` is at once the type
   of the starting weights, of the gradient and of the optimizer state;
-  `value_and_grad(loss)(m, x, y)` returns a gradient tree of the same shape and
+  `with_grad(loss)<m>(x, y)` returns a gradient tree of the same shape and
   `adam(m, g, state, lr)` consumes it, so no line in the program names a leaf. PyTorch needs
   three things — an `nn.Module`, an optimizer object and a `state_dict` — to express the same
   facts.
@@ -199,13 +199,10 @@ The genuinely awkward parts of writing this example. Each comes with a question 
 ## Tests
 
 The four problems above were decided by the review: row selection, labels, keyed randomness
-and atomic `save_tree` replacement are H20; index slicing, lambda inference and
-"differentiate the first parameter" are H21.  This example keeps the current spelling
-(`with <m: Mlp>`, `slice`, one-hot targets, deleting the checkpoint directory from Python)
-until H20-4 and H21-3 land, when it will be rewritten with
-`value_and_grad(loss)(m, x, y)`, `take`/`permutation` and integer labels; the H13 report records
-that order.  The review's backtick interpolation and
-`let (value, gradient) = ...` destructuring are already in place.
+and atomic `save_tree` replacement are H20; index slicing and lambda inference are H21 (none
+of these has landed on this branch).  H21 item 3 was withdrawn (see H25): `with <m: Mlp>` and
+`with_grad(loss)<m>(x, y)` are the final spelling.  The example binds `with_grad(loss)` outside
+the loop and uses `let (value, gradient) = loss_with_grad<m>(x, y)` inside.
 
 The small configuration is registered in `test/plans/perf/showcase_c2.plan.toml`
 (`tier = "slow"`): it runs 200 steps on the synthetic stand-in, runs both sides, checks the

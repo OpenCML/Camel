@@ -132,7 +132,7 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
 Independent of the store, but part of the same work for Tiles: an operator that reads the graph
 of a function value it receives declares `OperatorTraits::inspectsGraphs` (Tiles' `run`,
 `run_device`, `source`, `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`,
-`value_and_grad`). On a back end that runs a private lowered copy, every function-typed operand of
+`with_grad`). On a back end that runs a private lowered copy, every function-typed operand of
 such an operator goes through `:graph/original`, which returns the same function over the
 program's graph (`GCGraph::originalGraph()`): Tiles sees the LOOP of a function on every back end
 (`docs/technical/39_loops.md` section 4).

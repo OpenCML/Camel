@@ -130,7 +130,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "export_train_step"
-desc = "A training step (value_and_grad + sgd) exports with the parameter struct and the input as graph inputs and the loss and updated parameters as outputs; no call survives."
+desc = "A training step (with_grad + sgd) exports with the parameter struct and the input as graph inputs and the loss and updated parameters as outputs; no call survives."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step.cml"
 args = ["${case}"]
@@ -287,7 +287,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_train_step_branch"
-desc = "A training step whose loss takes a data-dependent branch (if s > 1.0) exports as one standard graph: value_and_grad differentiates through the branch and each branch arm (loss value and pullback result) becomes a standard If."
+desc = "A training step whose loss takes a data-dependent branch (if s > 1.0) exports as one standard graph: with_grad differentiates through the branch and each branch arm (loss value and pullback result) becomes a standard If."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch.cml"
 args = ["${case}"]
@@ -445,7 +445,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "export_train_step_dynamic"
-desc = "E14/T7: a training step (value_and_grad + sgd) exports with a dynamic batch axis. The batch mean written as sum / shape arithmetic keeps the divisor input-dependent (Shape + Gather + Div instead of a folded constant) and the gradient's broadcast becomes an Expand on a Shape."
+desc = "E14/T7: a training step (with_grad + sgd) exports with a dynamic batch axis. The batch mean written as sum / shape arithmetic keeps the divisor input-dependent (Shape + Gather + Div instead of a folded constant) and the gradient's broadcast becomes an Expand on a Shape."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_dynamic.cml"
 args = ["${case}"]
@@ -652,7 +652,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "ort_train_step_dynamic"
-desc = "E14/T7: one training-step graph (value_and_grad + sgd) exported with a dynamic batch axis runs on ONNX Runtime at batch sizes 1, 16 and 64 and matches the per-batch specialized exports and Camel's native run of the same step at each (<= 1e-6)."
+desc = "E14/T7: one training-step graph (with_grad + sgd) exported with a dynamic batch axis runs on ONNX Runtime at batch sizes 1, 16 and 64 and matches the per-batch specialized exports and Camel's native run of the same step at each (<= 1e-6)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/ort_train_dynamic.py"
@@ -698,7 +698,7 @@ args = ["${case}", 'onnx::export(out="${test_tmp}/pass_export_refused_a.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 28
+expect_diagnostic_line = 29
 expect_diagnostic_column = 1
 expect_output_contains = ["run std::opt before onnx::export"]
 expect_output_not_contains = ["exported"]
@@ -714,16 +714,16 @@ timeout_ms = 4000
 
 [[tests]]
 name = "pass_export_refuses_without_macro"
-desc = "Without std::macro the training step still contains value_and_grad: onnx::export refuses with TranslationRefused at the macro call, naming std::macro, and writes no file."
+desc = "Without std::macro the training step still contains with_grad: onnx::export refuses with TranslationRefused at the macro call, naming std::macro, and writes no file."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_train_step.cml"
 args = ["${case}", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_refused_b.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 24
+expect_diagnostic_line = 25
 expect_diagnostic_column = 14
-expect_output_contains = ["macro operator 'autodiff:value_and_grad' is not expanded; run std::macro"]
+expect_output_contains = ["macro operator 'autodiff:with_grad' is not expanded; run std::macro"]
 expect_output_not_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
@@ -744,7 +744,7 @@ case = "../../../cases/modules/onnx/pass_export.py"
 args = ["${case}", "refuse"]
 skip_unless = ["${python}", "-c", "import json"]
 expect_exit = 0
-expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:28:1 file written: False", "stage pass:onnx::export at export_train_step.cml:24:14 file written: False", "at export_nontail_recursion.cml:12:80 file written: False", "onnx::export refuse: PASS"]
+expect_stdout_contains = ["stage pass:onnx::export at export_train_step.cml:29:1 file written: False", "stage pass:onnx::export at export_train_step.cml:25:14 file written: False", "at export_nontail_recursion.cml:12:80 file written: False", "onnx::export refuse: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
@@ -1582,7 +1582,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "ort_grad_loop"
-desc = "The gradient of a loop whose length depends on the data (value_and_grad over a tail recursion, once with a data-dependent branch in the loop body) exports as paired ONNX Loops: on ONNX Runtime, for lengths 0, 1 and more and both arms of the branch, value and gradient match Camel's native run and a NumPy reverse sweep."
+desc = "The gradient of a loop whose length depends on the data (with_grad over a tail recursion, once with a data-dependent branch in the loop body) exports as paired ONNX Loops: on ONNX Runtime, for lengths 0, 1 and more and both arms of the branch, value and gradient match Camel's native run and a NumPy reverse sweep."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/ort_grad_loop.py"
@@ -1684,7 +1684,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_train_step_vjp"
-desc = "A training step (value_and_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
+desc = "A training step (with_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_vjp.cml"
 args = ["${case}", "std::macro"]
@@ -1707,7 +1707,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_train_step_vjp"
-desc = "A training step (value_and_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
+desc = "A training step (with_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_vjp.cml"
 args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/pass_export_train_step_vjp.onnx")']
@@ -1947,7 +1947,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_entry.train_step"
-desc = "A training step as `main` (weights as `with` parameters, value_and_grad, sgd): the weights are inputs (p_w, p_b) and, updated, outputs (output_1_w, output_1_b) next to the loss (output_0)."
+desc = "A training step as `main` (weights as `with` parameters, with_grad, sgd): the weights are inputs (p_w, p_b) and, updated, outputs (output_1_w, output_1_b) next to the loss (output_0)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/entry/train_step.cml"
 args = ["${case}", "std::macro", "std::opt", 'onnx::export(out="${test_tmp}/entry_train_step.onnx")']
@@ -1968,14 +1968,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_entry.train_step_without_macro"
-desc = "Without std::macro the training step still contains value_and_grad: refused at the macro call, naming std::macro, as for an export_model request."
+desc = "Without std::macro the training step still contains with_grad: refused at the macro call, naming std::macro, as for an export_model request."
 kind = "negative"
 case = "../../../cases/modules/onnx/entry/train_step.cml"
 args = ["${case}", "std::opt", 'onnx::export(out="${test_tmp}/entry_train_step_refused.onnx")']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 23
-expect_output_contains = ["macro operator 'autodiff:value_and_grad' is not expanded", "run std::macro"]
+expect_diagnostic_line = 22
+expect_output_contains = ["macro operator 'autodiff:with_grad' is not expanded", "run std::macro"]
 expect_output_not_contains = ["onnx::export: wrote"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2254,7 +2254,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "ort_const_under_as"
-desc = "A constant under `as` stays a constant, and `as` on a model-dependent tensor is a checked assertion: three models (weights converted to shaped types; conversions of computed values that the example's shape proves; value_and_grad through conversions) are exported by the operator and by the pass from an example that is itself a tensor of literals under `as`. Each passes onnx.checker's full check and matches NumPy on ONNX Runtime within 1e-6. Constant folding used to leave the CAST of a constant in the graph: the pass refused the example as 'a value computed at run time'."
+desc = "A constant under `as` stays a constant, and `as` on a model-dependent tensor is a checked assertion: three models (weights converted to shaped types; conversions of computed values that the example's shape proves; with_grad through conversions) are exported by the operator and by the pass from an example that is itself a tensor of literals under `as`. Each passes onnx.checker's full check and matches NumPy on ONNX Runtime within 1e-6. Constant folding used to leave the CAST of a constant in the graph: the pass refused the example as 'a value computed at run time'."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/ort_const_under_as.py"

@@ -91,7 +91,7 @@ the gradient are bitwise equal; the test asserts `grad_diff=0.0` with
 gradient of the labels form is `dy * (softmax(logits) - one_hot(labels))`, again with the same
 loop order as the one-hot kernel.
 
-`softmax_cross_entropy_grad` gets the same two definitions, so `value_and_grad` of either form
+`softmax_cross_entropy_grad` gets the same two definitions, so `with_grad` of either form
 works without a new API. A target whose element type is **not fixed** (a bare `Tensor` parameter)
 keeps the one-hot form, which is the pre-existing spelling; passing integer data there is a type
 error the compiler cannot see, and is listed under the open questions.

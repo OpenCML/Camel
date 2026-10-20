@@ -3,16 +3,17 @@ import { Tensor, reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
 // Refused: the function called is a parameter of the differentiated function itself, so no
-// function is named or built for it anywhere grad can look. The first of the two calls (line 10)
-// is the one reported. `p` is the first normal parameter (the differentiable one, 9.9); the
-// function value follows it as data.
-func loss(p: Tensor, f: (t: Tensor) => Tensor): float {
+// function is named or built for it anywhere grad can look. The differentiated value is the
+// first `with` parameter; the function is ordinary data. The first of the two calls is the one
+// reported.
+with <p: Tensor>
+func loss(f: (t: Tensor) => Tensor): float {
     let a = f(p)
     return sum(f(a) * p)
 }
 
 func main(): int sync {
     let x = reshape([0.5, 0.25, -0.35], [3])
-    println(grad(loss)(x, (t: Tensor): Tensor => tanh(t)))
+    println(grad(loss)<x>((t: Tensor): Tensor => tanh(t)))
     return 0
 }

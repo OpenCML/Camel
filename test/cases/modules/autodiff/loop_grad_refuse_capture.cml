@@ -8,13 +8,14 @@ module loop_grad_refuse_capture
 
 import { grad } from autodiff
 
-func f(w: float): float {
+with <w: float>
+func f(): float {
     let ys = [w, 2.0]
     return loop acc = 0.0 for k in [1, 2] do acc + ys[0]
 }
 
 func main(): int sync {
-    let d = grad(f)(2.0)
+    let d = grad(f)<2.0>()
     'loop_grad_refuse_capture d={}'->format<d>->println
     return 0
 }

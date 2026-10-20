@@ -1,7 +1,7 @@
 /**
  * T13 account 4 (Camel side): single-layer forward+backward micro-benchmark.
  *
- * Times one `value_and_grad` step of a one-layer function (a GEMM or a conv2d
+ * Times one `with_grad` step of a one-layer function (a GEMM or a conv2d
  * with the exact shapes of an mlp_big / lenet_big layer) under std::nvm, with
  * CAMEL_TENSOR_OPSTATS=1 so the stderr op table gives the per-shape kernel time
  * of matmul / matmul_grad_lhs / matmul_grad_rhs (or conv2d + its grad kernels)
@@ -14,7 +14,7 @@
 module micro
 
 import { Tensor, load_npy, set_num_threads, mean } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { conv2d, sgd } from nn
 import { get_env } from sys
 import { now } from time
@@ -54,7 +54,7 @@ func main(): int sync {
     let x = load_npy(dir + '/x.npy')
     let w = load_npy(dir + '/w.npy')
     if op == 'lin' then sync {
-        let step = (): float => { return value_and_grad(lin)(x, w).0 }
+        let step = (): float => { return with_grad(lin)(x, w).0 }
         let first = step()
         let warmed = warm(step, int(get_env('CAMEL_BENCH_WARMUP')) - 1)
         return timed(step, int(get_env('CAMEL_BENCH_REPS')))
@@ -67,8 +67,8 @@ func main(): int sync {
         return timed(step, int(get_env('CAMEL_BENCH_REPS')))
     } else sync {
         let b = load_npy(dir + '/b.npy')
-        let step = if op == 'conv_s1_p2' then (): float => { return value_and_grad(conv_s1_p2)(x, w, b).0 }
-                   else (): float => { return value_and_grad(conv_s1_p0)(x, w, b).0 }
+        let step = if op == 'conv_s1_p2' then (): float => { return with_grad(conv_s1_p2)(x, w, b).0 }
+                   else (): float => { return with_grad(conv_s1_p0)(x, w, b).0 }
         let first = step()
         let warmed = warm(step, int(get_env('CAMEL_BENCH_WARMUP')) - 1)
         return timed(step, int(get_env('CAMEL_BENCH_REPS')))

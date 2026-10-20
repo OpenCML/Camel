@@ -9,29 +9,32 @@ module grad_unexpanded_inline
 
 import { grad } from autodiff
 
-func leaky(x: float): float {
+with <x: float>
+func leaky(): float {
     return if x > 0.0 then x * x else 0.5 * x
 }
 
-func power(x: float, n: int): float {
-    return if n == 0 then 1.0 else x * power(x, n - 1)
+with <x: float>
+func power(n: int): float {
+    return if n == 0 then 1.0 else x * power<x>(n - 1)
 }
 
-func cube(x: float): float {
+with <x: float>
+func cube(): float {
     return if x > 0.0 then x * x * x else 0.0 - x
 }
 
-func of_param(f: (x: float) => float, x: float): float {
-    return grad(f)(x)
+func of_param(f: <x: float> () => float, x: float): float {
+    return grad(f)<x>()
 }
 
 func main(): int sync {
     println('before grad')
-    let a = grad(leaky)(3.0)
-    let b = grad(power)(2.0, 5)
+    let a = grad(leaky)<3.0>()
+    let b = grad(power)<2.0>(5)
     let c = of_param(cube, 2.0)
     // The same functions called directly are still inlined and still agree.
-    let d = leaky(3.0) + power(2.0, 5) + cube(2.0)
+    let d = leaky<3.0>() + power<2.0>(5) + cube<2.0>()
     'grad_unexpanded_inline a={} b={} c={} d={}'->format<a, b, c, d>->println
     return 0
 }

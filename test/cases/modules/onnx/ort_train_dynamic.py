@@ -1,6 +1,6 @@
 """E14/T7: one dynamic-batch TRAINING step graph vs per-batch specialized graphs.
 
-The value_and_grad + sgd step of ort_train_dynamic.cml (batch mean written as
+The with_grad + sgd step of ort_train_dynamic.cml (batch mean written as
 sum / shape arithmetic) is exported once with dynamic_axes = [0] and once per
 batch size (1, 16, 64) as a specialized static graph. ONNX Runtime runs both at
 each batch size; the loss and every updated parameter must match within 1e-6,

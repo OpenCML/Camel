@@ -1,4 +1,6 @@
 // Views read only the core's maps; custom VJPs exercise legal noncanonical dy reshapes.
+// The differentiated tensor is the first `with` parameter; the derivative wrappers keep the
+// ordinary signature that tiles::run and tiles::source specialize on.
 module tiles_core_views
 import { Tensor, load_npy, save_npy, reshape, permute, slice, sum, zeros } from tensor
 import { grad, vjp } from autodiff
@@ -12,21 +14,26 @@ func configured(x: Tensor<f32, const [2, 3, 4]>): Tensor<f32> { return permute(x
 func rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3, 2]) }
 @vjp<rule>
 func mark(x: Tensor<f32>): Tensor<f32> { return x }
-func loss(x: Tensor<f32>): float {
+with <x: Tensor<f32>>
+func loss(): float {
     return sum(mark(sum(x, 1)) * weights)
 }
-func negative_loss(x: Tensor<f32>): float {
+with <x: Tensor<f32>>
+func negative_loss(): float {
     return sum(mark(sum(x, -2)) * weights)
 }
-func keep_loss(x: Tensor<f32>): float { return sum(sum(x, -2, true)) }
+with <x: Tensor<f32>>
+func keep_loss(): float { return sum(sum(x, -2, true)) }
 func empty_rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3, 0]) }
 @vjp<empty_rule>
 func empty_mark(x: Tensor<f32>): Tensor<f32> { return x }
-func empty_loss(x: Tensor<f32>): float { return sum(empty_mark(sum(x, 1))) }
+with <x: Tensor<f32>>
+func empty_loss(): float { return sum(empty_mark(sum(x, 1))) }
 func wide_rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [4, 5, 2]) }
 @vjp<wide_rule>
 func wide_mark(x: Tensor<f32>): Tensor<f32> { return x }
-func wide_loss(x: Tensor<f32>): float { return sum(wide_mark(sum(x, 1))) }
+with <x: Tensor<f32>>
+func wide_loss(): float { return sum(wide_mark(sum(x, 1))) }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
     let x = load_npy(folder + '/x.npy') as Tensor<f32, const [2, 3, 4]>
@@ -40,9 +47,9 @@ func main(): int sync {
     save_npy(run<configured<[1, 2, 0]>>(x), folder + '/config_gpu1.npy')
     save_npy(run<configured<[2, 0, 1]>>(x), folder + '/config_gpu2.npy')
     let a = zeros([2, 4, 3])
-    let df = grad(loss)
-    let dn = grad(negative_loss)
-    let dk = grad(keep_loss)
+    let df = (v: Tensor<f32>): Tensor<f32> => grad(loss)<v>()
+    let dn = (v: Tensor<f32>): Tensor<f32> => grad(negative_loss)<v>()
+    let dk = (v: Tensor<f32>): Tensor<f32> => grad(keep_loss)<v>()
     save_npy(df(a), folder + '/expand_cpu.npy')
     save_npy(run<df>(a), folder + '/expand_gpu.npy')
     save_npy(dn(a), folder + '/negative_cpu.npy')
@@ -50,11 +57,11 @@ func main(): int sync {
     save_npy(dk(a), folder + '/keep_cpu.npy')
     save_npy(run<dk>(a), folder + '/keep_gpu.npy')
     let e = zeros([0, 4, 2])
-    let de = grad(empty_loss)
+    let de = (v: Tensor<f32>): Tensor<f32> => grad(empty_loss)<v>()
     save_npy(de(e), folder + '/empty_cpu.npy')
     save_npy(run<de>(e), folder + '/empty_gpu.npy')
     let w = zeros([2, 3, 4, 5])
-    let dw = grad(wide_loss)
+    let dw = (v: Tensor<f32>): Tensor<f32> => grad(wide_loss)<v>()
     save_npy(dw(w), folder + '/wide_cpu.npy')
     save_npy(run<dw>(w), folder + '/wide_gpu.npy')
     println('FIXED_INSPECT')

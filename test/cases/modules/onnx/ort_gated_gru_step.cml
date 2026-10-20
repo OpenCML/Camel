@@ -7,7 +7,7 @@
 module ort_gated_gru_step
 
 import { Tensor, sigmoid, tanh, slice, reshape, shape, zeros, mean, abs, load_npy, save_npy } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from sys
 
@@ -19,30 +19,34 @@ type Gru = {
     fc_w: Tensor, fc_b: Tensor
 }
 
-func cell(m: Gru, xt: Tensor, h: Tensor): Tensor {
+with <m: Gru>
+func cell(xt: Tensor, h: Tensor): Tensor {
     let r = sigmoid(xt @ m.w_ir + m.b_ir + h @ m.w_hr + m.b_hr)
     let z = sigmoid(xt @ m.w_iz + m.b_iz + h @ m.w_hz + m.b_hz)
     let n = tanh(xt @ m.w_in + m.b_in + r * (h @ m.w_hn + m.b_hn))
     return (1.0 - z) * n + z * h
 }
 
-func gated(m: Gru, x: Tensor, t: int, h: Tensor): Tensor {
+with <m: Gru, x: Tensor>
+func gated(t: int, h: Tensor): Tensor {
     let xt = reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])
-    return if mean(abs(xt)) > 0.5 then cell(m, xt, h) else h
+    return if mean(abs(xt)) > 0.5 then cell<m>(xt, h) else h
 }
 
-func run(m: Gru, x: Tensor, t: int, steps: int, h: Tensor): Tensor {
-    return if t >= steps then h else run(m, x, t + 1, steps, gated(m, x, t, h))
+with <m: Gru, x: Tensor>
+func run(t: int, steps: int, h: Tensor): Tensor {
+    return if t >= steps then h else run<m, x>(t + 1, steps, gated<m, x>(t, h))
 }
 
-func loss(m: Gru, x: Tensor): float {
-    let h = run(m, x, 0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
+with <m: Gru>
+func loss(x: Tensor): float {
+    let h = run<m, x>(0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
     let y = h @ m.fc_w + m.fc_b
     return mean(y * y)
 }
 
 func step(m: Gru, x: Tensor): (float, Gru) {
-    let vg = value_and_grad(loss)(m, x)
+    let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 

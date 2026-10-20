@@ -92,12 +92,12 @@ runtime.
 | update | `adam(m, gradient, opt, lr)`, optimizer state in the loop | `optimizer.step()` |
 | loop | `loop m, opt, step ... do sync { ... }` | `for step in range(...)` |
 
-### The future spelling
+### Differentiation spelling
 
-Design principles 9.9 / H21-3 will make the model an ordinary first parameter, giving
-`value_and_grad(loss)(m, x, eps)`; until then the example keeps `with <m: Vae>`.  Every Camel
-example up to this point carries that note so a reader does not mistake `with` for the final
-form.
+Design principles 9.9 (H21 item 3 was withdrawn; see H25): `with <m: Vae>` is the final
+spelling, and `with_grad(loss)<m>(x, eps)` differentiates the first `with` parameter, returning
+a gradient of the same type as `m`; the other parameters are data.  The example binds
+`with_grad(loss)` outside the loop.
 
 ## Problems found
 

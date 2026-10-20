@@ -1,13 +1,11 @@
 /**
- * One-hot matrix factorization trained with autodiff: value_and_grad of the rating loss gives
+ * One-hot matrix factorization trained with autodiff: with_grad of the rating loss gives
  * a MatrixFactorization-shaped gradient (only the selected user/item rows are non-zero), one
  * sgd step lowers the loss, and a recursive train loop repeats the step.
- *
- * The model is the first normal parameter of the loss (9.9).
  */
 module matrix_factorization
 
-import { grad, value_and_grad } from autodiff
+import { grad, with_grad } from autodiff
 import { Tensor, full, reshape, sum } from tensor
 import { sgd } from nn
 
@@ -16,7 +14,8 @@ type MatrixFactorization = {
     item_table: Tensor
 }
 
-func rating_loss(model: MatrixFactorization, user_one_hot: Tensor, item_one_hot: Tensor, rating: float): float {
+with <model: MatrixFactorization>
+func rating_loss(user_one_hot: Tensor, item_one_hot: Tensor, rating: float): float {
     let user_vec = user_one_hot @ model.user_table
     let item_vec = item_one_hot @ model.item_table
     let pred = sum(user_vec * item_vec)
@@ -32,7 +31,7 @@ func init(): MatrixFactorization {
 }
 
 func train(model: MatrixFactorization, u: Tensor, i: Tensor, rating: float, steps: int): MatrixFactorization {
-    return if steps == 0 then model else train(sgd(model, grad(rating_loss)(model, u, i, rating), 0.1), u, i, rating, steps - 1)
+    return if steps == 0 then model else train(sgd(model, grad(rating_loss)<model>(u, i, rating), 0.1), u, i, rating, steps - 1)
 }
 
 func main(): int sync {
@@ -41,12 +40,12 @@ func main(): int sync {
     let item_one_hot = reshape([[0.0, 1.0, 0.0, 0.0]], [1, 4])
     let rating = 1.0
 
-    let before = rating_loss(model, user_one_hot, item_one_hot, rating)
-    let vg = value_and_grad(rating_loss)(model, user_one_hot, item_one_hot, rating)
+    let before = rating_loss<model>(user_one_hot, item_one_hot, rating)
+    let vg = with_grad(rating_loss)<model>(user_one_hot, item_one_hot, rating)
     let stepped = sgd(model, vg.1, 0.1)
-    let after = rating_loss(stepped, user_one_hot, item_one_hot, rating)
+    let after = rating_loss<stepped>(user_one_hot, item_one_hot, rating)
     let trained = train(model, user_one_hot, item_one_hot, rating, 10)
-    let after_train = rating_loss(trained, user_one_hot, item_one_hot, rating)
+    let after_train = rating_loss<trained>(user_one_hot, item_one_hot, rating)
 
     'matrix_factorization metrics before={} step={} after={} train10={}'->format<before, vg.0, after, after_train>->println
     'matrix_factorization user_table={}'->format<stepped.user_table>->println

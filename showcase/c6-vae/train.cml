@@ -13,7 +13,7 @@ module c6_vae
 
 // == imports ==
 import { Tensor, exp, load_npy, mean, numel, relu, set_num_threads, shape, slice, sum } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { adam, adam_state } from nn
 import { now } from time
 
@@ -99,13 +99,14 @@ func main(data: string, steps: int, batch: int, lr: float, log_every: int, threa
     // The optimizer state is part of the loop state, as in C2.  The noise row for a step is a
     // contiguous slice, so no sampling happens inside the loop.
     let started = now()
+    let loss_with_grad = with_grad(loss)
     let (trained, optimizer) = loop m = initial, opt = adam_state(initial), step = 0
         while step < steps
         do sync {
             let start = (step % batches) * batch
             let x = slice(train_x, 0, start, start + batch)
             let eps = slice(noise, 0, step * batch, step * batch + batch)
-            let (value, gradient) = value_and_grad(loss)<m>(x, eps)
+            let (value, gradient) = loss_with_grad<m>(x, eps)
             if step % log_every == 0 then {
                 `c6 step=${step} loss=${value:.9f}`->println
             }

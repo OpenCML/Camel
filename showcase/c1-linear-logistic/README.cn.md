@@ -1,6 +1,6 @@
 # C1 — 线性回归与逻辑回归
 
-这个示例展示最小的一整套训练：张量、`value_and_grad`、`do` 循环、参数树上的 SGD。同一个
+这个示例展示最小的一整套训练：张量、`with_grad`、`do` 循环、参数树上的 SGD。同一个
 程序解决两个问题，只换损失函数：
 
 - 线性回归：`y = 2*x1 - 1.5*x2 + 0.5`，加少量噪声；
@@ -87,17 +87,17 @@ python showcase/c1-linear-logistic/compare.py --profile standard   # 写 RESULTS
 |---|---|---|
 | 模型 | `type Model = { w, b: Tensor }` | `nn.Linear(2, 1)` |
 | 损失 | 手写公式，`mean` 在全量上归约 | `F.mse_loss` / `F.binary_cross_entropy_with_logits` |
-| 梯度 | `value_and_grad(loss)<m>(x, y, kind)` | `value.backward()` |
+| 梯度 | `with_grad(loss)<m>(x, y, kind)` | `value.backward()` |
 | 更新 | `sgd(m, gradient, lr)`，返回同型参数树 | `optimizer.step()` |
 | 循环 | `loop m = initial, step = 0 while ... do sync { ... }` | `for step in range(steps)` |
 | 打印 | 反引号插值 `` `c1 step=${step} loss=${value:.9f}` `` | f-string |
 
-### 与将来的写法
+### 求导的写法
 
-设计原则 9.9 / H21-3 定下“对第一个参数求导、模型参数是普通参数”，最终写法是
-`value_and_grad(loss)(m, x, y)`，不再用 `with <m: Model>`。H21-3 还没落地，本示例保留
-`with` 形式；落地后只需把 `loss` 的 `with` 参数改成第一个普通参数，训练循环本身不动。
-报告 H13 里记了这一点。
+设计原则 9.9（H21 第 3 项已撤回，见 H25）：权重是 `with` 参数，
+`with_grad(loss)<m>(x, y)` 对第一个 `with` 参数求导，返回与 `m` 同型的梯度；其余
+`with` 参数是常量，普通参数是数据。本示例把 `with_grad(loss)` 绑定在循环外，循环内
+带权重调用。
 
 ## 遇到的问题
 

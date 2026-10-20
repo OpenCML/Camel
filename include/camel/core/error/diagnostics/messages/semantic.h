@@ -155,6 +155,8 @@ enum class SemanticDiag : uint32_t {
     DimensionNameAlreadyBound = 0x000142,
     DimensionMismatch         = 0x000143,
     InvalidExtentExpression   = 0x000144,
+    // Automatic differentiation (design principles 9.9): 0x150 and up.
+    NotDifferentiable = 0x000150,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

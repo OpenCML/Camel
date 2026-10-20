@@ -10,7 +10,7 @@
 
 ## 1. 问题与证据
 
-DDPM 项目已经能用 Camel 写完整的训练流程：模型、损失、`value_and_grad`、Adam、EMA、采样都在 Camel 里，GPU 上跑。暴露的问题集中在下面几处。
+DDPM 项目已经能用 Camel 写完整的训练流程：模型、损失、`with_grad`、Adam、EMA、采样都在 Camel 里，GPU 上跑。暴露的问题集中在下面几处。
 
 ### 1.1 参数树只能靠代码生成
 
@@ -37,7 +37,7 @@ export func stepFF(p: FF, g: FF, m: FF, v: FF, rate: float, bc1: float, bc2: flo
 - 值层面：没有"对结构的每个叶子做同一件事"的写法；
 - 类型层面：没有办法从 `FF` 得到"每个字段都在设备上的 `FF`"。
 
-而核心内部早已理解这种树：`value_and_grad(loss)(m, ...)` 对整个 `Model` 求梯度并返回同构的梯度（模型是第一个普通参数，9.9）；`run_device` 按原结构返回设备值。缺的只是让用户也能写。
+而核心内部早已理解这种树：`with_grad(loss)<m>` 对整个 `Model` 求梯度并返回同构的梯度；`run_device` 按原结构返回设备值。缺的只是让用户也能写。
 
 ### 1.2 一个训练步在主机与设备之间往返
 
@@ -160,7 +160,7 @@ export func sq_norm(p: typeas P): float {
 
 ### 3.6 与自动微分、Tiles 的关系
 
-- `value_and_grad` 已对结构参数返回同构梯度；树操作展开为逐叶节点后，梯度照常通过。
+- `with_grad` 已对结构参数返回同构梯度；树操作展开为逐叶节点后，梯度照常通过。
 - `@gpu` 与 `run_device` 已按结构传递参数；`Device<P>` 规范化后，用户写的类型与 Tiles 返回的类型一致。
 - 展开在类型确定之后、自动微分之前进行（技术选择，实现时与 `std::macro` 的位置一起确定）。
 
@@ -208,7 +208,7 @@ func train_step(s: Device<State>, data: Device<Tensor<f32>>, cfg: Config): (Devi
     let t     = randint(fold(k, 1), 0, cfg.timesteps - 1)
     let noise = normal(fold(k, 2), [cfg.batch, 784])
     let noisy = q_sample(clean, noise, cfg.abar[t])
-    let (l, g) = value_and_grad(loss)(s.params, noisy, noise, embedding(t))
+    let (l, g) = with_grad(loss)<s.params>(noisy, noise, embedding(t))
     let (p, m, v) = adam(s.params, g, s.m, s.v, hyper(cfg, s.step))
     return ({ params: p, m: m, v: v, ema: ema(s.ema, p), key: s.key, step: s.step + 1 }, l)
 }

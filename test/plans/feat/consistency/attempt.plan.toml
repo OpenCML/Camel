@@ -377,7 +377,7 @@ case = "../../../cases/consistency/attempt/refuse_grad.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 16
+expect_diagnostic_line = 18
 expect_output_contains = ["no derivative rule for operator ':mark/isolate'"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
 
@@ -399,7 +399,7 @@ case = "../../../cases/consistency/attempt/in_macro.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 16
+expect_diagnostic_line = 18
 expect_output_contains = ["':mark/isolate' is unavailable in macro execution"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
 

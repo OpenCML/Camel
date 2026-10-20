@@ -20,7 +20,7 @@
 | # | 示例 | 展示的 Camel 能力 | 依赖 |
 |---|---|---|---|
 | C1 | 线性回归、逻辑回归 | 张量、`grad`、`do` 循环训练 | 已具备 |
-| C2 | MLP 训练 MNIST（含评估与检查点） | 参数树即类型、`tree_map`、`value_and_grad`、资源推导、`save_tree` | 已具备 |
+| C2 | MLP 训练 MNIST（含评估与检查点） | 参数树即类型、`tree_map`、`with_grad`、资源推导、`save_tree` | 已具备 |
 | C3 | CNN：LeNet、ResNet-18 训练 CIFAR-10 | 卷积、BN、数据管线、`@gpu` | GPU 路径（Tiles） |
 | C4 | 字符级 RNN、LSTM 语言模型 | **穿过循环的反向传播**（按时间展开） | 循环求导（H4d） |
 | C5 | Transformer（nanoGPT 规模）训练 TinyShakespeare | 注意力、混合精度标签、`#strict` 对照 | GPU 路径 |

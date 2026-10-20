@@ -1094,6 +1094,19 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::NotDifferentiable,
+            {
+                "NotDifferentiable",
+                "The function cannot be differentiated: {0}.",
+                "grad and with_grad differentiate the first `with` parameter of a function "
+                "that returns a float (design principles 9.9). Weights are `with` parameters; "
+                "the remaining `with` parameters are constants and the ordinary parameters are "
+                "data. Give the function a `with` parameter of a differentiable type, or wrap "
+                "the value to differentiate in a lambda that makes it the first `with` "
+                "parameter.",
+            },
+        },
+        {
             SemanticDiag::EnumVariantCaseRepeated,
             {
                 "EnumVariantCaseRepeated",

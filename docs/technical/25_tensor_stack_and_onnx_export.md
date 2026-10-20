@@ -326,7 +326,7 @@ Every node evaluates to either a constant or a symbolic tensor:
   (float, int, bool) or a tuple or struct of these, nested, each leaf a
   carried value, a value computed from them where the recursion returns, or
   a constant (an integer counter is an int64 output); and, for the gradient,
-  `value_and_grad` of a loss computed from that result when ONE if / else
+  `with_grad` of a loss computed from that result when ONE if / else
   decides the recursion. The full statement, the refusals and the tests are
   in `26_autodiff_as_graph_rewrite.md` section 7 ("Tail recursion of dynamic
   depth is an ONNX Loop", "Linear recursion").

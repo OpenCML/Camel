@@ -3,11 +3,8 @@
  * no longer describes their ports: a copy specialized to constant arguments
  * (scale: `k` and `a` are bound, the type still lists three parameters), and a
  * branch arm called as an ordinary function once fold has resolved the static
- * branch (unroll: the arm takes four ports under the type `() => float`).
+ * branch (unroll: the arm takes four with ports under the type `() => float`).
  * Both used to yield a gradient of 0 without any error.
- *
- * `grad` differentiates the first normal parameter (9.9), so `w` leads the
- * signature and the remaining parameters are data.
  */
 module grad_specialized_callee
 
@@ -17,25 +14,28 @@ func scale(k: int, a: float, h: float): float {
     return h * a * float(k)
 }
 
-func scaled(w: float, x: float): float {
+with <w: float>
+func scaled(x: float): float {
     return scale(3, 2.0, x * w)
 }
 
-func unroll(w: float, t: int, steps: int, h: float): float {
-    return if t >= steps then h else unroll(w, t + 1, steps, h * w + 1.0)
+with <w: float>
+func unroll(t: int, steps: int, h: float): float {
+    return if t >= steps then h else unroll<w>(t + 1, steps, h * w + 1.0)
 }
 
-func unrolled(w: float, x: float): float {
-    let h = unroll(w, 0, 3, x)
+with <w: float>
+func unrolled(x: float): float {
+    let h = unroll<w>(0, 3, x)
     return h * h
 }
 
 func grad_scaled(w: float, x: float): float {
-    return grad(scaled)(w, x)
+    return grad(scaled)<w>(x)
 }
 
 func grad_unrolled(w: float, x: float): float {
-    return grad(unrolled)(w, x)
+    return grad(unrolled)<w>(x)
 }
 
 func main(): int sync {

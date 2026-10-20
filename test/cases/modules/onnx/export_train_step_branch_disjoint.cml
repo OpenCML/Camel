@@ -8,7 +8,7 @@
 module export_train_step_branch_disjoint
 
 import { Tensor, relu, mean, abs, reshape, zeros } from tensor
-import { value_and_grad } from autodiff
+import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
 import { get_env } from sys
@@ -19,7 +19,8 @@ type Mlp = {
     we: Tensor, be: Tensor
 }
 
-func loss(m: Mlp, x: Tensor): float {
+with <m: Mlp>
+func loss(x: Tensor): float {
     let h1 = relu(x @ m.w1 + m.b1)
     let h2 = relu(h1 @ m.w2 + m.b2)
     let y = if mean(abs(h2)) > 0.5 then h2 @ m.we + m.be else relu(h2 @ m.w3 + m.b3) @ m.wo + m.bo
@@ -27,7 +28,7 @@ func loss(m: Mlp, x: Tensor): float {
 }
 
 func step(m: Mlp, x: Tensor): (float, Mlp) {
-    let vg = value_and_grad(loss)(m, x)
+    let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 

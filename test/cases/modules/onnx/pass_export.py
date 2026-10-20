@@ -27,7 +27,7 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[3]
 PIPELINE = ["std::macro", "std::opt", "onnx::export"]
 # Plain forward export (closure over the weights, unrolled recursion, shape arithmetic) and a
-# training-step export (value_and_grad + sgd, parameters as graph inputs).
+# training-step export (with_grad + sgd, parameters as graph inputs).
 # The rest widen the coverage: an If, dynamic axes, and Adam / batch-norm / conv training steps.
 PROGRAMS = [
     "export_fold.cml",
@@ -59,8 +59,8 @@ PROGRAMS = [
 ]
 # (program, passes, expected fragment of the message, expected 1-based line of the position)
 REFUSALS = [
-    ("export_train_step.cml", ["onnx::export"], "run std::opt before onnx::export", 28),
-    ("export_train_step.cml", ["std::opt", "onnx::export"], "run std::macro", 24),
+    ("export_train_step.cml", ["onnx::export"], "run std::opt before onnx::export", 29),
+    ("export_train_step.cml", ["std::opt", "onnx::export"], "run std::macro", 25),
     ("export_nontail_recursion.cml", PIPELINE, "several branches decide whether a function calls itself", None),
 ]
 DTYPES = {"tensor(float)": "float32", "tensor(double)": "float64", "tensor(int64)": "int64"}
