@@ -320,7 +320,7 @@ c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 63d195595160cec9 ok stdlib/signatures/bytes.cml
 ba50ff52809dea87 ok stdlib/signatures/crypto.cml
 651e80439e059f51 ok stdlib/signatures/fs.cml
-a219255a6b1f29bb no stdlib/signatures/globals.cml
+730131259dab3541 no stdlib/signatures/globals.cml
 e496c47662032c01 ok stdlib/signatures/json.cml
 9b8ae9467061105d ok stdlib/signatures/math.cml
 f8d330763bbcd3e8 ok stdlib/signatures/os.cml
@@ -1058,8 +1058,8 @@ ece491c607145dbc ok test/cases/definitions/kernels.cml
 003aeab5eb88102c ok test/cases/definitions/mean_empty.cml
 38fb8cae2a40a044 ok test/cases/facts/tensors_and_loops.cml
 61acf4b4dcd0d842 ok test/cases/facts/two_functions.cml
-46085616dc154120 ok test/cases/feat/mm/buffers.cml
-abf0faf6b357fc32 ok test/cases/feat/mm/mem_buffers.cml
+00fb02a946aa1af0 ok test/cases/feat/mm/blocks.cml
+827a89198ee2c0fa ok test/cases/feat/mm/mem_blocks.cml
 bec40d29daf6e639 ok test/cases/feat/mm/capacity/perm_query_types.cml
 272b762adea784ae ok test/cases/feat/mm/gc/gc_born_old.cml
 f8019d12cc56b4bf ok test/cases/feat/mm/gc/gc_collection_trees.cml
@@ -1107,7 +1107,7 @@ c3ec908702304769 ok test/cases/linear/byref/let_to_var_with_param.cml
 bdda7724b9a64bf3 ok test/cases/linear/byref/param_sorted.cml
 6fdfbac84dc5e04f ok test/cases/linear/byref/param_to_var_param.cml
 da80fe2dd24ffa18 ok test/cases/linear/byref/path_assigned.cml
-44a7c51350c433a3 ok test/cases/linear/byref/path_assigned_allocs.cml
+c77183d971b0c498 ok test/cases/linear/byref/path_assigned_allocs.cml
 5b9b8251b1daec44 ok test/cases/linear/byref/var_capture_reference.cml
 33440f32bb34f6e2 ok test/cases/linear/byref/var_function_as_value_function.cml
 9cf7e573f3d55d53 ok test/cases/linear/byref/var_function_to_operator.cml
@@ -1204,6 +1204,7 @@ cf8fd70a4d109597 ok test/cases/loops/err_untyped_state.cml
 d64438ebe6e65e41 ok test/cases/loops/grad_array_index.cml
 67d78fc487bd920c ok test/cases/loops/grad_array_loop.cml
 c240986c982ab583 ok test/cases/loops/grad_through_loop.cml
+c60c396053868c80 ok test/cases/loops/hof_block_alloc.cml
 31d7c502b0109b06 ok test/cases/loops/iterate_empty.cml
 e29b3c401715123b ok test/cases/loops/iterate_macro.cml
 cd97492516145576 ok test/cases/loops/iterate_map.cml
@@ -1216,7 +1217,7 @@ ccbfb354f7dda082 ok test/cases/loops/onnx_refused.cml
 f9591fe68a90c170 ok test/cases/loops/recursion.cml
 a910f1e9cdce417e ok test/cases/loops/refuse_loop_no_channel.cml
 cba7b09e77a994a5 ok test/cases/loops/shapes.cml
-ab1a59fa8f563f1a ok test/cases/loops/state_in_place.cml
+4637fbbc40ef5a08 ok test/cases/loops/state_in_place.cml
 63e444a96478d95f ok test/cases/loops/tuple_destructure.cml
 de8066e46383fc72 ok test/cases/macro/hof_calls.cml
 a58dd440e290b13d ok test/cases/modules/bytes_text_reject.cml
@@ -1487,7 +1488,7 @@ eff506442c7debe6 ok test/cases/modules/tensor/linalg_layout.cml
 0e0e133714f58b47 ok test/cases/modules/tensor/numeric_contract.cml
 7ec970a2688b669e ok test/cases/modules/tensor/one_hot_oob.cml
 960c912dd11a0c89 ok test/cases/modules/tensor/reductions.cml
-1119b28add724781 ok test/cases/modules/tensor/reshape_view_gc.cml
+012718e49775f9aa ok test/cases/modules/tensor/reshape_view_gc.cml
 5557e0ae4cec78c7 ok test/cases/modules/tensor/runtime_shape_column.cml
 93da804c2830889f ok test/cases/modules/tensor/shape_error.cml
 d933d386c179ad74 ok test/cases/modules/tensor/static_shape_error.cml

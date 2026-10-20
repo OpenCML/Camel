@@ -1296,7 +1296,7 @@ timeout_ms = 4000
 # which is the shape `src/builtin/operators/ops.cpp` documents for `xs = xs->sort`, and the
 # copying form (`:op/set_index`) is nowhere in it. Whether the array is copied is decided by
 # the cell's "not shared" mark when :var/take runs; `element_assigned_copy` and
-# `path_assigned.allocs` show the copy that follows a read, counted with `std::mem::buffers()`.
+# `path_assigned.allocs` show the copy that follows a read, counted with `std::mem::blocks()`.
 [[tests]]
 name = "element_assigned.in_place_form"
 desc = "The lowering of `arr[0] = 9` on a `var` array is the in-place rebinding: :op/set_index_in_place takes its array from :var/take of the cell, and :op/assn_owned stores the result in that cell. The copying form :op/set_index is not in the graph."
@@ -1327,13 +1327,13 @@ assert(take && labels.get(take.source) === ':var/new', 'take reads the variable 
 }
 """
 
-# The same claim, counted rather than argued from the graph: `std::mem::buffers()` reads the
-# numeric array buffer counters (the pattern of `loops.state_in_place`), so the writes can be
+# The same claim, counted rather than argued from the graph: `std::mem::blocks()` reads the
+# numeric array block counters (the pattern of `loops.state_in_place`), so the writes can be
 # asked what they allocate. The array is 40 ints — past the 256 bytes an array may keep in its
-# value — so a copy really does take a buffer.
+# value — so a copy really does take a block.
 [[tests]]
 name = "path_assigned.allocs"
-desc = "A path assignment on an unshared `var` array does not copy: 30 writes in a loop allocate nothing (the delta of `std::mem::buffers().allocs`), while the control of 10 rounds that read the variable in between allocates 10 (one copy each). The first write after `var v = [...]` allocates one, since `:var/new` does not mark the cell as owning its array; after `let kept = v` a write allocates one and `kept` is unchanged."
+desc = "A path assignment on an unshared `var` array does not copy: 30 writes in a loop allocate nothing (the delta of `std::mem::blocks().allocs`), while the control of 10 rounds that read the variable in between allocates 10 (one copy each). The first write after `var v = [...]` allocates one, since `:var/new` does not mark the cell as owning its array; after `let kept = v` a write allocates one and `kept` is unchanged."
 kind = "behavior"
 case = "../../../cases/linear/byref/path_assigned_allocs.cml"
 args = ["${case}", "${backend}"]

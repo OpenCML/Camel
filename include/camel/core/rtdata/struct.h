@@ -1,8 +1,6 @@
 /**
  * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
+ * Camel is licensed under the MIT license:
  * [https://opensource.org/license/mit]
  *
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
@@ -13,16 +11,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "base.h"
+#include "camel/core/mm.h"
+#include "camel/core/rtdata/view.h"
 #include "camel/core/type/composite/struct.h"
+#include "camel/core/type/pure.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <new>
 
 namespace rtdata = camel::core::rtdata;
@@ -32,6 +34,18 @@ class Struct : public rtdata::Object {
   public:
     Struct(const Struct &)            = delete;
     Struct &operator=(const Struct &) = delete;
+
+    /// What a compact element view carries: the bytes of one element (inside the array's
+    /// block, stable across a collection), their layout and type.
+    struct ViewData {
+        const std::byte *bytes         = nullptr;
+        const type::DataLayout *layout = nullptr;
+        const type::Type *type         = nullptr;
+        size_t stride                  = 0;
+    };
+
+    /// A view is marked in the high bit of the field count. Normal structs keep their layout.
+    static constexpr uint32_t kViewFlag = 0x80000000u;
 
     static Struct *create(size_t fieldCount, camel::core::mm::IAllocator &allocator) {
         size_t headerSize = sizeof(Struct);
@@ -51,7 +65,14 @@ class Struct : public rtdata::Object {
         return s;
     }
 
-    size_t size() const { return size_; }
+
+    bool isView() const { return (size_ & kViewFlag) != 0; }
+    const ViewData *viewData() const {
+        return reinterpret_cast<const ViewData *>(
+            reinterpret_cast<const std::byte *>(this) - sizeof(ViewData));
+    }
+
+    size_t size() const { return size_ & ~kViewFlag; }
 
     bool has(std::string_view name, const type::Type *type) const {
         ASSERT(type && type->code() == type::TypeCode::Struct, "Type must be StructType");
@@ -60,7 +81,27 @@ class Struct : public rtdata::Object {
     }
 
     template <typename T> T get(size_t index) const {
-        ASSERT(index < size_, "Index out of range");
+        ASSERT(index < size(), "Index out of range");
+        if (isView()) {
+            const ViewData *view = viewData();
+            if (view->layout->slotShaped) {
+                // Every field is an 8-byte leaf: the bytes are slot data, so get is one load.
+                return rtdata::fromSlot<T>(reinterpret_cast<const slot_t *>(view->bytes)[index]);
+            }
+            const auto *structType = static_cast<const type::StructType *>(view->type);
+            ASSERT(index < structType->size(), "Index out of range");
+            const type::Type *fieldType = structType->typeAt(index);
+            const std::byte *at = view->bytes + view->layout->fieldOffsets[index];
+            if (fieldType->code() == type::TypeCode::Struct ||
+                fieldType->code() == type::TypeCode::Tuple) {
+                const type::DataLayout *layout = type::pureDataLayout(fieldType);
+                ASSERT(layout != nullptr, "A compact field has a layout");
+                return rtdata::fromSlot<T>(
+                    rtdata::pureViewOf(at, fieldType, layout, layout->size));
+            }
+            return rtdata::fromSlot<T>(
+                rtdata::readPureScalar(at, fieldType->code()));
+        }
         return rtdata::fromSlot<T>(data_[index]);
     }
 
@@ -73,15 +114,23 @@ class Struct : public rtdata::Object {
     }
 
     template <typename T> void set(size_t index, T value) {
-        ASSERT(index < size_, std::format("Index out of range: {}", index));
+        ASSERT(index < size(), std::format("Index out of range: {}", index));
         data_[index] = rtdata::toSlot(value);
     }
 
     template <typename T> void set(size_t index, T value, const type::StructType *structType) {
-        ASSERT(index < size_, std::format("Index out of range: {}", index));
+        ASSERT(index < size(), std::format("Index out of range: {}", index));
         ASSERT(structType != nullptr && index < structType->size(), "StructType is invalid.");
-        const slot_t slot = rtdata::toSlot(value);
-        camel::core::mm::writeBarrier(this, structType, slot, structType->typeAt(index));
+        // A view is not a value: if one reaches a real store, turn it into a real Struct/Tuple
+        // here. This is the boundary the read path relies on (map/filter/reduce/foreach). Only
+        // an aggregate field can hold one, so the common scalar write pays no call.
+        const type::Type *fieldType = structType->typeAt(index);
+        slot_t slot                 = rtdata::toSlot(value);
+        if (fieldType->code() == type::TypeCode::Struct ||
+            fieldType->code() == type::TypeCode::Tuple) {
+            slot = rtdata::materializeIfView(slot, fieldType);
+        }
+        camel::core::mm::writeBarrier(this, structType, slot, fieldType);
         data_[index] = slot;
     }
 
@@ -93,8 +142,14 @@ class Struct : public rtdata::Object {
         set<T>(optIndex.value(), value, structType);
     }
 
-    slot_t *data() { return data_; }
-    const slot_t *data() const { return data_; }
+    slot_t *data() {
+        ASSERT(!isView(), "A compact element view has no slot array");
+        return data_;
+    }
+    const slot_t *data() const {
+        ASSERT(!isView(), "A compact element view has no slot array");
+        return data_;
+    }
 
     virtual bool
     equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override {
@@ -106,8 +161,23 @@ class Struct : public rtdata::Object {
         const Struct *otherStruct          = reinterpret_cast<const Struct *>(other);
 
         // Different field counts mean inequality.
-        if (size_ != otherStruct->size_ || size_ != structType->size())
+        if (size() != otherStruct->size() || size() != structType->size())
             return false;
+
+        if (isView() || otherStruct->isView()) {
+            // Value equality of a view is the equality of the element it names. Materialising
+            // here is fine: equals is not a per-element read path.
+            rtdata::Object *left = isView()
+                                       ? rtdata::materializeAggregate(
+                                             viewData()->bytes, type, camel::core::mm::autoSpace())
+                                       : const_cast<Struct *>(this);
+            rtdata::Object *right =
+                otherStruct->isView()
+                    ? rtdata::materializeAggregate(
+                          otherStruct->viewData()->bytes, type, camel::core::mm::autoSpace())
+                    : const_cast<Struct *>(otherStruct);
+            return left->equals(right, type, true);
+        }
 
         auto codes          = structType->codes();
         const slot_t *dataA = data_;
@@ -116,11 +186,11 @@ class Struct : public rtdata::Object {
         if (!deep) {
             // Shallow compare: compare the entire memory block directly (reference fields
             // compare pointers only).
-            return std::memcmp(dataA, dataB, size_ * sizeof(slot_t)) == 0;
+            return std::memcmp(dataA, dataB, size() * sizeof(slot_t)) == 0;
         }
 
         // Deep compare: recurse field by field.
-        for (size_t i = 0; i < size_; ++i) {
+        for (size_t i = 0; i < size(); ++i) {
             type::TypeCode typeCode = codes[i];
             if (type::isGCTraced(typeCode)) {
                 const rtdata::Object *refA =
@@ -144,14 +214,17 @@ class Struct : public rtdata::Object {
         camel::core::mm::IAllocator &allocator, const type::Type *type,
         bool deep = false) const override {
         ASSERT(type && type->code() == type::TypeCode::Struct, "Type must be StructType");
+        if (isView()) {
+            return rtdata::materializeAggregate(viewData()->bytes, type, allocator);
+        }
         const type::StructType *structType = static_cast<const type::StructType *>(type);
         auto codes                         = structType->codes();
 
-        Struct *newStruct = Struct::create(size_, allocator);
+        Struct *newStruct = Struct::create(size(), allocator);
         const slot_t *src = data_;
         slot_t *dst       = newStruct->data_;
 
-        for (size_t i = 0; i < size_; ++i) {
+        for (size_t i = 0; i < size(); ++i) {
             if (type::isGCTraced(codes[i])) {
                 const rtdata::Object *oriRef =
                     reinterpret_cast<const rtdata::Object *const *>(src)[i];
@@ -180,7 +253,7 @@ class Struct : public rtdata::Object {
 
     virtual void print(std::ostream &os, const type::Type *type) const override {
         ASSERT(type && type->code() == type::TypeCode::Struct, "Type must be StructType");
-        if (size_ == 0) {
+        if (size() == 0) {
             os << "{}";
             return;
         }
@@ -189,14 +262,12 @@ class Struct : public rtdata::Object {
 
         os << "{ ";
 
-        const slot_t *dataPtr = data_;
-
-        for (size_t i = 0; i < size_; ++i) {
+        for (size_t i = 0; i < size(); ++i) {
             if (i > 0)
                 os << ", ";
 
             os << structType->fieldName(i) << ": ";
-            rtdata::printSlot(os, dataPtr[i], structType->typeAt(i));
+            rtdata::printSlot(os, get<slot_t>(i), structType->typeAt(i));
         }
 
         os << " }";
@@ -208,12 +279,15 @@ class Struct : public rtdata::Object {
 
     virtual void
     updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override {
+        if (isView()) {
+            return; // pure data has no references
+        }
         if (!type || type->code() != type::TypeCode::Struct)
             return;
         const type::StructType *structType = static_cast<const type::StructType *>(type);
         auto codes                         = structType->codes();
         rtdata::Object **refArr            = reinterpret_cast<rtdata::Object **>(data_);
-        for (size_t i = 0; i < size_; ++i) {
+        for (size_t i = 0; i < size(); ++i) {
             if (type::isGCTraced(codes[i])) {
                 if (rtdata::Object *&ref = refArr[i]) {
                     const type::Type *slotType = structType->typeAt(i);
@@ -233,9 +307,11 @@ class Struct : public rtdata::Object {
         }
     }
 
-  private:
-    explicit Struct(size_t fieldCount) : size_(static_cast<uint32_t>(fieldCount)) {}
+    /// Only the view ring (rtdata/view.cpp) passes flags; ordinary code uses create().
+    explicit Struct(size_t fieldCount, uint32_t flags = 0)
+        : size_(static_cast<uint32_t>(fieldCount) | flags) {}
 
+  private:
     uint32_t size_;
     slot_t data_[]; // Flexible array member.
 };
