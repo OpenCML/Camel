@@ -108,38 +108,38 @@ class DraftGraphBuilder {
     void setStaticSlot(runtime::gc_slot_idx_t index, slot_t slot);
     void setStaticData(runtime::gc_slot_idx_t index, const camel::core::data::data_ptr_t &data);
 
-    runtime::DraftNode *addStaticDataNode(
+    runtime::DraftNodeRef addStaticDataNode(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType = nullptr);
-    runtime::DraftNode *
-    addPortNode(camel::core::type::Type *type, std::string name, bool isWith, bool isVar);
-    runtime::DraftNode *addCastNode(camel::core::type::Type *type);
-    runtime::DraftNode *addCopyNode(camel::core::type::Type *type);
-    runtime::DraftNode *addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body);
-    runtime::DraftNode *
+    runtime::DraftNodeRef 
+    addPortNode(camel::core::type::Type *type, std::string name, bool isWith);
+    runtime::DraftNodeRef addCastNode(camel::core::type::Type *type);
+    runtime::DraftNodeRef addCopyNode(camel::core::type::Type *type);
+    runtime::DraftNodeRef addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body);
+    runtime::DraftNodeRef 
     addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload);
-    runtime::DraftNode *addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex);
-    runtime::DraftNode *addAccsNode(camel::core::type::Type *type, std::string key);
-    runtime::DraftNode *addBrchNode(
-        camel::core::type::Type *type, runtime::DraftNode *joinNode,
-        std::span<const runtime::GCBranchArm> arms, runtime::DraftNode *defaultArm = nullptr);
-    runtime::DraftNode *addJoinNode(
-        camel::core::type::Type *type, runtime::DraftNode *brchNode, runtime::gc_cnt_t armCount);
-    runtime::DraftNode *
+    runtime::DraftNodeRef addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex);
+    runtime::DraftNodeRef addAccsNode(camel::core::type::Type *type, std::string key);
+    runtime::DraftNodeRef addBrchNode(
+        camel::core::type::Type *type, runtime::DraftNodeRef joinNode,
+        std::span<const runtime::GCBranchArm> arms, runtime::DraftNodeRef defaultArm = nullptr);
+    runtime::DraftNodeRef addJoinNode(
+        camel::core::type::Type *type, runtime::DraftNodeRef brchNode, runtime::gc_cnt_t armCount);
+    runtime::DraftNodeRef 
     addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body = {});
-    runtime::DraftNode *addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex);
-    runtime::DraftNode *addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex);
+    runtime::DraftNodeRef addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex);
+    runtime::DraftNodeRef addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex);
     /// A LOOP node of form `kind` running `target` (camel/runtime/loop.h); its value has type
     /// `type`. The two graphs are made dependencies of this one.
-    runtime::DraftNode *
+    runtime::DraftNodeRef 
     addLoopNode(camel::core::LoopKind kind, const LoopTarget &target, camel::core::type::Type *type);
     /// Makes the OPER node `node` call `op` instead, an overload with the same parameters and
     /// result type (the node's inputs, outputs and slot are kept).
-    void retargetOperNode(runtime::DraftNode *node, const oper_idx_ptr_t &op);
-    runtime::DraftNode *addSyncNode();
-    runtime::DraftNode *addGateNode(camel::core::type::Type *type);
-    runtime::DraftNode *addDrefNode(DrefTarget target);
-    void link(runtime::DraftEdgeKind kind, runtime::DraftNode *from, runtime::DraftNode *to);
-    bool unlink(runtime::DraftEdgeKind kind, runtime::DraftNode *from, runtime::DraftNode *to);
+    void retargetOperNode(runtime::DraftNodeRef node, const oper_idx_ptr_t &op);
+    runtime::DraftNodeRef addSyncNode();
+    runtime::DraftNodeRef addGateNode(camel::core::type::Type *type);
+    runtime::DraftNodeRef addDrefNode(DrefTarget target);
+    void link(runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to);
+    bool unlink(runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to);
     void addDependencyGraph(const graph_ptr_t &graph);
     void eraseDependencyGraph(const graph_ptr_t &graph);
     void addSubGraph(const graph_ptr_t &graph);
@@ -150,79 +150,54 @@ class DraftGraphBuilder {
     const std::vector<graph_ptr_t> &subGraphs() const { return subGraphs_; }
     const std::vector<graph_ptr_t> &staticGraphRefs() const { return staticGraphRefs_; }
 
-    const std::string &nodeDebugEntityId(const runtime::DraftNode *node) const;
-    const std::string &nodeDebugEntityId(runtime::gc_node_ref_t nodeId) const {
-        return nodeDebugEntityId(draft_->node(nodeId));
-    }
-    const std::string &nodePortName(const runtime::DraftNode *node) const;
+    const std::string &nodePortName(runtime::DraftNodeRef node) const;
     const std::string &nodePortName(runtime::gc_node_ref_t nodeId) const {
-        return nodePortName(draft_->node(nodeId));
+        return nodePortName(runtime::DraftNodeRef(draft_.get(), nodeId));
     }
-    const std::string &nodeAccsKey(const runtime::DraftNode *node) const;
-    const std::string &nodeAccsKey(runtime::gc_node_ref_t nodeId) const {
-        return nodeAccsKey(draft_->node(nodeId));
-    }
-    const std::string *tryNodeAccsKey(const runtime::DraftNode *node) const;
-    const std::string *tryNodeAccsKey(runtime::gc_node_ref_t nodeId) const {
-        return tryNodeAccsKey(draft_->node(nodeId));
-    }
-    bool nodePortIsVar(const runtime::DraftNode *node) const;
-    bool nodePortIsVar(runtime::gc_node_ref_t nodeId) const {
-        return nodePortIsVar(draft_->node(nodeId));
-    }
-    const FuncTarget &funcTarget(const runtime::DraftNode *node) const;
+    const FuncTarget &funcTarget(runtime::DraftNodeRef node) const;
     const FuncTarget &funcTarget(runtime::gc_node_ref_t nodeId) const {
-        return funcTarget(draft_->node(nodeId));
+        return funcTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
     }
-    const LoopTarget &loopTarget(const runtime::DraftNode *node) const;
+    const LoopTarget &loopTarget(runtime::DraftNodeRef node) const;
     const LoopTarget &loopTarget(runtime::gc_node_ref_t nodeId) const {
-        return loopTarget(draft_->node(nodeId));
+        return loopTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
     }
-    const DrefTarget &drefTarget(const runtime::DraftNode *node) const;
+    const DrefTarget &drefTarget(runtime::DraftNodeRef node) const;
     const DrefTarget &drefTarget(runtime::gc_node_ref_t nodeId) const {
-        return drefTarget(draft_->node(nodeId));
+        return drefTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
     }
-    const oper_idx_ptr_t &operTarget(const runtime::DraftNode *node) const;
+    const oper_idx_ptr_t &operTarget(runtime::DraftNodeRef node) const;
     const oper_idx_ptr_t &operTarget(runtime::gc_node_ref_t nodeId) const {
-        return operTarget(draft_->node(nodeId));
+        return operTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
     }
-    void setNodeDebugEntityId(const runtime::DraftNode *node, std::string id);
-    void setNodeDebugEntityId(runtime::gc_node_ref_t nodeId, std::string id) {
-        setNodeDebugEntityId(draft_->node(nodeId), std::move(id));
-    }
-    void registerNodePortName(const runtime::DraftNode *node, std::string name);
+    void registerNodePortName(runtime::DraftNodeRef node, std::string name);
     void registerNodePortName(runtime::gc_node_ref_t nodeId, std::string name) {
-        registerNodePortName(draft_->node(nodeId), std::move(name));
+        registerNodePortName(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(name));
     }
-    void registerNodeAccsKey(const runtime::DraftNode *node, std::string key);
-    void registerNodeAccsKey(runtime::gc_node_ref_t nodeId, std::string key) {
-        registerNodeAccsKey(draft_->node(nodeId), std::move(key));
-    }
-    void registerPortVar(const runtime::DraftNode *node, bool isVar);
-    void registerPortVar(runtime::gc_node_ref_t nodeId, bool isVar) {
-        registerPortVar(draft_->node(nodeId), isVar);
-    }
-    void registerFuncTarget(const runtime::DraftNode *node, FuncTarget target);
+    void registerFuncTarget(runtime::DraftNodeRef node, FuncTarget target);
     void registerFuncTarget(runtime::gc_node_ref_t nodeId, FuncTarget target) {
-        registerFuncTarget(draft_->node(nodeId), std::move(target));
+        registerFuncTarget(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(target));
     }
-    void registerDrefTarget(const runtime::DraftNode *node, DrefTarget target);
+    void registerDrefTarget(runtime::DraftNodeRef node, DrefTarget target);
     void registerDrefTarget(runtime::gc_node_ref_t nodeId, DrefTarget target) {
-        registerDrefTarget(draft_->node(nodeId), std::move(target));
+        registerDrefTarget(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(target));
     }
-    void registerOperTarget(const runtime::DraftNode *node, oper_idx_ptr_t target);
+    void registerOperTarget(runtime::DraftNodeRef node, oper_idx_ptr_t target);
     void registerOperTarget(runtime::gc_node_ref_t nodeId, oper_idx_ptr_t target) {
-        registerOperTarget(draft_->node(nodeId), std::move(target));
+        registerOperTarget(runtime::DraftNodeRef(draft_.get(), nodeId), std::move(target));
     }
-    void eraseNodeColdData(const runtime::DraftNode *node);
+    void eraseNodeColdData(runtime::DraftNodeRef node);
     void eraseNodeColdData(runtime::gc_node_ref_t nodeId) {
-        eraseNodeColdData(draft_->node(nodeId));
+        eraseNodeColdData(runtime::DraftNodeRef(draft_.get(), nodeId));
     }
 
     ::OperatorIndex *registerOperIndex(std::shared_ptr<::OperatorIndex> idx);
     std::shared_ptr<::OperatorIndex> lookupOperIndex(const ::OperatorIndex *raw) const;
 
   private:
+    runtime::DraftNodeRef ref(runtime::gc_node_ref_t id) const {
+        return draft_->alive(id) ? runtime::DraftNodeRef(draft_.get(), id) : runtime::DraftNodeRef();
+    }
     static slot_t makeStaticSlot(
         const camel::core::data::data_ptr_t &data, camel::core::mm::IAllocator &allocator);
 
@@ -233,14 +208,11 @@ class DraftGraphBuilder {
     graph_ptr_t outerGraph_;
     bool parameterized_ = false;
 
-    std::unordered_map<const runtime::DraftNode *, std::string> nodeDebugIds_;
-    std::unordered_map<const runtime::DraftNode *, std::string> nodePortNames_;
-    std::unordered_map<const runtime::DraftNode *, std::string> nodeAccsKeys_;
-    std::unordered_map<const runtime::DraftNode *, bool> nodePortVars_;
-    std::unordered_map<const runtime::DraftNode *, FuncTarget> funcTargets_;
-    std::unordered_map<const runtime::DraftNode *, LoopTarget> loopTargets_;
-    std::unordered_map<const runtime::DraftNode *, DrefTarget> drefTargets_;
-    std::unordered_map<const runtime::DraftNode *, oper_idx_ptr_t> operTargets_;
+    std::unordered_map<runtime::gc_node_ref_t, std::string> nodePortNames_;
+    std::unordered_map<runtime::gc_node_ref_t, FuncTarget> funcTargets_;
+    std::unordered_map<runtime::gc_node_ref_t, LoopTarget> loopTargets_;
+    std::unordered_map<runtime::gc_node_ref_t, DrefTarget> drefTargets_;
+    std::unordered_map<runtime::gc_node_ref_t, oper_idx_ptr_t> operTargets_;
     std::vector<graph_ptr_t> dependencyGraphs_;
     std::vector<graph_ptr_t> subGraphs_;
     std::vector<graph_ptr_t> staticGraphRefs_;

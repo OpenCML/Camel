@@ -43,6 +43,7 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/node_ref.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -240,6 +241,10 @@ class GraphDraft {
     const DraftNode *node(gc_node_ref_t id) const;
     DraftNode *node(gc_node_ref_t id);
     gc_node_ref_t nodeId(const DraftNode *node) const;
+    /// The handle of live node `id`; the null handle when `id` is not a live node.
+    DraftNodeRef ref(gc_node_ref_t id) const {
+        return alive(id) ? DraftNodeRef(const_cast<GraphDraft *>(this), id) : DraftNodeRef();
+    }
     const DraftNodeHeader *header(gc_node_ref_t id) const;
     const DraftNodeHeader *header(const DraftNode *node) const;
     gc_node_ref_t draftIdOfSourceRef(gc_node_ref_t sourceRef) const;
