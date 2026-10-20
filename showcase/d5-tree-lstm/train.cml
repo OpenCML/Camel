@@ -1,0 +1,165 @@
+// D5 -- a Tree-LSTM over a syntactic tree, written recursively.
+//
+// Each sentence is a binary tree of four leaves.  A leaf is a one-hot word vector; an internal
+// node combines its two children with the usual Tree-LSTM gates.  The recursion is the point:
+// `forward` calls itself on the children, the tree is an `enum`, and `value_and_grad` still
+// produces the gradient of the whole parameter tree.  Sentiment is the sign of the summed leaf
+// polarities, so the label depends on the tree, not on a bag of words.
+//
+// Run:
+//   camel train.cml --arg data=artifacts/small --arg steps=300 --arg lr=0.01 \
+//         --arg log_every=50 --arg threads=1 std::macro std::nvm
+module d5_tree_lstm
+
+// == imports ==
+import { Tensor, argmax, load_npy, numel, reshape, set_num_threads, shape, sigmoid, slice, sum, tanh, zeros } from tensor
+import { value_and_grad } from autodiff
+import { adam, adam_state, softmax_cross_entropy } from nn
+import { now } from time
+
+// == model ==
+// A leaf carries its one-hot word vector; an internal node carries two subtrees.
+type Tree = enum {
+    Leaf(Tensor),
+    Node(Tree, Tree)
+}
+
+// `wx` maps the node input to each gate, `ux` maps the child hidden state.  The forget gates
+// use the child they forget, as in the binary Tree-LSTM.
+type Params = {
+    emb: Tensor,
+    wi: Tensor, wfl: Tensor, wfr: Tensor, wo: Tensor, wu: Tensor,
+    ui: Tensor, ufl: Tensor, ufr: Tensor, uo: Tensor, uu: Tensor,
+    bi: Tensor, bfl: Tensor, bfr: Tensor, bo: Tensor, bu: Tensor,
+    wout: Tensor, bout: Tensor
+}
+
+with <p: Params>
+func cell(x: Tensor, hl: Tensor, cl: Tensor, hr: Tensor, cr: Tensor): (Tensor, Tensor) {
+    let i = sigmoid(x @ p.wi + hl @ p.ui + hr @ p.ui + p.bi)
+    let fl = sigmoid(x @ p.wfl + hl @ p.ufl + hr @ p.ufl + p.bfl)
+    let fr = sigmoid(x @ p.wfr + hl @ p.ufr + hr @ p.ufr + p.bfr)
+    let o = sigmoid(x @ p.wo + hl @ p.uo + hr @ p.uo + p.bo)
+    let u = tanh(x @ p.wu + hl @ p.uu + hr @ p.uu + p.bu)
+    let c = i * u + fl * cl + fr * cr
+    return (o * tanh(c), c)
+}
+
+// The recursion.  A leaf's input is its embedding; an internal node's input is the sum of the
+// children's hidden states, so the node type itself carries no extra parameter.
+with <p: Params>
+func forward(t: Tree): (Tensor, Tensor) {
+    return match t {
+        case Tree::Leaf(onehot) => {
+            let x = onehot @ p.emb
+            let empty = zeros([1, shape(p.emb)[1]])
+            cell<p>(x, empty, empty, empty, empty)
+        }
+        case Tree::Node(left, right) => {
+            let (hl, cl) = forward<p>(left)
+            let (hr, cr) = forward<p>(right)
+            cell<p>(hl + hr, hl, cl, hr, cr)
+        }
+    }
+}
+
+// == loss ==
+with <p: Params>
+func loss(t: Tree, target: Tensor): float {
+    let (hidden, state) = forward<p>(t)
+    return softmax_cross_entropy(hidden @ p.wout + p.bout, target)
+}
+
+// == data ==
+func tree_at(words: Tensor): Tree {
+    let vocab = shape(words)[2]
+    return Tree::Node(
+        Tree::Node(
+            Tree::Leaf(reshape(slice(words, 1, 0, 1), [1, vocab])),
+            Tree::Leaf(reshape(slice(words, 1, 1, 2), [1, vocab]))),
+        Tree::Node(
+            Tree::Leaf(reshape(slice(words, 1, 2, 3), [1, vocab])),
+            Tree::Leaf(reshape(slice(words, 1, 3, 4), [1, vocab]))))
+}
+
+func load_model(data: string): Params {
+    let init = data + '/init'
+    return {
+        emb: load_npy(init + '/emb.npy'),
+        wi: load_npy(init + '/wi.npy'), wfl: load_npy(init + '/wfl.npy'),
+        wfr: load_npy(init + '/wfr.npy'), wo: load_npy(init + '/wo.npy'),
+        wu: load_npy(init + '/wu.npy'),
+        ui: load_npy(init + '/ui.npy'), ufl: load_npy(init + '/ufl.npy'),
+        ufr: load_npy(init + '/ufr.npy'), uo: load_npy(init + '/uo.npy'),
+        uu: load_npy(init + '/uu.npy'),
+        bi: load_npy(init + '/bi.npy'), bfl: load_npy(init + '/bfl.npy'),
+        bfr: load_npy(init + '/bfr.npy'), bo: load_npy(init + '/bo.npy'),
+        bu: load_npy(init + '/bu.npy'),
+        wout: load_npy(init + '/wout.npy'), bout: load_npy(init + '/bout.npy')
+    }
+}
+
+func count_params(p: Params): int {
+    return numel(p.emb) + numel(p.wi) + numel(p.wfl) + numel(p.wfr) + numel(p.wo) +
+        numel(p.wu) + numel(p.ui) + numel(p.ufl) + numel(p.ufr) + numel(p.uo) +
+        numel(p.uu) + numel(p.bi) + numel(p.bfl) + numel(p.bfr) + numel(p.bo) +
+        numel(p.bu) + numel(p.wout) + numel(p.bout)
+}
+
+// == evaluate ==
+// One tree at a time; the validation set is small and the point is the recursion, not a
+// throughput record.
+with <p: Params>
+func accuracy(words: Tensor, labels: Tensor): float {
+    let n = shape(words)[0]
+    let (correct, finished) = loop count = 0.0, index = 0
+        while index < n
+        do {
+            let sample = slice(words, 0, index, index + 1)
+            let target = slice(labels, 0, index, index + 1)
+            let (hidden, state) = forward<p>(tree_at(sample))
+            let hits = argmax(hidden @ p.wout + p.bout, 1) == argmax(target, 1)
+            (count + sum(hits), index + 1)
+        }
+    return correct / float(n)
+}
+
+// == entry ==
+func main(data: string, steps: int, lr: float, log_every: int, threads: int): int sync {
+    set_num_threads(threads)
+
+    // == data ==
+    let train_words = load_npy(data + '/train_words.npy')
+    let train_labels = load_npy(data + '/train_labels.npy')
+    let val_words = load_npy(data + '/val_words.npy')
+    let val_labels = load_npy(data + '/val_labels.npy')
+    let initial = load_model(data)
+    let train_n = shape(train_words)[0]
+    let before = accuracy<initial>(val_words, val_labels)
+    `d5 config steps=${steps} lr=${lr} threads=${threads} params=${count_params(initial)} train=${train_n}`->println
+    `d5 init val_accuracy=${before:.9f}`->println
+
+    // == train ==
+    // One sample per step; the sample index wraps around the shuffled file.  The tree is built
+    // from a contiguous slice of the one-hot rows, so no row selection operator is needed.
+    let started = now()
+    let (trained, optimizer) = loop p = initial, opt = adam_state(initial), step = 0
+        while step < steps
+        do sync {
+            let index = step % train_n
+            let sample = slice(train_words, 0, index, index + 1)
+            let target = slice(train_labels, 0, index, index + 1)
+            let (value, gradient) = value_and_grad(loss)<p>(tree_at(sample), target)
+            if step % log_every == 0 then {
+                `d5 step=${step} loss=${value:.9f}`->println
+            }
+            let next = adam(p, gradient, opt, lr)
+            return (next.0, next.1, step + 1)
+        }
+    let elapsed = now() - started
+
+    // == evaluate ==
+    let after = accuracy<trained>(val_words, val_labels)
+    `d5 trained steps=${steps} seconds=${elapsed:.6f} val_accuracy=${after:.9f}`->println
+    return 0
+}

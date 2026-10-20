@@ -194,16 +194,19 @@ The genuinely awkward parts of writing this example. Each comes with a question 
 
 ## Tests
 
-The small configuration is registered in `test/plans/perf/showcase_c2.plan.toml`
-(`tier = "benchmark"`, `slow` among its tags): it runs 200 steps on the synthetic stand-in,
-runs both sides, checks the tolerances above, and takes about 5 seconds. The default
-`npm run test` does not run it; `npm run test:all` or `node scripts/test.js test\plans\perf`
-does.
+The four problems above were decided by the review: row selection, labels, keyed randomness
+and atomic `save_tree` replacement are H20; index slicing, lambda inference and
+"differentiate the first parameter" are H21.  This example keeps the current spelling
+(`with <m: Mlp>`, `slice`, one-hot targets, deleting the checkpoint directory from Python)
+until H20-4 and H21-3 land, when it will be rewritten with
+`value_and_grad(loss)(m, x, y)`, `take`/`permutation` and integer labels; the H13 report records
+that order.  The review's backtick interpolation and
+`let (value, gradient) = ...` destructuring are already in place.
 
-It is not in a `slow` tier because **H10's fast/slow split has not landed**: the existing
-plans only have `smoke`, `feat`, `benchmark` and `gpu`, and `benchmark` is the only bucket
-that the default run excludes and the full run includes. When H10 lands, move the plan to
-`slow` (also recorded in the report's open questions).
+The small configuration is registered in `test/plans/perf/showcase_c2.plan.toml`
+(`tier = "slow"`): it runs 200 steps on the synthetic stand-in, runs both sides, checks the
+tolerances above, and takes about six seconds.  H10's fast/slow split has landed: the default
+`npm run test` skips the slow tier and `npm run test:all` (or `--tier all`) runs it.
 
 ## Not committed
 

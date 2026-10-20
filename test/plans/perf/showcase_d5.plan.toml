@@ -1,0 +1,21 @@
+id = "perf.showcase_d5_tree_lstm"
+order = 903
+tier = "slow"
+tags = ["showcase", "slow", "d5", "tree-lstm", "recursion"]
+
+# The small configuration of showcase/d5-tree-lstm (H13): 256 four-leaf trees, a recursive
+# Tree-LSTM, 200 Adam steps, one sentence per step.  It runs in seconds and fails when the
+# losses or the validation accuracy disagree beyond the tolerances.
+
+[[tests]]
+name = "small"
+desc = "D5 small configuration: compare.py runs the recursive Camel Tree-LSTM and its PyTorch counterpart on the same trees and checks every logged training loss and the initial and final validation accuracy; it exits non-zero when a bound is exceeded."
+kind = "behavior"
+tool = "python"
+case = "../../../showcase/d5-tree-lstm/compare.py"
+args = ["${case}", "--profile", "small", "--data", "tmp/d5-showcase-small", "--results", "tmp/d5-showcase-small/RESULTS.md"]
+skip_unless = ["${python}", "-c", "import numpy, torch, psutil"]
+expect_exit = 0
+expect_stdout_contains = ["d5 compare: PASS"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
