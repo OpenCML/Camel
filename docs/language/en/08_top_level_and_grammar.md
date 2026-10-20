@@ -85,7 +85,7 @@ variant   : name | name '(' type, ... ')' | name '{' name: type, ... '}'
 - `T?`, `T!`: [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t).
 - `typeas T`: [7.5](07_statements.md#75-generic-functions).
 - `constas n`: names a dimension in a `const` argument ([design principles 5.4](../../design-principles.en.md)): the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards; it is allowed only in an array literal of a `const` argument, and anywhere else it is a syntax error.
-- `enum`: [3.5](03_data_model.md#35-enums). `A | B` in a type position is retired and gives `SemanticDiag::UnionTypeRetired`.
+- `enum`: [3.5](03_data_model.md#35-enums).
 - Angle brackets: the arguments of a type function ([7.7](07_statements.md#77-type-declarations)) or the arguments of a module type.
 
 ## 8.5 The complete grammar
@@ -193,8 +193,7 @@ loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
 catchClause        : 'catch' identDef ':' typeExpr stmtBlock
-typeExpr           : unionType (('?' | '!')+ | '?' unionType)?
-unionType          : interType ('|' interType)*
+typeExpr           : interType ('?' | '!')*
 interType          : diffType ('&' diffType)*
 diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
@@ -230,7 +229,6 @@ Where there is more than one reading, the following rules decide, each on a boun
 | `(` in a type | a function type for `(name:`, `(var`, an empty list followed by `=>`; `(T)` is the parenthesized type; anything else a tuple type |
 | `{`: struct or block | a struct for `{ name :` and `{ ...`; `{}` is the empty block as a branch arm or a lambda body and the empty struct as a statement |
 | Arguments: positional or named | named from the first `name :` on |
-| `T ?` | the reserved form `T ? U` when a type can start after the `?` on the same line, the nullable mark otherwise |
 | `+` `-` `^` after a type | part of the type when a type can start after it (`x as T + U` casts to the type `T + U`) |
 | Unary `-` | always an operator; looser than `^`, tighter than `->`; applied directly to a number it gives the negative literal |
 
@@ -263,8 +261,8 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Parameter default values `b: int = 5` | `FeatureNotSupported` | Overloading; `with` parameters |
 | Slice subscripts `xs[a:b]`, `xs[a:b:c]` | `SemanticDiag::NoMatchingFunction` (there is no dedicated diagnostic: it is reported as "the subscript operator has no overload that accepts these arguments") | `xs->slice<a, b>` |
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |
-| `typeof e`, `T ? U`, `name of T` | `FeatureNotSupported` | None |
+| `typeof e`, `name of T` | `FeatureNotSupported` | None |
 | `keyof`, `enum` | Syntax error | None |
 | Modifiers `atomic`, `shared`, `inner`, `outer` | No diagnostic; no semantics | Do not write them |
 
-In addition there are a few things that "can be written but cannot be used at present": the union type `A | B` (values of the member types cannot enter it), and a declaration with a function type `let f: (x: int) => int = g`.
+In addition there is one thing that "can be written but cannot be used at present": a declaration with a function type `let f: (x: int) => int = g`.

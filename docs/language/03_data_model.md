@@ -245,8 +245,6 @@ error DivByZero: the divisor is zero
 
 **当前实现的行为，尚待确定**：`?->` 只对 `T!` 有定义；`match` 对这两种值恰好两个分支；它们可以打印，但除了 `T?` 与 `null` 比较之外不能用 `==` 比较。
 
-早先预留的记号 `T ? U` 已退役：`?` 只是可空标记，`T ?` 后面接类型的那条特殊读法没有了，写它得到 `SemanticDiag::ReservedTypeQuestionRetired`。
-
 ## 3.5 枚举 `enum`
 
 `enum` 是一个**名义类型**：一个值恰好是声明里列出的变体之一，每个变体可以不带数据、带一个元组或带一个结构体。两个同形的 `enum` 是不同的类型。
@@ -290,8 +288,6 @@ func area(s: Shape): float {
 **泛型。** `Option<int>` 与 `Option<float>` 是两个不同的类型，各是各的值。字段类型可以再用参数：`type Pair<A, B> = enum { Both(A, B), Neither }`，`Pair<int, string>` 的 `Both` 收一个 `int` 和一个 `string`。
 
 **图上。** 不增加节点种类：构造是"装入一个标签和数据"，`match` 是"取标签、按标签分支、在臂里取出数据"，与 `T?`、`T!` 相同。取标签与取字段是普通的内部算子（`__enum_tag__`、`__enum_field__`），调度器不对它们按名字特判。`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::macro` 与 `std::cpp` 都支持 `enum`；ONNX 导出与自动微分暂时给出带位置的拒绝。
-
-**已退役。** 类型位置上的 `A | B` 已退役：一个值只有一种类型，值是几种可能之一时写 `enum`（`SemanticDiag::UnionTypeRetired`，`|` 只留给逻辑或）；`T ? U` 同样退役（`SemanticDiag::ReservedTypeQuestionRetired`）。
 
 ## 3.6 映射与集合
 

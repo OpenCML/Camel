@@ -991,26 +991,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::UnionTypeRetired,
-            {
-                "UnionTypeRetired",
-                "The union type is retired: a value has one type, and no value enters "
-                "'A | B'.",
-                "When a value is one of several named cases, declare an enum: "
-                "'type T = enum {{ A(i32), B(string) }}'. '|' remains the logical or.",
-            },
-        },
-        {
-            SemanticDiag::ReservedTypeQuestionRetired,
-            {
-                "ReservedTypeQuestionRetired",
-                "The reserved form 'T ? U' is retired: '?' is only the nullable mark, as in "
-                "'T?'.",
-                "Write 'T?' for a value that may be null and 'T!' for one that may have "
-                "failed.",
-            },
-        },
-        {
             SemanticDiag::EnumFieldTypeMismatch,
             {
                 "EnumFieldTypeMismatch",

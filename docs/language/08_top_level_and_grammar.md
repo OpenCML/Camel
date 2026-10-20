@@ -85,7 +85,7 @@ enumBody  : 'enum' '{' 变体, ... '}'
 - `T?`、`T!`：[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。
 - `typeas T`：[7.5](07_statements.md#75-泛型函数)。
 - `constas n`：在 `const` 实参里给维度命名（[设计原则 5.4](../design-principles.cn.md)）：名字在形参类型里第一次出现时用 `constas` 绑定，之后直接写 `n`；只能出现在 `const` 实参的数组字面量里，别处写它是语法错误。
-- `enum`：[3.5](03_data_model.md#35-枚举-enum)。类型位置上的 `A | B` 已退役，写法给出 `SemanticDiag::UnionTypeRetired`。
+- `enum`：[3.5](03_data_model.md#35-枚举-enum)。
 - 尖括号：类型函数的实参（[7.7](07_statements.md#77-类型声明)）或模块类型的实参。
 
 ## 8.5 完整文法
@@ -193,8 +193,7 @@ loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
 catchClause        : 'catch' identDef ':' typeExpr stmtBlock
-typeExpr           : unionType (('?' | '!')+ | '?' unionType)?
-unionType          : interType ('|' interType)*
+typeExpr           : interType ('?' | '!')*
 interType          : diffType ('&' diffType)*
 diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
@@ -230,7 +229,6 @@ enumField          : identDef ':' typeExpr
 | 类型里的 `(` | `(名字:`、`(var`、空表后跟 `=>` 是函数类型；`(T)` 是括号类型；其余是元组类型 |
 | `{` 开头：结构体还是块 | `{ 名字 :`、`{ ...` 是结构体；`{}` 作分支臂、lambda 体时是空块，作语句时是空结构体 |
 | 实参：位置实参还是具名实参 | 第一个 `名字 :` 起是具名实参 |
-| `T ?` | 同一行上 `?` 后面能开始一个类型时是保留写法 `T ? U`，否则是可空标记 |
 | 类型之后的 `+` `-` `^` | 其后能开始一个类型时属于类型（`x as T + U` 是转换为类型 `T + U`） |
 | 一元 `-` | 永远是运算符；比 `^` 松、比 `->` 紧；直接作用在数字上时给出负的字面量 |
 
@@ -263,8 +261,8 @@ enumField          : identDef ':' typeExpr
 | 形参默认值 `b: int = 5` | `FeatureNotSupported` | 重载；`with` 形参 |
 | 切片下标 `xs[a:b]`、`xs[a:b:c]` | `SemanticDiag::NoMatchingFunction`（没有专门的诊断：按“下标运算符没有接受这些实参的重载”报告） | `xs->slice<a, b>` |
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
-| `typeof e`、`T ? U`、`名字 of T` | `FeatureNotSupported` | 无 |
+| `typeof e`、`名字 of T` | `FeatureNotSupported` | 无 |
 | `keyof`、`enum` | 语法错误 | 无 |
 | 修饰符 `atomic`、`shared`、`inner`、`outer` | 无诊断；没有语义 | 不写 |
 
-此外有几处“能写出来但目前用不了”：联合类型 `A | B`（成员类型的值不能进入它）、带函数类型的声明 `let f: (x: int) => int = g`。
+此外有一处“能写出来但目前用不了”：带函数类型的声明 `let f: (x: int) => int = g`。

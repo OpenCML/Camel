@@ -555,8 +555,6 @@ class Formatter {
 
     std::any visitTypeExpr(cst::TypeExpr context);
 
-    std::any visitUnionType(cst::UnionType context);
-
     std::any visitInterType(cst::InterType context);
 
     std::any visitDiffType(cst::DiffType context);

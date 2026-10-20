@@ -323,34 +323,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "retired_union"
-desc = "`A | B` is retired: a value has one type, and when it is one of several named cases that is an enum."
-kind = "negative"
-case = "../../../cases/compile/enum/retired_union.cml"
-args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::UnionTypeRetired"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 25
-expect_output_contains = ["The union type is retired: a value has one type, and no value enters 'A | B'"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "retired_question"
-desc = "`T ? U` is retired: `?` only marks a nullable value, as in `T?`."
-kind = "negative"
-case = "../../../cases/compile/enum/retired_question.cml"
-args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ReservedTypeQuestionRetired"
-expect_diagnostic_line = 3
-expect_diagnostic_column = 17
-expect_output_contains = ["The reserved form 'T ? U' is retired"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
 name = "refuse_grad"
 desc = "autodiff refuses a value that depends on the differentiated parameter and is put into an enum, where the value is built; it does not return a wrong zero."
 kind = "negative"
