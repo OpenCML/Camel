@@ -111,7 +111,7 @@ prints one entry.
 | `0x030000F1` | [SemanticDiag::OperatorNotOverloadable](#operatornotoverloadable) | Error |
 | `0x030000F2` | [SemanticDiag::OperatorOverloadInvalid](#operatoroverloadinvalid) | Error |
 | `0x030000F3` | [SemanticDiag::OperatorOverloadConflict](#operatoroverloadconflict) | Error |
-| `0x030000F4` | [SemanticDiag::AmbiguousOperatorCall](#ambiguousoperatorcall) | Error |
+| `0x030000F4` | [SemanticDiag::AmbiguousCall](#ambiguouscall) | Error |
 | `0x03000110` | [SemanticDiag::DeclaredTypeMismatch](#declaredtypemismatch) | Error |
 | `0x03000111` | [SemanticDiag::ModuleTypeCycle](#moduletypecycle) | Error |
 | `0x03000112` | [SemanticDiag::InvalidAnnotation](#invalidannotation) | Error |
@@ -2709,32 +2709,38 @@ func operator +(a: int, b: int): int { return 99 }
 func main(): int { return 0 }
 ```
 
-### AmbiguousOperatorCall
+### AmbiguousCall
 
-`0x030000F4` · Error · `SemanticDiag::AmbiguousOperatorCall`
+`0x030000F4` · Error · `SemanticDiag::AmbiguousCall`
 
 **Message**
 
 ```text
-Operator '{0}' applies to ({1}) in more than one way.
+The call to '{0}' with ({1}) fits more than one overload.
 ```
 
 **Help**
 
 ```text
-More than one overload of the operator takes these arguments; make the parameter types of one of them narrower, or convert an argument with 'as'. The overloads that take them: {2}
+More than one function takes these arguments; make the choice explicit: annotate the literal with its type (for example '2 as f32') or convert an argument with 'as'. The overloads that take them: {2}
 ```
 
-**Example** (`test/cases/consistency/operator_overloads/ambiguous_generic.cml`, run as `camel test/cases/consistency/operator_overloads/ambiguous_generic.cml`)
+**Example** (`test/cases/compile/overloads/ambiguous_literal.cml`, run as `camel test/cases/compile/overloads/ambiguous_literal.cml`)
 
 ```camel
-module ambiguous_generic
+module ambiguous_literal
 
-func operator +(a: (typeas T)[], b: T[]): T[] { return a->extend<b> }
-func operator +(a: (typeas T)[], b: (typeas U)[]): T[] { return a }
+func scale(x: f32): f32 {
+    return x * 2.0
+}
+
+func scale(x: float): float {
+    return x * 2.0
+}
 
 func main(): int sync {
-    println(['x'] + ['y'])
+    println(scale(2))
+    println('never printed')
     return 0
 }
 ```

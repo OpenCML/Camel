@@ -768,13 +768,13 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::AmbiguousOperatorCall,
+            SemanticDiag::AmbiguousCall,
             {
-                "AmbiguousOperatorCall",
-                "Operator '{0}' applies to ({1}) in more than one way.",
-                "More than one overload of the operator takes these arguments; make the "
-                "parameter types of one of them narrower, or convert an argument with 'as'. "
-                "The overloads that take them: {2}",
+                "AmbiguousCall",
+                "The call to '{0}' with ({1}) fits more than one overload.",
+                "More than one function takes these arguments; make the choice explicit: "
+                "annotate the literal with its type (for example '2 as f32') or convert an "
+                "argument with 'as'. The overloads that take them: {2}",
             },
         },
         {

@@ -360,10 +360,13 @@ node_handle_t Builder::partialApplicationOf(
         type != nullptr && type->code() == TypeCode::Function) {
         candidates.push_back(tt::as_ptr<FunctionType>(type));
     }
-    // Exact matches first; a literal enters a parameter type only when there is none. More
-    // than one candidate in the pass that is tried is still refused: a partial application
-    // used as a value has no declaration-order tie-break (H27c's refusal), and a type given
-    // by the position (`expected`) settles the choice before either pass.
+    // Exact matches first; a literal enters a parameter type only when there is none. Several
+    // candidates in the pass that is used are an ambiguity (design principles 5.1, H27e): it
+    // is recorded here and reported when the binding is refused for good, because the position
+    // may still say which function is meant (a parameter of function type, overloadValueFor,
+    // or the type of the call this value is passed to). Declaration order never chooses, and
+    // `expected` settles the choice before either pass.
+    ambiguousBindings_.erase(target);
     FunctionType *calleeType = nullptr;
     for (const bool entering : {false, true}) {
         std::vector<FunctionType *> fitted;
@@ -375,9 +378,11 @@ node_handle_t Builder::partialApplicationOf(
         if (fitted.empty()) {
             continue;
         }
-        if (fitted.size() == 1) {
-            calleeType = fitted.front();
+        if (fitted.size() > 1) {
+            ambiguousBindings_[target] = std::move(fitted);
+            return nullptr;
         }
+        calleeType = fitted.front();
         break;
     }
     if (calleeType == nullptr) {

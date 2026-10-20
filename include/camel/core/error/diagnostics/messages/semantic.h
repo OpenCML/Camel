@@ -127,7 +127,11 @@ enum class SemanticDiag : uint32_t {
     OperatorNotOverloadable  = 0x0000F1,
     OperatorOverloadInvalid  = 0x0000F2,
     OperatorOverloadConflict = 0x0000F3,
-    AmbiguousOperatorCall    = 0x0000F4,
+    // A call (of a function, an operator or a partial application used as a value) that
+    // more than one overload takes: several candidates in the pass being used, never
+    // settled by declaration order (design principles 5.1). Renamed from
+    // AmbiguousOperatorCall when it became the report for every call; the code is unchanged.
+    AmbiguousCall = 0x0000F4,
     // Rulings of 2026-10-15 (design principles log 2.13) and the defects found with them: 0x110
     // and up.
     DeclaredTypeMismatch = 0x000110,

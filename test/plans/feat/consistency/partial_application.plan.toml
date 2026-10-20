@@ -118,7 +118,7 @@ expect_output_contains = ["name=SemanticDiag::ConstructNotSupported", "err_var_p
 
 [[tests]]
 name = "partial_application.err_ambiguous"
-desc = "Two functions of one name take the context argument: a parameter of function type says which is meant; a let without a type cannot."
+desc = "Two functions of one name take the context argument exactly: a parameter of function type says which is meant; a let without a type cannot, and reports the same ambiguity an ordinary call reports, listing both candidates (SemanticDiag::AmbiguousCall)."
 kind = "negative"
 case = "../../../cases/consistency/partial_application/err_ambiguous.cml"
 args = ["-E", "short", "${case}"]
@@ -126,7 +126,19 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_ambiguous.cml:12:"]
+expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_ambiguous.cml:12:18:", "<k: int> (x: int) => int", "<k: int> (x: float) => float", "annotate the literal with its type"]
+
+[[tests]]
+name = "partial_application.err_entering_ambiguous"
+desc = "A context literal that enters two parameter types does not choose either: `scale<2>` with `with <k: f32>` and `with <k: float>` is refused with the same ambiguity diagnostic and candidate list as an ordinary call (design principles 5.1, H27e)."
+kind = "negative"
+case = "../../../cases/consistency/partial_application/err_entering_ambiguous.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_entering_ambiguous.cml:10:18:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float", "annotate the literal with its type"]
 
 [[tests]]
 name = "partial_application.context_arguments"
