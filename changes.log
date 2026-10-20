@@ -1,3 +1,25 @@
+[0.2.14]
+Changes:
+- 新增名义枚举 enum：变体可带位置或具名数据，match 支持变体模式与穷尽检查，同类型按变体与字段相等、按源码写法打印，支持泛型与递归，可跨模块使用，并在各调度器与独立 C++ 导出上运行；类型位置上的 A | B 与 T ? U 退役。
+- string 改为始终合法的 UTF-8，长度与下标按码点；新增内建 Bytes 与 bytes 模块，fs 提供二进制文件读写，crypto 的 sha256 同时接受 string 与 Bytes；str 的按字节函数与 char_* 退役。
+- 标注可以写在代码块之前，库可以声明授予节点属性的标注；# 不再是注释，只忽略首行的 #!。泛型的类型变量可以只出现在返回类型，类型实参可以按名字给出（pair::<A = int, B = string>）；match 可以匹配任意表达式。
+- 流水线改为显式组合：导入模块不再向其中加入遍（--no-module-passes 退役），核心的遍统一到 std::opt::*，模块的遍写成 tiles::compile、tensor::fuse、onnx::export；新增遍参数 name(key=value)（如 std::opt(safe_fp=true)、std::fvm(native_loop=true)、onnx::export(out="m.onnx")），原来经环境变量设置的遍设置退役。
+- std::opt 成为集成优化入口，循环执行去虚化、特化、内联、折叠、CSE、标量算式化简与死代码消除，并新增 std::opt::ctrl 控制边消除；std::opt::algebra 默认允许局部重结合，safe_fp=true 恢复严格等价的浮点改写。
+- Tiles 把静态循环编译为设备上的递推，在一颗内核里执行多状态循环，跨调用复用已编译区域，自己管理异步提交与跨流依赖，并按上限租借复用设备与锁页内存。
+- 新增参数树与检查点：tree_map、tree_reduce、tree_unzip、tree_leaves、tree_paths 按类型展开为普通图，save_tree、load_tree 以整目录原子替换和结构、类型、尺寸、SHA-256 校验保存带类型的训练状态；张量可按小端精确字节读写，二进制训练数据与 UTF-8 文件接口分离；补充扩散训练所需的批量矩阵乘与 BF16 GPU 路径。
+- 调试器区分尾调用的单步与步过、显示新一轮实参与入口快照，优化遍之后仍能停在断点；格式化器支持 enum、显式类型实参与任意 match 主体；std::stats 报告图存储占用的字节数。
+- 修复 std::prl 动态调用子图中的循环下降、宏求值替换图载体前释放根、内联完成门复用、无 main 的库模块图转储，以及 ONNX 导出在运行期分支与被内联成局部变量等情形下的拒绝定位。
+
+[0.2.13]
+Changes:
+- 新增 Tiles 静态区域抽取与 @gpu 执行；GPU 不可用或算子不支持时在执行前回退到原有 CPU 图。
+- 增加区域间传输规划、驻留值复用、静态预编译和数值感知计划缓存，修复并发图发布与驻留存储构建问题。
+- NodeVM、FastVM/JIT 和并行调度器支持原生调用 Camel 子图，保持递归、故障与 GC 语义。
+- 新增版本化 std::jgir JSON 图导出，明确 std::gir、std::rgir 与注释导出格式；调试器增加节点断点、暂停内存检查和 Release 编译边界。
+- 修复 int64 求和、exp 次正规数、argmax/argmin、空均值和 CBLAS 矩阵乘许可，并增加超越函数 ULP 验证。
+- ONNX 仅导出已证明安全或带运行时故障保护的切片，完善图重复输入与输出类型元数据。
+- wheel 构建改用配置的 Python 解释器。
+
 [0.2.11]
 Changes:
 - 新增 Tiles GPU 编译模块，支持 CUDA 内核生成、计算融合、设备驻留值及相关执行与性能验证。
