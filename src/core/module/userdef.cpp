@@ -33,6 +33,7 @@
 #include "camel/core/error/diagnostics.h"
 
 #include "camel/utils/log.h"
+#include "camel/utils/path.h"
 #include "camel/utils/phase_timer.h"
 
 #include <cstdint>
@@ -70,7 +71,9 @@ UserDefinedModule::UserDefinedModule(
     } else {
         diagnostics_ = std::make_shared<Diagnostics>(
             name,
-            path.empty() ? "<in-memory>" : fs::absolute(path).string(),
+            path.empty()
+                ? "<in-memory>"
+                : camel::utils::pathToUtf8(fs::absolute(camel::utils::pathFromUtf8(path))),
             ctx->sourceContext());
         diagnostics_->setConfig(ctx->diagConfig());
         parser_ = std::make_shared<CamelParser>(diagnostics_);
@@ -121,7 +124,7 @@ bool UserDefinedModule::compile(CompileStage till) {
             std::istringstream buffer(override.value_or(""));
             std::ifstream ifs;
             if (!override)
-                ifs.open(path_);
+                ifs.open(camel::utils::pathFromUtf8(path_));
             if (!override && !ifs.good()) {
                 throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
                     .commit(name_, "module file not found or unreadable: " + path_);

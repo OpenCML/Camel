@@ -149,6 +149,12 @@ enum class SemanticDiag : uint32_t {
     EnumTypeArgumentNotInferred = 0x000139,
     EnumFieldTypeMismatch       = 0x00013A,
     EnumConstructionMismatch    = 0x00013B,
+    // Named dimensions of type extents (design principles 5.4): 0x140 and up.
+    ConstasNotAllowed         = 0x000140,
+    DimensionNameNotBound     = 0x000141,
+    DimensionNameAlreadyBound = 0x000142,
+    DimensionMismatch         = 0x000143,
+    InvalidExtentExpression   = 0x000144,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

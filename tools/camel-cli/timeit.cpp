@@ -202,7 +202,8 @@ struct TimeitSummary {
 };
 
 std::string resolveEntryDir(const std::string &inputPath) {
-    return fs::absolute(fs::path(inputPath)).parent_path().string();
+    return camel::utils::pathToUtf8(
+        fs::absolute(camel::utils::pathFromUtf8(inputPath)).parent_path());
 }
 
 std::vector<std::string> buildSearchPathsForEntry(const std::string &entryDir) {
@@ -224,7 +225,7 @@ std::vector<std::string> buildSearchPathsForEntry(const std::string &entryDir) {
             return std::format(
                 "run | module paths | {} entries | CAMEL_HOME={} | entry_dir={} | stdlib={}",
                 n,
-                installRoot.string(),
+                camel::utils::pathToUtf8(installRoot),
                 entryDir,
                 stdlibNote);
         },
@@ -234,7 +235,7 @@ std::vector<std::string> buildSearchPathsForEntry(const std::string &entryDir) {
 
 RunInvocation makeRunInvocation(const std::string &inputPath) {
     RunInvocation invocation;
-    auto file = std::make_unique<std::ifstream>(inputPath);
+    auto file = std::make_unique<std::ifstream>(camel::utils::pathFromUtf8(inputPath));
     if (!file->is_open()) {
         throw std::runtime_error(std::format("Error: Cannot open file {}", inputPath));
     }

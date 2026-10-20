@@ -27,6 +27,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/storage.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
@@ -281,47 +282,9 @@ bool TupleType::resolved() const {
     return true;
 }
 
-string TupleType::toString() const {
-    if (cell_) {
-        return "var " + typesPtr_[0]->toString();
-    }
-    if (isTagged()) {
-        // A function payload is parenthesised, as it must be when written.
-        const bool parens  = typesPtr_[0]->code() == TypeCode::Function;
-        const string inner = typesPtr_[0]->toString();
-        return (parens ? "(" + inner + ")" : inner) + (isNullable() ? "?" : "!");
-    }
-    string result = "(";
-    for (size_t i = 0; i < size_; ++i) {
-        Type *type = typesPtr_[i];
-        if (type) {
-            result += type->toString() + ", ";
-        } else {
-            result += "null, ";
-        }
-    }
-    if (size_ > 0) {
-        result.pop_back();
-        result.pop_back();
-    }
-    result += ")";
-    return result;
-}
+string TupleType::toString() const { return typeToString(this); }
 
-std::string TupleType::mangle() const {
-    if (cell_) {
-        return "V" + typesPtr_[0]->mangle();
-    }
-    if (isTagged()) {
-        return (isNullable() ? "N" : "E") + typesPtr_[0]->mangle();
-    }
-    std::string result = "P";
-    result += std::to_string(size_);
-    for (size_t i = 0; i < size_; ++i) {
-        result += typesPtr_[i]->mangle();
-    }
-    return result;
-}
+std::string TupleType::mangle() const { return typeMangle(this); }
 
 Type *TupleType::clone(bool deep /* = false */) const {
     if (cell_ || isTagged()) {
@@ -341,24 +304,7 @@ Type *TupleType::clone(bool deep /* = false */) const {
     return TupleType::create(std::move(clonedTypes));
 }
 
-bool TupleType::equals(Type *other) const {
-    if (this == other) {
-        return true;
-    }
-    if (!other || other->code() != TypeCode::Tuple) {
-        return false;
-    }
-    const TupleType &otherTuple = static_cast<const TupleType &>(*other);
-    if (size_ != otherTuple.size_ || cell_ != otherTuple.cell_ || tag_ != otherTuple.tag_) {
-        return false;
-    }
-    for (size_t i = 0; i < size_; i++) {
-        if (!typesPtr_[i]->equals(otherTuple.typesPtr_[i])) {
-            return false;
-        }
-    }
-    return true;
-}
+bool TupleType::equals(Type *other) const { return typeEquals(this, other); }
 
 CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
     // Converting a value to its own type is legal and does nothing (design principles 5.1):

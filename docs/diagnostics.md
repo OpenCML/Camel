@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-165 diagnostics: 148 errors, 17 warnings.
+170 diagnostics: 153 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -134,6 +134,11 @@ prints one entry.
 | `0x03000139` | [SemanticDiag::EnumTypeArgumentNotInferred](#enumtypeargumentnotinferred) | Error |
 | `0x0300013A` | [SemanticDiag::EnumFieldTypeMismatch](#enumfieldtypemismatch) | Error |
 | `0x0300013B` | [SemanticDiag::EnumConstructionMismatch](#enumconstructionmismatch) | Error |
+| `0x03000140` | [SemanticDiag::ConstasNotAllowed](#constasnotallowed) | Error |
+| `0x03000141` | [SemanticDiag::DimensionNameNotBound](#dimensionnamenotbound) | Error |
+| `0x03000142` | [SemanticDiag::DimensionNameAlreadyBound](#dimensionnamealreadybound) | Error |
+| `0x03000143` | [SemanticDiag::DimensionMismatch](#dimensionmismatch) | Error |
+| `0x03000144` | [SemanticDiag::InvalidExtentExpression](#invalidextentexpression) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -3346,6 +3351,143 @@ func main(): void sync {
 }
 ```
 
+### ConstasNotAllowed
+
+`0x03000140` · Error · `SemanticDiag::ConstasNotAllowed`
+
+**Message**
+
+```text
+The dimension name '{0}' is bound here, but only a parameter type can bind one.
+```
+
+**Help**
+
+```text
+Write 'constas n' where the dimension first appears in a parameter type, 'x: Tensor<f32, const [constas n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.
+```
+
+**Example** (`test/cases/modules/tensor/named_dims/err_constas_return.cml`, run as `camel test/cases/modules/tensor/named_dims/err_constas_return.cml`)
+
+```camel
+module named_dims_err_constas_return
+import { Tensor, ones } from tensor
+// A return type uses the names its parameters bound; it binds none.
+func bad(x: Tensor<f32>): Tensor<f32, const [constas n]> {
+    return x as Tensor<f32, const [-1]>
+}
+func main(): int sync {
+    println(bad(ones([3])))
+    return 0
+}
+```
+
+### DimensionNameNotBound
+
+`0x03000141` · Error · `SemanticDiag::DimensionNameNotBound`
+
+**Message**
+
+```text
+The dimension name '{0}' is not bound by any parameter of this signature.
+```
+
+**Help**
+
+```text
+A name in a type's extents is bound by 'constas name' where it first appears in a parameter type. A name that appears only in the return type is an error: the caller has no argument that could say what it is.
+```
+
+**Example** (`test/cases/modules/tensor/named_dims/err_unbound_name.cml`, run as `camel test/cases/modules/tensor/named_dims/err_unbound_name.cml`)
+
+```camel
+module named_dims_err_unbound_name
+import { Tensor, ones } from tensor
+// A name that only the return type writes is an error: no parameter binds it.
+func only_return(x: Tensor<f32>): Tensor<f32, const [n]> {
+    return x as Tensor<f32, const [-1]>
+}
+func main(): int sync {
+    println(only_return(ones([3])))
+    return 0
+}
+```
+
+### DimensionNameAlreadyBound
+
+`0x03000142` · Error · `SemanticDiag::DimensionNameAlreadyBound`
+
+**Message**
+
+```text
+The dimension name '{0}' is already bound; write '{0}' here instead of 'constas {0}'.
+```
+
+**Help**
+
+```text
+Only the first occurrence of a dimension name in the parameter types binds it ('constas n'). Writing 'constas' again would ask for a second binding of the same name.
+```
+
+**Example** (`test/cases/modules/tensor/named_dims/err_constas_twice.cml`, run as `camel test/cases/modules/tensor/named_dims/err_constas_twice.cml`)
+
+```camel
+module named_dims_err_constas_twice
+import { Tensor } from tensor
+// Only the first occurrence binds; a second `constas` of the same name would bind it again.
+func bad(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [constas n]>): float {
+    return 0.0
+}
+```
+
+### DimensionMismatch
+
+`0x03000143` · Error · `SemanticDiag::DimensionMismatch`
+
+**Message**
+
+```text
+Argument {0} has extent {1}, but the dimensions the earlier arguments bound do not allow it.
+```
+
+**Help**
+
+```text
+The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to.
+```
+
+**Example** (`test/cases/modules/tensor/named_dims/err_mismatch.cml`, run as `camel test/cases/modules/tensor/named_dims/err_mismatch.cml`)
+
+```camel
+module named_dims_err_mismatch
+import { Tensor, ones, sum } from tensor
+func pair(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [n]>): float {
+    return sum(a) + sum(b)
+}
+func main(): int sync {
+    println(pair(ones([3]), ones([4])))
+    return 0
+}
+```
+
+### InvalidExtentExpression
+
+`0x03000144` · Error · `SemanticDiag::InvalidExtentExpression`
+
+**Message**
+
+```text
+This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('const [n, 3]').
+```
+
+**Help**
+
+```text
+Each extent is an integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown.
+```
+
+*No example: no test small enough to show raises it.*
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -4225,7 +4367,7 @@ Cannot write the result of 'main' to '{0}': {1}.
 --output <file> (-o) writes the value 'main' returns: a number, bool or text as a text file, a tensor as a .npy file, a struct or tuple as a directory with one file per member. Without it the value is printed on standard output.
 ```
 
-**Example** (`test/cases/consistency/entry/undeclared_println.cml`, run as `camel -o tmp/entry_undeclared.out test/cases/consistency/entry/undeclared_println.cml`)
+**Example** (`test/cases/consistency/entry/undeclared_println.cml`, run as `camel -o ${test_tmp}/entry_undeclared.out test/cases/consistency/entry/undeclared_println.cml`)
 
 ```camel
 module undeclared_println
@@ -4286,37 +4428,13 @@ Out of memory{0}: {1}.
 The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
 ```
 
-**Example** (`test/cases/feat/mm/gc/gc_live_large.cml`, run as `CAMEL_GC=generational CAMEL_GC_HEAP_LIMIT_MB=64 camel test/cases/feat/mm/gc/gc_live_large.cml --arg mb=256 --arg reps=10 std::nvm`)
+**Example** (`test/cases/loops/collection_oom.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 CAMEL_GC_HEAP_LIMIT_MB=16 camel test/cases/loops/collection_oom.cml test::loop_collect_summary ${backend}`)
 
 ```camel
-module gc_live_large
-
-func row(i: int, k: int): int[] {
-    return [i, i + k, i + 2, i + 3, i + 4, i + 5, i + 6, i + 7, i + 8, i + 9, i + 10, i + 11]
-}
-
-func block(n: int, k: int): int[][] {
-    return range(0, n)->map<(i: int): int[] => row(i, k)>
-}
-
-func blocks(count: int, n: int): int[][][] {
-    return range(0, count)->map<(b: int): int[][] => block(n, b)>
-}
-
-func probe(live: int[][][], n: int): int {
-    return live->reduce<(acc: int, b: int[][]): int => acc + b[n - 1][1] + b[0][0], 0>
-}
-
-func churn(live: int[][][], n: int, left: int, total: int): int {
-    return if left == 0 then total + probe(live, n) else churn(live, n, left - 1, total + block(n / 10 + 1, left)[n / 10][11])
-}
-
-// One block is 4096 rows: about 0.6 MB.
-func main(mb: int, reps: int): int sync {
-    let n = 4096
-    let count = mb * 10 / 6 + 1
-    let live = blocks(count, n)
-    println('gc_live_large blocks={} total={}'->format<count, churn(live, n, reps, 0)>)
+// A collecting loop whose tapes outgrow the heap limit (CAMEL_GC_HEAP_LIMIT_MB): the failure is
+// a memory exhaustion, attributed to the loop whose tape could not grow.
+func main(): int sync {
+    println(loop i = 0 while i < 2000000 do i + 1)
     return 0
 }
 ```

@@ -19,6 +19,7 @@
 
 // A checkpoint is immutable: flush a private sibling directory, then publish once.
 #include "include/tree/checkpoint_io.h"
+#include "camel/utils/path.h"
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
@@ -134,7 +135,8 @@ void publishCheckpoint(const fs::path &requested, const CheckpointFiles &files) 
         throw std::invalid_argument("invalid checkpoint directory");
     fs::create_directories(target.parent_path());
     if (fs::exists(target))
-        throw std::invalid_argument("checkpoint already exists: " + target.string());
+        throw std::invalid_argument(
+            "checkpoint already exists: " + camel::utils::pathToUtf8(target));
     static std::atomic<uint64_t> sequence{0};
 #ifdef _WIN32
     const auto pid = GetCurrentProcessId();

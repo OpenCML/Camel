@@ -63,12 +63,12 @@ digraph GraphIR {
         N11 [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=220, span="15:25-15:46", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="float[]"];
         N12 [label="[4]", type="DATA", origin=221, span="15:48-15:51", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="int[]"];
         N13 [label="tensor:reshape", type="OPER", origin=222, span="15:17-15:24", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor<float32, [4]>"];
-        N14 [label="gate", type="FUNC", origin=223, span="15:16-15:53", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
+        N14 [label="gate", type="FUNC", origin=223, span="15:12-15:53", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
         N15 [label=":io/println", type="OPER", role="effect", origin=224, span="15:4-15:11", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
         N16 [label="[0.25, -2.0, 3.0, 0.5]", type="DATA", origin=228, span="16:25-16:47", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="float[]"];
         N17 [label="[4]", type="DATA", origin=229, span="16:49-16:52", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="int[]"];
         N18 [label="tensor:reshape", type="OPER", origin=230, span="16:17-16:24", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor<float32, [4]>"];
-        N19 [label="gate", type="FUNC", origin=231, span="16:16-16:54", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
+        N19 [label="gate", type="FUNC", origin=231, span="16:12-16:54", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
         N1A [label=":io/println", type="OPER", role="effect", origin=232, span="16:4-16:11", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="Tensor"];
         N1B [label="0", type="DATA", origin=233, span="17:11-17:12", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="int"];
         N1C [label="GATE", type="GATE", value_type="int"];

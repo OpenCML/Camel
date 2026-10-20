@@ -68,9 +68,10 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
 
 Storage (`include/camel/runtime/graph.h`): kind 15; the frozen payload `GCLoopRef` holds the form
 and the reference-table indexes of the two graphs (both marked callee); a draft holds
-`GCLoopBody` with the graphs themselves. Decode, clone, both encoders, the session's graph
-enumeration and reachability know it. Every commit checks the payload (I12/I13) and
-`validateRuntimeLoopInterface` (op-semantics I18, I19).
+`GCLoopBody` with the graphs themselves. Both payloads also hold `collectionCount`, the number of
+collection slots (section 3.1, zero for a loop written in source today). Decode, clone, both
+encoders, the session's graph enumeration and reachability know it. Every commit checks the
+payload (I12/I13) and `validateRuntimeLoopInterface` (op-semantics I18, I19).
 
 `std::rgir`:
 
@@ -117,6 +118,28 @@ types `Type *` (the design's GraphId and TypeId as this runtime spells them).
 
 Passes treat the node as opaque: it carries ordering, the inliner's call graph and effect
 analysis look into its two graphs, and nothing lowers it in the shared program.
+
+### 3.1 Collection slots
+
+A loop can give one value per round for the executor to collect into an array (the tape of a
+future autodiff rewrite, and ONNX `Loop`'s scan output). Neither the grammar nor the builder
+writes such a loop yet; `collectionCount` (`s`) is part of the payload, and a pass or a later
+front end sets it. With `s > 0`:
+
+```
+value        (state_0 … state_{k-1}, T_0[] … T_{s-1}[])
+body result  (next_state_0 … next_state_{k-1}, v_0 … v_{s-1}),  v_c : T_c
+```
+
+The count is in the node because with `k = 2` the value `(state, array)` is otherwise
+indistinguishable from two states of which the second is an array. `s = 0` is exactly the old
+shape (the value when `k = 1`, the k-tuple when `k > 1`). `LoopView` exposes
+`collectionCount`, `valueIsTuple`, `valueComponentCount`, `stateValueIndex`,
+`collectionValueIndex`, `collectionArrayType`, `collectionElemType`, `nextStateIsTuple`,
+`bodyResultType`, `bodyStateResultIndex`, `bodyCollectionResultIndex`,
+`nextCollectionComponent`, and the free helpers `loopValueComponent`, `loopStateValue`,
+`loopCollectedValue`; the validation requires the value tuple to be the state types followed by
+the array types and the body's exit to be the state types followed by their element types.
 
 ## 4. Back ends
 
@@ -175,6 +198,17 @@ The macro evaluator's limit on
 the rounds of a loop is `--max-macro-rounds <n>` (else `CAMEL_MAX_MACRO_ROUNDS`; default
 1000000, 1 to 2^40), the way the nesting limit is `--max-macro-depth`.
 
+A collecting loop keeps its state and its tapes in one tuple, `(state…, tape…)`: the k state
+components are updated in place, and each round's `v_c` is appended to tape `c` with
+`Array::append` (O(1) amortised, O(n) for the loop; the tape is uniquely owned by the loop, so the
+append is unobservable). The work tuple lives in the node's slot (NodeVM, FastVM) or in a rooted
+tuple (the macro evaluator), so the arrays are traced; the tapes grow on the run-time heap, so a
+limit hit is `RuntimeDiag::MemoryExhausted` reported while "collecting the values a loop produces
+each round" at the loop's source location. There is no round limit. The lowering does the same
+with two hidden operators, `:loop/collector` (a fresh array, once before the loop) and
+`:loop/collect` (append in place, returns the tape), effectful by default so no pass removes or
+reorders them; `next` carries the `(state…, tape…)` tuple.
+
 **Lowered or native on std::fvm and std::jit.** The choice is made once at the entry: native when
 an observer asks for loop frames (`ExecutionObserver::wantsLoopFrames`, true for the debugger) or
 with `CAMEL_FVM_NATIVE_LOOP=1`, lowered otherwise; the choice is logged under the `FastVM` scope.
@@ -214,3 +248,16 @@ refusals, and the iterables: `loops.iterate_string`, `loops.iterate_map`, `loops
 `loops.err_tensor_rank0` and `loops.fault_tensor_rank0`), `parse.rulings` (syntax, AST, GCT, graph), `tools.debugger`
 `debugger.loop_frames`, four loop programs in `test/tools/cppexec/expect.txt` (one of them over a
 string), and progen's `loop` feature (all forms, sync bodies with effects).
+
+refusals), `parse.rulings` (syntax, AST, GCT, graph), `tools.debugger` `debugger.loop_frames`,
+three loop programs in `test/tools/cppexec/expect.txt`, and progen's `loop` feature (all forms,
+sync bodies with effects).
+
+`test/plans/feat/linear/loop_collect.plan.toml` covers collection slots through two test-only
+passes (`test::loop_collect`, `test::loop_collect_summary`, enabled by
+`CAMEL_ENABLE_TEST_PASSES=1`): the four shapes and the three ways a loop runs no rounds; the same
+on `std::nvm`, `std::fvm`, `std::jit`, `std::prl`, and the native FastVM loop on fvm and jit,
+with the back ends' output compared; `std::macro` on the two-value loop of `macro.cml`; a hundred
+thousand rounds of a `while` and a `for` loop with the tapes summarised by their lengths; and a
+tape that outgrows `CAMEL_GC_HEAP_LIMIT_MB`, which every executor reports as
+`RuntimeDiag::MemoryExhausted` at the loop's source line.

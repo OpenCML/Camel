@@ -37,6 +37,18 @@ const COLORS = {
     reset: '\x1b[0m',
 }
 
+// Test scratch. Every test gets its own directory, `<run>/<test name>` under tmp/test/run,
+// exposed as `${test_tmp}` and as CAMEL_TEST_TMPDIR in the child environment. A test that writes
+// a file writes there, so a file left by another test, or by an earlier run, cannot be read as
+// this run's output (the failure that motivated this: a stale model at the path a refused export
+// names made "a refused export must not write a model" fail). The directory is removed after the
+// test. tmp/test and test/tmp are cleared before and after a run as well: that covers a program
+// that still names a fixed path under them (the path is fresh, so its assertion means what it
+// says) and a run that was stopped before its own cleanup.
+const TEST_SCRATCH_ROOT = path.join(REPO_ROOT, 'tmp', 'test')
+const LEGACY_TEST_SCRATCH = path.join(TEST_ROOT, 'tmp')
+const TEST_SCRATCH_RUN = path.join(TEST_SCRATCH_ROOT, 'run', `${timestamp()}_${process.pid}`)
+
 function timestamp() {
     const now = new Date()
     const pad = (n) => String(n).padStart(2, '0')
@@ -196,6 +208,20 @@ function expandArgs(args, scope) {
     return expanded
 }
 
+/**
+ * Substitute `${name}` in an assertion string (the `expect_*` fields), so an expectation about a
+ * path a program prints can name this test's scratch directory. Unknown names are errors, as in
+ * `args`.
+ */
+function expandTextTokens(text, scope) {
+    return String(text).replace(/\$\{([A-Za-z0-9_.-]+)\}/g, (_, name) => {
+        if (!(name in scope)) throw new Error(`unknown variable ${name}`)
+        const value = scope[name]
+        if (Array.isArray(value)) throw new Error(`array variable ${name} cannot be used in text`)
+        return String(value)
+    })
+}
+
 function formatDurationMs(valueMs, digits = 2) {
     if (Math.abs(valueMs) >= 1000) {
         return `${(valueMs / 1000).toFixed(digits)} s`
@@ -332,6 +358,28 @@ function checkPrecondition(test, sharedVars) {
 
 function sanitizeSegment(value) {
     return String(value).replace(/[<>:"/\\|?*]+/g, '_')
+}
+
+/** The fresh scratch directory of one test; it is removed when the test is done. */
+function createTestScratchDir(test) {
+    const base = sanitizeSegment(test.name) || 'test'
+    let dir = path.join(TEST_SCRATCH_RUN, base)
+    for (let suffix = 2; fs.existsSync(dir); suffix++) {
+        dir = path.join(TEST_SCRATCH_RUN, `${base}-${suffix}`)
+    }
+    ensureDir(dir)
+    return dir
+}
+
+/**
+ * Clear what tests write under a fixed scratch path: tmp/test is the test scratch tree and
+ * test/tmp the older one. Called before the first test (a run stopped earlier, or a plan that
+ * still names a fixed path, leaves files there) and after the last one (nothing accumulates).
+ */
+function clearTestScratch() {
+    for (const dir of [TEST_SCRATCH_ROOT, LEGACY_TEST_SCRATCH]) {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
 }
 
 function snapshotCompare(actual, expected, mode) {
@@ -496,6 +544,8 @@ function runVerification(test, result) {
         normalized: result.normalized,
         diagnostics: result.diagnostics,
         benchmark: result.benchmark,
+        test_tmp: result.testTmp,
+        test_tmp_relative: result.testTmpRelative,
     }
     fs.writeFileSync(payloadPath, JSON.stringify(payload, null, 2))
 
@@ -558,29 +608,36 @@ function compareField(field, actual, baseline) {
 
 function validateTest(test, result, context) {
     const failures = []
+    const scope = context.scope || {}
     if (typeof test.expect_exit === 'number' && result.exitCode !== test.expect_exit) {
         failures.push(`expected exit ${test.expect_exit}, got ${result.exitCode}`)
     }
-    for (const needle of test.expect_stdout_contains || []) {
+    for (const rawNeedle of test.expect_stdout_contains || []) {
+        const needle = expandTextTokens(rawNeedle, scope)
         if (!result.normalized.stdout.includes(needle)) {
             failures.push(`stdout does not contain '${needle}'`)
         }
     }
-    if (typeof test.expect_stdout_starts_with === 'string'
-        && !result.normalized.stdout.startsWith(test.expect_stdout_starts_with)) {
-        failures.push(`stdout does not start with ${JSON.stringify(test.expect_stdout_starts_with)}`)
+    if (typeof test.expect_stdout_starts_with === 'string') {
+        const expectedStart = expandTextTokens(test.expect_stdout_starts_with, scope)
+        if (!result.normalized.stdout.startsWith(expectedStart)) {
+            failures.push(`stdout does not start with ${JSON.stringify(expectedStart)}`)
+        }
     }
-    for (const needle of test.expect_stderr_contains || []) {
+    for (const rawNeedle of test.expect_stderr_contains || []) {
+        const needle = expandTextTokens(rawNeedle, scope)
         if (!result.normalized.stderr.includes(needle)) {
             failures.push(`stderr does not contain '${needle}'`)
         }
     }
-    for (const needle of test.expect_output_contains || []) {
+    for (const rawNeedle of test.expect_output_contains || []) {
+        const needle = expandTextTokens(rawNeedle, scope)
         if (!result.normalized.output.includes(needle)) {
             failures.push(`output does not contain '${needle}'`)
         }
     }
-    for (const needle of test.expect_output_not_contains || []) {
+    for (const rawNeedle of test.expect_output_not_contains || []) {
+        const needle = expandTextTokens(rawNeedle, scope)
         if (result.normalized.output.includes(needle)) {
             failures.push(`output contains '${needle}'`)
         }
@@ -681,9 +738,14 @@ function runOneTest(test, sharedVars, logContext) {
     if (!toolExe) {
         throw new Error(`unknown test tool: ${toolName}`)
     }
+    // This test's own scratch directory: `${test_tmp}` in args, env values and expectations, the
+    // absolute path in CAMEL_TEST_TMPDIR, and both in the verification payload.
+    const scratch = createTestScratchDir(test)
+    const scratchRelative = path.relative(REPO_ROOT, scratch).split(path.sep).join('/')
     const scope = {
         ...sharedVars,
         case: casePath,
+        test_tmp: scratchRelative,
     }
     if (test.__backend) {
         const passes = sharedVars[`run_${test.__backend}`]
@@ -697,8 +759,9 @@ function runOneTest(test, sharedVars, logContext) {
     // Assertions on diagnostics (name, code, line, column) read the one-line text format.
     // A test of the format with source excerpts passes --error-format text, which wins.
     env.CAMEL_ERROR_FORMAT = 'short'
+    env.CAMEL_TEST_TMPDIR = scratch
     for (const entry of test.envs || []) {
-        const text = String(entry)
+        const text = expandTextTokens(entry, scope)
         const eq = text.indexOf('=')
         if (eq <= 0) {
             throw new Error(`invalid env entry for ${test.name}: ${text}`)
@@ -742,13 +805,21 @@ function runOneTest(test, sharedVars, logContext) {
         wallMs: raw.wallMs,
         benchmark: null,
         diagnostics: parseDiagnostics(raw.output),
+        testTmp: scratch,
+        testTmpRelative: scratchRelative,
     }
 
     if (test.kind === 'benchmark' && raw.stdout) {
         result.benchmark = benchmarkFromJson(raw.stdout)
     }
 
-    const failures = validateTest(test, result, logContext)
+    // The verification reads this test's output: it must run before the scratch directory goes.
+    let failures
+    try {
+        failures = validateTest(test, result, { ...logContext, scope })
+    } finally {
+        fs.rmSync(scratch, { recursive: true, force: true })
+    }
     const status = failures.length === 0 ? 'pass' : 'fail'
     return { ...result, failures, status, casePath }
 }
@@ -804,6 +875,7 @@ function writeLogFiles(plan, test, result, status, logDir) {
                     : null,
                 wall_ms: result.wallMs,
                 plan_path: test.__planPath,
+                test_tmp: result.testTmpRelative || null,
             },
             null,
             2
@@ -929,43 +1001,51 @@ function main() {
     const summary = { pass: 0, fail: 0, skip: 0, xfail: 0 }
     const completed = new Map()
 
-    for (const plan of plans) {
-        printPlanHeader(plan)
-        for (const test of plan.tests) {
-            const skipReason = checkPrecondition(test, sharedVars)
-            if (skipReason) {
-                summary.skip++
-                printStatusLine('skip', test.name)
-                printDetailLines([skipReason])
-                continue
-            }
-            const result = runOneTest(test, sharedVars, { options, completed })
-            completed.set(test.name, result)
-            if (test.__knownFail) {
-                // A known failure that fails is reported and counted apart, and does not fail
-                // the run. One that passes fails the run: the mark is out of date.
-                if (result.status === 'fail') {
-                    result.status = 'xfail'
-                } else {
-                    result.status = 'fail'
-                    result.failures.push(
-                        `marked known_fail on '${test.__backend}' but passes: remove the mark`
-                    )
+    // Files under a fixed scratch path are not this run's output.
+    clearTestScratch()
+    try {
+        for (const plan of plans) {
+            printPlanHeader(plan)
+            for (const test of plan.tests) {
+                const skipReason = checkPrecondition(test, sharedVars)
+                if (skipReason) {
+                    summary.skip++
+                    printStatusLine('skip', test.name)
+                    printDetailLines([skipReason])
+                    continue
                 }
-            }
-            summary[result.status]++
-            const metric = formatMetric(result)
-            printStatusLine(result.status, test.name, metric)
-            if (result.failures.length > 0) {
-                const note = test.__knownFail ? test.known_fail_note || test.failure_note : test.failure_note
-                if (note) {
-                    printDetailLines([`note: ${note}`])
+                const result = runOneTest(test, sharedVars, { options, completed })
+                completed.set(test.name, result)
+                if (test.__knownFail) {
+                    // A known failure that fails is reported and counted apart, and does not fail
+                    // the run. One that passes fails the run: the mark is out of date.
+                    if (result.status === 'fail') {
+                        result.status = 'xfail'
+                    } else {
+                        result.status = 'fail'
+                        result.failures.push(
+                            `marked known_fail on '${test.__backend}' but passes: remove the mark`
+                        )
+                    }
                 }
-                printDetailLines(result.failures)
-                if (result.status === 'fail') printFailedOutput(result)
+                summary[result.status]++
+                const metric = formatMetric(result)
+                printStatusLine(result.status, test.name, metric)
+                if (result.failures.length > 0) {
+                    const note = test.__knownFail ? test.known_fail_note || test.failure_note : test.failure_note
+                    if (note) {
+                        printDetailLines([`note: ${note}`])
+                    }
+                    printDetailLines(result.failures)
+                    if (result.status === 'fail') printFailedOutput(result)
+                }
+                writeLogFiles(plan, test, result, result.status, logDir)
             }
-            writeLogFiles(plan, test, result, result.status, logDir)
         }
+    } finally {
+        // The per-test directories are already gone; this removes what a program wrote under a
+        // fixed path of tmp/test or test/tmp, so repeated runs do not accumulate anything.
+        clearTestScratch()
     }
 
     fs.writeFileSync(

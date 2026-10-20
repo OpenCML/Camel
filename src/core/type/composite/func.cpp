@@ -20,6 +20,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/mm.h"
 #include "camel/core/type/intern.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
@@ -254,64 +255,9 @@ Type *FunctionType::resolve(const type_vec_t &typeList) const {
 
 bool FunctionType::resolved() const { return true; }
 
-string FunctionType::toString() const {
-    string result;
-    if (implMark_ != ImplMark::Graph) {
-        result += to_string(implMark_) + " ";
-    }
-    if (!modifiers_.empty()) {
-        result += string(modifiers_) + " ";
-    }
-    if (withCount_ > 0) {
-        result += "<";
-        for (size_t i = 0; i < withCount_; i++) {
-            if (i > 0)
-                result += ", ";
-            if (withIsVarAt(i))
-                result += "var ";
-            if (hasNames_)
-                result += string(argNameAt(i)) + ": ";
-            result += withTypeAt(i)->toString();
-        }
-        result += "> ";
-    }
-    result += "(";
-    for (size_t i = 0; i < normCount_; i++) {
-        if (i > 0)
-            result += ", ";
-        if (normIsVarAt(i))
-            result += "var ";
-        if (hasNames_)
-            result += string(argNameAt(withCount_ + i)) + ": ";
-        result += normTypeAt(i)->toString();
-    }
-    result += ") => ";
-    result += exitType_ ? exitType_->toString() : "<null>";
-    return result;
-}
+string FunctionType::toString() const { return typeToString(this); }
 
-string FunctionType::mangle() const {
-    string result = "F";
-    if (withCount_ > 0) {
-        result += "W" + to_string(withCount_);
-        for (size_t i = 0; i < withCount_; i++) {
-            if (withIsVarAt(i))
-                result += "V";
-            result += withTypeAt(i)->mangle();
-        }
-    }
-    if (normCount_ > 0) {
-        result += "N" + to_string(normCount_);
-        for (size_t i = 0; i < normCount_; i++) {
-            if (normIsVarAt(i))
-                result += "V";
-            result += normTypeAt(i)->mangle();
-        }
-    }
-    result += "R";
-    result += exitType_ ? exitType_->mangle() : "v";
-    return result;
-}
+string FunctionType::mangle() const { return typeMangle(this); }
 
 Type *FunctionType::clone(bool deep /* = false */) const {
     Parts copy = parts();
@@ -326,29 +272,7 @@ Type *FunctionType::clone(bool deep /* = false */) const {
     return intern(copy);
 }
 
-bool FunctionType::equals(Type *other) const {
-    if (this == other)
-        return true;
-    if (!other || other->code() != TypeCode::Function)
-        return false;
-
-    const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
-
-    if (withCount_ != otherFunc.withCount_ || normCount_ != otherFunc.normCount_)
-        return false;
-
-    for (size_t i = 0; i < paramCount(); i++) {
-        if (varMarks()[i] != otherFunc.varMarks()[i] || !types()[i]->equals(otherFunc.types()[i]))
-            return false;
-    }
-    if (exitType_ && otherFunc.exitType_) {
-        if (!exitType_->equals(otherFunc.exitType_))
-            return false;
-    } else if (exitType_ || otherFunc.exitType_) {
-        return false;
-    }
-    return true;
-}
+bool FunctionType::equals(Type *other) const { return typeEquals(this, other); }
 
 CastSafety FunctionType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr)

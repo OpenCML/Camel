@@ -117,9 +117,12 @@ enum class GCNodeKind : uint8_t {
     // Norm inputs the array (For, ForWhile) then the k first values of the state; With inputs
     // the m captured values, shared by the condition graph and the body graph; Ctrl inputs
     // ordering. Its payload names the two graphs (GCLoopRef / GCLoopBody). Its value is the
-    // last state: the value when k = 1, the k-tuple when k > 1. Consumers read it through
-    // camel/runtime/loop.h (LoopView); those that do not run it natively lower it to a tail
-    // recursion first (lowerLoopsToTailRecursion), never in the shared program.
+    // last state: the value when k = 1, the k-tuple when k > 1. A producer may also give it s
+    // collection slots (payload collectionCount): the body then returns (state…, v…) each round
+    // and the value is (state…, array…), the arrays holding the v of every round (see
+    // camel/runtime/loop.h). Consumers read it through camel/runtime/loop.h (LoopView); those
+    // that do not run it natively lower it to a tail recursion first
+    // (lowerLoopsToTailRecursion), never in the shared program.
     Loop = 15,
 };
 
@@ -220,17 +223,19 @@ static_assert(std::is_trivially_copyable_v<GCFuncRef>);
 /// "No graph" in a GCLoopRef: the condition of a For loop.
 inline constexpr uint32_t kNoLoopGraph = UINT32_MAX;
 
-/// Payload of a LOOP node in a frozen graph: its form and the indexes of its condition graph
+/// Payload of a LOOP node in a frozen graph: its form, the indexes of its condition graph
 /// (kNoLoopGraph for For) and of its body graph in the graph's reference table, where both are
 /// marked callee and nested (the LOOP node calls them each round; they are written inside the
-/// graph). (A draft's LOOP payload is a GCLoopBody, holding the graphs themselves.)
+/// graph), and how many values the loop collects into arrays (its collection slots; 0 for a
+/// loop the source wrote, which has none). (A draft's LOOP payload is a GCLoopBody, holding the
+/// graphs themselves.)
 struct GCLoopRef {
     camel::core::LoopKind kind = camel::core::LoopKind::While;
     uint8_t reserved0          = 0;
     uint16_t reserved1         = 0;
     uint32_t condRef           = kNoLoopGraph;
     uint32_t bodyRef           = kNoLoopGraph;
-    uint32_t reserved2         = 0;
+    uint32_t collectionCount   = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCLoopRef>);
 static_assert(sizeof(GCLoopRef) == 16, "A LOOP payload is two words.");
@@ -242,7 +247,7 @@ struct GCLoopBody {
     camel::core::LoopKind kind = camel::core::LoopKind::While;
     uint8_t reserved0          = 0;
     uint16_t reserved1         = 0;
-    uint32_t reserved2         = 0;
+    uint32_t collectionCount   = 0; // the typed collection slots of the loop (see LoopView)
 };
 static_assert(std::is_trivially_copyable_v<GCLoopBody>);
 
@@ -496,6 +501,11 @@ class GCGraph : public camel::core::rtdata::Object {
     camel::core::LoopKind loopKindOf(gc_node_ref_t ref) const {
         return nodeBodyAs<GCLoopRef>(ref)->kind;
     }
+    /// LOOP node `ref`: how many values it collects into arrays each round (0 for a loop the
+    /// source wrote). The node must be a LOOP node.
+    uint32_t loopCollectionCountOf(gc_node_ref_t ref) const {
+        return nodeBodyAs<GCLoopRef>(ref)->collectionCount;
+    }
     gc_node_ref_t matchedJoinOutputOf(gc_node_ref_t ref) const;
 
     /// The payload of node `ref` as a `Body` (see the payload structs above). The node must
@@ -630,9 +640,10 @@ class GCGraph : public camel::core::rtdata::Object {
 /// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.
 inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
     return GCLoopBody{
-        .condGraph = graph.loopCondGraphOf(ref),
-        .bodyGraph = graph.loopBodyGraphOf(ref),
-        .kind      = graph.loopKindOf(ref),
+        .condGraph       = graph.loopCondGraphOf(ref),
+        .bodyGraph       = graph.loopBodyGraphOf(ref),
+        .kind            = graph.loopKindOf(ref),
+        .collectionCount = graph.loopCollectionCountOf(ref),
     };
 }
 

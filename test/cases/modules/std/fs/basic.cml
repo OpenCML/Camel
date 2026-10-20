@@ -5,12 +5,17 @@ module main
 
 import { exists, is_file, is_dir, mkdir, mkdirs, read_text, write_text, file_size, read_chunk } from fs
 import { decode } from bytes
+import { get_env } from sys
 
 func main(): int sync {
     println("=== FS Module Basic Tests ===")
 
-    let dir = "test/tmp"
-    let path = "test/tmp/fs_test_tmp.txt"
+    // The runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR): this test
+    // writes under it, so it neither reads nor leaves anything under a fixed path. A direct run
+    // (a benchmark, which has no private working directory) keeps the older fixed path.
+    let root = get_env('CAMEL_TEST_TMPDIR')
+    let dir = if root == '' then 'test/tmp' else root + '/fs'
+    let path = dir + '/fs_test_tmp.txt'
     let content = "hello from fs module"
 
     println("\n[1] exists(dir) before mkdirs =", exists(dir))

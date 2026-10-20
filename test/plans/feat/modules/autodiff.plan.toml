@@ -1585,8 +1585,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_branch.cml:10:14: [Error]'), 'the diagnostic is not located at the call (10:14): ' + text)
-assert(/[(]at [^ ]*grad_function_value_branch[.]cml:10:14[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_branch.cml:10:13: [Error]'), 'the diagnostic is not located at the call (10:13): ' + text)
+assert(/[(]at [^ ]*grad_function_value_branch[.]cml:10:13[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -1605,8 +1605,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_branch.cml:10:14: [Error]'), 'the diagnostic is not located at the call (10:14): ' + text)
-assert(/[(]at [^ ]*grad_function_value_branch[.]cml:10:14[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_branch.cml:10:13: [Error]'), 'the diagnostic is not located at the call (10:13): ' + text)
+assert(/[(]at [^ ]*grad_function_value_branch[.]cml:10:13[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -1627,8 +1627,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_static_branch.cml:10:17: [Error]'), 'the diagnostic is not located at the call (10:17): ' + text)
-assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:10:17[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_static_branch.cml:10:16: [Error]'), 'the diagnostic is not located at the call (10:16): ' + text)
+assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:10:16[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -1647,8 +1647,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_static_branch.cml:10:17: [Error]'), 'the diagnostic is not located at the call (10:17): ' + text)
-assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:10:17[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_static_branch.cml:10:16: [Error]'), 'the diagnostic is not located at the call (10:16): ' + text)
+assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:10:16[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -1669,8 +1669,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_parameter.cml:9:14: [Error]'), 'the diagnostic is not located at the call (9:14): ' + text)
-assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:9:14[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_parameter.cml:9:13: [Error]'), 'the diagnostic is not located at the call (9:13): ' + text)
+assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:9:13[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 }
@@ -1688,8 +1688,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_parameter.cml:9:14: [Error]'), 'the diagnostic is not located at the call (9:14): ' + text)
-assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:9:14[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_parameter.cml:9:13: [Error]'), 'the diagnostic is not located at the call (9:13): ' + text)
+assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:9:13[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
@@ -1709,8 +1709,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_container.cml:10:17: [Error]'), 'the diagnostic is not located at the call (10:17): ' + text)
-assert(/[(]at [^ ]*grad_function_value_container[.]cml:10:17[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_container.cml:10:16: [Error]'), 'the diagnostic is not located at the call (10:16): ' + text)
+assert(/[(]at [^ ]*grad_function_value_container[.]cml:10:16[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 }
@@ -1728,8 +1728,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_container.cml:10:17: [Error]'), 'the diagnostic is not located at the call (10:17): ' + text)
-assert(/[(]at [^ ]*grad_function_value_container[.]cml:10:17[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_container.cml:10:16: [Error]'), 'the diagnostic is not located at the call (10:16): ' + text)
+assert(/[(]at [^ ]*grad_function_value_container[.]cml:10:16[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
@@ -1813,8 +1813,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_recursion.cml:7:53: [Error]'), 'the diagnostic is not located at the call (7:53): ' + text)
-assert(/[(]at [^ ]*grad_function_value_recursion[.]cml:7:53[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_recursion.cml:7:52: [Error]'), 'the diagnostic is not located at the call (7:52): ' + text)
+assert(/[(]at [^ ]*grad_function_value_recursion[.]cml:7:52[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is a parameter of'), 'missing: the function is a parameter of in: ' + text)
 assert(text.includes('iterate'), 'missing: iterate in: ' + text)
@@ -1834,8 +1834,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_recursion.cml:7:53: [Error]'), 'the diagnostic is not located at the call (7:53): ' + text)
-assert(/[(]at [^ ]*grad_function_value_recursion[.]cml:7:53[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_recursion.cml:7:52: [Error]'), 'the diagnostic is not located at the call (7:52): ' + text)
+assert(/[(]at [^ ]*grad_function_value_recursion[.]cml:7:52[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is a parameter of'), 'missing: the function is a parameter of in: ' + text)
 assert(text.includes('iterate'), 'missing: iterate in: ' + text)
@@ -1857,8 +1857,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_passed.cml:14:17: [Error]'), 'the diagnostic is not located at the call (14:17): ' + text)
-assert(/[(]at [^ ]*grad_function_value_passed[.]cml:14:17[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_passed.cml:14:12: [Error]'), 'the diagnostic is not located at the call (14:12): ' + text)
+assert(/[(]at [^ ]*grad_function_value_passed[.]cml:14:12[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
 assert(text.includes('call0'), 'missing: call0 in: ' + text)
@@ -1879,8 +1879,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_passed.cml:14:17: [Error]'), 'the diagnostic is not located at the call (14:17): ' + text)
-assert(/[(]at [^ ]*grad_function_value_passed[.]cml:14:17[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_passed.cml:14:12: [Error]'), 'the diagnostic is not located at the call (14:12): ' + text)
+assert(/[(]at [^ ]*grad_function_value_passed[.]cml:14:12[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
 assert(text.includes('call0'), 'missing: call0 in: ' + text)

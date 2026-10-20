@@ -939,7 +939,7 @@ struct Stamp {
 
 ## 11. `LOOP` 的消费接口
 
-> **实施状态（2026-10-15，`lane/loop`）**：`LOOP` 节点、11.1 的访问器（`include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`loopOf`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）、11.4 的私有降级（`include/camel/runtime/loop_lowering.h`，`lowerLoopsToTailRecursion`，结果是脱离主程序的副本）都已实现。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condGraph()` 在 `For` 时返回 `nullptr` 而不是空的 `optional`；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由节点算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。给 Tiles 的读法见 11.5。
+> **实施状态（2026-10-15，`lane/loop`）**：`LOOP` 节点、11.1 的访问器（`include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`loopOf`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）、11.4 的私有降级（`include/camel/runtime/loop_lowering.h`，`lowerLoopsToTailRecursion`，结果是脱离主程序的副本）都已实现。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condGraph()` 在 `For` 时返回 `nullptr` 而不是空的 `optional`；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由节点算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。**2026-10-20 补：收集输出（11.6）已实现**，节点载荷带收集槽计数，`LoopView` 有对应的访问器，四个执行器与降级都按 11.6 收集。给 Tiles 的读法见 11.5。
 
 `LOOP` 节点本身（语法、建图、编码、校验、打印、降级）是图模型第 10 步与循环设计稿第 7 节的工作（实施情况见图模型第 7 节）。本节规定的是消费者看到的接口，按图模型 3.5 的卡片与 3.10 的裁定（条件图与循环体图共用一份捕获表；`for … while` 是同一种节点的第三种形式；多个状态时循环体返回元组，循环的值也是这个元组；`do` 式的写法）。
 
@@ -955,6 +955,16 @@ class LoopView {
     LoopKind kind() const;
     size_t stateCount() const;                       // k
     TypeId stateType(size_t j) const;
+    size_t collectionCount() const;                  // s（11.6）
+
+    // The value: the state, the k-tuple of states, or (s > 0) (state…, arrays…)
+    bool valueIsTuple() const;                       // k > 1 or s > 0
+    size_t valueComponentCount() const;              // k + s
+    TypeId valueType() const;
+    size_t stateValueIndex(size_t j) const;          // j
+    size_t collectionValueIndex(size_t c) const;     // k + c
+    TypeId collectionArrayType(size_t c) const;      // T_c[]
+    TypeId collectionElemType(size_t c) const;       // T_c
 
     // Inputs of the LOOP node (outer graph)
     std::optional<NodeId> iterable() const;          // For/ForWhile: Norm input 0
@@ -972,11 +982,16 @@ class LoopView {
     NodeId condCapturePort(size_t c) const;          // captures()[c] <-> cond capture port c
     NodeId bodyCapturePort(size_t c) const;          //               <-> body capture port c
 
-    // Next state
+    // The body's result: (next state) or (s > 0) (next state…, collected values…)
     NodeId nextState() const;                        // the body graph's result node
-    /// k > 1 and the body builds its result with a tuple FILL: the node that fills slot j;
-    /// otherwise nullopt (the consumer projects with ACCS).
+    bool nextStateIsTuple() const;                   // k > 1 or s > 0
+    TypeId bodyResultType() const;
+    size_t bodyStateResultIndex(size_t j) const;     // j
+    size_t bodyCollectionResultIndex(size_t c) const;// k + c
+    /// k > 1 (or s > 0) and the body builds its result with a tuple FILL: the node that fills
+    /// slot j; otherwise nullopt (the consumer projects with ACCS).
     std::optional<NodeId> nextStateComponent(size_t j) const;
+    std::optional<NodeId> nextCollectionComponent(size_t c) const;
 
     EffectSummary condEffects() const, bodyEffects() const;
 };
@@ -1001,6 +1016,7 @@ func row_sums(rows: Tensor<f32>[]): (Tensor<f32>, int) {
 图模型 I13 已经要求"`LOOP` 的入边数与两张子图一致、子图的角色是 `LoopCond`/`LoopBody`"。本稿补上：
 
 - **I18 状态类型**：每个初值的类型可以赋给对应的状态类型；循环体的返回类型等于状态类型（k = 1 时是那个类型，k > 1 时是 k 元组）；条件图返回 `bool`；`For` 形式的元素端口类型等于被遍历数组的元素类型（序列不是数组时，循环所在处先把它转换成元素数组：字符串的码点、映射的键值对、张量的第一维子张量，见 `docs/technical/39_loops.md` 2a 节）。
+- **I18 收集槽（`s > 0`，11.6）**：节点的值类型是 `k + s` 元组，前 k 个分量等于状态类型，后 s 个是数组类型且元素类型非空；循环体图的返回类型恰好是 `(状态类型…, 元素类型…)`（与值类型逐位、严格相等，不做可赋值放宽）；`s = 0` 时仍按上一条。
 - **I19 子图接口**：条件图与循环体图的捕获端口个数、次序、类型都相同，并与节点的 `With` 输入一一对应；条件图的普通形参是 k 个状态；循环体图的普通形参是（元素）+ k 个状态。
 - **I20 效应摘要**：`LOOP` 节点的效应是两张子图摘要之并，加"可能故障"（迭代可能不终止，循环设计稿 4.8）；与图级摘要一起重新计算比对（I14）。
 
@@ -1025,7 +1041,8 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
     const rt::LoopView loop(*g, ref);
     // 形式与状态
     loop.kind();                 // While / For / ForWhile
-    loop.stateCount();           // k；loop.stateType(j)；loop.valueType() 是状态或 k 元组
+    loop.stateCount();           // k；loop.stateType(j)
+    loop.collectionCount();      // s；loop.valueType() 是状态、k 元组或 (状态…, 数组…)
     // 外层图里的输入
     loop.iterable();             // For/ForWhile：被遍历的元素数组（Norm 0；序列不是数组时为转换它的算子节点）
     loop.initialState(j);        // 第 j 个状态的初值
@@ -1035,9 +1052,10 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
     loop.bodyGraph();
     loop.condStateParam(j);  loop.bodyStateParam(j);  loop.bodyElementParam();
     loop.condCapturePort(c); loop.bodyCapturePort(c);  // 对应 captures()[c]
-    // 下一轮的状态
-    loop.nextState();            // 循环体图的结果节点（k > 1 时是元组）
-    loop.nextStateComponent(j);  // k > 1 且结果是元组 FILL 时，填第 j 个位置的节点
+    // 下一轮的状态与收集值
+    loop.nextState();            // 循环体图的结果节点（k > 1 或 s > 0 时是元组）
+    loop.nextStateComponent(j);  // 结果是元组 FILL 时，填第 j 个位置的节点
+    loop.nextCollectionComponent(c); // 填第 k + c 个位置（收集值）的节点
     loop.effects();              // 两张子图之并，加"可能故障""可能不终止"
 }
 ```
@@ -1046,6 +1064,17 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 - Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它。**运行时 `tiles.run<f>` 等在每个后端上收到的都是程序原来的 `f` 的图**（`lane/facts` 起）：`std::nvm` 原生执行 `LOOP`；`std::fvm`、`std::jit`（默认）、`std::prl`、`std::cpp` 在私有副本上降级，副本里每张图记着它复制自程序的哪张图（`GCGraph::originalGraph()`），声明了 `inspectsGraphs` 的算子（`OperatorTraits::inspectsGraphs`：Tiles 的 `run`、`run_device`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`value_and_grad`）的每个函数类型的操作数在副本里先经过 `:graph/original`，把副本的函数值换回原图、闭包不变。所以在降级的后端上 Tiles 看到的也是带 `LOOP` 的 `f`，不是 `f.loopN.rec`、`.next`、`.done`。新的模块算子若读函数值的图，同样在登记时声明 `inspectsGraphs`。
 - Tiles 自己决定原生处理还是在自己的入口降级：降级用 `lowerLoopsToTailRecursion(context, root)`，它返回一个脱离主程序的副本，不改共享的程序。
 - 校验已保证：初值能赋给状态类型、循环体返回状态类型、条件返回 `bool`、元素端口类型是数组的元素类型、两张子图的捕获端口个数、次序、类型相同并与 `captures()` 一一对应（I18、I19）。
+
+### 11.6 收集输出（`s > 0`）
+
+循环可以在每轮交出一个值，由执行器收进数组：这是 `s` 个**收集槽**，节点载荷里的 `collectionCount`。它是 H4d 的第一步（`docs/handover/reports/H4.md`），为自动微分的磁带、以及将来 ONNX `Loop` 的 scan output 准备；源码语法尚未定义如何写收集槽，测试用一个只读遍给循环加槽。
+
+- **节点的值与循环体的返回值**：`k + s` 元组。值的前 k 个分量是状态（与无收集槽时相同，所以忽略磁带的消费者读到状态的位置不变），后 s 个是 `Tc[]`；循环体返回 `(s1' … sk', v1 … vs)`，`vc` 的类型是 `Tc`。`s = 0` 时节点形状与 11.1 完全一样。
+- **计数为什么必须在节点里**：`k = 2` 时值 `(状态, 数组)` 与“两个状态、第二个恰是数组”在类型上无法区分；类型本身不能说明有收集槽。
+- **执行**：每个执行器（NodeVM、FastVM 原生循环、宏求值器）与私有降级（FastVM/JIT/PRL）为每个槽建一个空数组，把它与状态放在同一个工作元组里（节点的槽位、后端的帧里，因而被 GC 追踪），每轮把 `vc` **原地追加**到对应数组。数组由这次循环独占（循环体看不到它们），追加是 O(1) 摊还、总计 O(n)；没有轮数上限，内存耗尽按 `RuntimeDiag::MemoryExhausted` 在循环的源位置报出。
+- **降级**：新增两个隐藏算子 `:loop/collector`（建空数组，循环前一次）与 `:loop/collect`（原地追加，返回磁带），它们不是纯的（按算子语义的默认），因此不会被重排或消除；降级后的 `rec` 仍然只把状态传给条件图与循环体图。
+- **消费**：`LoopView` 的 `collectionCount`、`valueIsTuple`、`valueComponentCount`、`stateValueIndex`、`collectionValueIndex`、`collectionArrayType`、`collectionElemType`、`nextStateIsTuple`、`bodyResultType`、`bodyStateResultIndex`、`bodyCollectionResultIndex`、`nextCollectionComponent` 以及自由函数 `loopValueComponent`、`loopStateValue`、`loopCollectedValue`；自动微分不必自己重新推导布局。
+- **导出**：残差是普通值（数组），不是闭包，所以 ONNX 与 `std::cpp` 都能表示；导出与自动微分本身仍不在这一步。
 
 ---
 

@@ -38,6 +38,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
+#include "camel/utils/path.h"
 #include "camel/utils/phase_timer.h"
 #include "camel/utils/str.h"
 #include "core/module/userdef_internal.h"
@@ -152,7 +153,7 @@ std::string EntryConfig::toString() const {
     return os.str();
 }
 
-inline bool fileExists(const std::string &path) {
+inline bool fileExists(const std::filesystem::path &path) {
     std::ifstream file(path);
     return file.good();
 }
@@ -522,11 +523,11 @@ std::string Context::resolveRelativeModuleName(
 std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &moduleName) {
     std::string relativePath = moduleName;
     std::replace(relativePath.begin(), relativePath.end(), '.', '/');
-    fs::path relPath(relativePath);
+    fs::path relPath = camel::utils::pathFromUtf8(relativePath);
     fs::path parentDir = relPath.parent_path();
-    std::string stem   = relPath.filename().string();
+    std::string stem   = camel::utils::pathToUtf8(relPath.filename());
     if (stem.empty())
-        stem = relPath.string();
+        stem = camel::utils::pathToUtf8(relPath);
 
     /// Lookup order within directory D: 1) D/xx.cmo  2) D/xx.* (any text/source file with the
     /// same name)
@@ -534,7 +535,7 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
     // A directory is listed once per context (doc 38, section 8 item 5): looking every
     // module up by listing its directory again made N modules in one directory O(N^2).
     auto findModuleInDir = [&](const fs::path &dir) -> std::pair<std::string, bool> {
-        const std::string key = dir.lexically_normal().string();
+        const std::string key = camel::utils::pathToUtf8(dir.lexically_normal());
         auto listing          = directoryListings_.find(key);
         if (listing == directoryListings_.end()) {
             DirectoryListing files;
@@ -547,9 +548,10 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
                     const fs::path p = entry.path();
                     // The first file of a name in the order the directory lists them, as
                     // before; a `.cmo` of the name comes first whatever the order.
-                    files.byStem.try_emplace(p.stem().string(), p.string());
+                    files.byStem.try_emplace(
+                        camel::utils::pathToUtf8(p.stem()), camel::utils::pathToUtf8(p));
                     if (p.extension() == ".cmo") {
-                        files.cmo.insert(p.stem().string());
+                        files.cmo.insert(camel::utils::pathToUtf8(p.stem()));
                     }
                 }
             }
@@ -557,10 +559,10 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
         }
         const DirectoryListing &files = listing->second;
         if (files.cmo.contains(stem)) {
-            return {(dir / (stem + ".cmo")).string(), true};
+            return {camel::utils::pathToUtf8(dir / (stem + ".cmo")), true};
         }
         if (auto found = files.byStem.find(stem); found != files.byStem.end()) {
-            return {found->second, fs::path(found->second).extension() == ".cmo"};
+            return {found->second, camel::utils::pathFromUtf8(found->second).extension() == ".cmo"};
         }
         return {"", false};
     };
@@ -577,15 +579,15 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
     for (const auto &dir : entryConfig_.searchPaths) {
         if (dir.empty())
             continue;
-        fs::path basePath = fs::path(dir);
+        fs::path basePath = camel::utils::pathFromUtf8(dir);
         if (!basePath.is_absolute())
-            basePath = fs::path(entryConfig_.entryDir) / basePath;
+            basePath = camel::utils::pathFromUtf8(entryConfig_.entryDir) / basePath;
         auto [path, isCmo] = tryDir(basePath);
         if (!path.empty())
             return {path, isCmo};
     }
 
-    auto [path, isCmo] = tryDir(fs::path(entryConfig_.entryDir));
+    auto [path, isCmo] = tryDir(camel::utils::pathFromUtf8(entryConfig_.entryDir));
     if (!path.empty())
         return {path, isCmo};
     return {"", false};
@@ -594,11 +596,11 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
 std::vector<std::string> Context::getModuleSearchDiagnostics(const std::string &moduleName) const {
     std::string relativePath = moduleName;
     std::replace(relativePath.begin(), relativePath.end(), '.', '/');
-    fs::path relPath(relativePath);
+    fs::path relPath = camel::utils::pathFromUtf8(relativePath);
     fs::path parentDir = relPath.parent_path();
-    std::string stem   = relPath.filename().string();
+    std::string stem   = camel::utils::pathToUtf8(relPath.filename());
     if (stem.empty())
-        stem = relPath.string();
+        stem = camel::utils::pathToUtf8(relPath);
 
     std::vector<std::string> out;
 
@@ -608,7 +610,7 @@ std::vector<std::string> Context::getModuleSearchDiagnostics(const std::string &
         if (!fs::is_directory(dir))
             return "not a directory";
         fs::path cmoPath = dir / (stem + ".cmo");
-        if (fileExists(cmoPath.string()))
+        if (fileExists(cmoPath))
             return ""; // found, caller should not use this for failed attempt
         for (const auto &entry : fs::directory_iterator(dir)) {
             if (!entry.is_regular_file())
@@ -624,22 +626,22 @@ std::vector<std::string> Context::getModuleSearchDiagnostics(const std::string &
         fs::path dir       = base / parentDir;
         std::string reason = reasonInDir(dir);
         if (!reason.empty())
-            out.push_back(fs::absolute(dir).string() + ": " + reason);
+            out.push_back(camel::utils::pathToUtf8(fs::absolute(dir)) + ": " + reason);
         fs::path subdir       = dir / stem;
         std::string subReason = reasonInDir(subdir);
         if (!subReason.empty())
-            out.push_back(fs::absolute(subdir).string() + ": " + subReason);
+            out.push_back(camel::utils::pathToUtf8(fs::absolute(subdir)) + ": " + subReason);
     };
 
     for (const auto &dir : entryConfig_.searchPaths) {
         if (dir.empty())
             continue;
-        fs::path basePath = fs::path(dir);
+        fs::path basePath = camel::utils::pathFromUtf8(dir);
         if (!basePath.is_absolute())
-            basePath = fs::path(entryConfig_.entryDir) / basePath;
+            basePath = camel::utils::pathFromUtf8(entryConfig_.entryDir) / basePath;
         tryDirAndRecord(basePath);
     }
-    tryDirAndRecord(fs::path(entryConfig_.entryDir));
+    tryDirAndRecord(camel::utils::pathFromUtf8(entryConfig_.entryDir));
 
     return out;
 }
@@ -649,12 +651,13 @@ std::vector<std::string> Context::getSearchPathBases() const {
     for (const auto &dir : entryConfig_.searchPaths) {
         if (dir.empty())
             continue;
-        fs::path basePath = fs::path(dir);
+        fs::path basePath = camel::utils::pathFromUtf8(dir);
         if (!basePath.is_absolute())
-            basePath = fs::path(entryConfig_.entryDir) / basePath;
-        out.push_back(fs::absolute(basePath).string());
+            basePath = camel::utils::pathFromUtf8(entryConfig_.entryDir) / basePath;
+        out.push_back(camel::utils::pathToUtf8(fs::absolute(basePath)));
     }
-    out.push_back(fs::absolute(fs::path(entryConfig_.entryDir)).string());
+    out.push_back(camel::utils::pathToUtf8(
+        fs::absolute(camel::utils::pathFromUtf8(entryConfig_.entryDir))));
     return out;
 }
 
@@ -688,7 +691,11 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
     // principles 10.1), and another module may import the entry back.
     if (mainModule_ && !mainModule_->path().empty()) {
         std::error_code ec;
-        if (fs::equivalent(path, mainModule_->path(), ec) && !ec) {
+        if (fs::equivalent(
+                camel::utils::pathFromUtf8(path),
+                camel::utils::pathFromUtf8(mainModule_->path()),
+                ec) &&
+            !ec) {
             return mainModule_;
         }
     }

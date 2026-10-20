@@ -37,6 +37,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/utils/number_text.h"
+#include "camel/utils/path.h"
 #include "camel/utils/utf8.h"
 
 #include <charconv>
@@ -275,7 +276,7 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
 /// leaf, named by its path in the aggregate (the layout loadAggregate reads).
 void saveValue(slot_t value, Type *valueType, const std::string &path, const std::string &dir) {
     const auto writeText = [&](const std::string &text) {
-        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        std::ofstream out(camel::utils::pathFromUtf8(path), std::ios::binary | std::ios::trunc);
         out << text << "\n";
         if (!out) {
             throw std::runtime_error("the file cannot be written");
@@ -307,7 +308,7 @@ void saveValue(slot_t value, Type *valueType, const std::string &path, const std
         const bool top             = dir.empty();
         const std::string leafRoot = top ? path : dir;
         if (top) {
-            std::filesystem::create_directories(path);
+            std::filesystem::create_directories(camel::utils::pathFromUtf8(path));
         }
         for (size_t i = 0; i < count; ++i) {
             const std::string key =
@@ -436,12 +437,14 @@ void reportUnhandledError(core::context::Context &ctx, slot_t fallible, bool jso
         // know where it is.
         diagnostic.modulePath = file;
         for (const auto &module : ctx.allUserModules()) {
-            if (module && std::filesystem::path(module->path()).filename().string() == file) {
+            if (module &&
+                camel::utils::pathToUtf8(camel::utils::pathFromUtf8(module->path()).filename()) ==
+                    file) {
                 diagnostic.modulePath = module->path();
                 break;
             }
         }
-        diagnostic.moduleName = std::filesystem::path(file).stem().string();
+        diagnostic.moduleName = camel::utils::pathToUtf8(camel::utils::pathFromUtf8(file).stem());
     }
     diagnostic.stage = "run";
 

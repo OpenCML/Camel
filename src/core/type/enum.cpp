@@ -26,6 +26,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/storage.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
 
 #include <algorithm>
@@ -231,54 +232,13 @@ EnumType::cloneWithArguments(std::span<const TypeArgument> arguments, std::strin
     return cloneWithParams({});
 }
 
-std::string EnumType::toString() const {
-    if (paramCount_ == 0) {
-        return decl_->name();
-    }
-    std::string text = decl_->name() + "<";
-    for (size_t i = 0; i < paramCount_; ++i) {
-        if (i > 0) {
-            text += ", ";
-        }
-        text += params_[i] != nullptr ? params_[i]->toString() : std::string("_");
-    }
-    text += ">";
-    return text;
-}
+std::string EnumType::toString() const { return typeToString(this); }
 
-std::string EnumType::mangle() const {
-    std::string text = "E" + std::to_string(decl_->id());
-    if (paramCount_ == 0) {
-        text += "P";
-        return text;
-    }
-    for (size_t i = 0; i < paramCount_; ++i) {
-        text += "_";
-        text += params_[i] != nullptr ? params_[i]->mangle() : std::string("H");
-    }
-    return text;
-}
+std::string EnumType::mangle() const { return typeMangle(this); }
 
 Type *EnumType::clone(bool) const { return const_cast<EnumType *>(this); }
 
-bool EnumType::equals(Type *type) const {
-    if (this == type) {
-        return true;
-    }
-    if (type == nullptr || type->code() != code_) {
-        return false;
-    }
-    const auto *other = static_cast<const EnumType *>(type);
-    if (other->decl_ != decl_ || other->paramCount_ != paramCount_) {
-        return false;
-    }
-    for (size_t i = 0; i < paramCount_; ++i) {
-        if (!params_[i]->equals(other->params_[i])) {
-            return false;
-        }
-    }
-    return true;
-}
+bool EnumType::equals(Type *type) const { return typeEquals(this, type); }
 
 Type *EnumType::unify(Type *other) const {
     if (other == nullptr || other->code() != code_) {

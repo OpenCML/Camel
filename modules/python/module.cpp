@@ -27,6 +27,7 @@
 #include "camel/core/type/resolver.h"
 #include "camel/utils/env.h"
 #include "camel/utils/log.h"
+#include "camel/utils/path.h"
 #include "executor.h"
 #include "operators.h"
 
@@ -288,10 +289,10 @@ static void prepend_path_if_missing(py::list &path, py::object &normalize, const
     if (dir.empty())
         return;
     std::error_code ec;
-    fs::path absPath = fs::absolute(fs::path(dir), ec);
+    fs::path absPath = fs::absolute(camel::utils::pathFromUtf8(dir), ec);
     if (ec || !fs::exists(absPath))
         return;
-    std::string dirStr  = absPath.lexically_normal().string();
+    std::string dirStr  = camel::utils::pathToUtf8(absPath.lexically_normal());
     std::string normDir = normalize(dirStr).cast<std::string>();
     for (size_t i = 0; i < path.size(); ++i) {
         std::string existing = py::str(path[i]).cast<std::string>();

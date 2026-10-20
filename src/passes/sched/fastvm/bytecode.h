@@ -396,7 +396,11 @@ union BytecodeExtra {                           // 8 bytes
     const camel::runtime::GCFillBody *fillBody; // FILL slot mapping payload
     operator_t func;                            // for OPER
     MarkOpCode mark;                            // for SCHD
-    uint64_t raw;                               // generic
+    struct {
+        MarkOpCode mark;          // for SCHD
+        uint32_t collectionCount; // LOOP: its collection slots (camel/runtime/loop.h)
+    } loop;
+    uint64_t raw; // generic
 
     std::string toString(OpCode opcode) const;
 };

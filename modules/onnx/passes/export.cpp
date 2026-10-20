@@ -41,6 +41,7 @@
 #include "camel/passes/opt/config.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
+#include "camel/utils/path.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -673,7 +674,7 @@ void exportEntry(
         throw Refusal{e.origin(), std::move(message)};
     }
     try {
-        writeModelFile(model, out);
+        writeModelFile(model, camel::utils::pathFromUtf8(out));
     } catch (const std::runtime_error &e) {
         throw Refusal{camel::source::kInvalidOriginId, e.what()};
     }
@@ -705,7 +706,7 @@ GCGraph *OnnxExportPass::apply(GCGraph *graph, std::ostream &os) {
         }
         for (size_t i = 0; i < requests.size(); ++i) {
             try {
-                writeModelFile(models[i], requests[i].path);
+                writeModelFile(models[i], camel::utils::pathFromUtf8(requests[i].path));
             } catch (const std::runtime_error &e) {
                 throw Refusal{requests[i].origin, e.what()};
             }

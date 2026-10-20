@@ -155,6 +155,27 @@ A declared shape is checked at compile time wherever the value's type is at
 least as exact: at a call, at a `return` against the declared return type, in
 the operators of the body.
 
+A shape may also name its extents (design principles 5.4). The name is bound by
+`constas` where it first appears in a parameter type, and later occurrences write
+it plainly:
+
+```camel
+func dense(x: Tensor<f32, const [constas n, 3]>, w: Tensor<f32, const [3, constas k]>): Tensor<f32, const [n, k]>
+```
+
+The extents of a type are linear forms over those names: a name, an integer
+constant, and sums of those, so `n`, `n + 1` and `2 * n` are compared by value.
+Anything else (`n * m`, `n / 2`) is unknown, never an error. A name that only the
+return type writes is an error (`DimensionNameNotBound`), and so is a `constas`
+outside a parameter type (`ConstasNotAllowed`) or a second binding of one name
+(`DimensionNameAlreadyBound`). At a call the names are bound from the arguments
+whose extents are known; a contradicting extent is `DimensionMismatch`. An
+argument whose extent is unknown at compile time is accepted, and the call passes
+it through the checked conversion to the refined parameter type, so the extent is
+checked where the call runs, exactly as `as` does; the returned value is checked
+the same way against the refined return type. The names are only a compile-time
+matter: the function still has one graph and no instance carries an extent.
+
 What inference derives without help, besides the propagation listed above:
 
 - a shape literal: `zeros([2, 3])`, `reshape(x, [3, 2])`, `reshape(x, [-1])` of

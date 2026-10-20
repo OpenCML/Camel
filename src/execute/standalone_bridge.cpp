@@ -121,9 +121,9 @@ Runtime &runtime() {
         Runtime r;
         r.context = camel::core::context::Context::create(
             camel::core::context::EntryConfig{
-                .entryDir    = dir.string(),
+                .entryDir    = camel::utils::pathToUtf8(dir),
                 .entryFile   = "",
-                .searchPaths = camel::utils::buildModuleSearchPaths(dir.string()),
+                .searchPaths = camel::utils::buildModuleSearchPaths(camel::utils::pathToUtf8(dir)),
             },
             camel::core::error::DiagsConfig{});
         return r;

@@ -31,6 +31,7 @@
 #include "camel/execute/entry_args.h"
 #include "camel/execute/executor.h"
 #include "camel/runtime/node_roles.h"
+#include "camel/utils/path.h"
 #include "dtype.h"
 #include "npy.h"
 #include "ops/binary_ops.h"
@@ -105,7 +106,7 @@ bool TensorModule::load() {
                camel::core::type::Type *declared,
                camel::core::type::Type *&valueType) -> slot_t {
                 namespace tensor = camel::tensor;
-                std::filesystem::path path(text);
+                std::filesystem::path path = camel::utils::pathFromUtf8(text);
                 if (!std::filesystem::exists(path) && path.extension() != ".npy") {
                     path += ".npy";
                 }
@@ -133,14 +134,14 @@ bool TensorModule::load() {
         camel::execute::registerEntryResultSaver(
             camel::tensor::TensorType::typeCode(),
             [](slot_t value, camel::core::type::Type *, const std::string &text) -> std::string {
-                std::filesystem::path path(text);
+                std::filesystem::path path = camel::utils::pathFromUtf8(text);
                 if (path.extension() != ".npy") {
                     path += ".npy";
                 }
                 camel::tensor::saveNpy(
                     camel::core::rtdata::fromSlot<camel::tensor::TensorObject *>(value),
                     path);
-                return path.string();
+                return camel::utils::pathToUtf8(path);
             });
         return true;
     }();

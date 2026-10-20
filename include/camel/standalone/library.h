@@ -27,6 +27,7 @@
 
 #include "camel/standalone/array.h"
 #include "camel/standalone/str.h"
+#include "camel/utils/env.h"
 
 #include <chrono>
 #include <cmath>
@@ -44,8 +45,10 @@ inline double now() {
 /// `sys.get_env(name)` (sys:get_env, modules/sys/operators.cpp): the variable's value, or the
 /// empty string when it is not set.
 inline Str getEnv(const Str &name) {
-    const char *value = std::getenv(name.str().c_str());
-    return value != nullptr ? Str(value) : Str();
+    // The one place that reads the environment (camel/utils/env.h): through the wide interface
+    // on Windows, so that a value the process code page cannot express is not lost here either.
+    const std::string value = ::getEnv(name.str().c_str());
+    return value.empty() ? Str() : Str(value);
 }
 
 /// `statistics.mean(xs)` (statistics:mean, modules/statistics/operators.cpp): the sum in double,

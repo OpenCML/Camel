@@ -183,7 +183,7 @@ int main(int argc, char **argv) { return camel::standalone::run(argc, argv, a01_
 | `T[]` | `rt::Array<T>` | 句柄，指向 `{计数, 长度, 容量, T 元素}`；元素是 `T` 的 C++ 表示，`int[]` 是连续的 `int64_t`。计数为 1 时“返回新值”的算子在原处改（5.2） |
 | 元组 `(A, B)` | 生成的 `struct`（`Tuple_i64_str { int64_t _0; rt::Str _1; }`） | 按值。带 `==`（逐个元素，4.2）与打印 |
 | 结构体 `{ x: A }` | 生成的 `struct`，字段同名 | 按值。类型有别名时用别名作类型名 |
-| 枚举 `enum { A(T), B { x: A }, C }` | 生成的 `struct`：`tag`（第几个变体）与 `std::variant<std::monostate, A, B, C> value`，每个变体一个嵌套的载荷 `struct`；`make<Tag>`、`get<Tag, Index>` 由声明生成 | `tag` 与字段下标在图上都是常量，所以是模板参数（`Shape::make<1>(2.0, 3.0)`、`rt::enumField<1, 0>(x)`）。按值。带 `==`（先比 `tag`，再比载荷）与打印（`Shape::Rect { w: 2.0, h: 3.0 }`，与解释器逐字节相同） |
+| 枚举 `enum { A(T), B { x: A }, C }` | 生成的 `struct`：`tag`（第几个变体）与 `std::variant<std::monostate, A, B, C> value`，每个变体一个嵌套的载荷 `struct`；`make<Tag>`、`get<Tag, Index>` 由声明生成。递归枚举里传递包含该枚举自身的字段用 `std::shared_ptr` 间接持有（C++ 不能按值容纳无限类型）：`make` 装箱、`get` 与打印解引用，析构、相等与打印都用显式栈（`camel/standalone/recursive.h`），一百万节点的链不递归 | `tag` 与字段下标在图上都是常量，所以是模板参数（`Shape::make<1>(2.0, 3.0)`、`rt::enumField<1, 0>(x)`）。按值。带 `==`（先比 `tag`，再比载荷）与打印（`Shape::Rect { w: 2.0, h: 3.0 }`，与解释器逐字节相同） |
 | `T?` | `rt::Opt<T>` | 标量是“值 + 一位标记”；句柄类型用空句柄表示空，不多占位 |
 | `T!` | `rt::Fallible<T>` | “值 + 错误句柄”，错误句柄非空即出错 |
 | 错误值 | `rt::Error` | 句柄，指向固定的内建结构：种类名、消息、源码位置（3.9） |

@@ -40,6 +40,7 @@
 
 #include <algorithm>
 #include <format>
+#include <limits>
 #include <numeric>
 
 namespace camel::onnx {
@@ -163,6 +164,11 @@ Attribute ints(std::string name, std::vector<int64_t> values) {
 Attribute intAttr(std::string name, int64_t value) {
     return Attribute::makeInt(std::move(name), value);
 }
+
+/// ReduceMax (and friends) of `x` over `axes`, in the form the opset takes (defined below).
+std::string reduceAxes(
+    Emitter &e, const std::string &op, const std::string &x, std::vector<int64_t> axes,
+    bool keepDims);
 
 /// Every argument converted to the result dtype, then one node.
 LowerFn sameTypeOp(std::string opType, size_t operands) {
@@ -380,62 +386,128 @@ Value lowerConcat(const LowerContext &ctx) {
  *     selects one (Emitter::speculative): it would fault on the arm Camel does not run. That
  *     slice is refused.
  */
+namespace {
+
+/// The parameter of `source` for `operand` (and `axis`, or 0xFF for any), or nullptr.
+const core::sem::Param *findParam(
+    const core::sem::IndexedInstance &inst, core::sem::ParamSource source, size_t operand,
+    uint8_t axis = 0xFF) {
+    for (const core::sem::Param &p : inst.domain.params) {
+        if (p.source == source && p.operand == operand && (axis == 0xFF || p.axis == axis)) {
+            return &p;
+        }
+    }
+    return nullptr;
+}
+
+/// The check the declaration makes on operand `operand`, or nullptr.
+const core::sem::OperandCheck *findCheck(const core::sem::IndexedInstance &inst, size_t operand) {
+    for (const core::sem::OperandCheck &c : inst.checks) {
+        if (c.operand == operand) {
+            return &c;
+        }
+    }
+    return nullptr;
+}
+
+/// True when `value` is -1 * `other` (the form a negative bound's lower limit takes).
+bool isNegationOf(
+    const core::sem::ExprPool &pool, core::sem::ExprId value, core::sem::ExprId other) {
+    const core::sem::Expr &e = pool[value];
+    if (e.op != core::sem::ExprOp::Mul) {
+        return false;
+    }
+    const auto isMinusOne = [&](core::sem::ExprId id) {
+        const core::sem::Expr &f = pool[id];
+        return f.op == core::sem::ExprOp::Const && f.value == -1;
+    };
+    return (isMinusOne(e.lhs) && e.rhs == other) || (isMinusOne(e.rhs) && e.lhs == other);
+}
+
+} // namespace
+
+/**
+ * `slice`: the operator's index semantics declaration (ops/indexing.cpp) states the axis, the
+ * step and, for a bound that depends on the model, the interval the bound is accepted in. This
+ * lowering follows that declaration instead of restating the rules:
+ *
+ *   - Constant bounds that the declaration proves in range (it gives them no check) go to a
+ *     plain ONNX Slice, which normalizes a negative bound the same way. A constant bound the
+ *     declaration only checks (the axis extent is not known at export time) is guarded like a
+ *     model-dependent one.
+ *   - A bound that depends on the model is guarded from the declared interval: the declaration
+ *     states [-n, n] around the axis extent n, and the guard Gathers into zeros of length n + 1
+ *     at b - (b < 0), which is a valid index exactly for -n <= b <= n (ONNX Gather accepts
+ *     negative indices from -n - 1); anything else makes the run fail where Camel faults.
+ *   - A declaration this lowering cannot follow (no instance, no declared check, an interval
+ *     that is not the axis extent around zero) is a diagnostic, not a guess.
+ */
 Value lowerSlice(const LowerContext &ctx) {
-    Emitter &e            = ctx.emitter();
-    const int64_t axis[]  = {ctx.constInt(1)};
-    const int64_t steps[] = {ctx.constInt(4, 1)};
-    if (steps[0] <= 0) {
-        throw ExportError(std::format("'tensor:slice': the step {} is not positive", steps[0]));
+    Emitter &e = ctx.emitter();
+    if (!ctx.instance()) {
+        throw ExportError(
+            "'tensor:slice': the operator's index semantics declaration gives no instance for "
+            "this call (an unknown rank, a non-constant axis or step, or a constant bound "
+            "outside the axis), so the export cannot state the rule it follows");
+    }
+    const core::sem::IndexedInstance &inst = *ctx.instance();
+    const core::sem::Param *axisParam      = findParam(inst, core::sem::ParamSource::Static, 1);
+    if (axisParam == nullptr || !axisParam->value) {
+        throw ExportError(
+            "'tensor:slice': the index semantics declaration does not state the axis of this "
+            "call");
     }
     const auto facts = ctx.facts(0);
     if (!facts.shape) {
         throw ExportError("'tensor:slice' of a tensor of unknown rank is not supported");
     }
-    tensor::StaticShape shape = *facts.shape;
-    const int64_t rank        = static_cast<int64_t>(shape.size());
-    const int64_t at          = axis[0] < 0 ? axis[0] + rank : axis[0];
+    const int64_t rank = static_cast<int64_t>(facts.shape->size());
+    const int64_t at   = *axisParam->value;
     if (at < 0 || at >= rank) {
         throw ExportError(
-            std::format("'tensor:slice': axis {} is out of range for rank {}", axis[0], rank));
+            std::format(
+                "'tensor:slice': the index semantics declaration normalized the axis to {}, which "
+                "is out of range for rank {}",
+                at,
+                rank));
     }
-    const int64_t extent = shape[static_cast<size_t>(at)];
-    for (size_t index : {size_t{2}, size_t{3}}) {
-        if (!ctx.arg(index).isConstant() && ctx.arg(index).form != Value::Form::Scalar) {
-            throw ExportError(
-                std::format("'tensor:slice': argument {} must be an integer", index));
-        }
-    }
-    const bool constantBounds = ctx.arg(2).isConstant() && ctx.arg(3).isConstant();
+    const int64_t extent              = (*facts.shape)[static_cast<size_t>(at)];
+    const core::sem::Param *stepParam = findParam(inst, core::sem::ParamSource::Static, 4);
+    const int64_t step = stepParam != nullptr && stepParam->value ? *stepParam->value : 1;
+    const core::sem::OperandCheck *startCheck = findCheck(inst, 2);
+    const core::sem::OperandCheck *stopCheck  = findCheck(inst, 3);
 
     // Proved in range from the static extent and the constants: a plain Slice.
-    if (constantBounds && extent != tensor::kUnknownDim) {
-        for (size_t index : {size_t{2}, size_t{3}}) {
-            const int64_t b = ctx.constInt(index);
-            const int64_t n = b < 0 ? b + extent : b;
-            if (n < 0 || n > extent) {
-                throw ExportError(std::format(
-                    "'tensor:slice': the {} {} is outside axis {} of extent {} (Camel faults "
-                    "where the ONNX Slice would clamp it)",
-                    index == 2 ? "start" : "end",
-                    b,
-                    at,
-                    extent));
-            }
+    if (startCheck == nullptr && stopCheck == nullptr && ctx.arg(2).isConstant() &&
+        ctx.arg(3).isConstant()) {
+        if (extent == tensor::kUnknownDim) {
+            throw ExportError(
+                "'tensor:slice': the index semantics declaration gives no check for constant "
+                "bounds whose axis extent is unknown, so the export cannot prove them in range");
         }
         const int64_t start[] = {ctx.constInt(2)}, end[] = {ctx.constInt(3)};
-        return ctx.emit(
-            "Slice",
-            {ctx.input(0), e.int64s(start), e.int64s(end), e.int64s(axis), e.int64s(steps)});
+        const int64_t axis[] = {at}, steps[] = {step};
+        auto shape = facts.shape.value_or(tensor::StaticShape{});
+        if (ctx.result().shape) {
+            shape = *ctx.result().shape;
+        }
+        return Value::symbolic(
+            e.node(
+                "Slice",
+                {ctx.input(0), e.int64s(start), e.int64s(end), e.int64s(axis), e.int64s(steps)}),
+            facts.dtype,
+            shape);
     }
 
     if (e.speculative()) {
-        throw ExportError(std::format(
-            "'tensor:slice': its bounds on axis {} cannot be proved within the axis at export "
-            "time, and it is on an arm of a branch on a model-dependent condition, which the "
-            "exported model computes whether or not it is taken; an ONNX Slice there would "
-            "clamp bounds that Camel faults on (design principles 3.9). Prove the bounds with "
-            "constants, or move the slice out of the branch",
-            at));
+        throw ExportError(
+            std::format(
+                "'tensor:slice': its bounds on axis {} cannot be proved within the axis at export "
+                "time, and it is on an arm of a branch on a model-dependent condition, which the "
+                "exported model computes whether or not it is taken; an ONNX Slice there would "
+                "clamp bounds that Camel faults on (design principles 3.9). Prove the bounds with "
+                "constants, or move the slice out of the branch",
+                at));
     }
 
     // The guards: zeros of length n + 1, n the extent (known now, or read from the shape).
@@ -451,9 +523,11 @@ Value lowerSlice(const LowerContext &ctx) {
             {e.node("Shape", {ctx.input(0)}), e.int64s(axisIndex)},
             {intAttr("axis", 0)});
     }
-    const auto int64Cast = intAttr("to", static_cast<int64_t>(elemTypeOf(TypeCode::Int64)));
-    const std::string zeros =
-        e.node("Cast", {e.node("ConstantOfShape", {e.node("Add", {extentVec, e.int64s(one)})})}, {int64Cast});
+    const auto int64Cast    = intAttr("to", static_cast<int64_t>(elemTypeOf(TypeCode::Int64)));
+    const std::string zeros = e.node(
+        "Cast",
+        {e.node("ConstantOfShape", {e.node("Add", {extentVec, e.int64s(one)})})},
+        {int64Cast});
     const auto guarded = [&](size_t index) {
         std::string b;
         if (ctx.arg(index).isConstant()) {
@@ -462,21 +536,54 @@ Value lowerSlice(const LowerContext &ctx) {
         } else {
             b = e.node("Unsqueeze", {ctx.input(index, TypeCode::Int64), e.int64s(zero)});
         }
+        const core::sem::OperandCheck *check = findCheck(inst, index);
+        if (check == nullptr) {
+            if (ctx.arg(index).isConstant()) {
+                return b; // the declaration proved the constant in range
+            }
+            throw ExportError(
+                std::format(
+                    "'tensor:slice': the index semantics declaration states no fault for argument "
+                    "{} when it depends on the model, so the exported model would clamp a bound "
+                    "that Camel faults on",
+                    index));
+        }
+        if (check->onInvalid != core::sem::OnInvalid::Fault) {
+            throw ExportError(
+                std::format(
+                    "'tensor:slice': the index semantics declaration does not make a bound outside "
+                    "the axis of argument {} a fault, which the ONNX guard would have to reproduce",
+                    index));
+        }
+        const core::sem::Expr &upper = inst.exprs[check->upper];
+        const bool isExtent =
+            upper.op == core::sem::ExprOp::Param &&
+            inst.domain.params[upper.value].source == core::sem::ParamSource::Extent &&
+            inst.domain.params[upper.value].operand == 0 &&
+            inst.domain.params[upper.value].axis == at;
+        if (!isExtent || !isNegationOf(inst.exprs, check->lower, check->upper)) {
+            throw ExportError(
+                std::format(
+                    "'tensor:slice': the declared legal range of argument {} is not [-n, n] around "
+                    "the extent n of axis {}, which the ONNX fault guard cannot express",
+                    index,
+                    at));
+        }
         const std::string negative =
             e.node("Cast", {e.node("Less", {b, e.int64s(zero)})}, {int64Cast});
-        const std::string check =
+        const std::string inRange =
             e.node("Gather", {zeros, e.node("Sub", {b, negative})}, {intAttr("axis", 0)});
-        return e.node("Add", {b, check});
+        return std::string(e.node("Add", {b, inRange}));
     };
     const std::string starts = guarded(2);
     const std::string ends   = guarded(3);
-    if (!constantBounds) {
-        shape[static_cast<size_t>(at)] = tensor::kUnknownDim;
-    }
+    const int64_t axis[] = {at}, steps[] = {step};
+    auto shape = ctx.result().shape.value_or(facts.shape.value_or(tensor::StaticShape{}));
+    shape[static_cast<size_t>(at)] = tensor::kUnknownDim;
     return Value::symbolic(
         e.node("Slice", {ctx.input(0), starts, ends, e.int64s(axis), e.int64s(steps)}),
         facts.dtype,
-        constantBounds ? ctx.result().shape.value_or(shape) : shape);
+        shape);
 }
 
 /// Reduction over one axis. Opset 18 moved `axes` from an attribute to an input for every
@@ -498,12 +605,101 @@ LowerFn reduceAxisOp(std::string opType) {
     };
 }
 
+/**
+ * `argmax`: the position of the first NaN when the operand has one, else the first position of
+ * the largest value by IEEE 754-2019 maximum (-0 < +0), the first such position on ties
+ * (design principles 7.7). ONNX ArgMax takes the first index on ties with select_last_index=0,
+ * but it orders -0 and +0 the same and its NaN behavior is not specified, so the float cases
+ * compose the rule:
+ *
+ *   isNaN      = Not(Equal(x, x))
+ *   hasNaN     = ReduceMax(Cast(isNaN, int64)) != 0
+ *   nanFirst   = ArgMax(Cast(isNaN, int64))           first NaN
+ *   y          = Where(isNaN, -inf, x)                NaN cannot win the value race
+ *   maxValue   = ReduceMax(y)
+ *   valueFirst = ArgMax(y)                            first maximum, -0 == +0
+ *   plusZero   = And(Equal(y, 0), Greater(Reciprocal(y), 0))   +0, not -0
+ *   maxIsZero  = Equal(maxValue, 0)
+ *   usePlus    = And(maxIsZero, ReduceMax(Cast(plusZero, int64)) != 0)
+ *   result     = Where(hasNaN, nanFirst,
+ *                      Where(usePlus, ArgMax(Cast(plusZero, int64)), valueFirst))
+ *
+ * The last steps replace the first zero by the first +0 when the maximum is a zero (the only
+ * case where -0 and +0 compete; IEEE maximum says +0 wins, and the first such position). An
+ * int64 operand has neither NaN nor -0, and for bool false < true: both go straight to ArgMax
+ * (bool converted to int64, whose order ArgMax supports).
+ */
 Value lowerArgMax(const LowerContext &ctx) {
+    Emitter &e             = ctx.emitter();
+    const int64_t axis     = ctx.constInt(1);
     const int64_t keepDims = ctx.constBool(2, false) ? 1 : 0;
-    return ctx.emit(
-        "ArgMax",
-        {ctx.input(0)},
-        {intAttr("axis", ctx.constInt(1)), intAttr("keepdims", keepDims)});
+    const auto argmax      = [&](const std::string &data) {
+        return e.node(
+            "ArgMax",
+            {data},
+            {intAttr("axis", axis),
+             intAttr("keepdims", keepDims),
+             intAttr("select_last_index", 0)});
+    };
+    const auto dtypeOpt = ctx.facts(0).dtype;
+    if (!dtypeOpt) {
+        throw ExportError(
+            "'tensor:argmax_axis': the element type of the operand is not known, so the export "
+            "cannot tell whether NaN and -0 can occur");
+    }
+    const TypeCode dtype = *dtypeOpt;
+    const auto int64Cast = intAttr("to", static_cast<int64_t>(elemTypeOf(TypeCode::Int64)));
+    const auto boolCast  = intAttr("to", static_cast<int64_t>(elemTypeOf(TypeCode::Bool)));
+    if (dtype == TypeCode::Int64) {
+        return ctx.emit(
+            "ArgMax",
+            {ctx.input(0)},
+            {intAttr("axis", axis),
+             intAttr("keepdims", keepDims),
+             intAttr("select_last_index", 0)});
+    }
+    if (dtype == TypeCode::Bool) {
+        return ctx.emit(
+            "ArgMax",
+            {e.node("Cast", {ctx.input(0)}, {int64Cast})},
+            {intAttr("axis", axis),
+             intAttr("keepdims", keepDims),
+             intAttr("select_last_index", 0)});
+    }
+    if (dtype != TypeCode::Float32 && dtype != TypeCode::Float64) {
+        throw ExportError(
+            std::format(
+                "'tensor:argmax_axis': the element type {} has no ONNX lowering",
+                static_cast<int>(dtype)));
+    }
+    const std::string x = ctx.input(0);
+    const bool keep     = keepDims != 0;
+    const auto scalar   = [&](double v) {
+        return e.operand(
+            Value::constant(rtdata::toSlot(static_cast<rtdata::Float64>(v)), type::Type::Float64()),
+            dtype);
+    };
+    const std::string zero    = scalar(0.0);
+    const std::string isNan   = e.node("Not", {e.node("Equal", {x, x})});
+    const std::string isNan64 = e.node("Cast", {isNan}, {int64Cast});
+    const std::string hasNan =
+        e.node("Cast", {reduceAxes(e, "ReduceMax", isNan64, {axis}, keep)}, {boolCast});
+    const std::string nanFirst = argmax(isNan64);
+    const std::string y =
+        e.node("Where", {isNan, scalar(-std::numeric_limits<double>::infinity()), x});
+    const std::string maxValue   = reduceAxes(e, "ReduceMax", y, {axis}, keep);
+    const std::string valueFirst = argmax(y);
+    const std::string plusZero   = e.node(
+        "And",
+        {e.node("Equal", {y, zero}), e.node("Greater", {e.node("Reciprocal", {y}), zero})});
+    const std::string anyPlus = e.node(
+        "Cast",
+        {reduceAxes(e, "ReduceMax", e.node("Cast", {plusZero}, {int64Cast}), {axis}, keep)},
+        {boolCast});
+    const std::string plusFirst = argmax(e.node("Cast", {plusZero}, {int64Cast}));
+    const std::string usePlus   = e.node("And", {e.node("Equal", {maxValue, zero}), anyPlus});
+    const std::string value     = e.node("Where", {usePlus, plusFirst, valueFirst});
+    return ctx.result(e.node("Where", {hasNan, nanFirst, value}));
 }
 
 LowerFn softmaxOp(std::string opType) {
@@ -898,7 +1094,8 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:mean_axis", reduceAxisOp("ReduceMean"));
     add("tensor:max_axis", reduceAxisOp("ReduceMax"));
     add("tensor:min_axis", reduceAxisOp("ReduceMin"));
-    add("tensor:argmax_axis", lowerArgMax);
+    // select_last_index (opset 12) makes the tie rule explicit; the composition follows it.
+    add("tensor:argmax_axis", lowerArgMax, 12);
     add("tensor:softmax", softmaxOp("Softmax"), 13);
     add("tensor:log_softmax", softmaxOp("LogSoftmax"), 13);
     add("tensor:layer_norm", lowerLayerNorm, 17);
