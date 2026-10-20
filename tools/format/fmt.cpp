@@ -1590,6 +1590,8 @@ any Formatter::visit(syn::Node context) {
         return "typeof " + any_cast<string>(visit(context.expr()));
     case NK::TypeAsType:
         return "typeas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
+    case NK::ConstasData:
+        return "constas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
     default:
         throw std::runtime_error(
             "camel-format: no rule for " + std::string(syn::nodeKindName(context.kind())));

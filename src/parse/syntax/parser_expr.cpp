@@ -499,11 +499,18 @@ bool ParserImpl::lambdaAhead() const {
     return false;
 }
 
-/// primaryData : identRef | literal | arrayData | structData | tupleData | funcData
+/// primaryData : identRef | constasData | literal | arrayData | structData | tupleData
+///             | funcData
 void ParserImpl::parsePrimary() {
     switch (cur_) {
     case TK::Identifier:
         return parseIdentRef(NK::RefData);
+    case TK::KwConstas:
+        // A named dimension is only meaningful in a `const` type argument (`const [constas n]`).
+        if (constData_) {
+            return parseConstasData();
+        }
+        break;
     case TK::Integer:
     case TK::Real:
     case TK::String:
@@ -540,6 +547,16 @@ void ParserImpl::parsePrimary() {
         break;
     }
     unexpected({SyntaxError::Expression});
+}
+
+/// constasData : 'constas' identDef
+/// A named dimension (design principles 5.4): in a parameter type, `constas n` binds `n` the
+/// first time it appears; later occurrences write `n` directly.
+void ParserImpl::parseConstasData() {
+    const size_t m = mark();
+    bump();
+    parseIdentDef();
+    close(m, NK::ConstasData);
 }
 
 /// literal : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING

@@ -146,6 +146,19 @@ class Builder {
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
 
+    // Named dimensions of type extents (design principles 5.4): a name denotes an extent, not a
+    // type. Like `typeas T`, a name is bound only in the parameter types of the function
+    // declaration being visited (`constas n`), and the rest of its signature writes `n`.
+    // `dimNames_` is the binding of the signature being visited (empty outside a signature);
+    // it is filled from every parameter type before the extents are read, so a parameter may
+    // write a name that another parameter binds. `boundDims_` holds the names whose `constas`
+    // has been visited, so a second `constas` of the same name is reported.
+    // `dimBindAllowed_` is true only while its parameter types are visited, so a `constas` in a
+    // return type, in a body, or inside a nested function type is reported.
+    std::shared_ptr<std::set<std::string>> dimNames_;
+    std::shared_ptr<std::set<std::string>> boundDims_;
+    bool dimBindAllowed_ = false;
+
     // `any` is not a type a program can write (design principles 5.10): the name is
     // not in the type scope, and visitRefType reports it with the form recommended for the
     // position it was written in. The visitors of those positions set this around the
@@ -292,6 +305,17 @@ class Builder {
     Type *visitDataType(const AST::node_ptr_t &ast);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
+    /// Whether the expression of a `const` type argument writes a dimension name: `constas n`, or
+    /// a name already bound in `dimNames_`.
+    bool namesDimension(const AST::node_ptr_t &ast) const;
+    /// The extents of `const [e0, e1, ...]` as linear forms (design principles 5.4). Reports a
+    /// `constas` that cannot bind here, a name that is not bound, and an expression that is not
+    /// a shape. nullptr with a diagnostic reported.
+    std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>
+    visitNamedExtents(const AST::node_ptr_t &ast);
+    /// One extent as a linear form: a constant, a name, `+`/`-`, and `*` by a constant. Any
+    /// other expression is unknown.
+    camel::core::type::ExtentForm visitExtent(const AST::node_ptr_t &ast);
     /// `[...] as Map<K, V>`: an error when two constant keys of the literal are equal.
     void rejectDuplicateLiteralKeys(
         const data_ptr_t &data, Type *targetType, const AST::node_ptr_t &ast);

@@ -39,6 +39,7 @@ enum class DataType {
     Struct,
     Func,
     Ref,
+    ConstAs,
     EnumPattern
 };
 
@@ -310,6 +311,23 @@ class RefDataLoad : public DataLoad {
         return "RefData: " + ref_.toString() + this->status();
     }
 
+    const Reference &ref() const { return ref_; }
+    const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
+};
+
+/// `constas n`: the name of a dimension, bound by the first parameter type of a signature that
+/// writes it (design principles 5.4). Only meaningful inside a `const` type argument; the
+/// compiler reports one anywhere else.
+class ConstAsLoad : public DataLoad {
+  public:
+    ConstAsLoad(const Reference &ref) : DataLoad(DataType::ConstAs), ref_(ref) {}
+
+    const std::string toString() const override {
+        return "ConstAsData: " + ref_.toString() + this->status();
+    }
     const Reference &ref() const { return ref_; }
     const std::string geneCode() const override;
 

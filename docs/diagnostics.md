@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-165 diagnostics: 148 errors, 17 warnings.
+170 diagnostics: 153 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -134,6 +134,11 @@ prints one entry.
 | `0x03000139` | [SemanticDiag::EnumTypeArgumentNotInferred](#enumtypeargumentnotinferred) | Error |
 | `0x0300013A` | [SemanticDiag::EnumFieldTypeMismatch](#enumfieldtypemismatch) | Error |
 | `0x0300013B` | [SemanticDiag::EnumConstructionMismatch](#enumconstructionmismatch) | Error |
+| `0x03000140` | [SemanticDiag::ConstasNotAllowed](#constasnotallowed) | Error |
+| `0x03000141` | [SemanticDiag::DimensionNameNotBound](#dimensionnamenotbound) | Error |
+| `0x03000142` | [SemanticDiag::DimensionNameAlreadyBound](#dimensionnamealreadybound) | Error |
+| `0x03000143` | [SemanticDiag::DimensionMismatch](#dimensionmismatch) | Error |
+| `0x03000144` | [SemanticDiag::InvalidExtentExpression](#invalidextentexpression) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -3344,6 +3349,143 @@ func main(): void sync {
     println(s)
 }
 ```
+
+### ConstasNotAllowed
+
+`0x03000140` · Error · `SemanticDiag::ConstasNotAllowed`
+
+**Message**
+
+```text
+The dimension name '{0}' is bound here, but only a parameter type can bind one.
+```
+
+**Help**
+
+```text
+Write 'constas n' where the dimension first appears in a parameter type, 'x: Tensor<f32, const [constas n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.
+```
+
+**Example** (`test/cases/modules/tensor/named_dims/err_constas_return.cml`, run as `camel test/cases/modules/tensor/named_dims/err_constas_return.cml`)
+
+```camel
+module named_dims_err_constas_return
+import { Tensor, ones } from tensor
+// A return type uses the names its parameters bound; it binds none.
+func bad(x: Tensor<f32>): Tensor<f32, const [constas n]> {
+    return x as Tensor<f32, const [-1]>
+}
+func main(): int sync {
+    println(bad(ones([3])))
+    return 0
+}
+```
+
+### DimensionNameNotBound
+
+`0x03000141` · Error · `SemanticDiag::DimensionNameNotBound`
+
+**Message**
+
+```text
+The dimension name '{0}' is not bound by any parameter of this signature.
+```
+
+**Help**
+
+```text
+A name in a type's extents is bound by 'constas name' where it first appears in a parameter type. A name that appears only in the return type is an error: the caller has no argument that could say what it is.
+```
+
+**Example** (`test/cases/modules/tensor/named_dims/err_unbound_name.cml`, run as `camel test/cases/modules/tensor/named_dims/err_unbound_name.cml`)
+
+```camel
+module named_dims_err_unbound_name
+import { Tensor, ones } from tensor
+// A name that only the return type writes is an error: no parameter binds it.
+func only_return(x: Tensor<f32>): Tensor<f32, const [n]> {
+    return x as Tensor<f32, const [-1]>
+}
+func main(): int sync {
+    println(only_return(ones([3])))
+    return 0
+}
+```
+
+### DimensionNameAlreadyBound
+
+`0x03000142` · Error · `SemanticDiag::DimensionNameAlreadyBound`
+
+**Message**
+
+```text
+The dimension name '{0}' is already bound; write '{0}' here instead of 'constas {0}'.
+```
+
+**Help**
+
+```text
+Only the first occurrence of a dimension name in the parameter types binds it ('constas n'). Writing 'constas' again would ask for a second binding of the same name.
+```
+
+**Example** (`test/cases/modules/tensor/named_dims/err_constas_twice.cml`, run as `camel test/cases/modules/tensor/named_dims/err_constas_twice.cml`)
+
+```camel
+module named_dims_err_constas_twice
+import { Tensor } from tensor
+// Only the first occurrence binds; a second `constas` of the same name would bind it again.
+func bad(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [constas n]>): float {
+    return 0.0
+}
+```
+
+### DimensionMismatch
+
+`0x03000143` · Error · `SemanticDiag::DimensionMismatch`
+
+**Message**
+
+```text
+Argument {0} has extent {1}, but the dimensions the earlier arguments bound do not allow it.
+```
+
+**Help**
+
+```text
+The dimensions a signature names are one value for the whole call: every argument whose type writes the same name must have the extent the name was bound to.
+```
+
+**Example** (`test/cases/modules/tensor/named_dims/err_mismatch.cml`, run as `camel test/cases/modules/tensor/named_dims/err_mismatch.cml`)
+
+```camel
+module named_dims_err_mismatch
+import { Tensor, ones, sum } from tensor
+func pair(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [n]>): float {
+    return sum(a) + sum(b)
+}
+func main(): int sync {
+    println(pair(ones([3]), ones([4])))
+    return 0
+}
+```
+
+### InvalidExtentExpression
+
+`0x03000144` · Error · `SemanticDiag::InvalidExtentExpression`
+
+**Message**
+
+```text
+This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('const [n, 3]').
+```
+
+**Help**
+
+```text
+Each extent is an integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### VarParamInAsyncFunction
 
