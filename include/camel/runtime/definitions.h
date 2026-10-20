@@ -93,8 +93,10 @@ struct DefinitionGraph {
     /// The operator's key when it was built.
     camel::core::sem::OperatorKey key;
     camel::core::sem::Definition definition;
-    /// The function's graph (what it calls is reachable from it).
+    /// The function's graph (what it calls is reachable from it), and the program that holds
+    /// them.
     GCGraph *graph = nullptr;
+    const Program *program = nullptr;
     /// portableGraphHash of the graph: what it computes, in a form that is the same in every
     /// process. A change of the definition changes it.
     uint64_t contentHash = 0;

@@ -758,6 +758,17 @@ void Context::trackDetachedRuntimeProgram(const camel::runtime::Program *program
     runtimeGraphMgr_->trackDetached(program);
 }
 
+void Context::retainRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->retain(graphs);
+}
+
+const camel::runtime::Program *
+Context::programOfRuntimeGraph(const camel::runtime::GCGraph *graph) const {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    return runtimeGraphMgr_->programOf(graph);
+}
+
 void Context::pinRuntimeProgram(const camel::runtime::Program *program) {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->pin(program);

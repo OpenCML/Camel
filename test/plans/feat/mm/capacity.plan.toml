@@ -47,7 +47,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "capacity.chunks_shared"
-desc = "A commit that edits one node of a graph of 9000 nodes (36 node chunks) gives the new version every chunk of the old one but the edited node's: the others are the same blocks (GCNodeChunk::shares), found by comparing what the encoder staged with what the old version holds."
+desc = "A commit that adds a node to a graph of 9000 nodes (36 node chunks) gives the new version every chunk of the old one but the last: the others are the same blocks (GCNodeChunk::shares), found by comparing what the encoder staged with what the old version holds."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"

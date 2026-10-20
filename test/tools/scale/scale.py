@@ -323,7 +323,7 @@ CHUNKS_N = 3000
 
 
 def check_chunks(n: int) -> int:
-    """A commit that edits one node shares every node chunk but that node's with the old version."""
+    """A commit that adds a node shares every node chunk but the last with the old version."""
     text, total = wide_program(n)
     with tempfile.TemporaryDirectory(prefix="camel_scale_") as tmp:
         path = Path(tmp) / f"scale_chunks_{n}.cml"

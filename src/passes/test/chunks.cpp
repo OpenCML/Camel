@@ -18,9 +18,10 @@
  */
 
 /*
- * Edits one node of the largest graph of the program and commits: the new version has to share
- * every node chunk but the node's with the old one. Prints "CHUNKS shared=<n> of <m> ..." for
- * the test plan.
+ * Adds a node to the largest graph of the program and commits: the new version has to share every
+ * node chunk but the last with the old one. Prints "CHUNKS shared=<n> of <m> ..." for the test
+ * plan. (A change of a source position is not a change of content: the commit would keep the
+ * old version.)
  */
 #include "camel/passes/test/chunks.h"
 
@@ -38,11 +39,10 @@ ChunksTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     if (largest == nullptr || largest->nodeCount() == 0) {
         return program;
     }
-    // A node in the middle of the graph.
-    const gc_node_ref_t edited = largest->nodeCount() / 2;
+    // A node nothing reads, after the others.
     RuntimeGraphDraftSession session(context_, program);
-    GraphDraft &draft = session.edit(largest);
-    draft.setNodeOrigin(edited, draft.nodeOrigin(edited) + 1);
+    GraphDraft &draft          = session.edit(largest);
+    const gc_node_ref_t edited = draft.addSyncNode();
     const Program *next = session.commit();
 
     const GCGraph *after = next->graph(largest->id());

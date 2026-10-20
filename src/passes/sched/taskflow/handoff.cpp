@@ -54,8 +54,9 @@ uint64_t TaskflowBytecodeHandoff::nextRunId() {
     return next.fetch_add(1, std::memory_order_relaxed);
 }
 
-void TaskflowBytecodeHandoff::build(std::span<GCGraph *const> serialGraphs) {
-    image_.build(context_, serialGraphs);
+void TaskflowBytecodeHandoff::build(
+    const camel::runtime::Program &program, std::span<GCGraph *const> serialGraphs) {
+    image_.build(context_, program, serialGraphs);
 }
 
 TaskflowBytecodeHandoff::Interpreter &TaskflowBytecodeHandoff::interpreterOfThisThread() {
@@ -127,7 +128,7 @@ std::string_view TaskflowExecSchedPass::serialObstacle(const GraphPlan &plan) co
         case GCNodeKind::Call:
             return "it calls a function value";
         case GCNodeKind::Func:
-            if (graph->directCalleeGraphOf(it.ref()) == nullptr) {
+            if (programs_.of(graph).calleeOf(*graph, it.ref()) == nullptr) {
                 return "a direct call has no callee graph";
             }
             break;
@@ -188,7 +189,8 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
 
     // Every graph the run can reach without creating one, in a fixed order (the order of the
     // image). Their plans are built here; the run would build them at their first call.
-    const std::vector<GCGraph *> graphs = camel::runtime::collectReachableGraphs(root);
+    const std::vector<GCGraph *> graphs =
+        camel::runtime::collectReachableGraphs(programs_.of(root), root);
     std::unordered_map<GCGraph *, size_t> indexOf;
     indexOf.reserve(graphs.size());
     for (size_t i = 0; i < graphs.size(); ++i) {
@@ -218,7 +220,7 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
             if (node == nullptr || node->kind != GCNodeKind::Func) {
                 continue;
             }
-            const auto callee = indexOf.find(graph->directCalleeGraphOf(it.ref()));
+            const auto callee = indexOf.find(programs_.of(graph).calleeOf(*graph, it.ref()));
             if (callee != indexOf.end()) {
                 callersOf[callee->second].push_back(i);
             } else if (obstacle[i].empty()) {
@@ -269,7 +271,7 @@ void TaskflowExecSchedPass::prepareBytecodeHandoff(GCGraph *root) {
 
     auto handoff = std::make_unique<TaskflowBytecodeHandoff>(context_);
     try {
-        handoff->build(serial);
+        handoff->build(programs_.of(root), serial);
     } catch (const std::exception &error) {
         // The hand-off is an optimisation and the evaluator runs every graph: a graph the
         // bytecode compiler refuses (std::fvm would refuse the program) is no reason to fail a

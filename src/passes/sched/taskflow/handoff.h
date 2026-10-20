@@ -57,7 +57,9 @@ class TaskflowBytecodeHandoff {
     TaskflowBytecodeHandoff &operator=(const TaskflowBytecodeHandoff &) = delete;
 
     /// Compiles `serialGraphs` (closed under direct calls) into the image. Once, before the run.
-    void build(std::span<camel::runtime::GCGraph *const> serialGraphs);
+    void build(
+        const camel::runtime::Program &program,
+        std::span<camel::runtime::GCGraph *const> serialGraphs);
     /// Graph -> entry pc, for the graphs build() compiled.
     const std::unordered_map<camel::runtime::GCGraph *, size_t> &entries() const {
         return image_.entries();

@@ -205,6 +205,15 @@ std::vector<Value> elementsOf(slot_t slot, type::Type *ty) {
     return fields;
 }
 
+/// The program that holds `g`: a graph being exported is always one of the context's.
+const camel::runtime::Program &programOf(core::context::Context &ctx, const GCGraph *g) {
+    const camel::runtime::Program *program = ctx.programOfRuntimeGraph(g);
+    if (program == nullptr) {
+        throw std::logic_error("the ONNX export met a graph that belongs to no program");
+    }
+    return *program;
+}
+
 class Evaluator {
   public:
     Evaluator(
@@ -303,6 +312,9 @@ class Evaluator {
     std::vector<Value> callArguments(Activation &act, gc_node_ref_t site, GCGraph *callee);
     Activation activationOf(GCGraph *callee, std::span<const Value> args);
     bool nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGraph *target);
+    const camel::runtime::Program &programOf(const GCGraph *g) const {
+        return camel::onnx::programOf(ctx_, g);
+    }
     std::vector<LoopFrame *> loops_;
     GCGraph *nonTailFn_ =
         nullptr; // the function whose loop translation met a call outside tail position
@@ -528,7 +540,7 @@ void Evaluator::refuseEffects(GCGraph *root) {
                         ExportError::Kind::Other);
                 }
             } else if (n->kind == GCNodeKind::Func) {
-                referenced = g->directCalleeGraphOf(ref);
+                referenced = programOf(g).calleeOf(*g, ref);
             } else if (
                 n->kind == GCNodeKind::Data && n->dataIndex < 0 && n->dataType() &&
                 n->dataType()->code() == TypeCode::Function) {
@@ -774,7 +786,7 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
 namespace {
 
 /// Whether a direct call chain leads from `from` to `to` (`from` itself included).
-bool callReaches(const GCGraph *from, const GCGraph *to) {
+bool callReaches(const camel::runtime::Program &program, const GCGraph *from, const GCGraph *to) {
     std::unordered_set<const GCGraph *> seen;
     std::vector<const GCGraph *> work{from};
     while (!work.empty()) {
@@ -787,7 +799,7 @@ bool callReaches(const GCGraph *from, const GCGraph *to) {
             if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
                 continue;
             }
-            const GCGraph *callee = g->directCalleeGraphOf(it.ref());
+            const GCGraph *callee = program.calleeOf(*g, it.ref());
             if (callee == to) {
                 return true;
             }
@@ -800,7 +812,8 @@ bool callReaches(const GCGraph *from, const GCGraph *to) {
 /// A call site that makes a recursion a tree: a graph reachable from `root` that calls its own
 /// recursion in two places on one path (two calls that are not the alternative arms of a
 /// branch). Returns the graph and the second such call, or nothing.
-std::optional<std::pair<const GCGraph *, gc_node_ref_t>> findTreeRecursion(const GCGraph *root) {
+std::optional<std::pair<const GCGraph *, gc_node_ref_t>>
+findTreeRecursion(const camel::runtime::Program &program, const GCGraph *root) {
     std::unordered_set<const GCGraph *> seen;
     std::vector<const GCGraph *> work{root};
     while (!work.empty()) {
@@ -822,12 +835,12 @@ std::optional<std::pair<const GCGraph *, gc_node_ref_t>> findTreeRecursion(const
             if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
                 continue;
             }
-            const GCGraph *callee = g->directCalleeGraphOf(it.ref());
+            const GCGraph *callee = program.calleeOf(*g, it.ref());
             work.push_back(callee);
             if (arms.contains(it.ref())) {
                 continue;
             }
-            if ((callee == g || callReaches(callee, g)) && ++recursive == 2) {
+            if ((callee == g || callReaches(program, callee, g)) && ++recursive == 2) {
                 return std::pair{g, it.ref()};
             }
         }
@@ -837,7 +850,8 @@ std::optional<std::pair<const GCGraph *, gc_node_ref_t>> findTreeRecursion(const
 
 /// A call that closes a call cycle: a graph reachable from `root` and a call in it of a
 /// function from which that graph is called again. Nothing when no function is recursive.
-std::optional<std::pair<const GCGraph *, gc_node_ref_t>> findRecursiveCall(const GCGraph *root) {
+std::optional<std::pair<const GCGraph *, gc_node_ref_t>>
+findRecursiveCall(const camel::runtime::Program &program, const GCGraph *root) {
     std::unordered_set<const GCGraph *> seen;
     std::vector<const GCGraph *> work{root};
     while (!work.empty()) {
@@ -850,8 +864,8 @@ std::optional<std::pair<const GCGraph *, gc_node_ref_t>> findRecursiveCall(const
             if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
                 continue;
             }
-            const GCGraph *callee = g->directCalleeGraphOf(it.ref());
-            if (callee == g || callReaches(callee, g)) {
+            const GCGraph *callee = program.calleeOf(*g, it.ref());
+            if (callee == g || callReaches(program, callee, g)) {
                 return std::pair{g, it.ref()};
             }
             work.push_back(callee);
@@ -862,7 +876,7 @@ std::optional<std::pair<const GCGraph *, gc_node_ref_t>> findRecursiveCall(const
 
 /// Size of what is reachable from `root` by direct calls: graphs, nodes, direct and indirect
 /// calls, branches. For CAMEL_ONNX_PREP_STATS (how much the export's own simplification does).
-std::string reachableStats(const GCGraph *root) {
+std::string reachableStats(const camel::runtime::Program &program, const GCGraph *root) {
     size_t graphs = 0, nodes = 0, direct = 0, indirect = 0, branches = 0;
     std::unordered_set<const GCGraph *> seen;
     std::vector<const GCGraph *> work{root};
@@ -881,7 +895,7 @@ std::string reachableStats(const GCGraph *root) {
             switch ((*it)->kind) {
             case GCNodeKind::Func:
                 ++direct;
-                work.push_back(g->directCalleeGraphOf(it.ref()));
+                work.push_back(program.calleeOf(*g, it.ref()));
                 break;
             case GCNodeKind::Call:
                 ++indirect;
@@ -1019,8 +1033,8 @@ bool Evaluator::nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGra
         const gc_node_ref_t node = work.back();
         work.pop_back();
         if (g->node(node)->kind == GCNodeKind::Func) {
-            const GCGraph *callee = g->directCalleeGraphOf(node);
-            if (callee == target || callReaches(callee, target)) {
+            const GCGraph *callee = programOf(g).calleeOf(*g, node);
+            if (callee == target || callReaches(programOf(g), callee, target)) {
                 return true;
             }
         }
@@ -1062,7 +1076,7 @@ Evaluator::Activation Evaluator::activationOf(GCGraph *callee, std::span<const V
 }
 
 Value Evaluator::evalCall(Activation &act, gc_node_ref_t site) {
-    GCGraph *callee = act.graph->directCalleeGraphOf(site);
+    GCGraph *callee = programOf(act.graph).calleeOf(*act.graph, site);
     const std::string name =
         isSourceName(callee->name())
             ? std::format(" to '{}'", callee->name().substr(0, callee->name().find('$')))
@@ -1075,7 +1089,7 @@ Value Evaluator::evalCall(Activation &act, gc_node_ref_t site) {
         return *act.linear->hole;
     }
     for (const LoopFrame *loop : loops_) {
-        if (loop->fn == callee || callReaches(callee, loop->fn)) {
+        if (loop->fn == callee || callReaches(programOf(callee), callee, loop->fn)) {
             if (loop == loops_.back() && loop->fn == callee) {
                 nonTailFn_ = callee;
             }
@@ -1090,7 +1104,7 @@ Value Evaluator::evalCall(Activation &act, gc_node_ref_t site) {
         }
     }
     std::vector<Value> args = callArguments(act, site, callee);
-    if (!callReaches(callee, callee)) {
+    if (!callReaches(programOf(callee), callee, callee)) {
         // Not recursive: its value is its body's (simplification inlines these; one that is
         // left is evaluated in place).
         Activation inner     = activationOf(callee, args);
@@ -1373,7 +1387,7 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
         return evalLoopBody(act, norm.empty() ? g->withInputsOf(ref).back() : norm.back(), loop);
     }
     case GCNodeKind::Func: {
-        GCGraph *callee = g->directCalleeGraphOf(ref);
+        GCGraph *callee = programOf(g).calleeOf(*g, ref);
         if (callee == loop.fn) {
             // The recursive call in tail position: the next state.
             BodyOutcome out;
@@ -1386,7 +1400,7 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
             }
             return out;
         }
-        if (callReaches(callee, loop.fn)) {
+        if (callReaches(programOf(callee), callee, loop.fn)) {
             // A function (a branch arm, a helper) on the way to the recursive call.
             const std::vector<Value> args = callArguments(act, ref, callee);
             Activation inner              = activationOf(callee, args);
@@ -1825,11 +1839,11 @@ Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value
         if (*it == nullptr || (*it)->kind != GCNodeKind::Func) {
             continue;
         }
-        const GCGraph *callee = fn->directCalleeGraphOf(it.ref());
+        const GCGraph *callee = programOf(fn).calleeOf(*fn, it.ref());
         if (callee == fn) {
             f.site = it.ref();
             ++calls;
-        } else if (callReaches(callee, fn)) {
+        } else if (callReaches(programOf(fn), callee, fn)) {
             unsupported(
                 act,
                 "a recursion that goes through another function and is not in tail position "
@@ -3757,7 +3771,7 @@ void refuseUnendedUnrolling(
     if (!full) {
         return;
     }
-    const auto call = findRecursiveCall(received);
+    const auto call = findRecursiveCall(programOf(ctx, received), received);
     if (!call) {
         return;
     }
@@ -3793,7 +3807,7 @@ void refuseUnendedUnrolling(
                 }
                 ++nodes;
                 if ((*it)->kind == GCNodeKind::Func) {
-                    work.push_back(g->directCalleeGraphOf(it.ref()));
+                    work.push_back(programOf(ctx, g).calleeOf(*g, it.ref()));
                 }
             }
         }
@@ -3835,12 +3849,13 @@ Model translatePrepared(
     // simplification as onnx.export_model finishes the job with them, so that the two entries
     // accept the same functions. Macros are not expanded here: that stays the business of
     // std::macro before this pass.
-    const GCGraph *beforeSimplify = root;
+    const GCGraph *beforeSimplify                        = root;
+    const camel::runtime::Program *programBeforeSimplify = program;
     // Measurement aid: what the bound function looks like when the export receives it and
     // after the export's own simplification (one line each on stderr).
     const bool prepStats = std::getenv("CAMEL_ONNX_PREP_STATS") != nullptr;
     if (prepStats) {
-        std::cerr << "ONNX_PREP_STATS received " << reachableStats(root) << std::endl;
+        std::cerr << "ONNX_PREP_STATS received " << reachableStats(*program, root) << std::endl;
     }
     try {
         program =
@@ -3855,7 +3870,7 @@ Model translatePrepared(
         // twice on one path doubles with every level, and when its depth depends on the model
         // input nothing ends that before memory runs out. Say so, at
         // the call, instead of reporting the allocation failure.
-        const auto tree = findTreeRecursion(beforeSimplify);
+        const auto tree = findTreeRecursion(*programBeforeSimplify, beforeSimplify);
         if (!tree) {
             // The other way an unrolling ends badly: the
             // space all graphs live in is full (a recursion that is unrolled without end).
@@ -3887,7 +3902,7 @@ Model translatePrepared(
             ExportError::Kind::CallRemains);
     }
     if (prepStats) {
-        std::cerr << "ONNX_PREP_STATS simplified " << reachableStats(root) << std::endl;
+        std::cerr << "ONNX_PREP_STATS simplified " << reachableStats(*program, root) << std::endl;
     }
     if (dumpEnabled()) {
         GraphVizDumpPass(context).apply(program, std::cerr);

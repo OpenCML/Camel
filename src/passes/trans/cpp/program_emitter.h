@@ -51,7 +51,7 @@ class ProgramEmitter {
 
     /// The translation unit for the program whose root graph is `root`. Throws Refusal for a
     /// construct std::cpp does not translate.
-    std::string emit(GCGraph *root);
+    std::string emit(const camel::runtime::Program &runtimeProgram, GCGraph *root);
 
   private:
     /// The graph of `main`, called by the root graph, and what the root passes it.

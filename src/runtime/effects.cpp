@@ -33,6 +33,7 @@ namespace camel::runtime {
 namespace {
 
 struct EffectWalk {
+    const Program &program;
     std::unordered_map<const GCGraph *, EffectSummary> done;
     std::unordered_set<const GCGraph *> active;
 
@@ -75,11 +76,11 @@ struct EffectWalk {
                 summary.mayNotTerminate = true;
                 break;
             case GCNodeKind::Func:
-                summary |= of(graph->directCalleeGraphOf(ref));
+                summary |= of(program.calleeOf(*graph, ref));
                 break;
             case GCNodeKind::Loop:
-                summary |= of(graph->loopCondGraphOf(ref));
-                summary |= of(graph->loopBodyGraphOf(ref));
+                summary |= of(program.loopCondOf(*graph, ref));
+                summary |= of(program.loopBodyOf(*graph, ref));
                 summary.mayFault        = true;
                 summary.mayNotTerminate = true;
                 break;
@@ -95,6 +96,8 @@ struct EffectWalk {
 
 } // namespace
 
-EffectSummary effectSummaryOf(const GCGraph *graph) { return EffectWalk{}.of(graph); }
+EffectSummary effectSummaryOf(const Program &program, const GCGraph *graph) {
+    return EffectWalk{program}.of(graph);
+}
 
 } // namespace camel::runtime

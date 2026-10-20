@@ -45,6 +45,7 @@ class GraphVizDumpPass : public RuntimeGraphTranslatePass {
 
     size_t depth_ = 0;
     std::string baseIndent_;
+    const camel::runtime::Program *program_ = nullptr;
     const std::string indent_ = "    ";
 
     void pushIndent();

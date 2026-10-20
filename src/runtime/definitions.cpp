@@ -65,10 +65,10 @@ std::string firstError(const UserDefinedModule &module) {
 }
 
 /// The operators whose OPER nodes appear in `graph` and every graph reachable from it.
-std::vector<core::OperId> operatorsUsedBy(GCGraph *graph) {
+std::vector<core::OperId> operatorsUsedBy(const Program &program, GCGraph *graph) {
     std::vector<core::OperId> used;
     std::unordered_set<core::OperId> seen;
-    for (GCGraph *g : collectReachableGraphs(graph)) {
+    for (GCGraph *g : collectReachableGraphs(program, graph)) {
         for (gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
             if (g->node(ref)->kind != GCNodeKind::Oper) {
                 continue;
@@ -279,7 +279,7 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
     }
     // The effects (design 9.2): within the operator's.
     const auto traits           = table.find(oper);
-    const EffectSummary effects = effectSummaryOf(graph);
+    const EffectSummary effects = effectSummaryOf(*program, graph);
     if (traits && traits->pure && (effects.external || effects.writesVariables)) {
         return refuse("the operator is pure and its definition has an effect");
     }
@@ -288,13 +288,14 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
         return refuse("the operator never faults and its definition may");
     }
     Entry &entry = fresh();
-    entry.uses   = operatorsUsedBy(graph);
+    entry.uses   = operatorsUsedBy(*program, graph);
     entry.built  = std::make_unique<DefinitionGraph>(DefinitionGraph{
-        .oper        = oper,
-        .key         = s->key,
-        .definition  = d,
-        .graph       = graph,
-        .contentHash = fact::portableGraphHash(graph),
+         .oper        = oper,
+         .key         = s->key,
+         .definition  = d,
+         .graph       = graph,
+         .program     = program,
+         .contentHash = fact::portableGraphHash(*program, graph),
     });
     return entry;
 }
@@ -376,7 +377,8 @@ ExpandResult expandDefinition(
     const std::vector<gc_node_ref_t> ctrl(
         draft.ctrlInputsOf(node).begin(),
         draft.ctrlInputsOf(node).end());
-    const gc_node_ref_t call = draft.addFuncNode(definition->graph, resultType);
+    session.adoptProgram(*definition->program);
+    const gc_node_ref_t call = draft.addFuncNode(definition->graph->id(), resultType);
     draft.setNormInputs(call, arguments);
     draft.setCtrlInputs(call, ctrl);
     draft.setNodeOrigin(call, origin);

@@ -41,8 +41,9 @@
  *    node (nodePermissions; design principles 7.5, docs/design/op-semantics 6.3), and the
  *    attributes libraries attached to the nodes: one 32-bit interned set per node
  *    (nodeAttrs; camel/core/node_attrs.h, language reference 7.6).
- * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
- *    FUNC node names its callee by an index into it (GCFuncRef), and the graphs the function
+ * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7), by
+ *    GraphId; the Program a graph is read in (program.h) says which version of each it means.
+ *    A FUNC node names its callee by an index into it (GCFuncRef), and the graphs the function
  *    constants of the static area point to, the graphs written inside this one and the graphs
  *    it calls directly are entries of it, each marked with the roles it has (GCGraphRefRole).
  * 5. Hot-path data stays plain; cold debug metadata lives elsewhere (GCGraphDebugRecord).
@@ -178,6 +179,10 @@ enum GCGraphFlag : uint8_t {
     /// The graph is a function that carries a vjp rule as its last closure value
     /// (autodiff::attachRule).
     kGraphFlagCarriesRule = 1 << 0,
+    /// A commit looked at the graph's gates: none waits on nothing (GraphDraft::
+    /// dissolveUnorderedGates). A graph without it is looked at by the next commit that
+    /// reaches it; a graph with it is left as it is unless it is edited.
+    kGraphFlagGatesDissolved = 1 << 1,
 };
 
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
@@ -258,8 +263,8 @@ static_assert(sizeof(GCLoopRef) == 16, "A LOOP payload is two words.");
 /// What a LOOP node names, as values: the graphs themselves instead of their reference-table
 /// indexes (GraphDraft::loopGraphsOf, GCGraph's loopBodyOf).
 struct GCLoopBody {
-    class GCGraph *condGraph   = nullptr; // nullptr for a For loop
-    class GCGraph *bodyGraph   = nullptr;
+    GraphId condGraph          = kInvalidGraphId; // invalid for a For loop
+    GraphId bodyGraph          = kInvalidGraphId;
     camel::core::LoopKind kind = camel::core::LoopKind::While;
     uint8_t reserved0          = 0;
     uint16_t reserved1         = 0;
@@ -466,7 +471,8 @@ class GCGraph : public camel::core::rtdata::Object {
     bool hasFrameLayout() const;
     size_t frameSize() const;
     bool isMacro() const;
-    GCGraph *outerGraph() const;
+    /// The graph this one is written in, invalid for a root graph.
+    GraphId outerGraphId() const { return outerGraphId_; }
     /// The graph's revision (graph facts, camel/runtime/facts.h): a process-wide number. A
     /// commit keeps it for a graph it did not change and gives a new one to a graph a pass edited
     /// into different content. It says nothing about the graphs this one refers to
@@ -485,16 +491,17 @@ class GCGraph : public camel::core::rtdata::Object {
     void clearExtraSlots();
 
     /// The reference table: every graph this one refers to, once each (see the file comment).
-    std::span<GCGraph *const> refs() const { return {refs_, refCount_}; }
+    /// Program::resolve turns it into graphs.
+    std::span<const GraphId> refs() const { return {refs_, refCount_}; }
     /// The roles of entry `index` of the reference table (GCGraphRefRole bits).
     uint8_t refRoles(size_t index) const { return refRoles_[index]; }
     /// The entries of the reference table with role `role`, in table order.
-    std::vector<GCGraph *> refsWithRole(uint8_t role) const;
+    std::vector<GraphId> refsWithRole(uint8_t role) const;
     /// The graphs called directly, written inside this one, referred to by a function
     /// constant: views of the reference table by role.
-    std::vector<GCGraph *> dependencies() const { return refsWithRole(kGraphRefCallee); }
-    std::vector<GCGraph *> subGraphs() const { return refsWithRole(kGraphRefNested); }
-    std::vector<GCGraph *> staticGraphRefs() const { return refsWithRole(kGraphRefStatic); }
+    std::vector<GraphId> dependencies() const { return refsWithRole(kGraphRefCallee); }
+    std::vector<GraphId> subGraphs() const { return refsWithRole(kGraphRefNested); }
+    std::vector<GraphId> staticGraphRefs() const { return refsWithRole(kGraphRefStatic); }
     std::span<const slot_t> staticSlots() const;
 
     bool hasNodePayload() const;
@@ -525,11 +532,12 @@ class GCGraph : public camel::core::rtdata::Object {
     bool containsNodeRef(gc_node_ref_t ref) const { return ref < nativePayload_.nodeCount; }
     /// The NodeId of a record of this graph, kInvalidNodeRef for any other pointer.
     gc_node_ref_t nodeRef(const GCNode *node) const;
-    GCGraph *directCalleeGraphOf(gc_node_ref_t ref) const;
-    /// LOOP node `ref`: its condition graph (nullptr for a For loop, or when `ref` is not a
-    /// LOOP node) and its body graph (nullptr when `ref` is not a LOOP node).
-    GCGraph *loopCondGraphOf(gc_node_ref_t ref) const;
-    GCGraph *loopBodyGraphOf(gc_node_ref_t ref) const;
+    /// FUNC node `ref`: the callee (invalid when `ref` is not a FUNC node).
+    GraphId calleeIdOf(gc_node_ref_t ref) const;
+    /// LOOP node `ref`: its condition graph (invalid for a For loop, or when `ref` is not a
+    /// LOOP node) and its body graph (invalid when `ref` is not a LOOP node).
+    GraphId loopCondIdOf(gc_node_ref_t ref) const;
+    GraphId loopBodyIdOf(gc_node_ref_t ref) const;
     /// LOOP node `ref`: its form. The node must be a LOOP node.
     camel::core::LoopKind loopKindOf(gc_node_ref_t ref) const {
         return nodeBodyAs<GCLoopRef>(ref)->kind;
@@ -629,15 +637,6 @@ class GCGraph : public camel::core::rtdata::Object {
     /// Every node, in NodeId order.
     NodeRange nodes() const { return NodeRange(this); }
 
-    /// Calls `visitor` for every graph of the reference table.
-    template <typename Visitor> void traceGraphs(Visitor &&visitor) const {
-        for (GCGraph *graph : refs()) {
-            if (graph) {
-                visitor(graph);
-            }
-        }
-    }
-
     bool equals(
         const camel::core::rtdata::Object *other, const camel::core::type::Type *type,
         bool deep = false) const override;
@@ -660,11 +659,11 @@ class GCGraph : public camel::core::rtdata::Object {
     void releaseNodeChunks();
 
     GCGraph(
-        GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
-        camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
-        camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **refs,
-        uint8_t *refRoles, gc_cnt_t refCount, const GCGraphNativePayload &payload,
-        ::Tuple *staticArea);
+        GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord,
+        camel::core::type::FunctionType *funcType, camel::core::type::TupleType *runtimeDataType,
+        camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
+        GraphId outerGraph, GraphId *refs, uint8_t *refRoles, gc_cnt_t refCount,
+        const GCGraphNativePayload &payload, ::Tuple *staticArea);
 
     GraphId id_                                    = kInvalidGraphId;
     GraphId typeSpecializationRoot_                = kInvalidGraphId; // see typeSpecializationRoot()
@@ -674,9 +673,9 @@ class GCGraph : public camel::core::rtdata::Object {
     camel::core::type::TupleType *runtimeDataType_ = nullptr;
     camel::core::type::TupleType *staticDataType_  = nullptr;
     camel::core::type::TupleType *closureType_     = nullptr;
-    GCGraph *outerGraph_                           = nullptr;
+    GraphId outerGraphId_                          = kInvalidGraphId;
     uint64_t revision_                             = 0; // see revision()
-    GCGraph **refs_                                = nullptr;
+    GraphId *refs_                                 = nullptr;
     uint8_t *refRoles_                             = nullptr;
     gc_cnt_t refCount_                             = 0;
     const GCNodeChunk &chunkOf(gc_node_ref_t ref) const {
@@ -696,8 +695,8 @@ class GCGraph : public camel::core::rtdata::Object {
 /// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.
 inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
     return GCLoopBody{
-        .condGraph       = graph.loopCondGraphOf(ref),
-        .bodyGraph       = graph.loopBodyGraphOf(ref),
+        .condGraph       = graph.loopCondIdOf(ref),
+        .bodyGraph       = graph.loopBodyIdOf(ref),
         .kind            = graph.loopKindOf(ref),
         .collectionCount = graph.loopCollectionCountOf(ref),
     };
@@ -731,6 +730,17 @@ class GCGraphManager {
     void trackDetached(const Program *program);
     /// Frees the graphs of the tracked detached programs that the program does not hold.
     void releaseDetached();
+    /// Roots `graphs`, which no Program of the manager owns (graphs a transform creates while
+    /// the program runs), for as long as the manager.
+    void retain(std::span<GCGraph *const> graphs);
+    /// Frees a graph no program holds (a commit's encoding it did not need).
+    static void release(GCGraph *graph) { freeGraph(graph); }
+    /// The newest program of the manager that holds this version of `graph`, nullptr when none
+    /// does. A version a commit left unchanged is held by the program before it too, and names
+    /// the graphs it calls by id: what it calls is what the program it is read in holds. This
+    /// answers for a view of the latest program (a dump, the debugger); whoever runs or
+    /// rewrites a graph has the program it was given.
+    const Program *programOf(const GCGraph *graph) const;
     /// Keeps a program that belongs to no context program alive and traced for as long as the
     /// manager: the definition graphs of operators (camel/runtime/definitions.h). Neither
     /// clear() nor releaseDetached() frees it; a rewrite that uses one encodes a copy into the
@@ -752,6 +762,7 @@ class GCGraphManager {
     std::vector<GCGraph *> owned_;
     std::vector<const Program *> detached_;
     std::vector<const Program *> pinned_;
+    std::vector<GCGraph *> retained_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
 };
 

@@ -33,10 +33,67 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
+#include <algorithm>
+#include <mutex>
+#include <stdexcept>
 #include <vector>
 
 namespace camel::execute {
+
+/**
+ * The programs a back end runs graphs of: the one it was given and those of the function
+ * values it meets (a function made in another program, such as a gradient the program built
+ * while it ran). A frozen graph names the graphs it calls by id; the back end resolves them in
+ * the program that holds the graph version, found here.
+ */
+class RunPrograms {
+  public:
+    RunPrograms() = default;
+    explicit RunPrograms(const camel::runtime::Program *main) : main_(main) {}
+
+    void setMain(const camel::runtime::Program *main) {
+        std::lock_guard lock(mutex_);
+        main_ = main;
+        others_.clear();
+    }
+    const camel::runtime::Program *main() const { return main_; }
+
+    /// The graph of `function`, whose program is noted.
+    template <typename Func> camel::runtime::GCGraph *graphOf(const Func *function) {
+        note(function->program());
+        return function->graph();
+    }
+    void note(const camel::runtime::Program *program) {
+        if (program == main_ || program == nullptr) {
+            return;
+        }
+        std::lock_guard lock(mutex_);
+        if (std::find(others_.begin(), others_.end(), program) == others_.end()) {
+            others_.push_back(program);
+        }
+    }
+    /// The program that holds this version of `graph`.
+    const camel::runtime::Program &of(const camel::runtime::GCGraph *graph) const {
+        if (main_ != nullptr && main_->contains(graph)) {
+            return *main_;
+        }
+        std::lock_guard lock(mutex_);
+        for (const camel::runtime::Program *program : others_) {
+            if (program->contains(graph)) {
+                return *program;
+            }
+        }
+        throw std::logic_error(
+            "A graph being run belongs to none of the programs the back end knows.");
+    }
+
+  private:
+    const camel::runtime::Program *main_ = nullptr;
+    mutable std::vector<const camel::runtime::Program *> others_;
+    mutable std::mutex mutex_;
+};
 
 struct RuntimeBranchArmRegion {
     camel::runtime::gc_node_ref_t headIndex = camel::runtime::kInvalidNodeRef;

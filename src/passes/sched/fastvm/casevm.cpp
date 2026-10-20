@@ -233,7 +233,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 const data_arr_t wargs = bc.wargs();
                 auto function          = currFrame->get<Function *>(wargs[0]);
                 ASSERT(function != nullptr, "FastVM CALL resolved a null Function callee.");
-                auto *runtimeTarget = function->graph();
+                auto *runtimeTarget = programs_.graphOf(function);
                 ASSERT(
                     runtimeTarget != nullptr,
                     "FastVM indirect CALL requires a materialized runtime graph target.");

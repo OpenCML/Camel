@@ -77,7 +77,10 @@ Program prepare(ArgsView &with, ArgsView &norm, Context &ctx, bool staticRegion 
 slot_t regionsKernel(ArgsView &with, ArgsView &, Context &ctx) {
     return checked([&] {
         core::mm::NoCollectionScope noCollection;
-        auto text = inspectRegions(*with.get<::Function *>(0)->graph(), ctx.facts());
+        auto text = inspectRegions(
+            *with.get<::Function *>(0)->program(),
+            *with.get<::Function *>(0)->graph(),
+            ctx.facts());
         return td::toSlot(::String::from(text, core::mm::autoSpace()));
     });
 }
