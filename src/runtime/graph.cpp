@@ -1070,7 +1070,7 @@ void syncPayloadArenaView(GCGraphNativePayload &payload, const GCGraphPayloadAre
 }
 
 GCGraph *GCGraphBuildAccess::create(
-    GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
+    GraphId id, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
     const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
     camel::core::type::TupleType *closureType, GCGraph *outerGraph,
     std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
@@ -1089,6 +1089,7 @@ GCGraph *GCGraphBuildAccess::create(
     return constructInPlace(
         mem,
         bytes,
+        id,
         debugRecord,
         funcType,
         frameSlots,
@@ -1118,7 +1119,7 @@ size_t GCGraphBuildAccess::requiredBytes(
 }
 
 GCGraph *GCGraphBuildAccess::constructInPlace(
-    void *memory, size_t bytes, GCGraphDebugRecord *debugRecord,
+    void *memory, size_t bytes, GraphId id, GCGraphDebugRecord *debugRecord,
     camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
     camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
     GCGraph *outerGraph, std::span<GCGraph *const> dependencies,
@@ -1209,6 +1210,7 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     syncPayloadArenaView(ownedPayload, payloadArena);
 
     auto *graph = new (graphMem) GCGraph(
+        id,
         debugRecord,
         funcType,
         runtimeDataType,
@@ -1256,11 +1258,11 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
 }
 
 GCGraph::GCGraph(
-    GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
+    GraphId id, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
     camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
     camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **refs,
     uint8_t *refRoles, gc_cnt_t refCount, const GCGraphNativePayload &payload, ::Tuple *staticArea)
-    : debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
+    : id_(id), debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
       staticDataType_(staticDataType), closureType_(closureType), outerGraph_(outerGraph),
       refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),
       staticArea_(staticArea) {
@@ -1693,6 +1695,7 @@ camel::core::rtdata::Object *GCGraph::clone(
         throw std::bad_alloc();
     }
     auto *graph = new (mem) GCGraph(
+        id_,
         debug_,
         funcType_,
         runtimeDataType_,

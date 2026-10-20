@@ -387,8 +387,10 @@ inline std::string makeCompileGraphStableId(const std::string &name) {
 }
 
 inline compile_graph_ptr_t createCompileGraph(
-    FunctionType *funcType, const compile_graph_ptr_t &outer, std::string name = "") {
+    runtime::GraphId id, FunctionType *funcType, const compile_graph_ptr_t &outer,
+    std::string name = "") {
     auto graph = std::make_shared<DraftGraphBuilder>(funcType ? funcType : FunctionType::create());
+    graph->draft().setId(id);
     if (name.empty()) {
         name = std::format("__{}__", makeCompileGraphStableId(""));
     }

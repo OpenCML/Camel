@@ -21,6 +21,7 @@
 
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
+#include "camel/runtime/graph_id.h"
 #include "camel/core/slot.h"
 #include "camel/core/source/manager.h"
 
@@ -103,6 +104,7 @@ class Context : public std::enable_shared_from_this<Context> {
 
     std::unique_ptr<ExecutorManager> exeMgr_;
     std::unique_ptr<camel::runtime::GCGraphManager> runtimeGraphMgr_;
+    camel::runtime::GraphIdAllocator graphIds_;
     /// See facts(). Created on first use.
     std::unique_ptr<camel::runtime::fact::FactStore> facts_;
     /// See definitions(). Created on first use.
@@ -192,6 +194,9 @@ class Context : public std::enable_shared_from_this<Context> {
     /// See GCGraphManager::pin: graphs the core keeps for the context's lifetime (the
     /// definition graphs of operators).
     void pinRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs);
+    /// The allocator of the program's GraphIds (camel/runtime/graph_id.h): every graph the
+    /// front end builds and every graph a rewrite creates takes its id from here.
+    camel::runtime::GraphIdAllocator &graphIds() { return graphIds_; }
     /// The program's graph facts (camel/runtime/facts.h): what passes and back ends derived
     /// about its graphs, each with a stamp that a read checks. Lives as long as the context;
     /// a fact survives rewrites of the program and reads as absent once it no longer holds.

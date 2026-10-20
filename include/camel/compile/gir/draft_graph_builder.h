@@ -72,6 +72,8 @@ class DraftGraphBuilder {
     static DraftGraphBuilder *fromDraft(const runtime::GraphDraft *draft);
     graph_arena_ptr_t arena() const { return arena_; }
     const std::string &name() const { return name_; }
+    /// The graph's identity (camel/runtime/graph_id.h), the id of the runtime graph it encodes to.
+    runtime::GraphId graphId() const { return draft_->id(); }
     const std::string &stableId() const { return stableId_; }
     camel::core::type::FunctionType *funcType() const { return draft_->funcType(); }
     camel::core::type::TupleType *closureType() const { return draft_->closureType(); }

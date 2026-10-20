@@ -405,6 +405,7 @@ class EncodeSession {
         prepared.source = graph;
         prepared.draft  = std::make_unique<GraphDraft>();
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
+        prepared.draft->setId(graph->graphId());
         prepared.draft->setFuncType(graph->funcType());
         prepared.draft->setCaptureNames(graph->draft().captureNames());
         // Every compiled graph has a frame layout, one without slots included.
@@ -1002,6 +1003,7 @@ class EncodeSession {
         prepared.runtime = GCGraphBuildAccess::constructInPlace(
             prepared.memory,
             prepared.bytes,
+            prepared.draft->id(),
             debugRecord,
             prepared.draft->funcType(),
             prepared.draft->frameSlotTypes(),

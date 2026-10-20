@@ -193,6 +193,7 @@ class GraphDraftGroup {
   private:
     struct Member {
         RuntimeDraftIdentity identity;
+        GraphId id = kInvalidGraphId;
         std::unique_ptr<GraphDraft> draft;
         GCGraph *encoded = nullptr;
         std::byte keyStorage{};

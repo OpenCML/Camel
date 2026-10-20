@@ -112,7 +112,7 @@ struct GCGraphBuildAccess {
         std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots);
 
     static GCGraph *constructInPlace(
-        void *memory, size_t bytes, GCGraphDebugRecord *debugRecord,
+        void *memory, size_t bytes, GraphId id, GCGraphDebugRecord *debugRecord,
         camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
         camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
         GCGraph *outerGraph, std::span<GCGraph *const> dependencies,
@@ -122,7 +122,7 @@ struct GCGraphBuildAccess {
         std::span<const slot_t> staticSlots);
 
     static GCGraph *create(
-        GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
+        GraphId id, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
         const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
         camel::core::type::TupleType *closureType, GCGraph *outerGraph,
         std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,

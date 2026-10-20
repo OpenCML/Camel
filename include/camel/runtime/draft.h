@@ -212,6 +212,11 @@ class GraphDraft {
     GraphDraft(const GraphDraft &)            = delete;
     GraphDraft &operator=(const GraphDraft &) = delete;
 
+    /// The graph the draft is a draft of: decode takes the id of the graph it decodes, and the
+    /// graph that encode builds carries it (a draft keeps the id of the graph it edits). A draft
+    /// of a new graph is given one with setId (Context::graphIds) before it is encoded.
+    GraphId id() const { return id_; }
+    void setId(GraphId id) { id_ = id; }
     camel::core::type::FunctionType *funcType() const { return funcType_; }
     /// The names the function captures, in capture order (GCGraph::captureNames).
     std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
@@ -423,6 +428,7 @@ class GraphDraft {
         gc_node_ref_t newId, bool norm, bool with, bool ctrl);
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
 
+    GraphId id_                                = kInvalidGraphId;
     camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside

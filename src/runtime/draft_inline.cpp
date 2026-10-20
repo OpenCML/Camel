@@ -578,12 +578,14 @@ void eraseFormalFromDraft(GraphDraft &draft, FormalKind kind, gc_node_ref_t form
 }
 
 GCGraph *encodeSpecializedGraph(
-    GraphDraft &draft, const GCGraph *baseGraph, std::string_view tag, size_t nonce) {
+    RuntimeGraphDraftSession &session, GraphDraft &draft, const GCGraph *baseGraph,
+    std::string_view tag, size_t nonce) {
     ASSERT(baseGraph != nullptr, "Specialized graph encoding requires a base graph.");
     const std::string suffix      = std::format("${}{}", tag, nonce);
     const std::string stableId    = std::string(baseGraph->stableId()) + suffix;
     const std::string mangledName = std::string(baseGraph->mangledName()) + suffix;
     const std::string name        = std::string(baseGraph->name()) + suffix;
+    draft.setId(session.context()->graphIds().allocate());
     return draft.encode(stableId, mangledName, name);
 }
 
@@ -656,7 +658,7 @@ GCGraph *specializeGraphWithBindings(
     if (refinesTypes) {
         (void)reinferDraftTypes(*draft);
     }
-    GCGraph *specialized = encodeSpecializedGraph(*draft, baseGraph, tag, nonce);
+    GCGraph *specialized = encodeSpecializedGraph(session, *draft, baseGraph, tag, nonce);
     session.rememberSpecialization(std::move(cacheKey), specialized);
     return specialized;
 }
@@ -1059,7 +1061,7 @@ GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size
             type->exitType(),
             type->modifiers()));
     draft->setClosureType(nullptr);
-    GCGraph *lifted = encodeSpecializedGraph(*draft, base, "lift", nonce);
+    GCGraph *lifted = encodeSpecializedGraph(session, *draft, base, "lift", nonce);
     session.rememberSpecialization(std::move(key), lifted);
     return lifted;
 }

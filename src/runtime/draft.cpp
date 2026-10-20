@@ -738,6 +738,7 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
         graph->name(),
         graph->nodeCount());
     auto draft       = std::make_unique<GraphDraft>();
+    draft->id_       = graph->id();
     draft->funcType_ = graph->funcType();
     draft->captureNames_.assign(graph->captureNames().begin(), graph->captureNames().end());
     if (const auto *layout = graph->runtimeDataType()) {
@@ -1390,7 +1391,9 @@ GCGraph *GraphDraft::encode(
         }
     }();
 
+    ASSERT(isValid(id_), "Encoding a graph draft requires its GraphId.");
     return GCGraphBuildAccess::create(
+        id_,
         debugRecord,
         funcType_,
         frameSlotTypes(),

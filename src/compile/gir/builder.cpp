@@ -55,7 +55,8 @@ void Builder::ensureRootGraph() {
     if (rootGraph_) {
         return;
     }
-    rootGraph_ = createCompileGraph(FunctionType::create(), nullptr, "__root__");
+    rootGraph_ = createCompileGraph(
+        context_->graphIds().allocate(), FunctionType::create(), nullptr, "__root__");
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
         rootGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
             sourceContext.get());
@@ -150,7 +151,7 @@ compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::strin
     std::string scopeName = name;
     if (name.empty()) {
         const bool atRoot = currGraph_ == rootGraph_;
-        currGraph_        = createCompileGraph(funcType, currGraph_);
+        currGraph_        = createCompileGraph(context_->graphIds().allocate(), funcType, currGraph_);
         if (atRoot) {
             rootSubGraphOwners_[currGraph_.get()] = unit_;
         }
@@ -170,7 +171,7 @@ compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::strin
             }
         }
         if (!found) {
-            found = createCompileGraph(funcType, currGraph_, name);
+            found = createCompileGraph(context_->graphIds().allocate(), funcType, currGraph_, name);
             insertGraph(name, found);
             if (currGraph_ == rootGraph_) {
                 rootSubGraphOwners_[found.get()] = unit_;

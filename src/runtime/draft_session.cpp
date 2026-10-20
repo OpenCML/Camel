@@ -522,6 +522,7 @@ GCGraph *encodeDraftGraph(
     return GCGraphBuildAccess::constructInPlace(
         target,
         bytes,
+        draft.id(),
         [&] {
             auto *record =
                 createGraphDebugRecord(identity.stableId, identity.mangledName, identity.name);
@@ -1019,6 +1020,7 @@ GraphDraftGroup::~GraphDraftGroup() = default;
 GCGraph *GraphDraftGroup::reserve(std::string stableId, std::string mangledName, std::string name) {
     auto member      = std::make_unique<Member>();
     member->draft    = std::make_unique<GraphDraft>();
+    member->id       = context_->graphIds().allocate();
     GCGraph *key     = reinterpret_cast<GCGraph *>(&member->keyStorage);
     member->identity = RuntimeDraftIdentity{
         .sourceGraph = nullptr,
@@ -1043,7 +1045,8 @@ void GraphDraftGroup::encode() {
     GraphMap rewritten;
     std::unordered_map<GCGraph *, size_t> bytes;
     for (GCGraph *key : order_) {
-        const Member &m = member(key);
+        Member &m = member(key);
+        m.draft->setId(m.id);
         bytes.emplace(key, namedDraftGraphBytes(context_, m.identity, *m.draft, nullptr));
         rewritten.emplace(key, allocateGraph(context_, m.identity, *m.draft, bytes.at(key)));
     }

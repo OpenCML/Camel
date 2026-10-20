@@ -41,7 +41,6 @@ constexpr std::string_view kRulePrefix = "autodiff.vjp/";
 
 ::Function *attachRule(
     const camel::core::context::context_ptr_t &context, ::Function *function, ::Function *rule) {
-    (void)context;
     namespace rt = camel::runtime;
     using camel::core::type::TupleType;
     using camel::core::type::Type;
@@ -59,6 +58,7 @@ constexpr std::string_view kRulePrefix = "autodiff.vjp/";
     auto *withRule = TupleType::create(std::move(captured));
     draft->setClosureType(withRule);
 
+    draft->setId(context->graphIds().allocate());
     rt::GCGraph *graph = draft->encode(
         std::string(kRulePrefix) + source->stableId(),
         std::string(kRulePrefix) + source->mangledName(),

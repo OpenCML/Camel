@@ -129,7 +129,8 @@ runtime::GCGraph *outlineRegions(
         for (const auto &region : analysis.regions) {
             auto extracted  = extractRegion(*graph, region);
             const auto name = graph->stableId() + "/tiles.region/" + std::to_string(count++);
-            auto *callee    = extracted.graph->encode(name, name, name);
+            extracted.graph->setId(context.graphIds().allocate());
+            auto *callee = extracted.graph->encode(name, name, name);
             auto *fn        = ::Function::create(
                 callee,
                 core::type::TupleType::create(std::vector<core::type::Type *>{}),

@@ -80,6 +80,7 @@ Function *gpuFunction(
     draft.setOutputNode(output);
     draft.setExitNode(output);
     draft.setReturnNode(output, rt::GCReturnKind::Self);
+    draft.setId(context.graphIds().allocate());
     auto *graph = draft.encode(
         "tiles.gpu/" + source->graph()->stableId(),
         "tiles.gpu/" + source->graph()->mangledName(),

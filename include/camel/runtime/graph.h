@@ -56,6 +56,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/intern.h"
+#include "camel/runtime/graph_id.h"
 
 #include <atomic>
 #include <cstddef>
@@ -404,6 +405,9 @@ class GCGraph : public camel::core::rtdata::Object {
     // These accessors expose cold compile/debug metadata only. Runtime passes
     // should derive execution semantics from the native payload instead.
     const std::string &stableId() const;
+    /// The graph's identity within its program, the same for every version of the graph
+    /// (graph_id.h).
+    GraphId id() const { return id_; }
     const std::string &mangledName() const;
     const std::string &name() const;
     /// Source origin (camel::source::origin_id_t) of node `ref`, 0 when unknown.
@@ -608,12 +612,13 @@ class GCGraph : public camel::core::rtdata::Object {
     friend struct GCGraphBuildAccess;
 
     GCGraph(
-        GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
+        GraphId id, GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
         camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
         camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **refs,
         uint8_t *refRoles, gc_cnt_t refCount, const GCGraphNativePayload &payload,
         ::Tuple *staticArea);
 
+    GraphId id_                                    = kInvalidGraphId;
     GCGraphDebugRecord *debug_                     = nullptr;
     camel::core::type::FunctionType *funcType_     = nullptr;
     camel::core::type::TupleType *runtimeDataType_ = nullptr;

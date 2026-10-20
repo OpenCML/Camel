@@ -929,8 +929,10 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         lastSyncedNode_       = {};
 
         FunctionType *funcType = instantiateFunctionType(tmpl->funcType, bindings);
-        graph = tmpl->name.empty() ? createCompileGraph(funcType, currGraph_)
-                                   : createCompileGraph(funcType, currGraph_, instanceName);
+        const auto graphId = context_->graphIds().allocate();
+        graph              = tmpl->name.empty()
+                                 ? createCompileGraph(graphId, funcType, currGraph_)
+                                 : createCompileGraph(graphId, funcType, currGraph_, instanceName);
         if (const auto declaring = units_.find(tmpl->module.get());
             declaring != units_.end() && !tmpl->name.empty()) {
             // Shown with the module that declares it (design principles 10.2).
