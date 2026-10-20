@@ -66,6 +66,11 @@ class ArrayDataFactory {
     ~ArrayDataFactory();
 
     ArrayDataFactory &add(const data_ptr_t &e);
+    /// The element type the array is built with, before any element is added. A literal built
+    /// for a position that names the element type (`[a, b]` where an `int[]` is expected) is an
+    /// array of that type, and its computed elements are holes to be filled later; without it
+    /// the type is the one the elements unify to.
+    ArrayDataFactory &setElemType(type::Type *elemType);
     std::shared_ptr<ArrayData> build();
 
   private:

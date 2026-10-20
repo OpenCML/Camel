@@ -51,7 +51,11 @@ enum class SemanticDiag : uint32_t {
     // 0x000014 was ClosureCaptureAfterSelfCall, replaced by CaptureAfterRecursiveCall: with
     // function bodies built when first needed it is only met in recursion.
     ImportNameNotExported        = 0x000015,
-    LiteralStaticCastFailed      = 0x000016,
+    // A literal the type it is given cannot hold: out of range, truncated (a decimal literal
+    // in an integer type), or not a value of that type at all (a text that is not a number).
+    // One diagnostic for all of them (handover H24): it says which literal, which type, and
+    // why.
+    LiteralNotRepresentable      = 0x000016,
     DynamicCastForbidden         = 0x000017,
     ModuleParseFailed            = 0x000018,
     InvalidOperatorURI           = 0x000019,
@@ -64,7 +68,7 @@ enum class SemanticDiag : uint32_t {
     InvalidTypeArgument          = 0x000020,
     ArgumentNeedsConversion      = 0x000021,
     ReturnNeedsConversion        = 0x000022,
-    LiteralOutOfRange            = 0x000023,
+    // 0x000023 was LiteralOutOfRange, merged into LiteralNotRepresentable (0x000016).
     // 0x000025 was ImportCycle: modules may import each other (design principles 10.1).
     // 0x000026 was ImportedFunctionUsesModuleValue: a function of another module may use the
     // top level of its own module since every module builds into one root graph.

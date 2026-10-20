@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-169 diagnostics: 152 errors, 17 warnings.
+168 diagnostics: 151 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -61,7 +61,7 @@ prints one entry.
 | `0x03000012` | [SemanticDiag::ElementTypeMismatch](#elementtypemismatch) | Error |
 | `0x03000013` | [SemanticDiag::CallingIncompleteFunction](#callingincompletefunction) | Error |
 | `0x03000015` | [SemanticDiag::ImportNameNotExported](#importnamenotexported) | Error |
-| `0x03000016` | [SemanticDiag::LiteralStaticCastFailed](#literalstaticcastfailed) | Error |
+| `0x03000016` | [SemanticDiag::LiteralNotRepresentable](#literalnotrepresentable) | Error |
 | `0x03000017` | [SemanticDiag::DynamicCastForbidden](#dynamiccastforbidden) | Error |
 | `0x03000018` | [SemanticDiag::ModuleParseFailed](#moduleparsefailed) | Error |
 | `0x03000019` | [SemanticDiag::InvalidOperatorURI](#invalidoperatoruri) | Error |
@@ -74,7 +74,6 @@ prints one entry.
 | `0x03000020` | [SemanticDiag::InvalidTypeArgument](#invalidtypeargument) | Error |
 | `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error |
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
-| `0x03000023` | [SemanticDiag::LiteralOutOfRange](#literaloutofrange) | Error |
 | `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
 | `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
@@ -1143,7 +1142,7 @@ Ensure the data type matches the {0}'s element type, or convert the data to the 
 ```camel
 func main(): int sync {
     println([1, 2,
-        3.0, 4])
+        'x', 4])
     return 0
 }
 ```
@@ -1206,20 +1205,20 @@ func main(): int sync {
 }
 ```
 
-### LiteralStaticCastFailed
+### LiteralNotRepresentable
 
-`0x03000016` · Error · `SemanticDiag::LiteralStaticCastFailed`
+`0x03000016` · Error · `SemanticDiag::LiteralNotRepresentable`
 
 **Message**
 
 ```text
-Failed to static cast literal data '{0}' to type '{1}'.
+The literal '{0}' cannot be represented as type '{1}': {2}.
 ```
 
 **Help**
 
 ```text
-Ensure the literal value is compatible with the target type or use an appropriate conversion.
+A literal the type cannot hold is not wrapped around or cut off, and a value is never cut to fit a type. Write a value the type holds, or give the literal a wider type.
 ```
 
 **Example** (`test/cases/compile/generics/err_literal.cml`, run as `camel test/cases/compile/generics/err_literal.cml`)
@@ -1576,32 +1575,6 @@ func tree(x: Tensor<f32, const [-1]>, n: int): Tensor<f32, const [1]> {
 }
 func main(): int sync {
     println(sum(tree(reshape([1.0, 2.0, 3.0, 4.0, 5.0], [5]), 5)))
-    return 0
-}
-```
-
-### LiteralOutOfRange
-
-`0x03000023` · Error · `SemanticDiag::LiteralOutOfRange`
-
-**Message**
-
-```text
-The literal '{0}' is out of the range of type '{1}' ({2}).
-```
-
-**Help**
-
-```text
-A literal that its type cannot hold is not wrapped around or cut off. Write a value in the range, or give the literal a wider type.
-```
-
-**Example** (`test/cases/compile/literals/context_fold_out_of_range.cml`, run as `camel -E short test/cases/compile/literals/context_fold_out_of_range.cml`)
-
-```camel
-func main(): int sync {
-    let a: int = 9223372036854775807 + 1
-    println(a)
     return 0
 }
 ```
@@ -2811,13 +2784,17 @@ This value has type '{0}', which is not the declared type '{1}'.
 A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself). Convert the value explicitly, e.g. 'float(n)' or 'v as T', or change the declared type.
 ```
 
-**Example** (`test/cases/compile/literals/context_variable_declaration.cml`, run as `camel -E short test/cases/compile/literals/context_variable_declaration.cml`)
+**Example** (`test/cases/compile/literals/context_struct_field_variable.cml`, run as `camel -E short test/cases/compile/literals/context_struct_field_variable.cml`)
 
 ```camel
+module literal_context_struct_field_variable
+
+type Point = { x: float, y: float }
+
 func main(): int sync {
     let n: int = 1
-    let y: float = n
-    println(y)
+    let p: Point = { x: n, y: 2.0 }
+    println(p)
     return 0
 }
 ```

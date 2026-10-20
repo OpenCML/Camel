@@ -63,6 +63,11 @@ ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
     return *this;
 }
 
+ArrayDataFactory &ArrayDataFactory::setElemType(Type *elemType) {
+    impl_->elemType = elemType;
+    return *this;
+}
+
 std::shared_ptr<ArrayData> ArrayDataFactory::build() {
     ArrayTypeFactory typeFactory;
     typeFactory.setElemType(impl_->elemType ? impl_->elemType : Type::Void());

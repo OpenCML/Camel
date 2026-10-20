@@ -1,0 +1,26 @@
+/**
+ * Handover H24, item 1: a `return` written in a branch arm takes its type from the position
+ * of the arm (the branch's expected type), not from the declared return type of the function
+ * around it. Nothing here expects a type in `free`, so `2` is an int, as the arm next to it
+ * is: the float the function returns does not reach it. The declaration of `v` in `positioned`
+ * is the arm's position, so `2` there is a float, though the function returns an int.
+ */
+module literal_context_arm_exit
+
+func free(c: bool): float sync {
+    let v = if c then { return 2; } else { 3 };
+    println(v)
+    return float(v)
+}
+
+func positioned(c: bool): int sync {
+    let v: float = if c then { return 2; } else { 2.0 };
+    println(v)
+    return int(v)
+}
+
+func main(): int sync {
+    println(free(true), free(false))
+    println(positioned(true), positioned(false))
+    return 0
+}

@@ -20,8 +20,8 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 (x: int): int => x + 1      // lambda，见 6.9
 ```
 
-- 数组字面量的元素类型必须相同。空数组 `[]` 的元素类型来自上下文：`let xs: int[] = []`、`[] as Map<string, int>`。
-- 结构体字面量的键是标识符。
+- 数组字面量的元素类型必须相同。元素是**有期望类型的位置**（[3.3.1](03_data_model.md#331-数组)）：有上下文时每个元素取那个类型，`let xs: float[] = [1, 2.0]` 的元素都是 `float`；没有上下文时，同一个数组里的数字字面量取最宽的一种（整数 < 小数），所以 `[1, 2.0]` 是 `float[]`（与 Go 的无类型常量相同）。空数组 `[]` 的元素类型来自上下文：`let xs: int[] = []`、`[] as Map<string, int>`。
+- 结构体字面量的键是标识符。字段同样是有期望类型的位置：`let p: P = { a: 1, b: 2.0 }`（`P = { a: float, b: float }`）里 `1` 是 `float`。字段的值写成名字时是变量，不转换，类型不符就是 `SemanticDiag::DeclaredTypeMismatch`。
 - **列表推导** `[e for x in xs if c]` 就是 `xs->filter<(x) => c>->map<(x) => e>`：`x` 的类型是 `xs` 的元素类型，`if c` 可以省略，结果是 `e` 的数组。图上与手写这两个调用完全相同（两个算子节点，各带一张元素函数的子图），所以它的性质也相同：元素之间没有顺序约定（并行调度器可以并发地算），`e`、`c` 里的副作用与 `map`、`filter` 的元素函数里的一样处理（[6.10](#610-高阶算子)）。可以嵌套，也可以出现在任何需要表达式的位置。`xs` 不是数组是 `SemanticDiag::ComprehensionSourceRefused`。
 - 展开 `...xs` 保留，尚未实现（`SemanticDiag::ConstructNotSupported`）。写成 `concat(xs, ys)`。
 
@@ -298,6 +298,8 @@ note: the value of this 'if' is not used
 
 所以 Camel 里没有“提前返回”：把分支写成函数体的最后一个表达式，或在它前面写 `return`。多个条件依次判断时，把 `if ... else if ... else ...` 连成一个表达式。警告可用 `-Wno-exit-in-unused-branch` 关闭。`return null` 与不带值的 `return` 同样会报：臂不需要靠它来凑类型，写了多半是以为它能提前离开函数。
 
+臂里的 `return` 和臂里其他表达式一样，按**臂所在的位置**取类型（[3.3.1](03_data_model.md#331-数组)、设计原则 5.1）：`let v: float = if c then { return 1 } else { 2.0 }` 里 `1` 是 `float`（位置是 `v` 的声明），而 `let v = if c then { return 1 } else { 2 }` 里它是 `int`（位置没有类型，由各臂自己决定）。函数的声明返回类型**不是**臂里 `return` 的期望类型：`func f(c: bool): float { let v = if c then { return 2 } else { 3 } … }` 里 `v` 是 `int`，函数在需要时再显式转换。函数体最后一个表达式（包括整个 `if`/`match`）是函数返回值的位置，它的类型是函数的声明返回类型，臂里的 `return` 也就从那里取。
+
 ### 6.8.2 `match`
 
 ```
@@ -308,8 +310,8 @@ match 名字 {
 ```
 
 - 被匹配的可以是任意表达式（`match f(x) { ... }`），不只是一个名字。
-- 模式是字面量（整数、浮点数、字符串、`true`/`false`）或通配 `_`。一个 `case` 可以用 `|` 列出多个模式，任一匹配即进入。**每个模式的值必须能被被匹配值的类型接受**（设计原则 3.7）：它用该类型的比较与被匹配的值比较，所以 `string` 上的 `case 1` 是 `SemanticDiag::MatchCaseTypeMismatch`。
-- 按书写顺序取第一个匹配的分支。各臂类型必须相同。臂里的 `return` 与 `if` 的臂一样，给出的是 `match` 的值。
+- 模式是字面量（整数、浮点数、字符串、`true`/`false`）或通配 `_`。一个 `case` 可以用 `|` 列出多个模式，任一匹配即进入。**模式里的字面量取被匹配值的类型**（它有期望类型，设计原则 5.1）：`x: f32` 时 `case 3` 的 `3` 是 `f32`，`x: int` 时 `case 5000000000` 是 `SemanticDiag::LiteralNotRepresentable`。**每个模式的值必须能被被匹配值的类型接受**（设计原则 3.7）：它用该类型的比较与被匹配的值比较，所以 `string` 上的 `case 1` 是 `SemanticDiag::MatchCaseTypeMismatch`。
+- 按书写顺序取第一个匹配的分支。各臂类型必须相同。臂里的 `return` 与 `if` 的臂一样，给出的是 `match` 的值，并按臂所在的位置取类型（见 6.8.1）。
 
 ```cml
 func kind(c: string): string {

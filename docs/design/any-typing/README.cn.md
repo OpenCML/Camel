@@ -132,7 +132,7 @@
 ### 1.6 不是 `any`、但容易混为一谈的三样东西
 
 - **`PyObject`。** Python 桥的每个算子收发的都是 `PyObject` 或 `PyObject<T>`（由类型为 `T` 的 Camel 值包装而来）【读码 `modules/python/module.cpp:373-600`】。它是登记了 `GC_Traced` 的模块类型【读码 `modules/python/type.cpp:30-33`】，值是一个外部资源包装对象，回收器认识。`examples/t17_python.cml` 在毒化模式下通过。【实测】它说明"运行时才知道内容的值"可以有一个确定的静态类型。
-- **联合类型 `A | B`。** 它也是 `Auxiliary`（`TypeCode::Union`）。今天它只在 `stdlib/signatures/` 里当作重载的简写（`f32(x: i32 | int | f32 | float | string)`）；用户函数的形参写成 `int | string` 可以通过声明，但没有任何实参能匹配它，带标注的 `let x: int | string = 'abc'` 是 `LiteralStaticCastFailed`。【实测 `examples/t14_union.cml`】所以今天没有联合类型的值。它的去留在设计原则第 15 节（"类型表达式语言的具体内容"），不在本稿范围；但 4.6 的不变量把它一并挡在图外。
+- **联合类型 `A | B`。** 它也是 `Auxiliary`（`TypeCode::Union`）。今天它只在 `stdlib/signatures/` 里当作重载的简写（`f32(x: i32 | int | f32 | float | string)`）；用户函数的形参写成 `int | string` 可以通过声明，但没有任何实参能匹配它，带标注的 `let x: int | string = 'abc'` 是 `LiteralNotRepresentable`。【实测 `examples/t14_union.cml`】所以今天没有联合类型的值。它的去留在设计原则第 15 节（"类型表达式语言的具体内容"），不在本稿范围；但 4.6 的不变量把它一并挡在图外。
 - **没有元素类型的 `[]`。** `let e = []` 是编译期错误 `EmptyArrayWithoutType`。【实测 `examples/t15_empty_array.cml`】
 
 ---
@@ -147,7 +147,7 @@
 |---|---|
 | `func id(x: any): any`；`func wrap(x: int): any { return x }` | 通过。实参与返回值进入 `any` 不需要写 `as` |
 | `(t + 'x') as any`（算出来的值） | 通过 |
-| `42 as any`、`let a: any = 42`（字面量） | `LiteralStaticCastFailed` |
+| `42 as any`、`let a: any = 42`（字面量） | `LiteralNotRepresentable` |
 | `let a: any = n`、`let xs: any[] = [...]`（带标注的 `let`） | `FeatureNotSupported: dynamic type casting` |
 | `any[]`、`(int, any)`、`{ id: int, payload: any }` 作函数的返回类型 | 通过 |
 | `with <tag: any>`、`let f: (x: string) => any = wrap_s`、结构体字面量的字段 | 通过 |

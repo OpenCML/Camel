@@ -656,8 +656,15 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
             // block inside a sync block continues the chain but has statements of its own.
             const bool unused = !gct->operands() && (i + 1 < gct->size() || valueDropped);
             unusedStatement_  = unused ? child : nullptr;
-            any result        = visit(child);
-            unusedStatement_  = nullptr;
+            any result;
+            if (gct == tailExpectedFor_ && i + 1 == gct->size() && !gct->operands()) {
+                // The body's value, in the position of the body (see visitBodyNode).
+                ExpectedValueScope tailScope(expectedValueType_, tailExpectedType_);
+                result = visit(child);
+            } else {
+                result = visit(child);
+            }
+            unusedStatement_ = nullptr;
             if (unused && result.has_value() && result.type() == typeid(node_handle_t)) {
                 rejectUnusedPureResult(child, any_cast<node_handle_t>(result));
             }
