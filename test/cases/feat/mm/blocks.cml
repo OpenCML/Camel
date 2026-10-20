@@ -1,0 +1,4 @@
+// The data-block self-test runs from the pass `std::gc::blocks`; the program itself does nothing.
+func main(): int sync {
+    return 0
+}

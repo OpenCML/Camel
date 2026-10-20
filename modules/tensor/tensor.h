@@ -19,8 +19,8 @@
 
 /*
  * Tensor values are arrays (core/rtdata/array.h): the element type is the dtype and the shape
- * is the array's extents, so a tensor's data is a compact numeric buffer with no separate
- * tensor object. A tensor view is an Array view of the source's buffer; it keeps the buffer
+ * is the array's extents, so a tensor's data is a compact block of numbers with no separate
+ * tensor object. A tensor view is an Array view of the source's block; it keeps the block
  * alive and shares it without a copy.
  *
  * This header keeps the tensor module's spellings (dtype, shape, numel, data accessors) and the
@@ -70,7 +70,7 @@ Array *createTensor(
 /**
  * A tensor with `source`'s elements and dtype and the given shape, starting at element
  * `elementOffset` of `source` (which must leave at least the shape's element count).
- * It shares `source`'s buffer instead of copying it. Only the collected heap (mm::autoSpace)
+ * It shares `source`'s block instead of copying it. Only the collected heap (mm::autoSpace)
  * can hold a view; for any other allocator this copies the elements.
  */
 Array *viewTensor(

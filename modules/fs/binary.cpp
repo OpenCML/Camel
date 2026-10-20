@@ -183,10 +183,32 @@ slot_t fsReadBytes(ArgsView &, ArgsView &norm, camel::core::context::Context &) 
     std::ifstream file(camel::utils::pathFromUtf8(path), std::ios::binary);
     if (!file)
         systemFailure("fs.read_bytes", path, "cannot open file");
-    const std::string bytes((std::istreambuf_iterator<char>(file)), {});
-    if (file.bad())
+    file.seekg(0, std::ios::end);
+    const std::streamoff fileSize = file.tellg();
+    if (fileSize < 0)
+        systemFailure("fs.read_bytes", path, "cannot determine the file size");
+    file.seekg(0, std::ios::beg);
+    const size_t length = static_cast<size_t>(fileSize);
+    if (length < camel::core::mm::kInlineBlockBytes) {
+        std::string bytes(length, '\0');
+        if (length > 0)
+            file.read(bytes.data(), static_cast<std::streamsize>(length));
+        bytes.resize(static_cast<size_t>(file.gcount()));
+        if (file.bad())
+            systemFailure("fs.read_bytes", path, "cannot read complete file");
+        return toSlot(BytesObject::from(bytes, camel::core::mm::autoSpace()));
+    }
+
+    // Read directly into the data block: the Bytes value adopts it and the block does not move.
+    camel::core::mm::Block *block = camel::core::mm::Block::create(length);
+    file.read(reinterpret_cast<char *>(block->data()), static_cast<std::streamsize>(length));
+    const size_t read = static_cast<size_t>(file.gcount());
+    if (file.bad()) {
+        block->release();
         systemFailure("fs.read_bytes", path, "cannot read complete file");
-    return toSlot(BytesObject::from(bytes, camel::core::mm::autoSpace()));
+    }
+    block->setBytes(read);
+    return toSlot(BytesObject::adopt(block, read, camel::core::mm::autoSpace()));
 }
 slot_t fsWriteBytes(ArgsView &, ArgsView &norm, camel::core::context::Context &) {
     return write(norm, false);

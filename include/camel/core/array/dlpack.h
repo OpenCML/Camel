@@ -20,14 +20,16 @@
 /*
  * DLPack, zero-copy (design: docs/design/arrays-memory/README.cn.md 3.3).
  *
- * A Camel array is compact numeric data behind a reference-counted Buffer, so it can be handed
- * to another DLPack consumer without a copy: the exported managed tensor holds a reference to
- * the buffer, and the buffer's data address does not move while the array is alive. Importing
- * goes the other way: the data is adopted as an external Buffer and released through the
- * producer's deleter when the last camel array that reads it goes away.
+ * A Camel array is compact pure data behind a reference-counted data block, so a numeric array
+ * can be handed to another DLPack consumer without a copy: the exported managed tensor holds a
+ * reference to the block, and the block's data address does not move while the array is alive.
+ * Importing goes the other way: the data is adopted as an external block and released through
+ * the producer's deleter when the last camel array that reads it goes away.
  *
- * The leaf rule is what makes this safe: a compact buffer holds numbers only, so another
- * framework cannot introduce a reference or a cycle into Camel's heap.
+ * The leaf rule is what makes this safe: DLPack carries numeric dtypes only, so a compact
+ * numeric block holds numbers and another framework cannot introduce a reference or a cycle
+ * into Camel's heap. Arrays of pure-data structs are compact but are not exported through
+ * DLPack (there is no dtype for a struct); they are left to the Arrow item.
  */
 
 #pragma once
@@ -72,7 +74,7 @@ struct DLManagedTensor {
 
 /**
  * Exports a tensor as a DLPack managed tensor without copying. The argument must be a compact
- * array (a numeric tensor); an inline one is promoted first, which copies it once. The buffer
+ * array (a numeric tensor); an inline one is promoted first, which copies it once. The Block
  * is retained; the caller (the consumer) owns the returned managed tensor and must call its
  * deleter exactly once.
  */
@@ -80,7 +82,7 @@ DLManagedTensor *toDLPack(Array *tensor);
 
 /**
  * Imports a DLPack tensor without copying: the array reads the producer's memory through an
- * external buffer, and the producer's deleter runs when the last camel array that shares it is
+ * external Block, and the producer's deleter runs when the last camel array that shares it is
  * gone. Only CPU, contiguous, 1-lane tensors are accepted; the data must be row-major.
  *
  * `allocator` is the heap the array object itself is allocated on. For a heap other than

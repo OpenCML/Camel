@@ -546,7 +546,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "loops.state_in_place"
-desc = "The old value of a loop state is not visible once the next round begins (design principles 10.5): a body whose only use of its single state is `xs->append<v>` starts from a private copy of the literal and appends in place, so 199 rounds take one buffer (`std::mem::buffers()` read between the operations), while the copying append of an array the loop does not own takes 199; the `for` shape of the same rewrite takes one buffer for five rounds; the literal is not edited, a second call of the same loop sees its first value again. The decision is per state: with an array and a counter, whichever order they are written in, only the array takes a copy (1 buffer each), two appended arrays take two, an array starting from a parameter takes 199, a body that also reads the state (`len(xs)`) takes 199, and a state whose next value is the constant `0` leaves the appended state's one copy alone."
+desc = "The old value of a loop state is not visible once the next round begins (design principles 10.5): a body whose only use of its single state is `xs->append<v>` starts from a private copy of the literal and appends in place, so 199 rounds take one block (`std::mem::blocks()` read between the operations), while the copying append of an array the loop does not own takes 199; the `for` shape of the same rewrite takes one block for five rounds; the literal is not edited, a second call of the same loop sees its first value again. The decision is per state: with an array and a counter, whichever order they are written in, only the array takes a copy (1 block each), two appended arrays take two, an array starting from a parameter takes 199, a body that also reads the state (`len(xs)`) takes 199, and a state whose next value is the constant `0` leaves the appended state's one copy alone."
 kind = "behavior"
 case = "../../../cases/loops/state_in_place.cml"
 args = ["${case}", "${backend}"]
@@ -556,3 +556,15 @@ expect_exit = 0
 expect_stdout_exact = "200 200 1 199\n0 7 0 7 3 0 7\n6 1 0 5\n200 0 7 199 200 0 7 199\n200 0 7 200 10 8\n200 0 7 199 200 7 199\n1 1 2 199 199\n200 0 7 0 1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+[[tests]]
+name = "loops.hof_compact_element_view"
+desc = "A compact tuple array is consumed by map, filter, reduce and foreach without materialising an element: over 10,000 (int, int) elements the only blocks are the map and filter output arrays (one each), and reduce/foreach allocate none (std::mem::blocks() read between the operations)."
+kind = "behavior"
+case = "../../../cases/loops/hof_block_alloc.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "10000 1 5000 1\n100000000 0 0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
