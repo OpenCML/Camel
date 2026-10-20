@@ -28,32 +28,11 @@
 #include "camel/core/operator.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/runtime_sched.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
 
 namespace ctx            = camel::core::context;
 using runtime_data_idx_t = camel::runtime::gc_data_idx_t;
-
-struct NodeVMGraphCache {
-    std::vector<camel::runtime::gc_node_ref_t> topoNodeRefs;
-    std::vector<camel::runtime::GCGraph *> directCallTargets;
-    std::vector<uint8_t> directCallTailEligible;
-    std::vector<uint8_t> directCallFeedsTailJoin;
-    std::vector<uint32_t> directCallArgOffsets;
-    std::vector<runtime_data_idx_t> directCallArgSlots;
-    std::vector<runtime_data_idx_t> dataIndexByRef;
-    // For the BRCH at topo index i, branchArmEntries[branchArmEntryOffsets[i] + arm] is the node
-    // where that arm starts executing: its first executable node in topoNodeRefs, or the JOIN
-    // when the arm has nothing to execute (resolveRuntimeBranchArmEntry, shared with FastVM).
-    std::vector<uint32_t> branchArmEntryOffsets;
-    std::vector<camel::runtime::gc_node_ref_t> branchArmEntries;
-    camel::runtime::gc_node_ref_t tailValueRef = camel::runtime::kInvalidNodeRef;
-    size_t tailValueTopoIndex                  = 0;
-    bool tailValueIsJoin                       = false;
-};
-
-struct NodeVMCallLayoutCache {
-    std::vector<runtime_data_idx_t> calleePortSlots;
-};
 
 class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     // Calls that may be open at once without being tail calls (camel/execute/limits.h).
@@ -62,8 +41,6 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     // Activations of call() on the native stack, the entry graph's included.
     size_t currRecursionDepth_ = 0;
     ctx::FramePool framePool_;
-    std::vector<std::unique_ptr<NodeVMGraphCache>> graphCaches_;
-    std::vector<std::unique_ptr<NodeVMCallLayoutCache>> callLayoutCaches_;
     std::vector<runtime_data_idx_t> operIndices_;
     std::vector<slot_t> callArgScratch_;
 
@@ -77,11 +54,9 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     // Tail-call frame management (see the comment above call() in nodevm.cpp).
     ctx::Frame *tailCallFrame(
         camel::runtime::GCGraph *target, ctx::Frame *rootFrame, ctx::Frame *source,
-        ctx::Frame *&tailLow, ctx::Frame *&tailHigh, const NodeVMCallLayoutCache *layout,
+        ctx::Frame *&tailLow, ctx::Frame *&tailHigh, const camel::runtime::ExecPlan *layout,
         std::span<const runtime_data_idx_t> argSlots);
     void releaseTailFrames(ctx::Frame *&tailLow, ctx::Frame *&tailHigh);
-    std::span<const camel::runtime::gc_node_ref_t> buildTopoNodes(camel::runtime::GCGraph *graph);
-    std::span<const camel::runtime::gc_node_ref_t> topoNodesFor(camel::runtime::GCGraph *graph);
 
   public:
     NodeVMSchedPass(const ctx::context_ptr_t &ctx);

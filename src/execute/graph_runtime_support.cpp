@@ -27,6 +27,8 @@
 
 #include "camel/execute/graph_runtime_support.h"
 
+#include "camel/runtime/exec_plan.h"
+
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -130,6 +132,11 @@ gc_node_ref_t findRuntimeMatchedJoinIndex(camel::runtime::GCGraph *graph, gc_nod
 } // namespace
 
 std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GCGraph *graph) {
+    ASSERT(graph != nullptr, "Runtime graph is null in execution topo construction.");
+    return graph->execPlan().topo;
+}
+
+std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph is null in execution topo construction.");
     ASSERT(
         graph->hasNodePayload(),
@@ -240,7 +247,10 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
                 }
                 pushUsers(n);
             }
-            for (gc_node_ref_t n : inBranch) {
+            // In node order: the order of a hash set would depend on the library.
+            std::vector<gc_node_ref_t> branchNodes(inBranch.begin(), inBranch.end());
+            std::ranges::sort(branchNodes);
+            for (gc_node_ref_t n : branchNodes) {
                 for (auto inputs :
                      {graph->ctrlInputsOf(n), graph->normInputsOf(n), graph->withInputsOf(n)}) {
                     for (gc_node_ref_t input : inputs) {

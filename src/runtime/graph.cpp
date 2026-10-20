@@ -30,6 +30,7 @@
 
 #include "camel/runtime/graph.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/runtime/loop.h"
 #include "runtime/graph_build.h"
 
@@ -1596,7 +1597,27 @@ const GCUseIndex &GCGraph::uses() const {
     return *built;
 }
 
-GCGraph::~GCGraph() { delete uses_.load(std::memory_order_acquire); }
+const ExecPlan &GCGraph::execPlan() const {
+    if (ExecPlan *known = execPlan_.load(std::memory_order_acquire)) {
+        return *known;
+    }
+    ExecPlan *built    = buildExecPlan(*this).release();
+    ExecPlan *expected = nullptr;
+    if (!execPlan_.compare_exchange_strong(
+            expected,
+            built,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        delete built; // another thread was first
+        return *expected;
+    }
+    return *built;
+}
+
+GCGraph::~GCGraph() {
+    delete uses_.load(std::memory_order_acquire);
+    delete execPlan_.load(std::memory_order_acquire);
+}
 
 std::span<const gc_node_ref_t> GCGraph::normOutputsOf(gc_node_ref_t ref) const {
     return containsNodeRef(ref) ? uses().norm(ref) : std::span<const gc_node_ref_t>();
