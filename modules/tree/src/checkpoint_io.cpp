@@ -19,7 +19,8 @@
 
 // A checkpoint is replaced as a whole: write a complete private sibling, then swap it in.
 //
-// The protocol (destination D, temporary T = D.pending-<pid>-<seq>, previous P = D.previous):
+// The protocol (destination D, temporary T = D.pending-<pid>-<seq>, previous
+// P = `.<name>.ckpt-previous` beside D: the directory name of D with a fixed hidden prefix):
 //
 //   1. Recover: if P exists and D does not, the previous save was interrupted between the two
 //      renames; rename P back to D. If both exist, a published save could not remove P;
@@ -40,6 +41,11 @@
 // meantime. A process that dies after the second rename leaves D new and P stale: the next
 // save removes P. D itself is never written into, so no reader can observe a half-written
 // checkpoint there.
+//
+// One writer at a time: two saves of the same D are not serialized (there is no lock file).
+// Each builds its own T; the second swap can consume the P the first one left, and one of
+// the two saves then fails explicitly, naming P. A reader still sees only a complete
+// checkpoint. `save_tree` documents this single-writer contract.
 //
 // All three names are siblings, so every rename stays on one volume. A destination that is a
 // mount point, a junction or a symbolic link to another volume is refused before anything is
@@ -65,11 +71,20 @@
 #include <fcntl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <stdio.h>
+#include <sys/stdio.h>
+#endif
 #endif
 namespace camel::treelib {
 namespace fs = std::filesystem;
 namespace {
-constexpr const char *kPreviousSuffix = ".previous";
+// The previous checkpoint is a hidden sibling of the destination: a fixed prefix, the
+// destination's own directory name, and a fixed suffix, so it is named for the checkpoint
+// rather than read as a user's own `dir.previous`, and a reader can find it without scanning
+// the parent directory.
+constexpr const char *kPreviousPrefix = ".";
+constexpr const char *kPreviousSuffix = ".ckpt-previous";
 
 void nameCheck(const std::string &name) {
     if (name.empty() || name == "." || name == ".." ||
@@ -305,6 +320,14 @@ void publishRename(const fs::path &from, const fs::path &to) {
         "cannot publish the checkpoint directory",
         from,
         std::error_code(static_cast<int>(GetLastError()), std::system_category()));
+#elif defined(__APPLE__)
+    // macOS has no renameat2; renamex_np with RENAME_EXCL is its atomic no-replace rename.
+    if (::renamex_np(from.c_str(), to.c_str(), RENAME_EXCL) == 0)
+        return;
+    report(
+        "cannot publish the checkpoint directory",
+        from,
+        std::error_code(errno, std::generic_category()));
 #elif defined(SYS_renameat2)
     constexpr unsigned noReplace = 1; // RENAME_NOREPLACE
     if (::syscall(SYS_renameat2, AT_FDCWD, from.c_str(), AT_FDCWD, to.c_str(), noReplace) == 0)
@@ -323,9 +346,10 @@ void publishRename(const fs::path &from, const fs::path &to) {
 }
 
 fs::path previousPathOf(const fs::path &target) {
-    fs::path previous = target;
-    previous += kPreviousSuffix;
-    return previous;
+    fs::path name = kPreviousPrefix;
+    name += target.filename();
+    name += kPreviousSuffix;
+    return target.parent_path() / name;
 }
 
 /// Restores or removes the previous checkpoint left by an interrupted or only partly cleaned

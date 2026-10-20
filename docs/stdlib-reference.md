@@ -1046,14 +1046,19 @@ save_tree: (dir: string, tree: T, dataset_manifest_sha256: string) => void
 Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
 tensor), with a manifest that records the types, sizes and SHA-256 sums. The directory is
 replaced as a whole or not at all: the new checkpoint is written and flushed into a
-temporary sibling and renamed into place, and the old directory is kept beside it as
-`dir.previous` until that rename succeeds, so a failure puts the old directory back. A
-destination that does not exist is created; one that does is replaced; a symbolic link or a
-reparse point there is refused. If the process dies between the two renames,
-`load_tree` reads `dir.previous` and the next `save_tree` restores it before replacing it.
-(A directory rename cannot replace a non-empty directory on Windows or POSIX, hence the two
-renames.) A leaf type a checkpoint cannot hold (anything but a tensor, `Bytes`, `string`,
-`bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that names the path.
+temporary sibling and renamed into place, and the old directory is kept beside it as the
+hidden sibling `.<name>.ckpt-previous` (the destination's own directory name between a
+leading dot and `.ckpt-previous`) until that rename succeeds, so a failure puts the old
+directory back. A destination that does not exist is created; one that does is replaced; a
+symbolic link or a reparse point there is refused. If the process dies between the two
+renames, `load_tree` reads `.<name>.ckpt-previous` and the next `save_tree` restores it
+before replacing it. (A directory rename cannot replace a non-empty directory on Windows or
+POSIX, hence the two renames.) A leaf type a checkpoint cannot hold (anything but a tensor,
+`Bytes`, `string`, `bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that names
+the path. Only one writer may save to a directory at a time: concurrent `save_tree` calls
+for the same directory are not serialized (there is no lock file), so the contract is a
+single writer; one of two racing saves fails explicitly, and a reader still sees a complete
+checkpoint.
 
 - With effects: writes and replaces the directory.
 - Failure: fault `FileSystemError` when the directory cannot be written or published.
@@ -1069,8 +1074,8 @@ Reads a tree of the type T back from a directory `save_tree` wrote, checking the
 the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
 `CheckpointError` value, nothing is partly loaded. T is the explicit type argument or the
 expected type of the result. When a save was interrupted after moving the old directory
-aside, the complete `dir.previous` is read instead, with a warning on standard error; the
-next save restores it before replacing it.
+aside, the complete `.<name>.ckpt-previous` sibling is read instead, with a warning on
+standard error; the next save restores it before replacing it.
 
 - With effects: reads the directory.
 - Example: `load_tree::<{ w: Tensor<f32>, step: int }>('out/ckpt') !! initial()`

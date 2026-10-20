@@ -321,8 +321,8 @@ slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
             throw std::invalid_argument(
                 "backend did not supply the static checkpoint result layout");
         // A save interrupted between its two renames leaves the complete previous checkpoint
-        // at `dir.previous`: read that instead of failing, and say so (the next save restores
-        // it before replacing it).
+        // in the hidden sibling `.<name>.ckpt-previous`: read that instead of failing, and say
+        // so (the next save restores it before replacing it).
         bool recovered           = false;
         const auto readDirectory = checkpointReadDirectory(directoryPath, recovered);
         if (recovered)
