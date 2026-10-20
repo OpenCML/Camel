@@ -273,9 +273,6 @@ DraftNodeInit snapshotNodeInit(const GraphDraft &draft, gc_node_ref_t nodeId) {
         .normInputs   = draft.normInputsOf(nodeId),
         .withInputs   = draft.withInputsOf(nodeId),
         .ctrlInputs   = draft.ctrlInputsOf(nodeId),
-        .normUsers    = draft.normUsersOf(nodeId),
-        .withUsers    = draft.withUsersOf(nodeId),
-        .ctrlUsers    = draft.ctrlUsersOf(nodeId),
     };
 }
 

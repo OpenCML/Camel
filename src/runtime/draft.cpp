@@ -63,12 +63,9 @@ uint32_t capacityBytesForStorageClass(DraftNodeStorageClass storageClass, size_t
     return 0;
 }
 
-size_t adjacencyBytes(
-    gc_cnt_t normInputs, gc_cnt_t withInputs, gc_cnt_t ctrlInputs, gc_cnt_t normUsers,
-    gc_cnt_t withUsers, gc_cnt_t ctrlUsers) {
+size_t adjacencyBytes(gc_cnt_t normInputs, gc_cnt_t withInputs, gc_cnt_t ctrlInputs) {
     return (static_cast<size_t>(normInputs) + static_cast<size_t>(withInputs) +
-            static_cast<size_t>(ctrlInputs) + static_cast<size_t>(normUsers) +
-            static_cast<size_t>(withUsers) + static_cast<size_t>(ctrlUsers)) *
+            static_cast<size_t>(ctrlInputs)) *
            sizeof(gc_node_ref_t);
 }
 
@@ -124,9 +121,6 @@ DraftNodeInit makeInitFromNode(const DraftNode *node) {
     init.normInputs   = DraftNodeView::normInputs(node);
     init.withInputs   = DraftNodeView::withInputs(node);
     init.ctrlInputs   = DraftNodeView::ctrlInputs(node);
-    init.normUsers    = DraftNodeView::normUsers(node);
-    init.withUsers    = DraftNodeView::withUsers(node);
-    init.ctrlUsers    = DraftNodeView::ctrlUsers(node);
     return init;
 }
 
@@ -143,9 +137,6 @@ void initializeNodeStorage(
     draftNode->header.normInputCount = static_cast<gc_cnt_t>(init.normInputs.size());
     draftNode->header.withInputCount = static_cast<gc_cnt_t>(init.withInputs.size());
     draftNode->header.ctrlInputCount = static_cast<gc_cnt_t>(init.ctrlInputs.size());
-    draftNode->header.normUserCount  = static_cast<gc_cnt_t>(init.normUsers.size());
-    draftNode->header.withUserCount  = static_cast<gc_cnt_t>(init.withUsers.size());
-    draftNode->header.ctrlUserCount  = static_cast<gc_cnt_t>(init.ctrlUsers.size());
     draftNode->header.kind           = init.kind;
     draftNode->header.runtimeFlags   = init.runtimeFlags;
     draftNode->header.origin         = init.origin;
@@ -171,15 +162,6 @@ void initializeNodeStorage(
     }
     if (!init.ctrlInputs.empty()) {
         std::ranges::copy(init.ctrlInputs, DraftNodeView::ctrlInputs(draftNode).begin());
-    }
-    if (!init.normUsers.empty()) {
-        std::ranges::copy(init.normUsers, DraftNodeView::normUsers(draftNode).begin());
-    }
-    if (!init.withUsers.empty()) {
-        std::ranges::copy(init.withUsers, DraftNodeView::withUsers(draftNode).begin());
-    }
-    if (!init.ctrlUsers.empty()) {
-        std::ranges::copy(init.ctrlUsers, DraftNodeView::ctrlUsers(draftNode).begin());
     }
 }
 
@@ -249,66 +231,6 @@ std::span<const gc_node_ref_t> DraftNodeView::ctrlInputs(const DraftNode *node) 
                   static_cast<size_t>(node->header.withInputCount)) *
                      sizeof(gc_node_ref_t);
     return edgeSpan(bytes, node->header.ctrlInputCount);
-}
-
-std::span<gc_node_ref_t> DraftNodeView::normUsers(DraftNode *node) {
-    auto bytes = tailBytes(node) + node->header.payloadBytes +
-                 (static_cast<size_t>(node->header.normInputCount) +
-                  static_cast<size_t>(node->header.withInputCount) +
-                  static_cast<size_t>(node->header.ctrlInputCount)) *
-                     sizeof(gc_node_ref_t);
-    return edgeSpan(bytes, node->header.normUserCount);
-}
-
-std::span<const gc_node_ref_t> DraftNodeView::normUsers(const DraftNode *node) {
-    auto bytes = tailBytes(node) + node->header.payloadBytes +
-                 (static_cast<size_t>(node->header.normInputCount) +
-                  static_cast<size_t>(node->header.withInputCount) +
-                  static_cast<size_t>(node->header.ctrlInputCount)) *
-                     sizeof(gc_node_ref_t);
-    return edgeSpan(bytes, node->header.normUserCount);
-}
-
-std::span<gc_node_ref_t> DraftNodeView::withUsers(DraftNode *node) {
-    auto bytes = tailBytes(node) + node->header.payloadBytes +
-                 (static_cast<size_t>(node->header.normInputCount) +
-                  static_cast<size_t>(node->header.withInputCount) +
-                  static_cast<size_t>(node->header.ctrlInputCount) +
-                  static_cast<size_t>(node->header.normUserCount)) *
-                     sizeof(gc_node_ref_t);
-    return edgeSpan(bytes, node->header.withUserCount);
-}
-
-std::span<const gc_node_ref_t> DraftNodeView::withUsers(const DraftNode *node) {
-    auto bytes = tailBytes(node) + node->header.payloadBytes +
-                 (static_cast<size_t>(node->header.normInputCount) +
-                  static_cast<size_t>(node->header.withInputCount) +
-                  static_cast<size_t>(node->header.ctrlInputCount) +
-                  static_cast<size_t>(node->header.normUserCount)) *
-                     sizeof(gc_node_ref_t);
-    return edgeSpan(bytes, node->header.withUserCount);
-}
-
-std::span<gc_node_ref_t> DraftNodeView::ctrlUsers(DraftNode *node) {
-    auto bytes = tailBytes(node) + node->header.payloadBytes +
-                 (static_cast<size_t>(node->header.normInputCount) +
-                  static_cast<size_t>(node->header.withInputCount) +
-                  static_cast<size_t>(node->header.ctrlInputCount) +
-                  static_cast<size_t>(node->header.normUserCount) +
-                  static_cast<size_t>(node->header.withUserCount)) *
-                     sizeof(gc_node_ref_t);
-    return edgeSpan(bytes, node->header.ctrlUserCount);
-}
-
-std::span<const gc_node_ref_t> DraftNodeView::ctrlUsers(const DraftNode *node) {
-    auto bytes = tailBytes(node) + node->header.payloadBytes +
-                 (static_cast<size_t>(node->header.normInputCount) +
-                  static_cast<size_t>(node->header.withInputCount) +
-                  static_cast<size_t>(node->header.ctrlInputCount) +
-                  static_cast<size_t>(node->header.normUserCount) +
-                  static_cast<size_t>(node->header.withUserCount)) *
-                     sizeof(gc_node_ref_t);
-    return edgeSpan(bytes, node->header.ctrlUserCount);
 }
 
 DraftNodePool::~DraftNodePool() { clear(); }
@@ -506,34 +428,54 @@ std::span<const gc_node_ref_t> GraphDraft::ctrlInputsOf(const DraftNode *nodePtr
                                  : std::span<const gc_node_ref_t>{};
 }
 
+std::span<const gc_node_ref_t> GraphDraft::usersOf(gc_node_ref_t id, DraftEdgeKind kind) const {
+    if (id >= users_.size() || !users_[id]) {
+        return {};
+    }
+    return users_[id]->of(kind);
+}
+
+std::vector<gc_node_ref_t> &GraphDraft::userListOf(gc_node_ref_t id, DraftEdgeKind kind) {
+    if (users_.size() <= id) {
+        users_.resize(nodesById_.size());
+    }
+    if (!users_[id]) {
+        users_[id] = std::make_unique<DraftUserLists>();
+    }
+    return users_[id]->of(kind);
+}
+
 std::span<const gc_node_ref_t> GraphDraft::normUsersOf(gc_node_ref_t id) const {
-    const DraftNode *draftNode = node(id);
-    return draftNode ? DraftNodeView::normUsers(draftNode) : std::span<const gc_node_ref_t>{};
+    return usersOf(id, DraftEdgeKind::Norm);
 }
 
 std::span<const gc_node_ref_t> GraphDraft::normUsersOf(const DraftNode *nodePtr) const {
-    return containsNode(nodePtr) ? DraftNodeView::normUsers(nodePtr)
+    return containsNode(nodePtr) ? usersOf(nodePtr->header.selfId, DraftEdgeKind::Norm)
                                  : std::span<const gc_node_ref_t>{};
 }
 
 std::span<const gc_node_ref_t> GraphDraft::withUsersOf(gc_node_ref_t id) const {
-    const DraftNode *draftNode = node(id);
-    return draftNode ? DraftNodeView::withUsers(draftNode) : std::span<const gc_node_ref_t>{};
+    return usersOf(id, DraftEdgeKind::With);
 }
 
 std::span<const gc_node_ref_t> GraphDraft::withUsersOf(const DraftNode *nodePtr) const {
-    return containsNode(nodePtr) ? DraftNodeView::withUsers(nodePtr)
+    return containsNode(nodePtr) ? usersOf(nodePtr->header.selfId, DraftEdgeKind::With)
                                  : std::span<const gc_node_ref_t>{};
 }
 
 std::span<const gc_node_ref_t> GraphDraft::ctrlUsersOf(gc_node_ref_t id) const {
-    const DraftNode *draftNode = node(id);
-    return draftNode ? DraftNodeView::ctrlUsers(draftNode) : std::span<const gc_node_ref_t>{};
+    return usersOf(id, DraftEdgeKind::Ctrl);
 }
 
 std::span<const gc_node_ref_t> GraphDraft::ctrlUsersOf(const DraftNode *nodePtr) const {
-    return containsNode(nodePtr) ? DraftNodeView::ctrlUsers(nodePtr)
+    return containsNode(nodePtr) ? usersOf(nodePtr->header.selfId, DraftEdgeKind::Ctrl)
                                  : std::span<const gc_node_ref_t>{};
+}
+
+std::span<gc_node_ref_t> GraphDraft::mutableInputs(DraftNode *node, DraftEdgeKind kind) {
+    return kind == DraftEdgeKind::Norm   ? DraftNodeView::normInputs(node)
+           : kind == DraftEdgeKind::With ? DraftNodeView::withInputs(node)
+                                         : DraftNodeView::ctrlInputs(node);
 }
 
 bool GraphDraft::isControlAnchor(gc_node_ref_t id) const {
@@ -643,9 +585,6 @@ DraftNode *GraphDraft::createDecodedNode(
     const auto normInputs = graph->normInputsOf(sourceRef);
     const auto withInputs = graph->withInputsOf(sourceRef);
     const auto ctrlInputs = graph->ctrlInputsOf(sourceRef);
-    const auto normUsers  = graph->normOutputsOf(sourceRef);
-    const auto withUsers  = graph->withOutputsOf(sourceRef);
-    const auto ctrlUsers  = graph->ctrlOutputsOf(sourceRef);
 
     const uint32_t payloadBytes =
         static_cast<uint32_t>(payloadBytesForSourceNode(graph, sourceRef));
@@ -653,10 +592,7 @@ DraftNode *GraphDraft::createDecodedNode(
         static_cast<size_t>(payloadBytes) + adjacencyBytes(
                                                 static_cast<gc_cnt_t>(normInputs.size()),
                                                 static_cast<gc_cnt_t>(withInputs.size()),
-                                                static_cast<gc_cnt_t>(ctrlInputs.size()),
-                                                static_cast<gc_cnt_t>(normUsers.size()),
-                                                static_cast<gc_cnt_t>(withUsers.size()),
-                                                static_cast<gc_cnt_t>(ctrlUsers.size()));
+                                                static_cast<gc_cnt_t>(ctrlInputs.size()));
 
     DraftNodeStorageClass storageClass = DraftNodeStorageClass::Oversize;
     DraftNode *draftNode               = pool_.allocNode();
@@ -670,9 +606,6 @@ DraftNode *GraphDraft::createDecodedNode(
     draftNode->header.normInputCount   = static_cast<gc_cnt_t>(normInputs.size());
     draftNode->header.withInputCount   = static_cast<gc_cnt_t>(withInputs.size());
     draftNode->header.ctrlInputCount   = static_cast<gc_cnt_t>(ctrlInputs.size());
-    draftNode->header.normUserCount    = static_cast<gc_cnt_t>(normUsers.size());
-    draftNode->header.withUserCount    = static_cast<gc_cnt_t>(withUsers.size());
-    draftNode->header.ctrlUserCount    = static_cast<gc_cnt_t>(ctrlUsers.size());
     draftNode->header.kind             = sourceNode->kind;
     draftNode->header.runtimeFlags     = sourceNode->flags;
     draftNode->header.origin           = graph->nodeOrigin(sourceRef);
@@ -709,9 +642,6 @@ DraftNode *GraphDraft::createDecodedNode(
     copyTranslated(DraftNodeView::normInputs(draftNode), normInputs);
     copyTranslated(DraftNodeView::withInputs(draftNode), withInputs);
     copyTranslated(DraftNodeView::ctrlInputs(draftNode), ctrlInputs);
-    copyTranslated(DraftNodeView::normUsers(draftNode), normUsers);
-    copyTranslated(DraftNodeView::withUsers(draftNode), withUsers);
-    copyTranslated(DraftNodeView::ctrlUsers(draftNode), ctrlUsers);
 
     return draftNode;
 }
@@ -774,6 +704,20 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
             draftId,
             static_cast<int>((*it)->kind));
         draft->nodesById_[draftId] = draft->createDecodedNode(graph, sourceRef, sourceToDraft);
+        // The users of a node are those the frozen graph's use index lists, in its order.
+        const auto decodeUsers = [&](DraftEdgeKind kind, std::span<const gc_node_ref_t> users) {
+            if (users.empty()) {
+                return;
+            }
+            auto &list = draft->userListOf(draftId, kind);
+            list.reserve(users.size());
+            for (gc_node_ref_t user : users) {
+                list.push_back(translateNodeRef(user, sourceToDraft));
+            }
+        };
+        decodeUsers(DraftEdgeKind::Norm, graph->normOutputsOf(sourceRef));
+        decodeUsers(DraftEdgeKind::With, graph->withOutputsOf(sourceRef));
+        decodeUsers(DraftEdgeKind::Ctrl, graph->ctrlOutputsOf(sourceRef));
         draft->noteNodeKind(draftId, draft->nodesById_[draftId]->header.kind);
         draft->liveNodeCount_++;
     }
@@ -804,10 +748,7 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
         init.payload.size_bytes() + adjacencyBytes(
                                         static_cast<gc_cnt_t>(init.normInputs.size()),
                                         static_cast<gc_cnt_t>(init.withInputs.size()),
-                                        static_cast<gc_cnt_t>(init.ctrlInputs.size()),
-                                        static_cast<gc_cnt_t>(init.normUsers.size()),
-                                        static_cast<gc_cnt_t>(init.withUsers.size()),
-                                        static_cast<gc_cnt_t>(init.ctrlUsers.size()));
+                                        static_cast<gc_cnt_t>(init.ctrlInputs.size()));
 
     DraftNode *existing = node(id);
     if (existing != nullptr && tailBytes <= existing->header.capacityBytes) {
@@ -819,9 +760,6 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
         std::vector<gc_node_ref_t> normInputsCopy(init.normInputs.begin(), init.normInputs.end());
         std::vector<gc_node_ref_t> withInputsCopy(init.withInputs.begin(), init.withInputs.end());
         std::vector<gc_node_ref_t> ctrlInputsCopy(init.ctrlInputs.begin(), init.ctrlInputs.end());
-        std::vector<gc_node_ref_t> normUsersCopy(init.normUsers.begin(), init.normUsers.end());
-        std::vector<gc_node_ref_t> withUsersCopy(init.withUsers.begin(), init.withUsers.end());
-        std::vector<gc_node_ref_t> ctrlUsersCopy(init.ctrlUsers.begin(), init.ctrlUsers.end());
         DraftNodeInit copiedInit{
             .dataIndex    = init.dataIndex,
             .dataType     = init.dataType,
@@ -834,9 +772,6 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
             .normInputs   = normInputsCopy,
             .withInputs   = withInputsCopy,
             .ctrlInputs   = ctrlInputsCopy,
-            .normUsers    = normUsersCopy,
-            .withUsers    = withUsersCopy,
-            .ctrlUsers    = ctrlUsersCopy,
         };
         initializeNodeStorage(
             this,
@@ -847,7 +782,13 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
             existing->header.capacityBytes);
         return existing;
     }
-    const size_t reservedTailBytes     = tailBytes + growthSlackBytes(init.kind);
+    // A node that has outgrown its storage once is likely to grow again: a block that holds many
+    // inputs doubles, so that adding them one by one costs the inputs and not their square (the
+    // old block stays with the pool until the draft goes).
+    size_t reservedTailBytes = tailBytes + growthSlackBytes(init.kind);
+    if (existing != nullptr && existing->header.capacityBytes >= 128) {
+        reservedTailBytes = std::max<size_t>(reservedTailBytes, 2 * existing->header.capacityBytes);
+    }
     DraftNodeStorageClass storageClass = DraftNodeStorageClass::Oversize;
     DraftNode *draftNode               = existing != nullptr ? existing : pool_.allocNode();
     draftNode->tail                    = pool_.allocTail(reservedTailBytes, &storageClass);
@@ -871,59 +812,58 @@ void GraphDraft::replaceNodeStorage(gc_node_ref_t id, DraftNode *nodePtr) {
 
 void GraphDraft::removeUserRef(
     gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl) {
-    DraftNode *draftNode = node(id);
-    if (draftNode == nullptr) {
+    if (node(id) == nullptr || id >= users_.size() || !users_[id]) {
         return;
     }
-    DraftNodeInit init = makeInitFromNode(draftNode);
-    std::vector<gc_node_ref_t> normUsers(init.normUsers.begin(), init.normUsers.end());
-    std::vector<gc_node_ref_t> withUsers(init.withUsers.begin(), init.withUsers.end());
-    std::vector<gc_node_ref_t> ctrlUsers(init.ctrlUsers.begin(), init.ctrlUsers.end());
-
-    auto eraseOne = [userId](std::vector<gc_node_ref_t> &items) {
-        auto it = std::find(items.begin(), items.end(), userId);
-        if (it != items.end()) {
-            items.erase(it);
+    const auto eraseOne = [userId](std::vector<gc_node_ref_t> &items) {
+        // The user that was linked last is the one most often unlinked first.
+        auto it = std::find(items.rbegin(), items.rend(), userId);
+        if (it != items.rend()) {
+            items.erase(std::next(it).base());
         }
     };
     if (norm)
-        eraseOne(normUsers);
+        eraseOne(users_[id]->norm);
     if (with)
-        eraseOne(withUsers);
+        eraseOne(users_[id]->with);
     if (ctrl)
-        eraseOne(ctrlUsers);
-    init.normUsers = normUsers;
-    init.withUsers = withUsers;
-    init.ctrlUsers = ctrlUsers;
-    replaceNodeStorage(id, rebuildNode(id, init));
+        eraseOne(users_[id]->ctrl);
 }
 
 void GraphDraft::appendUserRef(
     gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl) {
-    DraftNode *draftNode = node(id);
-    if (draftNode == nullptr) {
+    if (node(id) == nullptr) {
         return;
     }
-    DraftNodeInit init = makeInitFromNode(draftNode);
-    std::vector<gc_node_ref_t> normUsers(init.normUsers.begin(), init.normUsers.end());
-    std::vector<gc_node_ref_t> withUsers(init.withUsers.begin(), init.withUsers.end());
-    std::vector<gc_node_ref_t> ctrlUsers(init.ctrlUsers.begin(), init.ctrlUsers.end());
-
-    auto appendUnique = [userId](std::vector<gc_node_ref_t> &items) {
+    // Called once the user reads `id` in the group: the user is in the list already when the
+    // group holds `id` more than once, or the list says so.
+    const auto appendUnique = [&](DraftEdgeKind kind) {
+        auto &items = userListOf(id, kind);
+        if (!items.empty() && items.back() == userId) {
+            return;
+        }
+        if (items.size() > 32) {
+            const auto inputs = kind == DraftEdgeKind::Norm   ? normInputsOf(userId)
+                                : kind == DraftEdgeKind::With ? withInputsOf(userId)
+                                                              : ctrlInputsOf(userId);
+            if (inputs.size() <= 64) {
+                if (std::count(inputs.begin(), inputs.end(), id) > 1) {
+                    return;
+                }
+                items.push_back(userId);
+                return;
+            }
+        }
         if (std::find(items.begin(), items.end(), userId) == items.end()) {
             items.push_back(userId);
         }
     };
     if (norm)
-        appendUnique(normUsers);
+        appendUnique(DraftEdgeKind::Norm);
     if (with)
-        appendUnique(withUsers);
+        appendUnique(DraftEdgeKind::With);
     if (ctrl)
-        appendUnique(ctrlUsers);
-    init.normUsers = normUsers;
-    init.withUsers = withUsers;
-    init.ctrlUsers = ctrlUsers;
-    replaceNodeStorage(id, rebuildNode(id, init));
+        appendUnique(DraftEdgeKind::Ctrl);
 }
 
 uint64_t GraphDraft::nodeOrigin(gc_node_ref_t id) const {
@@ -1007,28 +947,50 @@ void GraphDraft::noteNodeKind(gc_node_ref_t id, GCNodeKind kind) {
     }
 }
 
+void GraphDraft::appendInputEntry(gc_node_ref_t userId, DraftEdgeKind kind, gc_node_ref_t inputId) {
+    DraftNode *draftNode = node(userId);
+    DraftNodeHeader &h   = draftNode->header;
+    if (h.usedBytes() + sizeof(gc_node_ref_t) > h.capacityBytes) {
+        // No room: lay the node out again with the new input (the block grows by doubling).
+        DraftNodeInit init = makeInitFromNode(draftNode);
+        std::vector<gc_node_ref_t> grown;
+        const auto current = kind == DraftEdgeKind::Norm   ? init.normInputs
+                             : kind == DraftEdgeKind::With ? init.withInputs
+                                                           : init.ctrlInputs;
+        grown.assign(current.begin(), current.end());
+        grown.push_back(inputId);
+        (kind == DraftEdgeKind::Norm   ? init.normInputs
+         : kind == DraftEdgeKind::With ? init.withInputs
+                                       : init.ctrlInputs) = grown;
+        replaceNodeStorage(userId, rebuildNode(userId, init));
+        return;
+    }
+    // Room in the block: the entry goes at the end of its group, the groups after it move up.
+    auto *base = reinterpret_cast<gc_node_ref_t *>(draftNode->tail + h.payloadBytes);
+    const size_t normN = h.normInputCount, withN = h.withInputCount, ctrlN = h.ctrlInputCount;
+    const size_t at = kind == DraftEdgeKind::Norm   ? normN
+                      : kind == DraftEdgeKind::With ? normN + withN
+                                                    : normN + withN + ctrlN;
+    std::memmove(base + at + 1, base + at, (normN + withN + ctrlN - at) * sizeof(gc_node_ref_t));
+    base[at] = inputId;
+    (kind == DraftEdgeKind::Norm   ? h.normInputCount
+     : kind == DraftEdgeKind::With ? h.withInputCount
+                                   : h.ctrlInputCount)++;
+}
+
 void GraphDraft::eraseNode(gc_node_ref_t id) {
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot erase a missing draft node.");
 
-    const std::vector<gc_node_ref_t> normInputs(
-        DraftNodeView::normInputs(draftNode).begin(),
-        DraftNodeView::normInputs(draftNode).end());
-    const std::vector<gc_node_ref_t> withInputs(
-        DraftNodeView::withInputs(draftNode).begin(),
-        DraftNodeView::withInputs(draftNode).end());
-    const std::vector<gc_node_ref_t> ctrlInputs(
-        DraftNodeView::ctrlInputs(draftNode).begin(),
-        DraftNodeView::ctrlInputs(draftNode).end());
-    const std::vector<gc_node_ref_t> normUsers(
-        DraftNodeView::normUsers(draftNode).begin(),
-        DraftNodeView::normUsers(draftNode).end());
-    const std::vector<gc_node_ref_t> withUsers(
-        DraftNodeView::withUsers(draftNode).begin(),
-        DraftNodeView::withUsers(draftNode).end());
-    const std::vector<gc_node_ref_t> ctrlUsers(
-        DraftNodeView::ctrlUsers(draftNode).begin(),
-        DraftNodeView::ctrlUsers(draftNode).end());
+    const auto copy = [](std::span<const gc_node_ref_t> refs) {
+        return std::vector<gc_node_ref_t>(refs.begin(), refs.end());
+    };
+    const std::vector<gc_node_ref_t> normInputs = copy(DraftNodeView::normInputs(draftNode));
+    const std::vector<gc_node_ref_t> withInputs = copy(DraftNodeView::withInputs(draftNode));
+    const std::vector<gc_node_ref_t> ctrlInputs = copy(DraftNodeView::ctrlInputs(draftNode));
+    const std::vector<gc_node_ref_t> normUsers  = copy(usersOf(id, DraftEdgeKind::Norm));
+    const std::vector<gc_node_ref_t> withUsers  = copy(usersOf(id, DraftEdgeKind::With));
+    const std::vector<gc_node_ref_t> ctrlUsers  = copy(usersOf(id, DraftEdgeKind::Ctrl));
 
     for (gc_node_ref_t input : normInputs) {
         removeUserRef(input, id, true, false, false);
@@ -1039,38 +1001,21 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     for (gc_node_ref_t input : ctrlInputs) {
         removeUserRef(input, id, false, false, true);
     }
-    // User lists may still name users erased earlier (as replaceUsesInList also allows for).
-    for (gc_node_ref_t userId : normUsers) {
-        if (alive(userId)) {
-            (void)unlinkInput(DraftEdgeKind::Norm, userId, id);
+    // Whoever reads the node stops reading it, as often as it did. The lists of users are
+    // kept in step with the inputs, so nothing else needs looking at.
+    const auto unlinkAll = [&](DraftEdgeKind kind, const std::vector<gc_node_ref_t> &users) {
+        for (gc_node_ref_t userId : users) {
+            if (userId != id && alive(userId)) {
+                while (unlinkInput(kind, userId, id)) {
+                }
+            }
         }
-    }
-    for (gc_node_ref_t userId : withUsers) {
-        if (alive(userId)) {
-            (void)unlinkInput(DraftEdgeKind::With, userId, id);
-        }
-    }
-    for (gc_node_ref_t userId : ctrlUsers) {
-        if (alive(userId)) {
-            (void)unlinkInput(DraftEdgeKind::Ctrl, userId, id);
-        }
-    }
-    for (gc_node_ref_t otherId = 0; otherId < nodeSlotCount(); ++otherId) {
-        if (otherId == id || !alive(otherId)) {
-            continue;
-        }
-        while (std::find(normInputsOf(otherId).begin(), normInputsOf(otherId).end(), id) !=
-               normInputsOf(otherId).end()) {
-            (void)unlinkInput(DraftEdgeKind::Norm, otherId, id);
-        }
-        while (std::find(withInputsOf(otherId).begin(), withInputsOf(otherId).end(), id) !=
-               withInputsOf(otherId).end()) {
-            (void)unlinkInput(DraftEdgeKind::With, otherId, id);
-        }
-        while (std::find(ctrlInputsOf(otherId).begin(), ctrlInputsOf(otherId).end(), id) !=
-               ctrlInputsOf(otherId).end()) {
-            (void)unlinkInput(DraftEdgeKind::Ctrl, otherId, id);
-        }
+    };
+    unlinkAll(DraftEdgeKind::Norm, normUsers);
+    unlinkAll(DraftEdgeKind::With, withUsers);
+    unlinkAll(DraftEdgeKind::Ctrl, ctrlUsers);
+    if (id < users_.size()) {
+        users_[id].reset();
     }
 
     ++revision_;

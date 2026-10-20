@@ -89,9 +89,6 @@ struct DraftNodeHeader {
     gc_cnt_t normInputCount = 0;
     gc_cnt_t withInputCount = 0;
     gc_cnt_t ctrlInputCount = 0;
-    gc_cnt_t normUserCount  = 0;
-    gc_cnt_t withUserCount  = 0;
-    gc_cnt_t ctrlUserCount  = 0;
 
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
@@ -112,8 +109,7 @@ struct DraftNodeHeader {
     constexpr size_t usedBytes() const {
         return static_cast<size_t>(payloadBytes) +
                (static_cast<size_t>(normInputCount) + static_cast<size_t>(withInputCount) +
-                static_cast<size_t>(ctrlInputCount) + static_cast<size_t>(normUserCount) +
-                static_cast<size_t>(withUserCount) + static_cast<size_t>(ctrlUserCount)) *
+                static_cast<size_t>(ctrlInputCount)) *
                    sizeof(gc_node_ref_t);
     }
 };
@@ -135,9 +131,6 @@ struct DraftNodeInit {
     std::span<const gc_node_ref_t> normInputs{};
     std::span<const gc_node_ref_t> withInputs{};
     std::span<const gc_node_ref_t> ctrlInputs{};
-    std::span<const gc_node_ref_t> normUsers{};
-    std::span<const gc_node_ref_t> withUsers{};
-    std::span<const gc_node_ref_t> ctrlUsers{};
 };
 
 class DraftNodeView {
@@ -151,13 +144,6 @@ class DraftNodeView {
     static std::span<const gc_node_ref_t> withInputs(const DraftNode *node);
     static std::span<gc_node_ref_t> ctrlInputs(DraftNode *node);
     static std::span<const gc_node_ref_t> ctrlInputs(const DraftNode *node);
-
-    static std::span<gc_node_ref_t> normUsers(DraftNode *node);
-    static std::span<const gc_node_ref_t> normUsers(const DraftNode *node);
-    static std::span<gc_node_ref_t> withUsers(DraftNode *node);
-    static std::span<const gc_node_ref_t> withUsers(const DraftNode *node);
-    static std::span<gc_node_ref_t> ctrlUsers(DraftNode *node);
-    static std::span<const gc_node_ref_t> ctrlUsers(const DraftNode *node);
 
     template <typename Body> static Body *payloadAs(DraftNode *node) {
         auto bytes = payload(node);
@@ -202,6 +188,22 @@ class DraftNodePool {
     SlabArena slab96_{96, 0, {}};
     SlabArena slab128_{128, 0, {}};
     std::vector<void *> oversizeBlocks_;
+};
+
+/// The nodes that read a node, by edge group, in the order they were linked. A user appears once
+/// per group however often it reads the node. Kept apart from the node's storage so that adding
+/// a user costs the user alone.
+struct DraftUserLists {
+    std::vector<gc_node_ref_t> norm;
+    std::vector<gc_node_ref_t> with;
+    std::vector<gc_node_ref_t> ctrl;
+
+    std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) {
+        return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+    }
+    const std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) const {
+        return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+    }
 };
 
 class GraphDraft {
@@ -452,6 +454,12 @@ class GraphDraft {
     void replaceNodeStorage(gc_node_ref_t id, DraftNode *node);
     void removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
     void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
+    std::span<const gc_node_ref_t> usersOf(gc_node_ref_t id, DraftEdgeKind kind) const;
+    std::vector<gc_node_ref_t> &userListOf(gc_node_ref_t id, DraftEdgeKind kind);
+    std::span<gc_node_ref_t> mutableInputs(DraftNode *node, DraftEdgeKind kind);
+    /// Adds `inputId` at the end of the `kind` inputs of `userId`, in place when the node's
+    /// storage has room.
+    void appendInputEntry(gc_node_ref_t userId, DraftEdgeKind kind, gc_node_ref_t inputId);
     void replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceUsesInList(
@@ -476,6 +484,7 @@ class GraphDraft {
     std::vector<GCGraph *> payloadGraphs_;
     std::unordered_map<const GCGraph *, uint32_t> payloadGraphIndex_;
     std::vector<DraftNode *> nodesById_;
+    std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
     std::vector<gc_node_ref_t> sourceRefsById_;
     std::vector<gc_node_ref_t> draftIdsBySourceRef_;
     gc_cnt_t liveNodeCount_ = 0;
