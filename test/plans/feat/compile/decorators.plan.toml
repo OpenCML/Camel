@@ -1,6 +1,6 @@
 id = "compile.decorators"
 order = 215
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "decorators", "attributes", "semantics"]
 desc = "Node attributes and the decorators that grant them; decorators on blocks (language reference 7.6). A library operator declared to grant an attribute (OperatorTable::declareGrant), named by a decorator with constant with-arguments, is applied as the graph is built: the nodes written in the function or block get the attribute, the arms, loop bodies and lambdas written there too, no function they call. Each attribute key is registered by its library with the kind of its values (here a mark, flags of any width, an integer) and its rules: how nested grants combine and whether, and to what, two nodes that differ in it may be merged. Rewrites keep the attributes; CSE follows the merge rules. A decorated block is the block as a function of no parameters called where it is written, and behaves as the block without decorators. The decorators come from the test-only builtin module test_attrs (CAMEL_ENABLE_TEST_PASSES)."
 

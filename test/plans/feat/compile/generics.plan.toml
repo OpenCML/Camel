@@ -1,6 +1,6 @@
 id = "compile.generics"
 order = 323
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "generics", "types"]
 desc = "Generic functions bound with `typeas` (one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 5.6."
 

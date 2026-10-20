@@ -1,6 +1,6 @@
 id = "modules.unicode_paths"
 order = 950
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "unicode", "windows"]
 desc = "H9 item 3: on Windows a user name, a PATH entry or a checkout outside the process code page. The command line, the environment, the current directory, CAMEL_HOME, CAMEL_PACKAGES and every opened file are UTF-8, converted at the process boundary and never lost to the code page."
 

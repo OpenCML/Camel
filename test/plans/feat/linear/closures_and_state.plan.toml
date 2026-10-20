@@ -1,6 +1,6 @@
 id = "linear.closures_and_state"
 order = 342
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "closures", "state"]
 
 [[tests]]

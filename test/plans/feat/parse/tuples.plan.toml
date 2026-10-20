@@ -1,6 +1,6 @@
 id = "parse.tuples"
 order = 301
-tier = "feat"
+tier = "fast"
 tags = ["feat", "parse", "tuples"]
 desc = "Tuples and parenthesized expressions."
 

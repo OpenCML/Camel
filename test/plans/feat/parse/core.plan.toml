@@ -1,6 +1,6 @@
 id = "parse.core"
 order = 300
-tier = "feat"
+tier = "fast"
 tags = ["feat", "parse", "inspect"]
 
 [[tests]]

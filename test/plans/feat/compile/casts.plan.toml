@@ -1,6 +1,6 @@
 id = "compile.casts"
 order = 334
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "casts"]
 desc = "Conversions with `as` that the type system decides by itself."
 

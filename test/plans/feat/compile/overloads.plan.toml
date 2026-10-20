@@ -1,6 +1,6 @@
 id = "compile.overloads"
 order = 326
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "functions", "overloads"]
 desc = "User functions overloaded on their parameter types."
 

@@ -1,6 +1,6 @@
 id = "compile.numeric_permissions"
 order = 214
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "numeric", "semantics"]
 desc = "`@numeric(...)` on a function or a block grants numeric permissions to the code written in it, arms, loop bodies and lambdas included, never to a function it calls (design principles 7.5; docs/design/op-semantics 6.3, 6.4). The graph keeps them in a per-node column beside the source positions; std::gir shows them as a `numeric` attribute on the nodes that have any. Rewrites keep them, CSE and tensor::fuse do not merge nodes granted different ones, and the CPU back ends compute the canonical results with or without them."
 

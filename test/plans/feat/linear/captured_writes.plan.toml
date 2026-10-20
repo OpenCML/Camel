@@ -1,6 +1,6 @@
 id = "linear.captured_writes"
 order = 346
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "var", "capture", "wait"]
 
 [[tests]]

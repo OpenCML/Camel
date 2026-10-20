@@ -1,6 +1,6 @@
 id = "modules.nn"
 order = 361
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "nn"]
 
 [[tests]]
@@ -1000,6 +1000,8 @@ case = "../../../cases/modules/nn/mnist_py.cml"
 args = ["${case}"]
 # The training set is downloaded once into tmp/; without network access the test is skipped.
 skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]
+# The download writes the shared tmp/mnist cache; two of these at once could corrupt it.
+parallel = false
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1020,6 +1022,8 @@ case = "../../../cases/modules/nn/mnist_py.cml"
 args = ["${case}", "std::opt::fold", "std::nvm"]
 # The training set is downloaded once into tmp/; without network access the test is skipped.
 skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]
+# Shared tmp/mnist cache (see mnist_py).
+parallel = false
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1040,6 +1044,8 @@ case = "../../../cases/modules/nn/mnist_py.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 # The training set is downloaded once into tmp/; without network access the test is skipped.
 skip_unless = ["${python}", "test/cases/modules/nn/mnist_loader.py", "--ensure", "tmp"]
+# Shared tmp/mnist cache (see mnist_py).
+parallel = false
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

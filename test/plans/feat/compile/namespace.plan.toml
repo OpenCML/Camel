@@ -1,6 +1,6 @@
 id = "compile.namespace"
 order = 318
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "namespace"]
 
 [[tests]]

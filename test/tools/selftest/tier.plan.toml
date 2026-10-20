@@ -1,0 +1,29 @@
+# Fixture of test/tools/selftest/run.mjs: the tier filter. The plan is in the fast layer; one
+# test overrides that to slow, one keeps the plan's layer. `--tier fast` must run two tests,
+# `--tier slow` one, and `--tier all` all three.
+id = "selftest.tier"
+order = 5
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "selftest_probe.mjs"
+args = ["${case}", "echo", "tier"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "tier.fast"
+args = ["${case}", "echo", "tier.fast"]
+
+[[tests]]
+name = "tier.default"
+desc = "No tier of its own: it follows the plan's fast layer."
+args = ["${case}", "echo", "tier.default"]
+
+[[tests]]
+name = "tier.slow"
+desc = "Slow by its own declaration, inside a fast plan."
+tier = "slow"
+args = ["${case}", "echo", "tier.slow"]

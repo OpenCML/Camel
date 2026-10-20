@@ -1,6 +1,6 @@
 id = "gpu.tiles_decorator"
 order = 903
-tier = "gpu"
+tier = "slow"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]

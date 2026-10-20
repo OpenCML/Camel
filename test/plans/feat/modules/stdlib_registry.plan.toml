@@ -1,6 +1,6 @@
 id = "modules.stdlib_registry"
 order = 371
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "stdlib", "registry", "purity"]
 desc = "What the modules of this repository register: every operator declares whether it is pure, and the signature files list exactly the operators that exist"
 

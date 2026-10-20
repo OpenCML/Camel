@@ -1,6 +1,6 @@
 id = "docs.links"
 order = 920
-tier = "feat"
+tier = "fast"
 tags = ["feat", "docs"]
 desc = "The relative links of the reader-facing documents point at files and headings that exist"
 

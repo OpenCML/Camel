@@ -1,6 +1,6 @@
 id = "compile.diag_catalog"
 order = 317
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "diagnostics"]
 
 [[tests]]

@@ -130,8 +130,13 @@ object that had been promoted no longer moved, and the address an object moved a
 its old contents until something else was allocated there, so a stale read usually still gave
 the right answer. Whole plans are run under a mode with
 `CAMEL_TEST_TIMEOUT_SCALE=20 node scripts/test.js <plans>`; `mm.gc_poison_sweep` runs the
-module, compile, linear, para, trans and smoke plans under poisoning as part of the default
-set.
+module, compile, linear, para, trans and smoke plans under poisoning. Under `npm run test` the
+sweep keeps one test per source plan (`fast_sample = 1`), so every plan still poisons a
+safepoint without the full cost; `npm run test:all` (or `--tier slow`) runs every eligible test.
+The autodiff and onnx model plans stay out (they are covered by their own poison runs), and so
+do the two deep-structure tests of `consistency/values` (`value.deep_enum_chain`,
+`value.deep_nested_enum`: poisoning copies the young generation at every safepoint, which turns
+a million-node build into minutes; they run in the normal plan).
 
 Soak and scale: `gc_soak.*` (a steady live set under continuous allocation; the memory the
 collector holds must not depend on the number of steps), `gc_live_large.*` (a live set far

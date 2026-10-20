@@ -1,6 +1,6 @@
 id = "linear.var_reference"
 order = 344
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "var", "reference"]
 
 [[tests]]
@@ -3299,6 +3299,8 @@ timeout_ms = 8000
 
 [[tests]]
 name = "var_pipelines"
+# Slow layer: measured 34.8 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 desc = "Generated programs that write variables (fixed seed): recursions writing a var on the way down and up at depths 0 to 7, and straight-line functions with snapshots of the variable interleaved with writes, a snapshot feeding an argument the callee ignores while the callee writes, and a branch whose arms write; and, in 8 more programs, nested branches on a run-time integer (depth 1 to 3) whose innermost arm calls a self-tail-recursive function with literal or run-time bounds, where the arm ending the recursion, the sibling arms and the calling arm print and / or write the variable. Each of 16 programs runs on 11 pipelines (every scheduler also after std::opt) and is compared with a reference computed by simulation (not only with the default run). Three silent defects are in this class: two of std::opt (a dropped write; a read moved behind later writes) and one of the execution order (an arm of a branch ran into its sibling arm after an inner branch was removed)."
 kind = "behavior"
 tool = "python"

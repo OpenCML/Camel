@@ -1,5 +1,5 @@
 id = "gpu.tiles_rows"
-tier = "gpu"
+tier = "slow"
 tags = ["gpu", "tiles"]
 [[tests]]
 name = "shared_row_regions"

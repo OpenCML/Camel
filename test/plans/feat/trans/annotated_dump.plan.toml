@@ -1,6 +1,6 @@
 id = "trans.annotated_dump"
 order = 250
-tier = "feat"
+tier = "fast"
 tags = ["feat", "trans", "dump"]
 
 [[tests]]

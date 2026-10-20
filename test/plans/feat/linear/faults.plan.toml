@@ -1,6 +1,6 @@
 id = "linear.faults"
 order = 345
-tier = "feat"
+tier = "fast"
 tags = ["feat", "linear", "runtime", "negative"]
 
 [[tests]]

@@ -1,6 +1,6 @@
 id = "compile.function_values"
 order = 325
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "closures", "functions"]
 desc = "Functions named as values: bound with let, returned, captured, and the value of a function that captures names."
 

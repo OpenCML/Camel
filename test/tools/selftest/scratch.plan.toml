@@ -4,7 +4,7 @@
 # against this plan to show that a second run inherits nothing from the first.
 id = "selftest.scratch"
 order = 2
-tier = "selftest"
+tier = "fast"
 
 [defaults]
 tool = "node"

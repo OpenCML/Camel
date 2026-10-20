@@ -1,6 +1,6 @@
 id = "consistency.narrowing"
 order = 363
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "compile", "branches", "nullable"]
 desc = "A `T?` compared with `null` gives a bool, and the arm of an `if` that excludes null sees a `T` (design principles 3.8): the same branch as a `match` on the nullable."
 

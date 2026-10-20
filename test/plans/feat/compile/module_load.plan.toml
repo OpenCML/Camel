@@ -1,6 +1,6 @@
 id = "compile.module_load"
 order = 335
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "semantic", "modules", "import"]
 desc = "Loading in three steps: modules import each other, the top level does not depend on its order, values that depend on themselves are errors"
 

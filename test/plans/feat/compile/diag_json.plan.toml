@@ -1,6 +1,6 @@
 id = "compile.diag_json"
 order = 319
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "diagnostics"]
 
 [[tests]]

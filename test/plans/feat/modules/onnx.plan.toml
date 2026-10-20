@@ -1,6 +1,6 @@
 id = "modules.onnx"
 order = 363
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "onnx"]
 
 [[tests]]
@@ -609,6 +609,8 @@ timeout_ms = 60000
 
 [[tests]]
 name = "ort_train_step_adam"
+# Slow layer: measured 5.8 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 desc = "T3: the exported Adam step runs on ONNX Runtime with the optimizer state fed back; five steps match torch.optim.Adam and Camel's native nn:adam on the loss and every updated parameter (<= 1e-5)."
 kind = "behavior"
 tool = "python"
@@ -622,6 +624,8 @@ timeout_ms = 120000
 
 [[tests]]
 name = "resnetbn_train_step_export"
+# Slow layer: measured 9.2 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 desc = "T4: the literal ResNet-18 training step (20 training-mode batch_norms, running statistics as graph I/O) exports, passes onnx.checker(full_check), and matches Camel native execution on every one of the 123 outputs on ONNX Runtime (benchmarks/train.py --check-onnx)."
 kind = "behavior"
 tool = "python"
@@ -746,6 +750,8 @@ timeout_ms = 60000
 
 [[tests]]
 name = "pass_export_equals_export_model"
+# Slow layer: measured 15.9 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 desc = "For twenty-six programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes and the branched-call split: the four branched training steps, the gated GRU forward and its training step, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
 kind = "behavior"
 tool = "python"
@@ -1424,6 +1430,8 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_tree_recursion"
+# Slow layer: measured 32.7 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 desc = "A function that calls itself twice on one path with a depth that depends on the model input (tree recursion) is refused by export_model with a diagnostic at the second recursive call; it used to fail with an unlocated allocation error from simplification. The refusal comes when the doubling graph outgrows one runtime graph; since a node is a 16-byte record and an edge one entry (graph model step 3) a graph holds several times more nodes, so the unrolling runs further before it stops (measured in one container, release build: 9 s before, 39 s after; hence the timeout)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_tree_recursion.cml"
@@ -2412,6 +2420,8 @@ timeout_ms = 240000
 
 [[tests]]
 name = "unended_unrolling.pass"
+# Slow layer: measured 5.3 s in the full serial run (docs/handover/reports/H10.md).
+tier = "slow"
 desc = "An export whose simplification does not end (a constant typed by a declared return type that says neither element type nor shape, used inside a recursion: every unrolled level is more precisely typed than the loop) is refused, naming the recursive call, saying that the unrolling did not end and what to do. It used to be the unlocated 'Runtime draft encoding failed to allocate ... bytes'. By the pass (std::macro std::opt onnx::export): TranslationRefused. The unrolling stops at whichever limit it meets first: the space all graphs live in (refused at the recursive call) or the size of one graph (refused at the export_model call, with the recursive call in the text); which one depends on how compact the unrolled levels are, so the test holds for both. The graph space is limited to 64 MB (its size when it could not grow) so that the unrolling reaches a limit in a few seconds."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/unended_unrolling.cml"

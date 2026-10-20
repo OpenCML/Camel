@@ -1,6 +1,6 @@
 id = "trans.effect_trace"
 order = 337
-tier = "feat"
+tier = "fast"
 tags = ["feat", "trans", "effect_trace"]
 
 [[tests]]

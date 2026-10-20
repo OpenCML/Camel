@@ -1,6 +1,6 @@
 id = "modules.index_semantics"
 order = 364
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "tensor", "semantics"]
 desc = "The index semantics of operators (camel/core/index_semantics.h, docs/design/op-semantics sections 5 and 7): the quasi-affine expression language, the structural validation of instances, the query through the operator table, the text form, splitting dims for tiles and the strided view of a row-major operand."
 

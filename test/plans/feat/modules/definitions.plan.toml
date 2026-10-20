@@ -1,6 +1,6 @@
 id = "modules.definitions"
 order = 374
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "semantics", "definitions", "tensor"]
 desc = "The definition graphs of operators (camel/runtime/definitions.h, docs/design/op-semantics section 9; design principles 7.1: a definition graph is normative): the definitions the tensor module declares from stdlib/tensor_definitions.cml, the checks that refuse a definition, the kernels against their expanded definitions bit for bit on every back end, and gradients through the definitions against the operators' own derivative rules."
 

@@ -1,6 +1,6 @@
 id = "compile.collections"
 order = 330
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "collections", "map", "set", "types"]
 desc = "The built-in collection types `Map<K, V>` and `Set<T>`: construction with `as`, the operators, generics, the four back ends, the optimisation pipelines, and every diagnostic with its position (design principles 11.3; docs/technical/31_map_and_set.md)."
 

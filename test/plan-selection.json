@@ -1,0 +1,130 @@
+{
+    "comment": "Rules for `node scripts/test.js --changed`: the first rule whose path prefix matches a changed file names the plans to run, as paths under test/plans. A change that no rule matches (or a rule whose plans cannot be found) falls back to the whole fast layer. Keep rule order from specific to general: the first match wins. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
+    "rules": [
+        {
+            "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set.",
+            "paths": ["test/tools/run-tests.mjs", "test/tools/selftest/", "test/tools/toml-lite.mjs", "test/tools/gir-dot.mjs", "test/plan-selection.json", "test/runner.mjs", "scripts/test.js", "package.json"],
+            "plans": ["smoke", "feat/consistency/runner.plan.toml"]
+        },
+        {
+            "comment": "FastVM and the other schedulers.",
+            "paths": ["src/passes/sched/"],
+            "plans": ["smoke", "feat/linear", "feat/para", "feat/trans"]
+        },
+        {
+            "comment": "Optimization passes.",
+            "paths": ["src/passes/opt/"],
+            "plans": ["smoke", "feat/opt", "feat/trans"]
+        },
+        {
+            "comment": "Any other pass, including the shared pass machinery.",
+            "paths": ["src/passes/"],
+            "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear"]
+        },
+        {
+            "comment": "GCT/GIR construction, encoding and the graph printer.",
+            "paths": ["src/compile/"],
+            "plans": ["smoke", "feat/compile", "feat/consistency", "feat/trans"]
+        },
+        {
+            "comment": "The front end: lexer, parser, AST and diagnostics.",
+            "paths": ["src/parse/"],
+            "plans": ["smoke", "feat/parse", "feat/compile", "feat/consistency"]
+        },
+        {
+            "comment": "Values, types, the collector and the runtime shell.",
+            "paths": ["src/core/", "src/runtime/"],
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm"]
+        },
+        {
+            "comment": "Execution, entry arguments and the standalone bridge.",
+            "paths": ["src/execute/"],
+            "plans": ["smoke", "feat/linear", "feat/para"]
+        },
+        {
+            "comment": "Automatic differentiation.",
+            "paths": ["modules/autodiff/"],
+            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml"]
+        },
+        {
+            "comment": "The ONNX exporter.",
+            "paths": ["modules/onnx/"],
+            "plans": ["feat/modules/onnx.plan.toml", "feat/trans", "feat/compile/enum.plan.toml"]
+        },
+        {
+            "comment": "Neural-network operators: the nn plan and the plans that train with them.",
+            "paths": ["modules/nn/"],
+            "plans": ["feat/modules/nn.plan.toml", "feat/modules/checkpoints.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "feat/linear"]
+        },
+        {
+            "comment": "Tensor operators and shapes.",
+            "paths": ["modules/tensor/"],
+            "plans": ["feat/modules/tensor.plan.toml", "feat/modules/tensor", "feat/modules/autodiff.plan.toml"]
+        },
+        {
+            "comment": "Any other module.",
+            "paths": ["modules/"],
+            "plans": ["feat/modules"]
+        },
+        {
+            "comment": "The standard library's Camel sources and signatures.",
+            "paths": ["stdlib/", "modules/std/"],
+            "plans": ["feat/compile", "feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml", "feat/trans/macro.plan.toml"]
+        },
+        {
+            "comment": "The language server, debugger, formatter and command-line tools.",
+            "paths": ["tools/"],
+            "plans": ["feat/tools", "feat/format"]
+        },
+        {
+            "comment": "Example programs and their recorded output.",
+            "paths": ["examples/"],
+            "plans": ["feat/examples"]
+        },
+        {
+            "comment": "Benchmark scripts and artifacts: the slow gradient comparisons and the perf plans.",
+            "paths": ["benchmarks/"],
+            "plans": ["feat/modules/autodiff.plan.toml", "perf"]
+        },
+        {
+            "comment": "Documentation checks.",
+            "paths": ["docs/", "AGENTS.md", "agents/"],
+            "plans": ["feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
+        },
+        {
+            "comment": "The editor syntax files and their tests.",
+            "paths": ["editors/"],
+            "plans": ["feat/tools/grammar.plan.toml"]
+        },
+        {
+            "comment": "The build definitions: every backend may be affected, so the smoke set and the runtime plans.",
+            "paths": ["CMakeLists.txt", "cmake/", "modules/python/"],
+            "plans": ["smoke", "feat/linear", "feat/para", "feat/modules"]
+        },
+        {
+            "comment": "A test case: its plan is named by the directory it sits in.",
+            "paths": ["test/cases/compile/"],
+            "plans": ["feat/compile"]
+        },
+        {
+            "comment": "A test case: its plan is named by the directory it sits in.",
+            "paths": ["test/cases/linear/", "test/cases/para/", "test/cases/consistency/"],
+            "plans": ["feat/linear", "feat/para", "feat/consistency"]
+        },
+        {
+            "comment": "A test case: its plan is named by the directory it sits in.",
+            "paths": ["test/cases/parse/", "test/cases/format/", "test/cases/trans/", "test/cases/opt/"],
+            "plans": ["feat/parse", "feat/format", "feat/trans", "feat/opt"]
+        },
+        {
+            "comment": "A test case: its plan is named by the directory it sits in.",
+            "paths": ["test/cases/modules/", "test/cases/tools/", "test/cases/definitions/", "test/cases/facts/", "test/cases/loops/", "test/cases/macro/", "test/cases/resources/"],
+            "plans": ["feat/modules", "feat/tools", "feat/trans"]
+        },
+        {
+            "comment": "A plan file selects itself: editing the tests of one plan runs that plan.",
+            "paths": ["test/plans/"],
+            "self": true
+        }
+    ]
+}

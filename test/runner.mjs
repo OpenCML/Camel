@@ -1,13 +1,17 @@
 import path from 'path'
 import fs from 'fs'
-import { fileURLToPath } from 'url'
 import { spawnSync } from 'child_process'
+import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const TEST_ROOT = path.dirname(__filename)
 const REPO_ROOT = path.dirname(TEST_ROOT)
 const PLANS_ROOT = path.join(TEST_ROOT, 'plans')
 const RUNNER = path.join(TEST_ROOT, 'tools', 'run-tests.mjs')
+const SELECTION_PATH = path.join(TEST_ROOT, 'plan-selection.json')
+// `origin/fsh-dev` is the branch handover work is based on: `--changed` answers what this
+// checkout changed relative to it.
+const CHANGED_BASE = 'origin/fsh-dev'
 
 const TARGETS = {
     smoke: path.join(PLANS_ROOT, 'smoke'),
@@ -31,6 +35,9 @@ const DEFAULT_TARGETS = [
     path.join(PLANS_ROOT, 'smoke'),
     path.join(PLANS_ROOT, 'feat')
 ]
+
+// Options that take a value: the value belongs to the option, not to the target list.
+const VALUE_FLAGS = new Set(['--tier', '--jobs'])
 
 function resolvePlanPathFromSegments(segments) {
     if (segments.length === 0) return null
@@ -79,10 +86,13 @@ function resolveTarget(input) {
 function parseArgs(argv) {
     const runnerArgs = []
     const targets = []
+    let changed = false
 
     for (let i = 0; i < argv.length; ++i) {
         const arg = argv[i]
-        if (
+        if (arg === '--changed') {
+            changed = true
+        } else if (
             arg === '--all' ||
             arg === '--smoke' ||
             arg === '--feat' ||
@@ -104,7 +114,9 @@ function parseArgs(argv) {
             targets.push(resolveTarget(argv[++i]))
         } else if (arg.startsWith('-')) {
             runnerArgs.push(arg)
-            if (arg === '--tier' && i + 1 < argv.length) {
+            // `--tier fast` and `--jobs 8` carry their value; without this the value would be
+            // read as a plan name.
+            if (!arg.includes('=') && VALUE_FLAGS.has(arg) && i + 1 < argv.length) {
                 runnerArgs.push(argv[++i])
             }
         } else {
@@ -114,13 +126,94 @@ function parseArgs(argv) {
 
     return {
         runnerArgs,
-        targets: targets.length > 0 ? targets : DEFAULT_TARGETS
+        targets: targets.length > 0 ? targets : (changed ? [] : DEFAULT_TARGETS),
+        changed,
     }
+}
+
+/** Files changed against `origin/fsh-dev`, committed or not; null when git cannot answer. */
+function changedFiles() {
+    const run = (args) => spawnSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8', windowsHide: true })
+    const diff = run(['diff', '--name-only', CHANGED_BASE])
+    if (diff.error || diff.status !== 0) return null
+    const untracked = run(['ls-files', '--others', '--exclude-standard'])
+    const text = `${diff.stdout || ''}\n${untracked.status === 0 ? untracked.stdout || '' : ''}`
+    const files = text
+        .split(/\r?\n/)
+        .map((line) => line.trim().replace(/\\/g, '/'))
+        .filter(Boolean)
+    return [...new Set(files)]
+}
+
+export function loadSelectionRules() {
+    const doc = JSON.parse(fs.readFileSync(SELECTION_PATH, 'utf8'))
+    return (doc.rules || []).map((rule) => ({
+        paths: (rule.paths || []).map((entry) => String(entry).replace(/\\/g, '/')),
+        plans: (rule.plans || []).map((entry) => String(entry)),
+        // A rule may name no plans but select the changed plan file itself (`test/plans/`).
+        self: rule.self === true,
+    }))
+}
+
+/**
+ * The plans a set of changed files selects. The first rule whose path prefix matches a file
+ * names the plans for that file (`plans`), or is the changed plan file itself (`self`); the
+ * union over all files is run in plan order by the runner. Null when no rule matched anything
+ * (the caller then runs the whole fast layer).
+ */
+export function plansForChanges(files) {
+    const rules = loadSelectionRules()
+    const names = new Set()
+    const targets = []
+    let matched = false
+    for (const file of files) {
+        const rule = rules.find((candidate) =>
+            candidate.paths.some((prefix) => file === prefix || file.startsWith(prefix))
+        )
+        if (!rule) continue
+        matched = true
+        for (const plan of rule.plans) names.add(plan)
+        if (rule.self && file.endsWith('.plan.toml')) {
+            const target = path.join(REPO_ROOT, ...file.split('/'))
+            if (fs.existsSync(target)) targets.push(target)
+        }
+    }
+    return matched ? { names: [...names], targets } : null
+}
+
+/** A plan named by the selection file, relative to test/plans (a directory or a *.plan.toml). */
+function resolveSelectionTarget(name) {
+    const base = path.join(PLANS_ROOT, ...name.replace(/\\/g, '/').split('/'))
+    for (const candidate of [base, `${base}.plan.toml`]) {
+        if (fs.existsSync(candidate)) return candidate
+    }
+    throw new Error(`plan-selection.json names '${name}', which is not under ${PLANS_ROOT}`)
+}
+
+function selectChangedTargets() {
+    const files = changedFiles()
+    if (files === null) {
+        console.log(`[INFO] --changed: cannot read ${CHANGED_BASE}; running the whole fast layer`)
+        return []
+    }
+    if (files.length === 0) {
+        console.log(`[INFO] --changed: no change against ${CHANGED_BASE}; running the whole fast layer`)
+        return []
+    }
+    const plans = plansForChanges(files)
+    if (!plans || (plans.names.length === 0 && plans.targets.length === 0)) {
+        console.log(`[INFO] --changed: no rule matches ${files.length} changed file(s); running the whole fast layer`)
+        return []
+    }
+    const targets = [...plans.names.map(resolveSelectionTarget), ...plans.targets]
+    console.log(`[INFO] --changed: ${files.length} changed file(s) select ${targets.length} plan(s)`)
+    return targets
 }
 
 export function main(argv = process.argv.slice(2)) {
     const options = parseArgs(argv)
-    const proc = spawnSync(process.execPath, [RUNNER, ...options.runnerArgs, ...options.targets], {
+    const targets = options.changed && options.targets.length === 0 ? selectChangedTargets() : options.targets
+    const proc = spawnSync(process.execPath, [RUNNER, ...options.runnerArgs, ...targets], {
         cwd: REPO_ROOT,
         stdio: 'inherit',
         env: process.env

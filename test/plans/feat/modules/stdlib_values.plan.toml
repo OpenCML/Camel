@@ -1,6 +1,6 @@
 id = "modules.stdlib_values"
 order = 369
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "stdlib", "consistency"]
 desc = "The core standard library (str, math, statistics, array): values on the four back ends and through the optimizing pipelines, checked against golden files"
 

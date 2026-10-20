@@ -1,6 +1,6 @@
 id = "opt.control_data"
 order = 328
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "control", "branch"]
 
 [defaults]

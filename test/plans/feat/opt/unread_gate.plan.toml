@@ -1,6 +1,6 @@
 id = "opt.unread_gate"
 order = 325
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "control", "dce"]
 
 [defaults]

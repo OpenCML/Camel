@@ -1,6 +1,6 @@
 id = "consistency.cleanup"
 order = 353
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "runtime", "cleanup"]
 desc = "What a program wrote before a fault or an exit() is there afterwards, on the four back ends"
 

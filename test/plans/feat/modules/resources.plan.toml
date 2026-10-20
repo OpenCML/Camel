@@ -1,6 +1,6 @@
 id = "modules.resources"
 order = 373
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "semantics", "resources"]
 desc = "The resources of operators (camel/core/resource_semantics.h, camel/runtime/resources.h; docs/design/op-semantics section 8): the declarations and their registration checks, mapped regions, and their resolution in a program: the accesses of each node, the footprint of each graph, and the pairs of nodes that must keep their order, kept apart from data dependence."
 

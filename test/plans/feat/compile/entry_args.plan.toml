@@ -1,6 +1,6 @@
 id = "compile.entry_args"
 order = 322
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "entry"]
 desc = "`main` with parameters: the entry graph takes them, `--arg name=value` binds them, what `main` returns goes to the output (`-o`, standard output by default)."
 

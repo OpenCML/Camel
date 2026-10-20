@@ -35,9 +35,12 @@
 ### 1.2 构建与测试
 
 - 构建：`npm run build`（Windows PowerShell，命令之间用 `;`，不用 `&&`）。产物在 `out/latest/bin/`。
-- 测试：`node scripts/test.js <计划文件或目录>`；全套默认集合是 `npm run test`。
+- 测试：`node scripts/test.js <计划文件或目录>`。测试分两层（H10）：
+  - **日常开发跑 `npm run test`**：只跑 `fast` 层（`smoke` 加 `feat/**` 的快速测试），按处理器核数并行（`--jobs N` 可改，`--jobs 1` 为串行）。改动定下来后可用 `node scripts/test.js --changed`，按 `test/plan-selection.json` 只跑相关计划。
+  - **合入 `develop` 前跑一次 `npm run test:all`**：全部计划、全部层，包括与 PyTorch 的对比、GC 压力与投毒扫描、随机程序检查和性能基准。
+  - 只跑某个目标时默认仍只跑它的 `fast` 层；要看它的慢测试加 `--tier all`。分层规则见 `docs/test-plans.md`。
 - **先手动跑，再写测试**（`AGENTS.md`）：新功能先用 `camel x.cml` 在命令行运行，看清输出与诊断，再把确认过的行为写成测试。
-- 工作中只跑相关的测试计划；**任务结束前跑一次全套**，把失败的测试名与基线比较。
+- 工作中只跑相关的测试计划；**任务结束前跑一次 `npm run test:all`**，把失败的测试名与基线比较。
 - **基线**：2026-10-19 的 `fsh-dev`（5bc29823）全套 5646 项中有 19 项失败，名单如下。这些不是你造成的，不需要你修；但你的分支不能新增失败。
 
   ```

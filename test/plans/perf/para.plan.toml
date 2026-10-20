@@ -1,6 +1,6 @@
 id = "perf.para"
 order = 410
-tier = "benchmark"
+tier = "slow"
 tags = ["perf", "para"]
 
 [[tests]]

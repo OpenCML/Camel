@@ -1,6 +1,6 @@
 id = "gpu.tiles"
 order = 900
-tier = "gpu"
+tier = "slow"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]

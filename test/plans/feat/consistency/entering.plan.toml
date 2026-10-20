@@ -1,6 +1,6 @@
 id = "consistency.entering"
 order = 357
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "compile", "nullable", "fallible"]
 desc = "A value enters a T? / T! position by itself where the target type is known, never the other way; [] takes its element type from its position; a nullable right side of ?? (design principles 3.8)"
 

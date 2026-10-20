@@ -1,6 +1,6 @@
 id = "modules.ddpm_primitives"
 order = 375
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "autodiff", "math", "fs", "tiles"]
 
 [defaults]

@@ -1,6 +1,6 @@
 id = "opt.progen_simplify"
 order = 323
-tier = "feat"
+tier = "fast"
 tags = ["feat", "opt", "progen", "simplify", "regression"]
 
 [[tests]]

@@ -1,6 +1,6 @@
 id = "compile.check_command"
 order = 331
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "cli", "check"]
 desc = "`camel check`: the exit code says whether an error was found, `-s` stops after the syntax tree, `-i` after the tokens"
 

@@ -1,6 +1,6 @@
 id = "modules.std"
 order = 360
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "std"]
 
 [[tests]]

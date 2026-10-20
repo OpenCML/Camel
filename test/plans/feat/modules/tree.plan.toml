@@ -1,6 +1,6 @@
 id = "modules.tree"
 order = 368
-tier = "feat"
+tier = "fast"
 tags = ["feat", "modules", "tree"]
 
 [[tests]]

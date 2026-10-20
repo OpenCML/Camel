@@ -1,6 +1,6 @@
 id = "consistency.operator_overloads"
 order = 363
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "compile", "operators"]
 desc = "Operator overloads written in Camel, `func operator +(a: V, b: V): V` (design principles 4.3; the notation is provisional): which operators can be overloaded, the overloads of every layer as one set (this module, imported modules, built-in and C++ module operators), generic overloads, entering `T?`, export and import, and the diagnostics for refused declarations, conflicts and ambiguous calls."
 

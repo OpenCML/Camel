@@ -1,6 +1,6 @@
 id = "compile.utf8_strings"
 order = 921
-tier = "feat"
+tier = "fast"
 tags = ["feat", "compile", "strings", "utf8"]
 desc = "A string is always valid UTF-8 (design principles 11.1): a literal that is not is refused when the program is compiled; an escape that spells the bytes of a character is fine."
 

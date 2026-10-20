@@ -1,6 +1,6 @@
 id = "consistency.entry"
 order = 356
-tier = "feat"
+tier = "fast"
 tags = ["feat", "consistency", "runtime", "entry"]
 desc = "What main returns on the four back ends: the result of the program only under a declared return type; an unhandled error value at the exit of main"
 

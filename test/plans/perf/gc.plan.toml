@@ -1,6 +1,6 @@
 id = "perf.gc"
 order = 420
-tier = "benchmark"
+tier = "slow"
 tags = ["perf", "gc", "soak"]
 desc = """
 Minute-long soak and gigabyte-scale runs of both collectors; not part of the default set.

@@ -1,6 +1,6 @@
 id = "para.handoff"
 order = 351
-tier = "feat"
+tier = "fast"
 tags = ["feat", "para", "consistency"]
 desc = "The parallel scheduler runs serial graphs on the bytecode interpreter (design principles 9.10): same output, faults and recursion limit as the other back ends"
 

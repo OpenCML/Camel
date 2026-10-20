@@ -1,6 +1,6 @@
 id = "perf.fib"
 order = 400
-tier = "benchmark"
+tier = "slow"
 tags = ["perf", "fib"]
 
 [[tests]]

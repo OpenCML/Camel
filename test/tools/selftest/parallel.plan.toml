@@ -1,0 +1,39 @@
+# Fixture of test/tools/selftest/run.mjs: six tests that overlap when the runner runs them in
+# parallel, and whose status lines must come out in plan order all the same. It is not under
+# test/plans: the self-test starts it with an explicit --jobs.
+id = "selftest.parallel"
+order = 3
+tier = "fast"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "selftest_probe.mjs"
+envs = ["SELFTEST_PROBE_LOG=tmp/selftest-parallel.log"]
+args = ["${case}", "sleep", "p", "400"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "parallel.p1"
+args = ["${case}", "sleep", "p1", "400"]
+
+[[tests]]
+name = "parallel.p2"
+args = ["${case}", "sleep", "p2", "400"]
+
+[[tests]]
+name = "parallel.p3"
+args = ["${case}", "sleep", "p3", "400"]
+
+[[tests]]
+name = "parallel.p4"
+args = ["${case}", "sleep", "p4", "400"]
+
+[[tests]]
+name = "parallel.p5"
+args = ["${case}", "sleep", "p5", "400"]
+
+[[tests]]
+name = "parallel.p6"
+args = ["${case}", "sleep", "p6", "400"]
