@@ -64,6 +64,7 @@
 #include <ostream>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace camel::core::type {
@@ -442,6 +443,95 @@ class Array : public rtdata::Object {
         uint64_t flatIndex, slot_t value,
         const camel::core::type::ArrayType *arrayType = nullptr);
 
+    // ---- Element loops --------------------------------------------------------------------
+    //
+    // getSlot/setSlot decide the storage class and the element width at every element. That is
+    // right for a single access and wrong for a loop: map/filter/reduce/foreach over n elements
+    // asked the same two questions n times. A loop asks once (elementRead/elementWrite) and
+    // reads and writes through readElement/writeElement, which are compiled per class.
+    //
+    // What a loop may hoist is the class decision, never a pointer: the element callback is a
+    // safepoint, so the array object (and, for an inline compact array, its bytes) can move
+    // between two elements. Every loop therefore re-reads its arrays on every round and passes
+    // them to these functions.
+
+    /// How a loop reads this array's elements, decided once for the call.
+    enum class ElementRead : uint8_t {
+        Direct, // a slot array, or a compact element of exactly one slot: the slot_t layout
+        View,   // a compact pure-data aggregate: a view into the block, never materialised
+        Slow,   // any other compact element: taken out of its bytes by getSlotSlow
+    };
+    /// How a loop writes them. Writing needs one distinction reading does not: a slot array may
+    /// hold a reference, so its store goes through the write barrier.
+    enum class ElementWrite : uint8_t {
+        Direct,    // a compact element of exactly one slot: a plain store
+        Aggregate, // a compact pure-data aggregate: its bytes
+        Slow,      // a slot array (the barrier) or an element of any width but one slot
+    };
+
+    ElementRead elementRead() const {
+        if (isSlots() || (!isAggregateElement() && elementSize_ == sizeof(slot_t))) {
+            return ElementRead::Direct;
+        }
+        return isAggregateElement() ? ElementRead::View : ElementRead::Slow;
+    }
+    ElementWrite elementWrite() const {
+        if (isSlots()) {
+            return ElementWrite::Slow;
+        }
+        if (isAggregateElement()) {
+            return ElementWrite::Aggregate;
+        }
+        return elementSize_ == sizeof(slot_t) ? ElementWrite::Direct : ElementWrite::Slow;
+    }
+
+    /// One element, with the class already decided by elementRead. A View read needs the array
+    /// block-backed (ensureBlock) and the element `layout`, which the loop takes once for all
+    /// elements; it returns a view into the block, as getElementView does.
+    template <ElementRead R>
+    slot_t readElement(
+        uint64_t flatIndex,
+        const camel::core::type::DataLayout *layout = nullptr) const {
+        ASSERT(flatIndex < numel_, "Array flat index out of range");
+        if constexpr (R == ElementRead::Direct) {
+            return reinterpret_cast<const slot_t *>(dataPtr_)[flatIndex];
+        } else if constexpr (R == ElementRead::View) {
+            ASSERT(
+                block_ != nullptr,
+                "A view read needs a block-backed array; call ensureBlock() before the loop.");
+            return camel::core::rtdata::pureViewOf(
+                dataPtr_ + flatIndex * elementSize_, elemType_,
+                layout != nullptr ? layout : camel::core::type::pureDataLayout(elemType_),
+                elementSize_);
+        } else {
+            return getSlotSlow(flatIndex);
+        }
+    }
+    /// Stores one element, with the class already decided by elementWrite.
+    template <ElementWrite W>
+    void writeElement(
+        uint64_t flatIndex, slot_t value,
+        const camel::core::type::ArrayType *arrayType = nullptr) {
+        if constexpr (W == ElementWrite::Direct) {
+            ASSERT(flatIndex < numel_, "Array flat index out of range");
+            reinterpret_cast<slot_t *>(dataPtr_)[flatIndex] = value;
+        } else if constexpr (W == ElementWrite::Aggregate) {
+            // setSlot's fast path for a slot-shaped aggregate, with the storage-class tests
+            // already folded into the class.
+            if (slotShaped_ && value != NullSlot &&
+                !camel::core::rtdata::isAggregateView(value)) {
+                ASSERT(flatIndex < numel_, "Array flat index out of range");
+                std::memcpy(
+                    dataPtr_ + flatIndex * elementSize_,
+                    camel::core::rtdata::aggregateSlots(value), elementSize_);
+            } else {
+                setSlotSlow(flatIndex, value, arrayType);
+            }
+        } else {
+            setSlotSlow(flatIndex, value, arrayType);
+        }
+    }
+
     template <typename T> T get(size_t index) const {
         ASSERT(index < size_, "Index out of range");
         return rtdata::fromSlot<T>(getSlot(index));
@@ -591,3 +681,74 @@ class Array : public rtdata::Object {
     /// be copied into its bytes without a field loop.
     bool slotShaped_    = false;
 };
+
+// The one place that must stay in step with Array's element classes: a loop dispatches through
+// these instead of writing the switch itself, so adding a class is a change here and nowhere
+// else. `body` receives the class as an integral_constant, which is what makes the loop body
+// compile per class.
+template <typename Body>
+void dispatchElementAccess(
+    Array::ElementRead read, Array::ElementWrite write, Body &&body) {
+    using R = Array::ElementRead;
+    using W = Array::ElementWrite;
+    switch (read) {
+    case R::Direct:
+        switch (write) {
+        case W::Direct:
+            body(std::integral_constant<R, R::Direct>{}, std::integral_constant<W, W::Direct>{});
+            return;
+        case W::Aggregate:
+            body(
+                std::integral_constant<R, R::Direct>{},
+                std::integral_constant<W, W::Aggregate>{});
+            return;
+        case W::Slow:
+            body(std::integral_constant<R, R::Direct>{}, std::integral_constant<W, W::Slow>{});
+            return;
+        }
+        return;
+    case R::View:
+        switch (write) {
+        case W::Direct:
+            body(std::integral_constant<R, R::View>{}, std::integral_constant<W, W::Direct>{});
+            return;
+        case W::Aggregate:
+            body(std::integral_constant<R, R::View>{}, std::integral_constant<W, W::Aggregate>{});
+            return;
+        case W::Slow:
+            body(std::integral_constant<R, R::View>{}, std::integral_constant<W, W::Slow>{});
+            return;
+        }
+        return;
+    case R::Slow:
+        switch (write) {
+        case W::Direct:
+            body(std::integral_constant<R, R::Slow>{}, std::integral_constant<W, W::Direct>{});
+            return;
+        case W::Aggregate:
+            body(std::integral_constant<R, R::Slow>{}, std::integral_constant<W, W::Aggregate>{});
+            return;
+        case W::Slow:
+            body(std::integral_constant<R, R::Slow>{}, std::integral_constant<W, W::Slow>{});
+            return;
+        }
+        return;
+    }
+}
+
+/// dispatchElementAccess for a loop that only reads (filter, reduce, foreach, and the source of
+/// a map whose result is built another way).
+template <typename Body> void dispatchElementRead(Array::ElementRead read, Body &&body) {
+    using R = Array::ElementRead;
+    switch (read) {
+    case R::Direct:
+        body(std::integral_constant<R, R::Direct>{});
+        return;
+    case R::View:
+        body(std::integral_constant<R, R::View>{});
+        return;
+    case R::Slow:
+        body(std::integral_constant<R, R::Slow>{});
+        return;
+    }
+}

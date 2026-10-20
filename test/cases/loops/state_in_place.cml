@@ -52,6 +52,34 @@ func growConst(n: int): (int[], int) {
     return loop xs = [0], fixed = 9 while len(xs) < n do (xs->append<7>, 0)
 }
 
+// The criterion reads the value on the graph, not the way the source wrote it: a body that binds
+// the tuple to a name and returns the name returns the same value (`let r = …` then `r`) and is
+// written in place exactly like the tuple written in place; so is a name of a name. A tuple a
+// call returns is built by another graph, so it stays a copying append (cross-function, and a
+// loop state is only written in place when the graph returning it also builds it).
+func growNamed(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do sync {
+        let r = (xs->append<7>, rounds + 1)
+        r
+    }
+}
+
+func growNamedAlias(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do sync {
+        let step = (xs->append<7>, rounds + 1)
+        let r    = step
+        r
+    }
+}
+
+func stepOf(xs: int[], rounds: int): (int[], int) {
+    return (xs->append<7>, rounds + 1)
+}
+
+func growThroughCall(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do stepOf(xs, rounds)
+}
+
 func main(): int sync {
     let before = std::mem::blocks()
     let xs     = grow(200)
@@ -76,6 +104,13 @@ func main(): int sync {
     let beforeConst  = std::mem::blocks()
     let (cs, ck)     = growConst(200)
     let afterConst   = std::mem::blocks()
+    let beforeNamed  = std::mem::blocks()
+    let (gs, gr)     = growNamed(200)
+    let afterNamed   = std::mem::blocks()
+    let (hs, hr)     = growNamedAlias(200)
+    let afterNamedAlias = std::mem::blocks()
+    let (ks, kr)     = growThroughCall(200)
+    let afterCall    = std::mem::blocks()
     println(len(xs), len(ys), mid.allocs - before.allocs, after.allocs - mid.allocs)
     println(xs[0], xs[199], ys[0], ys[199], len(again), again[0], again[2])
     println(len(zs), afterFor.allocs - beforeFor.allocs, zs[0], zs[5])
@@ -89,5 +124,8 @@ func main(): int sync {
         afterFrom.allocs - afterBoth.allocs,
         afterPeek.allocs - afterFrom.allocs)
     println(len(cs), cs[0], cs[199], ck, afterConst.allocs - beforeConst.allocs)
+    println(len(gs), gs[0], gs[199], gr, afterNamed.allocs - beforeNamed.allocs)
+    println(len(hs), hs[0], hs[199], hr, afterNamedAlias.allocs - afterNamed.allocs)
+    println(len(ks), ks[0], ks[199], kr, afterCall.allocs - afterNamedAlias.allocs)
     return 0
 }
