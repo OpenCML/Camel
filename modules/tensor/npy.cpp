@@ -24,6 +24,8 @@
  */
 
 #include "npy.h"
+
+#include "camel/utils/path.h"
 #include "binary.h"
 
 #include <algorithm>
@@ -51,7 +53,7 @@ struct NpyHeader {
 };
 
 [[noreturn]] void fail(const std::filesystem::path &path, const std::string &what) {
-    throw std::invalid_argument("npy '" + path.string() + "': " + what);
+    throw std::invalid_argument("npy '" + camel::utils::pathToUtf8(path) + "': " + what);
 }
 
 /// Value text following `'key':` in the header dict.

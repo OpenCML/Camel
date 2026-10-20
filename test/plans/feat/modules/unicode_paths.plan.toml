@@ -1,0 +1,21 @@
+id = "modules.unicode_paths"
+order = 950
+tier = "feat"
+tags = ["feat", "modules", "unicode", "windows"]
+desc = "H9 item 3: on Windows a user name, a PATH entry or a checkout outside the process code page. The command line, the environment, the current directory, CAMEL_HOME, CAMEL_PACKAGES and every opened file are UTF-8, converted at the process boundary and never lost to the code page."
+
+[defaults]
+kind = "behavior"
+tool = "node"
+args = ["${case}"]
+skip_unless = ["node", "test/tools/on-windows.mjs"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 180000
+
+[[tests]]
+name = "unicode.paths"
+desc = "A program in a directory named 中文 目录 🐪: absolute and relative argv, get_cwd, an environment value and a Chinese-named variable, fs.write_text/read_text/exists/file_size round-trips (also into a directory it creates), a module found through a non-ASCII CAMEL_PACKAGES, an installation reached through a non-ASCII CAMEL_HOME junction, and the diagnostic of a missing file keeping its UTF-8 name."
+case = "../../../cases/tools/unicode/unicode_paths.test.mjs"

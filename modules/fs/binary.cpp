@@ -14,6 +14,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/utils/path.h"
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
@@ -159,7 +160,7 @@ slot_t write(ArgsView &norm, bool atomic) {
     const std::string path(norm.get<::String *>(0)->view());
     const std::string bytes(norm.get<BytesObject *>(1)->view());
     try {
-        const fs::path target(path);
+        const fs::path target = camel::utils::pathFromUtf8(path);
         if (!target.parent_path().empty())
             fs::create_directories(target.parent_path());
         if (atomic) {
@@ -179,7 +180,7 @@ slot_t write(ArgsView &norm, bool atomic) {
 } // namespace
 slot_t fsReadBytes(ArgsView &, ArgsView &norm, camel::core::context::Context &) {
     const std::string path(norm.get<::String *>(0)->view());
-    std::ifstream file(path, std::ios::binary);
+    std::ifstream file(camel::utils::pathFromUtf8(path), std::ios::binary);
     if (!file)
         systemFailure("fs.read_bytes", path, "cannot open file");
     const std::string bytes((std::istreambuf_iterator<char>(file)), {});
