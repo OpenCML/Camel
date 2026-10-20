@@ -553,7 +553,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "200 200 1 199\n0 7 0 7 3 0 7\n6 1 0 5\n200 0 7 199 200 0 7 199\n200 0 7 200 10 8\n200 0 7 199 200 7 199\n1 1 2 199 199\n200 0 7 0 1\n"
+expect_stdout_exact = "200 200 1 199\n0 7 0 7 3 0 7\n6 1 0 5\n200 0 7 199 200 0 7 199\n200 0 7 200 10 8\n200 0 7 199 200 7 199\n1 1 2 199 199\n200 0 7 0 1\n200 0 7 199 1\n200 0 7 199 1\n200 0 7 199 199\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
