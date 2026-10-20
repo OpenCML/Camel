@@ -249,6 +249,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **A `with` parameter is not a generic parameter.** It is a context parameter; do not use it to declare type parameters or compile-time parameters.
 - **A generic function can appear in any position that expects a function**, including being passed to another generic function (see 5.5).
 - **Angle brackets are only for "configuration"**: what configures a function (the mapping function of `map`, the predicate of `filter`, weights) is a `with` parameter, keeping the pipeline style `xs->map<f>`; the main input a function processes (such as the function `grad` differentiates) is an ordinary parameter: `grad(loss)`, `value_and_grad(loss)`. When a function passed as an ordinary argument is known at compile time, the compiler still specialises for it (an optimisation, not semantics). Which standard functions fall on which side is settled one by one once the showcase programs exist.
+- **A pipeline call may take extra arguments**: `x->f(a, b)` means `f(x, a, b)`; `x->f` and `x->f<w>` are unchanged.
 
 ---
 
@@ -263,6 +264,8 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **Converting a value to its own type is legal and does nothing**: `xs as int[]` (`xs: int[]`) passes, as does `p as A` through an alias.
 - There should be no type that is still undetermined at run time: after compilation every value has a determined type (for `any` see 5.10).
 - **Diagnostics and the graph use the type names in the source** (`first<int>`, not `first<i64>`).
+- **Literals take their type from context** (as Go's untyped constants): in order, the expected type (declaration, parameter, return position), the type of the other operand of a binary operation, then the default (`int` for integers, `float` for decimals, `c128` for imaginary); operations between literals are computed exactly at compile time; a value that does not fit the target type is a compile-time error. Variables are still never converted implicitly. Example: in `x * 2 + 1` with `x` of type `f32`, `2` and `1` are `f32`.
+- **Complex numbers**: core numeric types `c64` and `c128`, stored compactly in arrays. An imaginary literal is a number immediately followed by the suffix `i`: `4i`, `4.0i`, `1e-3i` (not on hexadecimal or binary literals); `3 + 4i` is `c128`, `let w: c64 = 1 - 2i`. Printed as `3+4i`.
 
 ### 5.2 Named types and structural types
 
@@ -598,6 +601,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 - `json.decode` returns the self-describing `Json` type, and `decode_as<T>` is provided (for explicit type arguments see 5.9).
 - For bad JSON text, `decode` returns the error value of `Json!`, not a fault.
 - The accessors of `Json` accept `Json?` and `Json!`, for chained access (access can be chained even when parsing failed); `as_float` accepts integers; `get<index>` out of range gives `null`.
+- **When `Json` accessors take a `Json!`, the error passes through unchanged**: `decode(text)->get<'a'>` has type `Json?!`, handled with `!!` or `??`. A document that is too deep reports `JsonTooDeep` (distinct from malformed text); the default depth limit is 10000, to become an optional parameter of `decode`.
 
 ### 11.3 Collections and sorting
 
@@ -611,6 +615,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 - Iterating and printing a map is by sorted key; the types that can be keys are integers, booleans, strings, and tuples made of them.
 - **`append` returns a new array and does not modify the original**: after `let ys = xs->append<5>`, `xs` is unchanged; to "append to a variable" write `acc = acc->append<5>`, like `x = x + 1`. In-place rewriting is only an implementation-level optimization (when the old value is no longer used it can be appended in place); it does not enter the semantics, and no explicit in-place operator is set up. The other standard-library operators are the same. The result of a pure operation that is not used (such as `xs->append<5>` written as a statement) is a compile-time error, with a hint to rewrite it as a rebinding.
 - Returning a new value and modifying in place are not told apart by two names: there is only `sort`, which returns a new array; `xs = xs->sort` sorts in place when the old value is no longer used, the same kind of implementation-level optimization as `acc = acc->append<v>`. Tensors keep explicit in-place operators, arrays have none.
+- **An `enum` can be a map key or a set element** when all its field types are comparable; ordered first by the variants' declaration order, then field by field.
 
 ### 11.4 Call style
 
