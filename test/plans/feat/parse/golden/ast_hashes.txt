@@ -540,10 +540,13 @@ cab3302faced01db ok test/cases/compile/generics/type_import.cml
 601fed65ec23c1f8 ok test/cases/compile/generics/type_lib.cml
 ba61c070244c5f96 ok test/cases/compile/generics/unused_body.cml
 b2c7183a3863ab1f ok test/cases/compile/gir/sync_ctrl_dedup.cml
+bf47c6018ccceea4 ok test/cases/compile/literals/context_argument_name.cml
 d3be0d7fca3ed697 ok test/cases/compile/literals/context_argument_out_of_range.cml
 1d2605a0fe7c420f ok test/cases/compile/literals/context_arm_exit.cml
 f11cad6f44dba18e ok test/cases/compile/literals/context_arm_value.cml
+742648c8fd0f5945 ok test/cases/compile/literals/context_array_argument_out_of_range.cml
 765b61012a832ef5 ok test/cases/compile/literals/context_array_element_out_of_range.cml
+4af40959dc39fde6 ok test/cases/compile/literals/context_composite_argument.cml
 2b250bf48d0f255f ok test/cases/compile/literals/context_composite_rounding.cml
 e207990e87658c8a ok test/cases/compile/literals/context_conversion_out_of_range.cml
 974af32a1255df31 ok test/cases/compile/literals/context_data_literal.cml
@@ -552,6 +555,8 @@ e2d8949af876fd61 ok test/cases/compile/literals/context_literal_operand_mismatch
 1e79a075e972881f ok test/cases/compile/literals/context_not_a_number.cml
 b1df525cedfb5b9d ok test/cases/compile/literals/context_operand_out_of_range.cml
 c6421a2198b98f5b ok test/cases/compile/literals/context_pattern_out_of_range.cml
+ad0e35bb1aeff8d4 ok test/cases/compile/literals/context_struct_argument_out_of_range.cml
+d013456d6a28093c ok test/cases/compile/literals/context_struct_argument_shape.cml
 cf1e6710f8973e89 ok test/cases/compile/literals/context_struct_field_variable.cml
 ca826df00abed749 ok test/cases/compile/literals/context_truncated.cml
 2a837f510ae8fd4a ok test/cases/compile/literals/context_variable_declaration.cml
@@ -1090,7 +1095,7 @@ c3ec908702304769 ok test/cases/linear/byref/let_to_var_with_param.cml
 bdda7724b9a64bf3 ok test/cases/linear/byref/param_sorted.cml
 6fdfbac84dc5e04f ok test/cases/linear/byref/param_to_var_param.cml
 da80fe2dd24ffa18 ok test/cases/linear/byref/path_assigned.cml
-4ed3d5141f50e8fa ok test/cases/linear/byref/path_assigned_allocs.cml
+44a7c51350c433a3 ok test/cases/linear/byref/path_assigned_allocs.cml
 5b9b8251b1daec44 ok test/cases/linear/byref/var_capture_reference.cml
 33440f32bb34f6e2 ok test/cases/linear/byref/var_function_as_value_function.cml
 9cf7e573f3d55d53 ok test/cases/linear/byref/var_function_to_operator.cml

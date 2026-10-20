@@ -469,14 +469,28 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         if (containsTypeVar(wanted)) {
             reject(describe(i) + " leaves a type variable without a type");
         }
-        if (!entersImplicitly(wanted, actualAt(i))) {
-            reject(
-                std::format(
-                    "{} is '{}' here ({})",
-                    describe(i),
-                    wanted->toString(),
-                    typeBindingsToString(bindings)));
+        if (entersImplicitly(wanted, actualAt(i))) {
+            continue;
         }
+        // A composite literal enters the parameter's type as any literal does (design
+        // principles 5.1): with `T` fixed to `f32` by another argument, `[1.0]` in the `T[]`
+        // parameter is an `f32[]`, its elements converted once from the values written. The
+        // conversion is the one an ordinary call makes (enterParameters); a literal that does
+        // not fit is refused at its element, and one that does not fit at all is described
+        // below.
+        if (compositeLiteralEntersIn(inputAt(i).node, wanted, inputAt(i).expr)) {
+            if (node_handle_t entered = coerceTo(inputAt(i).node, wanted, inputAt(i).expr)) {
+                inputAt(i).node = entered;
+                typeAt(i)       = wanted;
+                continue;
+            }
+        }
+        reject(
+            std::format(
+                "{} is '{}' here ({})",
+                describe(i),
+                wanted->toString(),
+                typeBindingsToString(bindings)));
     }
     return instantiateGeneric(tmpl, bindings, call);
 }

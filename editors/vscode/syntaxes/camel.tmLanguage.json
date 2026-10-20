@@ -442,7 +442,7 @@
         },
         {
           "name": "keyword.operator.expression.camel",
-          "match": "\\b(?:as|is|of|typeof|typeas|keyof)\\b"
+          "match": "\\b(?:as|is|of|typeof|typeas|constas|keyof)\\b"
         },
         {
           "name": "constant.language.boolean.camel",

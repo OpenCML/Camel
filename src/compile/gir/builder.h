@@ -1107,11 +1107,13 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         const std::function<bool(FunctionType *, bool)> &accepts);
-    /// Whether the generic overload `tmpl` accepts arguments of the types `normTypes`: its type
-    /// variables bind and every argument then fits its parameter (resolveGenericCall without
-    /// the diagnostics).
+    /// Whether the generic overload `tmpl` accepts the arguments `normInputs` of the types
+    /// `normTypes`: its type variables bind and every argument then fits its parameter
+    /// (resolveGenericCall without the diagnostics). An argument that is a composite literal
+    /// enters its parameter's type, as it does in a call (design principles 5.1).
     bool genericOperatorAccepts(
-        const template_ptr_t &tmpl, const camel::core::type::type_vec_t &normTypes);
+        const template_ptr_t &tmpl, const std::vector<Argument> &normInputs,
+        const camel::core::type::type_vec_t &normTypes);
     /// OperatorOverloadConflict when the overload `funcType` of the operator `group` takes
     /// parameter types a built-in, C++ module or imported overload of it takes.
     void rejectOperatorConflict(
@@ -1216,6 +1218,15 @@ class Builder {
     /// literal of that shape, or when a part of it cannot take the type it is given (a literal
     /// the type cannot hold is reported here).
     node_handle_t compositeLiteralInType(
+        node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// Whether the array / struct literal written at `origin` can be given `target` as its type,
+    /// with the same walk as compositeLiteralInType but without building the converted value and
+    /// without reporting: an argument enters its parameter's type while overloads are tried
+    /// (design principles 5.1), and the conversion — which may report a value that does not fit
+    /// — is made once the callee is known (coerceTo). A value of the right kind that is out of
+    /// the type's range still enters: it is the conversion that refuses it. An element that is a
+    /// name is a value of its own type and does not enter; neither does one of another kind.
+    bool compositeLiteralEntersIn(
         node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// `data` with every element (field) in `type`, recursively; nullptr when a part of it is
     /// not a value of the type. The exact value an element was written as, kept by the GCT for
