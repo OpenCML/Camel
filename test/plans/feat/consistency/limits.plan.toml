@@ -118,7 +118,7 @@ expect_output_contains = ["Maximum recursion depth (100) exceeded"]
 
 [[tests]]
 name = "limit.default"
-desc = "Without option and variable every scheduler stops at 1000 open calls (design principles 2.10): depth(999) runs and depth(1000) does not, on all four alike. std::prl counts like the others (it had no count by default)."
+desc = "Without option and variable every scheduler stops at 1000 open calls (design principles 3.9): depth(999) runs and depth(1000) does not, on all four alike. std::prl counts like the others (it had no count by default)."
 args = ["${case}", "${backend}"]
 envs = ["N=999"]
 expect_exit = 0

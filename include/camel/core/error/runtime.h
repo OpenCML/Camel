@@ -186,7 +186,7 @@ ExecutionSite makePcExecutionSite(
 Diagnostic reportRuntimeFault(
     camel::core::context::Context &ctx, const RuntimeFault &fault, const ExecutionSite &site);
 
-// ---- Fault isolation (design principles 2.9; docs/technical/33_fault_isolation.md) ----
+// ---- Fault isolation (design principles 3.9; docs/technical/33_fault_isolation.md) ----
 
 /// Whether a fault with this diagnostic may become an error value at a fault-isolation
 /// boundary. An allow-list of the faults of a program's own computation: defects and limits of

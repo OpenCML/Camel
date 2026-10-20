@@ -18,7 +18,7 @@
  */
 
 /*
- * Equality by content (design principles 2.10): `==` compares arrays, tuples, structs and
+ * Equality by content (design principles 4.2): `==` compares arrays, tuples, structs and
  * enums part by part, not by the identity of the object. The runtime objects of module types
  * (Map, Set, Enum) use these functions too, so they live in the core rather than beside the
  * builtin operators.

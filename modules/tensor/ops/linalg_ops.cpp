@@ -219,7 +219,7 @@ std::vector<OpDef> linalgOps() {
         .traits    = {}});
     // matmul by a system BLAS (CAMEL_TENSOR_BLAS), whose order of accumulation is its own: no
     // source-level name; tensor::fuse substitutes it for a matmul granted reassociate and
-    // change_precision (design principles 2.13). Without a BLAS it is the canonical matmul.
+    // change_precision (design principles 7.5). Without a BLAS it is the canonical matmul.
     defs.push_back(OpDef{
         .name      = "matmul_blas",
         .exports   = {},

@@ -7,7 +7,7 @@
  * times over and goes on computing on the same threads: every fault must leave the interpreter
  * of its thread as it was (frames given back, call count restored), or the later lines differ.
  * The second part lets one through: of the elements that fault (5, 9 and 13), the one of the
- * smallest index ends the program (design principles 2.10), with one located diagnostic that
+ * smallest index ends the program (design principles 3.6), with one located diagnostic that
  * names index 105.
  */
 module fault_deep

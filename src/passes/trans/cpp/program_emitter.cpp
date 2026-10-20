@@ -282,7 +282,7 @@ ProgramEmitter::tailCallGroups(const std::vector<GCGraph *> &functions) {
 std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     // The parameters of `main` still open (no --arg bound them when the program was
     // translated) are the ports of the root graph: the program reads them from its command
-    // line (design principles 2.13; camel/standalone/entry.h), in the order `camel` names them
+    // line (design principles 10.6; camel/standalone/entry.h), in the order `camel` names them
     // (unboundEntryParameters: the `with` ones, then the others).
     const std::vector<std::string> names = camel::execute::unboundEntryParameters(root);
     const size_t withCount               = root->withPorts().size();
@@ -418,7 +418,7 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     call += ")";
 
     // Only a `main` that declares its return type gives the program a result (design
-    // principles 2.10): an integer or a bool is the exit code, any other value is printed. A
+    // principles 9.8): an integer or a bool is the exit code, any other value is printed. A
     // declared `T!` that failed is an error nobody handled: reported on standard error, exit
     // code 1 (src/execute/entry_args.cpp, writeEntryResultTo).
     const Type *type    = entry.main->funcType()->exitType();
@@ -482,7 +482,7 @@ std::string ProgramEmitter::emit(GCGraph *root) {
     Entry entry;
     if (program) {
         entry = findEntry(root);
-        // Values of the top level that are computed (`let k = f()`, design principles 2.11:
+        // Values of the top level that are computed (`let k = f()`, design principles 10.1:
         // before main starts): the root graph is a function of the program that computes
         // them and calls main.
         const bool computed =

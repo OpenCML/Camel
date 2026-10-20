@@ -18,7 +18,7 @@
  */
 
 /*
- * Built-in operators over Map and Set (design principles 2.9;
+ * Built-in operators over Map and Set (design principles 11.3;
  * docs/technical/31_map_and_set.md, section 6).
  *
  * Every one is pure: it reads its arguments and returns a new value. The collection that
@@ -26,7 +26,7 @@
  * argument (`put<k, v>(m)`, `m->put<k, v>`), as with `contains<v>(xs)` and `slice<a, b>(xs)`;
  * an operation on two collections of equal standing takes both as ordinary arguments
  * (`merge(a, b)`), as `concat(a, b)` does. This is the one calling form (design principles
- * 2.10); `put(m, k, v)`, once accepted as well, is refused with a hint that gives the form.
+ * 11.4); `put(m, k, v)`, once accepted as well, is refused with a hint that gives the form.
  */
 
 #pragma once

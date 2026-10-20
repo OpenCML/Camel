@@ -204,8 +204,8 @@ class Context : public std::enable_shared_from_this<Context> {
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
 
-    // ---- Type declarations in progress (design principles 2.13) ----------------------------
-    // Modules may import each other's types (2.11). A type declaration of one module that
+    // ---- Type declarations in progress (design principles 10.1) ----------------------------
+    // Modules may import each other's types (10.1). A type declaration of one module that
     // needs a type of another module compiles that module's types in the middle of its own
     // declaration; when that module needs, in turn, the type being declared, the types form a
     // cycle across the modules. Each module has its own construction-tree builder, so the
@@ -266,7 +266,7 @@ class Context : public std::enable_shared_from_this<Context> {
     }
     /**
      * Whether the entry function declares its return type. Only then is the value it returns
-     * the result of the program: the exit code, and what `-o` writes (design principles 2.10).
+     * the result of the program: the exit code, and what `-o` writes (design principles 9.8).
      * A `main` without a declared return type still has a value (that of its body), which is
      * nobody's result. The front end that knows the declaration says so here; without a word
      * from it the value counts, as it did before the rule.
@@ -304,7 +304,7 @@ class Context : public std::enable_shared_from_this<Context> {
     /**
      * The graph builder of the program compiled on this context: one for all of its modules,
      * which build their functions and their top-level values into one `__root__` graph
-     * (design principles 2.11). Opaque here: it belongs to camel/compile/gir, which creates
+     * (design principles 10.1). Opaque here: it belongs to camel/compile/gir, which creates
      * it on first use (camel::compile::gir::Builder::of).
      */
     std::shared_ptr<void> &graphBuildSession() { return graphBuildSession_; }

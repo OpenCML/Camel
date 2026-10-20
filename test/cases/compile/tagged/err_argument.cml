@@ -1,6 +1,6 @@
 /**
  * A plain value passed where a `T?` is expected enters the form by itself (design principles
- * 2.10): `f(5)` is `f(5 as int?)`. It used to be an error that asked for the conversion.
+ * 3.8): `f(5)` is `f(5 as int?)`. It used to be an error that asked for the conversion.
  */
 module err_argument
 

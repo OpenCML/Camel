@@ -283,7 +283,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "A line that starts with '@' annotates the function declaration or the block "
                 "that follows. '@name' and '@name<args>' are decorators of a function or of a "
                 "block; '@numeric(...)' grants numeric permissions to a function or a block "
-                "(design principles 2.13).",
+                "(design principles 7.5).",
             },
         },
         {
@@ -821,7 +821,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "LoopSequenceNotArray",
                 "'for' takes the elements of an array; '{0}' has type '{1}'.",
                 "A loop's 'for x in xs' visits the elements of the array xs in order (design "
-                "principles 2.10). 'range(a, b)' is the array of the integers from a to b; a "
+                "principles 3.10). 'range(a, b)' is the array of the integers from a to b; a "
                 "string, a map or a tensor is not iterated by 'for'.",
             },
         },

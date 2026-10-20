@@ -176,7 +176,7 @@ class OperatorGroup {
   private:
     /// Two rules of one group that accept exactly the same arguments cannot both be meant:
     /// the first would silently win. A registration error, found when the module loads
-    /// (design principles 2.17). Only rules that declare a fixed signature can be compared.
+    /// (design principles log 2.17). Only rules that declare a fixed signature can be compared.
     void rejectOverlappingRules() const {
         for (size_t i = 0; i < resolvers_.size(); ++i) {
             const type::FunctionType *a =

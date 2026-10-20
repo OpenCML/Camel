@@ -232,7 +232,7 @@ size_t warnUndeclaredOperatorTraits(const Module &module) {
     }
     if (count > 0) {
         // Not an error: an operator without a declaration is treated as having side effects,
-        // which costs optimizations and never correctness (design principles 2.9).
+        // which costs optimizations and never correctness (design principles 3.3).
         CAMEL_LOG_WARN_S(
             "Module",
             "Module '{}' does not declare whether {} of its operators are pure ({}{}); they are "

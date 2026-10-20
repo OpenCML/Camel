@@ -1,6 +1,6 @@
 /**
  * `t += u` on a tensor computes the new tensor and binds `t` to it, as for a number (design
- * principles 2.10): nothing is changed in place, so another name of the old tensor keeps
+ * principles 4.2): nothing is changed in place, so another name of the old tensor keeps
  * its value. Likewise `-=`, `*=`, `/=`, with a tensor or a scalar on the right.
  */
 module compound_assign

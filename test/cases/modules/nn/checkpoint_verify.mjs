@@ -53,7 +53,7 @@ try {
             }
         }
         checkLeaf(manifest.tree)
-        // The checkpoint's names are exactly the paths of tree_paths (design principles 2.17):
+        // The checkpoint's names are exactly the paths of tree_paths (design principles 13.5):
         // one file per leaf, named by the path, and the manifest records the same path.
         const pathsText = invoke('checkpoint_roundtrip.cml', pass, 6, directory).stdout.trim()
         const treePaths = pathsText.slice(1, -1).split(', ')

@@ -8,7 +8,7 @@ states the same rules for a user; this note states them for someone who changes 
 
 The goals, in the language author's words: determinism (how a text is read follows from written
 rules, not from a prediction algorithm), efficiency, and line breaks that take part in
-delimiting statements. The rulings are in `docs/design-principles.cn.md` 2.10, "语法".
+delimiting statements. The rulings are in `docs/design-principles.cn.md` 4, "语法".
 
 ```
 text ──Lexer──► TokenBuffer ──Parser──► Tree (CST) ──ast::Builder──► AST ──► GCT ──► GIR

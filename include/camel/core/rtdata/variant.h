@@ -19,7 +19,7 @@
 
 /*
  * The value of an enum: a tag and the fields of the variant it names, stored in the order
- * written (design principles 2.13). A unit variant has no field. The object does not store its
+ * written (design principles 5.3). A unit variant has no field. The object does not store its
  * static type: every method is given it, which is how the collector traces the fields with the
  * types of the variant the value happens to name.
  *

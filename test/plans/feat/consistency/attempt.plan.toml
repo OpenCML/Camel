@@ -2,7 +2,7 @@ id = "consistency.attempt"
 order = 355
 tier = "feat"
 tags = ["feat", "consistency", "runtime", "faults", "isolation"]
-desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of external resources when a run ends (design principles 2.9; docs/technical/33_fault_isolation.md)"
+desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of external resources when a run ends (design principles 3.9; docs/technical/33_fault_isolation.md)"
 
 # A fault raised inside the call `attempt` makes becomes, at the `attempt`, an error value
 # (kind: the name of the fault's diagnostic; message; location). Unless an entry says otherwise
@@ -180,7 +180,7 @@ assert(input.normalized.stdout === '8328\nerror DivisionByZero: Attempted divisi
 
 [[tests]]
 name = "attempt.siblings"
-desc = "Design principles 2.10: one element of a map inside a boundary faults. Elements that started run to their end, elements that did not start do not start, and the error value is given only after all that started have ended: every 'start' but the faulting element's has its 'end' before 'isolated'. When every element faults, the error is the fault of element 0 (attempt.lowest_index)."
+desc = "Design principles 3.6: one element of a map inside a boundary faults. Elements that started run to their end, elements that did not start do not start, and the error value is given only after all that started have ended: every 'start' but the faulting element's has its 'end' before 'isolated'. When every element faults, the error is the fault of element 0 (attempt.lowest_index)."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/siblings.cml"
 backends_agree = ["exit_code"]
@@ -294,7 +294,7 @@ golden = "golden/attempt_pipelines.txt"
 
 [[tests]]
 name = "attempt.pipeline.simplify"
-desc = "std::opt. It specialises a callee on the constant 0 and warns that the division always faults (not folded, 2.9); the warning is switched off here, the output is the same."
+desc = "std::opt. It specialises a callee on the constant 0 and warns that the division always faults (not folded, 3.9); the warning is switched off here, the output is the same."
 case = "../../../cases/consistency/attempt/pipelines.cml"
 args = ["-Wno-constant-expression-faults", "${case}", "std::opt", "${backend}"]
 golden = "golden/attempt_pipelines.txt"

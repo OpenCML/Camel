@@ -30,7 +30,7 @@
  * dependencies move to the fused node).
  *
  * A remaining tensor:matmul whose node was granted both `reassociate` and
- * `change_precision` (@numeric, design principles 2.13) becomes
+ * `change_precision` (@numeric, design principles 7.5) becomes
  * tensor:matmul_blas, which uses the system BLAS when the build has one
  * (CAMEL_TENSOR_BLAS) and the canonical kernel otherwise. Without those
  * permissions a matmul always runs the canonical fused multiply-add chain.

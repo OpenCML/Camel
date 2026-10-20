@@ -370,7 +370,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         const string valueType =
             outputType ? camel::core::type::sourceTypeSpelling(outputType->toString()) : "";
         // The numeric permissions the program granted with @numeric(...) (design principles
-        // 2.13): an attribute only on the nodes that have any, so that the dump of a program
+        // 7.5): an attribute only on the nodes that have any, so that the dump of a program
         // without the annotation is unchanged.
         const uint8_t permissions = graph->nodePermissions(nodeRef);
         const string valueAttr =

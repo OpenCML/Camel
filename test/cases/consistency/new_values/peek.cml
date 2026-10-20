@@ -1,5 +1,5 @@
 /**
- * Reads of an array variable between appends (design principles 2.12; Builder::
+ * Reads of an array variable between appends (design principles 11.3; Builder::
  * markNonRetainingReads). A read whose value only goes to an operation that cannot keep the
  * array (`len`, an element of an int[], `==`, `format`) leaves the variable's mark set, so the
  * next `acc = acc->append<v>` appends in place; a read that can keep it (bound to a name, an

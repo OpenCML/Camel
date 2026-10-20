@@ -36,7 +36,7 @@
  * module, yet they need to know whether an operator may be evaluated early, merged or
  * dropped. Modules and the builtin operator set declare those properties here when they are
  * loaded; passes only query. An operator nobody declared is treated conservatively: it has
- * side effects and may fault (design principles 2.9).
+ * side effects and may fault (design principles 3.9).
  *
  * Passes and back ends recognise an operator by its OperId, never by comparing URI text
  * (design section 3.8, R10). The operators the core itself knows have compile-time ids
@@ -137,7 +137,7 @@ struct OperatorTraits {
     /// when it runs, so it is never folded, merged or moved across a write; it is not an effect a
     /// user can observe, so it is not reported as one (effect trace).
     bool stateOnly = false;
-    /// The operator can raise a fault (design principles 2.9: division by zero, an index out
+    /// The operator can raise a fault (design principles 3.9: division by zero, an index out
     /// of range, a conversion whose value does not fit). True unless the module declares
     /// otherwise. Recorded for consumers of the graph model; no pass in this repository
     /// changes its behaviour on it yet (docs/design/graph-model, question Q1).
@@ -193,7 +193,7 @@ struct AttrGrant {
 
 /**
  * What the compiler does at a call of the operator because of what the operator is (design
- * principles 2.17): facts of the operator, declared with it, instead of names the compiler
+ * principles 6.6): facts of the operator, declared with it, instead of names the compiler
  * knows. Declared at module load time (OperatorTable::declareCallSpec).
  */
 struct CallSpec {
@@ -260,7 +260,7 @@ class OperatorTable {
 
     /// Declares the purity of the operators `protocol:name`, one `{name, pure}` each. Every
     /// operator of a module has to be declared, the ones with side effects too (design
-    /// principles 2.9): an operator nobody declared is treated as having side effects, and
+    /// principles 3.3): an operator nobody declared is treated as having side effects, and
     /// its module is told so when it is loaded. `pure` means the result depends on the
     /// arguments only: not on a clock, a random generator, the environment or a file.
     void declare(
@@ -288,7 +288,7 @@ class OperatorTable {
     bool hasExternalEffect(OperId id) const;
     bool hasExternalEffect(std::string_view uri) const;
 
-    // ---- In-place forms (design principles 2.12, 2.13) --------------------------------------
+    // ---- In-place forms (design principles 11.3) --------------------------------------
     //
     // An operator returns a new value and never changes its arguments (`sort` returns a new
     // array). Where a variable is bound to the result of the operator applied to the
@@ -407,7 +407,7 @@ class OperatorTable {
     }
 
     /// Whether running the operator writes the resource the ordinary (or with) operand `index`
-    /// names: from its resource declaration (design principles 2.17), the one source of what
+    /// names: from its resource declaration (design principles 3.3), the one source of what
     /// an operator writes. An operator without a declaration is read conservatively: every
     /// operand of a non-pure one, except that the operands of one that calls or reads the graphs
     /// of the function values it receives are not written by the operator (what the callee does

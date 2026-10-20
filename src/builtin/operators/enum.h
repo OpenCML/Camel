@@ -18,7 +18,7 @@
  */
 
 /*
- * The lowering targets of the enum (design principles 2.13), inserted by the GIR builder and
+ * The lowering targets of the enum (design principles 5.3), inserted by the GIR builder and
  * never written by a program:
  *
  *   __enum_make__(tag: int, field0, field1, ...) => E   a value of the variant `tag`

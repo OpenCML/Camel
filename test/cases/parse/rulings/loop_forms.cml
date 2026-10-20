@@ -1,4 +1,4 @@
-// The four shapes of the `do` form of a loop (design principles 2.13): one state over an array,
+// The four shapes of the `do` form of a loop (design principles 3.10): one state over an array,
 // two states under a condition (the value is their tuple), a struct as the state (`{` after
 // `do` is read as after `then`), and `for ... while` with an `if` as the body.
 func main(): int sync {

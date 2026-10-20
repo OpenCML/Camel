@@ -74,7 +74,7 @@ class MacroEvaluator {
     /// previously unsuccessful call evaluable.
     /// Reports the failures of the current round as RuntimeDiag::MacroEvaluationFailed errors
     /// at the call, with the reason, in the runtime diagnostics: a failed evaluation rejects
-    /// the program (design principles 2.7 and 3). An argument that is not a
+    /// the program (design principles 8). An argument that is not a
     /// constant is not a failure and is never reported here.
     void reportFailures();
 

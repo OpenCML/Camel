@@ -1,6 +1,6 @@
 /// Arrays, tuples and structs: constants, values built from computed elements, elements and
 /// fields, the operators on arrays, and their text. `append` gives a new array (design
-/// principles 2.12).
+/// principles 11.3).
 module composites
 
 type Point = { x: int, y: int }

@@ -1,5 +1,5 @@
 /**
- * Refused declaration of an operator overload (design principles 2.12): an operator has no
+ * Refused declaration of an operator overload (design principles 4.3): an operator has no
  * with-parameters.
  */
 module with_param

@@ -1,4 +1,4 @@
-// The condition and the body share one table of captured values (design principles 2.12): the
+// The condition and the body share one table of captured values (design principles 3.10): the
 // condition captures `limit`, the body `step` and `scale`; both reach the loop. A variable read
 // in the body is read each round. Loops nest: the inner loop's graphs capture the outer state.
 func main(): int sync {

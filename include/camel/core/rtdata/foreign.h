@@ -147,7 +147,7 @@ class ForeignResourceObject final : public Object {
 
 ForeignResourceStats foreignResourceStats();
 /// Releases every external resource that is still held, newest first, and returns how many were
-/// released. For the end of a run (design principles 2.9: before a program ends, however it
+/// released. For the end of a run (design principles 3.9: before a program ends, however it
 /// ends, its external resources are released): the collector releases a resource when it finds
 /// its wrapper dead, which for the wrappers alive at the end would be never. The wrappers stay
 /// valid objects; using one afterwards is the "disposed" error. Must not run while the program

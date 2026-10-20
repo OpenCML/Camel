@@ -4,7 +4,7 @@ tier = "feat"
 tags = ["feat", "compile", "semantic", "modules", "import"]
 desc = "Loading in three steps: modules import each other, the top level does not depend on its order, values that depend on themselves are errors"
 
-# Design principles 2.11 and 2.12; docs/design/graph-model/README.cn.md 3.9.4 (declare, build,
+# Design principles 10.1 and 10.2; docs/design/graph-model/README.cn.md 3.9.4 (declare, build,
 # link) and 3.9.5 (the two kinds of cycle).
 
 [defaults]

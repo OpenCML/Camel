@@ -52,7 +52,7 @@
  * The program grants attributes with a decorator whose operator is declared to grant them
  * (OperatorTable::declareGrant): to the nodes written in the function or block it decorates,
  * the arms, loop bodies and lambdas written there included, and not to the functions they
- * call (lexical, as design principles 2.13 says of numeric permissions).
+ * call (lexical, as design principles 7.5 says of numeric permissions).
  */
 
 #pragma once

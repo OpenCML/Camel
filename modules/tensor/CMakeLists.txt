@@ -42,7 +42,7 @@ add_camel_module(
 
 # Contraction (a * b + c into one fused multiply-add) is off in the whole project (top-level
 # CMakeLists.txt), the GEMM units included: matmul's canonical algorithm is a chain of fused
-# multiply-adds in ascending k (design principles 2.13), and gemm_blocked.inl writes each one
+# multiply-adds in ascending k (design principles 7.1), and gemm_blocked.inl writes each one
 # explicitly, so every unit computes the same bits, with or without FMA hardware.
 # The unary units (exp, tanh, sigmoid, gelu: bounded, not correctly rounded) are compiled with
 # contraction on: their polynomials may then round differently on processors with and without

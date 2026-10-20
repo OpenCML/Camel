@@ -82,8 +82,8 @@ ResolverFunc memberRule(TypeCode keyCode) {
 JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
     // `Json`: a JSON value whose shape is known only when the program runs (value.h). Its
     // static type is definite; a program looks into it through the operators below (design
-    // principles 2.12: `decode` gives a self-describing `Json`, not an `any`). Text that is
-    // not JSON gives an error value: `decode` returns a `Json!` (design principles 2.13).
+    // principles 11.2: `decode` gives a self-describing `Json`, not an `any`). Text that is
+    // not JSON gives an error value: `decode` returns a `Json!` (design principles 11.2).
     exportType(Reference("Json"), JsonType::get());
 
     // encode takes a value of every type that has a JSON form, a Json among them (a type
@@ -194,7 +194,7 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
                 camel::json::jsonObjectType())}));
     // get<key>: a member of an object; get<index>: an element of an array. Null when the
     // value is not of that kind or has no such member or element (a lookup that finds
-    // nothing is empty, as for a map: design principles 2.9).
+    // nothing is empty, as for a map: design principles 11.3).
     exportEntity(
         "get",
         OperatorGroup::create(
@@ -219,7 +219,7 @@ bool JsonModule::load() {
     context_->registerExecutorFactory("json", [ctx = context_]() {
         return createJsonExecutor(ctx);
     });
-    // The purity of every operator (design principles 2.9).
+    // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
         "json",
         {

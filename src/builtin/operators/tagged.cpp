@@ -81,7 +81,7 @@ slot_t __error_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
 namespace {
 
 /// `parse_int` and `parse_float` read a number under the rule of the conversion functions
-/// (design principles 2.10): the whole string must be one number, without blanks around it.
+/// (design principles 5.1): the whole string must be one number, without blanks around it.
 /// What is a fault there is an error value here.
 template <typename T>
 slot_t parseNumber(ArgsView &norm, const TupleType *resultType, const char *what, const char *op) {

@@ -1,5 +1,5 @@
 /**
- * A `var` parameter is a reference to the caller's variable (docs/design-principles.cn.md 2.5):
+ * A `var` parameter is a reference to the caller's variable (docs/design-principles.cn.md 3.5):
  * a write by the callee is a write to that variable, when it happens, on every scheduler and
  * after every pass. Expected output, one value per line:
  *   1        direct call
@@ -12,7 +12,7 @@
  *   11       ... and both writes land in the caller's variable
  *   9        a struct variable replaced by the callee
  *   [1, 2, 3, 4] 4   an array variable: bound by the callee to it with 4 appended
- *                    (`xs = xs->append<v>`, design principles 2.12), then replaced
+ *                    (`xs = xs->append<v>`, design principles 11.3), then replaced
  *   15       a tuple variable replaced by the callee
  *   2        a var with-parameter
  *   7        a write is visible before the callee returns (read through a second reference)

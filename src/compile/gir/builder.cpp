@@ -1428,7 +1428,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             patternAt(i)->toString());
     };
     // 1. Each variable takes the type found at its `typeas` position. An argument that is
-    // not of the form of a `T?` / `T!` parameter enters it (design principles 2.10), so it
+    // not of the form of a `T?` / `T!` parameter enters it (design principles 3.8), so it
     // binds the variables of the payload: `or_zero(5, 0)` with `x: (typeas T)?` gives
     // `T = int`. `null` binds nothing.
     type_bindings_t bindings;
@@ -1978,7 +1978,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
                                    : createCompileGraph(funcType, currGraph_, instanceName);
         if (const auto declaring = units_.find(tmpl->module.get());
             declaring != units_.end() && !tmpl->name.empty()) {
-            // Shown with the module that declares it (design principles 2.12).
+            // Shown with the module that declares it (design principles 10.2).
             graph->setName(qualifiedName(*declaring->second, instanceName));
         }
         if (currGraph_ == rootGraph_) {
@@ -2047,7 +2047,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             if (dataType->code() == TypeCode::Array && !dataType->resolved() && !refTypes.empty()) {
                 // An array whose elements are all computed (`[x, null]`, `[a, b]` with an
                 // `int` and an `int?`): its element type is what the elements join to, and
-                // an element that is not of that type enters it (design principles 2.10).
+                // an element that is not of that type enters it (design principles 3.8).
                 Type *joined = valueTypeOf(refTypes.front());
                 for (size_t i = 1; i < refTypes.size() && joined != nullptr; ++i) {
                     joined = joinTypes(joined, valueTypeOf(refTypes[i]));
@@ -2217,7 +2217,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         }
         throw;
     }
-    // Design principles 2.10: the empty literal `[]` takes its element type from where it
+    // Design principles 3.8: the empty literal `[]` takes its element type from where it
     // stands (an annotation, a parameter, the other arm of a branch, `as`). A name bound to
     // it without one has no element type; say so here, where the type can be written. (A
     // name the compiler made for an element of a literal starts with a digit.)
@@ -2234,7 +2234,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     if (ident == GCT::kDiscardName) {
-        // `let _ = e` (design principles 2.11): the value is evaluated where the statement
+        // `let _ = e` (design principles 3.9): the value is evaluated where the statement
         // stands and dropped on purpose. No name is bound, so the statement can be repeated.
         if (node != nullptr) {
             discardedValues_.insert(node);
@@ -2293,7 +2293,7 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
 
 void Builder::recordWrite(
     node_handle_t variable, node_handle_t entry, node_handle_t exit, bool throughCallee) {
-    // `A(i); wait modify(i); B(i)` gives A -> modify -> B (design principles 2.6). The second
+    // `A(i); wait modify(i); B(i)` gives A -> modify -> B (design principles log 2.6). The second
     // half follows from setModifier. The first: the waited writer is ordered after every
     // operation that directly used the variable's value before it: the operations that took a
     // value read from it (the read itself when nothing took it), and the calls and branches
@@ -2685,11 +2685,11 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
 }
 
 void Builder::reportUnusedFallibleValues() {
-    // Design principles 2.11: a `T!` that is evaluated and that nothing takes is a warning,
+    // Design principles 3.9: a `T!` that is evaluated and that nothing takes is a warning,
     // because the error it may hold is lost without a trace. On the graph "evaluated and
     // not taken" is a node without a data user that something is ordered after: a statement
     // of a sync block. (Outside a sync block a value nothing takes is not evaluated at all:
-    // design principles 2.1, which has its own warning, EffectNotExecuted.)
+    // design principles 3.1, which has its own warning, EffectNotExecuted.)
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
     const auto warn =
         [&](const compile_graph_ptr_t &graph, node_handle_t node, Type *type, const char *remark) {
@@ -2714,7 +2714,7 @@ void Builder::reportUnusedFallibleValues() {
         return asFallible(valueTypeOf(type));
     };
     // The entry function, when it declares no return type: what its body ends with is not
-    // the result of the program (design principles 2.10), so nothing takes that either.
+    // the result of the program (design principles 9.8), so nothing takes that either.
     DraftGraphBuilder *undeclaredMain = nullptr;
     if (context_ && module_ && context_->mainModule() == module_) {
         if (auto mains = graphsAt("main");
@@ -2815,10 +2815,10 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     ENTER("DREF");
     // The name as written, and the name of the module it stands for when it is one (from the
-    // innermost namespace out; design principles 2.12, layers 1 and 2).
+    // innermost namespace out; design principles 10.2, layers 1 and 2).
     const string written = gct->name();
     if (written.find("::") != std::string::npos) {
-        // `Shape::Empty`, a variant without fields: the value itself (design principles 2.13).
+        // `Shape::Empty`, a variant without fields: the value itself (design principles 5.3).
         EnumType *enumType = nullptr;
         size_t tag         = 0;
         if (enumVariantOfName(written, gct, enumType, tag)) {
@@ -2833,7 +2833,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     refOrigin_            = gct->origin();
     if (camel::core::isOverloadableOperatorGroup(written)) {
         // An operator (`a + b` is `__add__(a, b)`): its overloads from every layer are one
-        // set (design principles 2.12), not those of the first layer that has the name.
+        // set (design principles 10.2), not those of the first layer that has the name.
         node_handle_t drefNode = operatorDrefOf(written, gct);
         LEAVE("DREF");
         return drefNode;
@@ -2862,7 +2862,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (auto optTemplate = templateScope_->get(name); optTemplate.has_value()) {
         // The name of a generic function stands for a template, which has no graph. Called,
         // the arguments choose the instance; anywhere else a function is expected the
-        // position does (design principles 2.10; genericValueFor), and until then the name
+        // position does (design principles 5.5; genericValueFor), and until then the name
         // is this marker node.
         node_handle_t drefNode = graph->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
@@ -2918,7 +2918,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         }
     }
-    // Layers 3 to 5 (design principles 2.12): imported by name (or through a module or
+    // Layers 3 to 5 (design principles 10.2): imported by name (or through a module or
     // namespace prefix), then through a `using namespace`, then what comes along unasked.
     // Operators take their overloads from every layer.
     std::optional<camel::core::module::entity> opt;
@@ -2933,7 +2933,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     if (isOperatorName(written) || (named.has_value() && named->isOperGroup())) {
         // Operator groups (`+`, and the operators a module of operators brings) take their
-        // overloads from every layer (design principles 2.12; the graph model, N3).
+        // overloads from every layer (design principles 10.2; the graph model, N3).
         importedName = importedName || module_->hasImportedRef(written);
         if (importedName) {
             opt = module_->getImportedEntity(written);
@@ -2962,7 +2962,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         const auto &e = opt.value();
         if (e.isValue()) {
-            // A constant a C++ module exports (`math::pi`; design principles 2.13): the
+            // A constant a C++ module exports (`math::pi`; design principles 10.1): the
             // constant itself, here, as the same value written as a literal would be. It has
             // no node on the root graph and needs no capture.
             const GCT::node_ptr_t literal = tree_->makeData(e.value());
@@ -2980,7 +2980,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         if (camel::core::module::detail::EntityAccess::isNode(e)) {
             // A value exported by another module: a node of the root graph (design principles
-            // 2.11), used like a value of this module's top level: on the root graph itself,
+            // 10.1), used like a value of this module's top level: on the root graph itself,
             // through a capture port in a function.
             node_handle_t node = exportedValueNode(
                 *static_cast<ExportedValue *>(camel::core::module::detail::EntityAccess::node(e)));
@@ -3053,7 +3053,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     throw BuildAbortException();
 }
 
-// ---- Operator overloads of the program (design principles 2.12) --------------------------
+// ---- Operator overloads of the program (design principles 10.2) --------------------------
 //
 // Where this meets the resolution of names: an operator is the one kind of name that does not
 // take the first layer having it (visitDRefNode, "local > this module > imported > using >
@@ -3171,7 +3171,7 @@ bool Builder::hasProgramOperatorOverloads(const std::string &group) {
 
 node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct) {
     OperatorOverloads set = operatorOverloadsOf(group);
-    // `!=` is not overloaded itself: an overload of `==` gives it (design principles 2.13).
+    // `!=` is not overloaded itself: an overload of `==` gives it (design principles 4.3).
     // Where one applies, `a != b` is the negation of the call of that overload; where none
     // does, the built-in `!=` (the group of the DREF, which set.ops is not) is used as before.
     bool negated = false;
@@ -3246,7 +3246,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     }
     const bool builtinAccepts =
         set.ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
-    // Design principles 2.13: an overload of the program is preferred where it is more
+    // Design principles 4.3: an overload of the program is preferred where it is more
     // specific than the others that take the arguments. "More specific" is exact: its
     // parameter types are the argument types themselves (as written, without a value entering
     // `T?` / `T!`), while the others take them only as members of a family of types: a
@@ -3400,7 +3400,7 @@ void Builder::rejectOperatorConflict(
     // A built-in (or C++ module) overload declared for exactly these parameter types is as
     // specific as this one: the two cannot both be meant. One that takes them as members of a
     // family of types (by content, a type rule over several types) is less specific, and this
-    // one is preferred where both apply (design principles 2.13; chooseOperatorOverload).
+    // one is preferred where both apply (design principles 4.3; chooseOperatorOverload).
     const bool sameAsBuiltin = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
         const FunctionType *fixed = entry.second->fixedSignature();
         if (fixed == nullptr || fixed->withTypesCount() != 0 ||
@@ -3589,9 +3589,9 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
         gct->at(0)->type() != GCT::NodeKind::DATA) {
         // The type a declaration is written with (`let x: T = e`; GCT Builder::declaredValue):
         // `e` must already have it. A value of that very type passes as it is (converting a
-        // value to its own type does nothing, design principles 2.12); one of a type the
+        // value to its own type does nothing, design principles 5.1); one of a type the
         // declared type accepts is cast to it, so that the name has the declared type; any
-        // other is refused, as numbers are not converted implicitly (design principles 2.7).
+        // other is refused, as numbers are not converted implicitly (design principles 5.1).
         Type *have = valueTypeOf(sourceType);
         if (targetType->equals(have)) {
             LEAVE("CAST");
@@ -3706,7 +3706,7 @@ Builder::namedValueOf(node_handle_t node, const std::string &name, const GCT::no
 
 node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin) {
     if (boundWithArgs_.contains(node)) {
-        // `f<w>` as a value is a partial application (design principles 2.10). The binding
+        // `f<w>` as a value is a partial application (design principles 4.4). The binding
         // used to be dropped here, without a word.
         if (node_handle_t applied = partialApplicationOf(node, origin)) {
             return applied;
@@ -3945,7 +3945,7 @@ void Builder::rejectNameWithoutValue(
 
 void Builder::reportImportNameConflicts() {
     // Two imports by name that bring functions of the same name and the same parameter types
-    // (design principles 2.10): the call used to take the function of the import written
+    // (design principles 10.2): the call used to take the function of the import written
     // first, silently. Functions of different parameter types form a set of overloads, as
     // before; whether that stays is undecided.
     if (!module_) {
@@ -3999,7 +3999,7 @@ void Builder::reportImportNameConflicts() {
                 // is not overloaded).
                 std::optional<std::string> clash;
                 // A value: exported by a module written in Camel (a node of the root graph) or
-                // a constant of a C++ module (design principles 2.13).
+                // a constant of a C++ module (design principles 10.1).
                 const auto isValue = [](const camel::core::module::entity &e) {
                     return EntityAccess::isNode(e) || e.isValue();
                 };
@@ -4364,7 +4364,7 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // Only for a type a module defines. The built-in types have their own operators, and
     // where one is missing (`%=` on a float, `+=` on an array) that stays an error.
     // Or for any type when the program overloads the plain operator: `m &= n` on a type of
-    // the program is `m = m & n` through its `operator &` (design principles 2.11, 2.12).
+    // the program is `m = m & n` through its `operator &` (design principles 4.2, 4.3).
     Type *target = valueTypeOf(nodeTypeOf(operands[0].node));
     if (target == nullptr || (!target->isOtherType() && !hasProgramOperatorOverloads(plainName))) {
         return nullptr;
@@ -4728,7 +4728,7 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
         written = symbol;
     }
     // When the operation is applied to a variable, the program most likely meant to change
-    // it, as `xs->append<5>` did before 2.12: the fix is to bind the variable to the result.
+    // it, as `xs->append<5>` did before 11.3: the fix is to bind the variable to the result.
     std::string fix;
     const std::string text = sourceTextOf(call);
     if (call->size() >= 2 && call->at(1)->type() == GCT::NodeKind::DREF &&
@@ -5052,7 +5052,7 @@ std::optional<camel::core::attr::AttrSetId> Builder::staticGrantOf(const GCT::no
                    graphsAt(name).has_value() || decoratedGraphAt(name).has_value() ||
                    (unit_ != nullptr && unit_->values.contains(name));
         };
-        // The entity an imported name stands for (design principles 2.12, layers 3 to 5).
+        // The entity an imported name stands for (design principles 10.2, layers 3 to 5).
         const auto imported =
             [&](const GCT::node_ptr_t &ref) -> std::optional<camel::core::module::entity> {
             const std::string written = ref->name();
@@ -5262,7 +5262,7 @@ StaticArg Builder::staticArgOf(node_handle_t node) const {
 // The part of a "no matching function" message for a call that wrote every argument in the
 // parentheses although `name` takes all but the first `normCount` in angle brackets: the
 // standard library's convention is that the value worked on is an ordinary argument and what
-// configures the operation a with-argument (design principles 2.10). Names the misplaced
+// configures the operation a with-argument (design principles 11.4). Names the misplaced
 // arguments and gives the call as it should be written.
 std::string Builder::withArgumentsHint(
     const std::string &name, const std::vector<Argument> &arguments, size_t normCount) const {
@@ -5461,7 +5461,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (gct->size() >= 1 && gct->at(0)->type() == GCT::NodeKind::DREF &&
         gct->at(0)->name().find("::") != std::string::npos) {
         // `Shape::Circle(1.0)`: the variant is built from its fields, not called (design
-        // principles 2.13). A qualified name that is no variant is resolved as it was.
+        // principles 5.3). A qualified name that is no variant is resolved as it was.
         EnumType *enumType = nullptr;
         size_t tag         = 0;
         if (enumVariantOfName(gct->at(0)->name(), gct->at(0), enumType, tag)) {
@@ -5536,7 +5536,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         // An operator that declares it takes the position of its call at this many arguments
         // (CallSpec::callSiteAtArity; `error(kind, message)`: an error value records where it
-        // was made, design principles 2.9) gets that position as one more, constant argument.
+        // was made, design principles 3.9) gets that position as one more, constant argument.
         const auto &drefTarget   = nodeGraphOf(targetNode)->drefTarget(targetNode);
         const auto takesCallSite = [&] {
             if (!std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
@@ -5600,7 +5600,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     continue;
                 }
                 if (genericDrefs_.contains(node)) {
-                    // The name of a generic function (design principles 2.10). A callee
+                    // The name of a generic function (design principles 5.5). A callee
                     // with one known signature says which function it expects; a generic
                     // callee solves for it with its other arguments (resolveGenericCall);
                     // an operator tries the instances its other arguments suggest
@@ -5670,7 +5670,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         settle(normInputs, normInputTypes, false);
     }
 
-    // Design principles 2.10: an argument enters a `T?` / `T!` parameter by itself, `null`
+    // Design principles 3.8: an argument enters a `T?` / `T!` parameter by itself, `null`
     // too, and `[]` takes the element type of its parameter. A callee is first tried with the
     // argument types as they are, so that among overloads an exact match wins (`f(5)` with
     // `f(x: int)` and `f(x: int?)`); then with every argument that enters its parameter
@@ -5951,7 +5951,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 Modifier::None);
             if (!res.has_value() && withInputs.empty()) {
                 // `x == null` / `x != null` over a `T?`: the tag of `x`, not a comparison of
-                // two values (design principles 2.11).
+                // two values (design principles 3.8).
                 if (node_handle_t test =
                         nullComparison(ops->name(), gct, normInputs, normInputTypes)) {
                     LEAVE("LINK");
@@ -6030,7 +6030,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             return "<" + p.first + ">: " + p.second->signature();
                         }) +
                     "\n";
-                // The overloads of the program are part of the set (design principles 2.12).
+                // The overloads of the program are part of the set (design principles 10.2).
                 if (auto overloads = operatorOverloads_.find(targetNode);
                     overloads != operatorOverloads_.end()) {
                     for (const auto &graph : overloads->second.graphs) {
@@ -6062,7 +6062,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             rejectLiteralConversion(ops->name(), targetOperator->funcType(), normInputs, gct);
             // `foreach` drops what its element function gives: the value of the body of a
             // function written in place here is a value nothing takes (design principles
-            // 2.12). A function named here may be used elsewhere, where its value counts.
+            // 11.3). A function named here may be used elsewhere, where its value counts.
             // The operator says so itself (CallSpec::discardsCallbackResult).
             const auto *callSpec =
                 camel::core::OperatorTable::instance().callSpec(targetOperator->uri());
@@ -6078,7 +6078,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             // A constant format string is checked against the arguments it formats now, not
-            // when the program runs (CallSpec::checkFormat; design principles 2.7).
+            // when the program runs (CallSpec::checkFormat; design principles 5.4).
             if (callSpec != nullptr && callSpec->checkFormat) {
                 const bool patternInWith = callSpec->formatWithArg >= 0;
                 const auto &patterns     = patternInWith ? withInputs : normInputs;
@@ -6410,7 +6410,7 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     ASSERT(tgtNode != nullptr, "Access node target is null.");
     if (EnumType *enumType = asEnumType(nodeTypeOf(tgtNode))) {
         // A value of an enum has the fields of the variant it is, and which one that is the
-        // compiler does not know (design principles 2.9, 2.13): they are taken out by matching.
+        // compiler does not know (design principles 3.8, 5.3): they are taken out by matching.
         std::string example;
         for (const EnumVariant &variant : enumType->variants()) {
             if (variant.fieldCount() > 0) {
@@ -6440,7 +6440,7 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     Type *elemType     = nullptr;
     if (asTagged(tgtType) != nullptr) {
         // A `T?` / `T!` has the layout of a tuple and is not one: its parts are reached by
-        // `??`, `!!`, `?->` and `match` only (design principles 2.9).
+        // `??`, `!!`, `?->` and `match` only (design principles 3.9).
         diags_->of(SemanticDiag::TaggedValueNotOpened)
             .atOrigin(gct->origin())
             .commit(tgtType->toString(), "a member cannot be read from it");
@@ -6625,7 +6625,7 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
     const auto where = gct->origin() != 0 ? gct->origin() : gct->at(0)->origin();
     if (gct->exitType() == ExitType::Throw) {
         // `throw e`: the exit `return` is, with the failed form of the declared `T!` as its
-        // value (design principles 2.9). OPER __throw__ makes the failed value, the CAST
+        // value (design principles 3.9). OPER __throw__ makes the failed value, the CAST
         // gives it the declared type; both are the same object.
         TupleType *fallible = asFallible(declared);
         if (fallible == nullptr) {
@@ -6637,7 +6637,7 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
                         : "the function around it returns '" + declared->toString() + "'");
             throw BuildAbortException();
         }
-        // Design principles 2.10: `throw` takes an error value (made by `error(kind,
+        // Design principles 3.9: `throw` takes an error value (made by `error(kind,
         // message)` or bound by `case error e`), nothing else.
         if (!valueType->equals(errorType())) {
             diags_->of(SemanticDiag::ThrowNotAnError).atOrigin(where).commit(valueType->toString());
@@ -6649,7 +6649,7 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
     }
     // `return v` under a declared `T?` / `T!` puts `v` into that form: the counterpart of
     // `throw`, and one of the positions where a value enters by itself (design principles
-    // 2.10; coerceTo). A value that already has the declared type, and one that fits neither
+    // 3.8; coerceTo). A value that already has the declared type, and one that fits neither
     // way (reported by checkDeclaredReturn), is left alone.
     if (declared != nullptr && !declared->assignableFrom(valueType)) {
         if (node_handle_t entered = coerceTo(value, declared, gct->at(0))) {
@@ -6704,7 +6704,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     if (onNull && asTagged(valueTypeOf(nodeTypeOf(subject))) == nullptr &&
         isNarrowedName(gct->at(0))) {
         // `x ?? d` where an `if` around it already narrowed `x` to a `T` (design principles
-        // 2.13): allowed, with a warning.
+        // 3.8): allowed, with a warning.
         subject = reopenNarrowedName(gct->at(0), subject, gct, "??");
     }
     Type *subjectType = valueTypeOf(nodeTypeOf(subject));
@@ -6730,7 +6730,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
         // evaluated, only when the tag selects it. Arm 1 takes the value out.
         arms[0] = buildArmGraph(exec);
-        // Design principles 2.10: the right-hand side is a `T`, and the result is a `T`; or
+        // Design principles 3.8: the right-hand side is a `T`, and the result is a `T`; or
         // it is itself a `T?` (`T!` for `!!`), and the result is that: `a ?? b ?? 9` tries
         // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
         // taking the value out. Either way it is one branch.
@@ -6863,7 +6863,7 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
     return buildBranch(gct, tagNode, &arms);
 }
 
-// ---- The enum (design principles 2.13) ----
+// ---- The enum (design principles 5.3) ----
 
 namespace {
 
@@ -7410,7 +7410,7 @@ void collectNullTests(const GCT::node_ptr_t &expr, bool negated, std::vector<Nul
 
 /// The operands that `&&` joins in `expr` (`expr` itself when it is not an `&&`). Each of
 /// them holds where `expr` does: a test against null among them narrows the then arm
-/// (design principles 2.12).
+/// (design principles 3.8).
 void conjunctsOf(const GCT::node_ptr_t &expr, std::vector<const GCT::Node *> &conjuncts) {
     if (isLogicalBranch(expr, GCT::BranchKind::LogicalAnd)) {
         conjunctsOf(expr->at(0), conjuncts);
@@ -7457,7 +7457,7 @@ node_handle_t Builder::nullComparison(
     if (asNullable(subjectType) == nullptr) {
         // A value whose type is never null (`5`, an `int`, a name already narrowed to a `T`):
         // the test is allowed and its result is fixed, which is worth a warning (design
-        // principles 2.13). The value itself is not needed, so nothing evaluates it. `null`
+        // principles 3.8). The value itself is not needed, so nothing evaluates it. `null`
         // itself (type `void`) is left to the comparison of two `null`s, which is refused.
         if (subjectType == nullptr || subjectType->code() == TypeCode::Void) {
             return nullptr;
@@ -7493,7 +7493,7 @@ bool Builder::isNarrowedName(const GCT::node_ptr_t &expr) {
 node_handle_t Builder::reopenNarrowedName(
     const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
     const char *construct) {
-    // Design principles 2.13: the construct is still allowed on the name; it is applied to the
+    // Design principles 3.8: the construct is still allowed on the name; it is applied to the
     // value put back into `T?`, so that it is checked and built exactly as on the name before
     // narrowing (the right side of `??` still has to fit, the cases of the `match` still have
     // to be its fixed patterns), and only its null arm can never be taken.
@@ -7523,7 +7523,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
         return nullptr; // an `if` that tests no name against null
     }
 
-    // Narrowing (design principles 2.11, 2.12). In the arm of `if x != null then A else B`
+    // Narrowing (design principles 3.8). In the arm of `if x != null then A else B`
     // that excludes null, `x` is a `T`: the arm starts by taking the value out of `x`, and
     // the name `x` stands for that value inside the arm, as `v` does in
     // `match x { case null => B  case v => A }`. The value is taken out inside the arm
@@ -7679,7 +7679,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
             "right",
             rightSideOf(gct));
     }
-    // An `if` without `else` has no value (design principles 2.10; see buildBranch).
+    // An `if` without `else` has no value (design principles 3.7; see buildBranch).
     const bool valueless = !logical && elseArm.exec->size() == 0;
     return buildBranch(gct, condNode, &arms, valueless);
 }
@@ -7694,7 +7694,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         return node;
     }
     // `&&`, `||`, and an `if` whose condition compares names with `null` (design principles
-    // 2.11). Any other `if`, and every `match`, is built below.
+    // 3.8). Any other `if`, and every `match`, is built below.
     if (node_handle_t node = visitConditionBrchNode(gct)) {
         LEAVE("BRCH");
         return node;
@@ -7707,7 +7707,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     node_handle_t node{};
     if (asTagged(valueTypeOf(nodeTypeOf(condNode))) == nullptr && isNarrowedName(gct->at(0))) {
         // `match x { case null => ...  case v => ... }` where an `if` around it already
-        // narrowed `x` to a `T` (design principles 2.13): allowed, with a warning. A match
+        // narrowed `x` to a `T` (design principles 3.8): allowed, with a warning. A match
         // without `case null` is an ordinary match on the `T`.
         const bool nullCase = std::any_of(gct->begin() + 1, gct->end(), [](const auto &c) {
             return c->caseType() == GCT::CaseType::Value && isNullLiteral(c->at(0));
@@ -7773,7 +7773,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
     if (type == Type::Bool() && hasTrue && hasFalse) {
         return; // every value of the type has a case
     }
-    // Design principles 2.10: a `match` must have a default case, and the compiler adds no
+    // Design principles 3.7: a `match` must have a default case, and the compiler adds no
     // arm the program does not show. A `match` without `case _` is therefore refused here
     // (the fixed patterns over `T?` / `T!` never reach this function).
     diags_->of(SemanticDiag::MatchWithoutDefault).atOrigin(gct->origin()).commit(type->toString());
@@ -7857,7 +7857,7 @@ node_handle_t Builder::buildBranch(
             });
 
         if (absentElse) {
-            // Design principles 2.10: an `if` without `else` has no value. Its arm may be of
+            // Design principles 3.7: an `if` without `else` has no value. Its arm may be of
             // any type and what the arm gives is dropped: the join takes nothing. The arm
             // written is evaluated as any arm is; the one not written is an empty arm.
             joinType = Type::Void();
@@ -7868,7 +7868,7 @@ node_handle_t Builder::buildBranch(
         } else {
             // Arms must agree up to refinement: unify widens (for example two
             // tensors whose shapes differ in one extent) or fails. Failing that, one arm may
-            // enter the form of the other (design principles 2.10): `if c then 1 else null`
+            // enter the form of the other (design principles 3.8): `if c then 1 else null`
             // is an `int?`, `if c then v else failed` a `T!`. The arm that is not of the
             // joined type gets the CAST at its exit once the type is known (below).
             Type *unified = joinTypes(joinType, exitType);
@@ -8137,7 +8137,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     const size_t k         = gct->loopStateCount();
     const bool hasIterable = camel::core::loopHasIterable(kind);
 
-    // The names of the head are declared once, together (design principles 2.13).
+    // The names of the head are declared once, together (design principles 3.10).
     {
         std::unordered_set<std::string> names;
         for (size_t j = 0; j < k + (hasIterable ? 1 : 0); ++j) {
@@ -8224,7 +8224,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
     buildLoopGraph(bodyGraph, gct->loopBody());
     // The body gives the next state: of the state's type, or a value that enters it (an
-    // `int` where the state is an `int?`, design principles 2.10).
+    // `int` where the state is an `int?`, design principles 3.8).
     Type *bodyType = bodyGraph->funcType()->exitType();
     if (bodyType == nullptr || !stateType->assignableFrom(bodyType)) {
         if (bodyType != nullptr && entersImplicitly(stateType, bodyType)) {
@@ -8565,7 +8565,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     // The permissions of this scope (they include those of the enclosing ones) are in force
     // for everything built in it, arms and lambdas included.
     NumericPermissionScope permissions(numericPermissions_, gct->numericPermissions());
-    // The `using namespace` written in this block are in force in it (design principles 2.12).
+    // The `using namespace` written in this block are in force in it (design principles 10.2).
     UsingScope usings(*this, GCT::Tree::of(gct)->usingsOf(gct));
     bool old                  = synced_;
     node_handle_t oldFuncNode = lastSyncedNode_;
@@ -8747,7 +8747,7 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
         if (auto value = unit_->values.find(name); value != unit_->values.end()) {
             TopLevelDeclaration &declaration = *value->second;
             if (declaration.isVar) {
-                // Design principles 2.11: a `var` of the top level is written by the module's
+                // Design principles 10.1: a `var` of the top level is written by the module's
                 // own functions only, which are exported instead.
                 camel::source::origin_id_t origin = gct->origin();
                 for (const auto &child : *declaration.gct) {

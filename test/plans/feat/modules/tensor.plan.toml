@@ -379,7 +379,7 @@ assert(values.length === 2 && values.every(x => x === 0), 'broadcast gradient mu
 """
 timeout_ms = 10000
 
-# --- the numeric contract (design principles 2.13) -------------------------------------------
+# --- the numeric contract (design principles 7) -------------------------------------------
 
 [[tests]]
 name = "numeric_contract"
@@ -460,7 +460,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "int64_sum_exact"
-desc = "The sum of an int64 tensor accumulates exactly in int64 and wraps on overflow (design principles 2.10, 2.14): 2^53 + 1 + 1 + 1 is 9007199254740995 by axis and 9007199254740996.0 (the exact sum rounded once) in full, where an f64 accumulator gave 9007199254740992.0; INT64_MAX + 1 wraps to INT64_MIN in the full sum too (it used to come out positive)."
+desc = "The sum of an int64 tensor accumulates exactly in int64 and wraps on overflow (design principles 5.1, 7.7): 2^53 + 1 + 1 + 1 is 9007199254740995 by axis and 9007199254740996.0 (the exact sum rounded once) in full, where an f64 accumulator gave 9007199254740992.0; INT64_MAX + 1 wraps to INT64_MIN in the full sum too (it used to come out positive)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/int64_sum.cml"
 args = ["${case}", "${backend}"]
@@ -471,7 +471,7 @@ expect_stdout_exact = "9007199254740996.0\n3002399751580332.0\ntensor(9007199254
 
 [[tests]]
 name = "argmax_ieee"
-desc = "argmax and argmin compare by IEEE 754-2019 maximum and minimum (design principles 2.14): the first of equal extremes, the first NaN when there is one (for both), +0 above -0 (argmax of [-0, +0, -0, +0] is 1, argmin 0), integers by value."
+desc = "argmax and argmin compare by IEEE 754-2019 maximum and minimum (design principles 3.10): the first of equal extremes, the first NaN when there is one (for both), +0 above -0 (argmax of [-0, +0, -0, +0] is 1, argmin 0), integers by value."
 kind = "behavior"
 case = "../../../cases/modules/tensor/argmax_ieee.cml"
 args = ["${case}", "${backend}"]

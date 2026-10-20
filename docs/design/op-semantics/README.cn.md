@@ -1,15 +1,15 @@
 # 算子语义协议与图事实（设计稿）
 
 
-> **2026-10-15 已裁定**：第 15 节的 Q1–Q11 均按本稿建议（矩阵乘的规范算法取乙，按 k 递增的 FMA 链）；见设计原则 2.13。
+> **2026-10-15 已裁定**：第 15 节的 Q1–Q11 均按本稿建议（矩阵乘的规范算法取乙，按 k 递增的 FMA 链）；见设计原则 7.1。
 >
-> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 2.13 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。`LOOP` 的消费接口（第三阶段的 3a）已实现，见第 11 节开头的实施状态；事实库（3b）已实现，见第 10 节开头的实施状态；资源与定义图（第四阶段）已实现，见下面的第四阶段一段与第 8、9 节开头的实施状态。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
+> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 7 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。`LOOP` 的消费接口（第三阶段的 3a）已实现，见第 11 节开头的实施状态；事实库（3b）已实现，见第 10 节开头的实施状态；资源与定义图（第四阶段）已实现，见下面的第四阶段一段与第 8、9 节开头的实施状态。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
 >
 > **第二阶段已实现（`lane/opsem-p2`）**：下标语义的数据结构与查询（`camel/core/index_semantics.h`：准仿射表达式、迭代域、访问与写映射、四种越界策略、间接访问的形式、归约律与 `reorderFreedom`、`splitDims`、`rowMajorView`；`camel/runtime/operator_instance.h`：冻结图节点上的实例）；第一批声明（逐元素族连同广播、`transpose`/`permute`/`slice`/`reshape`/`flatten`/`unsqueeze`/`broadcast_like`/`expand_axis`、`sum`/`mean` 全量与按轴、`max`/`min` 按轴（张量模块没有全量的 `max`/`min`）、`sum_to`、`matmul`、`nn` 的两种池化作为窗口的例子、`unordered_reduce` 的律）；`camel inspect --instances`；声明求值器 `tensor::test_index_eval`（与 CPU 内核逐位比较，见第 12 节）。给 Tiles 的说明见 14.2 节。与本稿字面不同的几处（均为窄读，见 14.2 与各处注释）：实例只有一个 `law` 下标（`Write` 不另存）；`Domain::guard` 表示分块尾部不存在的点；`LawInit::Operand`（`unordered_reduce` 的 `initial`）；`LawEmpty::Fault` 指归约维为空即故障（`max_axis` 的内核在结果为空时也拒绝空轴）；声明附在张量算子的 `OpDef::index` 上，与 `infer` 并列。
 > **第四阶段已实现（`lane/opsem-p4`）**：资源的声明与查询（`camel/core/resource_semantics.h`、`camel/runtime/resources.h`；事实种类 `core.resources`），见第 8 节开头；定义图的登记、构建与检查、展开（`OperatorTable::declareDefinition`、`camel/runtime/definitions.h`；`stdlib/tensor_definitions.cml`），见第 9 节开头。给 Tiles 的说明见 14.4 节。没有改变图的转储；程序的结果只有 `log_softmax` 的变了（内核改为照它的定义，Q10）；没有遍或后端默认展开定义图。`Indirect` 访问的 gather/scatter 算子仍不存在（数据结构自第二阶段就有），本阶段没有声明。
 
 状态：**设计稿，待语言作者过目。本稿不含任何源码改动。**
-依据：`docs/design-principles.cn.md`（2.9–2.13，尤其 2.13 的"浮点的数值契约"与 `do` 式循环头；第 6 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../loops/README.cn.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
+依据：`docs/design-principles.cn.md`（3.3 的纯度、5.5 的泛型、第 7 节的"浮点的数值契约"、3.10 的 `do` 式循环头；第 15 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../loops/README.cn.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
 基线提交：`6bf31d1f`（`fsh-dev`，v0.2.12 合入之后）。
 相关：物理映射、`std::tiles` 遍的入口与块级内核语言见 [Tiles 的路线](../tiles-route/README.cn.md)（`std::tiles` 遍的入口与块级内核语言；下称 tiles-route），本稿不涉及。
 提出者：Tiles（CUDA 编译模块）的开发方，两轮需求；分工已经商定：**核心提供通用的协议与图结构；CUDA 映射、布局、Tensor Core、调度、流与事件、内存池、编译缓存、自动调优由 Tiles 实现。**
@@ -33,7 +33,7 @@ C++ 声明与 Camel 示例都是**拟议**的写法，现有编译器不接受�
 1. **算子表旁边加一份带版本的 `OperatorSemantics` 记录**，与 `OperatorTraits` 并存：traits 是热路径上的五个位，semantics 是按需查询的富信息，各部分都可以缺省，缺省一律按保守处理。算子的**稳定标识**是 `protocol:name@主.次`（如 `tensor:matmul@1.0`）；`OperId` 仍是进程内的编号，离开进程的东西（`.cmo`、Tiles 的编译缓存）按稳定标识加版本绑定（第 4 节）。
 2. **算子的原始语义与程序授予的许可分开。** 算子的声明只说它自己做什么（规范算法、累加类型、顺序、特殊值规则、故障条件）；五项数值许可只能由程序写在代码上，存在图上与节点平行的一列里，模块无从扩大（第 6 节）。
 3. **下标模型是"迭代域 + 每个操作数的访问映射 + 输出的写映射"，表达式是封闭的准仿射语言**（加、减、乘常数或参数、整除与取模），einsum 串只是简写；数据相关的地址（gather/scatter）是一种显式的"不可分析但声明了边界"的访问。声明是秩多态的，所以算子注册的是一个**实例化函数**：给定实参的类型与静态实参，得出这个节点上的具体迭代域（第 5 节）。这一点与 IC 稿"映射是一张纯子图"不同，理由在 1.3。
-4. **数值契约照 2.13 的裁定实施**：规范算法 + 五项互不蕴含的许可；归约是否可以重排，看的是"这个 dtype 与累加类型下的确切代数律 + 节点上的许可"，不是"加法有结合律"。`max`/`min` 的 NaN 与 ±0 规则今天在 CPU 上是位置相关、不交换的【实测】，建议改为 IEEE 754-2019 的 `maximum`/`minimum`，这使最大值归约在任何顺序下逐位相同而不需要许可（第 6、7 节；Q5）。
+4. **数值契约照第 7 节的裁定实施**：规范算法 + 五项互不蕴含的许可；归约是否可以重排，看的是"这个 dtype 与累加类型下的确切代数律 + 节点上的许可"，不是"加法有结合律"。`max`/`min` 的 NaN 与 ±0 规则今天在 CPU 上是位置相关、不交换的【实测】，建议改为 IEEE 754-2019 的 `maximum`/`minimum`，这使最大值归约在任何顺序下逐位相同而不需要许可（第 6、7 节；Q5）。
 5. **图事实是挂在快照上的旁表，每条事实带一个印记**：它所依赖的每张图的修订号、算子声明的纪元、目标配置的散列。读的时候逐项比较整数，发布构建里也查。不能从图上恢复的语义信息（数值许可、用户约束、定义图的绑定）**不是事实而是图的内容**，随图块进缓存；可推导的事实重算，缓存要验印记；与目标相关的结果不进核心（第 10 节）。
 6. **`LOOP` 的消费者拿到一个统一的访问器**（初值、条件图与循环体图的形参、下一轮状态、捕获的对应关系），提交时核心校验状态类型、子图接口与效应摘要；**降为尾递归只发生在各后端自己的入口、在它私有的事务里**，不得在共享的程序上不可逆地提前做（第 11 节）。
 7. **定义图**（算子的完整语义展开，如带数值稳定化的 softmax）由核心管理生命周期、版本与递归检测；后端可以保留高层算子，也可以展开，核心从不强迫提早展开（第 9 节）。
@@ -57,8 +57,8 @@ IC 稿（2026-10-15，`wzj-dev`）是一份**拟议的目标架构**：计算图
 | 3.1 三种映射：逻辑访问、存储、执行布局 | 只有**逻辑访问映射**进核心；存储映射与执行布局归 Tiles（5.7） | 按分工 |
 | 3.2 `scatter_reduce` 的"重复目标要有合并策略" | 写映射的三种模式：唯一、按归约律合并、按逻辑顺序覆盖（5.6） | **实现**（作为声明的词汇；算子本身不在本稿） |
 | 3.3 构造的装配模式（唯一放置、归约、有序覆盖） | 同上，写映射的模式 | **实现**（词汇） |
-| 3.4 归约器、有序折叠 / 有序树 / 无序 | `ReductionLaw`（第 7 节）；三种顺序映射到"许可 (a) + 律的确切交换性" | **实现，按 2.13 重述**（1.3 D4） |
-| 4 每个操作的算术契约（存储、计算、累加类型，输出转换，重排、FMA、近似、特殊值、复现范围） | `NumericSemantics`（算子的原始语义）+ 节点上的许可列（第 6 节） | **实现，按 2.13 裁定**（1.3 D1） |
+| 3.4 归约器、有序折叠 / 有序树 / 无序 | `ReductionLaw`（第 7 节）；三种顺序映射到"许可 (a) + 律的确切交换性" | **实现，按第 7 节重述**（1.3 D4） |
+| 4 每个操作的算术契约（存储、计算、累加类型，输出转换，重排、FMA、近似、特殊值、复现范围） | `NumericSemantics`（算子的原始语义）+ 节点上的许可列（第 6 节） | **实现，按第 7 节裁定**（1.3 D1） |
 | 4 故障契约（不能忽略、不能投机执行会故障的操作） | `FaultSpec`：故障的种类与条件（4.2） | **实现**（声明层面；"并行时报哪个故障"仍是第 6 节的未决项） |
 | 6.2 资源的读写区域、别名、逃逸 | `ResourceSpec`：资源身份、区域、访问方式、结果与输入的别名（第 8 节） | **实现语义层**；能力、版本、事件不实现 |
 | 7 表的前五项接口：Shape/domain、Indexing、Effects/resources、Algebra/numerics、Decomposition | `OperatorSemantics` 的五个部分（4.2） | **实现** |
@@ -73,10 +73,10 @@ IC 稿（2026-10-15，`wzj-dev`）是一份**拟议的目标架构**：计算图
 
 ### 1.3 本稿与 IC 稿不同的地方（附理由）
 
-- **D1 数值策略。** IC 稿第 4 节拟议三个命名策略 `source`/`reproducible`/`relaxed`，并说"不把跨后端逐位相同的保证追加到现有的 `sum`、`matmul` 上"。负责人 2.13 的裁定取代了这一点：基准是规范算法，加减乘除与开方逐步正确舍入、按书写顺序、不收缩，**在这个范围内各后端、各设备逐位相同**；放宽是五项互不蕴含的显式许可。所以本稿没有命名策略，只有"原始语义 + 许可集合"；`sum`、`matmul` 各自要声明一个规范算法，现有的实现要按它审计（6.9）。IC 稿"测试的误差容限不是重排的许可""调度不能悄悄削弱数值许可"两条与裁定一致，照用。
+- **D1 数值策略。** IC 稿第 4 节拟议三个命名策略 `source`/`reproducible`/`relaxed`，并说"不把跨后端逐位相同的保证追加到现有的 `sum`、`matmul` 上"。负责人 7.1 的裁定取代了这一点：基准是规范算法，加减乘除与开方逐步正确舍入、按书写顺序、不收缩，**在这个范围内各后端、各设备逐位相同**；放宽是五项互不蕴含的显式许可。所以本稿没有命名策略，只有"原始语义 + 许可集合"；`sum`、`matmul` 各自要声明一个规范算法，现有的实现要按它审计（6.9）。IC 稿"测试的误差容限不是重排的许可""调度不能悄悄削弱数值许可"两条与裁定一致，照用。
 - **D2 映射的形式。** IC 稿把 `IndexMap` 定为"一张把下标元组与参数映射到坐标的纯子图"。本稿建议**主形式是一个封闭的准仿射表达式语言**（5.1），纯子图只作为"数据相关 / 不可分析"时的退路。理由：(1) 可分析——依赖、越界、单射、覆盖的判定落在线性整数算术上，有确定的算法与超时退回"未知"的分级（IC 5 自己也这样分级）；(2) 可序列化——描述是驻留的数据，进缓存键、比较相等都是常数时间，不占图的 65,535 容量，不需要图引用；(3) 可组合——Tiles 今天已经在把 transpose、slice、broadcast 的映射复合成一条地址式【读码：`modules/tiles/src/codegen.cpp:39-49`】，描述语言上的复合是代入。子图形式这三样都要另做一套。
 - **D3 维度的第三种角色。** IC 稿的角色只有并行与归约。本稿加 **Sequential**（有序递推）：`LOOP` 的 `for`、`fold`、`scan` 的那一维。它不能并行、也不是归约（每一步都有可观察的中间状态），但它的下标映射与域照样有用（5.1、11.3）。
-- **D4 有序树与无序。** IC 稿区分"保持元素顺序、允许重新加括号"与"允许置换与重新加括号"。2.13 的许可 (a) 只有一项"改变归约的顺序或结合方式"。本稿的对应：许可 (a) 授予**重新加括号**；**置换**另外要求这个律在这个 dtype 上是**确切可交换**的（浮点加、乘、IEEE `maximum` 是，位置相关的 `max`、字符串连接、矩阵积不是）。不可交换的律在许可 (a) 下只能保序分组。这样不需要第六项许可，又不会把"可以改舍入"误读成"可以改数学结果"。
+- **D4 有序树与无序。** IC 稿区分"保持元素顺序、允许重新加括号"与"允许置换与重新加括号"。7.2 的许可 (a) 只有一项"改变归约的顺序或结合方式"。本稿的对应：许可 (a) 授予**重新加括号**；**置换**另外要求这个律在这个 dtype 上是**确切可交换**的（浮点加、乘、IEEE `maximum` 是，位置相关的 `max`、字符串连接、矩阵积不是）。不可交换的律在许可 (a) 下只能保序分组。这样不需要第六项许可，又不会把"可以改舍入"误读成"可以改数学结果"。
 - **D5 描述放在哪。** IC 稿说域、布局、输出规格、数值策略是"类型化的值或驻留的描述"。本稿：算子的**声明**是算子表里驻留的描述（不是图上的值）；一个节点上**实例化**后的域是可推导的事实（第 10 节的第 (ii) 类），按需算、带印记缓存；只有程序写下的、图上推不出来的东西（数值许可等）是图的内容。布局不进核心。
 - **D6 接口的边界。** IC 第 7 表把 Scheduling、Target lowering、Cost 也列为算子接口。按分工，它们不进核心的 `OperatorSemantics`；Tiles 用 `OperatorKey` 做键自己登记，核心不读它们。
 - **D7 资源。** IC 6 的能力、内存版本、完成事件、屏障、集合通信都留在拟议。核心只给语义层的声明（第 8 节）与保守的缺省；`sync`、`wait` 的含义不变，不成为 GPU 的同步原语（IC 2 与 Tiles 的要求一致）。
@@ -91,7 +91,7 @@ IC 稿（2026-10-15，`wzj-dev`）是一份**拟议的目标架构**：计算图
 
 - `OperId` 是 32 位的表下标，**进程内**有效；离开进程的东西"必须存 URI、装载时重新驻留"（文件头注释）。核心认得的 11 个算子有编译期常量编号（`oper::VarGet`、`oper::UnorderedReduceArr` 等）。
 - 每个表项：URI、族标志（内建、`:mark/`、赋值）、一个原子字节的 traits、类型规则（resolver）、类型折叠函数、就地形式。
-- `OperatorTraits` 五个位：`pure`、`elementwise`（"输出元素 i 只依赖输入元素 i（广播之后）"）、`stateOnly`、`mayFault`（缺省为真）、`callsGraphs`。没有声明的算子按"有效应、可能故障"处理（2.9）。
+- `OperatorTraits` 五个位：`pure`、`elementwise`（"输出元素 i 只依赖输入元素 i（广播之后）"）、`stateOnly`、`mayFault`（缺省为真）、`callsGraphs`。没有声明的算子按"有效应、可能故障"处理（3.3）。
 - 张量模块的 `OpDef` 带自己的 `OpTraits{pure, elementwise}`、`infer`（形状推断）、`vjp`、`foldFromTypes`【读码：`modules/tensor/ops/op_def.h:127-145`】；注册时只把 `pure`、`elementwise` 写进核心的算子表【读码：`modules/tensor/ops/registry.cpp:183-185`】，所以张量算子的 `mayFault` 一律是缺省的"可能"。
 - 图上：节点 16 字节定长，每图一张图引用表（图模型第 3 步的 3b、3c 已合入）；每张图一个四位的效应摘要（图模型 3.3）。**运行期的节点枚举里还没有 `LOOP`**【读码：`include/camel/runtime/graph.h:93-109`，0–14，没有 15】。
 
@@ -119,14 +119,14 @@ IC 稿（2026-10-15，`wzj-dev`）是一份**拟议的目标架构**：计算图
 
 ### 2.3 核心 CPU 内核在数值契约下的现状
 
-2.13 的契约对核心自己的 CPU 实现同样成立。以下是写本稿时顺带查到的，列为核心一侧的审计项（6.9）：
+第 7 节的契约对核心自己的 CPU 实现同样成立。以下是写本稿时顺带查到的，列为核心一侧的审计项（6.9）：
 
 - **GEMM 打开了收缩。** 全项目以 `-ffp-contract=off` 编译，但张量的 GEMM 与一元运算单元"opt back in"：`gemm_generic.cpp`、`unary_generic.cpp` 用 `-ffp-contract=on`，AVX2/AVX-512 单元用 `-mfma -ffp-contract=on`；注释说没有 FMA 的 x86-64 上通用单元"rounds twice"【读码：`CMakeLists.txt:48-54`、`modules/tensor/CMakeLists.txt:37-52`】。也就是说**今天 CPU 的 `matmul` 在不同的处理器上已经可能不逐位相同**。GEMM 是 Goto 式分块（KC 深度的块）【读码：`modules/tensor/kernels/gemm_blocked.inl:25-33`】；每个输出元素沿 k 的累加次序是否严格递增、块与块之间是否从零开始再相加【未查】。
 - **`exp` 是自写的多项式**："few ulp over the normal float range"，"NaN inputs are not propagated faithfully"【读码：`modules/tensor/kernels/vmath.h:20-29`】；`tanh`、`sigmoid`、`gelu` 由它导出，误差是绝对误差约 1e-7，不是 ulp。
 - **`max`/`min` 的特殊值规则是位置相关的**【实测，附录 A.1】：逐元素 `maximum(a, b)` 有 NaN 时返回 `a`、±0 平局时返回 `a`，所以 `maximum(a, b)` 与 `maximum(b, a)` 不同；`max(x, 0)` 只在**第一个元素**是 NaN 时得 NaN（`[1, NaN, 3]` 得 3，`[NaN, 1, 3]` 得 NaN），`[0, −0]` 得 0、`[−0, 0]` 得 −0。实现是 `std::max(a, b)` 与 `v > best`【读码：`modules/tensor/kernels/elementwise.cpp:263-266`、`reduce.cpp:163-174`】。
 - **`relu(NaN) = 0`、`relu(−0) = +0`**【实测】；实现是 `x > 0.0f ? x : 0.0f`【读码：`modules/tensor/kernels/unary_loops.inl` 的 `Relu` 分支】。**Tiles 写的是 `a<0.0f?0.0f:a`，给出 NaN 与 −0**【读码：`modules/tiles/src/codegen.cpp:226`】。两者在逐位相同的契约下不能并存（Q6）。
 - **融合的 `softmax` 内核与"max、减、exp、sum、除"的组合不是同一个算法**【读码：`modules/tensor/kernels/reduce.cpp:211-229`】：最大值从 −∞ 起用 `std::max` 累计（于是 NaN 一律被忽略，与 `max_axis` 的"首个 NaN 传播"不同）；`exp` 用 `vmath::exp`；和在 f64 里累加；最后乘以 f32 舍入过的倒数 `1/sum`，而不是除以和。Tiles 把 softmax 写成组合（README），所以"CPU 的 `tensor:softmax`"与"Tiles 的 softmax"在位上不同是预期的；问题在于 `tensor:softmax` 的规范算法到底是哪一个（第 9 节，Q10）。
-- **标量浮点除以零是故障**【实测：`let nan = zero / zero` 报 `RuntimeDiag::DivisionByZero`】，**张量逐元素除以零按 IEEE 得 NaN/±∞**【实测：附录 A.1 用 `m / m` 造出 NaN】。两者都与 2.9"除零是故障"的字面不完全一致，但这是张量算子既有的语义（Tiles README 也这样说），本稿不改；声明里如实写（4.2 的 `FaultSpec`）。
+- **标量浮点除以零是故障**【实测：`let nan = zero / zero` 报 `RuntimeDiag::DivisionByZero`】，**张量逐元素除以零按 IEEE 得 NaN/±∞**【实测：附录 A.1 用 `m / m` 造出 NaN】。两者都与 3.9"除零是故障"的字面不完全一致，但这是张量算子既有的语义（Tiles README 也这样说），本稿不改；声明里如实写（4.2 的 `FaultSpec`）。
 
 ---
 
@@ -187,7 +187,7 @@ struct OperatorKey {
 ```cpp
 namespace camel::core::sem {
 
-enum Permission : uint8_t {          // design principles 2.13; names are provisional (Q1)
+enum Permission : uint8_t {          // design principles 7.5; names are provisional (Q1)
     kReassociate      = 1 << 0,      // (a) reorder or reassociate a reduction
     kContract         = 1 << 1,      // (b) contract a multiply and an add into an FMA
     kApproxMath       = 1 << 2,      // (c) approximate math functions
@@ -406,13 +406,13 @@ output   (i, j)  Unique
 ```
 params   n, c (Extent); start, stop, step (Static 或 Runtime)
 domain   (i, j) : 0 <= i < L, 0 <= j < c       其中 L = max(0, (stop - start + step - 1) floordiv step)
-         constraints: step > 0, 0 <= start <= n, start <= stop <= n     （2.11：起点在终点之后得空）
+         constraints: step > 0, 0 <= start <= n, start <= stop <= n     （3.9：起点在终点之后得空）
 x        (start + step * i, j)
          valid: start + step * i < n           onInvalid: Unreachable（由 constraints 推出）
 output   (i, j)  Unique
 ```
 
-`L` 里有 `max`，不在准仿射语言里：实例把 `L` 本身登记为一个参数，并加约束 `step * (L - 1) < stop - start <= step * L`（或 `L = 0` 当 `stop <= start`）。`start`、`stop` 是运行期值时，越界在算子入口处是故障（2.10"运行期的 `slice` 越界是故障"），声明成 `FaultSpec{IndexOutOfRange}` 加上述约束作为前置条件；进入域之后的访问是 `Unreachable`。Tiles 今天对静态 slice 正是这样做的：入口处检查、空域把步长规范为 0【读码：`compiler.cpp:446-468`】。
+`L` 里有 `max`，不在准仿射语言里：实例把 `L` 本身登记为一个参数，并加约束 `step * (L - 1) < stop - start <= step * L`（或 `L = 0` 当 `stop <= start`）。`start`、`stop` 是运行期值时，越界在算子入口处是故障（3.9"运行期的 `slice` 越界是故障"），声明成 `FaultSpec{IndexOutOfRange}` 加上述约束作为前置条件；进入域之后的访问是 `Unreachable`。Tiles 今天对静态 slice 正是这样做的：入口处检查、空域把步长规范为 0【读码：`compiler.cpp:446-468`】。
 
 **例 3：reshape。** `reshape(x, [p, q])`，`x: [a, b]`，`a·b = p·q`：
 
@@ -524,9 +524,9 @@ initial  base                                     // 输出从 base 开始；Com
 
 ## 6. 数值契约
 
-### 6.1 裁定（2.13，照录要点）
+### 6.1 裁定（第 7 节，照录要点）
 
-2026-10-18 的 2.15 裁定补充了以下规则的例外：`std::opt::algebra`（含 `std::opt` 内的算式阶段）
+2026-10-18 的裁定（裁定记录 2.15，现为 7.3、7.4）补充了以下规则的例外：`std::opt::algebra`（含 `std::opt` 内的算式阶段）
 默认允许局部重结合和系数合并，不要求节点显式授予 `reassociate`。遍参数 `safe_fp=true`
 将此阶段限制为严格等价变换。该策略不传播节点许可，也不默认授予 FMA、精度变化、近似函数
 或特殊值假设；其余遍和算子的以下契约保持。参数是遍自身的策略，不是后端的全局许可。
@@ -609,7 +609,7 @@ func caller(x: Tensor<f32, const [8, 3]>, w: Tensor<f32, const [3, 4]>): float {
 三个候选（Q5）：
 
 - **A. IEEE 754-2019 的 `maximum`/`minimum`**：任一操作数是 NaN 则结果是 NaN；−0 < +0。确切可结合、可交换，所以最大值归约在任何顺序、任何分块下**逐位相同，不需要许可**；Tiles 的并行最大值不再需要带下标（`argmax` 仍需要，见下）。CUDA 的 `fmaxf` 不是它（`fmaxf` 忽略 NaN），要用比较序列实现【未查：CUDA 是否有直接对应的内建函数】。
-- **B. `maximumNumber`**：忽略 NaN（全是 NaN 时才是 NaN）；−0 < +0。同样确切可结合可交换；但"数据里有 NaN 而结果看不出来"与 2.13 不对特殊值作额外假设的精神不合。
+- **B. `maximumNumber`**：忽略 NaN（全是 NaN 时才是 NaN）；−0 < +0。同样确切可结合可交换；但"数据里有 NaN 而结果看不出来"与 7.3 不对特殊值作额外假设的精神不合。
 - **C. 保持现状**：位置相关。不改语义，但每个并行实现都要带下标，并且 `softmax` 内核里的 `std::max` 从 −∞ 起累计（忽略 NaN）与 `max_axis`（传播首个 NaN）这两个现存的不一致都要按 C 的规则修。
 
 建议 A。平局时的**下标**（`argmax`、`max` 的梯度）仍取第一个出现的位置：`argmax` 的律是"(值, 下标) 对上的字典序最大值，值相等取下标小的"，它也确切可结合可交换（因为下标唯一），并行时照样带下标，这不受 Q5 影响。
@@ -622,8 +622,8 @@ func caller(x: Tensor<f32, const [8, 3]>, w: Tensor<f32, const [3, 4]>): float {
 
 **Tiles**（交给 Tiles，第 14 节同列）：
 
-1. **matmul 的 `fmaf`。** 在 2.13 的字面下，没有许可 (b) 时 `matmul` 的规范算法是"先乘、舍入、再加、舍入"，`fmaf` 是一次没有被授予的收缩。若 Q7 定为字面读法，Tiles 改用 `__fmul_rn` 与 `__fadd_rn`（CUDA 规定这两个内建函数不被收缩【未查：以 CUDA 文档为准】），有许可 (b) 的节点再用 `fmaf`。若 Q7 定为"按 k 顺序的 FMA 链"是 `matmul` 的规范算法，Tiles 现有代码即符合，要审计的是 CPU。
-2. **容差测试不是逐位相同的证明。** README 说"浮点的一致性以容差测试"；基准测试里"所有输出逐位相同"是样本，不是证明。2.13 之后，`CorrectlyRounded` 类的算子在 Tiles 与 CPU 之间应当**逐位比较**；容差只适用于 `Bounded` 类，且容差应当由声明的 `ulpBound` 推出，而不是一个经验数。
+1. **matmul 的 `fmaf`。** 在 7.1 的字面下，没有许可 (b) 时 `matmul` 的规范算法是"先乘、舍入、再加、舍入"，`fmaf` 是一次没有被授予的收缩。若 Q7 定为字面读法，Tiles 改用 `__fmul_rn` 与 `__fadd_rn`（CUDA 规定这两个内建函数不被收缩【未查：以 CUDA 文档为准】），有许可 (b) 的节点再用 `fmaf`。若 Q7 定为"按 k 顺序的 FMA 链"是 `matmul` 的规范算法，Tiles 现有代码即符合，要审计的是 CPU。
+2. **容差测试不是逐位相同的证明。** README 说"浮点的一致性以容差测试"；基准测试里"所有输出逐位相同"是样本，不是证明。第 7 节之后，`CorrectlyRounded` 类的算子在 Tiles 与 CPU 之间应当**逐位比较**；容差只适用于 `Bounded` 类，且容差应当由声明的 `ulpBound` 推出，而不是一个经验数。
 3. **`relu` 的 NaN 与 −0**：与 CPU 不同（2.3）。按 Q6 的裁定改一边。
 4. **NVRTC 的精度选项要写死。** 今天只传了 `--fmad=false`【读码：`cuda_backend.cpp:256`】。除法与开方的正确舍入、次正规数不冲刷依赖 NVRTC 的缺省（`-prec-div`、`-prec-sqrt`、`-ftz`）【未查：缺省值以 NVRTC 文档为准】；契约要求的东西不应依赖缺省值，显式传入，并进编译缓存的键。
 5. **`expf`、`logf` 的误差上界**要不超过声明的 `ulpBound`【未查：CUDA 文档给出的这两个函数的上界】；`--use_fast_math` 一类选项只能在节点有许可 (c)（与 (e)，若它还改变特殊值）时使用。
@@ -706,7 +706,7 @@ granted = 节点的许可列 ∪ (law.order == Unordered ? {a} : ∅)
 
 `std::opt::algebra` 在算子表里找"声明了对另一个算子分配、且二者都可交换"的算子对，把它们当作乘与加，再找声明了"是该加法的减"的算子；内建的 `:op/add_i/l/f/d` 与张量的 `tensor:add`、`subtract`、`multiply`（float32 元素）同样处理，核心里不再有算子 URI 清单。张量的规则多一条限制：被合并的两项必须与结果同类型（不做广播），系数是元素类型精确表示的标量常量。整数张量不在其内：内核对整数的契约没有声明为精确可结合。
 
-2.15 与 2.16 的"默认放宽"是**策略**，不是节点的许可：`sem::NumericPolicy`（`defaultGrants` 加上"节点自带的许可算不算"）有三个取值——`explicitOnly()`（只认节点写的）、`relaxed()`（默认，附带 `reassociate`）、`strict()`（`safe_fp=true`：默认什么都不给，节点的许可也不算）。改写遍问 `policy.permits(节点许可, 所需许可)`；`reorderFreedom(law, 节点许可, policy)` 与 `reorderFreedomOf(graph, node, policy)` 是同一个问题在归约上的形式，`core.reorder` 事实用 `explicitOnly()`。Tiles 的 `relaxed` 掩码（`cuda.cpp`、`schedule.cpp`）仍是它自己的一份，等它改读这里的策略。
+7.3 的"默认放宽"是**策略**，不是节点的许可：`sem::NumericPolicy`（`defaultGrants` 加上"节点自带的许可算不算"）有三个取值——`explicitOnly()`（只认节点写的）、`relaxed()`（默认，附带 `reassociate`）、`strict()`（`safe_fp=true`：默认什么都不给，节点的许可也不算）。改写遍问 `policy.permits(节点许可, 所需许可)`；`reorderFreedom(law, 节点许可, policy)` 与 `reorderFreedomOf(graph, node, policy)` 是同一个问题在归约上的形式，`core.reorder` 事实用 `explicitOnly()`。Tiles 的 `relaxed` 掩码（`cuda.cpp`、`schedule.cpp`）仍是它自己的一份，等它改读这里的策略。
 
 ---
 
@@ -718,7 +718,7 @@ granted = 节点的许可列 ∪ (law.order == Unordered ? {a} : ∅)
 > - **区域**：`Mapped` 不另存表达式，而是指明节点下标实例里的哪一张映射（某个操作数的访问映射或写映射），区域就是该映射在域上取到的元素；`regionBounds` 给出包围盒，`regionsMayOverlap` 判断重叠（算不出就按整体）。今天没有声明 `Mapped` 区域的算子（张量没有就地算子），由测试用手造的实例覆盖。
 > - **结果**：`ResultAlias` 照 8.1；另有 `allocates`：结果是新的资源（`:var/new` 新建单元，`tiles:upload` 新建设备内存）。
 > - **外部效应与 traits**：声明的 `externalEffect` 只能在 traits 允许外部效应时为真（不是 pure、不是 stateOnly）；反过来可以细化：赋值族在 traits 里算外部效应（没有"写变量"这一位），资源声明说它只写程序自己的单元。效应摘要（`effectSummaryOf`）仍由 traits 算出，不变（8.3）。随机数的生成照 8.1 的注释算外部效应，见 14.4 的待问。
-> - **查询**（`camel/runtime/resources.h`）：`resourcesOf`（每个节点：OPER 读声明；FUNC、LOOP、被调函数可知的 CALL 读所运行的图的足迹并映射到节点的输入）、`footprintOf`（一张图对它收到的资源、环境状态与程序外做了什么；递归按最小不动点，按图的序号与声明纪元缓存）、`originOf`/`mayAlias`（同一次激活里两个不同的新建、或新建与收到的值，不是同一资源；两个端口可能是）、`resourceConflict`（`Resource`：重叠区域且至少一写；`External`：都有外部效应）、`dependsOn`（只看数据边）与 `orderedBefore`（含控制边）分开（8.2）、`requiredOrderings`（一张图里必须保持先后的成对节点，分支的不同臂不算一对；图没有排序的一对即设计原则第 6 节未决的情形）。
+> - **查询**（`camel/runtime/resources.h`）：`resourcesOf`（每个节点：OPER 读声明；FUNC、LOOP、被调函数可知的 CALL 读所运行的图的足迹并映射到节点的输入）、`footprintOf`（一张图对它收到的资源、环境状态与程序外做了什么；递归按最小不动点，按图的序号与声明纪元缓存）、`originOf`/`mayAlias`（同一次激活里两个不同的新建、或新建与收到的值，不是同一资源；两个端口可能是）、`resourceConflict`（`Resource`：重叠区域且至少一写；`External`：都有外部效应）、`dependsOn`（只看数据边）与 `orderedBefore`（含控制边）分开（8.2）、`requiredOrderings`（一张图里必须保持先后的成对节点，分支的不同臂不算一对；图没有排序的一对即设计原则第 15 节未决的情形）。
 > - **已声明**：`:var/*` 与赋值族、控制台与 profiler、`fs`、`random`、`time`、`os`、`sys`、`nn:save_params`、`para:rendezvous`、`algo` 的就地形式、张量的有效应算子、Tiles 的算子（14.4）。`:mark/` 高阶算子、`python`、`pyplot`、`onnx`、`autodiff` 未声明，照保守读法，与今天一样排序。
 >
 > 细节见 `docs/technical/41_resources_and_definitions.md` 第 1 节。
@@ -754,8 +754,8 @@ struct ResourceSpec {
 } // namespace camel::core::sem
 ```
 
-- **身份。** 2.12 列明了有身份的东西：`var` 单元、经 `var` 参数就地修改的对象、外部库包装的对象；其余的值没有可观察的身份，后端可以随意复制或共享。所以 `Binding` 只会指向这三类：`var` 形参、写了的捕获单元、外部资源对象（如 Tiles 的 `Device<Tensor>` 底下的设备内存）。张量值本身不是资源。
-- **区域。** 不知道时是整个对象。张量的就地算子（2.10 保留的显式就地算子）的区域可以是一个映射出来的窗口。
+- **身份。** 10.5 列明了有身份的东西：`var` 单元、经 `var` 参数就地修改的对象、外部库包装的对象；其余的值没有可观察的身份，后端可以随意复制或共享。所以 `Binding` 只会指向这三类：`var` 形参、写了的捕获单元、外部资源对象（如 Tiles 的 `Device<Tensor>` 底下的设备内存）。张量值本身不是资源。
+- **区域。** 不知道时是整个对象。张量的就地算子（11.3 保留的显式就地算子）的区域可以是一个映射出来的窗口。
 - **访问方式**：读、写、读-改-写。
 - **结果与输入的别名**：新分配、就是某个输入（今天的就地形式：`setInPlaceForm` 声明的算子"改它的第一个实参并返回它"【读码：`operator_table.h:190-206`】，即 `accesses = [{Norm 0, Whole, ReadModifyWrite}]`、`result = Same(0)`）、某个输入的视图、可能别名、未知。
 
@@ -766,16 +766,16 @@ struct ResourceSpec {
 | 关系 | 是什么 | 谁表达 |
 |---|---|---|
 | 计算依赖 | 一个值用到另一个值 | 图上的数据边（`Norm`、`With`） |
-| 资源冲突 | 两次访问同一资源的重叠区域，至少一次是写 | 前端按 2.5、2.6 插入的控制边（`sync` 块、`wait`、写入追踪）；图上的效应摘要（图模型 3.3）；本节的声明让分析能判断"两次访问是否真的重叠" |
+| 资源冲突 | 两次访问同一资源的重叠区域，至少一次是写 | 前端按 3.5、裁定记录 2.6 插入的控制边（`sync` 块、`wait`、写入追踪）；图上的效应摘要（图模型 3.3）；本节的声明让分析能判断"两次访问是否真的重叠" |
 | 异步完成 | 一次操作的结果什么时候可见 | **不在核心。**核心的执行模型里，一个节点执行完它的结果就可用（规则 E1）；设备上的异步是 Tiles 的实现细节，用 Tiles 自己的事件与流表达，在交出 Camel 值之前完成（Tiles 今天就是同步完成后才发布【读码：README "Completion is synchronous"】） |
 
-`sync` 与 `wait` 是源码到图的规则（第 4 节："源码层的限制只在源码翻译到图这一步生效"），它们产生控制边，**不是 GPU 的同步原语**，本稿不给它们任何新含义。
+`sync` 与 `wait` 是源码到图的规则（9.5："源码层的限制只在源码翻译到图这一步生效"），它们产生控制边，**不是 GPU 的同步原语**，本稿不给它们任何新含义。
 
 ### 8.3 与效应摘要的关系
 
 图的效应摘要（四个位：出口依赖外部效应、写了捕获的变量、读了捕获的变量、可能故障）是由节点算出来的图级概括（图模型 3.10 的 I14）。资源声明让这个概括可以细化：一个只读捕获单元的算子不必按"写"处理；一次 `Mapped` 区域的写只与重叠的区域冲突。细化的结果是可推导的事实（第 10 节），不改变效应摘要本身的定义。
 
-### 8.4 声明是效应的唯一来源（2026-10-19 审查后，设计原则 2.17）
+### 8.4 声明是效应的唯一来源（2026-10-19 审查后，设计原则 3.3）
 
 优化遍问"这个节点写不写它的某个操作数"，答案只来自资源声明：`OperatorTable::writesOperand`（算子）、足迹（`footprintOf`，被调的图）、`touchesClass`（声明碰哪一类资源）。`draft_writes.h` 的 `isWrittenArgument`、`isWrittenInPlace`（现在对共享的 GATE 有访问集，不再指数地重走）与 `WrittenSlots`（一次算出整张草稿的答案，algebra 不再自带一份）都由它们推出；CSE 的"读变量"是"声明了对 `Variable` 类资源的访问"，`EffectSummary::writesVariables` 是"声明了对 `Variable` 或 `Object` 的写"，所以 `:var/take` 与就地形式也算写入，不再靠 `:op/assn` 前缀与固定的 `VarGet` id。没有声明的非纯算子按保守读法写它的每个操作数；例外是调用或读取函数值的图的算子（高阶算子、宏算子、导出器）：它们的操作数是函数，不是资源。
 
@@ -821,7 +821,7 @@ func softmax_def(x: Tensor<f32>, axis: int): Tensor<f32> {
 | 参数的绑定 | 展开一个 `OPER` 节点 = 以它的 `Norm`/`With` 输入作为实参的一次直接调用（`FUNC`），随后可以内联。绑定记在 `Definition{graph, normMap, withMap}` 里 |
 | 许可 | 定义图里的节点带定义图自己的许可列（通常全 0：库作者不能替调用者扩大许可）；展开时属于这个算子的节点再加上被展开节点的许可（6.4） |
 | `mayFault` 与效应 | 定义图的效应摘要必须是声明的子集：声明说不会故障的算子，定义图里不能有可能故障的节点；纯的算子，定义图必须纯。登记时检查（4.4 第 5 条） |
-| 递归 | 登记时沿"定义图里出现的算子 → 它们的定义图"做环检测，有环拒绝；展开是一个有轮数预算的遍，并受单图容量（65,535）约束（2.9：容量不放宽，装不下就不展开） |
+| 递归 | 登记时沿"定义图里出现的算子 → 它们的定义图"做环检测，有环拒绝；展开是一个有轮数预算的遍，并受单图容量（65,535）约束（裁定记录 2.9：容量不放宽，装不下就不展开；已被图存储第二版取代） |
 | 版本 | 定义图的内容散列计入算子的语义版本：改定义图而结果不变（重构）是次版本，结果变了是主版本 |
 | 生命周期 | 由核心管理：定义图在模块装载时建出，放在全程序的图表里，归声明它的模块所有；图模型第 5 步之后有稳定的 `GraphId`，之前由算子表持有一个冻结图并作为回收的根 |
 
@@ -941,7 +941,7 @@ struct Stamp {
 
 > **实施状态（2026-10-15，`lane/loop`）**：`LOOP` 节点、11.1 的访问器（`include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`loopOf`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）、11.4 的私有降级（`include/camel/runtime/loop_lowering.h`，`lowerLoopsToTailRecursion`，结果是脱离主程序的副本）都已实现。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condGraph()` 在 `For` 时返回 `nullptr` 而不是空的 `optional`；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由节点算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。给 Tiles 的读法见 11.5。
 
-`LOOP` 节点本身（语法、建图、编码、校验、打印、降级）是图模型第 10 步与循环设计稿第 7 节的工作（实施情况见图模型第 7 节）。本节规定的是消费者看到的接口，按图模型 3.5 的卡片与 2.12、2.13 的裁定（条件图与循环体图共用一份捕获表；`for … while` 是同一种节点的第三种形式；多个状态时循环体返回元组，循环的值也是这个元组；`do` 式的写法）。
+`LOOP` 节点本身（语法、建图、编码、校验、打印、降级）是图模型第 10 步与循环设计稿第 7 节的工作（实施情况见图模型第 7 节）。本节规定的是消费者看到的接口，按图模型 3.5 的卡片与 3.10 的裁定（条件图与循环体图共用一份捕获表；`for … while` 是同一种节点的第三种形式；多个状态时循环体返回元组，循环的值也是这个元组；`do` 式的写法）。
 
 ### 11.1 访问器
 
@@ -1128,7 +1128,7 @@ table.bind(sem::OperatorKey::parse("tensor:matmul@1.0").value());  // 读缓存�
 table.declarationEpoch();            // 声明有增改时加一
 ```
 
-已声明的：内建 `:op/` 标量的加减乘除、取模、取负、比较（i32/int/f32/float）；张量的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`、`neg`、`abs`、`relu`、`sqrt`、`rsqrt`、`exp`、`log`、`sum`、`sum_axis`、`mean`、`mean_axis`、`max_axis`、`min_axis`、`argmax_axis`、`argmin_axis`、`sum_to`、`matmul`、`reshape`、`flatten`、`unsqueeze`、`transpose`、`permute`、`slice`、`broadcast_like`、`expand_axis`。`softmax`、`matmul_grad_*`、`cast_like` 等未声明（Opaque）。张量算子的声明描述 f32 的情形；整数与布尔元素一律精确（int64 与布尔的 `sum`、`mean` 在 int64 里精确累加并回绕，设计原则 2.14；归约律 `sum_i64` 等的累加类型是 int64）。`camel inspect --ops <程序>` 在每个已声明的算子上打印 `"semantics": {...}`，可以直接核对。下标映射与归约律是第二阶段：Tiles 在此之前仍按今天的方式（`reindex`、名字）取得映射与累加类型。
+已声明的：内建 `:op/` 标量的加减乘除、取模、取负、比较（i32/int/f32/float）；张量的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`、`neg`、`abs`、`relu`、`sqrt`、`rsqrt`、`exp`、`log`、`sum`、`sum_axis`、`mean`、`mean_axis`、`max_axis`、`min_axis`、`argmax_axis`、`argmin_axis`、`sum_to`、`matmul`、`reshape`、`flatten`、`unsqueeze`、`transpose`、`permute`、`slice`、`broadcast_like`、`expand_axis`。`softmax`、`matmul_grad_*`、`cast_like` 等未声明（Opaque）。张量算子的声明描述 f32 的情形；整数与布尔元素一律精确（int64 与布尔的 `sum`、`mean` 在 int64 里精确累加并回绕，设计原则 7.7；归约律 `sum_i64` 等的累加类型是 int64）。`camel inspect --ops <程序>` 在每个已声明的算子上打印 `"semantics": {...}`，可以直接核对。下标映射与归约律是第二阶段：Tiles 在此之前仍按今天的方式（`reindex`、名字）取得映射与累加类型。
 
 **查询一个节点被授予的许可：**
 
@@ -1149,7 +1149,7 @@ bool any        = graph->hasNodePermissions();
 
 **CPU 的结果、图的转储、程序的输出都没有变**；只增加了声明与查询。已声明下标语义的张量算子的键升为 `@1.1`（次版本：只多了事实，4.1）；内建 `:op/` 仍是 `@1.0`；新声明的 `nn:max_pool2d`、`nn:avg_pool2d`、`:mark/unordered_reduce_arr` 是 `@1.0`。
 
-**已声明的实例**（`camel inspect --ops` 里 `"indexing": true` 的算子）：逐元素的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`（广播，数作为 0 维操作数）、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`；`transpose`、`permute`、`slice`（正步长；负的起止点从末尾数，之后仍在 [0, n] 之外是故障 `SliceOutOfRange`、没有实例，与数组的 `slice` 一致，设计原则 2.10；起点在终点之后是空的范围，2.11）、`reshape`、`flatten`、`unsqueeze`、`broadcast_like`、`expand_axis`；`sum`、`mean`（全量）、`sum_axis`、`mean_axis`、`max_axis`、`min_axis`、`argmax_axis`、`argmin_axis`（律 `ArgMax`/`ArgMin`：按 IEEE `maximum`/`minimum` 的第一个最值的位置，有 NaN 时第一个 NaN，+0 大于 -0，设计原则 2.14）、`sum_to`；`matmul`（NumPy 的一维与批维广播规则，k 是归约维）；`nn:max_pool2d`、`nn:avg_pool2d`（第 5.2 节例 4 的窗口：越界的元素 `max` 排除、`avg` 读 +0）；`:mark/unordered_reduce_arr`。每个实例由声明求值器（`tensor::test_index_eval`）在 2780 个随机调用上与 CPU 内核逐位比较过（第 12 节）。
+**已声明的实例**（`camel inspect --ops` 里 `"indexing": true` 的算子）：逐元素的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`（广播，数作为 0 维操作数）、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`；`transpose`、`permute`、`slice`（正步长；负的起止点从末尾数，之后仍在 [0, n] 之外是故障 `SliceOutOfRange`、没有实例，与数组的 `slice` 一致，设计原则 3.9；起点在终点之后是空的范围，3.9）、`reshape`、`flatten`、`unsqueeze`、`broadcast_like`、`expand_axis`；`sum`、`mean`（全量）、`sum_axis`、`mean_axis`、`max_axis`、`min_axis`、`argmax_axis`、`argmin_axis`（律 `ArgMax`/`ArgMin`：按 IEEE `maximum`/`minimum` 的第一个最值的位置，有 NaN 时第一个 NaN，+0 大于 -0，设计原则 7.7）、`sum_to`；`matmul`（NumPy 的一维与批维广播规则，k 是归约维）；`nn:max_pool2d`、`nn:avg_pool2d`（第 5.2 节例 4 的窗口：越界的元素 `max` 排除、`avg` 读 +0）；`:mark/unordered_reduce_arr`。每个实例由声明求值器（`tensor::test_index_eval`）在 2780 个随机调用上与 CPU 内核逐位比较过（第 12 节）。
 
 **取得一个实例：**
 
@@ -1311,7 +1311,7 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 
 **待问（给负责人）**：
 1. 随机数生成器的效应：按 8.1 的注释算外部效应，于是它与打印、文件之间也保持先后；若定为"程序内部的状态"，调度器就可以让抽样与输出交换次序（它们彼此仍保持先后，因为都读改写 `rand:generator`）。
-2. ~~`mean` 对空张量：内核与定义的故障种类不同~~ 已按 2.13（"故障也包括在内"）改：内核也报 `DivisionByZero`，与定义的除法相同的诊断（`definitions` 计划的 `mean_empty_fault*` 对照两边的故障种类与消息）。
+2. ~~`mean` 对空张量：内核与定义的故障种类不同~~ 已按 7.1（"故障也包括在内"）改：内核也报 `DivisionByZero`，与定义的除法相同的诊断（`definitions` 计划的 `mean_empty_fault*` 对照两边的故障种类与消息）。
 3. 定义库在第一次被问到时编译，而不是模块装载时（第 9 节开头的理由）；若要"装载时建出"，每个导入 `tensor` 的程序都要多编一个库。
 
 ---
@@ -1351,7 +1351,7 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 ### Q7 `matmul` 的规范算法
 
 候选：(A) 字面读法：每个 k 先乘、舍入，再加、舍入，k 递增，从 +0 开始；FMA 只在许可 (b) 下使用；(B) `matmul` 的规范算法定义为"k 递增的 FMA 链"`acc = fma(a, b, acc)`，从 +0 开始。FMA 是 IEEE 754 规定的一次正确舍入的运算，所以 B 同样逐位可复现；这是算子声明"自己做什么"，不是对用户写的 `a * b + c` 的收缩，许可 (b) 对用户代码仍然有意义。
-**建议 B，但请负责人明确裁定**，因为它触及 2.13 措辞的读法。理由：Tiles 现有代码与 CPU 的 AVX2/AVX-512 路径（若其 k 次序是严格递增的，【未查】）已经是 B；B 比 A 更精确；A 会让 GPU 与 CPU 的矩阵乘都放弃硬件的乘加融合，峰值大约减半。无论选哪个，CPU 上"没有 FMA 的 x86-64 舍入两次"都与契约不符（选 B 时要用软件 `fma`，慢；选 A 时 AVX 路径要关掉收缩）。
+**建议 B，但请负责人明确裁定**，因为它触及 7 的措辞的读法。理由：Tiles 现有代码与 CPU 的 AVX2/AVX-512 路径（若其 k 次序是严格递增的，【未查】）已经是 B；B 比 A 更精确；A 会让 GPU 与 CPU 的矩阵乘都放弃硬件的乘加融合，峰值大约减半。无论选哪个，CPU 上"没有 FMA 的 x86-64 舍入两次"都与契约不符（选 B 时要用软件 `fma`，慢；选 A 时 AVX 路径要关掉收缩）。
 
 ### Q8 提高累加精度算不算许可 (d)
 
@@ -1366,7 +1366,7 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 ### Q10 定义图与融合内核谁是规范
 
 `tensor:softmax` 的 CPU 内核与它显然的定义（max、减、exp、sum、除）在位上不同（2.3）。候选：(A) 定义图是规范，内核要与它逐位一致（`Bounded` 部分按上界），不一致的内核是缺陷；(B) 内核是规范，定义图只是近似的说明，自动微分与展开只"大致"等价；(C) 每个算子自己选，在声明里写明。
-**建议 A**：B 使展开、导出、自动微分各自得到不同的数，与 2.13 的出发点相反。代价是 `softmax` 内核要改（用除法而不是倒数乘法、按 Q5 处理 NaN），可能慢一点。
+**建议 A**：B 使展开、导出、自动微分各自得到不同的数，与第 7 节的出发点相反。代价是 `softmax` 内核要改（用除法而不是倒数乘法、按 Q5 处理 NaN），可能慢一点。
 
 ### Q11 后端入口能否接受许可
 

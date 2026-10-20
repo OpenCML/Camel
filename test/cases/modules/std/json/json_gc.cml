@@ -17,7 +17,7 @@ func keep(j: Json, n: int): Json {
     return if c >= 0 then j else j
 }
 
-// `d` is the decoded document (decode gives a `Json!`, design principles 2.13).
+// `d` is the decoded document (decode gives a `Json!`, design principles 11.2).
 func run(d: Json, n: int): int sync {
     let c = churn(n)
     let kept = keep(d, n)

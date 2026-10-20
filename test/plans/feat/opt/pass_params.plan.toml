@@ -3,7 +3,7 @@ order = 331
 tier = "feat"
 tags = ["feat", "opt", "pipeline", "pass-parameters"]
 
-# Pass parameters are general pipeline syntax (design principles 2.17): `name(key=value, ...)`
+# Pass parameters are general pipeline syntax (design principles 9.2): `name(key=value, ...)`
 # for every pass, scheduler and module pass, the values constant expressions, checked against
 # the pass's declaration before anything runs.
 

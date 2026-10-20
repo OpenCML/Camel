@@ -2,7 +2,7 @@ id = "consistency.logical_branch"
 order = 362
 tier = "feat"
 tags = ["feat", "consistency", "compile", "branches"]
-desc = "`&&` and `||` are branches (design principles 2.11): the right side is an arm, evaluated only when the left side does not decide; `&`, `|`, `&=`, `|=` evaluate both sides; both sides of `&&` / `||` are bool."
+desc = "`&&` and `||` are branches (design principles 4.2): the right side is an arm, evaluated only when the left side does not decide; `&`, `|`, `&=`, `|=` evaluate both sides; both sides of `&&` / `||` are bool."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

@@ -1,4 +1,4 @@
-// `!=` follows `==` (design principles 2.13): it cannot be overloaded by itself.
+// `!=` follows `==` (design principles 4.3): it cannot be overloaded by itself.
 type V = { x: int }
 func operator !=(a: V, b: V): bool { return a.x != b.x }
 func main(): int { return 0 }

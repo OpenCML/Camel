@@ -1,7 +1,7 @@
 """A slice with a model-dependent end exported to ONNX faults on ONNX Runtime where Camel faults.
 
 ort_slice_bounds.cml slices x[0 : int(sum(x))]. Camel faults when the end is outside [-n, n]
-(design principles 2.10); the ONNX Slice alone would clamp it and return a result. Each model
+(design principles 3.9); the ONNX Slice alone would clamp it and return a result. Each model
 (the slice alone, and inside a branch on the data) is run on ONNX Runtime: in-range ends give
 the NumPy slice, out-of-range ends must make the run fail.
 

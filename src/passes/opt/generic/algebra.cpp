@@ -23,7 +23,7 @@
  * (OperatorSemantics::binary: a commutative, associative sum, a product that distributes over
  * it, a subtraction of it): no operator is named here, so the scalar operators and the
  * elementwise operators of a module (tensors) are one case. The relaxations it applies are a
- * NumericPolicy's (design principles 2.15): the default policy allows the grouping to change
+ * NumericPolicy's (design principles 7.4): the default policy allows the grouping to change
  * and `safe_fp=true` is the strict one.
  */
 #include "generic.h"
@@ -377,7 +377,7 @@ bool simplify(
                 return false;
             }
             // Same-sign, nonzero coefficients preserve infinities and signed zero. Only the
-            // rounding path changes, which the default algebra policy permits (§2.15).
+            // rounding path changes, which the default algebra policy permits (§7.3).
             // Cancellation can change inf-inf and zero signs and needs those specific grants.
             const bool sameSign = left.coefficient != T{0} && right.coefficient != T{0} &&
                                   std::signbit(left.coefficient) == std::signbit(right.coefficient);

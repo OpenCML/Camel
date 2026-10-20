@@ -12,7 +12,7 @@
  */
 
 // ---- constants ----
-// Values the module exports (design principles 2.13), written without parentheses.
+// Values the module exports (design principles 10.1), written without parentheses.
 
 /// The ratio of a circle's circumference to its diameter.
 /// @example pi    // 3.14159...

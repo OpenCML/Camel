@@ -2,7 +2,7 @@ id = "consistency.if_without_else"
 order = 356
 tier = "feat"
 tags = ["feat", "consistency", "compile", "branches"]
-desc = "An if without else has no value: its arm may be of any type, what the arm gives is dropped, and using the if as a value is a compile-time error (design principles 2.10)"
+desc = "An if without else has no value: its arm may be of any type, what the arm gives is dropped, and using the if as a value is a compile-time error (design principles 3.7)"
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

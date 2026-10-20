@@ -1,6 +1,6 @@
 // Generic enums: an enum declares type parameters, and each variant's fields use them. The
 // arguments are inferred from the fields, or from what the position expects
-// (design principles 2.13).
+// (design principles 5.3).
 
 type Option<T> = enum {
     Some(T),

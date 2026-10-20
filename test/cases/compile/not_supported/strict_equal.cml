@@ -1,5 +1,5 @@
 /**
- * `===` is not supported for now (design principles 2.10). It used to compile and compare
+ * `===` is not supported for now (design principles 4.1). It used to compile and compare
  * objects: two equal string literals were unequal.
  */
 module strict_equal

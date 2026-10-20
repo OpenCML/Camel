@@ -330,7 +330,7 @@ Switch to parallel scheduling, `camel docs/tutorial/examples/05_map_order.cml st
 [75, 63, 75, 13, 90, 9, 57, 37]
 ```
 
-This is behaviour laid down by the language (design principles, 2.7), not a defect: it is precisely because there is no order between the elements that `map` can run in parallel. The `reduce` used for the second line runs in element order, and its result is the same on all back ends. The rule is simple: **keep the functions passed to `map` and `filter` pure; do what must be done in order with `foreach`, `reduce` or tail recursion.**
+This is behaviour laid down by the language (design principles, 3.6), not a defect: it is precisely because there is no order between the elements that `map` can run in parallel. The `reduce` used for the second line runs in element order, and its result is the same on all back ends. The rule is simple: **keep the functions passed to `map` and `filter` pure; do what must be done in order with `foreach`, `reduce` or tail recursion.**
 
 ## 6. Evaluation by dependency, sync and wait
 

@@ -63,7 +63,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "semantic.raise_is_a_name"
-desc = "`raise` is not a keyword and not a statement: it is an ordinary name, here a function (design principles 2.10)."
+desc = "`raise` is not a keyword and not a statement: it is an ordinary name, here a function (design principles 3.9)."
 kind = "behavior"
 case = "../../../cases/compile/semantic/raise_is_a_name.cml"
 args = ["${case}"]
@@ -74,7 +74,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "semantic.try_not_in_language"
-desc = "`try` / `catch` / `finally` is not part of the language (design principles 2.9): TryCatchNotInLanguage at `try`, pointing to `!!`, `?->`, `match` and fault isolation."
+desc = "`try` / `catch` / `finally` is not part of the language (design principles 3.9): TryCatchNotInLanguage at `try`, pointing to `!!`, `?->`, `match` and fault isolation."
 kind = "negative"
 case = "../../../cases/compile/semantic/try_not_in_language.cml"
 args = ["${case}"]

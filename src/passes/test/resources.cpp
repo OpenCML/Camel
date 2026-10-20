@@ -171,7 +171,7 @@ ResourcesTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     attempt(os, "pure_touches_none", "semtest:pure", ResourceSpec{});
     attempt(os, "same_again", "semtest:pure", ResourceSpec{});
     // The declaration is the truth about effects; the `var` parameters of the signature are
-    // checked against it (design principles 2.17), whichever is registered first.
+    // checked against it (design principles 3.3), whichever is registered first.
     {
         using camel::core::type::StaticFuncTypeResolver;
         using camel::core::type::Type;

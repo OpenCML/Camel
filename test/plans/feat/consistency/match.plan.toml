@@ -4,7 +4,7 @@ tier = "feat"
 tags = ["feat", "consistency", "compile", "match"]
 desc = "A match must have a default case: without `case _` it is a compile-time error, and the compiler adds no arm"
 
-# Design principles 2.10: a `match` must have `case _`; a match over a bool that lists both
+# Design principles 3.7: a `match` must have `case _`; a match over a bool that lists both
 # literals and the fixed patterns over `T?` / `T!` are complete without it. The compiler adds
 # no arm the program does not show (an earlier version added one that faulted at run time,
 # RuntimeDiag::MatchNotExhaustive, and only warned).

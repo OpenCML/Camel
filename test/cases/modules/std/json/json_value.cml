@@ -1,5 +1,5 @@
 /**
- * json.decode gives a `Json!` (design principles 2.12, 2.13): a value of a definite type whose
+ * json.decode gives a `Json!` (design principles 11.2): a value of a definite type whose
  * content is known only when the program runs, or an error value when the text is not JSON.
  * The program looks into a `Json` with the operators of the json module, each of which gives a
  * value of a definite type, and a missing member or a value of another kind is null.

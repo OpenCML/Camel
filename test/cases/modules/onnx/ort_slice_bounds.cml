@@ -1,6 +1,6 @@
 /**
  * A slice whose end depends on the model input: Camel faults when the end leaves the axis
- * (design principles 2.10) where the ONNX Slice would clamp it, so the exported model must fail
+ * (design principles 3.9) where the ONNX Slice would clamp it, so the exported model must fail
  * on ONNX Runtime where Camel faults and agree with Camel elsewhere (checked by
  * ort_slice_bounds.py, for the slice alone and inside a branch on the data: MODE=branch).
  */

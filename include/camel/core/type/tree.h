@@ -9,7 +9,7 @@
  */
 
 /*
- * The one definition of "what is a tree and what is a leaf" (design principles 2.16, 2.17).
+ * The one definition of "what is a tree and what is a leaf" (design principles 13.5).
  *
  * A parameter tree is a value whose type is made of structs and tuples. An inner node is a
  * struct or an ordinary tuple (not a `T?`/`T!`, which are tagged tuples, and not a mutable

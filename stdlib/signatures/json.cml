@@ -25,7 +25,7 @@ inner func encode(value: T, indent: int): string {
 
 /// The value a JSON text describes, as a `Json`: a value of a definite type whose content is
 /// known only when the program runs; an error value when the text is not JSON (design
-/// principles 2.13). Look into a Json with get, as_int, as_array and the other operators below,
+/// principles 11.2). Look into a Json with get, as_int, as_array and the other operators below,
 /// each of which gives a value of a definite type and takes a `Json?` as well, so that calls
 /// chain; read a part whose shape is known with decode_as. Prints as its JSON text. In the
 /// examples below, `j` is a Json decoded so.

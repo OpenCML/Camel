@@ -2,7 +2,7 @@
 
 This note describes how generic functions (`typeas`) and type functions (type declarations
 with parameters) are compiled. The normative text is `docs/design-principles.cn.md` sections
-2.9, "类型、泛型与类型函数", and 2.10; the user-facing description is in `docs/language/` (3.1, 7.5,
+5.5 and 5.6, "泛型" and "类型函数与原语"; the user-facing description is in `docs/language/` (3.1, 7.5,
 7.7). Everything here happens while a module is compiled: no pass, backend or runtime
 structure knows about either construct.
 
@@ -17,7 +17,7 @@ structure knows about either construct.
 A graph only ever holds concrete types. `camel x.cml std::rgir` shows one subgraph per set of
 types a generic function is called with, named `name<types>`; `camel inspect --gir x.cml`
 also prints each subgraph's signature. Types are named as source text names them (design
-principles 2.10): `first<int>`, not `first<i64>`. That is the display name only: the mangled
+principles 5.1): `first<int>`, not `first<i64>`. That is the display name only: the mangled
 name of a type (`Type::mangle`) and the structural comparison that finds an instance again
 do not use it.
 
@@ -151,7 +151,7 @@ the same types is not a new instance and is not limited.
 ## 5. Exported generic functions
 
 All modules of a program are built by one graph builder into one root graph (design
-principles 2.11; `src/compile/gir/program.cpp`). An instance of a generic function is
+principles 2.1; `src/compile/gir/program.cpp`). An instance of a generic function is
 therefore **one graph per set of types for the whole program**, under the graph the function
 was declared in (the root graph for a function of a module's top level), whichever module
 calls it. (Before the root graphs were merged, each importing module built instances of its
@@ -175,7 +175,7 @@ own and their bodies could not use a top-level value of the declaring module; th
 
 ## 6. A generic function where a function is expected
 
-Design principles 2.10: a generic function may stand wherever a function is expected, and is
+Design principles 5.5: a generic function may stand wherever a function is expected, and is
 instantiated once the position fixes its type variables. The delay exists while the module is
 compiled: the marker node of the name is replaced by the function value of an instance
 before the call it belongs to is built, and no graph ever holds a template.

@@ -1,6 +1,6 @@
 # 枚举 `enum`：类型、降级与运行时
 
-本文说明 `enum`（设计原则 2.13、[语言参考 3.5](../language/03_data_model.md#35-枚举-enum)）在实现中的位置：类型层、图构造层、图 IR 与运行时各做什么，以及为什么这样做。用户可见的规则以语言参考为准。
+本文说明 `enum`（设计原则 5.3、[语言参考 3.5](../language/03_data_model.md#35-枚举-enum)）在实现中的位置：类型层、图构造层、图 IR 与运行时各做什么，以及为什么这样做。用户可见的规则以语言参考为准。
 
 ## 表面语法
 
@@ -30,7 +30,7 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 - `EnumType` 是一个**实例**：`EnumType::get(decl, args)` 按声明与实参驻留（反射相等即同一指针）。`EnumType` 是 `OtherType` 的子类，`typeCode()` 注册为 `Enum`（`GC_Traced`，与 `String` 等对象类型同级）。
 - 递归：声明先以原型（`pending()`，字段类型里出现 `EnumHole`）进入类型作用域，再构造变体字段、最后 `complete()`。`asEnumType` 对原型返回空，`asEnumTypeOrPrototype` 两者都接受；`containsEnumHole` 与 `enumEntersFrom` 用于实例化与环检测。
 - 泛型实参：`EnumType` 带 `typeArguments()`（与 `Map<K, V>` 相同），`cloneWithParams` / `cloneWithArguments` 支持类型函数实例化；名字修饰（mangle）是 `E<declId>P`（原型）与 `E<declId>_<实参mangle>`（实例），跨模块、跨缓存稳定。
-- 类型层不提供"按值的类型判断"的任何入口（2.9）：`EnumType` 上没有 `is`/`as` 的运行时分支，比较、打印都在运行时按内容做。
+- 类型层不提供"按值的类型判断"的任何入口（5.3）：`EnumType` 上没有 `is`/`as` 的运行时分支，比较、打印都在运行时按内容做。
 
 ## 图构造层（GCT）与图 IR（GIR）
 

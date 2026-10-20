@@ -38,7 +38,7 @@
  * 6. The source position of each node is a column parallel to the records (nodeOrigin): one
  *    32-bit origin id per node, 0 when the node has none. Beside it, only in a graph where some
  *    node has any, the numeric permissions the program granted with @numeric(...): one byte per
- *    node (nodePermissions; design principles 2.13, docs/design/op-semantics 6.3), and the
+ *    node (nodePermissions; design principles 7.5, docs/design/op-semantics 6.3), and the
  *    attributes libraries attached to the nodes: one 32-bit interned set per node
  *    (nodeAttrs; camel/core/node_attrs.h, language reference 7.6).
  * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
@@ -113,7 +113,7 @@ enum class GCNodeKind : uint8_t {
     Sync = 12,
     Gate = 13,
     Dref = 14, // build-time only, see above
-    // A loop (design principles 2.10, 2.12, 2.13; docs/design/graph-model 3.5, the LOOP card):
+    // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):
     // Norm inputs the array (For, ForWhile) then the k first values of the state; With inputs
     // the m captured values, shared by the condition graph and the body graph; Ctrl inputs
     // ordering. Its payload names the two graphs (GCLoopRef / GCLoopBody). Its value is the

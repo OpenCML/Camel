@@ -74,7 +74,7 @@ slot_t idx2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 /// `t[i]`, `t[i, j]`: a float. When the tensor's shape and an index are known at compile time,
-/// a wrong rank or an index outside the extent is an error here (design principles 2.7);
+/// a wrong rank or an index outside the extent is an error here (design principles 3.9);
 /// otherwise the kernel checks at run time.
 std::optional<Type *> indexInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);

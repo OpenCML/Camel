@@ -87,7 +87,7 @@ caller:
   (`ArrayType::create`) are interned by their component type objects: re-encoding an unchanged
   graph, graphs with equal layouts and every place a program writes `int[]` allocate nothing
   new. This became possible when converting a value to its own type was ruled legal (design
-  principles 2.12): the cast rule of these types compares structure, not object identity.
+  principles 5.1): the cast rule of these types compares structure, not object identity.
 - Function types (`FunctionType::create`, `FunctionTypeFactory::build`) are interned with their
   parameter names: an operator's signature for a call, a function type a program writes, a
   branch arm's signature, every signature a rewrite re-infers. The one exception is the

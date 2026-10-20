@@ -338,7 +338,7 @@ void ProgramIndex::collect(
                 const GCNode *n = *it;
                 if (n != nullptr && n->kind == GCNodeKind::Loop && arms != nullptr) {
                     // The condition and the body of a loop are code of the function the loop
-                    // is written in (design principles 2.11: they fold like arms).
+                    // is written in (design principles 12.1: they fold like arms).
                     for (GCGraph *part : {g->loopCondGraphOf(it.ref()), g->loopBodyGraphOf(it.ref())}) {
                         if (part != nullptr) {
                             auto &owners = (*arms)[part];
@@ -592,7 +592,7 @@ std::string ProgramIndex::capturedName(GCGraph *graph, std::string_view shown) {
 FunctionResolution ProgramIndex::resolveFunction(const std::string &written) const {
     FunctionResolution out;
     std::string name = written;
-    // The entry module may qualify its own names with its own name (design principles 2.12).
+    // The entry module may qualify its own names with its own name (design principles 10.2).
     if (const auto entry = ctx_ ? ctx_->mainModule() : nullptr; entry) {
         const std::string self = entry->name() + "::";
         if (name.rfind(self, 0) == 0 && moduleNames_.count(entry->name()) == 0) {

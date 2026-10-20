@@ -588,7 +588,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "wait_direct_user.graph"
-desc = "A(i + 1); wait modify(i): `wait` orders by the use of the variable. The direct user of i is `+`, so the graph has the control edge `+` -> modify and none from A to modify (design principles 2.6)."
+desc = "A(i + 1); wait modify(i): `wait` orders by the use of the variable. The direct user of i is `+`, so the graph has the control edge `+` -> modify and none from A to modify (design principles log 2.6)."
 kind = "behavior"
 case = "../../../cases/linear/byref/wait_direct_user.cml"
 args = ["${case}", "std::gir"]

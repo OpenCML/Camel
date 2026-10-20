@@ -2,7 +2,7 @@ id = "parse.rulings"
 order = 306
 tier = "feat"
 tags = ["feat", "parse", "syntax"]
-desc = "The syntax rulings of design principles 2.10: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block."
+desc = "The syntax rulings of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block."
 
 [[tests]]
 name = "rulings.power"
@@ -90,7 +90,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.loop_ast"
-desc = "The `do` form of a loop (design principles 2.13): `loop s = a, t = b (for x in xs)? (while c)? do e` parses to a LoopExpr node with the names of the state and of the element, and four children: the first values, the optional sequence, the optional condition, the body (an expression after `do`, a block on the AST as the arm of an `if` is). The four shapes of the ruling: one state over an array, two states under a condition, a struct literal as the state and as the body, `for ... while` with an `if` as the body."
+desc = "The `do` form of a loop (design principles 3.10): `loop s = a, t = b (for x in xs)? (while c)? do e` parses to a LoopExpr node with the names of the state and of the element, and four children: the first values, the optional sequence, the optional condition, the body (an expression after `do`, a block on the AST as the arm of an `if` is). The four shapes of the ruling: one state over an array, two states under a condition, a struct literal as the state and as the body, `for ... while` with an `if` as the body."
 kind = "behavior"
 case = "../../../cases/parse/rulings/loop_forms.cml"
 args = ["${inspect_ast}", "${case}"]

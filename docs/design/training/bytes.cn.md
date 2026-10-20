@@ -26,4 +26,4 @@
 
 最终 `.camel-explicit-types-v6` 同时包含编译期类型调用与二进制解码。手动用例覆盖声明、普通形参和返回位置的 dtype 推断，以及带声明类型的解码器函数值。SNaN/QNaN payload、无穷、最小次正规数、负零和超出 double 精确范围的 int64 都逐字节保持；rank-0、空张量、bool 也通过。NVM/FVM/JIT 的结果相同；FVM 开启分代回收、minor safepoint stress 与收集前后校验仍保持结果。短 payload、bool 非规范值及尺寸乘积溢出给出明确运行期诊断。
 
-尚待第一阶段其余工作：（2026-10-19 更新：`save_tree` / `load_tree` 已在 `tree` 模块；`string` 保证是合法的 UTF-8，`str::from_bytes([255])` 在调用处就是故障，`Bytes` 是不必导入的内建类型名，见设计原则 2.17。）第一阶段尚未验收完成。
+尚待第一阶段其余工作：（2026-10-19 更新：`save_tree` / `load_tree` 已在 `tree` 模块；`string` 保证是合法的 UTF-8，`str::from_bytes([255])` 在调用处就是故障，`Bytes` 是不必导入的内建类型名，见设计原则 11.1。）第一阶段尚未验收完成。

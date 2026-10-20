@@ -7,7 +7,7 @@ Each COMMAND is a shell command line. The variants are run in turn, RUNS rounds,
 one core with taskset when --cpu is given; the minimum and the median of every variant are
 reported, with /proc/loadavg before and after. A variant whose exit code differs
 between rounds is flagged. Numbers describe that the system is usable; they are not a claim of
-a performance advantage (design principles 2.9).
+a performance advantage (design principles 1).
 """
 import argparse
 import os

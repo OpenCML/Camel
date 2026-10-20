@@ -1,6 +1,6 @@
 /**
  * `a ?? b`: when `b` is itself a `T?` the result is a `T?`, when it is a `T` the result is a
- * `T` (design principles 2.10); `!!` likewise with `T!`. A chain `a ?? b ?? 9` tries `a`, then
+ * `T` (design principles 3.8); `!!` likewise with `T!`. A chain `a ?? b ?? 9` tries `a`, then
  * `b`, then gives the default, and a right side is evaluated only when it is needed. Each
  * `??` is one branch on the graph.
  */

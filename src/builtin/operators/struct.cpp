@@ -36,7 +36,7 @@ using namespace camel::core::type;
 
 slot_t __len_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *s = norm.get<String *>(0);
-    // Code points, not bytes (design principles 2.17).
+    // Code points, not bytes (design principles 11.1).
     return rtdata::toSlot(static_cast<Int64>(camel::utf8::count(s->view())));
 }
 
@@ -159,7 +159,7 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 end     = with.get<Int64>(1);
 
     // A bound outside the array is a fault, as an index out of range is (design principles
-    // 2.10): a bound is a position from 0 to the length, the end one past the last element
+    // 3.9): a bound is a position from 0 to the length, the end one past the last element
     // taken. It used to be cut to the array, and a negative bound counted from the end.
     // `take` and `drop` of the `array` module are the operations that cut by definition.
     const Int64 size = static_cast<Int64>(arr->size());
@@ -167,7 +167,7 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
     }
     // Both bounds inside the array and the end before the start is the empty range, not a
-    // fault (design principles 2.11): `xs->slice<2, 1>` is `[]`.
+    // fault (design principles 3.9): `xs->slice<2, 1>` is `[]`.
     if (end < start)
         end = start;
 
@@ -198,7 +198,7 @@ slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 namespace {
 // A new array holding the elements of `arr` and room for `extra` more. The operators below
-// return new arrays and leave their argument as it was (design principles 2.12): an array
+// return new arrays and leave their argument as it was (design principles 11.3): an array
 // that a program still refers to never changes. The room makes the appends that follow
 // cheap; it is not visible, only `size()` elements exist.
 Array *copyWithRoom(const Array *arr, size_t extra, const ArrayType *arrType) {
@@ -237,7 +237,7 @@ slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // "Equals" is the `==` of the element type: by content for arrays, tuples and structs,
-    // as numbers for floats (design principles 2.10).
+    // as numbers for floats (design principles 4.2).
     Array *arr           = norm.get<Array *>(0);
     const slot_t item    = with.get<slot_t>(0);
     const Type *elemType = tt::as_ptr<ArrayType>(norm.type(0))->elemType();

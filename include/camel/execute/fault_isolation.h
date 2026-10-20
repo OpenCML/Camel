@@ -18,7 +18,7 @@
  */
 
 /*
- * The fault-isolation operator (design principles 2.9; docs/technical/33_fault_isolation.md).
+ * The fault-isolation operator (design principles 3.9; docs/technical/33_fault_isolation.md).
  *
  * On the graph it is one OPER node with the URI kFaultIsolationUri whose first input is a
  * function value and whose other inputs are the arguments: a marked call of the subgraph of
@@ -39,7 +39,7 @@
 
 namespace camel::execute {
 
-/// The name the operator has in a program: `attempt`, settled by design principles 2.10. This
+/// The name the operator has in a program: `attempt`, settled by design principles 3.9. This
 /// is the only place it is written: everything else uses the URI below, which does not
 /// contain it.
 inline constexpr const char *kFaultIsolationName = "attempt";

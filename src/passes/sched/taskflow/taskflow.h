@@ -471,7 +471,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         return thread.faultDomain ? *thread.faultDomain : rootDomain_;
     }
     // What a failure stops, for a fault that is isolated and for one that ends the run alike
-    // (design principles 2.10): tasks that have started run to their end (with everything
+    // (design principles 3.6): tasks that have started run to their end (with everything
     // they start), tasks that have not started do not start, and whoever started the flow
     // waits for all that started before the failure goes on. There is no preemption and no
     // flag polled by running code: a scope skips its remaining chains (FlowInstance::failed),
@@ -487,7 +487,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // Describes `fault` at node `nodeRef` of `graph` (at the graph when the node has no source
     // position) and throws the diagnostic. Nothing is recorded here: element functions that
     // run concurrently can fault together, and of their faults the one of the smallest
-    // element index is reported (design principles 2.10; ElementFaults), by the outer index
+    // element index is reported (design principles 3.6; ElementFaults), by the outer index
     // first for nested operators. The fault that arrives at the entry of the run is recorded
     // there; the one that arrives at a fault-isolation node becomes its error value.
     [[noreturn]] void raiseFault(
@@ -530,7 +530,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
 
     // ---- Bytecode hand-off (handoff.h, handoff.cpp) ---------------------------------------
     //
-    // Design principles 2.11: the parallel scheduler hands subgraphs that have nothing to
+    // Design principles 9.10: the parallel scheduler hands subgraphs that have nothing to
     // parallelise to the bytecode interpreter. Walking a graph node by node costs 4 to 6 times
     // what its bytecode costs, and where no two things can run at once that is all the
     // scheduler adds.

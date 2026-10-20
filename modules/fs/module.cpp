@@ -43,7 +43,7 @@ FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
                   {},
                   {{Type::String(), false}, {Type::String(), false}},
                   Type::Void())}}));
-    // The same read as an operation that can fail (design principles 2.9): an error value
+    // The same read as an operation that can fail (design principles 3.9): an error value
     // instead of a fault when the file cannot be opened.
     exportEntity(
         "try_read_text",
@@ -107,7 +107,7 @@ bool FsModule::load() {
     if (loaded_)
         return true;
     context_->registerExecutorFactory("fs", [ctx = context_]() { return createFsExecutor(ctx); });
-    // The purity of every operator (design principles 2.9).
+    // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
         "fs",
         {

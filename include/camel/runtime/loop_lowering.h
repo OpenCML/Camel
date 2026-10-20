@@ -18,7 +18,7 @@
  */
 
 /*
- * Lowering a LOOP node to the tail recursion it means (design principles 2.10: "first lower
+ * Lowering a LOOP node to the tail recursion it means (design principles 3.10: "first lower
  * LOOP to a tail-recursive subgraph at each subsystem's entry"; docs/design/graph-model 3.5, the
  * end of the LOOP card; docs/design/op-semantics 11.4).
  *

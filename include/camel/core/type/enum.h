@@ -19,7 +19,7 @@
 
 /*
  * Sum types: `type Shape = enum { Circle(float), Rect { w: float, h: float }, Empty }`
- * (design principles 2.13).
+ * (design principles 5.3).
  *
  * Two objects describe an enum:
  *

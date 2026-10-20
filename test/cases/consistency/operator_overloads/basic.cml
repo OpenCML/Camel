@@ -1,5 +1,5 @@
 /**
- * Operator overloads of the program (design principles 2.12): binary and unary operators,
+ * Operator overloads of the program (design principles 4.3): binary and unary operators,
  * indexing, comparison, `&` and `|` on types of the program, next to the built-in overloads
  * of the same operators; `+=` on a type of the program is `x = x + y` through its `+`.
  */

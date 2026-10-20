@@ -5,7 +5,7 @@ tags = ["feat", "opt", "fold", "diagnostics"]
 
 [[tests]]
 name = "constant_fault_untaken.default"
-desc = "Design principles 2.9: a constant expression that can only fault (`1 / 0`) in an arm that is not taken. Without passes nothing faults and nothing is warned: 7, exit 0."
+desc = "Design principles 3.9: a constant expression that can only fault (`1 / 0`) in an arm that is not taken. Without passes nothing faults and nothing is warned: 7, exit 0."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
 args = ["${case}"]
@@ -98,7 +98,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_fault_reached.fold"
-desc = "With std::opt::fold the program behaves the same (2.9): 'before', then the division by zero at the same position, exit 1. The warning on stderr names that position before the run."
+desc = "With std::opt::fold the program behaves the same (3.9): 'before', then the division by zero at the same position, exit 1. The warning on stderr names that position before the run."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
 args = ["${case}", "std::opt::fold"]

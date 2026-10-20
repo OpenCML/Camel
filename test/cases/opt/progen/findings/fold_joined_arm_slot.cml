@@ -1,6 +1,6 @@
 /**
  * progen finding F42 (branch arm). The arms of the `if` are `null` and `1.0`, so the branch is
- *   a `float?` and each arm is put into that form at its exit (design principles 2.10). The
+ *   a `float?` and each arm is put into that form at its exit (design principles 3.8). The
  *   node that stands for an arm in the enclosing graph was made before the arms were joined
  *   and kept the slot of what the arm gave then, a `float`. Without a pass nothing reads that
  *   slot by its type (the JOIN copies it); `std::opt::fold` prunes the branch with the constant

@@ -1,5 +1,5 @@
 /**
- * External resources and the ways a program ends (design principles 2.9: before termination,
+ * External resources and the ways a program ends (design principles 3.9: before termination,
  * output is flushed and external resources are released). A Python object that announces its
  * release stands for an external resource. The environment variable END selects the ending:
  *

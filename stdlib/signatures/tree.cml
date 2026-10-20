@@ -1,5 +1,5 @@
 // Signatures of the parameter-tree module: operations on a value made of structs and tuples
-// (design principles 2.16, 2.17), and the checkpoints that save such a value to a directory and
+// (design principles 13.5), and the checkpoints that save such a value to a directory and
 // read it back. These declarations are reference metadata.
 //
 // A tree is a struct or an ordinary tuple (not a `T?`/`T!`) and everything else is a leaf; the

@@ -1,5 +1,5 @@
 /**
- * Comparison with null and narrowing (design principles 2.11, 2.12). `x == null` and
+ * Comparison with null and narrowing (design principles 3.8). `x == null` and
  * `x != null` are defined for a `T?` and give a bool. Where such a comparison is the
  * condition of an `if`, or one of the operands `&&` joins in it, the name is a `T` in the arm
  * that excludes null: the same branch as `match x { case null => B  case v => A }`.

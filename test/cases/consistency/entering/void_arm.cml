@@ -1,5 +1,5 @@
 /**
- * Two rulings of 2026-10-13 (design principles 2.11) that were already implemented:
+ * Two rulings of 2026-10-13 (design principles log 2.11) that were already implemented:
  * an arm without a value (`void`) and an arm of type `T` make the branch a `T?`, the arm
  * without a value giving `null`; and `xs->slice<2, 1>`, whose start is after its end, is
  * the empty array (not a fault).

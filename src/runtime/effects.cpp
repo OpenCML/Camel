@@ -59,7 +59,7 @@ struct EffectWalk {
                 const auto oper   = graph->nodeBodyAs<GCOperBody>(ref)->oper;
                 const auto traits = table.find(oper);
                 summary.external |= table.hasExternalEffect(oper);
-                // What an operator writes is its resource declaration's (design principles 2.17).
+                // What an operator writes is its resource declaration's (design principles 3.3).
                 summary.writesVariables |= table.writesProgramState(oper);
                 summary.mayFault |= !traits || traits->mayFault;
                 if (traits && traits->callsGraphs) {

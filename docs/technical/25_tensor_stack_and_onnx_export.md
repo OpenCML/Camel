@@ -84,7 +84,7 @@ one definition.
   - `cblas`: forwards to `cblas_sgemm`. Enabled by the CMake option
     `CAMEL_TENSOR_BLAS` when `find_package(BLAS)` succeeds. A BLAS orders
     the accumulation its own way, so it does not follow matmul's canonical
-    algorithm (design principles 2.13): every operator uses the builtin GEMM,
+    algorithm (design principles 7.1): every operator uses the builtin GEMM,
     and only `tensor:matmul_blas` calls the BLAS. `tensor::fuse` puts it in
     place of a matmul whose node was granted both `reassociate` and
     `change_precision` (`@numeric(...)`).
@@ -233,7 +233,7 @@ Write rule shared by `fold` and `cse`: a node passed to a `var` parameter is not
 one value. It is a variable's cell (created by `:var/new`, read by `:var/get`,
 stored into by `:op/assn*`; see doc 18 section 8.1) or an object an operator
 changes in place (a module operator with a `var` parameter; no built-in or
-standard-library operator does that since design principles 2.12). `isWrittenInPlace`
+standard-library operator does that since design principles 11.3). `isWrittenInPlace`
 (`include/camel/runtime/draft_writes.h`) answers this from the callee's
 signature (operator overload, FUNC target, CALL callee type), through GATEs. A
 written node is never replaced by a constant or by another node, a tuple

@@ -1,6 +1,6 @@
 module main
 
-// Full names in the debugger (design principles 2.12): functions of other modules are shown
+// Full names in the debugger (design principles 10.2): functions of other modules are shown
 // as `module::path::name`, the entry module's own without the module.
 
 import names_lib

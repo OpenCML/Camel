@@ -1,7 +1,7 @@
 /**
  * A declaration written with a type takes a value of that type (language reference 7.2):
  * `var acc: V = p` with `p: V` was refused as "dynamic type casting". Converting a value to
- * its own type does nothing (design principles 2.12).
+ * its own type does nothing (design principles 5.1).
  */
 type V = { x: float, y: float }
 

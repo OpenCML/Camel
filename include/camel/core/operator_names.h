@@ -23,14 +23,14 @@
  *
  * `a + b` is the call `__add__(a, b)`: the operator group `__add__` holds the built-in
  * overloads and those of the C++ modules, and a program adds its own with
- * `func operator +(a: V, b: V): V` (design principles 2.12; the notation is provisional).
+ * `func operator +(a: V, b: V): V` (design principles 4.3; the notation is provisional).
  * This table is the one place that says which symbol is which function, which symbols can be
  * overloaded and with how many parameters, and why the others cannot: the parser takes any
  * operator token after `func operator`, the compiler checks the declaration here, the
  * resolution of a call recognises an operator by its group name, and the diagnostics and the
  * language server show the symbol instead of the reserved name.
  *
- * Not in the table as overloadable: `&&` and `||` are branches (2.11); `??`, `!!` and `?->` are
+ * Not in the table as overloadable: `&&` and `||` are branches (4.2); `??`, `!!` and `?->` are
  * branches on the mark of a `T?` / `T!`; `->` passes a value to a function; `..` composes two
  * functions; `=` and the compound assignments write a variable (`a += b` is `a = a + b`, so it
  * follows `+`); `===` and `!==` are not part of the language.

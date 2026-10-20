@@ -1,6 +1,6 @@
 /**
  * A `T!` that is evaluated in a sync block and that nothing uses is a warning (design
- * principles 2.11): the error it may hold is lost. `let _ = ...` drops it on purpose.
+ * principles 3.9): the error it may hold is lost. `let _ = ...` drops it on purpose.
  */
 module unused
 

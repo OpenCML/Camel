@@ -41,10 +41,10 @@ case = "../../../cases/tools/lsp/graph.test.mjs"
 
 [[tests]]
 name = "lsp.operators"
-desc = "Operator overloads of the program (design principles 2.12): hover and definition on the operator of a call that took one (binary and unary), a built-in operator unchanged, the overloads in the outline, the formatter's `func operator +(`."
+desc = "Operator overloads of the program (design principles 4.3): hover and definition on the operator of a call that took one (binary and unary), a built-in operator unchanged, the overloads in the outline, the formatter's `func operator +(`."
 case = "../../../cases/tools/lsp/operators.test.mjs"
 
 [[tests]]
 name = "lsp.namespaces"
-desc = "Namespace members by their full names (design principles 2.13): hover (functions, a nested namespace, a namespace written as a path, values), the outline, completion inside the namespace and after `N::` (labelled with the full name, written by the member's own)."
+desc = "Namespace members by their full names (design principles 10.2): hover (functions, a nested namespace, a namespace written as a path, values), the outline, completion inside the namespace and after `N::` (labelled with the full name, written by the member's own)."
 case = "../../../cases/tools/lsp/namespaces.test.mjs"

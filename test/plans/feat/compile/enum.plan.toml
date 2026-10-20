@@ -2,7 +2,7 @@ id = "compile.enum"
 order = 327
 tier = "feat"
 tags = ["feat", "compile", "enum", "types", "match"]
-desc = "Nominal enums (design principles 2.13): `type E = enum { A(i32), B { x: f32 }, C }`, construction by a qualified variant, `match` over the variants with an exhaustiveness check, printing, equality, generics, all four schedulers, the translation passes that refuse an enum, and the retirement of `A | B` and `T ? U`."
+desc = "Nominal enums (design principles 5.3): `type E = enum { A(i32), B { x: f32 }, C }`, construction by a qualified variant, `match` over the variants with an exhaustiveness check, printing, equality, generics, all four schedulers, the translation passes that refuse an enum, and the retirement of `A | B` and `T ? U`."
 
 [[tests]]
 name = "shapes"

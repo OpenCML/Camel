@@ -272,7 +272,7 @@ Builder::TypePositionGuard::TypePositionGuard(Builder &builder, TypePosition pos
 Builder::TypePositionGuard::~TypePositionGuard() { builder.typePosition_ = saved; }
 
 void Builder::reportAnyType(const AST::node_ptr_t &ast) {
-    // Design principles 2.11, 2.12: every value has a definite type after compilation, and
+    // Design principles 5.10: every value has a definite type after compilation, and
     // `any` is refused wherever a recommended form exists. Each position has one.
     const char *instead = "";
     switch (typePosition_) {
@@ -317,11 +317,11 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("float"), Type::Float64());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
-    // The type of binary data (design principles 2.17), a built-in name like `string`.
+    // The type of binary data (design principles 11.1), a built-in name like `string`.
     typeScope_->insert(Reference("Bytes"), camel::core::type::BytesType::get());
     // No `any`: see reportAnyType.
     typeScope_->insert(Reference("void"), Type::Void());
-    // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 2.9).
+    // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 11.3).
     typeScope_->insert(Reference("Map"), MapType::prototype());
     typeScope_->insert(Reference("Set"), SetType::prototype());
 }
@@ -365,7 +365,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
         }
     }
 
-    // Loading in steps (design principles 2.11: modules may import each other; the graph
+    // Loading in steps (design principles 10.1: modules may import each other; the graph
     // model, 3.9.4). First every import is bound: the modules are found, nothing of them is
     // compiled. Then the module declares its types, compiling an imported module only when one
     // of its types is named. Then the imported modules are compiled as far as their
@@ -388,7 +388,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     node_ptr_t root = makeExec();
 
     // The namespaces the module declares, and the `using namespace` of its top level, which
-    // apply to the whole module whatever their position (design principles 2.12).
+    // apply to the whole module whatever their position (design principles 10.2).
     ownNamespaces_.clear();
     namespacePath_.clear();
     usingFrames_.clear();
@@ -435,7 +435,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
             usings           = load->scopeUsings();
             if (load->stmtType() == AST::StmtType::Func) {
                 // An operator is named without its namespaces (it belongs to the module,
-                // design principles 2.13); it is still lowered in the block it is written in.
+                // design principles 4.3); it is still lowered in the block it is written in.
                 const auto &func = stmt->loadAs<AST::FuncDeclLoad>();
                 path = func->operatorSymbol().empty() ? func->ref().paths() : func->declaredIn();
             } else if (load->stmtType() == AST::StmtType::Type) {
@@ -599,7 +599,7 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     const auto &fullPath = load->getPath();
     const auto &refs     = load->refs();
     // `from m::N`: the module `m`, and the namespace `N` of it the names are taken from
-    // (design principles 2.12).
+    // (design principles 10.2).
     const size_t nsAt      = fullPath.find("::");
     const std::string path = nsAt == std::string::npos ? fullPath : fullPath.substr(0, nsAt);
     std::vector<std::string> nsPath;
@@ -648,8 +648,8 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
-    // A module importing itself: allowed, and it has no effect (design principles 2.13). Its
-    // names are its own already (with or without its own name in front, 2.12); the import
+    // A module importing itself: allowed, and it has no effect (design principles 10.1). Its
+    // names are its own already (with or without its own name in front, 10.2); the import
     // binds nothing, and records no import a cycle could be made of.
     if (mod == module_) {
         LEAVE("ImportDecl");
@@ -667,7 +667,7 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     // in name/operator resolution after a normal import.
     if (refs.empty()) {
         module_->importDefaultRefsFromMod(mod);
-        // `import m` binds `m`, `import m as x` binds `x` (design principles 2.12), `import
+        // `import m` binds `m`, `import m as x` binds `x` (design principles 10.2), `import
         // m::N` binds `N` to that namespace of the module.
         if (nsPath.empty()) {
             const Reference localNamespace =
@@ -1055,7 +1055,7 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(ast->size() - 1);
     const auto &declLoad     = ast->loadAs<AST::FuncDeclLoad>();
     if (!declLoad->operatorSymbol().empty()) {
-        // `func operator +(a: V, b: V): V` (design principles 2.12): the function of the
+        // `func operator +(a: V, b: V): V` (design principles 4.3): the function of the
         // operator's reserved name, which the parser and the AST builder chose.
         checkOperatorDeclaration(declLoad->operatorSymbol(), funcDataNode, ast);
     } else if (!validateIdent(funcDataNode->loadAs<AST::FuncDataLoad>()->ref().ident())) {
@@ -1272,7 +1272,7 @@ node_ptr_t Builder::visitUsingNamespaceDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for UsingNamespace");
     const auto &load = ast->loadAs<AST::UsingNamespaceLoad>();
     // It applies to the block it is written in (visitStmtBlock, visitModule), and what it
-    // names is found where a name is used (design principles 2.12); here it is only checked.
+    // names is found where a name is used (design principles 10.2); here it is only checked.
     if (!usableNamespace(load->ref())) {
         diags_->of(SemanticDiag::UnresolvedReference)
             .at(ast->load()->tokenRange())
@@ -1359,7 +1359,7 @@ void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
         return;
     }
     // `return null` and a bare `return` are reported like any other: an arm needs no value
-    // to compile (design principles 2.10: an `if` without `else` has none, and its arm may
+    // to compile (design principles 3.7: an `if` without `else` has none, and its arm may
     // be of any type), so one written there was most likely meant to leave the function.
     // One report per statement: the arm of `case a | b` is lowered once for each pattern.
     const auto range = exit->load()->tokenRange();
@@ -1425,7 +1425,7 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
     const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
     if (stmtBlock->waited()) {
         // `wait { ... }`: the grammar takes it and the mark was dropped. `wait` is defined
-        // for one expression (design principles 2.6); what it means for a block is not.
+        // for one expression (design principles log 2.6); what it means for a block is not.
         diags_->of(SemanticDiag::ConstructNotSupported)
             .at(ast->load()->tokenRange())
             .commit(
@@ -1447,7 +1447,7 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
     // Push a new scope for the statement block
     pushScope();
     // The `using namespace` written in the block apply to the whole block, and to it only
-    // (design principles 2.12).
+    // (design principles 10.2).
     std::vector<Reference> blockUsings;
     for (const auto &stmt : *ast->atAs<AST::RepeatedLoad>(0)) {
         if (stmt->type() == AST::LoadType::Stmt &&
@@ -1566,7 +1566,7 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     }
     if (data->waited() && data->dataType() != AST::DataType::BinaryExpr &&
         data->dataType() != AST::DataType::ReservedExpr) {
-        // `wait` orders the one expression after it (design principles 2.6). Only an operator
+        // `wait` orders the one expression after it (design principles log 2.6). Only an operator
         // expression, an assignment, a call, an access or a binding is lowered with the mark;
         // on anything else (a name, a literal, a unary operator, a lambda) the mark was
         // dropped without a word. What it should order there has not been decided.
@@ -1703,14 +1703,14 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     switch (binaryExpr->op()) {
     case AST::BinaryDataOp::LogicalOr:
     case AST::BinaryDataOp::LogicalAnd: {
-        // `||` and `&&` are branches, not operators (design principles 2.11).
+        // `||` and `&&` are branches, not operators (design principles 4.2).
         node_ptr_t res = visitLogicalExpr(ast);
         LEAVE("BinaryExpr");
         return res;
     }
     case AST::BinaryDataOp::StrictEq:
     case AST::BinaryDataOp::StrictNeq: {
-        // Design principles 2.10: `===` is not supported for now (and `!==` with it). It
+        // Design principles 4.1: `===` is not supported for now (and `!==` with it). It
         // used to compile and compared objects, so two equal string literals were unequal.
         // Located at the whole comparison (the range of the node itself is its right side).
         auto range  = ast->load()->tokenRange();
@@ -1892,7 +1892,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::NullThen:
     case AST::ReservedDataOp::ErrorThen: {
         // `a ?? b` / `a !! b`: a branch on the tag of `a` whose first arm is `b` (design
-        // principles 2.9). The graph builder knows the types; it adds the arm that takes the
+        // principles 3.9). The graph builder knows the types; it adds the arm that takes the
         // value out of `a`.
         const bool onNull = reservedExpr->op() == AST::ReservedDataOp::NullThen;
         res               = tree_->makeBrch(onNull ? BranchKind::NullThen : BranchKind::ErrorThen);
@@ -1938,7 +1938,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         int32_t argSlot                                      = 0;
         // `x ?-> f`: the receiver is marked (NotNullThen). The call becomes the arm of a
         // branch on the tag of `x`, taken when `x` has not failed, and receives the value
-        // taken out of `x` under a reserved name (design principles 2.9).
+        // taken out of `x` under a reserved name (design principles 3.8).
         node_ptr_t passedNode        = nullptr;
         AST::node_ptr_t passOperator = nullptr;
         for (auto &argNode : *argsNode) {
@@ -2005,7 +2005,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         *res << visitData(lhsASTNode);
         for (const auto &argument : *ast->atAs<AST::RepeatedLoad>(1)) {
             if (argument->type() == AST::LoadType::NamedType) {
-                // `A = int`: the name as a constant, then the type (design principles 2.17).
+                // `A = int`: the name as a constant, then the type (design principles 5.9).
                 const auto &named = argument->loadAs<AST::NamedTypeLoad>();
                 *res << tree_->makeData(std::make_shared<StringData>(named->getRef().toString()));
                 *res << tree_->makeType(visitType(argument->at(0)), ImplMark::Graph);
@@ -2232,7 +2232,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     // Whether this `if` is a statement whose value nothing takes: its arms are then lowered
     // as arms of an unused branch (see ValueUse).
     const bool valueUnused = std::exchange(valueUse_.unusedCtrl, nullptr) == ast.get();
-    // Design principles 2.10: an `if` without `else` has no value, so it can only stand as
+    // Design principles 3.7: an `if` without `else` has no value, so it can only stand as
     // a statement. (As the last statement of a block it gives the block no value either;
     // what then expects one reports the missing value by the type.)
     const bool isStatement = std::exchange(valueUse_.stmtExpr, nullptr) == ast.get();
@@ -2319,10 +2319,10 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
 /*
 LoopExpr(state, binder) : Repeated Data inits, Optional Data sequence, Optional Data condition,
                           StmtBlock body ;
-A loop (design principles 2.10, 2.13) becomes one LOOP node (camel/compile/gct/node.h,
+A loop (design principles 3.10) becomes one LOOP node (camel/compile/gct/node.h,
 Node::loopKind): the first values and the sequence are expressions where the loop is; the
 condition and the body are scopes of their own, the way the arms of an `if` are, each with
-the numeric permissions in force here (2.13: a loop body written in a block or a function
+the numeric permissions in force here (7.5: a loop body written in a block or a function
 under @numeric is part of it). The names of the state and of the element are declared by the
 graph builder, which gives the condition and the body their own graphs.
 */
@@ -2436,7 +2436,7 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
             caseLoadType == AST::LoadType::Data &&
             aCaseNode->front()->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Ref) {
             // `case v` / `case error e`: the fixed patterns over a `T?` / `T!` (design
-            // principles 2.9). The graph builder, which knows the scrutinee's type, binds
+            // principles 3.8). The graph builder, which knows the scrutinee's type, binds
             // the name in the arm or reports the pattern.
             const auto &pattern    = aCaseNode->front();
             const bool isError     = pattern->size() > 0;
@@ -2533,7 +2533,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     case LiteralType::String: {
         // Decode escaped characters in the string and create a StringData object
         std::string decoded = decodeEscapes(str);
-        // A string is always valid UTF-8 (design principles 2.17); `'\xE4'` alone is not.
+        // A string is always valid UTF-8 (design principles 11.1); `'\xE4'` alone is not.
         // Write the character itself or `\u{4E2D}`; a byte sequence is a `Bytes` value.
         if (!camel::utf8::isValid(decoded)) {
             diags_->of(SemanticDiag::InvalidLiteral)
@@ -2642,7 +2642,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     node_ptr_t execNode = makeExec(false, true);
 
     // `[1, null, 3]`: a `null` among other elements makes the array one of `T?` (design
-    // principles 2.10), whose elements are put into that form when the program runs. Which
+    // principles 3.8), whose elements are put into that form when the program runs. Which
     // `T` is known to the GIR builder only, so every element is left to it as a computed one
     // (visitDataNode joins their types and adds the CASTs).
     const auto &items   = ast->atAs<AST::RepeatedLoad>(0);
@@ -2767,7 +2767,7 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
     }
     // Any other expression: an annotation CAST (see the declaration). An expression of the
     // declared type used to be refused here as "dynamic type casting" (`var acc: V = p`
-    // with `p: V`); converting a value to its own type does nothing (design principles 2.12).
+    // with `p: V`); converting a value to its own type does nothing (design principles 5.1).
     node_ptr_t castNode = tree_->makeCast(type, true);
     *castNode << value;
     setOriginFromAst(context_, castNode, ast, camel::source::OriginKind::GctNode, "gct.cast");
@@ -2782,7 +2782,7 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
         ast->atAs<AST::RepeatedLoad>(0)->size() == 0) {
         return visitData(ast);
     }
-    // Design principles 2.10: the elements of an array literal are a position where a value
+    // Design principles 3.8: the elements of an array literal are a position where a value
     // enters `T?` / `T!` when the element type is known, as it is here. Each element is the
     // value under a CAST to the element type (the conversion an annotated `let` writes), so
     // the array is built from computed elements of exactly that type.
@@ -3096,7 +3096,7 @@ Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
     Type *payload       = visitType(ast->atAs<AST::TypeLoad>(0));
     const bool fallible = ast->loadAs<AST::NullableTypeLoad>()->fallible();
     // The same mark twice (`T??`, `T!!`) adds nothing a program could tell apart; `T?!` and
-    // `T!?` are allowed (design principles 2.10).
+    // `T!?` are allowed (design principles 3.8).
     if (TupleType *inner = asTagged(payload); inner && inner->isFallible() == fallible) {
         diags_->of(SemanticDiag::TaggedTypeNesting)
             .at(ast->load()->tokenRange())
@@ -3136,7 +3136,7 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     switch (op) {
     case AST::TypeOp::Union: {
         // `A | B` is retired: a value has one type, and a value that is one of several named
-        // cases is an enum (design principles 2.13). The AST keeps the form so that the
+        // cases is an enum (design principles 5.3). The AST keeps the form so that the
         // program is told so, instead of failing to parse.
         diags_->of(SemanticDiag::UnionTypeRetired).at(ast->load()->tokenRange()).commit();
         throw BuildAbortException();
@@ -3304,7 +3304,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
     // A declaration binds variables in its parameters or return type (design principles
-    // 2.13). Return-only variables come from the expected type or explicit ::<T> arguments.
+    // 5.9). Return-only variables come from the expected type or explicit ::<T> arguments.
     const bool signature = std::exchange(declSignature_, false);
     const bool open      = std::exchange(openSignature_, false);
     struct FlagGuard {
@@ -3682,7 +3682,7 @@ void Builder::rejectTypeCycle(
 
 Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     const std::string written = ref.toString();
-    // The module's own name may qualify its names (design principles 2.12).
+    // The module's own name may qualify its names (design principles 10.2).
     std::string own = written;
     for (const std::string &self : {module_->name(), module_->declaredName()}) {
         if (!self.empty() && own.starts_with(self + "::")) {
@@ -3724,7 +3724,7 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
         for (const Reference &using_ : frame) {
             const std::string prefixed = using_.toString() + "::" + written;
             Type *type                 = nullptr;
-            // The full name of the candidate, for AmbiguousName (design principles 2.13).
+            // The full name of the candidate, for AmbiguousName (design principles 10.2).
             std::string shown = prefixed;
             for (size_t depth = namespacePath_.size() + 1; depth-- > 0 && type == nullptr;) {
                 std::string candidate;

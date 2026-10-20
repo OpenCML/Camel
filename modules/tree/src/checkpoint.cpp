@@ -333,7 +333,7 @@ slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
     }
 }
 // A leaf type no checkpoint can hold is a compile-time error that names the path (design
-// principles 2.17); a type variable is decided when the function is instantiated.
+// principles 13.5); a type variable is decided when the function is instantiated.
 bool supportedLeaf(Type *leaf) { return containsTypeVar(leaf) || kind(leaf) != "unsupported"; }
 std::optional<std::string> unsupportedLeaf(Type *tree) {
     if (const auto bad = core::type::tree::firstRejectedLeaf(tree, supportedLeaf))

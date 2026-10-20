@@ -1,6 +1,6 @@
 /**
  * A store into an element of a `var` array: the target is not a variable.
- * Rejected at compile time (docs/design-principles.cn.md 2.5, 2.6: a side effect
+ * Rejected at compile time (docs/design-principles.cn.md 3.5: a side effect
  * must be declared, and only a `var` can be changed).
  */
 module element_assigned

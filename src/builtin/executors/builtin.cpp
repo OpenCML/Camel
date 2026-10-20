@@ -326,7 +326,7 @@ void registerBuiltinOperatorTraits() {
     // Pure: conversions, arithmetic, comparisons, logic, and indexing (everything under op/
     // except the assignment family, which writes a variable), plus the string and array
     // helpers, none of which changes its arguments: `append` and `extend` return a new array
-    // (design principles 2.12). io/, profiler/ and input are effectful.
+    // (design principles 11.3). io/, profiler/ and input are effectful.
     static const std::unordered_set<std::string_view> kPureHelpers = {
         "str/format",
         "str/join",
@@ -391,7 +391,7 @@ void registerBuiltinOperatorTraits() {
     registry.set(":var/get", {.stateOnly = true});
     registry.set(":var/peek", {.stateOnly = true});
     registry.set(":var/take", {.stateOnly = true});
-    // What the compiler does at a call because of the operator (design principles 2.17).
+    // What the compiler does at a call because of the operator (design principles log 2.17).
     registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
     registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});
     registry.declareCallSpec(":mark/unordered_foreach_arr", {.discardsCallbackResult = true});

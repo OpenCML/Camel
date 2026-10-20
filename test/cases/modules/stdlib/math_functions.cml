@@ -2,7 +2,7 @@
  * The math module: elementary functions and constants. Numeric types are not converted
  * implicitly: a function over floats takes a float and returns the type it was given.
  * A constant is a value the module exports, written without parentheses: `pi` (design
- * principles 2.13).
+ * principles 10.1).
  */
 module math_functions
 

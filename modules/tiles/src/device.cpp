@@ -71,7 +71,7 @@ slot_t DeviceType::castSlotFrom(slot_t value, Type *other) const {
 bool DeviceType::typeArguments() const { return true; }
 namespace {
 // `Device<T>` over a tree is a tree of `Device` leaves; what a tree and a path are comes from
-// core::type::tree (design principles 2.16, 2.17).
+// core::type::tree (design principles 13.5).
 Type *distributeDevice(Type *host, const std::string &path, std::string &error) {
     return core::type::tree::mapLeaves(
         host,

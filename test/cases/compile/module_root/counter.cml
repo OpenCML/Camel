@@ -1,6 +1,6 @@
 /**
  * Helper module: a counter kept in a top-level `var`, read and written only through the
- * functions it exports (an exported `var` is not allowed, design principles 2.11).
+ * functions it exports (an exported `var` is not allowed, design principles 10.1).
  */
 module counter
 

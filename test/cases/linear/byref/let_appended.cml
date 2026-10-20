@@ -1,8 +1,8 @@
 /**
  * `append` written as a statement on a `let` array. `append` returns a new array and changes
- * nothing (docs/design-principles.cn.md 2.12), so the statement does nothing: a compile-time
+ * nothing (docs/design-principles.cn.md 11.3), so the statement does nothing: a compile-time
  * error (UnusedPureResult). It used to be refused because `append` changed its argument in
- * place and `xs` is not a `var` (2.5, 2.6).
+ * place and `xs` is not a `var` (3.5).
  */
 module let_appended
 

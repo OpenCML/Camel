@@ -36,7 +36,7 @@ namespace {
 constexpr Int64 literalOf(const StaticArg &arg) { return static_cast<Int64>(*arg.value); }
 
 /**
- * The three calls of an enum value (design principles 2.13). Their types are decided by the
+ * The three calls of an enum value (design principles 5.3). Their types are decided by the
  * enum type, which the graph builder supplies: a value being built carries the instance as its
  * explicit type argument, and the fields are read with the variant they belong to, so the type
  * of the field is that of the position in that variant and no other.

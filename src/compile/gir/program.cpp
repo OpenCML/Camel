@@ -18,7 +18,7 @@
  */
 
 /*
- * The program-wide side of the GIR builder (design principles 2.11 "模块"; the graph model,
+ * The program-wide side of the GIR builder (design principles 10.1 "模块"; the graph model,
  * docs/design/graph-model/README.cn.md 3.9.4): one builder per program, and loading in three
  * steps.
  *
@@ -287,7 +287,7 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
                 declaration->names = {child->name()};
                 if (!unit.entry) {
                     // Shown with its module wherever it is shown (dumps, diagnostics, the
-                    // debugger), unless it is the entry module's (design principles 2.12).
+                    // debugger), unless it is the entry module's (design principles 10.2).
                     declaration->graph->setName(qualifiedName(unit, child->name()));
                 }
                 topLevelFunctions_[declaration->graph.get()] = declaration.get();
@@ -622,7 +622,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     if (ok) {
         settleEffectfulGraphs();
         // Before the graphs are encoded: the reads whose value cannot be kept leave the mark
-        // that lets `acc = acc->append<v>` append in place (design principles 2.12).
+        // that lets `acc = acc->append<v>` append in place (design principles 11.3).
         markNonRetainingReads();
         for (ModuleUnit *unit : order) {
             UnitContext context(*this, *unit);

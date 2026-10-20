@@ -1,5 +1,5 @@
 // The parameter `x` of the lambda shadows the narrowed `x`: it is a plain `int`, on which
-// `??` is an error (only a narrowed name is allowed it, design principles 2.13).
+// `??` is an error (only a narrowed name is allowed it, design principles 3.8).
 func f(x: int?): int {
     return if x != null then ((x: int): int => x ?? 0)(1) else 0
 }

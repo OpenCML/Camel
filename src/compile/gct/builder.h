@@ -77,7 +77,7 @@ class Builder {
     // type is reported at all.
     std::unordered_set<std::string> poisonedTypes_;
     bool wholeImportFailed_ = false;
-    // Namespaces (design principles 2.12). The namespace path of the top-level declaration
+    // Namespaces (design principles 10.2). The namespace path of the top-level declaration
     // being lowered (`A::B` for `A::B::f`): a type name written in it is looked up there, then
     // in the enclosing namespaces, then at the top level. The `using namespace` in force, one
     // frame per block (the module's, a namespace block's, a block of a function body). The
@@ -92,7 +92,7 @@ class Builder {
     Type *lookupType(const Reference &ref, const AST::node_ptr_t &ast);
     /// `ref`, written at `ast`, names the type `remote` of the module `source`, which is
     /// not declared yet. When that declaration is in progress further up, the types form a
-    /// cycle across modules: reported with the cycle (ModuleTypeCycle; design principles 2.13).
+    /// cycle across modules: reported with the cycle (ModuleTypeCycle; design principles 10.1).
     /// When it is on a cycle reported already, the failure follows from that report and is not
     /// reported again. Either way BuildAbortException; otherwise nothing happens.
     void rejectTypeCycle(
@@ -121,14 +121,14 @@ class Builder {
     std::pair<data_ptr_t, bool>
     extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
-    // Type variables and type functions (design principles 2.9; camel/core/type/typevar.h).
+    // Type variables and type functions (design principles 5.6; camel/core/type/typevar.h).
     // `typeas T` binds a variable only among the parameters of a function declaration: the
     // builder notes that the function type it is about to visit is such a signature
     // (declSignature_, set from funcDeclPending_), allows binding while it visits the
     // parameters (typeasAllowed_), and records what was bound (declaredTypeVars_) so the
     // declaration can be checked. A type function may only appear as the base of
     // `Name<...>` (typeFunctionBase_).
-    // The numeric permissions in force where the builder is (design principles 2.13): the
+    // The numeric permissions in force where the builder is (design principles 7.5): the
     // union of the `@numeric(...)` grants of the blocks and functions it is inside. Every EXEC
     // is made with them (makeExec).
     uint8_t numericPermissions_ = 0;
@@ -146,7 +146,7 @@ class Builder {
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
 
-    // `any` is not a type a program can write (design principles 2.11, 2.12): the name is
+    // `any` is not a type a program can write (design principles 5.10): the name is
     // not in the type scope, and visitRefType reports it with the form recommended for the
     // position it was written in. The visitors of those positions set this around the
     // type they visit (TypePositionGuard in builder.cpp). A type nested in another one is
@@ -215,7 +215,7 @@ class Builder {
     node_ptr_t visitStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitDataDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncDecl(const AST::node_ptr_t &ast);
-    /// `func operator <symbol>(...)` (design principles 2.12): reports, and aborts, an operator
+    /// `func operator <symbol>(...)` (design principles 4.3): reports, and aborts, an operator
     /// that cannot be overloaded (OperatorNotOverloadable) and a declaration that does not fit
     /// its operator: the number of parameters, a with-parameter or a var parameter
     /// (OperatorOverloadInvalid). `funcData` is the declaration's FuncData, `decl` the whole.
@@ -249,7 +249,7 @@ class Builder {
     node_ptr_t visitData(const AST::node_ptr_t &ast);
     node_ptr_t visitUnaryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitBinaryExpr(const AST::node_ptr_t &ast);
-    /// `a && b` / `a || b`: the branch they stand for (design principles 2.11).
+    /// `a && b` / `a || b`: the branch they stand for (design principles 4.2).
     node_ptr_t visitLogicalExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitReservedExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitIfExpr(const AST::node_ptr_t &ast);
@@ -259,7 +259,7 @@ class Builder {
     node_ptr_t visitLiteral(const AST::node_ptr_t &ast);
     node_ptr_t visitArrayData(const AST::node_ptr_t &ast);
     /// `[e for x in xs if c]`: `xs->filter<(x) => c>->map<(x) => e>` (design principles
-    /// 2.10), built as those two calls are. The type of `x` is the element type of `xs`,
+    /// 4.2), built as those two calls are. The type of `x` is the element type of `xs`,
     /// which only the GIR builder knows: each of the two functions is written with a type
     /// variable for it and is instantiated where `map` / `filter` receive it.
     node_ptr_t visitComprehension(const AST::node_ptr_t &ast);

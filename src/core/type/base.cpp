@@ -378,7 +378,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         ::String *s = reinterpret_cast<::String *>(static_cast<uintptr_t>(value));
         switch (to) {
         // The whole string must be one number; otherwise the fault of the conversion
-        // functions (design principles 2.10).
+        // functions (design principles 5.1).
         case TypeCode::Int32:
             return toSlot(integerFromText<Int32>(s->view(), "i32"));
         case TypeCode::Int64:

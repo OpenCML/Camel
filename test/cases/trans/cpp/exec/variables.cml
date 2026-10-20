@@ -1,5 +1,5 @@
 /// `var` variables: assigned in a function (a C++ local), passed as `var` arguments and captured
-/// by a closure (a shared cell: every holder sees the same value, design principles 2.5).
+/// by a closure (a shared cell: every holder sees the same value, design principles 3.5).
 module variables
 
 sync func bump(var x: int) {

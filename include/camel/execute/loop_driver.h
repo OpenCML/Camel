@@ -20,7 +20,7 @@
 /*
  * The rounds of a LOOP node, once for every interpreter (docs/design/loops, docs/technical/
  * 39_loops.md): the order of a round, the layout of the ports a round binds, and what ends the
- * loop are the loop's (design principles 2.14, camel/core/loop_kind.h), not an interpreter's.
+ * loop are the loop's (design principles 3.10, camel/core/loop_kind.h), not an interpreter's.
  * NodeVM, FastVM's native loop and the macro evaluator each supply only the services below, so a
  * change of the rules (more things to iterate over than arrays) is made here.
  *

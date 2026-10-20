@@ -574,7 +574,7 @@ void ParserImpl::parseModuleDecl() {
 }
 
 /// importDecl : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from'
-/// moduleName) A name followed by `from` is the one name imported (design principles 2.12: `import
+/// moduleName) A name followed by `from` is the one name imported (design principles 10.2: `import
 /// a from m` is `import { a } from m`), otherwise the start of the module name; `import m as x`
 /// gives the module another name.
 void ParserImpl::parseImportDecl() {
@@ -699,7 +699,7 @@ void ParserImpl::parseNamespaceDecl() {
 
 /// funcAnno : '@' identRef (angledValues | parentIdents)?
 /// `@name` and `@name<args>` are decorators; `@name(a, b)` is an annotation whose arguments are
-/// names, `@numeric(reassociate, contract)` (design principles 2.13). Which annotations exist,
+/// names, `@numeric(reassociate, contract)` (design principles 7.5). Which annotations exist,
 /// and where each may be written, is checked when the tree is built (AST builder).
 void ParserImpl::parseFuncAnno() {
     const size_t m = mark();
@@ -714,7 +714,7 @@ void ParserImpl::parseFuncAnno() {
 }
 
 /// A statement that starts with annotations: a function declaration, or an annotated block
-/// (blockStmt's second form; `@numeric(...)` on a block, design principles 2.13). The annotations
+/// (blockStmt's second form; `@numeric(...)` on a block, design principles 7.5). The annotations
 /// are read first; a block follows when the next token is '{' or `sync {`, anything else continues
 /// the function declaration. After an annotation '{' is always a block, never a struct literal.
 void ParserImpl::parseAnnotatedStmt() {
@@ -775,7 +775,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
 /// operatorName : IDENTIFIER (OPERATOR | '[' ']')
 ///
 /// The IDENTIFIER is the name `operator`; OPERATOR is any operator token. An operator overload
-/// (design principles 2.12): `func operator +(a: V, b: V): V`. The notation is provisional, and
+/// (design principles 4.3): `func operator +(a: V, b: V): V`. The notation is provisional, and
 /// this production is the whole of it in the parser: `operator` is not a keyword (a function may
 /// still be called `operator`), it starts this form only right after `func` and before an operator
 /// token other than `(`. Every operator token is taken here; which of them can be overloaded, and
@@ -808,7 +808,7 @@ void ParserImpl::parseDataDecl() {
     bump();
     switch (cur_) {
     case TK::Underscore: {
-        // `let _ = e`: the value of `e` is dropped on purpose (design principles 2.11). `_`
+        // `let _ = e`: the value of `e` is dropped on purpose (design principles 3.9). `_`
         // is not a name; it is taken in this one place, alone, and stands where the single
         // name of a declaration does, so the tree has the shape of `let x = e`.
         if (!isLet) {

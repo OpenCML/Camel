@@ -23,7 +23,7 @@
  * A Str is one pointer to a block {references, size, capacity, bytes}; the empty string is the
  * null pointer. The bytes never change while more than one Str refers to them: a string is a
  * value, and two holders of the same block cannot tell it from two copies (design principles
- * 2.11). Copying a Str counts one more reference, destroying it one less; the last one frees
+ * 10.5). Copying a Str counts one more reference, destroying it one less; the last one frees
  * the block. The count is not atomic: a generated program runs on one thread.
  *
  * Concatenation takes its left operand by value. When the generated code passes the operand's
@@ -31,7 +31,7 @@
  * so building a string piece by piece in a loop is linear.
  *
  * A string is valid UTF-8 and its lengths and indices count code points (design principles
- * 2.17).
+ * 11.1).
  */
 
 #pragma once
@@ -137,7 +137,7 @@ class Str {
 };
 
 /// `len(s)` (:struct/len_str): the number of code points (a string is valid UTF-8; design
-/// principles 2.17).
+/// principles 11.1).
 inline int64_t length(const Str &s) { return static_cast<int64_t>(camel::utf8::count(s.view())); }
 
 /// `s[i]` (:op/idx_str): the string of the one character at code point `i`. An index outside

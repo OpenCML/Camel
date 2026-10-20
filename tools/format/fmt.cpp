@@ -345,7 +345,7 @@ blockStmt  : WAIT? stmtBlock | funcAnno+ stmtBlock ;
 any Formatter::visitBlockStmt(cst::BlockStmt context) {
     string result;
     // `@numeric(...)` on a block: each annotation on a line of its own, at the start of a line
-    // (design principles 2.11: a line that starts with '@' annotates what follows).
+    // (design principles 4.1: a line that starts with '@' annotates what follows).
     for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
         result += any_cast<string>(visitFuncAnno(funcAnno)) + lineEnd();
     }
@@ -471,7 +471,7 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
     }
 
     // An operator overload is written `func operator +(...)`: the word, one space, the symbol
-    // and the parameters right after it (design principles 2.12; the notation is provisional).
+    // and the parameters right after it (design principles 4.3; the notation is provisional).
     if (const auto operatorName = context->get<cst::OperatorName>()) {
         result +=
             "func operator " + operatorName->text().substr(std::string_view("operator").size());

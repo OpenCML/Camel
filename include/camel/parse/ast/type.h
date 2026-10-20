@@ -177,7 +177,7 @@ class RefTypeLoad : public TypeLoad {
     Reference ref_;
 };
 
-/// How a variant of an enum carries its data (design principles 2.13): nothing, a tuple of
+/// How a variant of an enum carries its data (design principles 5.3): nothing, a tuple of
 /// fields in the order written, or named fields.
 enum class EnumVariantShape { Unit, Tuple, Struct };
 

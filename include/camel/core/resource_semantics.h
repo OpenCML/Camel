@@ -22,7 +22,7 @@
  * and writes besides its operands' values, declared as data so that a scheduler can tell two
  * effects that touch the same thing from two that do not.
  *
- * Only some things have an identity a program can observe (design principles 2.12): a `var`
+ * Only some things have an identity a program can observe (design principles 10.5): a `var`
  * cell, an object changed in place through a `var` parameter or an in-place form, an object a
  * module wraps (Tiles' device memory, a Python object). Every other value can be copied or
  * shared at will and is not a resource. Besides those, some state is named by no value at all:
@@ -64,7 +64,7 @@
 
 namespace camel::core::sem {
 
-/// The class of a resource (design principles 2.12, "有身份的东西要列明").
+/// The class of a resource (design principles 10.5, "有身份的东西要列明").
 enum class ResourceClass : uint8_t {
     /// Any of the others: what an undeclared operator may touch.
     Unknown = 0,
@@ -207,7 +207,7 @@ bool writesOperand(const ResourceSpec &spec, bool isWith, size_t index);
 bool touchesClass(const ResourceSpec &spec, ResourceClass cls, bool writesOnly = false);
 
 /// The declaration against the `var` parameters of the operator's signature (design principles
-/// 2.17: the resource declaration is the truth about effects, the signature is checked against
+/// 3.3: the resource declaration is the truth about effects, the signature is checked against
 /// it): nullopt when they agree. A `var` parameter is declared written; a cell (Variable) or an
 /// object changed in place (Object) is written only through a `var` parameter; a Foreign
 /// resource is a handle a module wraps and may be written through an ordinary operand.

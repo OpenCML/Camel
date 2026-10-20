@@ -4,7 +4,7 @@ tier = "feat"
 tags = ["feat", "compile", "semantic", "modules", "import"]
 desc = "All modules build into one root graph; a capture is bound to the value it captures, not to its name"
 
-# Design principles 2.11 ("模块"); docs/design/graph-model/README.cn.md 3.7 and 3.9. Every
+# Design principles 10.1 ("模块"); docs/design/graph-model/README.cn.md 3.7 and 3.9. Every
 # program here runs on several back ends: the root graph and the capture ports are ordinary
 # graph structure, which no back end treats specially.
 
@@ -175,7 +175,7 @@ expect_stdout_contains = ["return static_cast<int>(main_(0, 3.14159));"]
 
 [[tests]]
 name = "root.export_var"
-desc = "A `var` cannot be exported (design principles 2.11): ExportedVariable at the variable, in the module that exports it."
+desc = "A `var` cannot be exported (design principles 10.1): ExportedVariable at the variable, in the module that exports it."
 kind = "negative"
 case = "../../../cases/compile/module_root/export_var.cml"
 args = ["-E", "short", "${case}"]

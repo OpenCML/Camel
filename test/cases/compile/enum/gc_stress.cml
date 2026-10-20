@@ -1,5 +1,5 @@
 // An enum value is a run-time object that holds its fields; the collector must trace them
-// (docs/design-principles.cn.md 2.13). Many values are built, dropped and read back, under
+// (docs/design-principles.cn.md 5.3). Many values are built, dropped and read back, under
 // both collectors (`--gc generational` and `--gc mark-sweep`), and the checksums stay the same.
 
 type Box = enum {

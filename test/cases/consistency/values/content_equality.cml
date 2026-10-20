@@ -1,6 +1,6 @@
 /**
  * `==` and `!=` on arrays, tuples and structs compare by content, element by element
- * (design principles 2.10): nested values, strings, `T?` / `T!` and maps or sets inside them
+ * (design principles 4.2): nested values, strings, `T?` / `T!` and maps or sets inside them
  * included; float elements as floats (an array that holds a NaN does not equal itself).
  * `contains` on an array uses the same equality, and a string has `contains` too.
  */

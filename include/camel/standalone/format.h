@@ -33,7 +33,7 @@
  *
  * `println` with a format string ends with one line break and `print` with one with none, as
  * without a format. (Both used to write one more, copied from the interpreter, whose defect it
- * was: design principles 2.13.)
+ * was: design principles 10.6.)
  */
 
 #pragma once
@@ -146,7 +146,7 @@ template <typename... Args> std::string joined(const Args &...args) {
 } // namespace detail
 
 /// `println(a, b, ...)`: the texts separated by blanks, then a line break. Gives `a`
-/// (design principles 2.10: an effect returns a value, here its first argument).
+/// (design principles 3.1: an effect returns a value, here its first argument).
 template <typename First, typename... Rest> First println(const First &first, const Rest &...rest) {
     write(detail::joined(first, rest...) + "\n");
     return first;

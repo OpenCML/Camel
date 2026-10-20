@@ -20,7 +20,7 @@
 /*
  * The semantics of an operator: the versioned record that every pass and back end reads to
  * understand an operator it does not know by name (docs/design/op-semantics, sections 3, 4 and
- * 6; design principles 2.13).
+ * 6; design principles 7).
  *
  * It sits beside the operator table's traits (camel/core/operator_table.h): the traits are the
  * five bits a hot path tests, the semantics are the richer facts a pass or a back end asks for
@@ -106,7 +106,7 @@ struct OperatorKey {
     bool operator==(const OperatorKey &) const = default;
 };
 
-// ---- Permissions (design principles 2.13) --------------------------------------------------
+// ---- Permissions (design principles 7.5) --------------------------------------------------
 
 /**
  * One relaxation of the canonical algorithm, granted by the program with @numeric(...) on a
@@ -188,12 +188,12 @@ struct NumericSemantics {
     std::string algorithm;
 };
 
-// ---- Numeric policy (design principles 2.15, 2.16) -----------------------------------------
+// ---- Numeric policy (design principles 7.3) -----------------------------------------
 
 /**
  * Which relaxations a consumer applies on top of what the program grants. The permissions of a
  * node are the program's own (@numeric); a policy is the consumer's: the algebra pass of
- * 2.15 relaxes by default and takes `safe_fp=true` to be strict, a back end of 2.16 relaxes
+ * 7.3 relaxes by default and takes `safe_fp=true` to be strict, a back end relaxes
  * the accumulation order by default and has a safe mode. They are the same question, so the
  * code asks it here: a rewrite or a schedule asks `permits(nodePermissions, required)`, and
  * reorderFreedom (camel/core/index_semantics.h) takes the policy with the node's permissions.
@@ -202,12 +202,12 @@ struct NumericPolicy {
     /// Permissions every node has under this policy, with or without @numeric.
     PermissionMask defaultGrants = kNoPermissions;
     /// Whether the permissions a node carries count. A strict policy ignores them: even a node
-    /// with wider permissions keeps its canonical rounding path (2.15, safe mode).
+    /// with wider permissions keeps its canonical rounding path (7.4, safe mode).
     bool nodeGrants = true;
 
     /// Nothing but what the program writes (what the node's own permissions give).
     static constexpr NumericPolicy explicitOnly() { return {kNoPermissions, true}; }
-    /// The default of 2.15 and 2.16: the order and grouping of a sum or product may change
+    /// The default of 7.3: the order and grouping of a sum or product may change
     /// (kReassociate), nothing else is assumed. Precision, approximate math, fused multiply-add
     /// and the special values still need their permission.
     static constexpr NumericPolicy relaxed() { return {kReassociate, true}; }
@@ -304,7 +304,7 @@ struct DefinitionParam {
 };
 
 /**
- * The definition of an operator (design section 9; design principles 2.13: "a definition graph
+ * The definition of an operator (design section 9; design principles 7.1: "a definition graph
  * is normative"): a function written in Camel, exported by a library module, that computes
  * exactly what the operator computes: the axis, the numeric stabilization, the accumulator
  * type, every conversion. A kernel, fused or hand-written, must agree with it (bit for bit on
@@ -339,7 +339,7 @@ enum class ElementShape : uint8_t {
 };
 
 /**
- * The declaration of a higher-order operator (design principles 2.17): it calls the function
+ * The declaration of a higher-order operator (design principles 3.6): it calls the function
  * value it receives, for the elements of an array or once, in the way `shape` says. Schedulers
  * choose how to run it from this record, not from the operator's name: the operands are the
  * array first and the function first among the with operands (Isolate: the function is the first

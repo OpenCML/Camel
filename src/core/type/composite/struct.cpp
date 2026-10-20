@@ -302,7 +302,7 @@ bool StructType::equals(Type *type) const {
     return true;
 }
 
-// Converting a value to its own type is legal and does nothing (design principles 2.12).
+// Converting a value to its own type is legal and does nothing (design principles 5.1).
 CastSafety StructType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr)
         return CastSafety::Forbidden;

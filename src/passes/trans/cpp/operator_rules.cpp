@@ -258,7 +258,7 @@ Rules buildRules() {
     r[":op/eq"] = infix("==");
     r[":op/ne"] = infix("!=");
 
-    // ---- Booleans: `&` and `|` evaluate both sides (design principles 2.11); here both
+    // ---- Booleans: `&` and `|` evaluate both sides (design principles 4.2); here both
     // operands are values already, so && and || compute the same.
     r[":op/not"] = prefix("!");
     r[":op/and"] = infix("&&");

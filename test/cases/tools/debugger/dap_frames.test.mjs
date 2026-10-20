@@ -1,5 +1,5 @@
-// How the debugger presents a program over the Debug Adapter Protocol (design principles 2.11,
-// 2.12; docs/technical/35_debugger.md 4.2, 5.4, 3.3), on both debuggable back ends:
+// How the debugger presents a program over the Debug Adapter Protocol (design principles 12.1,
+// 10.2; docs/technical/35_debugger.md 4.2, 5.4, 3.3), on both debuggable back ends:
 //  - the arms of a branch are part of the frame of their function: a line step goes through
 //    an arm as through the rest of the function, the arm's names are the frame's while it
 //    runs; with frames "subgraphs" the arm is the frame it is;

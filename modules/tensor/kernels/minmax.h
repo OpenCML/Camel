@@ -18,7 +18,7 @@
  */
 
 /*
- * The maximum, minimum and relu of every tensor kernel (design principles 2.13: `max` and
+ * The maximum, minimum and relu of every tensor kernel (design principles 7.7: `max` and
  * `min` are IEEE 754-2019 maximum and minimum, and relu(x) = maximum(x, +0)).
  *
  * For floats:
@@ -79,7 +79,7 @@ template <typename T> inline T minimum(T a, T b) {
 }
 
 /**
- * argmax (Max) and argmin (design principles 2.14): true when `v`, met after `best` (the
+ * argmax (Max) and argmin (design principles 7.7): true when `v`, met after `best` (the
  * extreme so far), takes its place. The order is the one of IEEE 754-2019 maximum and minimum:
  * a NaN is beyond every number (so the first NaN is kept), +0 is above -0, and on a tie the
  * earlier position stays. The result is the position of the first element equal to the

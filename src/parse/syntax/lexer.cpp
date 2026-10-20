@@ -452,7 +452,7 @@ TokenBuffer Lexer::tokenize(std::string source) {
         }
         case kHash: {
             // `#!` on the first line is an interpreter line and is ignored; elsewhere `#` opens
-            // a tag (design principles 2.20), so it is an ordinary token.
+            // a tag (design principles 4.1), so it is an ordinary token.
             if (i == 0 && at(1) == '!') {
                 size_t j = i + 1;
                 while (j < n && s[j] != '\n' && s[j] != '\r' && s[j] != '\f') {

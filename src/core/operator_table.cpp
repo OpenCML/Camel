@@ -153,7 +153,7 @@ bool OperatorTable::hasExternalEffect(std::string_view uri) const {
 namespace {
 
 /// The resource declaration against the `var` parameters of the signature (design principles
-/// 2.17); an empty string when they agree or the signature does not say.
+/// 3.3); an empty string when they agree or the signature does not say.
 std::string checkVarAgainstResources(
     std::string_view uri, const sem::ResourceSpec &resources,
     const type::FuncTypeResolver *resolver) {

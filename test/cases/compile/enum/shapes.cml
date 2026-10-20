@@ -1,4 +1,4 @@
-// Enums: construction, matching, printing and equality (design principles 2.13).
+// Enums: construction, matching, printing and equality (design principles 5.3).
 
 type Shape = enum {
     Circle(float),

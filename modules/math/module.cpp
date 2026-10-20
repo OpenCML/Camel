@@ -158,7 +158,7 @@ MathModule::MathModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
         exportEntity(group->name(), group);
     for (const auto &group : getMathNumericGroups())
         exportEntity(group->name(), group);
-    // The constants are values (design principles 2.13): `math::pi`, written without
+    // The constants are values (design principles 10.1): `math::pi`, written without
     // parentheses, is the constant itself where it is used. (They were functions of no
     // arguments, `pi()`, while a module could export nothing but functions and types.)
     exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi));

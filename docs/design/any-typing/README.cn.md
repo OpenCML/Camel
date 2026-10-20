@@ -1,10 +1,10 @@
 # `any`：现状普查，与"编译之后每个值都有确定类型"的方案（调研稿）
 
-状态：**调研稿；已按设计原则 2.12 落实（2026-10-14）。** 本稿正文保持调研时的样子，所描述的是落实之前的实现；`examples/` 里写了 `any` 的程序今天编译不过（`SemanticDiag::AnyNotAllowed`）。落实的结果：
+状态：**调研稿；已按设计原则 5.10 落实（2026-10-14）。** 本稿正文保持调研时的样子，所描述的是落实之前的实现；`examples/` 里写了 `any` 的程序今天编译不过（`SemanticDiag::AnyNotAllowed`）。落实的结果：
 - Q1 定为甲（用户写 `any` 是错误，诊断按位置给出推荐写法）；Q2 定为乙（`json.decode` 给出自描述的 `Json`，另有 `decode_as`）；Q4 定为甲（签名说明用类型变量）；Q5 定为甲（不做）；Q6、Q7 照建议。
 - `TypeCode::Any` 与 12 个文件里的特判已删去；附录 B 的 D0–D6 的复现程序都成了回归用例（`test/plans/feat/compile/typing_any.plan.toml`、`test/plans/feat/modules/json_value.plan.toml`）。
 - 图的提交校验加了"图上的类型都已确定"（[图模型设计稿](../graph-model/README.cn.md) 的 I17）。
-依据：`docs/design-principles.cn.md`（2.7 的"`<any>`"一条、2.9 的"类型、泛型与类型函数"与"垃圾回收"、2.11 的"类型"一条、第 6 节）；`docs/technical/36_gc_handle_rules.md` 第 9 节；`docs/technical/37_generational_gc_report.md` 6.4 与第 7 节；`docs/technical/28_generic_functions_and_type_functions.md`；[计算图的对外数据模型](../graph-model/README.cn.md)。
+依据：`docs/design-principles.cn.md`（5.5、5.6 的泛型与类型函数，10.5 的垃圾回收，5.10 的 `any`，第 15 节；[裁定记录](../../design-principles-log.cn.md) 2.7 的"`<any>`"一条）；`docs/technical/36_gc_handle_rules.md` 第 9 节；`docs/technical/37_generational_gc_report.md` 6.4 与第 7 节；`docs/technical/28_generic_functions_and_type_functions.md`；[计算图的对外数据模型](../graph-model/README.cn.md)。
 基线：分支 `lane/analysis`，提交 `6dd61bcd`（Camel v0.2.9），Linux x86-64 容器里的发布构建。文中的输出与数字都可以用附录 A 的命令复现。
 
 文中每条事实标注来源：
@@ -15,7 +15,7 @@
 
 示例在本文档旁边的 [`examples/`](examples/)，脚本在 [`tools/`](tools/)；文中写作 `examples/x`、`tools/x` 的路径都相对于 `docs/design/any-typing/`。
 
-裁定原文（2026-10-13，设计原则 2.11）："`any` 只是一种简化的写法，是类型系统成熟之前临时开的口子。不应当存在到了运行时还不确定的类型：每个值在编译之后都有确定的类型。"
+裁定原文（2026-10-13，设计原则 5.10）："`any` 只是一种简化的写法，是类型系统成熟之前临时开的口子。不应当存在到了运行时还不确定的类型：每个值在编译之后都有确定的类型。"
 
 ---
 
@@ -113,7 +113,7 @@
 | `test/cases/modules/std/json/decode.cml` | 6 处 `decode(...) as T`；`test/cases/compile/diag_render/runtime_json.cml` 1 处 `println(decode('{bad json'))`。这是仓库里 `json.decode` 的全部使用者 |
 | `examples/`、`exemplars/`、`benchmarks/` 的 `.cml` | 0 |
 | `benchmarks/pipeline/exclusions.json` | 两条排除项，理由是"打印静态类型为 `any` 的值，内联前后输出不同" |
-| 文档 | 设计原则 2.7（`<any>` 是正常现象）、2.11；`docs/language/03_data_model.md:29`；`docs/stdlib-reference.md` 7 处签名；`docs/technical/35_debugger.md:253`；`36`、`37` 号文档的开放问题 |
+| 文档 | 设计原则裁定记录 2.7（`<any>` 是正常现象）、设计原则 5.10；`docs/language/03_data_model.md:29`；`docs/stdlib-reference.md` 7 处签名；`docs/technical/35_debugger.md:253`；`36`、`37` 号文档的开放问题 |
 
 ### 1.5 分类汇总
 
@@ -132,7 +132,7 @@
 ### 1.6 不是 `any`、但容易混为一谈的三样东西
 
 - **`PyObject`。** Python 桥的每个算子收发的都是 `PyObject` 或 `PyObject<T>`（由类型为 `T` 的 Camel 值包装而来）【读码 `modules/python/module.cpp:373-600`】。它是登记了 `GC_Traced` 的模块类型【读码 `modules/python/type.cpp:30-33`】，值是一个外部资源包装对象，回收器认识。`examples/t17_python.cml` 在毒化模式下通过。【实测】它说明"运行时才知道内容的值"可以有一个确定的静态类型。
-- **联合类型 `A | B`。** 它也是 `Auxiliary`（`TypeCode::Union`）。今天它只在 `stdlib/signatures/` 里当作重载的简写（`f32(x: i32 | int | f32 | float | string)`）；用户函数的形参写成 `int | string` 可以通过声明，但没有任何实参能匹配它，带标注的 `let x: int | string = 'abc'` 是 `LiteralStaticCastFailed`。【实测 `examples/t14_union.cml`】所以今天没有联合类型的值。它的去留在设计原则第 6 节（"类型表达式语言的具体内容"），不在本稿范围；但 4.6 的不变量把它一并挡在图外。
+- **联合类型 `A | B`。** 它也是 `Auxiliary`（`TypeCode::Union`）。今天它只在 `stdlib/signatures/` 里当作重载的简写（`f32(x: i32 | int | f32 | float | string)`）；用户函数的形参写成 `int | string` 可以通过声明，但没有任何实参能匹配它，带标注的 `let x: int | string = 'abc'` 是 `LiteralStaticCastFailed`。【实测 `examples/t14_union.cml`】所以今天没有联合类型的值。它的去留在设计原则第 15 节（"类型表达式语言的具体内容"），不在本稿范围；但 4.6 的不变量把它一并挡在图外。
 - **没有元素类型的 `[]`。** `let e = []` 是编译期错误 `EmptyArrayWithoutType`。【实测 `examples/t15_empty_array.cml`】
 
 ---
@@ -234,7 +234,7 @@ let ys = decode('[[1], [2]]') as int[]     // 元素是两个数组的地址
 
 ### 2.6 打印、相等、拷贝、调试器
 
-- 打印：`printSlot` 对不带 `GC_Traced`、也不是模块类型的类型码按原始类型分支，`any` 落到 `default`，输出 `<类型名>` 即 `<any>`。这就是设计原则 2.7 那条裁定的实现。【读码 `include/camel/core/rtdata/base.h:240-283`】
+- 打印：`printSlot` 对不带 `GC_Traced`、也不是模块类型的类型码按原始类型分支，`any` 落到 `default`，输出 `<类型名>` 即 `<any>`。这就是设计原则裁定记录 2.7 那条裁定的实现。【读码 `include/camel/core/rtdata/base.h:240-283`】
 - 相等：`==` 的重载里没有接受 `any` 的，编译期拒绝（2.1）。`valuesEqualByContent` 对非追踪类型比较槽的位，`any` 成员（数组元素、元组字段）因此按位比，引用按地址比。【读码 `src/builtin/operators/ops.cpp:461-470`】
 - 拷贝与克隆：元组、结构体、数组的克隆对非追踪字段拷贝槽，深拷贝到 `any` 字段为止。【读码 `include/camel/core/rtdata/tuple.h:123-150`】
 - 调试器：显示 `<any>`，不展开。【读码 `tools/debugger/src/core/values.cpp:238-241`】
@@ -253,7 +253,7 @@ let ys = decode('[[1], [2]]') as int[]     // 元素是两个数组的地址
   }
   ```
 
-  【实测 `camel …/t18_inline_changes_print.cml` 与 `camel …/t18_inline_changes_print.cml std::opt::inline std::fvm`】内联之后 `println` 的实参节点是 `n` 本身，类型是 `int`。`benchmarks/pipeline/exclusions.json` 为此排除了两个程序。按设计原则 2.10，遍前后行为不同不算缺陷；但它直接说明 `any` 遮住的类型编译器本来就知道。
+  【实测 `camel …/t18_inline_changes_print.cml` 与 `camel …/t18_inline_changes_print.cml std::opt::inline std::fvm`】内联之后 `println` 的实参节点是 `n` 本身，类型是 `int`。`benchmarks/pipeline/exclusions.json` 为此排除了两个程序。按设计原则 9.6，遍前后行为不同不算缺陷；但它直接说明 `any` 遮住的类型编译器本来就知道。
 - **内联也改变 GC 问题是否暴露。** `examples/t11_gc_user_func.cml` 加 `std::opt::inline` 后（`std::fvm`）前四种设置都对（`any` 形参没了），只剩毒化模式报出；`examples/t07_gc_frame.cml` 加 `std::opt::inline` 后五种设置全对。【实测，附录 A 的矩阵命令加 `PASSES=std::opt::inline`】这不是修复，是时序变了。
 - **`std::macro` 把 `any` 值变成常量。** `macro func table(): any { return decode('[…]') }` 经 `std::macro` 求值后，结果成为 `main` 静态区里一个类型为 `any` 的常量；静态区的追踪同样跳过它（2.5）。`examples/t16_macro_const.cml` 加 `std::macro` 后在强制回收下打印 `300 299`、`300 0`（退出码 0）或崩溃。【实测】
 
@@ -364,7 +364,7 @@ func main(n: int): int sync {
 - T2 回收器不需要任何"类型未知"的分支：每个引用都经由一个带 `GC_Traced` 的静态类型到达，或者指向一个自描述对象。
 - T3 没有不检查的转换：`as` 要么在编译期就知道成立，要么在运行时检查并给出 `T!` 或故障。
 - T4 `std::cpp`、GPU 内核等后端可以对每个值问"你是什么类型"并总能得到答案。
-- T5 设计原则 2.9 不变：不做通用联合类型的运行时分辨；运行时没有"类型"这种值。
+- T5 设计原则 3.8 不变：不做通用联合类型的运行时分辨；运行时没有"类型"这种值。
 
 T5 与"JSON 的形状运行时才知道"之间的张力是 Q2 的全部内容。
 
@@ -418,7 +418,7 @@ println(v)
 | `with <tag: any>` | `with <tag: typeas T>` | 【未查】`with` 形参上的 `typeas` 是否已支持 |
 | `let f: (x: string) => any` | 写出真实的返回类型 | |
 
-泛型现有的限制会在这里被碰到【读码 `docs/technical/28_generic_functions_and_type_functions.md` 第 7 节】：泛型函数不能被修饰（`GenericFunctionUnsupported`）；`f<w>` 对泛型的 `f` 不是部分应用；类型实参不能在调用处显式写出。前两条是实现上的缺口，第三条是设计原则第 6 节的未决项（Q3）。
+泛型现有的限制会在这里被碰到【读码 `docs/technical/28_generic_functions_and_type_functions.md` 第 7 节】：泛型函数不能被修饰（`GenericFunctionUnsupported`）；`f<w>` 对泛型的 `f` 不是部分应用；类型实参不能在调用处显式写出。前两条是实现上的缺口，第三条是设计原则第 15 节的未决项（Q3）。
 
 **两种做法**（Q1）：
 
@@ -492,7 +492,7 @@ let bad = decode_as('["a"]', [0]) !! [-1]         // [-1]：形状不符是错�
 取出：  d as T    ⇒  d.type 与 T 结构相等则给 value，否则给错误值；结果是 T!
 ```
 
-代价：每次进入一次分配；`as` 时一次类型的结构比较（类型今天不是规范化的，`docs/technical/28` 第 7 节：两个 `T[]` 是不同的对象，要用 `equals` 比）；以及它实际上引入了运行时的类型分辨，与 2.9 冲突。
+代价：每次进入一次分配；`as` 时一次类型的结构比较（类型今天不是规范化的，`docs/technical/28` 第 7 节：两个 `T[]` 是不同的对象，要用 `equals` 比）；以及它实际上引入了运行时的类型分辨，与 3.8 冲突。
 
 **不建议的摆法**：把槽加宽成（类型，值）两个槽——四个后端的帧、对象、调用约定全要动；在槽里借位做标记——`int` 是完整的 64 位，没有位可借；让标记-清除对 `any` 槽做保守扫描——只能保住对象本身，往下仍然没有类型（2.5 的第二层），而且对分代无效。
 
@@ -514,7 +514,7 @@ A、B、C 清空后：
 
 - 删除 `Type::Any()`、`TypeCode::Any`、类型作用域里的 `any`（除非 Q1 选乙，那时它只在前端作为形参简写存在，不产生类型对象）、`checkCastSafetyWithAny`、数组推断与装箱里的特判、1.2 列出的 6 处防御性特判。
 - 图的校验加一条：节点类型、端口类型、函数类型的各个成分、静态区各槽的类型都不带 `Auxiliary` 标志。这对应图模型设计稿 3.10 的类型级不变量；`Ref` 今天在三处校验里被当作"跳过"的类型（`src/runtime/graph.cpp:223`、`src/compile/gir/graph_encode.cpp:106`、`src/runtime/draft_session.cpp:71`），是否也能挡在图外【未查】。
-- 设计原则 2.7 的"`<any>` 是正常现象"一条失去对象，建议标为已由 2.11 取代；`docs/technical/36` 第 9 节的 `any` 问题、第 7 节的第 21 与 23 项关闭；`docs/technical/37` 第 7 节"暂不把分代设为默认"的两条理由去掉第一条。
+- 设计原则裁定记录 2.7 的"`<any>` 是正常现象"一条失去对象，建议标为已由 5.10 取代；`docs/technical/36` 第 9 节的 `any` 问题、第 7 节的第 21 与 23 项关闭；`docs/technical/37` 第 7 节"暂不把分代设为默认"的两条理由去掉第一条。
 
 ---
 
@@ -529,7 +529,7 @@ A、B、C 清空后：
 | 2 | **A 类**（4.1）：9 处登记的签名；重新生成签名说明与标准库参考 | 约 100 行，净减 | 低 | `encode(函数值)` 之类从运行期故障变成编译期错误；文档里 `println` 的签名不再写 `any` |
 | 3 | **C 类**（4.2，按 Q1 的裁定）：甲——用户代码里的 `any` 报错；乙——形参位置的 `any` 脱糖成匿名类型变量，返回位置等于不写，其余报错。先以警告发一个版本 | 甲约 40 行；乙约 150 行（前端一处脱糖 + 诊断） | 甲低；乙中（泛型的三条限制会被更多程序碰到：不能修饰、不能部分应用） | 甲：`func f(x: any)` 要改写成 `typeas`。乙：多数程序不用改，`x as any` 要删，`println(wrap(n))` 从 `<any>` 变成 `42` |
 | 4 | **B 类**（4.3，按 Q2 的裁定）。乙：`Json` 类型、对象、追踪、打印、相等、8 个左右的访问算子、`encode` 接受 `Json`；`decode` 的返回类型改为 `Json`（或 `Json!`） | 乙约 500–600 行 C++，加测试 | 中：新的对象类型要过 `36` 号文档第 6 节的三项检查（毒化、强制回收 + 提升年龄 1、静态搜索） | `decode(s) as T` 不再编译；改成 `decode_as(s, shape) !! …`（形状已知）或 `Json` 的访问算子（形状未知）。仓库内：2 个测试文件 7 处 |
-| 5 | **收尾**（4.6）：删 `TypeCode::Any` 与 12 个文件里的特判；第 1 步的警告升为错误；更新设计原则 2.7、`36`、`37` 号文档与语言文档 | 净减约 150 行 | 低到中：`modules/json/operators.cpp` 里有三处拿 `Type::Any()` 当"类型缺失"的兜底，要逐处确认走不到 | 无（前几步已经改完） |
+| 5 | **收尾**（4.6）：删 `TypeCode::Any` 与 12 个文件里的特判；第 1 步的警告升为错误；更新设计原则裁定记录 2.7、`36`、`37` 号文档与语言文档 | 净减约 150 行 | 低到中：`modules/json/operators.cpp` 里有三处拿 `Type::Any()` 当"类型缺失"的兜底，要逐处确认走不到 | 无（前几步已经改完） |
 | 6 | **之后才可以做的事**：分代回收设为默认（`37` 号文档第 7 节，另需 Windows 上的一轮测试）；`std::cpp` 放宽类型范围时不必考虑无类型的槽 | — | — | — |
 
 依赖：0、1、2 互不依赖，可以马上做；3 等 Q1；4 等 Q2（若选乙且想要顺手的写法，还等 Q3）；5 在 2、3、4 之后。**3 与 4 都先以警告发布一个版本**，因为它们是仅有的两步会让现有用户程序停止编译的。
@@ -565,11 +565,11 @@ let d = decode(text)          // 今天：any
 - 乙：`decode` 返回模块类型 `Json`（4.3、4.4），用算子取成员，取出的结果是 `T?`/`T!`。
 - 丙：`any` 变成通用的带标记动态值，`as T` 检查并返回 `T!`。
 
-**建议乙，并把 `decode_as` 作为文档里的首选写法。** 甲最干净，但配置文件、日志、别的程序给的消息里"可有可无的键"是常事，没有乙就只能在 C++ 里另写算子。丙让任何值都能变成动态的，是把 2.9 不要的东西从后门请进来；乙把动态性关在一个模块类型里，语言核心、图、回收器都只看见一个确定的类型 `Json`，与 `PyObject` 同理。乙的成本是一个新的对象类型和大约 8 个算子。
+**建议乙，并把 `decode_as` 作为文档里的首选写法。** 甲最干净，但配置文件、日志、别的程序给的消息里"可有可无的键"是常事，没有乙就只能在 C++ 里另写算子。丙让任何值都能变成动态的，是把 3.8 不要的东西从后门请进来；乙把动态性关在一个模块类型里，语言核心、图、回收器都只看见一个确定的类型 `Json`，与 `PyObject` 同理。乙的成本是一个新的对象类型和大约 8 个算子。
 
 ### Q3 怎样把"要得到的类型"交给一个算子
 
-设计原则第 6 节已有"泛型函数的类型参数是否允许调用时显式给出"；`modules/json/module.cpp:53` 的 `DESIGN-QUESTION(json-typed-decode)` 是同一个问题。去掉 `any` 之后它从"可以绕开"变成"每个解码的人都会碰到"。
+设计原则第 15 节已有"泛型函数的类型参数是否允许调用时显式给出"；`modules/json/module.cpp:53` 的 `DESIGN-QUESTION(json-typed-decode)` 是同一个问题。去掉 `any` 之后它从"可以绕开"变成"每个解码的人都会碰到"。
 
 ```camel
 let a = decode_as(text, [0]) !! []                         // (1) 今天：形状实参，只取类型
@@ -579,7 +579,7 @@ let d = decode(text) as int[] !! []                        // (3) as 把类型�
 ```
 
 - (1) 保持现状。缺点：要凭空造一个那种类型的值（`[0]`、`[] as Map<…>`），结构体尤其别扭。
-- (2) 类型规则能看到"调用处期望的类型"。这与第 6 节的 `entering-operator-args`（"让类型规则能报出我接受的类型"）是同一个机制的另一半；2.10 已经让空数组字面量从目标位置取类型。
+- (2) 类型规则能看到"调用处期望的类型"。这与第 15 节的 `entering-operator-args`（"让类型规则能报出我接受的类型"）是同一个机制的另一半；3.8 已经让空数组字面量从目标位置取类型。
 - (3) `as` 的目标类型交给被转换的那个算子的类型规则，结果是 `T!`。写法与 `[...] as Map<K, V>` 一脉相承。
 - (4) 允许调用处写类型实参。尖括号已经被 `with` 实参占用，需要另找写法。
 
@@ -615,7 +615,7 @@ let d = decode(text) as int[] !! []                        // (3) as 把类型�
 
 ### Q7 设计原则与文档里的两处
 
-- 2.7"静态类型为 `any` 的值打印为 `<any>` 是正常现象"：迁移完成后没有这样的值。建议那时在 2.7 该条后注明"已由 2.11 取代"。
+- 裁定记录 2.7"静态类型为 `any` 的值打印为 `<any>` 是正常现象"：迁移完成后没有这样的值。建议那时在裁定记录 2.7 该条后注明"已由 5.10 取代"。
 - `docs/language/03_data_model.md:29` 说"用户代码里不能把值声明为 `any`"，实现并不拒绝（D3）。按 Q1 的结果改文档或改实现。
 
 ---

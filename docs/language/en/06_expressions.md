@@ -147,7 +147,7 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
 **Two places where mistakes are easy:**
 
 - `^` binds one level tighter than `*` and `/` and associates from right to left: `2 * 3 ^ 2` is `18`, and `2 ^ 3 ^ 2` is `2 ^ (3 ^ 2)`, that is `512`.
-- Unary `-` binds less tightly than `^` and more tightly than `->` and the other binary operators, before a literal as before a name: `-n ^ 2` is `-(n ^ 2)`, `-2 ^ 2` is `-4` (for `4` write `(-2) ^ 2`); `-n->f` is `(-n)->f`; `-a * b` is `(-a) * b`. The right operand of `^` may carry a sign: `2.0 ^ -1.0`. `!` and `~` are at the level of the unary `-` (design principles 2.12): `!x->f` is `(!x)->f` and `!a ^ b` is `!(a ^ b)`; to negate the result of a chain write `!(xs->empty)`.
+- Unary `-` binds less tightly than `^` and more tightly than `->` and the other binary operators, before a literal as before a name: `-n ^ 2` is `-(n ^ 2)`, `-2 ^ 2` is `-4` (for `4` write `(-2) ^ 2`); `-n->f` is `(-n)->f`; `-a * b` is `(-a) * b`. The right operand of `^` may carry a sign: `2.0 ^ -1.0`. `!` and `~` are at the level of the unary `-` (design principles 4.2): `!x->f` is `(!x)->f` and `!a ^ b` is `!(a ^ b)`; to negate the result of a chain write `!(xs->empty)`.
 
 ### 6.7.2 Logic
 
@@ -290,7 +290,7 @@ match name {
 ```
 
 - What is matched may be any expression (`match f(x) { ... }`), not only a name.
-- A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **Each pattern must be a value the type of the matched value accepts** (design principles 2.13): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
+- A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **Each pattern must be a value the type of the matched value accepts** (design principles 3.7): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
 - The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`.
 
 ```cml
@@ -351,7 +351,7 @@ Tuple patterns, struct patterns, and identifier patterns on values of ordinary t
 
 ### 6.8.3 `loop`
 
-A loop is an expression with a state (design principles 2.10, 2.13). The state is written in the head of the loop: each name is declared once with its first value. The expression after `do` is the body; its value is the state of the next round, and the value of the whole loop is the last state.
+A loop is an expression with a state (design principles 3.10). The state is written in the head of the loop: each name is declared once with its first value. The expression after `do` is the body; its value is the state of the next round, and the value of the whole loop is the last state.
 
 ```
 loop name = init (, name = init)* (for name in array)? (while condition)? do expression
@@ -369,12 +369,12 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 - **No `break` and no `continue`**: ending early is written as the `while` condition, skipping the rest of a round as an `if`.
 - **Scope.** The first values and the array are evaluated once, where the loop is, and do not see the names of the head; the condition sees the names of the state, the body those and the name of `for`. A name of the head is given once (`SemanticDiag::LoopNameRepeated`). The condition and the body see the names around the loop (a `var` is read anew in every round).
 - **After `do`** comes an expression, read as after `then`: `{ x: 1 }` is a struct, `{ 5 }` and `sync { ... }` are blocks. A `return` in such a block ends the block with the next state; it does not leave the function.
-- **Effects.** Whether the body is a sync block is up to the body (2.4). Written `do sync { println(x); acc + x }`, its effects run in order every round. A loop in a block that is not a sync block, whose value nothing uses, does not run, with `EffectNotExecuted`, as for an unused call.
+- **Effects.** Whether the body is a sync block is up to the body (3.2). Written `do sync { println(x); acc + x }`, its effects run in order every round. A loop in a block that is not a sync block, whose value nothing uses, does not run, with `EffectNotExecuted`, as for an unused call.
 - **Order and depth.** The rounds run strictly one after the other. A loop is not a recursion: no number of rounds takes call depth, `--max-recursion-depth` does not count them, and a loop that does not end runs on.
-- **Numeric permissions.** `@numeric(...)` on a function or a block covers the bodies and conditions of the loops written in it (2.13).
+- **Numeric permissions.** `@numeric(...)` on a function or a block covers the bodies and conditions of the loops written in it (7.5).
 - `loop`, `while`, `do`, `for` and `in` are keywords.
 
-On the graph a loop is one `LOOP` node in the graph it is written in; the condition and the body are a subgraph each, sharing one table of captured values (design principles 2.12; `docs/design/graph-model` 3.5).
+On the graph a loop is one `LOOP` node in the graph it is written in; the condition and the body are a subgraph each, sharing one table of captured values (design principles 3.10; `docs/design/graph-model` 3.5).
 
 ## 6.9 Lambdas and function types
 

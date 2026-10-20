@@ -214,7 +214,7 @@ class TryExprLoad : public DataLoad {
 
 /// loop S1 = INIT1, ..., Sk = INITk (for BINDER in SEQUENCE)? (while CONDITION)? do BODY
 ///
-/// A loop is an expression with a state (design principles 2.10, the `do` form of 2.13). The
+/// A loop is an expression with a state (design principles 3.10, the `do` form). The
 /// load holds the names:
 ///   state()    the names of the state, in the order written (k >= 1);
 ///   binder()   the name bound to the element of each round; empty without `for`.

@@ -86,7 +86,7 @@ std::string textOf(ArgsView &args, size_t index) {
 
 // ---------------------------------------------------------------------------------------------
 // A string is valid UTF-8 and its indices and lengths count code points (design principles
-// 2.17). Text that is only ASCII, the common case, is indexed directly.
+// 11.1). Text that is only ASCII, the common case, is indexed directly.
 // ---------------------------------------------------------------------------------------------
 
 slot_t __str_split__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -192,7 +192,7 @@ slot_t __str_find__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 // A range that does not lie inside the string is a fault, as an index out of range is and as
-// the built-in `slice` on arrays does (design principles 2.10).
+// the built-in `slice` on arrays does (design principles 3.9).
 slot_t __str_substr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const std::string s = textOf(norm, 0);
     const Int64 start   = with.get<Int64>(0);
@@ -274,7 +274,7 @@ slot_t __str_from_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
         out[i] = static_cast<char>(static_cast<uint8_t>(value));
     }
-    // A string is always valid UTF-8 (design principles 2.17): the bytes must be.
+    // A string is always valid UTF-8 (design principles 11.1): the bytes must be.
     if (const size_t bad = camel::utf8::invalidOffset(out); bad != camel::utf8::npos) {
         throwRuntimeFault(
             RuntimeDiag::InvalidArgument,

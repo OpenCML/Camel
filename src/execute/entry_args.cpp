@@ -379,7 +379,7 @@ void registerEntryResultSaver(TypeCode code, EntryResultSaver saver) {
 
 namespace {
 
-/// An error value nobody handled reached the exit of `main` (design principles 2.10): it is
+/// An error value nobody handled reached the exit of `main` (design principles 3.9): it is
 /// reported on standard error as a diagnostic, in the format the command line chose, located
 /// where the error value says it was made (`file:line:column`, the file name without its
 /// directory; an error made by an operator names the operator instead and has no position).
@@ -466,11 +466,11 @@ void writeEntryResultTo(
             std::string why;
             try {
                 // Only a `main` that declares its return type has a result (design principles
-                // 2.10). The value an undeclared one happens to end with (that of its last
+                // 9.8). The value an undeclared one happens to end with (that of its last
                 // statement, `println('a')` giving 'a') is neither printed nor written.
                 // An error value such a body ends with is not reported at run time either:
                 // nothing takes it, which the compiler warns about (UnusedFallibleValue,
-                // design principles 2.11).
+                // design principles 3.9).
                 const bool declared = ctx->entryResultDeclared();
                 Type *resultType =
                     declared && graph && graph->funcType() && graph->funcType()->hasExitType()

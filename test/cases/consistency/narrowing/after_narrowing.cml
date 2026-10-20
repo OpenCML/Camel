@@ -1,5 +1,5 @@
 /**
- * After narrowing (design principles 2.13): in the arm where `x` is known not to be null,
+ * After narrowing (design principles 3.8): in the arm where `x` is known not to be null,
  * the constructs written for a `T?` are still allowed, each with a warning.
  */
 func describe(x: int?, ready: bool): string {

@@ -24,7 +24,7 @@
  *
  * The shadow stack of debug_core.cpp has a frame per activation of a graph, as the schedulers
  * run them. The arm of a branch is a graph of its own, so a function that branches is, on that
- * stack, its own frame plus a frame per arm it entered. Design principles 2.11: the debugger
+ * stack, its own frame plus a frame per arm it entered. Design principles 12.1: the debugger
  * shows the arms as part of the frame of the function they are written in, and can show the
  * real subgraphs instead. So every shadow frame belongs to an *activation*:
  *

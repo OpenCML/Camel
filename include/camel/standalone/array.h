@@ -22,7 +22,7 @@
  *
  * An Array<T> is one pointer to a block {references, size, capacity, elements}; the empty
  * array is the null pointer. The elements are the C++ values of T, so an `int[]` is a run of
- * int64_t. An array is a value (design principles 2.12: `append` returns a new array): two
+ * int64_t. An array is a value (design principles 11.3: `append` returns a new array): two
  * holders of one block never see a change, because a block is changed only while it has one
  * holder. The operations that give a new array take their first argument by value; when the
  * generated code passes its last use (std::move) and nothing else holds the block, they change
@@ -110,7 +110,7 @@ template <typename T> class Array {
     }
 
     friend bool operator==(const Array &a, const Array &b) {
-        // By content, element by element (design principles 2.10); not short-cut by identity:
+        // By content, element by element (design principles 4.2); not short-cut by identity:
         // an array that holds a NaN does not equal itself.
         if (a.size() != b.size()) {
             return false;
@@ -181,7 +181,7 @@ template <typename T> Array<T> concat(Array<T> xs, const Array<T> &ys) {
 
 /// `xs->slice<start, end>` (:struct/slice_arr): a bound outside 0..len is SliceOutOfRange at
 /// `site` (values: the start, the end, "an array", the length); an end before the start gives
-/// the empty array (design principles 2.11).
+/// the empty array (design principles 3.9).
 template <typename T>
 Array<T> slice(const Array<T> &xs, int64_t start, int64_t end, const Site &site) {
     const auto n = static_cast<int64_t>(xs.size());

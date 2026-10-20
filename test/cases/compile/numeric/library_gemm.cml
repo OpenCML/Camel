@@ -1,7 +1,7 @@
 /**
  * tensor::fuse lets a matmul use the library GEMM (tensor:matmul_blas, a system BLAS when the
  * build has one) only when its node may be reassociated and computed at another precision; any
- * other matmul keeps the canonical fused multiply-add chain (design principles 2.13).
+ * other matmul keeps the canonical fused multiply-add chain (design principles 7.1).
  */
 module library_gemm
 

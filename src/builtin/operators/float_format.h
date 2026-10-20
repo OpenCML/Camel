@@ -20,7 +20,7 @@
 /*
  * A float as an argument of `format` (and of `print` / `println` with a format string).
  *
- * A float has one text (design principles 2.10): the shortest that reads back as the same
+ * A float has one text (design principles 7.7): the shortest that reads back as the same
  * number, camel::utils::floatText. A placeholder without a format specification, `{}`, writes
  * that text, so that `format`, `string` and `println` agree; a placeholder with one
  * (`{:.2f}`, `{:>8}`, `{:e}`) asks for something else and is formatted by fmt as before.

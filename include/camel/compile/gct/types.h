@@ -54,12 +54,12 @@ enum class NodeKind : uint8_t {
     EXIT, // `return` / `throw`; child: the value
     EXEC, // a block
     EXPT, // the names a module exports
-    LOOP, // a loop (design principles 2.10, 2.13); children: see Node::loopKind
+    LOOP, // a loop (design principles 3.10); children: see Node::loopKind
 };
 
 std::string to_string(NodeKind kind);
 
-/// What selects the arm of a BRCH node (design principles 2.9; all are the same structure on
+/// What selects the arm of a BRCH node (design principles 1; all are the same structure on
 /// the graph).
 ///  - Cond: `if` (a boolean) and `match` (a value compared with the cases, or the tag of a
 ///    `T?` / `T!` with the fixed patterns). Children: condition, CASE...
@@ -67,7 +67,7 @@ std::string to_string(NodeKind kind);
 ///  - ErrorThen: `a !! b`. Children: a, CASE(True)[EXEC b].
 ///  - ErrorPass: `x ?-> f`. Children: x, CASE(Else)[EXEC call], where the call takes
 ///    DREF kPassedValueName as its argument.
-///  - LogicalAnd: `a && b`, which is `if a then b else false` (design principles 2.11).
+///  - LogicalAnd: `a && b`, which is `if a then b else false` (design principles 4.2).
 ///    Children: a, CASE(True)[EXEC b], CASE(Else)[EXEC false].
 ///  - LogicalOr: `a || b`, which is `if a then true else b`.
 ///    Children: a, CASE(True)[EXEC true], CASE(Else)[EXEC b].
@@ -78,12 +78,12 @@ enum class BranchKind : uint8_t { Cond, NullThen, ErrorThen, ErrorPass, LogicalA
 /// The pattern of a CASE node.
 ///  - Value: a value the scrutinee is compared with. Children: the value, the body.
 ///  - True / Else: the arms of an `if`. One child, the body.
-///  - Bind: `case v` over a tagged scrutinee (design principles 2.9): the value taken out of
+///  - Bind: `case v` over a tagged scrutinee (design principles 3.8): the value taken out of
 ///    a `T?` / `T!` under the name binding(). One child, the body.
 ///  - Error: `case error e`: the error of a failed `T!` under that name. One child, the body.
 ///  - Enum: `case Shape::Rect { w, h }`: a variant of an enum. One child, the body; the
 ///    variant and the fields the pattern binds are in the node's EnumCase (design principles
-///    2.13). Which variant that is, and what its fields are, the graph builder decides from
+///    5.3). Which variant that is, and what its fields are, the graph builder decides from
 ///    the type of the value matched.
 enum class CaseType : uint8_t { Value, True, Else, Bind, Error, Enum };
 
@@ -91,7 +91,7 @@ enum class CaseType : uint8_t { Value, True, Else, Bind, Error, Enum };
 /// is not an identifier, so no program can write it.
 inline constexpr const char *kPassedValueName = "$passed";
 /// The name of `let _ = e`: the value of `e` is dropped on purpose and no name is bound
-/// (design principles 2.11). An NREF with this name declares nothing.
+/// (design principles 3.9). An NREF with this name declares nothing.
 inline constexpr const char *kDiscardName = "_";
 
 } // namespace camel::compile::gct

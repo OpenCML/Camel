@@ -71,8 +71,8 @@ target_include_directories(prog PRIVATE $ENV{CAMEL_HOME}/include)
 - **故障**（除零、越界、转换越界等）：与解释器相同的诊断文字，带源码位置与源码摘录，写在标准输出上，退出码 1。`CAMEL_ERROR_FORMAT=short` 时是一行的形式。
 - **递归上限**：与调度器的规则相同，默认是转译时的上限（`--max-recursion-depth`，否则 1000）；运行时 `CAMEL_MAX_RECURSION_DEPTH` 可以改它。尾调用（包括互相尾调用的一组函数）写成循环，不使栈增长、不计数。
 - **退出码**：`main` 声明了整数返回类型时是它的返回值；`exit(n)` 是 n。
-- **`main` 的参数**（设计原则 2.13）：与 `camel` 一样用 `--arg 名字=值` 给出，按声明的类型读（整数、浮点数、`true`/`false`、原样的文字）：`./prog --arg n=3 --arg name=hi`。写错的、多给的、重复的、缺少的参数报告与解释器逐字相同（`EntryArgumentInvalid`、`EntryArgumentMissing`，位置在 `main`），退出码 1。参数类型是 `int`、`i32`、`float`、`f32`、`bool`、`string` 之外的（张量、结构体从文件读，只有 `camel` 能读）时拒绝转译。转译时已经用 `--arg` 绑定的参数成为程序里的常量。
-- **`map`、`filter`** 在生成的程序里按元素顺序依次执行（设计原则 2.13）。
+- **`main` 的参数**（设计原则 10.6）：与 `camel` 一样用 `--arg 名字=值` 给出，按声明的类型读（整数、浮点数、`true`/`false`、原样的文字）：`./prog --arg n=3 --arg name=hi`。写错的、多给的、重复的、缺少的参数报告与解释器逐字相同（`EntryArgumentInvalid`、`EntryArgumentMissing`，位置在 `main`），退出码 1。参数类型是 `int`、`i32`、`float`、`f32`、`bool`、`string` 之外的（张量、结构体从文件读，只有 `camel` 能读）时拒绝转译。转译时已经用 `--arg` 绑定的参数成为程序里的常量。
+- **`map`、`filter`** 在生成的程序里按元素顺序依次执行（设计原则 10.6）。
 
 ---
 

@@ -9,14 +9,14 @@
  *   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
  * - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
  *   returns an error value, and a wrong argument is a fault of the operator that meets it.
- * - Order of evaluation (design principles 2.7). A function passed to one of these is applied
+ * - Order of evaluation (design principles 3.6). A function passed to one of these is applied
  *   with `map`: its calls on different elements have NO order among them and the parallel
  *   scheduler may run them at the same time; the result is put together by position and is
  *   the same on every back end. That holds for `find`, `any`, `all`, `count`, `flat_map`,
  *   `sort_by` and `zip_with`. None of them stops early: the function is applied to every
  *   element. A function with side effects belongs in `foreach` or `reduce`, which are ordered.
  * - These are generic functions: there is one instance per set of element types in the whole
- *   program, whichever module calls it (one root graph, design principles 2.11). `group_by`
+ *   program, whichever module calls it (one root graph, design principles 10.1). `group_by`
  *   is not here: it needs the map type.
  */
 module array

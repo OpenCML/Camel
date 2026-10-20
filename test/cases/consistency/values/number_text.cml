@@ -1,5 +1,5 @@
 /**
- * Text to number: the whole string must be one number (design principles 2.10). `int(s)` and
+ * Text to number: the whole string must be one number (design principles 5.1). `int(s)` and
  * `float(s)` fault on anything else, blanks included; `parse_int` and `parse_float` read by
  * the same rule and give an error value instead. The faults are shown through `attempt`.
  */

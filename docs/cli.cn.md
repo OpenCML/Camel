@@ -114,7 +114,7 @@
 - **运行需要每个参数都有值。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`，或默认运行）拒绝仍带参数的入口图，诊断为 `RuntimeDiag::EntryArgumentMissing`（`0x04000010`，阶段 `run`），定位在 `main` 的定义处，并列出没有值的参数。什么都不会运行；绝不假定默认值、零值或随机值。重写遍和翻译遍接受未绑定的参数。
 - **错误的实参**（名字不是参数、同一名字给了两次、文本不是该类型的字面量、文件不存在、张量形状不同、对没有参数的 `main` 使用 `--arg`）是 `RuntimeDiag::EntryArgumentInvalid`（`0x04000011`），定位在 `main`，在任何遍运行之前报告。
 - **`main` 的返回值写到输出**，即 `-o` / `--output <file>`，默认是标准输出，前提是有调度遍运行了程序。确切规则如下：
-  - **只有写明了返回类型的 `main`，它的返回值才算程序的结果**（设计原则 2.10）。没有写返回类型的 `main`（`func main() sync { println('a') }`）：函数体的值（这里是 `println` 返回的 `'a'`）不是结果，不打印、不写出，退出码是 0；此时使用 `-o` 是 `EntryResultNotWritten`。`println(x)` 仍然返回 `x`：`func main(): string sync { println('a') }` 的结果是 `'a'`，由 `println` 打印一次，再作为结果输出一次。
+  - **只有写明了返回类型的 `main`，它的返回值才算程序的结果**（设计原则 9.8）。没有写返回类型的 `main`（`func main() sync { println('a') }`）：函数体的值（这里是 `println` 返回的 `'a'`）不是结果，不打印、不写出，退出码是 0；此时使用 `-o` 是 `EntryResultNotWritten`。`println(x)` 仍然返回 `x`：`func main(): string sync { println('a') }` 的结果是 `'a'`，由 `println` 打印一次，再作为结果输出一次。
   - `main` 的返回类型是 `T!`：返回成功值时按 `T` 处理（`int!` 的成功值是退出码）。返回的是**没有被处理的错误值**时，它作为诊断 `RuntimeDiag::UnhandledError`（`0x04000051`，阶段 `run`）打印到**标准错误**，退出码为 1，标准输出上只有程序自己的输出。诊断按 `--error-format` 的格式呈现（`json` 时是标准错误上的一个数组），位置是错误值里记录的产生处：`error(...)` 调用的位置，或被 `attempt` 隔离的故障的位置；由算子产生的错误（如 `parse_int`）不记录位置，这时定位在 `main`，并用一条 `note:` 指出是哪个算子。
   - `main` 不返回值（声明为 `: void`）：什么都不写。此时使用 `-o` 是 `RuntimeDiag::EntryResultNotWritten`（`0x04000012`），定位在 `main`，在程序运行之后报告，退出码为 1。
   - `main` 返回退出码（`int`、`bool`、`byte`：进程退出码由这些类型导出）：该值就是退出码，与任何 `main` 一样，并且 **不** 打印到标准输出，所以 `main` 返回自身状态的程序行为不变。只有 `-o` 指定了文件时才把它（作为文本）写出。
@@ -143,7 +143,7 @@
 
 | 遍 | 参数（默认值） |
 | --- | --- |
-| `std::opt`、`std::opt::algebra` | `safe_fp: bool = false`（严格等价的浮点算式；设计原则 2.15） |
+| `std::opt`、`std::opt::algebra` | `safe_fp: bool = false`（严格等价的浮点算式；设计原则 7.4） |
 | `std::fvm`、`std::jit` | `native_loop: bool = false`（程序自己的 LOOP 节点原生运行，而不是降为尾递归；调试器下总是如此），`stats: string = ""`（把本次运行每张图的字节码数与执行计数追加写入该文件） |
 | `std::jit` | `hot_threshold: int = 1`（同一调用点调用多少次后编译一张图；0 表示第一次调用就编译） |
 | `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行） |
@@ -185,7 +185,7 @@
 当每个实参都是常量时，`std::macro` 把对 `macro` 函数或宏算子的调用替换为它的结果。有两种情况会让调用留在程序里：
 
 - **某个实参不是常量。** 这是正常情况，不是失败；什么都不打印。带 `-v` 时 stderr 上有一行日志指出这次调用和那个实参：`[WARN] <Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
-- **求值失败**：某个算子抛出错误（除以零、`autodiff: no derivative rule for operator ...`）、有异常逃逸，或者求值所需的嵌套调用数超过求值器的上限（64，除非 `--max-macro-depth` 或 `CAMEL_MAX_MACRO_DEPTH` 另有指定）。这是编译期错误（见设计原则 2.7）：`RuntimeDiag::MacroEvaluationFailed`（`0x0400000E`，阶段 `pass:std::macro`），定位在这次调用，并带有原因（`short` 格式，后面还有建议和诊断名）：`(m)m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero. ...` 流水线在此停止，退出码为 1；后面的遍不运行，程序不执行。
+- **求值失败**：某个算子抛出错误（除以零、`autodiff: no derivative rule for operator ...`）、有异常逃逸，或者求值所需的嵌套调用数超过求值器的上限（64，除非 `--max-macro-depth` 或 `CAMEL_MAX_MACRO_DEPTH` 另有指定）。这是编译期错误（见设计原则 8）：`RuntimeDiag::MacroEvaluationFailed`（`0x0400000E`，阶段 `pass:std::macro`），定位在这次调用，并带有原因（`short` 格式，后面还有建议和诊断名）：`(m)m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero. ...` 流水线在此停止，退出码为 1；后面的遍不运行，程序不执行。
 
 这条规则的后果：
 
@@ -299,7 +299,7 @@
 
 **递归上限计的是什么** 在每个执行后端上都相同：每一次处于打开状态且不是尾调用的函数调用，不论它是写成一次调用、通过函数值进行，还是由高阶算子（`map`、`filter`、`reduce`、`foreach`）为某个元素进行。处于尾位置的调用替换它的调用者，不计数（见 `docs/technical/19_tail_call_optimization.md`），所以任意深度的尾递归在任何上限下都能运行。`if` 的分支臂是它们所在函数的尾调用。唯一不由程序自己发出的调用，即运行时对 `main` 的调用，不计数。因此上限为 L 时，对于从 `main` 调用的 `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`，`depth(L - 1)` 是能运行的最深调用，在 `std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的）以及 `std::tf` 上都是如此：默认值下是 `depth(999)`。改变存在哪些调用的遍（`std::opt::inline`）也改变被计数的内容，因为它们改变了图。
 
-**设置它。** 命令行上的 `--max-recursion-depth <n>`，否则是环境变量 `CAMEL_MAX_RECURSION_DEPTH=<n>`；`n` 是 1 到 1000000 的整数。其他任何值（0、文本、更大的数）在程序编译之前就在标准错误上被拒绝（`Invalid --max-recursion-depth value: '0'. Expected an integer from 1 to 1000000.`），退出码为 1。没有对应的 `.opencmlrc` 键。既没有选项也没有变量时，每个调度器都在 1000 处停下，并行调度器同样计数（设计原则 2.10）。
+**设置它。** 命令行上的 `--max-recursion-depth <n>`，否则是环境变量 `CAMEL_MAX_RECURSION_DEPTH=<n>`；`n` 是 1 到 1000000 的整数。其他任何值（0、文本、更大的数）在程序编译之前就在标准错误上被拒绝（`Invalid --max-recursion-depth value: '0'. Expected an integer from 1 to 1000000.`），退出码为 1。没有对应的 `.opencmlrc` 键。既没有选项也没有变量时，每个调度器都在 1000 处停下，并行调度器同样计数（设计原则 3.9）。
 
 **调高上限的代价**（在 Linux x86-64、release 构建上测得，函数有三个槽）：
 

@@ -2,7 +2,7 @@
  * Exercises JSON decoding across primitives, arrays, and structs, including an encode-decode round trip.
  * The text has a known shape, so it is decoded with `decode_as`, which checks it against the
  * type of the shape argument (`decode(text) as T` read the untyped result unchecked and is a
- * compile-time error now: design principles 2.12).
+ * compile-time error now: design principles 5.10).
  */
 module main
 

@@ -1,5 +1,5 @@
 /**
- * A constant expression that can only fault is not folded (design principles 2.9): std::opt::fold
+ * A constant expression that can only fault is not folded (design principles 3.9): std::opt::fold
  * and std::opt leave `1 / 0` as written and warn where it is written, once. The program
  * behaves the same with and without the pass.
  *

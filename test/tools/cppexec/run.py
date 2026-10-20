@@ -25,7 +25,7 @@ Each program ends in one of these outcomes:
 --expect <file> reads a list of programs (one path per line, relative to the repository; '#'
 starts a comment) that must all be "same", runs them, and exits with 1 if one is not. That is
 the form the test plan uses (test/plans/feat/trans/cpp.plan.toml). A path may be followed by the
-arguments of the program's `main` (`--arg name=value ...`, design principles 2.13): `camel`
+arguments of the program's `main` (`--arg name=value ...`, design principles 10.6): `camel`
 is given them before the file, the generated program on its command line. A program may be
 listed several times with different arguments (or none: the report of the missing ones).
 
@@ -166,10 +166,10 @@ def check(entry, workdir, args):
     elif fout == xout and fcode == ccode:
         rec["outcome"] = "same"
     elif IN_PLACE.search(open(program, encoding="utf-8", errors="replace").read()):
-        # Design principles 2.12: `append` returns a new array; the runtime still changes the
+        # Design principles 11.3: `append` returns a new array; the runtime still changes the
         # array in place, and a program that relies on it (the result of a statement
         # `xs->append<x>` unused) is to become a compile-time error.
-        rec["outcome"] = "differs: in-place append (2.12)"
+        rec["outcome"] = "differs: in-place append (11.3)"
         rec["detail"] = first_difference(fout, xout) if fout != xout else "exit codes"
     else:
         rec["outcome"] = "differs"

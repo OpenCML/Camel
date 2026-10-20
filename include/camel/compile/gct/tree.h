@@ -122,7 +122,7 @@ class Tree {
     /// The tree as indented text, one node per line (`camel inspect --gct`).
     void print(std::ostream &os) const;
 
-    /// The `using namespace` in force in `node` (design principles 2.12): for the root, those
+    /// The `using namespace` in force in `node` (design principles 10.2): for the root, those
     /// of the module; for an EXEC that is a block, those written in the block; for a top-level
     /// declaration, those of the namespace blocks it is written in. What they name is found
     /// where a name is used. Null when there are none.
@@ -131,7 +131,7 @@ class Tree {
 
     /// The namespaces of the block a top-level declaration is written in, when its name does
     /// not say them: an operator overload, whose name is the operator's (design principles
-    /// 2.13). Null for any other node; the namespaces of a name are then its path.
+    /// 10.2). Null for any other node; the namespaces of a name are then its path.
     void setNamespaceOf(const Node *node, const std::vector<std::string> &path);
     const std::vector<std::string> *namespaceOf(const Node *node) const;
 

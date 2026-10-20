@@ -71,7 +71,7 @@ std::string regexErrorReason(const std::regex_error &e) {
 
 // Text with characters above ASCII is matched as wide characters, so that `.` and a class
 // stand for one code point and not for one byte (a string counts code points; design
-// principles 2.17). Where wchar_t is 16 bits (Windows) a code point above U+FFFF is two units.
+// principles 11.1). Where wchar_t is 16 bits (Windows) a code point above U+FFFF is two units.
 std::wstring widen(std::string_view text) {
     std::wstring out;
     size_t pos = 0;

@@ -110,7 +110,7 @@ device plans, and broader optimized implementations and tuning. See the design
 route for the full intended scope; passing the current test suite does not
 complete that scope.
 
-Known core defect: design principles 2.14 require an empty reduction domain to
+Known core defect: design principles 7.7 require an empty reduction domain to
 fault, including when the result is empty. Some existing tensor declarations
 (`sum`, `sum_axis`, `mean_axis`) still declare `LawEmpty::Initial`, and their CPU
 kernels retain that older behavior. Reconcile the declarations, CPU kernels,

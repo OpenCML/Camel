@@ -5,7 +5,7 @@ tags = ["feat", "compile", "warnings", "branches"]
 desc = "The warning for a return or throw in an arm of an if / match whose value nothing uses."
 
 # An arm is a graph of its own: `return` in an arm ends the arm and gives the value of the
-# branch (design principles 2.1, 2.4). When the branch is a statement that value goes nowhere
+# branch (design principles 3.1, 3.2). When the branch is a statement that value goes nowhere
 # and the exit has no effect. The warning (SemanticDiag::ExitInUnusedBranch) changes nothing
 # about what the program does.
 

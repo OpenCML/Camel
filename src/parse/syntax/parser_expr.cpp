@@ -350,7 +350,7 @@ void ParserImpl::parseLink() {
 /// The minus is always an operator, never part of a number, and reads the same before a
 /// literal and before a name: it binds less tightly than `^` and more tightly than `->` and
 /// every other binary operator. `-2 ^ 2` is `-(2 ^ 2)`, `-x->f` is `(-x)->f`, `-a * b` is
-/// `(-a) * b`. `!` and `~` are at the same level (design principles 2.12): `!x->f` is
+/// `(-a) * b`. `!` and `~` are at the same level (design principles 4.2): `!x->f` is
 /// `(!x)->f`, `!a ^ b` is `!(a ^ b)`. Under a prefix operator the power is taken here;
 /// elsewhere it is powerExpr, whose right operand reaches this function too, so `2 ^ -1` has
 /// a signed exponent.
@@ -690,7 +690,7 @@ void ParserImpl::parseAngledValues() {
 
 /// typeArguments : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
 /// namedTypeArgument : IDENTIFIER '=' typeExpr
-/// The arguments are all positional or all named (design principles 2.17): `f::<int, string>`
+/// The arguments are all positional or all named (design principles 5.9): `f::<int, string>`
 /// or `f::<A = int, B = string>`.
 void ParserImpl::parseTypeArguments() {
     const size_t m = mark();
@@ -1015,7 +1015,7 @@ void ParserImpl::parseTry() {
 /// loopState : identDef '=' logicalOrExpr
 /// loopFor : 'for' identDef 'in' logicalOrExpr
 /// loopWhile : 'while' logicalOrExpr
-/// A loop is an expression with a state (design principles 2.10, written as 2.13 rules): each
+/// A loop is an expression with a state (design principles 3.10): each
 /// name of the state is declared once in the head with its first value, several separated by
 /// commas; the expression after `do` is evaluated once per round and its value is the state of
 /// the next round (a tuple when the state has several names); the value of the loop is the last

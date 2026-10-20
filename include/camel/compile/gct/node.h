@@ -40,7 +40,7 @@
  *     CAST              payload: the target type; flag: written on a declaration
  *     EXIT              tag: ExitType
  *     EXEC              flags: sync block, scope of operands; tag: the numeric permissions
- *                       in force in it (design principles 2.13)
+ *                       in force in it (design principles 7.5)
  *     EXPT              payload: the list of exported names
  *     LOOP              payload: the names of the state, then the name of the element with
  *                       `for`; tag: camel::core::LoopKind
@@ -185,7 +185,7 @@ class Node {
 
     /// EXEC: the numeric permissions (camel/core/operator_semantics.h, PermissionMask) in
     /// force in this scope: those `@numeric(...)` grants on it, on the function whose body it
-    /// is, and on every block and function it is lexically nested in (design principles 2.13:
+    /// is, and on every block and function it is lexically nested in (design principles 7.5:
     /// an arm, a loop body or a lambda written in the code is part of the code). Every EXEC
     /// the GCT builder makes carries them, so the graph builder reads them from the nearest
     /// EXEC whatever order it builds graphs in. 0 when none is granted.
@@ -210,7 +210,7 @@ class Node {
     }
 
     /// LOOP: `loop s1 = a1, ..., sk = ak (for x in xs)? (while c)? do b` (design principles
-    /// 2.10, 2.13). The children, in order: the k first values a1 ... ak; with `for`, the
+    /// 3.10). The children, in order: the k first values a1 ... ak; with `for`, the
     /// sequence xs; with `while`, an EXEC holding the condition c; last, the EXEC of the body b.
     /// The first values and the sequence are evaluated once, where the loop is; the condition
     /// sees the state names, the body the state names and the element.
@@ -276,7 +276,7 @@ class Node {
         return *payload_.name;
     }
     /// CASE of an enum variant (CaseType::Enum): the variant as written, and the fields the
-    /// pattern binds (design principles 2.13). For a tuple pattern the bindings are one per
+    /// pattern binds (design principles 5.3). For a tuple pattern the bindings are one per
     /// position, in order, with an empty name for `_`; for a struct pattern `fields` and
     /// `bindings` are the fields written, in the order written.
     struct EnumCase {

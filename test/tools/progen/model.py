@@ -186,14 +186,14 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         return "null"
     if k == "coal":
         # `a ?? b ?? d`: every operand but the last is a `T?`; the last is a `T` (the result
-        # is a `T`) or a `T?` (the result is a `T?`). Design principles 2.10.
+        # is a `T`) or a `T?` (the result is a `T?`). Design principles 3.8.
         return wrap(" ?? ".join(sub(x) for x in n.c))
     if k == "comp":
-        # `[e for x in xs if c]`: filter then map (design principles 2.10).
+        # `[e for x in xs if c]`: filter then map (design principles 4.2).
         cond = "" if n.c[2] is None else " if " + arg(n.c[2])
         return f"[{arg(n.c[1])} for {n.a['var']} in {arg(n.c[0])}{cond}]"
     if k == "loop":
-        # `loop s = a, t = b (for x in xs)? (while c)? do body` (design principles 2.13). The
+        # `loop s = a, t = b (for x in xs)? (while c)? do body` (design principles 3.10). The
         # first values, the array and the condition are operands (an `if` among them takes
         # parentheses); what follows `do` reads as after `then`.
         inits, seq, cond, body = n.c
@@ -295,7 +295,7 @@ def block(n: N, ind: int) -> str:
         lines.append(IND * (ind + 1) + "return " + ex(n.c[1], ind + 1, True) + ";")
     elif n.a.get("null"):
         # An arm that gives nothing ends in `null`. (`return null` there is now reported by
-        # ExitInUnusedBranch: an arm needs no value to compile, design principles 2.10.)
+        # ExitInUnusedBranch: an arm needs no value to compile, design principles 3.7.)
         lines.append(IND * (ind + 1) + "null;")
     lines.append(IND * ind + "}")
     return "\n".join(lines)
@@ -311,7 +311,7 @@ def st(n: N, ind: int) -> list:
         return [pad + ex(n.c[0], ind, True)]
     if k == "ifs":
         # The arm of an `if` without `else` may also be one expression of any type, whose
-        # value is dropped (design principles 2.10): `if c then println(x)`.
+        # value is dropped (design principles 3.9): `if c then println(x)`.
         text = f"{pad}if {ex(n.c[0], ind, n.c[0].k not in LOW)} then {arm(n.c[1], ind)}"
         if n.c[2] is not None:
             text += " else " + block(n.c[2], ind)
@@ -348,7 +348,7 @@ def type_decls_src(prog: N, export: bool) -> list:
 
 def globals_src(prog: N, export: bool) -> list:
     # Written in the order recorded by the generator, not the order they were made: the top
-    # level of a module does not depend on the order it is written in (design principles 2.12).
+    # level of a module does not depend on the order it is written in (design principles 10.1).
     made = prog_globals(prog)
     order = prog.a.get("global_order") or list(range(len(made)))
     out = []
@@ -514,7 +514,7 @@ def show_in(v) -> str:
 
 
 def show_float(v: float) -> str:
-    # The one text of a float (design principles 2.10): the shortest that reads back as the
+    # The one text of a float (design principles 7.7): the shortest that reads back as the
     # same number, with a fraction or an exponent. Python's repr follows the same layout
     # (an exponent below -4 or from 16 up, `1e+16`, `1e-05`, `-0.0`, `inf`); a NaN has no sign.
     return "nan" if v != v else repr(float(v))
@@ -536,7 +536,7 @@ class Evaluator:
             key = f.a.get("key", f.a["name"])
             g.d[key] = Closure(f.a["params"], f.c[0], g, f.a["name"], f.a.get("with"))
         # The top-level values are pure and each uses only the ones made before it: evaluated
-        # in that order, before main (design principles 2.11), whatever order they are written in.
+        # in that order, before main (design principles 10.1), whatever order they are written in.
         for v in prog_globals(self.prog):
             g.d[v.a["name"]] = self.ev(v.c[0], g)
         main = g.get("main")
@@ -634,7 +634,7 @@ class Evaluator:
     def e_loop(self, n, env):
         # The state is given by the head; each round: the condition (it sees the state), then
         # the next element, then the body (it sees the state and the element); its value is the
-        # next state, the tuple of the values when there are several (design principles 2.13).
+        # next state, the tuple of the values when there are several (design principles 3.10).
         inits, seq, cond, body = n.c
         names = n.a["names"]
         state = [self.ev(x, env) for x in inits]
@@ -683,7 +683,7 @@ class Evaluator:
     def e_bin(self, n, env):
         op = n.a["op"]
         if op in ("&&", "||"):
-            # Branches (design principles 2.11): `a && b` is `if a then b else false`, so the
+            # Branches (design principles 4.2): `a && b` is `if a then b else false`, so the
             # right side, its effects and its faults included, is evaluated only when the left
             # side does not decide.
             left = bool(self.ev(n.c[0], env))
@@ -695,7 +695,7 @@ class Evaluator:
             left, right = bool(self.ev(n.c[0], env)), bool(self.ev(n.c[1], env))
             return (left and right) if op == "&" else (left or right)
         if op in ("==", "!=") and "null" in (n.c[0].k, n.c[1].k):
-            # The test of a `T?` against null (design principles 2.11).
+            # The test of a `T?` against null (design principles 3.8).
             v = self.ev(n.c[1] if n.c[0].k == "null" else n.c[0], env)
             return (v is None) == (op == "==")
         a, b = self.ev(n.c[0], env), self.ev(n.c[1], env)
@@ -704,7 +704,7 @@ class Evaluator:
         return binop(op, a, b)
 
     def overload(self, env, symbol, args):
-        """An operator on a struct: the program's overload of it (design principles 2.12)."""
+        """An operator on a struct: the program's overload of it (design principles 4.3)."""
         return self.call(env.get(f"operator {symbol}/{len(args)}"), args)
 
     def e_un(self, n, env):
@@ -818,7 +818,7 @@ class Evaluator:
         return a[i:j]
 
     def e_append(self, n, env):
-        # A new array: the one appended to is unchanged (design principles 2.12).
+        # A new array: the one appended to is unchanged (design principles 11.3).
         r = self.ev(n.c[0], env) + [self.ev(n.c[1], env)]
         if len(r) > MAX_ARR:
             raise Reject("array too long")
@@ -962,7 +962,7 @@ def effect_violations(prog: N) -> list:
     statement (or the result) of a `sync` block whose enclosing blocks, up to the body of its
     function or lambda, are all `sync` blocks; `wait`, and `if` / `match` whose arms are `sync`
     blocks, pass the position on. Everywhere else an effect would run on demand (design
-    principles 2.1), which the eager reference does not model, so the generator never writes one
+    principles 3.1), which the eager reference does not model, so the generator never writes one
     there and the reducer must not create one. Calls are judged by the `eff` mark the generator
     put on them."""
     bad = []
@@ -1116,7 +1116,7 @@ MAX_HEAVY = 34
 def static_faults(prog: N) -> list:
     """Faults that are visible without running: an index known to be a literal outside an array
     whose length is known (a literal, a `let` bound to one, a member of a tuple literal), a
-    division by a literal zero. The design principles (2.7) make the first a compile-time
+    division by a literal zero. The design principles (3.9) make the first a compile-time
     error, so a program that has one, even in code that never runs, is not a valid test of the
     optimizer; the reducer must not shrink a program into one."""
     out = []

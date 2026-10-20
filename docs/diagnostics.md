@@ -2427,7 +2427,7 @@ A 'var' of the top level of a module is read and written only by the module's ow
 **Example** (`test/cases/compile/module_root/export_var.cml`, run as `camel -E short test/cases/compile/module_root/export_var.cml`)
 
 ```camel
-// A `var` cannot be exported (design principles 2.11).
+// A `var` cannot be exported (design principles 10.1).
 import export_var_lib
 
 func main(): int sync {
@@ -2551,7 +2551,7 @@ Every value has a definite type after compilation. A type parameter ('typeas T')
 ```camel
 module written_parameter
 
-// `any` is not a type a program can write (design principles 2.12). A parameter that takes
+// `any` is not a type a program can write (design principles 5.10). A parameter that takes
 // values of several types declares a type parameter: `func keep(x: typeas T, n: int): T`.
 func keep(x: any, n: int): any {
     return x
@@ -2828,7 +2828,7 @@ Each of these types needs the next one to be declared first, and the last needs 
 **Example** (`test/cases/compile/modules_213/type_cycle.cml`, run as `camel -E short test/cases/compile/modules_213/type_cycle.cml`)
 
 ```camel
-// Design principles 2.13: types that form a cycle across modules are reported with the cycle
+// Design principles 10.1: types that form a cycle across modules are reported with the cycle
 // (ModuleTypeCycle), not as names that are not resolved.
 import { A } from cycle_a
 
@@ -2850,7 +2850,7 @@ The annotation '@{0}' is not accepted: {1}.
 **Help**
 
 ```text
-A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@numeric(...)' grants numeric permissions to a function or a block (design principles 2.13).
+A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@numeric(...)' grants numeric permissions to a function or a block (design principles 7.5).
 ```
 
 **Example** (`test/cases/compile/numeric/invalid.cml`, run as `camel test/cases/compile/numeric/invalid.cml`)
@@ -2885,7 +2885,7 @@ func main(): int sync {
 **Help**
 
 ```text
-A loop's 'for x in xs' visits the elements of the array xs in order (design principles 2.10). 'range(a, b)' is the array of the integers from a to b; a string, a map or a tensor is not iterated by 'for'.
+A loop's 'for x in xs' visits the elements of the array xs in order (design principles 3.10). 'range(a, b)' is the array of the integers from a to b; a string, a map or a tensor is not iterated by 'for'.
 ```
 
 **Example** (`test/cases/loops/err_not_array.cml`, run as `camel -E short test/cases/loops/err_not_array.cml`)
@@ -3226,7 +3226,7 @@ When a value is one of several named cases, declare an enum: 'type T = enum { A(
 **Example** (`test/cases/compile/enum/retired_union.cml`, run as `camel -E short test/cases/compile/enum/retired_union.cml`)
 
 ```camel
-// `A | B` is retired: a value has one type (design principles 2.13). When a value is one of
+// `A | B` is retired: a value has one type (design principles 5.3). When a value is one of
 // several named cases, that is an enum.
 
 type IntOrFloat = int | float
@@ -3255,7 +3255,7 @@ Write 'T?' for a value that may be null and 'T!' for one that may have failed.
 **Example** (`test/cases/compile/enum/retired_question.cml`, run as `camel -E short test/cases/compile/enum/retired_question.cml`)
 
 ```camel
-// `T ? U` is retired: `?` only marks a nullable value, as in `T?` (design principles 2.13).
+// `T ? U` is retired: `?` only marks a nullable value, as in `T?` (design principles 3.9).
 
 func f(x: int ? float): int {
     return 1
@@ -3588,7 +3588,7 @@ Only a value of type 'T?' can be null. In the arm of 'if x != null' the name 'x'
 
 ```camel
 // A value that cannot be null may be compared with `null`: the result is fixed, and the
-// compiler warns (design principles 2.13).
+// compiler warns (design principles 3.8).
 func main(): int sync {
     let a = 1
     println(a == null)          // line 5: warned, always false
@@ -4515,7 +4515,7 @@ Cannot convert {0} to {1}: {2}.
 **Help**
 
 ```text
-A conversion whose value does not fit the target type is a fault (design principles 2.10): a float that is NaN, infinite or beyond the integer's range, or an integer beyond the range of a narrower integer type. Check the value before converting it, or clamp it (min, max) to the range of the target.
+A conversion whose value does not fit the target type is a fault (design principles 5.1): a float that is NaN, infinite or beyond the integer's range, or an integer beyond the range of a narrower integer type. Check the value before converting it, or clamp it (min, max) to the range of the target.
 ```
 
 **Example** (`test/cases/consistency/faults/float_to_int_range.cml`, run as `camel `)

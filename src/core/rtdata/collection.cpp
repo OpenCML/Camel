@@ -221,7 +221,7 @@ void Table::updateRefs(const RefRelocator &relocate, const type::Type *type) {
 
 // ---- Order and equality ----
 
-// Design principles 2.10: a collection is ordered by its keys, and this function is that
+// Design principles 11.3: a collection is ordered by its keys, and this function is that
 // order. Everything that shows an order (keys, values, items, printing) and equality follow
 // it, so a collection is determined by its entries and by nothing else.
 int compareKeys(slot_t a, slot_t b, const type::Type *keyType) {

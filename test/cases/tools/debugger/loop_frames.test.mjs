@@ -1,5 +1,5 @@
 // A loop in the debugger, on both debuggable back ends: its body is part of the frame of the
-// function the loop is written in (design principles 2.11: like the arms of a branch), a
+// function the loop is written in (design principles 12.1: like the arms of a branch), a
 // breakpoint in the body stops once per round with the names of the round, and `frames
 // subgraphs` shows the body graph as the subgraph it is.
 
