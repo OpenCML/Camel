@@ -148,7 +148,7 @@ void DraftGraphBuilder::setStaticData(
     setStaticSlot(index, makeStaticSlot(data, arena_->allocator()));
 }
 
-runtime::DraftNode *DraftGraphBuilder::addStaticDataNode(
+runtime::DraftNodeRef DraftGraphBuilder::addStaticDataNode(
     const camel::core::data::data_ptr_t &data, camel::core::type::Type *runtimeType) {
     auto *nodeType       = runtimeType ? runtimeType : data->type();
     const auto slotIndex = addStaticData(data, nodeType);
@@ -156,16 +156,15 @@ runtime::DraftNode *DraftGraphBuilder::addStaticDataNode(
         nodeType,
         slotIndex,
         static_cast<uint8_t>(runtime::kGCNodeFlagConstant));
-    return draft_->node(id);
+    return ref(id);
 }
 
-runtime::DraftNode *DraftGraphBuilder::addPortNode(
-    camel::core::type::Type *type, std::string name, bool isWith, bool isVar) {
+runtime::DraftNodeRef DraftGraphBuilder::addPortNode(
+    camel::core::type::Type *type, std::string name, bool isWith) {
     const auto slotIndex            = addRuntimeSlot(type);
     const runtime::gc_node_ref_t id = draft_->addPortNode(type, slotIndex);
-    auto *node                      = draft_->node(id);
+    const auto node                 = ref(id);
     registerNodePortName(node, std::move(name));
-    registerPortVar(node, isVar);
     if (isWith) {
         draft_->appendWithPort(id);
     } else {
@@ -174,54 +173,50 @@ runtime::DraftNode *DraftGraphBuilder::addPortNode(
     return node;
 }
 
-runtime::DraftNode *DraftGraphBuilder::addCastNode(camel::core::type::Type *type) {
-    return draft_->node(draft_->addCastNode(type));
+runtime::DraftNodeRef DraftGraphBuilder::addCastNode(camel::core::type::Type *type) {
+    return ref(draft_->addCastNode(type));
 }
 
-runtime::DraftNode *DraftGraphBuilder::addCopyNode(camel::core::type::Type *type) {
-    return draft_->node(draft_->addCopyNode(type));
+runtime::DraftNodeRef DraftGraphBuilder::addCopyNode(camel::core::type::Type *type) {
+    return ref(draft_->addCopyNode(type));
 }
 
-runtime::DraftNode *
+runtime::DraftNodeRef 
 DraftGraphBuilder::addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body) {
-    return draft_->node(draft_->addFillNode(type, body));
+    return ref(draft_->addFillNode(type, body));
 }
 
-runtime::DraftNode *
+runtime::DraftNodeRef 
 DraftGraphBuilder::addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload) {
-    return draft_->node(draft_->addFillNode(type, payload));
+    return ref(draft_->addFillNode(type, payload));
 }
 
-runtime::DraftNode *
+runtime::DraftNodeRef 
 DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex) {
-    return draft_->node(draft_->addAccsNode(type, tupleIndex));
+    return ref(draft_->addAccsNode(type, tupleIndex));
 }
 
-runtime::DraftNode *DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, std::string key) {
-    const runtime::gc_node_ref_t id = draft_->addAccsNode(type, key);
-    auto *node                      = draft_->node(id);
-    registerNodeAccsKey(node, std::move(key));
-    return node;
+runtime::DraftNodeRef DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, std::string key) {
+    return ref(draft_->addAccsNode(type, key));
 }
 
-runtime::DraftNode *DraftGraphBuilder::addBrchNode(
-    camel::core::type::Type *type, runtime::DraftNode *joinNode,
-    std::span<const runtime::GCBranchArm> arms, runtime::DraftNode *defaultArm) {
-    return draft_->node(
-        draft_->addBrchNode(type, draft_->nodeId(joinNode), arms, draft_->nodeId(defaultArm)));
+runtime::DraftNodeRef DraftGraphBuilder::addBrchNode(
+    camel::core::type::Type *type, runtime::DraftNodeRef joinNode,
+    std::span<const runtime::GCBranchArm> arms, runtime::DraftNodeRef defaultArm) {
+    return ref(draft_->addBrchNode(type, joinNode.id, arms, defaultArm.id));
 }
 
-runtime::DraftNode *DraftGraphBuilder::addJoinNode(
-    camel::core::type::Type *type, runtime::DraftNode *brchNode, runtime::gc_cnt_t armCount) {
-    return draft_->node(draft_->addJoinNode(type, draft_->nodeId(brchNode), armCount));
+runtime::DraftNodeRef DraftGraphBuilder::addJoinNode(
+    camel::core::type::Type *type, runtime::DraftNodeRef brchNode, runtime::gc_cnt_t armCount) {
+    return ref(draft_->addJoinNode(type, brchNode.id, armCount));
 }
 
-runtime::DraftNode *
+runtime::DraftNodeRef 
 DraftGraphBuilder::addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body) {
-    return draft_->node(draft_->addCallNode(type, body));
+    return ref(draft_->addCallNode(type, body));
 }
 
-runtime::DraftNode *
+runtime::DraftNodeRef 
 DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
     const uint8_t runtimeFlags = static_cast<uint8_t>(
@@ -229,37 +224,37 @@ DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t 
                                                                         : 0);
     const runtime::gc_node_ref_t id =
         draft_->addFuncNode(nullptr, target->funcType()->exitType(), runtimeFlags, dataIndex);
-    auto *node = draft_->node(id);
+    const auto node = ref(id);
     registerFuncTarget(node, target);
     return node;
 }
 
-runtime::DraftNode *DraftGraphBuilder::addLoopNode(
+runtime::DraftNodeRef DraftGraphBuilder::addLoopNode(
     camel::core::LoopKind kind, const LoopTarget &target, camel::core::type::Type *type) {
     ASSERT(target.body != nullptr, "A LOOP node needs a body graph.");
     // The draft holds no graph yet: the encoder writes the runtime graphs of the targets
     // (graph_encode.cpp), as it does for the callee of a FUNC node.
     const runtime::gc_node_ref_t id = draft_->addLoopNode(runtime::GCLoopBody{.kind = kind}, type);
-    auto *node                      = draft_->node(id);
-    loopTargets_[node]              = target;
+    const auto node                 = ref(id);
+    loopTargets_[node.id]              = target;
     addDependencyGraph(target.cond);
     addDependencyGraph(target.body);
     return node;
 }
 
 const DraftGraphBuilder::LoopTarget &
-DraftGraphBuilder::loopTarget(const runtime::DraftNode *node) const {
-    auto it = loopTargets_.find(node);
+DraftGraphBuilder::loopTarget(runtime::DraftNodeRef node) const {
+    auto it = loopTargets_.find(node.id);
     ASSERT(it != loopTargets_.end(), "DraftGraphBuilder loop target not found.");
     return it->second;
 }
 
-runtime::DraftNode *
+runtime::DraftNodeRef 
 DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
     const runtime::gc_node_ref_t id =
         draft_->addOperNode(op->funcType()->exitType(), nullptr, op->uri(), dataIndex);
-    auto *node = draft_->node(id);
+    const auto node = ref(id);
     if (op->funcType()->modifiers().macro()) {
         draft_->setNodeRuntimeFlags(id, runtime::kGCNodeFlagMacro);
     }
@@ -267,10 +262,10 @@ DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t 
     return node;
 }
 
-void DraftGraphBuilder::retargetOperNode(runtime::DraftNode *node, const oper_idx_ptr_t &op) {
-    ASSERT(node != nullptr && node->header.kind == runtime::GCNodeKind::Oper, "Not an OPER node.");
+void DraftGraphBuilder::retargetOperNode(runtime::DraftNodeRef node, const oper_idx_ptr_t &op) {
+    ASSERT(node && draft_->header(node.id)->kind == runtime::GCNodeKind::Oper, "Not an OPER node.");
     ASSERT(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
-    auto payload = draft_->mutablePayloadOf(node);
+    auto payload = draft_->mutablePayloadOf(node.id);
     ASSERT(payload.size() >= sizeof(runtime::GCOperBody), "OPER payload is too small.");
     auto *body = reinterpret_cast<runtime::GCOperBody *>(payload.data());
     body->op   = nullptr;
@@ -278,27 +273,27 @@ void DraftGraphBuilder::retargetOperNode(runtime::DraftNode *node, const oper_id
     registerOperTarget(node, op);
 }
 
-runtime::DraftNode *DraftGraphBuilder::addSyncNode() { return draft_->node(draft_->addSyncNode()); }
+runtime::DraftNodeRef DraftGraphBuilder::addSyncNode() { return ref(draft_->addSyncNode()); }
 
-runtime::DraftNode *DraftGraphBuilder::addGateNode(camel::core::type::Type *type) {
-    return draft_->node(draft_->addGateNode(type));
+runtime::DraftNodeRef DraftGraphBuilder::addGateNode(camel::core::type::Type *type) {
+    return ref(draft_->addGateNode(type));
 }
 
-runtime::DraftNode *DraftGraphBuilder::addDrefNode(DrefTarget target) {
+runtime::DraftNodeRef DraftGraphBuilder::addDrefNode(DrefTarget target) {
     const runtime::gc_node_ref_t id = draft_->addDrefNode();
-    auto *node                      = draft_->node(id);
+    const auto node                 = ref(id);
     registerDrefTarget(node, std::move(target));
     return node;
 }
 
 void DraftGraphBuilder::link(
-    runtime::DraftEdgeKind kind, runtime::DraftNode *from, runtime::DraftNode *to) {
-    draft_->appendInput(kind, draft_->nodeId(to), draft_->nodeId(from));
+    runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to) {
+    draft_->appendInput(kind, to.id, from.id);
 }
 
 bool DraftGraphBuilder::unlink(
-    runtime::DraftEdgeKind kind, runtime::DraftNode *from, runtime::DraftNode *to) {
-    return draft_->unlinkInput(kind, draft_->nodeId(to), draft_->nodeId(from));
+    runtime::DraftEdgeKind kind, runtime::DraftNodeRef from, runtime::DraftNodeRef to) {
+    return draft_->unlinkInput(kind, to.id, from.id);
 }
 
 void DraftGraphBuilder::addDependencyGraph(const graph_ptr_t &graph) {
@@ -342,100 +337,57 @@ void DraftGraphBuilder::eraseStaticGraphRef(const graph_ptr_t &graph) {
     std::erase(staticGraphRefs_, graph);
 }
 
-const std::string &DraftGraphBuilder::nodeDebugEntityId(const runtime::DraftNode *node) const {
-    static const std::string kMissingDebugEntityId;
-    auto it = nodeDebugIds_.find(node);
-    if (it == nodeDebugIds_.end()) {
-        // Rewritten/decorated function values may synthesize intermediate nodes without a stable
-        // source debug entity. Source-origin recovery should degrade to "unknown" instead of
-        // returning an invalid map iterator in release builds.
-        return kMissingDebugEntityId;
-    }
-    return it->second;
-}
-
-const std::string &DraftGraphBuilder::nodePortName(const runtime::DraftNode *node) const {
-    auto it = nodePortNames_.find(node);
+const std::string &DraftGraphBuilder::nodePortName(runtime::DraftNodeRef node) const {
+    auto it = nodePortNames_.find(node.id);
     ASSERT(it != nodePortNames_.end(), "DraftGraphBuilder node port name not found.");
     return it->second;
 }
 
-const std::string &DraftGraphBuilder::nodeAccsKey(const runtime::DraftNode *node) const {
-    auto it = nodeAccsKeys_.find(node);
-    ASSERT(it != nodeAccsKeys_.end(), "DraftGraphBuilder node ACCS key not found.");
-    return it->second;
-}
-
-const std::string *DraftGraphBuilder::tryNodeAccsKey(const runtime::DraftNode *node) const {
-    auto it = nodeAccsKeys_.find(node);
-    return it != nodeAccsKeys_.end() ? &it->second : nullptr;
-}
-
-bool DraftGraphBuilder::nodePortIsVar(const runtime::DraftNode *node) const {
-    auto it = nodePortVars_.find(node);
-    return it != nodePortVars_.end() ? it->second : false;
-}
-
 const DraftGraphBuilder::FuncTarget &
-DraftGraphBuilder::funcTarget(const runtime::DraftNode *node) const {
-    auto it = funcTargets_.find(node);
+DraftGraphBuilder::funcTarget(runtime::DraftNodeRef node) const {
+    auto it = funcTargets_.find(node.id);
     ASSERT(it != funcTargets_.end(), "DraftGraphBuilder function target not found.");
     return it->second;
 }
 
 const DraftGraphBuilder::DrefTarget &
-DraftGraphBuilder::drefTarget(const runtime::DraftNode *node) const {
-    auto it = drefTargets_.find(node);
+DraftGraphBuilder::drefTarget(runtime::DraftNodeRef node) const {
+    auto it = drefTargets_.find(node.id);
     ASSERT(it != drefTargets_.end(), "DraftGraphBuilder DREF target not found.");
     return it->second;
 }
 
-const oper_idx_ptr_t &DraftGraphBuilder::operTarget(const runtime::DraftNode *node) const {
-    auto it = operTargets_.find(node);
+const oper_idx_ptr_t &DraftGraphBuilder::operTarget(runtime::DraftNodeRef node) const {
+    auto it = operTargets_.find(node.id);
     ASSERT(it != operTargets_.end(), "DraftGraphBuilder operator target not found.");
     return it->second;
 }
 
-void DraftGraphBuilder::setNodeDebugEntityId(const runtime::DraftNode *node, std::string id) {
-    nodeDebugIds_[node] = std::move(id);
+void DraftGraphBuilder::registerNodePortName(runtime::DraftNodeRef node, std::string name) {
+    nodePortNames_[node.id] = std::move(name);
 }
 
-void DraftGraphBuilder::registerNodePortName(const runtime::DraftNode *node, std::string name) {
-    nodePortNames_[node] = std::move(name);
-}
-
-void DraftGraphBuilder::registerNodeAccsKey(const runtime::DraftNode *node, std::string key) {
-    nodeAccsKeys_[node] = std::move(key);
-}
-
-void DraftGraphBuilder::registerPortVar(const runtime::DraftNode *node, bool isVar) {
-    nodePortVars_[node] = isVar;
-}
-
-void DraftGraphBuilder::registerFuncTarget(const runtime::DraftNode *node, FuncTarget target) {
+void DraftGraphBuilder::registerFuncTarget(runtime::DraftNodeRef node, FuncTarget target) {
     ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
-    funcTargets_[node] = std::move(target);
+    funcTargets_[node.id] = std::move(target);
 }
 
-void DraftGraphBuilder::registerDrefTarget(const runtime::DraftNode *node, DrefTarget target) {
-    drefTargets_[node] = std::move(target);
+void DraftGraphBuilder::registerDrefTarget(runtime::DraftNodeRef node, DrefTarget target) {
+    drefTargets_[node.id] = std::move(target);
 }
 
-void DraftGraphBuilder::registerOperTarget(const runtime::DraftNode *node, oper_idx_ptr_t target) {
+void DraftGraphBuilder::registerOperTarget(runtime::DraftNodeRef node, oper_idx_ptr_t target) {
     ASSERT(target != nullptr, "DraftGraphBuilder operator target cannot be null.");
     registerOperIndex(target);
-    operTargets_[node] = std::move(target);
+    operTargets_[node.id] = std::move(target);
 }
 
-void DraftGraphBuilder::eraseNodeColdData(const runtime::DraftNode *node) {
-    nodeDebugIds_.erase(node);
-    nodePortNames_.erase(node);
-    nodeAccsKeys_.erase(node);
-    nodePortVars_.erase(node);
-    funcTargets_.erase(node);
-    loopTargets_.erase(node);
-    drefTargets_.erase(node);
-    operTargets_.erase(node);
+void DraftGraphBuilder::eraseNodeColdData(runtime::DraftNodeRef node) {
+    nodePortNames_.erase(node.id);
+    funcTargets_.erase(node.id);
+    loopTargets_.erase(node.id);
+    drefTargets_.erase(node.id);
+    operTargets_.erase(node.id);
 }
 
 ::OperatorIndex *DraftGraphBuilder::registerOperIndex(std::shared_ptr<::OperatorIndex> idx) {

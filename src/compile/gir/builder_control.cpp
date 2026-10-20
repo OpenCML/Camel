@@ -86,7 +86,7 @@ node_handle_t loopStateValueOf(node_handle_t node) {
         if (inputs.size() != 1) {
             return node; // a gate that waits on nothing has no value to forward
         }
-        node = nodeDraftOf(node)->node(inputs.front());
+        node = nodeDraftOf(node)->ref(inputs.front());
     }
     return node;
 }
@@ -271,7 +271,7 @@ node_handle_t Builder::compositeLiteralInType(
     // Only the constant the literal was lowered to: a value computed by the program is not a
     // literal, and takes no type from its position. A constant lives in a static slot, whose
     // index is negative (a runtime slot index is not).
-    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || node->header.dataIndex >= 0) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || nodeHeaderOf(node)->dataIndex >= 0) {
         return nullptr;
     }
     const data_ptr_t &data = origin->data();
@@ -305,7 +305,7 @@ bool Builder::compositeLiteralEntersIn(
     }
     // Only the constant the literal was lowered to, as in compositeLiteralInType: a value the
     // program computes is not a literal, and a runtime slot's value is not one either.
-    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || node->header.dataIndex >= 0) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Data) || nodeHeaderOf(node)->dataIndex >= 0) {
         return false;
     }
     const data_ptr_t &data = origin->data();
@@ -433,7 +433,7 @@ void Builder::coerceArmExit(
     // The nodes are added to the arm's own graph; no name is looked up, so the scopes of the
     // position the branch stands at do no harm.
     const compile_graph_ptr_t outer = std::exchange(currGraph_, arm);
-    node_handle_t output            = arm->draft().node(arm->draft().exitNode());
+    node_handle_t output            = arm->draft().ref(arm->draft().exitNode());
     node_handle_t coerced           = coerceTo(output, target, origin);
     ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
     if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
@@ -646,7 +646,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         node_handle_t result = visitBodyNode(exec);
         ASSERT(result != nullptr, "The call of '?->' produced no node.");
         if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-            result = nodeDraftOf(result)->node(normInputsOf(result).front());
+            result = nodeDraftOf(result)->ref(normInputsOf(result).front());
         }
         Type *type = valueTypeOf(nodeTypeOf(result));
         if (asFallible(type) != nullptr) {
@@ -1517,7 +1517,7 @@ void Builder::buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_p
     bodyStates_[graph.get()] = BodyState::Open;
     try {
         for (draft_node_ref_t portId : graph->draft().normPorts()) {
-            node_handle_t port = graph->draft().node(portId);
+            node_handle_t port = graph->draft().ref(portId);
             insertNode(graph->nodePortName(port), port);
             if (recorder_) {
                 recordDeclaration(graph->nodePortName(port), port, exec);
@@ -1884,7 +1884,7 @@ void Builder::markLoopStateInPlace(
         draft.returnNode() == runtime::kInvalidNodeRef) {
         return;
     }
-    node_handle_t returned = loopStateValueOf(draft.node(draft.returnNode()));
+    node_handle_t returned = loopStateValueOf(draft.ref(draft.returnNode()));
     if (returned == nullptr) {
         return;
     }
@@ -1921,7 +1921,7 @@ void Builder::markLoopStateInPlace(
         if (slots[i] >= stateCount) {
             return;
         }
-        next[slots[i]] = nodeDraftOf(returned)->node(withIns[i]);
+        next[slots[i]] = nodeDraftOf(returned)->ref(withIns[i]);
     }
     for (size_t j = 0; j < stateCount; ++j) {
         markLoopStateInPlaceOne(bodyGraph, loop, initial, j, next[j]);
@@ -1955,7 +1955,7 @@ void Builder::markLoopStateInPlaceOne(
     if (normIns.size() != 1) {
         return;
     }
-    node_handle_t port = nodeDraftOf(next)->node(normIns.front());
+    node_handle_t port = nodeDraftOf(next)->ref(normIns.front());
     if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(index)) {
         return;
     }
@@ -1967,7 +1967,7 @@ void Builder::markLoopStateInPlaceOne(
     if (withIns.size() != 1) {
         return;
     }
-    Type *valueType = nodeTypeOf(nodeDraftOf(next)->node(withIns.front()));
+    Type *valueType = nodeTypeOf(nodeDraftOf(next)->ref(withIns.front()));
     if (valueType == nullptr) {
         return;
     }
@@ -2014,7 +2014,7 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
     // GATE is the output anchor, the value it forwards is what the graph returns.
     node_handle_t value = result;
     if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-        value = nodeDraftOf(result)->node(normInputsOf(result).front());
+        value = nodeDraftOf(result)->ref(normInputsOf(result).front());
     }
     checkDeclaredReturn(graph, nodeTypeOf(value), 0);
     setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(value), nodeTypeOf(value));

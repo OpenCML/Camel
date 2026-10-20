@@ -213,7 +213,7 @@ node_handle_t Builder::createFuncDataNode(
     const auto slotIndex = currGraph_->addStaticSlot(
         camel::core::rtdata::toSlot<StaticFunction *>(staticFunc),
         graph->funcType());
-    auto dataNode = currGraph_->draft().node(currGraph_->draft().addDataNode(
+    auto dataNode = currGraph_->draft().ref(currGraph_->draft().addDataNode(
         graph->funcType(),
         slotIndex,
         static_cast<uint8_t>(runtime::kGCNodeFlagConstant)));
@@ -483,7 +483,7 @@ node_handle_t Builder::partialApplicationOf(
         size_t index = 0;
         for (draft_node_ref_t port : graph->draft().withPorts()) {
             const std::string name = "$with" + std::to_string(index++);
-            nodeScope_->insert(name, graph->draft().node(port));
+            nodeScope_->insert(name, graph->draft().ref(port));
             *with << nameNode(name);
         }
         GCT::node_ptr_t call = make(tree_->makeLink(calleeType->normTypesCount()));
@@ -491,7 +491,7 @@ node_handle_t Builder::partialApplicationOf(
         index = 0;
         for (draft_node_ref_t port : graph->draft().normPorts()) {
             const std::string name = "$norm" + std::to_string(index++);
-            nodeScope_->insert(name, graph->draft().node(port));
+            nodeScope_->insert(name, graph->draft().ref(port));
             *call << nameNode(name);
         }
         // The call is the value of the function, so it runs whenever the function is called.
@@ -553,10 +553,10 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
             setNodeMacro(call, true);
         }
         for (draft_node_ref_t port : graph->draft().withPorts()) {
-            linkNodes(LinkType::With, graph->draft().node(port), call);
+            linkNodes(LinkType::With, graph->draft().ref(port), call);
         }
         for (draft_node_ref_t port : graph->draft().normPorts()) {
-            linkNodes(LinkType::Norm, graph->draft().node(port), call);
+            linkNodes(LinkType::Norm, graph->draft().ref(port), call);
         }
         addCaptureSite(call, target);
         bindGraphScopedFuncNodeDebug(sourceContext, targetOrigin, target, call);
