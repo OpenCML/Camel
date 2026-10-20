@@ -1,0 +1,15 @@
+# Fixture of test/tools/selftest/run.mjs: the risk-based fast sample of a [[sweeps]] entry. The
+# risky source plan (tags include "collections") keeps three copies in the fast layer, the plain
+# one keeps one; `--tier all` keeps every copy. The self-test counts the status lines.
+id = "selftest.sweep"
+order = 22
+tier = "fast"
+desc = "The risk-based sweep sample: three copies for a collections plan, one for the rest."
+
+[[sweeps]]
+name = "poison"
+plans = ["sources"]
+envs = ["SELFTEST_SWEEP=1"]
+fast_sample = 1
+risk_tags = ["collections", "closures", "iterators", "comprehension", "loops", "collect", "higher_order"]
+risk_sample = 3

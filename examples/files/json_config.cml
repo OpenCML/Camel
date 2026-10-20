@@ -5,6 +5,7 @@ module json_config
 
 import json
 import { mkdirs, write_text, try_read_text } from fs
+import { get_env } from sys
 
 type Config = { host: string, port: int, verbose: bool }
 
@@ -23,7 +24,11 @@ func show(c: Config): string {
 
 func main(): int sync {
     let defaults: Config = { host: 'localhost', port: 8080, verbose: false }
-    let dir = 'tmp/examples'
+    // The test runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR), so the
+    // four back ends (and two runs) do not share these files. A direct run keeps the path the
+    // header names.
+    let root = get_env('CAMEL_TEST_TMPDIR')
+    let dir = if root == '' then 'tmp/examples' else root
     mkdirs(dir)
 
     let path = dir + '/config.json'

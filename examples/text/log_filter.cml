@@ -8,6 +8,7 @@ import { test } from re
 import { split, trim, find, substr } from str
 import { count } from array
 import { mkdirs, write_text, try_read_text } from fs
+import { get_env } from sys
 
 type Entry = { time: string, level: string, message: string }
 
@@ -32,8 +33,11 @@ func parse(line: string): Entry {
 }
 
 func main(): int sync {
-    let path = 'tmp/examples/service.log'
-    mkdirs('tmp/examples')
+    // The runner's per-test scratch directory; a direct run keeps the header's fixed path.
+    let root = get_env('CAMEL_TEST_TMPDIR')
+    let dir = if root == '' then 'tmp/examples' else root
+    let path = dir + '/service.log'
+    mkdirs(dir)
     write_text(path, '09:00:01 INFO  service started
 09:00:07 WARN  disk usage at 81%
 09:01:12 ERROR cannot open cache.db
