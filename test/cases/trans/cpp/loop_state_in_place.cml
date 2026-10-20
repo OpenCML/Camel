@@ -1,0 +1,41 @@
+// H17 item 4 through the C++ translation: a loop whose state is appended in place translates
+// to the standalone Array, where `append` copies a block another holder shares and moves one it
+// does not, so the private copy the rewrite puts before the loop has nothing to do and the
+// values are those of the interpreter. The multi-state forms translate the same way.
+func grow(n: int): int[] {
+    return loop xs = [0] while len(xs) < n do xs->append<7>
+}
+
+func gather(xs: int[]): int[] {
+    return loop acc = [0] for x in xs do acc->append<x>
+}
+
+func growCounted(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do (xs->append<7>, rounds + 1)
+}
+
+func countAndGrow(n: int): (int, int[]) {
+    return loop rounds = 0, xs = [0] while len(xs) < n do (rounds + 1, xs->append<7>)
+}
+
+func growBoth(n: int): (int[], int[]) {
+    return loop xs = [0], ys = [10] while len(xs) < n do (xs->append<7>, ys->append<8>)
+}
+
+func growConst(n: int): (int[], int) {
+    return loop xs = [0], fixed = 9 while len(xs) < n do (xs->append<7>, 0)
+}
+
+func main(): int sync {
+    let xs = grow(5)
+    let zs = gather([1, 2, 3, 4, 5])
+    let (ws, wr) = growCounted(5)
+    let (vr, vs) = countAndGrow(5)
+    let (ms, ns) = growBoth(5)
+    let (cs, ck) = growConst(5)
+    println(len(xs), xs[0], xs[4], len(zs), zs[0], zs[5])
+    println(len(ws), ws[0], ws[4], wr, len(vs), vs[0], vs[4], vr)
+    println(len(ms), ms[0], ms[4], len(ns), ns[0], ns[4])
+    println(len(cs), cs[0], cs[4], ck)
+    return 0
+}

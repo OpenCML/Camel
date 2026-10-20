@@ -1833,19 +1833,8 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
 void Builder::markLoopStateInPlace(
     const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
     std::vector<node_handle_t> &initial) {
-    // One state value: the body hands it back directly. With two or more the body returns a
-    // tuple and the elements are read out of it, which is not the shape this rewrite covers.
-    if (loop->loopStateCount() != 1 || initial.size() != 1 || initial[0] == nullptr) {
-        return;
-    }
-    // The first value has to be a literal: a name, a call or a projection can name an array
-    // that something else also reads, and the loop is about to make its first value private.
-    if (!nodeIsKind(initial[0], runtime::GCNodeKind::Data) &&
-        !nodeIsKind(initial[0], runtime::GCNodeKind::Fill)) {
-        return;
-    }
-    const Type *stateType = valueTypeOf(nodeTypeOf(initial[0]));
-    if (stateType == nullptr || stateType->code() != TypeCode::Array) {
+    const size_t stateCount = loop->loopStateCount();
+    if (stateCount == 0 || initial.size() != stateCount) {
         return;
     }
     runtime::GraphDraft &draft = bodyGraph->draft();
@@ -1853,34 +1842,90 @@ void Builder::markLoopStateInPlace(
         draft.returnNode() == runtime::kInvalidNodeRef) {
         return;
     }
-    node_handle_t value = draft.node(draft.returnNode());
-    if (value == nullptr || !nodeIsKind(value, runtime::GCNodeKind::Oper)) {
+    node_handle_t returned = draft.node(draft.returnNode());
+    if (returned == nullptr) {
         return;
     }
-    const oper_idx_ptr_t op = nodeGraphOf(value)->operTarget(value);
+    // The next value of each state, in state order. One state hands the append call back
+    // directly. Two or more return a tuple, a FILL whose With inputs are the computed
+    // components and whose payload says which component each one fills; a component written as
+    // a constant there (`(xs->append<7>, 0)`) has no value node and no rewrite of its own.
+    if (stateCount == 1) {
+        markLoopStateInPlaceOne(bodyGraph, loop, initial, 0, returned);
+        return;
+    }
+    if (!nodeIsKind(returned, runtime::GCNodeKind::Fill)) {
+        return;
+    }
+    const Type *returnType = valueTypeOf(nodeTypeOf(returned));
+    if (returnType == nullptr || returnType->code() != TypeCode::Tuple) {
+        return;
+    }
+    const auto withIns = withInputsOf(returned);
+    const auto payload = nodeDraftOf(returned)->payloadOf(nodeIdOf(returned));
+    if (payload.size() < sizeof(runtime::GCFillBody)) {
+        return;
+    }
+    const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
+    if (fill->fillKind != runtime::GCFillKind::Tuple) {
+        return;
+    }
+    const auto slots = fill->slots();
+    if (slots.size() != withIns.size()) {
+        return;
+    }
+    std::vector<node_handle_t> next(stateCount, nullptr);
+    for (size_t i = 0; i < slots.size(); ++i) {
+        if (slots[i] >= stateCount) {
+            return;
+        }
+        next[slots[i]] = nodeDraftOf(returned)->node(withIns[i]);
+    }
+    for (size_t j = 0; j < stateCount; ++j) {
+        markLoopStateInPlaceOne(bodyGraph, loop, initial, j, next[j]);
+    }
+}
+
+void Builder::markLoopStateInPlaceOne(
+    const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+    std::vector<node_handle_t> &initial, size_t index, node_handle_t next) {
+    if (next == nullptr || !nodeIsKind(next, runtime::GCNodeKind::Oper)) {
+        return;
+    }
+    // The first value has to be a literal: a name, a call or a projection can name an array
+    // that something else also reads, and the loop is about to make its first value private.
+    if (!nodeIsKind(initial[index], runtime::GCNodeKind::Data) &&
+        !nodeIsKind(initial[index], runtime::GCNodeKind::Fill)) {
+        return;
+    }
+    const Type *stateType = valueTypeOf(nodeTypeOf(initial[index]));
+    if (stateType == nullptr || stateType->code() != TypeCode::Array) {
+        return;
+    }
+    const oper_idx_ptr_t op = nodeGraphOf(next)->operTarget(next);
     if (op == nullptr || op->uri() != ":struct/append_arr") {
         return;
     }
-    // The array the call appends to is the state parameter, and the body uses it nowhere
-    // else: once the round returns, the value the parameter was bound to is gone (the driver
-    // binds the round's own state), so nothing can see it as it was.
-    const auto normIns = normInputsOf(value);
+    // The array the call appends to is this state's parameter, and the body uses that
+    // parameter nowhere else: once the round returns, the value it was bound to is gone (the
+    // driver binds the round's own state), so nothing can see it as it was.
+    const auto normIns = normInputsOf(next);
     if (normIns.size() != 1) {
         return;
     }
-    node_handle_t port = nodeDraftOf(value)->node(normIns.front());
-    if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(0)) {
+    node_handle_t port = nodeDraftOf(next)->node(normIns.front());
+    if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(index)) {
         return;
     }
     if (normUsersOf(port).size() + withUsersOf(port).size() != 1) {
         return;
     }
     // The appended value is the call's only With input; the owned form takes the same.
-    const auto withIns = withInputsOf(value);
+    const auto withIns = withInputsOf(next);
     if (withIns.size() != 1) {
         return;
     }
-    Type *valueType = nodeTypeOf(nodeDraftOf(value)->node(withIns.front()));
+    Type *valueType = nodeTypeOf(nodeDraftOf(next)->node(withIns.front()));
     if (valueType == nullptr) {
         return;
     }
@@ -1902,16 +1947,16 @@ void Builder::markLoopStateInPlace(
         return;
     }
     const auto copyOp =
-        copyGroup->operGroup()->resolve({}, {nodeTypeOf(initial[0])}, statics, Modifier::None);
+        copyGroup->operGroup()->resolve({}, {nodeTypeOf(initial[index])}, statics, Modifier::None);
     if (!copyOp.has_value()) {
         return;
     }
     node_handle_t copy = currGraph_->addOperNode(*copyOp, 0);
     stampPermissions(copy);
-    registerNodeOrigin(context_, copy, loop->loopInitial(0), "gir.loop.copy");
-    linkNodes(LinkType::Norm, initial[0], copy);
-    initial[0] = copy;
-    nodeGraphOf(value)->retargetOperNode(value, *owned);
+    registerNodeOrigin(context_, copy, loop->loopInitial(index), "gir.loop.copy");
+    linkNodes(LinkType::Norm, initial[index], copy);
+    initial[index] = copy;
+    nodeGraphOf(next)->retargetOperNode(next, *owned);
 }
 
 void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {
