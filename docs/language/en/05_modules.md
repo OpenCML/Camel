@@ -54,7 +54,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `str` | Strings: by byte, splitting, trimming, case conversion, replacing, searching, taking substrings; by code point, counting, reading, encoding and decoding |
 | `array` | Arrays: `reverse`, `take`, `drop`, `unique`, `find`, `sum`, `min`, `max`, `sort_by`, `flat_map` and others (generic functions written in Camel) |
 | `math` | The constants `pi`, `e`, `inf`, `nan` (values); elementary functions, rounding, `min`/`max`/`clamp`, `gcd`/`lcm`, base conversion, bit operations such as `bit_and` |
-| `random` | `seed`, `rand`, `randint`, `randn`, `choice`, `sample`, `shuffle` |
+| `random` | The type `Key`; `seed`, `rand`, `randint`, `randn`, `choice`, `sample`, `shuffle`, and the pure keyed `key`, `split`, `permutation` |
 | `time` | `now`, `strftime`, `strptime` |
 | `fs` | `exists`, `is_file`, `is_dir`, `mkdir`, `mkdirs`, `remove`, `remove_dir`, `read_text`, `try_read_text`, `write_text`, `file_size`, `read_chunk`, `read_bytes`, `write_bytes`, `replace` |
 | `json` | the type `Json`; `encode`, `decode`, `decode_as`; `kind`, `is_null`, `get`, `as_bool`, `as_int`, `as_float`, `as_string`, `as_array`, `as_object` |
@@ -65,10 +65,10 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `algo` | `sort`, `merge_sort`, `merge_sorted_arrays` and other sorting functions (each returns a new array, under one name) |
 | `statistics` | `mean`, `stdev`, `variance`, `median`, `quantile` |
 | `para` | `unordered_foreach`, `unordered_reduce` |
-| `tensor`, `nn`, `autodiff`, `onnx` | Tensors, network layers and optimisers, gradients, ONNX export |
+| `tensor`, `nn`, `autodiff`, `onnx` | Tensors, network layers and optimisers, gradients, ONNX export; the row gather `take`, `one_hot`, and `softmax_cross_entropy` overloaded on the target's type (one-hot rows or integer class labels) |
 | `python` | Embedded Python (must be enabled at build time) |
 
-For every function of the modules in the table other than `tensor`, `nn`, `autodiff`, `onnx` and `python`, see the [standard library reference](../../stdlib-reference.md); for the conventions see [5.6](#56-standard-library).
+For every function of the modules in the table other than `tensor`, `nn`, `autodiff`, `onnx` and `python`, see the [standard library reference](../../stdlib-reference.md); for the conventions see [5.6](#56-standard-library). Tensor row gathering, class labels and keyed random are in [43_rows_labels_and_keys.md](../../technical/43_rows_labels_and_keys.md); array indexing and slicing are in [design principles 5.4](../../design-principles.en.md).
 
 ## 5.3 Exports
 

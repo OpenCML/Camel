@@ -1,2 +1,2 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
-add_camel_module(NAME random)
+add_camel_module(NAME random SOURCES executor.cpp key.cpp module.cpp operators.cpp)

@@ -2493,3 +2493,27 @@ expect_output_contains = ["an array variable is appended to (`acc = acc->append<
 expect_output_not_contains = ["exported", "internal error", "Segmentation fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 6000
+
+[[tests]]
+name = "export_take"
+desc = "take with a constant index array exports as one Gather on axis 0 with the indices as an i64 initializer; the capture `forward` is inlined and the tail reshape folds to Identity (H20-2)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_take.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_take.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_take.onnx'))
+assert(model.ops.includes('Gather'), `expected a Gather, got ${model.ops}`)
+assert(model.initializers.includes('ints'), `expected i64 index initializer, got ${model.initializers}`)
+assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
+}
+"""
+timeout_ms = 4000

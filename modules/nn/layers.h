@@ -27,6 +27,8 @@
 
 #include "../tensor/tensor.h"
 
+#include <span>
+
 namespace camel::nn {
 
 /// Gathers rows of a rank-2 table [rows, dim] by rank-1 int64 indices.
@@ -45,6 +47,16 @@ double softmaxCrossEntropy(const tensor::TensorObject *logits, const tensor::Ten
 /// Gradient of `softmaxCrossEntropy` w.r.t. the logits, scaled by `dy`.
 tensor::TensorObject *softmaxCrossEntropyGradLogits(
     const tensor::TensorObject *logits, const tensor::TensorObject *target, double dy,
+    tensor::mm::IAllocator &allocator);
+
+/// Fused softmax cross-entropy of rank-2 logits [batch, classes] against integer class labels
+/// (one per row): the value is the same as `softmaxCrossEntropy` with the labels one-hot.
+double softmaxCrossEntropyLabels(
+    const tensor::TensorObject *logits, std::span<const int64_t> labels);
+
+/// Gradient of `softmaxCrossEntropyLabels` w.r.t. the logits, scaled by `dy`.
+tensor::TensorObject *softmaxCrossEntropyLabelsGradLogits(
+    const tensor::TensorObject *logits, std::span<const int64_t> labels, double dy,
     tensor::mm::IAllocator &allocator);
 
 /// Registers nn's tensor operators under the "nn" protocol (idempotent).

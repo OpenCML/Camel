@@ -1,0 +1,62 @@
+id = "modules.random"
+order = 365
+tier = "fast"
+tags = ["feat", "modules", "random", "purity"]
+
+# Keyed random (H20-3): `random::key`, `split` and `permutation` are pure Philox4x32-10
+# functions. The same key gives the same bits on all four schedulers, in translated C++ and on
+# every platform; nothing touches the process generator.
+
+[[tests]]
+name = "keyed_random.four_schedulers"
+desc = "key(seed), split(key) and permutation(key, n) print the same values on std::nvm, std::fvm, std::jit and std::prl: a key is the struct { hi, lo } of two int64 fields, split gives the same pair every time, permutation(_, 0) is [] and (_, 1) is [0]."
+kind = "behavior"
+case = "../../../cases/modules/random/keyed_random.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "keyed key={ hi: 1350887118657991639, lo: -7139630017956984517 } a={ hi: -343134353990486859, lo: -1032652826686562345 } b={ hi: 7902514079619341531, lo: -7704411369378599526 }\nkeyed repeat={ hi: 1350887118657991639, lo: -7139630017956984517 } pure=true perm=[6, 0, 3, 4, 1, 2, 5, 7]\nkeyed small p0=[] p1=[0]\nkeyed splitrepeat=({ hi: -343134353990486859, lo: -1032652826686562345 }, { hi: 7902514079619341531, lo: -7704411369378599526 }) ({ hi: -343134353990486859, lo: -1032652826686562345 }, { hi: 7902514079619341531, lo: -7704411369378599526 })\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "keyed_random.leaves_generator_alone"
+desc = "key, split and permutation read no generator state: the draws around them are the same as the draws alone, and permuting twice with one key gives one permutation."
+kind = "behavior"
+case = "../../../cases/modules/random/random_independence.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["same=true", "order=[2, 0, 1, 3, 4] repeat=[2, 0, 1, 3, 4]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "keyed_random.permutation_negative_length"
+desc = "permutation with a negative length is a located InvalidArgument naming random.permutation and the length (design principles 3.9); n = 0 is [], not a fault."
+kind = "behavior"
+case = "../../../cases/modules/random/permutation_negative.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_stdout_contains = ["permutation empty=[]", "RuntimeDiag::InvalidArgument", "Invalid argument of 'random.permutation': the permutation length is -1; it must be non-negative."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "keyed_random.std_cpp_agrees"
+# Slow layer: builds each program with the system C++ compiler.
+tier = "slow"
+desc = "std::cpp translates key/split/permutation to rt::randomKey/randomSplitKey/randomPermutationKey over camel/utils/philox.h; the standalone program prints what std::fvm prints (same keys, same permutations)."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--expect", "test/tools/cppexec/expect_h20.txt"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 120000

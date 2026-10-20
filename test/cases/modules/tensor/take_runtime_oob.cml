@@ -1,0 +1,19 @@
+/**
+ * A row index that is only known at run time is a located IndexOutOfRange (design principles 3.9,
+ * 5.4): no wrap-around for a negative index.
+ */
+module take_runtime_oob
+
+import { Tensor, reshape, range, cast, take } from tensor
+
+func pick(t: Tensor, i: int): Tensor {
+    return take(t, cast([i], 'int64'))
+}
+
+func main(): int sync {
+    let t = reshape(range(0, 12), [4, 3])
+    let ok = pick(t, 1)
+    'take runtime ok={}'->format<ok>->println
+    let bad = pick(t, -1)
+    return 0
+}

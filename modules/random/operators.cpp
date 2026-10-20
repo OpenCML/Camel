@@ -22,9 +22,13 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/utils/philox.h"
 #include "camel/utils/random.h"
 #include "camel/utils/type.h"
+#include "key.h"
 
 #include <algorithm>
 #include <format>
@@ -34,6 +38,7 @@ using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::rtdata;
 namespace rnd = camel::utils::random;
+namespace philox = camel::utils::philox;
 
 // The distributions are camel/utils/random.h's, not <random>'s: the same seed gives the same
 // numbers on every platform.
@@ -48,8 +53,29 @@ std::unordered_map<std::string, operator_t> getRandomOpsMap() {
         {"choice", __rand_choice__},
         {"sample", __rand_sample__},
         {"shuffle", __rand_shuffle__},
+        {"key", __rand_key__},
+        {"split", __rand_split__},
+        {"permutation", __rand_permutation__},
     };
 }
+
+namespace {
+
+/// A Key struct value: `{ hi, lo }` in the canonical field order (key.h).
+Struct *makeKey(const philox::Key &key) {
+    Struct *value = Struct::create(2, mm::autoSpace());
+    value->set<Int64>(0, static_cast<Int64>(key.hi));
+    value->set<Int64>(1, static_cast<Int64>(key.lo));
+    return value;
+}
+
+philox::Key readKey(const Struct *value) {
+    return philox::Key{
+        static_cast<philox::u64>(value->get<Int64>(0)),
+        static_cast<philox::u64>(value->get<Int64>(1))};
+}
+
+} // namespace
 
 slot_t __rand_seed__(ArgsView &with, ArgsView &norm, Context &ctx) {
     g_rng.seed(norm.get<Int64>(0));
@@ -138,4 +164,35 @@ slot_t __rand_shuffle__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *res = static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
     shuffleArray(res);
     return toSlot(res);
+}
+
+// ---------------------------------------------------------------- keyed random
+
+slot_t __rand_key__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(makeKey(philox::key(static_cast<philox::u64>(norm.get<Int64>(0)))));
+}
+
+slot_t __rand_split__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const auto [left, right] = philox::split(readKey(norm.get<Struct *>(0)));
+    Tuple *pair              = Tuple::create(2, mm::autoSpace());
+    pair->set(0, makeKey(left));
+    pair->set(1, makeKey(right));
+    return toSlot(pair);
+}
+
+slot_t __rand_permutation__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const philox::Key key = readKey(norm.get<Struct *>(0));
+    const Int64 n         = norm.get<Int64>(1);
+    if (n < 0) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "random.permutation",
+            std::format("the permutation length is {}; it must be non-negative", n));
+    }
+    const std::vector<int64_t> order = philox::permutation(key, static_cast<int64_t>(n));
+    Array *result                    = Array::create(mm::autoSpace(), order.size());
+    for (size_t i = 0; i < order.size(); ++i) {
+        result->set<Int64>(i, static_cast<Int64>(order[i]));
+    }
+    return toSlot(result);
 }

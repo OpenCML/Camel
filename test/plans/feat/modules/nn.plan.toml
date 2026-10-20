@@ -1372,3 +1372,29 @@ assert(depth === 2, `expected the int field to survive sgd updates unchanged, go
 }
 """
 timeout_ms = 90000
+
+[[tests]]
+name = "softmax_cross_entropy_labels"
+desc = "softmax_cross_entropy and softmax_cross_entropy_grad overloaded on the target's type: integer class labels (int[] or a rank-1 int64/int32 tensor) give exactly the value and gradient of the one-hot form, which is selected when the target has a floating element type (H20-2)."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_labels.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["softmax_labels loss=1.0058682848905545 1.0058682848905545 1.0058682848905545 1.0058682848905545 grad_diff=0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "softmax_cross_entropy_labels_out_of_range"
+desc = "A label outside the class dimension is a located IndexOutOfRange of the labels form, naming the operator and the length (design principles 3.9)."
+kind = "behavior"
+case = "../../../cases/modules/nn/softmax_labels_oob.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_stdout_contains = ["RuntimeDiag::IndexOutOfRange", "Index -1 is out of range for the class dimension of softmax_cross_entropy of length 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
