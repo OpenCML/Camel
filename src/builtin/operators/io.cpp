@@ -22,7 +22,9 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/bytes.h"
+#include "camel/core/rtdata/complex.h"
 
+#include "complex_format.h"
 #include "float_format.h"
 #include "fmt/args.h"
 #include "text_format.h"
@@ -37,6 +39,9 @@ using namespace camel::core::rtdata;
 #include <iostream>
 #include <mutex>
 #include <sstream>
+
+#include "complex_format.h"
+#include "float_format.h"
 
 namespace {
 
@@ -87,6 +92,20 @@ slot_t writeArguments(ArgsView &with, ArgsView &norm, std::ostringstream &out, b
         case TypeCode::Float64:
             store.push_back(camel::builtin::LanguageFloat<Float64>{norm.get<Float64>(i)});
             break;
+        case TypeCode::Complex64: {
+            const Complex *value = norm.get<Complex *>(i);
+            store.push_back(camel::builtin::LanguageComplex<Float32>{
+                value != nullptr ? value->realF() : Float32{0},
+                value != nullptr ? value->imaginaryF() : Float32{0}});
+            break;
+        }
+        case TypeCode::Complex128: {
+            const Complex *value = norm.get<Complex *>(i);
+            store.push_back(camel::builtin::LanguageComplex<Float64>{
+                value != nullptr ? value->real() : Float64{0},
+                value != nullptr ? value->imaginary() : Float64{0}});
+            break;
+        }
         default:
             std::ostringstream oss;
             printSlot(oss, norm.slot(i), norm.type(i));

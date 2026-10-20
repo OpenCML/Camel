@@ -26,8 +26,10 @@
  *
  * `format` follows the runtime (src/builtin/operators/str.cpp, float_format.h), which hands the
  * string to the fmt library: an integer is formatted as an integer, a float as a float (a
- * placeholder without a specification writes the float's text), and every other value as its
- * text. What fmt does with a specification ([[fill]align][sign][#][0][width][.precision][type])
+ * placeholder without a specification writes the float's text), a complex number as the two
+ * numbers it is (src/builtin/operators/complex_format.h: the number part of the specification
+ * writes each part, the fill, alignment and width lay out the whole text), and every other value
+ * as its text. What fmt does with a specification ([[fill]align][sign][#][0][width][.precision][type])
  * is reproduced here for the forms a Camel program can write; a format string fmt rejects is
  * FormatFailed at the operation's site (values: the format string, what is wrong).
  *
@@ -39,10 +41,12 @@
 #pragma once
 
 #include "camel/standalone/array.h"
+#include "camel/standalone/complex.h"
 #include "camel/standalone/core.h"
 #include "camel/standalone/fn.h"
 #include "camel/standalone/opt.h"
 #include "camel/standalone/str.h"
+#include "camel/utils/format_spec.h"
 #include "camel/utils/number_text.h"
 
 #include <cctype>
@@ -166,18 +170,25 @@ namespace detail {
 
 /// One argument of `format`, classified as the runtime hands it to fmt.
 struct FormatArg {
-    enum class Kind { Integer, Float32, Float64, Text } kind;
-    int64_t integer = 0;
-    double real     = 0;
+    enum class Kind { Integer, Float32, Float64, Complex32, Complex64, Text } kind;
+    int64_t integer    = 0;
+    double real        = 0;
+    double imaginary   = 0;
     std::string text;
 };
 
-inline FormatArg formatArg(int64_t v) { return {FormatArg::Kind::Integer, v, 0, {}}; }
-inline FormatArg formatArg(int32_t v) { return {FormatArg::Kind::Integer, v, 0, {}}; }
-inline FormatArg formatArg(double v) { return {FormatArg::Kind::Float64, 0, v, {}}; }
-inline FormatArg formatArg(float v) { return {FormatArg::Kind::Float32, 0, v, {}}; }
+inline FormatArg formatArg(int64_t v) { return {FormatArg::Kind::Integer, v, 0, 0, {}}; }
+inline FormatArg formatArg(int32_t v) { return {FormatArg::Kind::Integer, v, 0, 0, {}}; }
+inline FormatArg formatArg(double v) { return {FormatArg::Kind::Float64, 0, v, 0, {}}; }
+inline FormatArg formatArg(float v) { return {FormatArg::Kind::Float32, 0, v, 0, {}}; }
+inline FormatArg formatArg(std::complex<float> v) {
+    return {FormatArg::Kind::Complex32, 0, v.real(), v.imag(), {}};
+}
+inline FormatArg formatArg(std::complex<double> v) {
+    return {FormatArg::Kind::Complex64, 0, v.real(), v.imag(), {}};
+}
 template <typename T> FormatArg formatArg(const T &v) {
-    FormatArg arg{FormatArg::Kind::Text, 0, 0, {}};
+    FormatArg arg{FormatArg::Kind::Text, 0, 0, 0, {}};
     appendText(arg.text, v);
     return arg;
 }
@@ -452,19 +463,56 @@ inline Spec parseSpec(std::string_view s) {
     return spec;
 }
 
+/// A complex number under one specification (`complex_format.h` in the interpreter): the
+/// precision, the type and the `#` flag write each part, the fill, the alignment and the width
+/// lay out the whole text, and the sign of the imaginary part is the separator. Zero padding and
+/// the `=` alignment are errors, as they are for a complex number in Python.
+template <typename T>
+std::string formatComplex(T real, T imaginary, std::string_view specText, bool hasSpec) {
+    if (!hasSpec || specText.empty()) {
+        return camel::utils::complexText<T>(real, imaginary);
+    }
+    const camel::utils::NumberFormatSpec parts =
+        camel::utils::splitNumberFormatSpec(specText);
+    if (parts.zeroPadded) {
+        throw FormatError{"Zero padding is not allowed in complex format specifier"};
+    }
+    if (parts.equalAlign) {
+        throw FormatError{"'=' alignment is not allowed in complex format specifier"};
+    }
+    const std::string realText = formatFloat(real, parseSpec(parts.number));
+    std::string magnitudeSpec  = parts.number;
+    if (!magnitudeSpec.empty() &&
+        (magnitudeSpec[0] == '+' || magnitudeSpec[0] == '-' || magnitudeSpec[0] == ' ')) {
+        magnitudeSpec.erase(0, 1);
+    }
+    const bool negative     = !std::isnan(imaginary) && std::signbit(imaginary);
+    const T magnitude       = negative ? -imaginary : imaginary;
+    std::string text        = realText;
+    text += negative ? '-' : '+';
+    text += formatFloat(magnitude, parseSpec(magnitudeSpec));
+    text += 'i';
+    return camel::utils::padFormatText(text, parts.fill, parts.align, parts.width);
+}
+
 inline std::string formatOne(const FormatArg &arg, std::string_view specText, bool hasSpec) {
-    const Spec spec = parseSpec(specText);
     switch (arg.kind) {
     case FormatArg::Kind::Integer:
-        return formatInteger(arg.integer, spec);
+        return formatInteger(arg.integer, parseSpec(specText));
     case FormatArg::Kind::Float32:
-        return hasSpec ? formatFloat(static_cast<float>(arg.real), spec)
+        return hasSpec ? formatFloat(static_cast<float>(arg.real), parseSpec(specText))
                        : camel::utils::floatText(static_cast<float>(arg.real));
     case FormatArg::Kind::Float64:
-        return hasSpec ? formatFloat(arg.real, spec) : camel::utils::floatText(arg.real);
+        return hasSpec ? formatFloat(arg.real, parseSpec(specText))
+                       : camel::utils::floatText(arg.real);
+    case FormatArg::Kind::Complex32:
+        return formatComplex(
+            static_cast<float>(arg.real), static_cast<float>(arg.imaginary), specText, hasSpec);
+    case FormatArg::Kind::Complex64:
+        return formatComplex(arg.real, arg.imaginary, specText, hasSpec);
     case FormatArg::Kind::Text:
     default:
-        return formatText(arg.text, spec);
+        return formatText(arg.text, parseSpec(specText));
     }
 }
 

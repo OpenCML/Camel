@@ -90,3 +90,7 @@ test/cases/loops/captures.cml
 # A loop state appended in place (H17 item 4, single and multiple states): the private copy of
 # the first value translates to the array value itself, which `append` copies when it is shared.
 test/cases/trans/cpp/loop_state_in_place.cml
+
+# Complex numbers (H15c): c64 and c128 are std::complex<float>/<double>, ^ is repeated squaring for
+# an integer exponent, / faults on the complex zero, and one format specification writes both parts.
+test/cases/trans/cpp/complex_scalar.cml
