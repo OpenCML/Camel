@@ -58,6 +58,13 @@ class Function : public rtdata::Object {
     // Resolve the closure tuple layout from the active graph carrier.
     const type::TupleType *tupleType() const;
 
+    /// The closure layout this function was created with. Unlike tupleType() it does not
+    /// require the graph to be bound in the program: a draft group reserves a graph id and
+    /// binds it when it encodes the group, while a function value it puts in a static slot
+    /// already names that id (runtime/draft_session.cpp collects those references before the
+    /// bind). A live function has both; only the encoder is between the two.
+    const type::TupleType *closureType() const { return tupleType_; }
+
     virtual bool
     equals(const rtdata::Object *other, const type::Type *type, bool deep = false) const override {
         if (this == other)

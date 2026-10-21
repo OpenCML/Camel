@@ -709,6 +709,52 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
     discardedValues_.insert(node);
 }
 
+namespace {
+
+namespace rtdata = camel::core::rtdata;
+using rtdata::Float32;
+using rtdata::Float64;
+using rtdata::Int32;
+using rtdata::Int64;
+
+/// Whether the conversion function of `to` applied to the literal `value` of `from` has no
+/// value, by the rule of the conversion functions themselves (camel/core/numeric_convert.h,
+/// the operators in builtin/operators/cast.cpp): a float to an integer truncates and faults
+/// when the result does not fit, an integer to i32 faults when it does not fit, an integer to
+/// a float rounds (an f32 overflow is an infinity, not a fault), and a real to a complex
+/// number is always representable. This is not the `as` conversion: a CAST node is built only
+/// where castSafetyFrom says Safe, and Type::castSlotFrom asserts exactly that. `int(x)` and
+/// `x as int` share their arithmetic but not their legality (design principles 5.1), so a
+/// literal argument is checked here by the conversion function's rule.
+void checkLiteralNumericConversion(TypeCode from, TypeCode to, slot_t value) {
+    switch (to) {
+    case TypeCode::Int32:
+        if (from == TypeCode::Int64) {
+            (void)camel::core::checkedNarrow<Int32>(rtdata::fromSlot<Int64>(value), "i32");
+        } else if (from == TypeCode::Float32) {
+            (void)camel::core::checkedTruncate<Int32>(
+                rtdata::fromSlot<Float32>(value), "i32");
+        } else if (from == TypeCode::Float64) {
+            (void)camel::core::checkedTruncate<Int32>(
+                rtdata::fromSlot<Float64>(value), "i32");
+        }
+        break;
+    case TypeCode::Int64:
+        if (from == TypeCode::Float32) {
+            (void)camel::core::checkedTruncate<Int64>(
+                rtdata::fromSlot<Float32>(value), "int");
+        } else if (from == TypeCode::Float64) {
+            (void)camel::core::checkedTruncate<Int64>(
+                rtdata::fromSlot<Float64>(value), "int");
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+} // namespace
+
 void Builder::rejectLiteralConversion(
     const std::string &group, FunctionType *funcType, const std::vector<Argument> &operands,
     const GCT::node_ptr_t &call) {
@@ -752,7 +798,7 @@ void Builder::rejectLiteralConversion(
                 break;
             }
         } else if (const auto value = staticArgOf(operands[0].node).value) {
-            (void)target->castSlotFrom(*value, data->type());
+            checkLiteralNumericConversion(data->type()->code(), target->code(), *value);
         }
         return;
     } catch (const camel::core::error::RuntimeFault &) {

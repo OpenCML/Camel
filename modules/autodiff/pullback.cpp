@@ -1501,12 +1501,10 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     const size_t k               = bodyPlan.stateTypes.size();
     const size_t m               = bodyPlan.captureTypes.size();
     const size_t r               = bodyPlan.residualTypes.size();
-    ASSERT(
-        bodyPlan.collectionTypes.size() == (r == 0 ? 1u : r),
-        "autodiff: a loop body's collection slots do not match the values its round collects.");
     // A loop whose value has no tangent cannot carry a gradient, and one none of whose ports has
     // a tangent has nothing to send back: leave it alone (its captures get no gradient, which is
-    // right: they cannot influence the value).
+    // right: they cannot influence the value). Such a plan was not given a tape at all, so it
+    // has no collection slots; the count is checked once there is a plan to run.
     if (bodyPlan.dyType == nullptr) {
         return;
     }
@@ -1517,6 +1515,9 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     if (!anyPort) {
         return;
     }
+    ASSERT(
+        bodyPlan.collectionTypes.size() == (r == 0 ? 1u : r),
+        "autodiff: a loop body's collection slots do not match the values its round collects.");
     const PullbackPlan site = makePlanTypes(bodyPlan.portTypes, bodyPlan.stateValueType, carriesGradient);
     // The site's inputs: the captures (the node's With inputs), then the first values of the
     // state (its Norm inputs), the order visitCallSite reads them in.

@@ -109,7 +109,10 @@ void visitGraphsInStaticSlot(
         }
         visitor(func->graphId(), func->program());
         if (::Tuple *closure = func->tuple()) {
-            auto *closureType = const_cast<TupleType *>(func->tupleType());
+            // The layout the function was created with, not the one resolved through the graph:
+            // a graph of the group being encoded is bound only after its bytes are collected,
+            // and this function value names it already.
+            auto *closureType = const_cast<TupleType *>(func->closureType());
             for (size_t i = 0; i < closureType->size(); ++i) {
                 if (!shouldTraverseStaticSlotType(closureType->typeAt(i))) {
                     continue;
@@ -210,13 +213,13 @@ slot_t cloneStaticSlot(
         auto *cloned = ::Function::create(
             program->graph(func->graphId()) != nullptr ? program : func->program(),
             func->graphId(),
-            func->tupleType(),
+            func->closureType(),
             mm::autoSpace());
         objectCache.emplace(object, cloned);
 
         if (::Tuple *closure = func->tuple()) {
             ::Tuple *clonedClosure       = cloned->tuple();
-            const TupleType *closureType = cloned->tupleType();
+            const TupleType *closureType = cloned->closureType();
             for (size_t i = 0; i < closureType->size(); ++i) {
                 clonedClosure->set<slot_t>(
                     i,

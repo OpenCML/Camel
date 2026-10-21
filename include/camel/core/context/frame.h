@@ -156,16 +156,23 @@ class Frame : public rtdata::Object {
             res = staticArea_->get<T>(idx);
         }
         EXEC_WHEN_DEBUG({
-            std::ostringstream oss;
-            rtdata::printSlot(oss, rtdata::toSlot(res), typeAt<type::Type>(index));
-            CAMEL_LOG_INFO_S(
-                "Frame",
-                "[{}] Getting data of graph <{}> at index {} ({}): {}",
-                mm::formatAddress(const_cast<Frame *>(this), true),
-                graphName(),
-                index,
-                typeCodeToString(codeAt(index)),
-                oss.str());
+            // The text of the value, and reading it at all, is for a log line that is emitted:
+            // a frame slot can hold a collection a higher-order operator is still filling (a
+            // map re-reads its own result slot every round to write through the relocated
+            // pointer), and printing a large array at every round is what turned a 10,000
+            // element map into a quadratic Debug run. See H31.
+            if (::Logger::ShouldEmit(::LogLevel::Info, "Frame")) {
+                std::ostringstream oss;
+                rtdata::printSlot(oss, rtdata::toSlot(res), typeAt<type::Type>(index));
+                CAMEL_LOG_INFO_S(
+                    "Frame",
+                    "[{}] Getting data of graph <{}> at index {} ({}): {}",
+                    mm::formatAddress(const_cast<Frame *>(this), true),
+                    graphName(),
+                    index,
+                    typeCodeToString(codeAt(index)),
+                    oss.str());
+            }
         });
         return res;
     }
@@ -179,16 +186,22 @@ class Frame : public rtdata::Object {
             return;
         }
         EXEC_WHEN_DEBUG({
-            std::ostringstream oss;
-            rtdata::printSlot(oss, rtdata::toSlot(value), typeAt<type::Type>(index));
-            CAMEL_LOG_INFO_S(
-                "Frame",
-                "[{}] Setting data of graph <{}> at index {} ({}): {}",
-                mm::formatAddress(this, true),
-                graphName(),
-                index,
-                typeCodeToString(codeAt(index)),
-                oss.str());
+            // The index and the type, not the value: a set publishes a result, and the result
+            // of a higher-order operator is an array (or a struct holding one) that the
+            // operator fills *through the loop* after storing it (evalMarkedOperator_map_arr
+            // stores it first so a safepoint in the element call keeps it alive). Reading such
+            // a value asserts on its unwritten elements and costs a full pass per set. The
+            // get line keeps the value; the printer renders an unwritten element as
+            // "<uninitialized>" (rtdata/print.cpp).
+            if (::Logger::ShouldEmit(::LogLevel::Info, "Frame")) {
+                CAMEL_LOG_INFO_S(
+                    "Frame",
+                    "[{}] Setting data of graph <{}> at index {} ({})",
+                    mm::formatAddress(this, true),
+                    graphName(),
+                    index,
+                    typeCodeToString(codeAt(index)));
+            }
         });
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);

@@ -180,6 +180,15 @@ void printValue(std::ostream &os, slot_t data, Type *type) {
 
         const Type *t  = item.type;
         const slot_t v = item.slot;
+        if (v == DeadSlot) {
+            // An element of a value that is still being built: a higher-order operator stores
+            // its result array in the frame slot before the element calls fill it (so a
+            // safepoint inside one keeps the array alive), and the frame's debug log or a
+            // debugger may print it in between. The elements not written yet are all this
+            // pattern; show them rather than assert, as the debugger's value reader does.
+            os << "<uninitialized>";
+            continue;
+        }
         if (!t->isGCTraced()) {
             printScalar(os, v, t);
             continue;
@@ -199,7 +208,7 @@ void printValue(std::ostream &os, slot_t data, Type *type) {
             const Type *elemType = static_cast<const ArrayType *>(t)->elemType();
             pushText(stack, "]");
             for (size_t i = array->size(); i-- > 0;) {
-                pushSlot(stack, array->get<slot_t>(i), elemType);
+                pushSlot(stack, array->getSlot(i), elemType);
                 if (i > 0) {
                     pushText(stack, ", ");
                 }
@@ -228,7 +237,7 @@ void printValue(std::ostream &os, slot_t data, Type *type) {
             }
             pushText(stack, ")");
             for (size_t i = tupleType->size(); i-- > 0;) {
-                pushSlot(stack, tuple->get<slot_t>(i), tupleType->typeAt(i));
+                pushSlot(stack, tuple->slotAt(i), tupleType->typeAt(i));
                 if (i > 0) {
                     pushText(stack, ", ");
                 }
@@ -245,7 +254,7 @@ void printValue(std::ostream &os, slot_t data, Type *type) {
             }
             pushText(stack, " }");
             for (size_t i = structType->size(); i-- > 0;) {
-                pushSlot(stack, record->get<slot_t>(i), structType->typeAt(i));
+                pushSlot(stack, record->slotAt(i), structType->typeAt(i));
                 pushText(stack, ": ");
                 pushText(stack, structType->fieldName(i));
                 if (i > 0) {
