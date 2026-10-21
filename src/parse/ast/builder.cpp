@@ -2137,20 +2137,47 @@ Value Builder::visitArgumentList(cst::ArgumentList context) {
 }
 
 /*
-indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
+indices : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']' ;
+sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)? ;
 */
 Value Builder::visitIndices(cst::Indices context) {
     ENTER("Indices");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
-    if (context->expr(0)) {
-        *dataList << any2node(visitExpr(context->expr(0)));
-    }
-    if (context->expr(1)) {
-        *dataList << any2node(visitExpr(context->expr(1)));
-    }
-    if (context->expr(2)) {
-        *dataList << any2node(visitExpr(context->expr(2)));
+    for (const syn::Node entry : context->nodes()) {
+        if (entry.is(NK::SliceIndices)) {
+            // Three slots, one per part, an unwritten part a null load: the graph builder tells
+            // a slice from an element subscript by the node, not by counting children. Which
+            // slot a part takes follows from the colons the tree kept: a part before the first
+            // colon is the start, one between the colons the end, one after the second the step.
+            const cst::SliceIndices slice(entry);
+            node_ptr_t sliceNode = createNodeAs<SliceLoad>();
+            setNodeTokenRangeByContext(sliceNode, slice);
+            node_ptr_t slots[3] = {nullptr, nullptr, nullptr};
+            size_t colons       = 0;
+            for (size_t i = 0; i < slice->childCount(); ++i) {
+                const auto child = slice->child(i);
+                if (child.isToken()) {
+                    if (child.token().kind() == TK::Colon) {
+                        ++colons;
+                    }
+                    continue;
+                }
+                if (colons < 3) {
+                    slots[colons] = any2node(visitExpr(child.node()));
+                }
+            }
+            for (node_ptr_t &slot : slots) {
+                if (slot == nullptr) {
+                    slot = createNodeAs<NullLoad>();
+                    setNodeTokenRangeByContext(slot, slice);
+                }
+                *sliceNode << slot;
+            }
+            *dataList << sliceNode;
+        } else {
+            *dataList << any2node(visitExpr(entry));
+        }
     }
     LEAVE("Indices");
     return dataList;

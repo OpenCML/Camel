@@ -182,7 +182,8 @@ pairedValues       : keyValuePair (',' keyValuePair)*
 dataList           : dataExpr (',' dataExpr)*
 argumentList       : indexValues (',' pairedValues)? | pairedValues
 indexValues        : indexValue (',' indexValue)*
-indices            : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']'
+indices            : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']'
+sliceIndices       : dataExpr? ':' dataExpr? (':' dataExpr?)?
 parentArgues       : '(' argumentList? ','? ')'
 angledValues       : '<' argumentList? ','? '>'
 typeArguments      : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
@@ -281,7 +282,8 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Struct destructuring `let { x, y } = p`, array destructuring `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`, `xs[0]` (tuple destructuring is available) |
 | Keyword arguments `f(a: 1)` | `FeatureNotSupported` | Pass by position |
 | Parameter default values `b: int = 5` | `FeatureNotSupported` | Overloading; `with` parameters |
-| Slice subscripts `xs[a:b]`, `xs[a:b:c]` | `SemanticDiag::NoMatchingFunction` (there is no dedicated diagnostic: it is reported as "the subscript operator has no overload that accepts these arguments") | `xs->slice<a, b>` |
+| A slice subscript that slices a dimension other than the first, `xs[:, 0]`, `xs[a:b, c]` | `SemanticDiag::ConstructNotSupported` (the diagnostic names H17) | Take the rows with `take`, or slice one dimension at a time |
+| A slice subscript whose step is not 1, `xs[a:b:s]` | Array: the run-time `RuntimeDiag::InvalidArgument`; tensor: the compile-time `ArgumentsRejected` (both name H17) | `xs->slice<0, a, b, s>` |
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |
 | `typeof e`, `name of T` | `FeatureNotSupported` | None |
 | `keyof` | Syntax error | None |

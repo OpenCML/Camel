@@ -182,7 +182,8 @@ pairedValues       : keyValuePair (',' keyValuePair)*
 dataList           : dataExpr (',' dataExpr)*
 argumentList       : indexValues (',' pairedValues)? | pairedValues
 indexValues        : indexValue (',' indexValue)*
-indices            : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']'
+indices            : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']'
+sliceIndices       : dataExpr? ':' dataExpr? (':' dataExpr?)?
 parentArgues       : '(' argumentList? ','? ')'
 angledValues       : '<' argumentList? ','? '>'
 typeArguments      : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
@@ -281,7 +282,8 @@ analysisClause     : IDENTIFIER '=>' dataExpr
 | 结构体解构 `let { x, y } = p`、数组解构 `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`、`xs[0]`（元组解构可用） |
 | 关键字实参 `f(a: 1)` | `FeatureNotSupported` | 按位置传 |
 | 形参默认值 `b: int = 5` | `FeatureNotSupported` | 重载；`with` 形参 |
-| 切片下标 `xs[a:b]`、`xs[a:b:c]` | `SemanticDiag::NoMatchingFunction`（没有专门的诊断：按“下标运算符没有接受这些实参的重载”报告） | `xs->slice<a, b>` |
+| 切片下标切的是第一维以外的维度 `xs[:, 0]`、`xs[a:b, c]` | `SemanticDiag::ConstructNotSupported`（诊断里点名 H17） | 先用 `take` 取行，或一次只切一维 |
+| 切片下标的步长不是 1 `xs[a:b:s]` | 数组是运行时 `RuntimeDiag::InvalidArgument`，张量是编译期的 `ArgumentsRejected`（都点名 H17） | `xs->slice<0, a, b, s>` |
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
 | `typeof e`、`名字 of T` | `FeatureNotSupported` | 无 |
 | `keyof` | 语法错误 | 无 |

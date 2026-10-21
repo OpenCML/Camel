@@ -336,6 +336,8 @@ class ParserImpl {
     void parseDataList(TK closer);
     void parseArguments(TK closer);
     void parseIndices();
+    void parseSliceIndices();
+    void parseSlicePart();
     void parseParentArgues();
     void parseAngledValues();
     void parseTypeArguments();

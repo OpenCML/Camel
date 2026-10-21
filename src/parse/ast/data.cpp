@@ -62,6 +62,8 @@ std::string to_string(DataType type) {
         return "Ref";
     case DataType::ConstAs:
         return "ConstAs";
+    case DataType::Slice:
+        return "Slice";
     default:
         ASSERT(false, "Unknown DataType");
         return "UnknownDataType";
@@ -242,6 +244,8 @@ const std::string FuncDataLoad::geneCode() const {
 const std::string RefDataLoad::geneCode() const { return ref_.toString(); }
 
 const std::string ConstAsLoad::geneCode() const { return "constas " + ref_.toString(); }
+
+const std::string SliceLoad::geneCode() const { return ":"; }
 
 const std::string EnumPatternLoad::geneCode() const {
     std::string result = ref_.toString();
