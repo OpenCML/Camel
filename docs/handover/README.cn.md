@@ -169,8 +169,8 @@
 | H54 | CPU 每算子开销：小矩阵不进线程池、首次调用的 6 ms、分派成本（见 reviews/H24-H25-H26.md 末尾） | 无 | **进行中**（`handover/H54-cpu-op-cost`） |
 | H51 | 泛型第一期：按结构展开（`match type`、`static for`、`static loop`、`t.[n]`、可变元数），`tree_map` 等改用 Camel 写（先交计划） | 无 | **计划已批**（reviews/H51-plan.md），按 15 步实施 |
 | H50 | GPU G4–G5：支持面（bf16/Tensor Core 等）、使用已授予的许可、融合、优化器多张量融合（先交计划） | H49 计划获批 | **未开始** |
-| H49 | GPU G1–G3：放置标签、设备上的数组值、驻留与异步、整段编译与缓存（先交计划） | H48 的基准可用 | **未开始**（第 0 步按 H47 的证据先做：逐叶传输合批 `handover/H49a-tiles-transfer`） |
-| H47 | Tiles 现状与差距报告（只读，可并入 H48 的第一份报告） | 无 | **已完成**（报告 reports/H47.md：区域选择按类型、反向看不见、逐叶串行传输、回退 1000×） |
+| H49 | GPU G1–G3：放置标签、设备上的数组值、驻留与异步、整段编译与缓存（先交计划） | H48 的基准可用 | **部分完成**（H49a：区域/树传输合批，小往返 97.6→56.3 µs、同步点 5→2；报告 reports/H49a.md；动态形状、回传图类型、无设备时不重试 `cuInit` 按 author 裁定仍未做） |
+| H47 | Tiles 现状与差距报告（只读，可并入 H48 的第一份报告） | 无 | **已完成**（报告 reports/H47.md；H49a 更正了它对 `run` 归因：4.9 ms 中约 3.2 ms 是 `tensor:sum` 串行归约） |
 | H48 | GPU G0：剖析工具与 GPU 基准 | 无 | **已完成**（`std::profile` 与训练步基准；报告 reports/H48.md；今日没有算子被放到设备上） |
 | H59 | **严格运行器暴露的真实失败**：H43b 区域化 autodiff 让复合循环状态的梯度在投影处静默丢失（8 条，首次坏提交 `914c0eda`）；`saturate_all`/`extract` 保留饱和造出的死写法（第 9 条） | 无 | **已完成**（报告 reports/H59.md；新增回归用例 `loop_grad_composite_read`） |
 | H1 | `enum` | 无 | **已完成**（检查意见 reviews/H1.md） |
