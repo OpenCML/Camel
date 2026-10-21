@@ -201,18 +201,6 @@ at a position (`ExecLoopEvent`: `Begin`, `Test`, `End`) are run by the functions
 interpreter that walks the nodes). A nested loop starts again in every round of the loop around
 it; going back to the start of a round does not start or test the loops around it.
 
-**A loop in an arm of a branch.** The nodes of an arm are one range between its BRCH and its JOIN
-(`17_graph_rewrite_api_contracts.md`, 4.1), and a loop inside the arm is laid out inside that
-range: its condition, its body and the LOOP node. The arm's entry in the plan is the **first**
-node of the range, not the first node of it that does something: a loop's first position is the
-first node of its regions, which is usually a port of the body, and the `Begin`/`Test` events of
-the first round sit at that position. An entry chosen past it would skip the events, so the first
-round would run with unbound ports and the loop would lose it (the bug H45 fixed). Every back end
-that jumps to an arm entry — NodeVM, FastVM/JIT, Taskflow, the macro evaluator — starts at the
-range's first node, so a loop in an arm gives the value of the same loop in the function body.
-A loop inside another loop's body that is itself in an arm, and an arm that holds a loop and
-another `if`, are the same: each loop's condition and body are regions of where the loop is, and
-the commit refuses a graph where they are not (`17_graph_rewrite_api_contracts.md`, 4.1).
 **A loop of several values keeps its components, not a tuple per round.** A body that ends in the
 tuple of the next state makes that tuple with a `FILL`, and the next round takes it apart again:
 one allocation and k writes per round, for a tuple nothing ever reads. When the plan can prove
@@ -229,6 +217,19 @@ to date from the components once, when the loop ends. NodeVM and FastVM do not r
 which is correct and only costs. A body whose state comes from a port, or whose tuple is read by
 something else, keeps the round-by-round tuple: the plan says nothing, and every back end behaves
 as before.
+
+**A loop in an arm of a branch.** The nodes of an arm are one range between its BRCH and its JOIN
+(`17_graph_rewrite_api_contracts.md`, 4.1), and a loop inside the arm is laid out inside that
+range: its condition, its body and the LOOP node. The arm's entry in the plan is the **first**
+node of the range, not the first node of it that does something: a loop's first position is the
+first node of its regions, which is usually a port of the body, and the `Begin`/`Test` events of
+the first round sit at that position. An entry chosen past it would skip the events, so the first
+round would run with unbound ports and the loop would lose it (the bug H45 fixed). Every back end
+that jumps to an arm entry — NodeVM, FastVM/JIT, Taskflow, the macro evaluator — starts at the
+range's first node, so a loop in an arm gives the value of the same loop in the function body.
+A loop inside another loop's body that is itself in an arm, and an arm that holds a loop and
+another `if`, are the same: each loop's condition and body are regions of where the loop is, and
+the commit refuses a graph where they are not (`17_graph_rewrite_api_contracts.md`, 4.1).
 
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
 function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
@@ -309,6 +310,24 @@ move in the interpreter and one helper call in compiled code. A compiled graph t
 or `LMOD` runs that bytecode in the helper that the other runtime constructs use
 (`jitHelperBytecode`, and `collectRuntimeConstructs` keeps such a graph framed for it).
 
+H43 item 2 (`48345984`, merged into this branch) makes the JIT compile a loop of regions: `LBEG`,
+`LTST` and `LEND` run the interpreters' own `loop_frame.h` functions on the frame through helpers
+(`07_jit_architecture.md`, 17.9), and a graph with a loop is compiled at its first call under the
+default threshold (14.1). The same measurement on the merged tree (median of five interleaved runs,
+whole-process CPU time, load average 60 to 75):
+
+| | `std::nvm` | `std::fvm` | `std::jit` | tail recursion, `std::fvm` | tail recursion, `std::jit` |
+|---|---|---|---|---|---|
+| H43-perf build (loop interpreted) | 1.571 s | 0.436 s | 0.435 s | 0.310 s | — |
+| merged tree (loop compiled) | 1.611 s | 0.457 s | **0.363 s** | 0.309 s | 0.084 s |
+
+`std::jit` is 20% faster than the interpreter in the same batch (0.363 against 0.457 s) and 16%
+faster than its own H43-perf number; `std::jit(hot_threshold=0)` gives the same 0.363 s, and
+`std::jit` without a parameter now compiles the loop too — the entry function `main` is called once,
+which the call-count threshold used to leave interpreted. The compiled round is 36.3 ns against
+8.4 ns for the same work as a compiled tail recursion; the difference is the two helper calls and
+the frame traffic of every round. The target 0.155 s is therefore still 2.3 times away.
+
 What is left, and why the targets of H43 are not met yet:
 
 - `std::nvm` is at 152 ns a round against a target of 70. NodeVM runs a node at a time: 23 ns a
@@ -321,11 +340,15 @@ What is left, and why the targets of H43 are not met yet:
   fast as the same work written as a recursion over parameters, both being interpreted. Reaching
   24.5 ns needs fewer round trips through the dispatch loop: a compiled loop (next item), or a
   superinstruction that runs a round inside one bytecode.
-- `std::jit` is FastVM's number because a graph with a loop is not compiled yet: the interpreter
-  runs the rounds and only the functions it calls are compiled. The same work as a tail recursion
-  is 7.8 ns a round when `std::jit` compiles it, which is where the loop would land.
+- `std::jit` now runs the rounds of the loop in compiled code (36.3 ns a round against 45.7 in the
+  interpreter), but each round is still two calls of the helpers that run `loop_frame.h`, and the
+  state is read from and written to the frame on both sides of them. The same work as a tail
+  recursion is 8.4 ns a round when compiled; closing the gap needs the common shape lowered
+  natively (the test and the end of the round inline, the state in registers) rather than the
+  three events as calls, which is the next step, not item 2.
 
-Next steps: compiling a loop with the JIT; a superinstruction for the round (the condition, the
+Next steps: the native lowering of the common loop shape (LTST/LEND inline, state in registers);
+a superinstruction for the round (the condition, the
 test and the body of a loop whose regions are straight-line bytecode run by one instruction);
 the k values of the state passed as arguments to a compiled loop body; the translation of a loop to
 an ONNX Loop; autodiff on the regions.

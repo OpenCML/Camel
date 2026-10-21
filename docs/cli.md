@@ -148,7 +148,7 @@ Settings of a pass are parameters, no longer environment variables:
 | `std::opt::algebra` | `neutral_only: bool = false` (apply only the integer neutral elements `x + 0`, `0 + x`, `x - 0`, `x * 1`, `1 * x`, not the merging of like terms and constant factors; the reference for passes that do the same, such as one written in Camel) |
 | `std::opt`, `std::opt::inline` (and `::small` / `::arm` / `::hybrid`), `std::opt::specialize`, `std::opt::devirtualize` | `growth_budget: int = 4096` (nodes specialization and inlining may copy before the remaining calls are left as calls; 0 stops them; one budget for all rounds of `std::opt`) |
 | `std::fvm`, `std::jit` | `stats: string = ""` (append per-graph bytecode and execution counts of the run to this file) |
-| `std::jit` | `hot_threshold: int = 1` (calls from one call site before a graph is compiled; 0 compiles at the first call) |
+| `std::jit` | `hot_threshold: int = 1` (calls from one call site before a graph is compiled; 0 compiles at the first call). A graph that runs a loop of regions is compiled at its first call under the eager thresholds (0 and 1, the default): what makes it expensive is the rounds, which a call count cannot see; an explicit threshold above 1 keeps the call-count rule (so `hot_threshold=1000000000` still compiles nothing) |
 | `std::tf`, `std::prl` | `linear: bool = false` (evaluate node by node), `fanout_all: bool = false` (fan every unordered higher-order call out), `diag: bool = false` (print the decision for every graph), `bytecode: bool = true` (hand serial graphs to the bytecode interpreter), `gc_stats: int = 0` (1: statistics at the end of the run; 2: also one line per collection) |
 | `onnx::export` | `out: string = ""` (the model file; see below) |
 
