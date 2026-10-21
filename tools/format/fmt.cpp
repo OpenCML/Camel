@@ -313,8 +313,11 @@ blockStmt  : WAIT? stmtBlock | funcAnno+ stmtBlock ;
 */
 any Formatter::visitBlockStmt(cst::BlockStmt context) {
     string result;
-    // `@numeric(...)` on a block: each annotation on a line of its own, at the start of a line
-    // (design principles 4.1: a line that starts with '@' annotates what follows).
+    // The tags written before the block (`#tag { ... }`) and `@numeric(...)`: each on a line of
+    // its own, at the start of a line (design principles 4.1, 6.2).
+    for (const auto &tagUse : context->all<cst::TagUse>()) {
+        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+    }
     for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
         result += any_cast<string>(visitFuncAnno(funcAnno)) + lineEnd();
     }
@@ -401,6 +404,80 @@ any Formatter::visitFuncAnno(cst::FuncAnno context) {
 }
 
 /*
+tagDecl    : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+           | 'export'? 'tag' identDef '=' bracketIdents
+*/
+any Formatter::visitTagDecl(cst::TagDecl context) {
+    string result = context->tok(TK::KwExport) ? "export tag " : "tag ";
+    result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (context->get<cst::AngledParams>()) {
+        result += any_cast<string>(visitAngledParams(context->get<cst::AngledParams>()));
+    }
+    if (const auto group = context->get<cst::BracketIdents>()) {
+        return result + " = " + any_cast<string>(visitBracketIdents(group));
+    }
+    result += " on " + any_cast<string>(visitTagPositions(context->get<cst::TagPositions>()));
+    if (context->get<cst::TagReaders>()) {
+        result += " read_by " + any_cast<string>(visitTagReaders(context->get<cst::TagReaders>()));
+    }
+    return result;
+}
+
+/*
+tagPositions : tagPositionName (',' tagPositionName)* ','?
+*/
+any Formatter::visitTagPositions(cst::TagPositions context) {
+    string result;
+    for (const auto position : context->all<cst::IdentDef>()) {
+        if (!result.empty()) {
+            result += ", ";
+        }
+        result += any_cast<string>(visitIdentDef(position));
+    }
+    return result;
+}
+
+/*
+tagReaders : identRef (',' identRef)* ','?
+*/
+any Formatter::visitTagReaders(cst::TagReaders context) {
+    string result;
+    for (const auto reader : context->all<cst::IdentRef>()) {
+        if (!result.empty()) {
+            result += ", ";
+        }
+        result += any_cast<string>(visitIdentRef(reader));
+    }
+    return result;
+}
+
+/*
+tagUse     : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
+*/
+any Formatter::visitTagUse(cst::TagUse context) {
+    const auto refs = context->all<cst::TagRef>();
+    if (refs.size() == 1 && !context->tok(TK::LBracket)) {
+        return "#" + any_cast<string>(visitTagRef(refs.front()));
+    }
+    string result = "#[";
+    for (size_t i = 0; i < refs.size(); ++i) {
+        result += (i > 0 ? ", " : "") + any_cast<string>(visitTagRef(refs[i]));
+    }
+    return result + "]";
+}
+
+/*
+tagRef     : identRef angledValues?
+*/
+any Formatter::visitTagRef(cst::TagRef context) {
+    string result = any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
+    if (const auto values = context->get<cst::AngledValues>()) {
+        result += any_cast<string>(visitAngledValues(values));
+    }
+    return result;
+}
+
+/*
 funcDecl   :
         funcAnno*
         (WITH angledParams)?
@@ -418,6 +495,10 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
     const auto &parentParams = context->get<cst::ParentParams>();
     const auto &typeExpr     = context->type();
     const auto &stmtBlock    = context->get<cst::StmtBlock>();
+
+    for (const auto &tagUse : context->all<cst::TagUse>()) {
+        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+    }
 
     for (const auto funcAnno : funcAnnos) {
         result += any_cast<string>(visitFuncAnno(funcAnno)) + lineEnd();
@@ -572,6 +653,9 @@ typeDecl
 any Formatter::visitTypeDecl(cst::TypeDecl context) {
     const auto &implMark = context->get<cst::ImplMark>();
     string result;
+    for (const auto &tagUse : context->all<cst::TagUse>()) {
+        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+    }
     if (implMark) {
         result += any_cast<string>(visitImplMark(implMark)) + " ";
     }
@@ -633,7 +717,12 @@ any Formatter::visitSpreadValue(cst::SpreadValue context) {
 keyTypePair  : identDef ':' typeExpr ;
 */
 any Formatter::visitKeyTypePair(cst::KeyTypePair context) {
-    return any_cast<string>(visitIdentDef(context->get<cst::IdentDef>())) + ": " +
+    string result;
+    for (const auto &tagUse : context->all<cst::TagUse>()) {
+        result += any_cast<string>(visitTagUse(tagUse)) + " ";
+    }
+    return result +
+           any_cast<string>(visitIdentDef(context->get<cst::IdentDef>())) + ": " +
            any_cast<string>(visitType(context->type()));
 }
 
@@ -1470,6 +1559,11 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(BlockStmt)
         CAMEL_FORMAT(StmtBlock)
         CAMEL_FORMAT(FuncAnno)
+        CAMEL_FORMAT(TagDecl)
+        CAMEL_FORMAT(TagPositions)
+        CAMEL_FORMAT(TagReaders)
+        CAMEL_FORMAT(TagUse)
+        CAMEL_FORMAT(TagRef)
         CAMEL_FORMAT(FuncDecl)
         CAMEL_FORMAT(RuleDecl)
         CAMEL_FORMAT(RuleContext)

@@ -1,0 +1,179 @@
+id = "compile.tags"
+order = 226
+tier = "fast"
+tags = ["feat", "compile", "tags", "attributes", "semantics"]
+desc = "The tag mechanism of design principles 6.2: `tag name<params> on positions` declares a name of the module's entity namespace, `tag group = [a, b]` a group of tags, and `#name`, `#name<args>` and `#[a, b<v>]` write a tag before a function, a type declaration, a struct field or a block. Tags of `on nodes` become node attributes of the region they precede (an inner same-name tag with a parameter wins); tags of `on func`, `on type` and `on field` belong to the declaration and are printed by `camel inspect --tags` (the C++ query is tag::ofDeclaration / tag::ofField). A tag says through `read_by` which passes read it, and the pipeline warns when none of them is in it. Writing a tag where its declaration does not list it, an undeclared tag, a wrong number of arguments, a non-constant argument and an argument type a tag cannot carry are located errors at the tag."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "decl.run"
+desc = "A program that declares tags of every position and writes them before functions, types, fields and blocks runs to the same result in the four back ends."
+kind = "behavior"
+case = "../../../cases/compile/tags/decl.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 7
+expect_stdout_exact = ""
+
+[[tests]]
+name = "decl.tags"
+desc = "`camel inspect --tags` prints the declaration of every tag (its positions, parameters and readers), and, for each declaration a tag was written on, the facts it carries: a function, a type and a field (`Bits.0`); a tag of `on nodes` is not on the declaration of its function."
+kind = "behavior"
+case = "../../../cases/compile/tags/decl.cml"
+args = ["inspect", "--tags", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+for (const line of [
+  'main::kernel on nodes',
+  'main::fast on func, nodes',
+  'main::readable on func read_by std::opt',
+  'main::shape on type, field',
+  'main::width on type, field<w: int>',
+  'main::pure on  = [fast, readable]',
+  'main::finite on  = [kernel, fast]',
+  'Bits : main::width=32',
+  'Bits.0 : main::width=8',
+  'Square : main::shape',
+  'both : main::fast',
+  'grouped : main::fast, main::readable',
+  'stacked : main::fast',
+]) {
+  assert(out.includes(line), `missing '${line}' in:\\n${out}`)
+}
+// `kernel` is declared `on nodes` only: it belongs to the body, not to the declaration.
+assert(!out.includes('marked :'), `marked carries no declaration tag:\\n${out}`)
+}
+"""
+
+[[tests]]
+name = "graph.attrs"
+desc = "std::gir shows the facts of `on nodes` as `attrs` (spans are 0-based lines): a tag written before a function holds for the nodes of its body, a tag of `nodes` on a function that also allows it, a tag before a block for the nodes written in it, accumulating with the enclosing ones; an inner same-name tag with a parameter wins over the outer value."
+kind = "behavior"
+case = "../../../cases/compile/tags/graph.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const nodes = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
+const attrs = (l) => { const m = l.match(/attrs="([^"]*)"/); return m ? m[1] : '' }
+const at = (line) => nodes.filter((l) => l.includes(`span="${line}:`))
+const only = (line, value) => {
+  const found = at(line)
+  assert(found.length > 0, `no OPER at line ${line}`)
+  for (const l of found) assert(attrs(l) === value, `line ${line}: attrs="${attrs(l)}", expected "${value}": ${l}`)
+}
+only(10, 'main::scale=2')           // doubled: the tag before the function
+only(15, 'main::heavy')             // weighed: the nodes half of `on func, nodes`
+only(20, 'main::scale=3')           // main: the tag before the function
+only(23, 'main::plain, main::scale=3') // the block adds plain to the enclosing scale
+only(27, 'main::scale=5')           // the inner same-name tag wins
+assert(at(27).every((l) => !attrs(l).includes('main::plain')), 'the inner block does not carry the outer block')
+}
+"""
+
+[[tests]]
+name = "graph.run"
+desc = "The tagged program runs to the same result through `std::nvm`, `std::fvm` and `std::opt::inline std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tags/graph.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 121
+expect_stdout_exact = ""
+
+[[tests]]
+name = "read_by.absent"
+desc = "A tag whose `read_by` names a pass that is not in the pipeline is reported where it is written: at the use, and the message names the tag and the pass."
+kind = "behavior"
+case = "../../../cases/compile/tags/decl.cml"
+args = ["${case}"]
+expect_exit = 7
+expect_output_contains = ["SemanticDiag::TagHasNoReader", "The tag 'main::readable' is written, but none of the passes it names (std::opt) is in the pipeline."]
+
+[[tests]]
+name = "read_by.present"
+desc = "With the pass `std::opt` named by `read_by` in the pipeline the warning is gone."
+kind = "behavior"
+case = "../../../cases/compile/tags/decl.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 7
+expect_output_not_contains = ["TagHasNoReader", "none of the passes it names"]
+
+[[tests]]
+name = "position"
+desc = "A tag declared `on type` written before a function: the error is at the tag and names the declaration's positions."
+kind = "negative"
+case = "../../../cases/compile/tags/err_position.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagNotAtPosition"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 2
+expect_output_contains = ["The tag 'shape' may not be written at a func: it is declared for type."]
+
+[[tests]]
+name = "undeclared"
+desc = "A tag that is not declared is reported at its name, with the namespace a tag lives in."
+kind = "negative"
+case = "../../../cases/compile/tags/err_undeclared.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagUndeclared"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 2
+expect_output_contains = ["No tag 'nope' is declared."]
+
+[[tests]]
+name = "arity"
+desc = "A tag written without the arguments its declaration gives it."
+kind = "negative"
+case = "../../../cases/compile/tags/err_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 2
+expect_output_contains = ["The tag 'width' takes 1 parameter(s), but 0 argument(s) are written."]
+
+[[tests]]
+name = "not_constant"
+desc = "A tag argument that is not a compile-time value is refused at the use: a tag is read before the program runs."
+kind = "negative"
+case = "../../../cases/compile/tags/err_const.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentNotConstant"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 6
+expect_output_contains = ["The argument 'n' of the tag 'width' is not a compile-time value."]
+
+[[tests]]
+name = "unsupported_argument"
+desc = "A floating-point tag argument is refused with the types a tag can carry yet (H2b adds real-valued attributes)."
+kind = "negative"
+case = "../../../cases/compile/tags/err_float.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentUnsupported"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 2
+expect_output_contains = ["has a type a tag cannot carry yet"]
+
+[[tests]]
+name = "old_annotation_form"
+desc = "The old `@name(...)` form of a tag gets a located diagnostic that points at `#name` / `#[...]`, not a syntax error."
+kind = "negative"
+case = "../../../cases/compile/tags/err_old_annotation.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 1
+expect_output_contains = ["a tag is written '#name' or '#name<args>' (or '#[a, b]'), never '@name(args)'", "'#name', '#name<args>' or '#[a, b<v>]'"]

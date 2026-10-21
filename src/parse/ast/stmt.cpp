@@ -178,6 +178,85 @@ const std::string TypeDeclLoad::geneCode() const {
     return result;
 }
 
+const std::string TagDeclLoad::toString() const {
+    std::string result = "TagDecl: " + ref_.toString();
+    if (!params_.empty()) {
+        result += "<";
+        for (size_t i = 0; i < params_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + params_[i].name + ": " + params_[i].type;
+        }
+        result += ">";
+    }
+    if (isGroup()) {
+        result += " = [";
+        for (size_t i = 0; i < aliases_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + aliases_[i].toString();
+        }
+        result += "]";
+    } else {
+        result += " on ";
+        bool first = true;
+        for (const auto &[position, name] :
+             {std::pair{TagPosition::Func, "func"},
+              std::pair{TagPosition::Type, "type"},
+              std::pair{TagPosition::Field, "field"},
+              std::pair{TagPosition::Nodes, "nodes"},
+              std::pair{TagPosition::Param, "param"}}) {
+            if (!allows(position)) {
+                continue;
+            }
+            result += (first ? "" : ", ") + std::string(name);
+            first = false;
+        }
+        if (!readBy_.empty()) {
+            result += " read_by ";
+            for (size_t i = 0; i < readBy_.size(); ++i) {
+                result += (i > 0 ? ", " : "") + readBy_[i].toString();
+            }
+        }
+    }
+    return result + docSuffix();
+}
+
+const std::string TagDeclLoad::geneCode() const {
+    std::string result = "tag " + ref_.toString();
+    if (!params_.empty()) {
+        result += "<";
+        for (size_t i = 0; i < params_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + params_[i].name + ": " + params_[i].type;
+        }
+        result += ">";
+    }
+    if (isGroup()) {
+        result += " = [";
+        for (size_t i = 0; i < aliases_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + aliases_[i].toString();
+        }
+        return result + "]";
+    }
+    result += " on ";
+    bool first = true;
+    for (const auto &[position, name] :
+         {std::pair{TagPosition::Func, "func"},
+          std::pair{TagPosition::Type, "type"},
+          std::pair{TagPosition::Field, "field"},
+          std::pair{TagPosition::Nodes, "nodes"},
+          std::pair{TagPosition::Param, "param"}}) {
+        if (!allows(position)) {
+            continue;
+        }
+        result += (first ? "" : ", ") + std::string(name);
+        first = false;
+    }
+    if (!readBy_.empty()) {
+        result += " read_by ";
+        for (size_t i = 0; i < readBy_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + readBy_[i].toString();
+        }
+    }
+    return result;
+}
+
 const std::string UsingNamespaceLoad::geneCode() const {
     return "using namespace " + ref_.toString();
 }

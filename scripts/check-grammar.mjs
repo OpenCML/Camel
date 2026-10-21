@@ -32,6 +32,10 @@ const END = '<!-- grammar:end -->'
 // Token classes: terminals that are not written as a quoted literal.
 // OPERATOR: any operator token (the symbol of `func operator +`, production operatorName).
 const TOKEN_CLASSES = new Set(['IDENTIFIER', 'INTEGER', 'REAL', 'STRING', 'MULTI_STR', 'FSTRING', 'SEP', 'EOF', 'OPERATOR'])
+// Contextual keywords: written as a word, but not reserved words, so they are not tokens of
+// token_kinds.def. A production may quote one where the parser decides on the text (`tag` in
+// `tag x on nodes`, `on` and `read_by` in the same production, design principles 6.2).
+const CONTEXTUAL = new Set(['tag', 'on', 'read_by'])
 // Productions parsed inside the function of another one.
 const FOLDED = {
     decl: 'parseDecl',
@@ -136,7 +140,7 @@ for (const p of productions) {
     const body = p.lines.join(' ')
     for (const m of body.matchAll(/'((?:\\.|[^'\\])+)'/g)) {
         const literal = m[1].replace(/\\(.)/g, '$1')
-        if (!tokenLiterals.has(literal)) {
+        if (!tokenLiterals.has(literal) && !CONTEXTUAL.has(literal)) {
             errors.push(`production '${p.name}' uses the literal '${literal}', which is not a token of token_kinds.def`)
         }
     }

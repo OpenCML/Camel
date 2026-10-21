@@ -289,7 +289,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "A line that starts with '@' annotates the function declaration or the block "
                 "that follows. '@name' and '@name<args>' are decorators of a function or of a "
                 "block; '@numeric(...)' grants numeric permissions to a function or a block "
-                "(design principles 7.5).",
+                "(design principles 7.5). A tag is written with '#': '#name', '#name<args>' or "
+                "'#[a, b<v>]' (design principles 6.2).",
             },
         },
         {
@@ -1100,6 +1101,96 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Every variant of '{0}' is matched before 'case _': the wildcard is never taken.",
                 "Naming every variant already covers every value of the enum. Remove 'case _', or "
                 "remove the case it was meant to stand in for.",
+            },
+        },
+        {
+            SemanticDiag::TagUnknownPosition,
+            {
+                "TagUnknownPosition",
+                "A tag cannot be written at '{0}': the positions are func, type, field, nodes and "
+                "param.",
+                "Write the places the tag may be written, after 'on': '... on func, nodes'.",
+            },
+        },
+        {
+            SemanticDiag::TagNotAtPosition,
+            {
+                "TagNotAtPosition",
+                "The tag '{0}' may not be written at a {1}: it is declared for {2}.",
+                "Write the tag where its declaration says it belongs, or add the position to the "
+                "declaration after 'on'.",
+            },
+        },
+        {
+            SemanticDiag::TagUndeclared,
+            {
+                "TagUndeclared",
+                "No tag '{0}' is declared.",
+                "Tags share the namespace of functions and types: import the module that declares "
+                "it, or declare it with 'tag {0} on ...'.",
+            },
+        },
+        {
+            SemanticDiag::TagArgumentCount,
+            {
+                "TagArgumentCount",
+                "The tag '{0}' takes {1} parameter(s), but {2} argument(s) are written.",
+                "Write one argument for each parameter of the tag, in the order of the "
+                "declaration.",
+            },
+        },
+        {
+            SemanticDiag::TagArgumentNotConstant,
+            {
+                "TagArgumentNotConstant",
+                "The argument '{0}' of the tag '{1}' is not a compile-time value.",
+                "A tag is read before the program runs: write a literal, a top-level constant or "
+                "a function name.",
+            },
+        },
+        {
+    SemanticDiag::TagParameterMissing,
+            {
+                "TagParameterMissing",
+                "The parameter '{0}' of the tag '{1}' has no type.",
+                "A tag parameter is read as a compile-time value: write its type, 'tag {1}<{0}: "
+                "int> on ...'.",
+            },
+        },
+        {
+            SemanticDiag::TagOnUnnamedField,
+            {
+                "TagOnUnnamedField",
+                "A tag on the field '{0}' of an unnamed struct type belongs to no declaration.",
+                "Declare the struct as a type ('type S = {{ ... }}') and tag the field in that "
+                "declaration.",
+            },
+        },
+        {
+            SemanticDiag::TagArgumentNamed,
+            {
+                "TagArgumentNamed",
+                "A tag argument is positional: '{0}' is named.",
+                "A tag's parameters are given in the order the tag declares them: write "
+                "'#tag<a, b>', not '#tag<x: a>'.",
+            },
+        },
+        {
+            SemanticDiag::TagArgumentUnsupported,
+            {
+                "TagArgumentUnsupported",
+                "The argument '{0}' of the tag '{1}' has a type a tag cannot carry yet.",
+                "A tag carries an integer, a string, a boolean (as 0 or 1), a symbol or a graph "
+                "reference; a floating-point argument comes with the real-valued tag attributes.",
+            },
+        },
+        {
+            SemanticDiag::TagHasNoReader,
+            {
+                "TagHasNoReader",
+                "The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeline.",
+                "A tag only allows a pass to do something; with no such pass in the pipeline the "
+                "tag has no effect. Add the pass it names ('read_by'), or remove the tag.",
             },
         },
     };
