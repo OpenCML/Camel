@@ -995,7 +995,7 @@ std::optional<std::string> checkLaw(const ReductionLaw &law) {
     return std::nullopt;
 }
 
-ReorderFreedom reorderFreedom(const ReductionLaw &law, uint8_t granted) {
+ReorderFreedom reorderFreedom(const ReductionLaw &law, uint16_t granted) {
     const PermissionMask g =
         granted |
         (law.order == LawOrder::Unordered ? PermissionMask{kReassociate} : PermissionMask{0});
@@ -1011,7 +1011,7 @@ ReorderFreedom reorderFreedom(const ReductionLaw &law, uint8_t granted) {
 }
 
 ReorderFreedom
-reorderFreedom(const ReductionLaw &law, uint8_t nodePermissions, const NumericPolicy &policy) {
+reorderFreedom(const ReductionLaw &law, PermissionMask nodePermissions, const NumericPolicy &policy) {
     return reorderFreedom(law, policy.effective(nodePermissions));
 }
 
@@ -1188,3 +1188,5 @@ std::optional<StridedView> rowMajorView(
 }
 
 } // namespace camel::core::sem
+
+

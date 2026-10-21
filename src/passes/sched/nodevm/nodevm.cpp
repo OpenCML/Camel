@@ -58,6 +58,21 @@ using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::kInvalidNodeRef;
 
+/// Whether `loop` is a region form of its graph: a LOOP node owns a condition region and a body
+/// region (camel/runtime/graph.h). The graph form of a loop (two graphs in the LOOP body) is not
+/// built any more, and NodeVM does not execute it.
+[[maybe_unused]] bool hasLoopRegions(const camel::runtime::GCGraph &graph, gc_node_ref_t loop) {
+    for (uint32_t r = 0; r < graph.regionCount(); ++r) {
+        const camel::runtime::GCRegion *region = graph.region(r);
+        if (region != nullptr && region->owner == loop &&
+            (region->kind == camel::runtime::GCRegionKind::LoopCond ||
+             region->kind == camel::runtime::GCRegionKind::LoopBody)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void bindMarkedFunctionFrame(
     Frame *frame, Function *func, std::span<const slot_t> normArgs,
     std::span<const slot_t> withArgs = {}) {
@@ -517,7 +532,6 @@ slot_t NodeVMSchedPass::call(
             } break;
 
             case GCNodeKind::Func: {
-                auto *callerRuntimeGraph = currRuntimeGraph;
                 auto *runtimeTarget      = currProgram->graph(currPlan->directCallTargetIds[i]);
                 ASSERT(
                     runtimeTarget != nullptr,
@@ -598,13 +612,14 @@ slot_t NodeVMSchedPass::call(
             } break;
 
             case GCNodeKind::Loop:
-                // The rounds of a loop that is a region of its graph ran at the events of the
-                // plan, and the state is the value. A loop the builder left as two graphs -- one
-                // built while the program runs, which the lowering never saw -- runs its rounds
-                // here, a call of each graph per round.
-                if (!hasLoops) [[unlikely]] {
-                    evalLoop(currRuntimeGraph, nodeRef, *currFrame);
-                }
+                // Every loop the builders make is a region of its graph: its rounds ran at the
+                // events of the plan and the state is its value. A loop of the old graph form (a
+                // condition graph and a body graph, run a call per round) is not executed; the
+                // plans above prove no such loop reaches this point.
+                ASSERT(
+                    hasLoopRegions(*currRuntimeGraph, nodeRef),
+                    "NodeVM: a LOOP node is not a region of its graph (the graph form of a loop "
+                    "must not remain).");
                 break;
 
             case GCNodeKind::Port:
@@ -946,69 +961,5 @@ slot_t NodeVMSchedPass::evalNativeOperator(
     }
     camel::execute::FunctionCallScope callScope(*context_, std::move(invoker));
     return (*opFunc)(withView, normView, *context_);
-}
-
-void NodeVMSchedPass::evalLoop(
-    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
-    const camel::runtime::LoopView loop(programs_.of(graph), *graph, nodeRef);
-    const size_t k           = loop.stateCount();
-    const size_t collections = loop.collectionCount();
-    const auto stateSlot     = dataIndexOf(graph, nodeRef);
-    const auto captures      = loop.captures();
-    const auto iterable      = loop.iterable();
-    GCGraph *const cond      = loop.condGraph();
-    GCGraph *const body      = loop.bodyGraph();
-    // The value is a tuple when k > 1 or the loop collects; its components are the k state
-    // values and, when it collects, the arrays (LoopView::valueType).
-    const bool wraps = k > 1 || collections != 0;
-    const auto *const valueType =
-        wraps ? static_cast<const TupleType *>(loop.valueType()) : nullptr;
-    // The rounds and the state are the loop's (camel/execute/loop_driver.h); this interpreter
-    // supplies a frame and a call for each.
-    struct Host {
-        NodeVMSchedPass &vm;
-        GCGraph *graph;
-        Frame &currFrame;
-        camel::runtime::LoopView loop;
-        camel::runtime::gc_data_idx_t stateSlot;
-        size_t k;
-        std::span<const gc_node_ref_t> captures;
-        std::optional<gc_node_ref_t> iterableNode;
-
-        void beforeRound(size_t) {}
-        slot_t initialState(size_t j) {
-            return currFrame.get<slot_t>(dataIndexOf(graph, loop.initialState(j)));
-        }
-        slot_t stateValue() { return currFrame.get<slot_t>(stateSlot); }
-        void setStateValue(slot_t value) { currFrame.set(stateSlot, value); }
-        slot_t
-        callRound(const camel::execute::LoopShape &shape, GCGraph *target, const slot_t *element) {
-            vm.requireRecursionRoom(graph);
-            Frame *frame = vm.framePool_.acquire(target);
-            camel::execute::bindLoopRound(
-                frame,
-                target,
-                k,
-                element,
-                captures.size(),
-                [&](size_t j) {
-                    return camel::execute::loopStateComponent(shape, stateValue(), j);
-                },
-                [&](size_t c) { return currFrame.get<slot_t>(dataIndexOf(graph, captures[c])); });
-            return vm.call(target, frame);
-        }
-        Array *iterable() { return currFrame.get<Array *>(dataIndexOf(graph, *iterableNode)); }
-    } host{*this, graph, currFrame, loop, stateSlot, k, captures, iterable};
-    camel::execute::driveLoopRounds(
-        camel::execute::LoopShape{
-            .cond            = cond,
-            .body            = body,
-            .iterates        = iterable.has_value(),
-            .stateCount      = k,
-            .collectionCount = collections,
-            .valueType       = valueType,
-            .origin          = graph->nodeOrigin(nodeRef),
-        },
-        host);
 }
 

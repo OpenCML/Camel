@@ -113,6 +113,36 @@ void GenerationalAllocatorWithGC::noteFinalizable(void *payload) {
     }
 }
 
+void GenerationalAllocatorWithGC::noteBlockHeld(rtdata::Object *owner, Block *block) {
+    if (owner == nullptr || block == nullptr) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    // Only a block held by the elder space is beyond a minor collection. A young array that
+    // grows its block is counted when it is promoted (forward); a large object is measured by
+    // the large-object budget.
+    if (!inElderGenSpace(headerOf(owner))) {
+        return;
+    }
+    noteElderBlockBytesUnlocked(block);
+}
+
+void GenerationalAllocatorWithGC::noteElderBlockBytesUnlocked(Block *block) {
+    if (block == nullptr) {
+        return;
+    }
+    const size_t added = block->claimPacingBytes();
+    if (added == 0) {
+        return;
+    }
+    elderBlockBytesSinceSweep_ += added;
+    if (UNLIKELY(elderBlockBytesSinceSweep_ >= elderBlockBudget_) &&
+        pendingSafepointCollection_ != CollectionKind::Major &&
+        pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
+        requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderBlockBudget);
+    }
+}
+
 bool GenerationalAllocatorWithGC::isObjectAddressStable(rtdata::Object *object) const {
     if (!object) {
         return true;
@@ -1166,18 +1196,9 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
         // A block this value holds moves with it into the elder space, and only a major
         // collection sweeps the elder space, so these bytes can no longer be reclaimed by the
         // minor collections the blocks pace. Count them and ask for the major when enough have
-        // accumulated since the last sweep.
-        const size_t heldBlockBytes = obj->blockBytesHeld();
-        if (heldBlockBytes != 0) {
-            elderBlockBytesSinceSweep_ += heldBlockBytes;
-            if (UNLIKELY(elderBlockBytesSinceSweep_ >= elderBlockBudget_) &&
-                pendingSafepointCollection_ != CollectionKind::Major &&
-                pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
-                requestCollectionAtSafepointUnlocked(
-                    CollectionKind::Major,
-                    kCauseElderBlockBudget);
-            }
-        }
+        // accumulated since the last sweep. The block is counted by identity: a second view of
+        // it that is promoted later adds nothing.
+        noteElderBlockBytesUnlocked(obj->heldBlock());
         newHeader = headerOf(newObj);
         newHeader->setAge(age);
         newHeader->setRegion(AllocRegion::ElderGen);
@@ -1419,16 +1440,22 @@ void GenerationalAllocatorWithGC::markObject(rtdata::Object *obj, const type::Ty
 void GenerationalAllocatorWithGC::sweepOldGen() {
     std::vector<ObjectHeader *> unreachable;
     size_t liveBlockBytes = 0;
+    const uint64_t sweepGeneration = blockSweepGeneration_++;
 
-    elderGenSpace_.iterateAllocated([&unreachable, &liveBlockBytes](ObjectHeader *header) {
-        if (!header->marked_) {
-            unreachable.push_back(header);
-        } else {
-            // The blocks the survivors still hold: only a major collection can release them,
-            // so they are the base of the next promoted-block budget.
-            liveBlockBytes += payloadOf<rtdata::Object>(header)->blockBytesHeld();
-        }
-    });
+    elderGenSpace_.iterateAllocated(
+        [&unreachable, &liveBlockBytes, sweepGeneration](ObjectHeader *header) {
+            if (!header->marked_) {
+                unreachable.push_back(header);
+            } else {
+                // The blocks the survivors still hold: only a major collection can release
+                // them, so they are the base of the next promoted-block budget. A block can be
+                // reached through several views; count it once, by identity.
+                Block *block = payloadOf<rtdata::Object>(header)->heldBlock();
+                if (block != nullptr && block->claimSweepGeneration(sweepGeneration)) {
+                    liveBlockBytes += block->bytes();
+                }
+            }
+        });
 
     stats_.freedElderObjects += unreachable.size();
     finalizeObjects(unreachable);

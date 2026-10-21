@@ -184,10 +184,10 @@ bool OnnxModule::load() {
         {{"export_model", false}, {"supported_operators", false}});
     // export_model translates the graph of the function value it receives: it is handed the
     // program's own graph, also on a back end that lowered loops in a private copy
-    // (OperatorTraits::inspectsGraphs; op-semantics 11.4).
+    // (OperatorTraits::readsGraphs; op-semantics 11.4).
     camel::core::OperatorTable::instance().set(
         "onnx:export_model",
-        {.pure = false, .inspectsGraphs = true});
+        {.pure = false, .readsGraphs = true});
     // Where an export would stop: an operator the ONNX backend has no lowering for.
     camel::runtime::NodeRoleRegistry::instance().add(
         {"export-capability", "export capability (no ONNX lowering)", "#cfe2f3"},

@@ -37,9 +37,9 @@
  *    time anything asks for it and keeps it for the graph's lifetime.
  * 6. The source position of each node is a column parallel to the records (nodeOrigin): one
  *    32-bit origin id per node, 0 when the node has none. Beside it, only in a graph where some
- *    node has any, the numeric permissions the program granted with @numeric(...): one byte per
- *    node (nodePermissions; design principles 7.5, docs/design/op-semantics 6.3), and the
- *    attributes libraries attached to the nodes: one 32-bit interned set per node
+ *    node has any, the numeric permissions the program granted with the standard permission
+ *    tags: one mask per node (nodePermissions; design principles 7.5, docs/design/op-semantics
+ *    6.3), and the attributes libraries attached to the nodes: one 32-bit interned set per node
  *    (nodeAttrs; camel/core/node_attrs.h, language reference 7.6).
  * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7), by
  *    GraphId; the Program a graph is read in (program.h) says which version of each it means.
@@ -53,6 +53,7 @@
 
 #include "camel/core/loop_kind.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/symbol.h"
@@ -124,13 +125,13 @@ enum class GCNodeKind : uint8_t {
     Dref = 14, // build-time only, see above
     // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):
     // Norm inputs the array (For, ForWhile) then the k first values of the state; With inputs
-    // the m captured values, shared by the condition graph and the body graph; Ctrl inputs
-    // ordering. Its payload names the two graphs (GCLoopRef). Its value is the
+    // the results of its two regions and the round port; Ctrl inputs ordering. Its condition
+    // and body are regions of this graph (GCRegionKind::LoopCond and LoopBody) whose ports are
+    // the state (see camel/runtime/loop.h). Its value is the
     // last state: the value when k = 1, the k-tuple when k > 1. A producer may also give it s
     // collection slots (payload collectionCount): the body then returns (state…, v…) each round
     // and the value is (state…, array…), the arrays holding the v of every round (see
-    // camel/runtime/loop.h). Consumers read it through camel/runtime/loop.h (LoopView); those
-    // that need two graphs (autodiff) take them out of the regions first (outlineLoopRegions).
+    // camel/runtime/loop.h). Consumers read it through camel/runtime/loop.h (LoopView).
     Loop = 15,
     // The place of a node a rewrite removed. A graph keeps the NodeIds of the version it came
     // from, so a removed node leaves a record with this kind and no inputs, which every
@@ -144,12 +145,9 @@ enum class GCNodeKind : uint8_t {
 /// types along the edges, no cycle of inputs) are not listed; this is what differs:
 ///  - Executable: every value has one writing and the graph has no cycle of inputs. The state a
 ///    back end runs.
-///  - NonExecutable: a shape no back end runs (the ONNX export's split of branched calls, whose
-///    sibling JOINs merge and close a cycle of inputs). The cycle check is left to the back ends,
-///    which refuse a cyclic graph when they build the execution plan.
 ///  - Tabled: some value has several writings (an equivalence table on the graph). Not
 ///    executable until an extraction picks one writing per value; acyclic at the level of nodes.
-enum class GraphState : uint8_t { Executable, NonExecutable, Tabled };
+enum class GraphState : uint8_t { Executable, Tabled };
 
 enum class GCReturnKind : uint8_t {
     None,
@@ -203,7 +201,7 @@ struct WritingUnion {
     gc_node_ref_t a = kInvalidNodeRef;
     gc_node_ref_t b = kInvalidNodeRef;
     /// The numeric permissions the equivalence needs (0: it holds bit for bit).
-    uint8_t perms = 0;
+    camel::core::sem::PermissionMask perms = 0;
     uint8_t flags = 0;
     /// The rule that asserted it (0: none, congruence).
     uint16_t rule = 0;
@@ -432,7 +430,7 @@ struct GCNodeChunk {
     uint32_t payloadWordCount = 0;
     uint32_t *origins         = nullptr; // nodeCount source origins (0: none)
     uint32_t *regions         = nullptr; // nodeCount regions of the nodes; null when all are 0
-    uint8_t *permissions      = nullptr; // nodeCount numeric permissions; null when all are 0
+    camel::core::sem::PermissionMask *permissions = nullptr; // nodeCount numeric permissions
     uint32_t *attrs           = nullptr; // nodeCount attribute sets; null when all are 0
     gc_node_ref_t *edges      = nullptr; // edgeCount entries: the input runs of the nodes in order
     gc_payload_word_t *payload = nullptr; // payloadWordCount words
@@ -513,7 +511,7 @@ class GCGraph : public camel::core::rtdata::Object {
     uint64_t nodeOrigin(gc_node_ref_t ref) const;
     /// Numeric permissions (camel/core/operator_semantics.h, PermissionMask) the program granted
     /// to node `ref`, 0 when none; the graph has no permission column when no node has any.
-    uint8_t nodePermissions(gc_node_ref_t ref) const;
+    camel::core::sem::PermissionMask nodePermissions(gc_node_ref_t ref) const;
     /// True when some node of the graph has numeric permissions.
     bool hasNodePermissions() const { return nativePayload_.hasPermissions; }
     /// The attributes (camel/core/node_attrs.h, AttrSetId) of node `ref`, 0 when none; the
@@ -942,3 +940,4 @@ class GCGraphManager {
 };
 
 } // namespace camel::runtime
+

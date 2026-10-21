@@ -31,7 +31,7 @@ NativeCallbackTestPass::apply(const camel::runtime::Program *program, std::ostre
     constexpr auto uri = "test:native_callback";
     camel::core::OperatorTable::instance().set(
         uri,
-        {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+        {.pure = false, .callsGraphs = true, .readsGraphs = true});
     // Schedulers resolve the URI through the executor manager, independently of
     // the function pointer retained in the graph payload.
     if (!context_->execMgr().findWithoutImport(uri))

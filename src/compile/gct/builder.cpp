@@ -1076,7 +1076,16 @@ void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
     camel::core::tag::Decl tag;
     tag.module = module_->name();
     tag.ident  = decl->ref().toString();
-    tag.name   = tag.module.empty() ? tag.ident : tag.module + "::" + tag.ident;
+    // A program may not declare a tag with the name of a core permission: `#reassociate` in the
+    // program would still mean the core's permission, so the declaration would never be read
+    // (design principles 6.2, log 2026-10-21).
+    if (tag.ident == "finite_math" ||
+        camel::core::sem::parsePermission(tag.ident).has_value()) {
+        diags_->of(SemanticDiag::TagShadowsPermission)
+            .at(ast->load()->tokenRange())
+            .commit(tag.ident);
+    }
+    tag.name = tag.module.empty() ? tag.ident : tag.module + "::" + tag.ident;
     tag.on     = static_cast<camel::core::tag::Positions>(decl->on());
     for (const auto &param : decl->params()) {
         tag.params.push_back({param.name, param.type});
@@ -1695,11 +1704,11 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
         throw BuildAbortException();
     }
     // The block's own grant joins those of the blocks it is in, for everything written in it.
-    const uint8_t outerPermissions = numericPermissions_;
+    const camel::core::sem::PermissionMask outerPermissions = numericPermissions_;
     numericPermissions_ |= stmtBlock->numeric();
     struct PermissionScope {
-        uint8_t &current;
-        uint8_t outer;
+        camel::core::sem::PermissionMask &current;
+        camel::core::sem::PermissionMask outer;
         ~PermissionScope() { current = outer; }
     } permissionScope{numericPermissions_, outerPermissions};
     node_ptr_t execNode = makeExec(stmtBlock->synced());
@@ -4809,3 +4818,4 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     throw BuildAbortException();
 }
 } // namespace camel::compile::gct
+

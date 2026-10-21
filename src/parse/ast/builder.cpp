@@ -22,6 +22,9 @@
 #include "camel/core/operator_semantics.h"
 #include "camel/core/tags.h"
 
+#include <functional>
+#include <set>
+
 #include "camel/parse/syntax/lexer.h"
 #include "camel/parse/syntax/parser.h"
 #include "camel/parse/syntax/report.h"
@@ -290,11 +293,77 @@ void Builder::popNamespace(size_t previousSize) {
 /*
 program : SEP? (decl SEP?)* EOF;
 */
+void Builder::collectProgramPermissionGroups(cst::Program program) {
+    // The names and members of the groups this program declares (`tag fast = [reassociate,
+    // contract]`). Only the module's own, top-level declarations: a requirement is read while
+    // the rule that carries it is parsed, before the GCT builder registers anything.
+    std::map<std::string, std::vector<std::string>> groups;
+    for (const syn::Node &decl : program->nodes()) {
+        if (!decl.is(NK::TagDecl)) {
+            continue;
+        }
+        const cst::TagDecl tag(decl);
+        const auto name = tag->get<cst::IdentDef>();
+        if (!name) {
+            continue;
+        }
+        std::vector<std::string> members;
+        if (const auto group = tag->get<cst::BracketIdents>()) {
+            if (const auto list = group->get<cst::IdentList>()) {
+                for (const auto ident : list->all<cst::IdentDef>()) {
+                    members.emplace_back(ident->text());
+                }
+            }
+        }
+        if (!members.empty()) {
+            groups.emplace(name->text(), std::move(members));
+        }
+    }
+    std::function<camel::core::sem::PermissionMask(const std::string &, std::set<std::string> &)>
+        expand = [&](const std::string &name,
+                     std::set<std::string> &visiting) -> camel::core::sem::PermissionMask {
+        // A core permission (including `finite_math` and its members) grants itself; a group
+        // grants what its members grant. A cycle grants nothing and is not followed.
+        if (const auto permission = camel::core::sem::parsePermission(name)) {
+            return *permission;
+        }
+        const auto it = groups.find(name);
+        if (it == groups.end() || !visiting.insert(name).second) {
+            return 0;
+        }
+        camel::core::sem::PermissionMask mask = 0;
+        for (const std::string &member : it->second) {
+            mask |= expand(member, visiting);
+        }
+        return mask;
+    };
+    for (const auto &[name, members] : groups) {
+        std::set<std::string> visiting;
+        programPermissions_[name] = expand(name, visiting);
+    }
+}
+
+camel::core::sem::PermissionMask Builder::programPermissionOf(std::string_view name) const {
+    if (const auto it = programPermissions_.find(std::string(name)); it != programPermissions_.end()) {
+        return it->second;
+    }
+    // A qualified requirement written for a group of this module (`m::fast`).
+    if (const size_t sep = name.rfind("::"); sep != std::string_view::npos) {
+        if (const auto it = programPermissions_.find(std::string(name.substr(sep + 2)));
+            it != programPermissions_.end()) {
+            return it->second;
+        }
+    }
+    return 0;
+}
+
 Value Builder::visitProgram(cst::Program context) {
     ENTER("Program");
     g_sourceContext = sourceContext_;
     g_sourceFileId  = sourceFileId_;
     const ArenaScope arena;
+
+    collectProgramPermissionGroups(context);
 
     root_ = std::make_shared<Node>(module_);
 
@@ -699,7 +768,7 @@ Value Builder::visitFuncData(cst::FuncData context) {
 funcAnno   : '@' identRef (angledValues | parentIdents)? ;
 `@numeric(name, ...)`: the numeric permissions the program grants (design principles 7.5).
 */
-std::optional<uint8_t> Builder::numericAnnotationOf(cst::FuncAnno context) {
+std::optional<camel::core::sem::PermissionMask> Builder::numericAnnotationOf(cst::FuncAnno context) {
     const auto names = context->get<cst::ParentIdents>();
     if (!names) {
         return std::nullopt;
@@ -714,16 +783,16 @@ std::optional<uint8_t> Builder::numericAnnotationOf(cst::FuncAnno context) {
         reject(
             "the only annotation that takes names in parentheses is '@numeric(...)'; a tag is "
             "written '#name' or '#name<args>' (or '#[a, b]'), never '@name(args)'");
-        return uint8_t{0};
+        return camel::core::sem::PermissionMask{0};
     }
-    uint8_t granted = 0;
+    camel::core::sem::PermissionMask granted = 0;
     const auto list = names->get<cst::IdentList>();
     if (!list) {
         reject(
             "it names no permission; write one or more of reassociate, contract, "
-            "approx_math, change_precision, finite_math, no_nans, no_infs, "
+            "approx_math, change_precision, nondeterministic, finite_math, no_nans, no_infs, "
             "no_signed_zeros, flush_subnormals");
-        return uint8_t{0};
+        return camel::core::sem::PermissionMask{0};
     }
     for (const auto &ident : list->all<cst::IdentDef>()) {
         const std::string name(ident->text());
@@ -733,7 +802,7 @@ std::optional<uint8_t> Builder::numericAnnotationOf(cst::FuncAnno context) {
             reject(
                 "'" + name +
                 "' is not a permission; the permissions are reassociate, contract, "
-                "approx_math, change_precision, finite_math (no_nans, no_infs, "
+                "approx_math, change_precision, nondeterministic, finite_math (no_nans, no_infs, "
                 "no_signed_zeros, flush_subnormals)");
         }
     }
@@ -822,7 +891,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     // an argument that names no permission is a located diagnostic rather than a silent pass.
     // The mask is handed to `__rule`, which the rewrite engines compare with the policy (a rule
     // whose requirement is not met is not applied).
-    uint8_t needs = 0;
+    camel::core::sem::PermissionMask needs = 0;
     for (const auto use : context->all<cst::TagUse>()) {
         for (const auto tagRef : use->all<cst::TagRef>()) {
             const auto ident = tagRef->get<cst::IdentRef>();
@@ -854,9 +923,15 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                         name += tokens.text(i);
                     }
                 }
-                const uint8_t permission = camel::core::tag::permissionOfName(name);
+                camel::core::sem::PermissionMask permission =
+                    camel::core::tag::permissionOfName(name);
+                if (permission == 0) {
+                    // A group this program declares (`tag fast = [reassociate, contract]`):
+                    // its declaration is not in the core's registry, so it is expanded here.
+                    permission = programPermissionOf(name);
+                }
                 if (permission != 0) {
-                    needs = static_cast<uint8_t>(needs | permission);
+                    needs = static_cast<camel::core::sem::PermissionMask>(needs | permission);
                     return;
                 }
                 const auto at =
@@ -1136,6 +1211,46 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
         node_ptr_t use  = createNodeAs<TagUseLoad>(name);
         setNodeTokenRangeByContext(use, ref);
         if (const auto values = ref->get<cst::AngledValues>()) {
+            // A tag whose arguments are names, not values (`#reads<reassociate, contract>`):
+            // each argument is the name as written, carried as a string constant. Whether the
+            // name is a tag is the GIR builder's question; here it is only text.
+            const auto id = camel::core::tag::find(name.toString());
+            const camel::core::tag::Decl *decl =
+                id.has_value() ? camel::core::tag::get(*id) : nullptr;
+            if (decl != nullptr && decl->names) {
+                node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
+                setNodeTokenRangeByContext(dataList, values);
+                const syn::TokenBuffer &tokens = context.tree()->tokens();
+                std::string current;
+                const auto flush = [&]() {
+                    if (!current.empty()) {
+                        node_ptr_t literalNode =
+                            createNodeAs<LiteralLoad>(Literal(LiteralType::String, current));
+                        setNodeTokenRangeByContext(literalNode, values);
+                        *dataList << literalNode;
+                        current.clear();
+                    }
+                };
+                for (size_t i = values->firstToken().index();
+                     i <= values->lastToken().index() && i < tokens.size();
+                     ++i) {
+                    if (syn::isTrivia(tokens[i].kind)) {
+                        continue;
+                    }
+                    const std::string_view text = tokens.text(i);
+                    if (text == "<" || text == ">") {
+                        flush();
+                    } else if (text == ",") {
+                        flush();
+                    } else {
+                        current += text;
+                    }
+                }
+                flush();
+                *use << dataList;
+                uses.push_back(use);
+                continue;
+            }
             auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
                 visitAngledValues(values));
             if (namedDataList && namedDataList->size() > 0) {
@@ -1174,7 +1289,7 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     // Decorators are applied to the function; `@numeric(...)` grants its permissions to the
     // function's body (design principles 7.5), which is where the GCT builder reads them.
     node_ptr_t annoListNode    = nullptr;
-    uint8_t numericPermissions = 0;
+    camel::core::sem::PermissionMask numericPermissions = 0;
     for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
         if (const auto permissions = numericAnnotationOf(funcAnno)) {
             numericPermissions |= *permissions;
@@ -3955,3 +4070,4 @@ Value Builder::visitType(syn::Node context) {
             "Builder: not a type: " + std::string(syn::nodeKindName(context.kind())));
     }
 }
+

@@ -329,13 +329,15 @@ class Builder {
     // (GCT::Node::numericPermissions). Every OPER node made while they are in force gets them
     // (stampPermissions); a function's graph starts from those of its own body, whatever was
     // in force where it is built from.
-    uint8_t numericPermissions_ = 0;
+    camel::core::sem::PermissionMask numericPermissions_ = 0;
     void stampPermissions(node_handle_t operNode) const;
     /// Sets numericPermissions_ for a scope and puts the previous value back at its end.
     struct NumericPermissionScope {
-        uint8_t &current;
-        uint8_t outer;
-        NumericPermissionScope(uint8_t &c, uint8_t permissions) : current(c), outer(c) {
+        camel::core::sem::PermissionMask &current;
+        camel::core::sem::PermissionMask outer;
+        NumericPermissionScope(
+            camel::core::sem::PermissionMask &c, camel::core::sem::PermissionMask permissions)
+            : current(c), outer(c) {
             current = permissions;
         }
         ~NumericPermissionScope() { current = outer; }
@@ -832,7 +834,7 @@ class Builder {
         /// The numeric permissions the permission tags written here grant (design principles
         /// 7.2: a permission is a tag). They go to the same column `@numeric(...)` uses, never
         /// to the attribute set: one fact, one place.
-        uint8_t permissions = 0;
+        camel::core::sem::PermissionMask permissions = 0;
     };
     /// The facts of the tag uses written on `gct`, which is written at `at` (Func, Type or
     /// Nodes). Resolved once per node and remembered. Reports a use that is wrong and throws
@@ -1589,3 +1591,4 @@ class Builder {
 };
 
 } // namespace camel::compile::gir
+

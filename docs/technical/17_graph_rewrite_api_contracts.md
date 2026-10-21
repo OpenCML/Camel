@@ -174,8 +174,7 @@
 2. **等待 `B` 的节点在某条臂里**：以 `B` 为控制输入的节点（`J` 除外）属于 `B` 的某条臂。否则没有后端会执行它。
 3. **只读一定会执行的节点**：一个节点只读与它同一个控制区域、或包住它的控制区域里的节点；分支内部的值与完成
    只经由 `J` 流出（`J` 读各臂的结果）。读另一条臂里的节点，意味着只有那条臂被选中时它才会算过。
-4. 一个 `BRCH` 被多个 `JOIN` 读（`devirtualizeBranchedCallInDraft`，只在 `enableBranchedCallSplit` 下产生）
-   是仅供导出的值 DAG，不可执行，不校验。
+4. **一个 `BRCH` 只有一个 `JOIN`**：活的、读它的 `JOIN` 就是 `J`。第二个 `JOIN` 会让它的使用者在“分支已经汇合”之外执行。
 
 **循环的两块区域在循环所在的地方。** 一个 `LOOP` 的条件区域（`LoopCond`）与体区域（`LoopBody`）是它所在区域的
 子区域：循环写在臂里，这两块区域就是这条臂的区域（或臂里更内层区域的子区域）；循环写在另一个循环的体里，它们就在
@@ -191,8 +190,7 @@ of where the loop is (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1)
 ```
 
 **区域由谁维护。** 前端在写臂的地方直接建出臂：臂的每个节点落在这条臂的区域里（`GraphDraft::setInsertRegion`），
-臂里读外面的节点、等待 `BRCH` 的根节点由建图补上控制边；`JOIN` 的 with 输入就是臂的结果。自动微分把臂提成
-子图再放回时用 `raiseBranchArms` / `lowerBranchArms`（`callSite` 标出还是一次调用的臂）。改写遍
+臂里读外面的节点、等待 `BRCH` 的根节点由建图补上控制边；`JOIN` 的 with 输入就是臂的结果。自动微分在原地改写臂区域（`GraphDraft::armRegionOf`），不再把臂提成子图。改写遍
 维护区域：新加或改接输入的节点落在其输入中最内层的控制区域里（`GraphDraft::inheritRegion`，`JOIN` 除外）；
 `rewriteNode` 保留区域；擦除 `BRCH`/`LOOP` 时它拥有的区域并入外层（`dissolveRegionsOf`）；一个遍替换节点时，
 新节点要放进被替换节点所在的区域（`DraftNodeInit::region`、`setNodeRegion`）。
@@ -210,7 +208,7 @@ the BRCH and no arm's result depends on it (see docs/technical/17_graph_rewrite_
 
 提交（与建图编码）对每张产出的图检查两件事，随调用检查一起执行，失败是一条带图名与节点编号的运行时错误：
 
-1. **无环**：沿输入（值、`with`、控制）走，回不到自己。消息给出环上的路径。唯一的例外是会话声明自己建的形态没有后端会运行（`RuntimeGraphDraftSession::allowNonExecutable`；现在只有导出的 `enableBranchedCallSplit`，它造出同级 `JOIN`、其使用者合并的形态）；后端在建执行计划时拒绝环。
+1. **无环**：沿输入（值、`with`、控制）走，回不到自己。消息给出环上的路径。
 2. **边上的类型相容**：`COPY`/`GATE` 的类型与输入相容，`CAST` 不是被禁止的转换，`JOIN` 的每条臂能放进 `JOIN`，`ACCS` 取出的元素类型相容，调用的实参、结果与被调图的形参、结果相容。**相容**指相等、互为细化（已知形状的张量与同元素类型的无形状张量）、或可互相赋值（`Type::unify`、`assignableFrom`），形参名与字段名不计。算子的结果不与算子的类型解析器比较：节点的类型是解析器结果的细化（形状推断之后）。
 
 新增一类检查时，先让一个测试 pass 在快层上只收集违规（不拒绝），列出已有 pass 的违规，再让它强制。测试：`test/plans/feat/opt/edges.plan.toml`。

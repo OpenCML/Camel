@@ -1,0 +1,22 @@
+/**
+ * A Camel pass says which tags it reads with `#reads<...>` on its function (design principles
+ * 6.2): the arguments are tag names, not values, and there may be any number of them. The
+ * facts are the declaration's, and `camel inspect --tags` prints them.
+ */
+module reads
+
+tag cost on func
+
+#[reads<reassociate, contract>]
+func first(p: int): int {
+    return p
+}
+
+#[reads<cost>]
+func second(p: int): int {
+    return p
+}
+
+func main(): int {
+    return first(1) + second(2)
+}

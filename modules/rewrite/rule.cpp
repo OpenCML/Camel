@@ -57,7 +57,7 @@ bool RuleType::assignableFrom(Type *source) const { return is(source); }
 OtherType *RuleType::cloneWithParams(std::span<Type *const>) const { return get(); }
 
 RuleObject *RuleObject::create(
-    camel::core::SymId name, bool twoWay, uint8_t needs, uint64_t constParams, ::Function *lhs,
+    camel::core::SymId name, bool twoWay, camel::core::sem::PermissionMask needs, uint64_t constParams, ::Function *lhs,
     ::Function *rhs, ::Function *when, mm::IAllocator &allocator) {
     void *mem = allocator.alloc(sizeof(RuleObject), alignof(RuleObject));
     if (mem == nullptr) {
@@ -111,3 +111,4 @@ void RuleObject::updateRefs(const rtdata::Object::RefRelocator &relocate, const 
 }
 
 } // namespace camel::rewritemod
+

@@ -615,11 +615,11 @@ class TilesModule final : public BuiltinModule {
         core::OperatorTable::instance().set("tiles:retain_host", {.pure = false});
         core::OperatorTable::instance().set(
             "tiles:run_host_resident",
-            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+            {.pure = false, .callsGraphs = true, .readsGraphs = true});
         core::OperatorTable::instance().set("tiles:retain_preferred", {.pure = false});
         core::OperatorTable::instance().set(
             "tiles:run_preferred_resident",
-            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+            {.pure = false, .callsGraphs = true, .readsGraphs = true});
         // run may initialize a driver/compile code; never execute it in constant folding.
         core::OperatorTable::instance().declare(
             "tiles",
@@ -636,7 +636,7 @@ class TilesModule final : public BuiltinModule {
              {"device", false}});
         // These compile the graph of the function value they receive: a back end that runs a
         // private copy of the program with its loops lowered hands them the program's own
-        // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
+        // graph, LOOP nodes included (OperatorTraits::readsGraphs; op-semantics 11.4).
         for (const char *name :
              {"run",
               "run_device",
@@ -649,15 +649,15 @@ class TilesModule final : public BuiltinModule {
               "gpu"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
-                {.pure = false, .inspectsGraphs = true});
+                {.pure = false, .readsGraphs = true});
         }
         core::OperatorTable::instance().set(
             "tiles:prefer_gpu",
-            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+            {.pure = false, .callsGraphs = true, .readsGraphs = true});
         for (const char *name : {"tiles:run_compiled", "tiles:run_compiled_device"})
             core::OperatorTable::instance().set(
                 name,
-                {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+                {.pure = false, .callsGraphs = true, .readsGraphs = true});
         // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
         // resource `tiles:device` (upload makes one; run and run_device read the device values
         // among their inputs, run_device returns new ones that may be inputs again); the driver

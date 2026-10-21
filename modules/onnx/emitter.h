@@ -141,6 +141,11 @@ class Emitter {
     /// is known, so the output Identities are added afterwards) and for the model's outputs.
     std::string appendIdentity(Graph &body, const std::string &input, std::string_view hint);
 
+    /// An Identity in the current scope that is never the one of an enclosing scope. A branch
+    /// arm's output must be a node of the arm's own graph, but node() reuses a structurally
+    /// equal node it finds in an enclosing scope.
+    std::string armOutput(const std::string &input, std::string_view hint);
+
     /// Operand name for `value`, converted to `dtype` when given.
     std::string operand(const Value &value, std::optional<type::TypeCode> dtype = std::nullopt);
 

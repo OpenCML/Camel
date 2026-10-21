@@ -341,7 +341,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_train_step_branch_tensor"
-desc = "E13/T5 (fixed): a branched training step with TENSOR arms exports — the branched-call split calls each arm's pullback with the original arguments (the cotangent may be computed after the branch JOIN), the captures are lambda-lifted to trailing parameters, and the graph gets one If for the branch value and one for the pullback result."
+desc = "E13/T5: a branched training step with TENSOR arms exports. Every branch arm is a region of the branch's graph and yields (value, pullback); the exporter emits one If for the branch value and one for the pullback result, so no indirect call is left."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch_tensor.cml"
 args = ["${case}"]
@@ -369,7 +369,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_train_step_branch_disjoint"
-desc = "E13/T5 (fixed): a branched training step whose arms use DISJOINT parameter subsets exports. Every arm pullback yields a full gradient struct, so the branch JOIN is aggregate-typed and the exporter emits one multi-output If for it (plus one If for the branch value)."
+desc = "E13/T5: a branched training step whose arms use DISJOINT parameter subsets exports. Every arm pullback yields a full gradient struct, which is a region of the branch's graph: the branch value becomes one If and the pullback one multi-output If (its arms call the arm pullbacks), so the model has an If per branched value."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch_disjoint.cml"
 args = ["${case}"]
@@ -387,7 +387,7 @@ const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_branch_
 assert(model.inputs.join() === 'w1,b1,w2,b2,w3,b3,wo,bo,we,be,input1', `weights must be graph inputs: ${model.inputs}`)
 assert(model.outputs.length === 11, `loss and 10 updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
-assert(count('If') === 3, `expected an If per branched value (loss, pullback pieces), got ${model.ops}`)
+assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
 assert(!model.initializers.some((n) => /^(w1|b1|w2|b2|w3|b3|wo|bo|we|be)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
 }
 """
@@ -395,7 +395,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_gated_gru_step"
-desc = "E13/T5: the training step of a recurrent network whose cell update branches on the step's input (gated GRU, T = 3) exports: weights and input in, the loss and the 14 updated weights out, a nested decision tree of If operators and no Loop. It used to be refused, last at an indirect call of a pullback: a closure that is called through a branch stayed read by a GATE that nothing reads and other nodes wait on, which dead-code elimination kept, so the call was not split across the branch. The numbers are checked by ort_gated_gru_step."
+desc = "E13/T5: the training step of a recurrent network whose cell update branches on the step's input (gated GRU, T = 3) exports: weights and input in, the loss and the 14 updated weights out, a decision tree of If operators and no Loop. A branch arm's pullback and the call of it are in the branch's own graph, so the exporter keeps the branch and calls the pullbacks inside its If arms. The numbers are checked by ort_gated_gru_step."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_step.cml"
 args = ["${case}"]
@@ -424,7 +424,7 @@ const buf = fs.readFileSync(file)
 const mark = Buffer.from([0x22, 0x02, 0x49, 0x66])
 let ifs = 0, at = 0
 while ((at = buf.indexOf(mark, at)) !== -1) { ifs += 1; at += 1 }
-assert(ifs >= 7, `expected at least the 2^3 - 1 = 7 If nodes of the forward's decision tree, got ${ifs}`)
+assert(ifs >= 6, `expected an If per gate decision and per pullback selection (3 + 3), got ${ifs}`)
 }
 """
 timeout_ms = 20000
@@ -752,7 +752,7 @@ timeout_ms = 60000
 name = "pass_export_equals_export_model"
 # Slow layer: measured 15.9 s in the full serial run (docs/handover/reports/H10.md).
 tier = "slow"
-desc = "For twenty-six programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes and the branched-call split: the four branched training steps, the gated GRU forward and its training step, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
+desc = "For twenty-six programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes: the four branched training steps, the gated GRU forward and its training step, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/pass_export.py"

@@ -20,6 +20,9 @@
 #include "camel_pass.h"
 
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/module/module.h"
+#include "camel/core/node_attrs.h"
+#include "camel/core/tags.h"
 #include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tagged.h"
@@ -251,6 +254,43 @@ void registerCamelPass(
     descriptor.make = [module, function, params](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<CamelPass>(ctx, module, function, params, args);
     };
+    // A Camel pass says which tags it reads with `#reads<...>` on its function: that is what
+    // makes a tag's facts read, exactly as a C++ module's `read_by` does (design principles
+    // 6.2). The module is the one the pass was compiled from (already in the context).
+    try {
+        if (const auto owner = ctx->importModule(module)) {
+            const auto facts =
+                camel::core::tag::ofDeclaration(*owner, Reference(function));
+            const auto value = camel::core::attr::valueOf(facts, camel::core::attr::key("reads"));
+            if (value != camel::core::attr::kNoValue) {
+                const camel::core::attr::Value decoded = camel::core::attr::value(value);
+                const auto declare = [&](const std::string &writen) {
+                    // The reader is recorded under the tag's qualified name, which is what a use
+                    // of it in a program names (the program writes the short name).
+                    std::string key = writen;
+                    if (const auto id = camel::core::tag::find(module, writen)) {
+                        key = camel::core::tag::get(*id)->name;
+                    } else if (const auto core = camel::core::tag::find(writen)) {
+                        key = camel::core::tag::get(*core)->name;
+                    }
+                    camel::core::tag::declareTagReader(key, module + "::" + function);
+                };
+                if (decoded.kind == camel::core::attr::ValueKind::Symbol) {
+                    declare(decoded.text);
+                } else if (decoded.kind == camel::core::attr::ValueKind::Tuple) {
+                    for (const auto item : decoded.items) {
+                        const camel::core::attr::Value tag = camel::core::attr::value(item);
+                        if (tag.kind == camel::core::attr::ValueKind::Symbol) {
+                            declare(tag.text);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (const std::exception &) {
+        // The declaration cannot be read here; the pass still runs and the tag simply has no
+        // reader recorded for it (the pipeline warns when that leaves it unread).
+    }
     registerModulePass(module + "::" + function, std::move(descriptor));
 }
 

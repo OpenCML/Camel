@@ -21,6 +21,8 @@
 
 #include <vector>
 
+#include "camel/core/operator_semantics.h"
+
 #include "base.h"
 
 namespace camel::parse::ast {
@@ -188,8 +190,8 @@ class StmtBlockLoad : public StmtLoad {
     /// `@numeric(...)` written on this block or on the function whose body it is (design
     /// principles 7.5). Only this block's own grant: the GCT builder adds those of the
     /// enclosing blocks. 0 when none.
-    void grantNumeric(uint8_t permissions) { numeric_ |= permissions; }
-    uint8_t numeric() const { return numeric_; }
+    void grantNumeric(camel::core::sem::PermissionMask permissions) { numeric_ |= permissions; }
+    camel::core::sem::PermissionMask numeric() const { return numeric_; }
 
     // The children of a block, in this order (each only when it is there):
     //   [0] RepeatedLoad("Stmt")          the statements (always)
@@ -204,7 +206,7 @@ class StmtBlockLoad : public StmtLoad {
   private:
     bool synced_     = false;
     bool waited_     = false;
-    uint8_t numeric_ = 0;
+    camel::core::sem::PermissionMask numeric_ = 0;
 };
 
 /// One `#` form (design principles 6.2): `#name`, `#name<args>`, and each member of
@@ -276,3 +278,4 @@ class TagDeclLoad : public StmtLoad {
 };
 
 } // namespace camel::parse::ast
+

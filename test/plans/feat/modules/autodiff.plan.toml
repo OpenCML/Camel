@@ -1474,8 +1474,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "loop_grad_refuse_iterable.lowered"
-desc = "The same refusal when std::fvm runs grad: the back end lowers loops in its private copy, but grad reads the program's own LOOP node, so the diagnostic is the same and is reported at the loop."
+name = "loop_grad_refuse_iterable.fvm"
+desc = "The same refusal when std::fvm runs grad: the back end and grad read the same LOOP node of the program, so the diagnostic is the same and is reported at the loop."
 kind = "negative"
 case = "../../../cases/modules/autodiff/loop_grad_refuse_iterable.cml"
 args = ["${case}", "${run_fvm}"]

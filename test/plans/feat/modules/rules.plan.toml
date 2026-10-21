@@ -272,3 +272,33 @@ expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'requires' takes 1 parameter(s), but 0 argument(s) are written."]
+
+[[tests]]
+name = "rules.requires_program_group"
+desc = "A requirement may name a group of permissions the program declares (`tag fast = [reassociate, contract]`): `#requires<fast>` is the union of its members, so the rule applies to `kept` (which grants `contract`) and not to `scaled`."
+kind = "behavior"
+case = "../../../cases/modules/rules/requires_group_target.cml"
+args = ["${case}", "counts::report_requires", "requires_group::apply", "counts::report_requires", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const expected = ['scaled 1 kept 1', 'scaled 1 kept 0', '3.0 4.0', ''].join(String.fromCharCode(10))
+assert(input.normalized.stdout === expected, `stdout was: ${JSON.stringify(input.normalized.stdout)}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.requires_nondeterministic"
+desc = "`nondeterministic` is a permission like the others (design principles 7.2): a rule may require it and a function grant it, and the rule is applied only where it is granted."
+kind = "behavior"
+case = "../../../cases/modules/rules/requires_nd_target.cml"
+args = ["${case}", "counts::report_requires", "requires_nd::apply", "counts::report_requires", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const expected = ['scaled 1 kept 1', 'scaled 1 kept 0', '3.0 4.0', ''].join(String.fromCharCode(10))
+assert(input.normalized.stdout === expected, `stdout was: ${JSON.stringify(input.normalized.stdout)}`)
+}
+"""
+timeout_ms = 10000

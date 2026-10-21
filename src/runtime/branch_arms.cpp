@@ -205,16 +205,21 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                     brch,
                     join));
         }
-        // Several JOINs over one BRCH is the export-only shape of devirtualizeBranchedCallInDraft
-        // (OptimizeRewriteConfig::enableBranchedCallSplit): a value DAG for a translator, which
-        // no back end executes (the execution order reports a cycle for it). Not checked.
+        // One JOIN is the single cut between the BRCH and everything after it (design 4.1); a
+        // second live JOIN over the same BRCH would let its users run outside that cut.
         size_t joinsReading = 0;
         for (gc_node_ref_t user : graph->normOutputsOf(brch)) {
             const GCNode *userNode = graph->node(user);
-            joinsReading += userNode && userNode->kind == GCNodeKind::Join ? 1 : 0;
+            joinsReading += userNode && userNode->kind == GCNodeKind::Join && live[user] ? 1 : 0;
         }
         if (joinsReading > 1) {
-            continue;
+            fail(
+                graph,
+                std::format(
+                    "BRCH {} is read by {} JOINs; a branch has one JOIN (see "
+                    "docs/technical/17_graph_rewrite_api_contracts.md, 4.1)",
+                    brch,
+                    joinsReading));
         }
         if (!live[join]) {
             fail(

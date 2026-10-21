@@ -149,7 +149,7 @@ struct OperatorTraits {
     /// compiles, exports or differentiates them) instead of only calling them. Such an operator
     /// sees the program's own graphs, with their structure (a LOOP node and its regions:
     /// docs/design/op-semantics 11.4).
-    bool inspectsGraphs = false;
+    bool readsGraphs = false;
 };
 
 /**
@@ -278,7 +278,7 @@ class OperatorTable {
     bool callsGraphs(OperId id) const { return (traitBits(id) & kCallsGraphs) != 0; }
 
     /// True when the operator reads the graphs of the function values it receives.
-    bool inspectsGraphs(OperId id) const { return (traitBits(id) & kInspectsGraphs) != 0; }
+    bool readsGraphs(OperId id) const { return (traitBits(id) & kReadsGraphs) != 0; }
 
     /// True when running the operator is an effect visible outside the program's variables:
     /// it is neither pure nor state-only. True for an undeclared operator.
@@ -457,8 +457,8 @@ class OperatorTable {
         kElementwise    = 1 << 2,
         kStateOnly      = 1 << 3,
         kNoFault        = 1 << 4,
-        kCallsGraphs    = 1 << 5,
-        kInspectsGraphs = 1 << 6,
+        kCallsGraphs = 1 << 5,
+        kReadsGraphs = 1 << 6,
     };
 
     // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isAssignment).

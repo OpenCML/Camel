@@ -290,9 +290,8 @@ class Compiler {
         if (view.kind() != core::LoopKind::For || view.stateCount() == 0 ||
             !view.bodyEffects().pure())
             throw UnsupportedComputation("tiles requires a pure static For loop");
-        // The body is a region of the graph that has the node, or a graph of its own (a program an
-        // interpreter made for itself, outlineLoopRegions).
-        auto *body = view.inRegions() ? frame.graph : view.bodyGraph();
+        // The body is a region of the graph that has the node.
+        auto *body = frame.graph;
         const rt::fact::Anchor anchors[]{
             {runtimeProgram, frame.graph, id},
             {runtimeProgram, body, *view.bodyElementParam()}};
@@ -320,11 +319,7 @@ class Compiler {
             initials.push_back(std::move(initial));
             states.push_back(std::move(state));
         }
-        const std::vector<rt::gc_node_ref_t> outerRefs =
-            view.inRegions() ? view.externalInputs(true)
-                             : std::vector<rt::gc_node_ref_t>(
-                                   view.captures().begin(),
-                                   view.captures().end());
+        const std::vector<rt::gc_node_ref_t> outerRefs = view.externalInputs(true);
         for (auto ref : outerRefs) {
             const auto outer = eval(frame, ref);
             inputs.push_back(materialize(outer));
@@ -341,12 +336,7 @@ class Compiler {
         for (size_t i = 0; i < states.size(); ++i)
             activation.values.emplace(view.bodyStateParam(i), states[i]);
         for (size_t c = 0; c < captures.size(); ++c)
-            activation.values.emplace(
-                view.inRegions() ? outerRefs[c] : view.bodyCapturePort(c),
-                captures[c]);
-        if (!view.inRegions()) {
-            nested.active.insert(body);
-        }
+            activation.values.emplace(outerRefs[c], captures[c]);
         // Visit the statements of the body too: an unused println in a sync body must not
         // disappear.
         nested.eval(activation, view.bodyResult());
@@ -595,7 +585,7 @@ class Compiler {
                 // Only this operator's lowering inherits its lexical grant.
                 // Arguments and separately called functions have already been
                 // lowered with their own permissions and must remain unchanged.
-                const uint8_t permissions =
+                const camel::core::sem::PermissionMask permissions =
                     camel::core::tag::factsOf(*g, id).permissions;
                 for (size_t i = first; i < program.nodes.size(); ++i) {
                     program.nodes[i].permissions = permissions;
@@ -905,11 +895,7 @@ std::string loopEligibility(
             const auto ref = view.initialState(i);
             frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
         }
-        const std::vector<rt::gc_node_ref_t> outerRefs =
-            view.inRegions() ? view.externalInputs(true)
-                             : std::vector<rt::gc_node_ref_t>(
-                                   view.captures().begin(),
-                                   view.captures().end());
+        const std::vector<rt::gc_node_ref_t> outerRefs = view.externalInputs(true);
         for (auto ref : outerRefs)
             frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
         (void)compiler.loop(frame, id);
@@ -1024,3 +1010,4 @@ void bindRegionArguments(
     planStorage(program);
 }
 } // namespace camel::tiles
+

@@ -385,6 +385,17 @@ std::vector<std::string> Emitter::nodeN(
     return outputs;
 }
 
+std::string Emitter::armOutput(const std::string &input, std::string_view hint) {
+    const std::string output = fresh(hint);
+    Node n;
+    n.opType  = "Identity";
+    n.name    = "n_" + output;
+    n.inputs  = {input};
+    n.outputs = {output};
+    scopes_.back().graph.nodes.push_back(std::move(n));
+    return output;
+}
+
 std::string Emitter::appendIdentity(Graph &body, const std::string &input, std::string_view hint) {
     const std::string output = fresh(hint);
     Node n;

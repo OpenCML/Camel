@@ -61,7 +61,7 @@ thread. Nested native operators restore the previous scope on every exit path.
 
 The scope grants no purity or numerical permission. The module must still declare
 `callsGraphs`, effects and possible faults correctly. Merely inspecting a graph
-continues to use `inspectsGraphs` and requires no invocation scope.
+continues to use `readsGraphs` and requires no invocation scope.
 
 ## Lifetime and backend obligations
 

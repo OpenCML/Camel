@@ -245,9 +245,10 @@ slot_t __append_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(res);
 }
 
-// A private copy of an array, made for the first state of a loop whose body only appends to it
-// (Builder::markLoopStateInPlace): the rounds then append to the copy in place, and the literal
-// the program wrote stays the constant it is. Not a name a program can reach for.
+// A private copy of an array, made for one state of a loop whose body only appends to it
+// (Builder::markLoopStateInPlace, which decides per state): the rounds then append to the copy
+// in place, and the literal the program wrote stays the constant it is. Not a name a program can
+// reach for.
 slot_t __copy_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     (void)ctx;

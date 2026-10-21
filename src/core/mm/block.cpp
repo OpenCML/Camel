@@ -166,6 +166,25 @@ void Block::grow(size_t newBytes) {
     noteBytesAdded(grown);
 }
 
+size_t Block::claimPacingBytes() noexcept {
+    // The block's bytes are counted at most once, whichever view is promoted or takes the
+    // block over first. A growth after that adds only the bytes not counted yet.
+    if (bytes_ <= pacedBytes_) {
+        return 0;
+    }
+    const size_t added = bytes_ - pacedBytes_;
+    pacedBytes_        = bytes_;
+    return added;
+}
+
+bool Block::claimSweepGeneration(uint64_t generation) noexcept {
+    if (sweepGeneration_ == generation) {
+        return false;
+    }
+    sweepGeneration_ = generation;
+    return true;
+}
+
 void Block::setBytes(size_t bytes) noexcept {
     ASSERT(bytes <= capacity_, "A block cannot grow through setBytes");
     bytes_ = bytes;

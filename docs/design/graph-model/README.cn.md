@@ -632,7 +632,7 @@ subgraph "sum_to" {
 }
 ```
 
-降级为尾递归（循环设计稿的方案 (c)）是一条固定的改写：`LOOP(cond, body, s, c)` 换成一张新图 `L(with c)(s) = if cond(s) then L(body(s)) else s` 与一个 `FUNC L` 节点。降级后的图就是手写尾递归的图（`examples/nodes/loop_tail.cml`【实测】）。实现在 `camel/runtime/loop_lowering.h`（`lowerLoopsToTailRecursion`）：每个循环三张图（`rec`、两条臂 `next`、`done`），`for` 多一个下标，`for … while` 每轮先看条件再取元素；只在后端入口、在后端私有的、不提交回共享程序的副本上做（op-semantics 11.4）。今天用它的是 `std::fvm`/`std::jit`（默认；调试器下与 `CAMEL_FVM_NATIVE_LOOP=1` 时原生执行）、`std::prl` 与 `std::cpp`；`std::nvm` 与 `std::macro` 求值器原生执行（`docs/technical/39_loops.md`）。
+条件与循环体是图里的两个控制区域（`GCRegionKind::LoopCond` / `LoopBody`），没有把 `LOOP` 降级成子图的改写：每个后端都在程序自己的图上按 `camel/execute/loop_frame.h` 的轮次协议执行这两个区域（`docs/technical/39_loops.md`；op-semantics 11.4）。`examples/nodes/loop_tail.cml` 是手写尾递归的图，供对照，不是运行时走的路。
 
 #### `GATE` 门
 

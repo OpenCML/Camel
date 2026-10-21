@@ -312,7 +312,6 @@ class Evaluator {
     BodyOutcome evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop);
     BodyOutcome mergeOutcomes(
         Activation &act, const Value &cond, BodyOutcome sides[2], Graph bodies[2], LoopFrame &loop);
-    Value selectValue(Activation &act, const std::string &cond, const Value &a, const Value &b);
     std::vector<Value> callArguments(Activation &act, gc_node_ref_t site, GCGraph *callee);
     Activation activationOf(GCGraph *callee, std::span<const Value> args);
     bool nodeReachesCall(const GCGraph *g, gc_node_ref_t ref, const GCGraph *target);
@@ -993,6 +992,20 @@ bool holdsClosure(const Value &v) {
     return false;
 }
 
+/// Whether a value is, or holds, a function that `evalFill` left deferred (an aggregate element
+/// of function type that nothing has called yet): it has no value until it is evaluated with
+/// functions kept as values. A branch whose arm yields such a value must be merged eagerly too,
+/// or the merged function element would be a placeholder and the call of it would fail.
+bool holdsDeferredClosure(const Value &v) {
+    if (isDeferredClosure(v)) {
+        return true;
+    }
+    if (v.isAggregate()) {
+        return std::ranges::any_of(v.fields, holdsDeferredClosure);
+    }
+    return false;
+}
+
 /// Whether two struct types spell the same value layout. A named type and the anonymous type of
 /// its fields, written in the declaration's order, are one representation: a value of the
 /// anonymous type enters the named one by an identity CAST (design principles 5.2), and the two
@@ -1193,36 +1206,6 @@ Value Evaluator::evalCall(Activation &act, gc_node_ref_t site) {
     }
 }
 
-Value Evaluator::selectValue(
-    Activation &act, const std::string &cond, const Value &a, const Value &b) {
-    if (sameValue(a, b)) {
-        return a;
-    }
-    if (a.isAggregate() || b.isAggregate() || !isCarriable(a) || !isCarriable(b)) {
-        unsupported(
-            act,
-            "a tuple, struct or array differs between the paths of a recursion whose depth "
-            "depends on the model input; only tensors and scalars can be carried by a loop");
-    }
-    const TensorFacts fa = factsOf(a), fb = factsOf(b);
-    if (!fa.dtype || fa.dtype != fb.dtype) {
-        unsupported(
-            act,
-            "the paths of a recursion whose depth depends on the model input yield values of "
-            "different types");
-    }
-    const std::string out = emitter_.node(
-        "Where",
-        {cond, emitter_.operand(a, *fa.dtype), emitter_.operand(b, *fa.dtype)});
-    if (type::Type *scalar = scalarCamelTypeOf(a)) {
-        return Value::symbolicScalar(out, scalar);
-    }
-    std::optional<tensor::StaticShape> shape;
-    if (fa.shape && fb.shape && *fa.shape == *fb.shape) {
-        shape = fa.shape;
-    }
-    return Value::symbolic(out, fa.dtype, shape);
-}
 
 Evaluator::BodyOutcome Evaluator::mergeOutcomes(
     Activation &act, const Value &cond, BodyOutcome sides[2], Graph bodies[2], LoopFrame &loop) {
@@ -2242,7 +2225,53 @@ Value Evaluator::mergeValues(
             select.fields = {la[j], lb[j]};
             merged.push_back(std::move(select));
         } else {
-            merged.push_back(selectValue(act, cond, la[j], lb[j]));
+            // A value leaf becomes an If output, as the branch that yields it does: the model keeps
+            // the decision as a branch (a Where would hide it). Both arms of the Camel branch are
+            // already evaluated here; the If's arms only select the value each one yielded.
+            if (sameValue(la[j], lb[j])) {
+                merged.push_back(la[j]);
+                continue;
+            }
+            if (la[j].isAggregate() || lb[j].isAggregate() || !isCarriable(la[j]) ||
+                !isCarriable(lb[j])) {
+                unsupported(
+                    act,
+                    "a tuple, struct or array differs between the arms of a branch on a "
+                    "model-dependent condition; only tensors and scalars can be selected");
+            }
+            const TensorFacts fa = factsOf(la[j]), fb = factsOf(lb[j]);
+            if (!fa.dtype || fa.dtype != fb.dtype) {
+                unsupported(
+                    act,
+                    "the arms of a branch on a model-dependent condition yield values of "
+                    "different types");
+            }
+            Graph bodies[2];
+            const Value *leaves[2] = {&la[j], &lb[j]};
+            for (size_t i = 0; i < 2; ++i) {
+                // The arm yields a value computed outside the If: appendIdentity, not node(),
+                // which would return an Identity emitted in an enclosing scope and leave the
+                // arm empty.
+                emitter_.pushScope(i == 0 ? "then_branch" : "else_branch");
+                bodies[i] = emitter_.popScope();
+                const std::string out = emitter_.appendIdentity(
+                    bodies[i], emitter_.operand(*leaves[i], *fa.dtype), "arm_out");
+                bodies[i].outputs.push_back(valueInfoOf(out, factsOf(*leaves[i])));
+            }
+            const std::string out = emitter_.node(
+                "If",
+                {cond},
+                {Attribute::makeGraph("then_branch", std::move(bodies[0])),
+                 Attribute::makeGraph("else_branch", std::move(bodies[1]))});
+            if (type::Type *scalar = scalarCamelTypeOf(la[j])) {
+                merged.push_back(Value::symbolicScalar(out, scalar));
+            } else {
+                std::optional<tensor::StaticShape> shape;
+                if (fa.shape && fb.shape && *fa.shape == *fb.shape) {
+                    shape = fa.shape;
+                }
+                merged.push_back(Value::symbolic(out, fa.dtype, shape));
+            }
         }
     }
     size_t next = 0;
@@ -2310,18 +2339,100 @@ Value Evaluator::callClosure(
     case Value::ClosureKind::Loop:
         return callLoopClosure(act, fn, args, withCount);
     case Value::ClosureKind::Select: {
-        // Both functions are called and one result is selected (see evalEagerBranch).
-        emitter_.beginSpeculation();
-        Value a, b;
-        try {
-            a = callClosure(act, fn.fields[0], args, withCount);
-            b = callClosure(act, fn.fields[1], args, withCount);
-        } catch (...) {
-            emitter_.endSpeculation();
-            throw;
+        // (if c then f else g)(args) is if c then f(args) else g(args): the branch stays a
+        // branch in the model, so the arm not taken is not evaluated. Calling both and
+        // selecting the results would make a model that computes the arm it does not use (and
+        // an arm's call may be a function that has no value here at all). A result of tuple or
+        // struct shape becomes one If output per leaf: an If yields tensors, not aggregates.
+        const std::string condName = fn.name;
+        Graph bodies[2];
+        Value results[2];
+        std::vector<Value> arms[2];
+        for (size_t i = 0; i < 2; ++i) {
+            emitter_.pushScope(i == 0 ? "then_branch" : "else_branch");
+            act.memo.emplace_back();
+            try {
+                results[i] = callClosure(act, fn.fields[i], args, withCount);
+                if (results[i].isClosure() || holdsClosure(results[i]) ||
+                    holdsDeferredClosure(results[i])) {
+                    refuseFunctionBranch(act, results[i].camelType);
+                }
+                flattenValue(results[i], arms[i]);
+                act.memo.pop_back();
+                bodies[i] = emitter_.popScope();
+            } catch (...) {
+                act.memo.pop_back();
+                emitter_.popScope();
+                throw;
+            }
+            // The arm's leaves are values of the arm's own graph: emit an Identity for each into
+            // the popped body (appendIdentity, not node(), which would reuse an Identity of the
+            // enclosing scope and leave the arm empty).
+            for (const Value &leaf : arms[i]) {
+                const TensorFacts f = factsOf(leaf);
+                const std::string out =
+                    emitter_.appendIdentity(bodies[i], emitter_.operand(leaf), "arm_out");
+                bodies[i].outputs.push_back(valueInfoOf(out, f));
+            }
         }
-        emitter_.endSpeculation();
-        return mergeValues(act, fn.name, a, b);
+        if (arms[0].size() != arms[1].size()) {
+            unsupported(
+                act,
+                "the arms of a branch on a model-dependent condition yield different types");
+        }
+        // Arms that already agree need no selection (see evalSymbolicBranch).
+        bool agree = true;
+        for (size_t k = 0; k < arms[0].size() && agree; ++k) {
+            const Value &x = arms[0][k], &y = arms[1][k];
+            agree = (x.isConstant() && y.isConstant() && x.slot == y.slot && x.ty == y.ty) ||
+                    (x.isSymbolic() && y.isSymbolic() && x.form == y.form && x.name == y.name &&
+                     !x.name.empty());
+        }
+        if (agree) {
+            return results[0];
+        }
+        std::vector<Value> selected;
+        selected.reserve(arms[0].size());
+        for (size_t k = 0; k < arms[0].size(); ++k) {
+            const Value &x = arms[0][k], &y = arms[1][k];
+            if (x.isSymbolic() && x.form == Value::Form::IntArray) {
+                unsupported(
+                    act, "a branch on a model-dependent condition cannot yield an int array");
+            }
+            const TensorFacts a = factsOf(x), b = factsOf(y);
+            const bool sameForm = x.isConstant() || y.isConstant() || x.form == y.form;
+            if (!a.dtype || a.dtype != b.dtype || !sameForm) {
+                unsupported(
+                    act, "the arms of a branch on a model-dependent condition yield different types");
+            }
+            std::optional<tensor::StaticShape> shape;
+            if (a.shape && b.shape && a.shape->size() == b.shape->size()) {
+                shape = a.shape;
+                for (size_t d = 0; d < shape->size(); ++d) {
+                    if ((*a.shape)[d] != (*b.shape)[d]) {
+                        (*shape)[d] = tensor::kUnknownDim;
+                    }
+                }
+            }
+            if (type::Type *scalar = scalarCamelTypeOf(x)) {
+                selected.push_back(Value::symbolicScalar(std::string(), scalar));
+            } else {
+                selected.push_back(Value::symbolic(std::string(), a.dtype, shape));
+            }
+        }
+        // One If for the call, one output per leaf of its result.
+        const std::vector<std::string> names = emitter_.nodeN(
+            "If",
+            {condName},
+            {Attribute::makeGraph("then_branch", std::move(bodies[0])),
+             Attribute::makeGraph("else_branch", std::move(bodies[1]))},
+            selected.size(),
+            "branch_out");
+        for (size_t k = 0; k < selected.size(); ++k) {
+            selected[k].name = names[k];
+        }
+        size_t next = 0;
+        return rebuildValue(results[0], selected, next);
     }
     case Value::ClosureKind::Plain:
         break;
@@ -2851,8 +2962,7 @@ Value Evaluator::evalSymbolicBranch(
                     results[i].isClosure() ? results[i].camelType : results[i].ty);
             }
             const TensorFacts f = factsOf(results[i]);
-            const std::string out =
-                emitter_.node("Identity", {emitter_.operand(results[i])}, {}, "arm_out");
+            const std::string out = emitter_.armOutput(emitter_.operand(results[i]), "arm_out");
             act.memo.pop_back();
             bodies[i] = emitter_.popScope();
             bodies[i].outputs.push_back(valueInfoOf(out, f));
@@ -2984,10 +3094,13 @@ Value Evaluator::evalSymbolicAggregateBranch(
             throw;
         }
     }
-    if (holdsClosure(results[0]) || holdsClosure(results[1])) {
+    if (holdsClosure(results[0]) || holdsClosure(results[1]) || holdsDeferredClosure(results[0]) ||
+        holdsDeferredClosure(results[1])) {
         // An arm yields a function that exists only at export time (what a linear recursion
-        // returns). Its captured values must stay visible where it is called, so the arms
-        // cannot live in If subgraphs: both are evaluated here and the condition selects.
+        // returns, or the pullback of a branch arm), or one that evalFill deferred because
+        // nothing had called it yet. Its captured values must stay visible where it is called,
+        // so the arms cannot live in If subgraphs: both are evaluated here and the condition
+        // selects.
         Value cond = Value::symbolicScalar(condName, type::Type::Bool());
         return evalEagerBranch(act, cond, arms);
     }
@@ -3633,11 +3746,6 @@ OptimizeRewriteConfig exportRewriteConfig() {
     OptimizeRewriteConfig config;
     // Everything that is not recursive is inlined; ONNX has no calls.
     config.inlineConfig.smallSubgraphMaxNonDataPortNodes = std::numeric_limits<size_t>::max();
-    // The pullback of a data-dependent branch is an indirect call of a closure projected out
-    // of the branch's JOIN; split it into per-arm calls with one JOIN per value. The graph is
-    // only walked as a value DAG from here on (no execution topo is built), so the sibling
-    // JOINs this creates are valid.
-    config.enableBranchedCallSplit = true;
     // An export has to reach straight-line code or it is refused, so it is not held to the growth
     // bounds that keep an optimization pass cheap (the growth_budget parameter belongs to the
     // pass on the pipeline, and an export that runs after it may be held to it). A graph too

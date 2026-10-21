@@ -64,23 +64,10 @@ bool specializeDirectFuncInDraft(
 /// captures bound into a specialization), or a closure built in this graph by FILL, whose graph
 /// is lifted so that the captures become trailing norm arguments. With `unwrapGatedCallee` a
 /// callee hidden behind gates (sync code gates a callee after the previous statement) is seen
-/// through; the FUNC keeps the gate as a control input, so ordering is preserved. That mode is
-/// export-only: gate it on OptimizeRewriteConfig::enableBranchedCallSplit like the branched
-/// split, since it exists for graphs that are only walked as value DAGs.
+/// through; the FUNC keeps the gate as a control input, so ordering is preserved.
 bool devirtualizeStaticCallInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
     bool unwrapGatedCallee = false);
-
-/// Rewrites a CALL whose callee is projected out of a branch JOIN (the with_grad pullback
-/// shape: each arm packs (value, closure) into a tuple, the JOIN selects, and the closure is
-/// called indirectly) into one CALL per arm plus one JOIN per used projection: the call's
-/// result projections and the JOIN's other projections each select among the per-arm values.
-/// Returns false (changing nothing) unless every arm's callee is statically devirtualizable
-/// and the placement inside the branch arms is provably safe. EXPORT-ONLY: the sibling JOINs
-/// this creates violate the scheduler's join-is-a-cut invariant, so it runs only under
-/// OptimizeRewriteConfig::enableBranchedCallSplit.
-bool devirtualizeBranchedCallInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId);
 
 /// The node whose value `id` reads when `id` projects an element out of a tuple built by FILL
 /// in the same graph (through any chain of such projections); `id` itself otherwise. A tuple
