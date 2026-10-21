@@ -771,7 +771,7 @@ e4862de16dae3163 ok test/cases/compile/not_supported/struct_unpacking.cml
 9a04df74fb2e4efe ok test/cases/compile/not_supported/wait_ignored.cml
 13fbd71b37526793 ok test/cases/compile/numeric/cse.cml
 3a57b8f70254b82e ok test/cases/compile/numeric/fuse.cml
-e39f69ff88d8951c no test/cases/compile/numeric/invalid.cml
+8e4daba14d8a8ab2 no test/cases/compile/numeric/invalid.cml
 ff520b71c454e671 ok test/cases/compile/numeric/library_gemm.cml
 999a15f801ebef52 ok test/cases/compile/numeric/permissions.cml
 193074d94ca4e26b ok test/cases/compile/operators/array_add_assign.cml
@@ -859,11 +859,15 @@ ef609c554e1d4936 ok test/cases/compile/tags/err_float.cml
 1188742cce158473 no test/cases/compile/tags/err_old_annotation.cml
 865e177811b078c5 ok test/cases/compile/tags/err_param_type.cml
 b9bb47b2c53fd3ac ok test/cases/compile/tags/err_position.cml
+6d5a08d1c048121a ok test/cases/compile/tags/err_reads_empty.cml
+81ea977ed9aebc7a ok test/cases/compile/tags/err_reads_undeclared.cml
+ea95d3ed9a96616e ok test/cases/compile/tags/err_tag_shadows_permission.cml
 8a8a6731caef4850 ok test/cases/compile/tags/err_type.cml
 8a46ed23b5a19733 ok test/cases/compile/tags/err_undeclared.cml
 0805b6064bbc79f8 ok test/cases/compile/tags/float.cml
 f4c1ab05bea62ebf ok test/cases/compile/tags/graph.cml
-8ed3438c9a2aceef ok test/cases/compile/tags/permissions.cml
+bd87fdc8c9db059a ok test/cases/compile/tags/permissions.cml
+d336d09053a3b840 ok test/cases/compile/tags/reads.cml
 d41c5f92dc874079 ok test/cases/consistency/attempt/bad_calls.cml
 3bf0ff25ffa31ac4 ok test/cases/consistency/attempt/collector.cml
 01a7c4a015e15d56 ok test/cases/consistency/attempt/compiled.cml
@@ -1131,8 +1135,10 @@ ece491c607145dbc ok test/cases/definitions/kernels.cml
 c68d2c55e0d4c83b ok test/cases/feat/mm/complex.cml
 827a89198ee2c0fa ok test/cases/feat/mm/mem_blocks.cml
 bec40d29daf6e639 ok test/cases/feat/mm/capacity/perm_query_types.cml
+bdd17da7dffc787b ok test/cases/feat/mm/gc/gc_block_adopted.cml
 2c1253bf822ca8d3 ok test/cases/feat/mm/gc/gc_block_churn.cml
 9fd78f3aa978e035 ok test/cases/feat/mm/gc/gc_block_pacing.cml
+65f5756af907b46e ok test/cases/feat/mm/gc/gc_block_views.cml
 272b762adea784ae ok test/cases/feat/mm/gc/gc_born_old.cml
 f8019d12cc56b4bf ok test/cases/feat/mm/gc/gc_collection_trees.cml
 b8a8760f9100df26 ok test/cases/feat/mm/gc/gc_collections.cml
@@ -1310,6 +1316,7 @@ cec0468331d216da ok test/cases/loops/reduce_view.cml
 a910f1e9cdce417e ok test/cases/loops/refuse_loop_no_channel.cml
 cba7b09e77a994a5 ok test/cases/loops/shapes.cml
 c24be36afcb891ea ok test/cases/loops/state_in_place.cml
+e0e4f96e956c3237 ok test/cases/loops/state_in_place_multi.cml
 63e444a96478d95f ok test/cases/loops/tuple_destructure.cml
 de8066e46383fc72 ok test/cases/macro/hof_calls.cml
 c96746199ab07fa4 ok test/cases/modules/bytes_text_reject.cml
@@ -1383,6 +1390,7 @@ e717022e42281990 ok test/cases/modules/graph_pass/camel_import_values.cml
 9e0f3f56a523c664 ok test/cases/modules/graph_pass/chain.cml
 9bdf66272f3ad7a6 ok test/cases/modules/graph_pass/chainlib.cml
 705004f7c79f48fa ok test/cases/modules/graph_pass/edits.cml
+32de672d13046d2c ok test/cases/modules/graph_pass/firstuser.cml
 09d450553fe79f00 ok test/cases/modules/graph_pass/fold_constants.cml
 61b8d97e867702ff ok test/cases/modules/graph_pass/fold_target.cml
 16cb00d0ac7f3976 ok test/cases/modules/graph_pass/gl.cml
@@ -1399,6 +1407,7 @@ b0e6d4af9676f7c6 ok test/cases/modules/graph_pass/neutral_var_target.cml
 37a01b53998c98bb ok test/cases/modules/graph_pass/probes.cml
 34369d96fe2a1eca ok test/cases/modules/graph_pass/region_target.cml
 e081988c84e502d4 ok test/cases/modules/graph_pass/regionprobe.cml
+ae4dc20a07c9b162 ok test/cases/modules/graph_pass/seconduser.cml
 5efb5481f0d02818 ok test/cases/modules/graph_pass/shared_target.cml
 b6eeea12193bd0ee ok test/cases/modules/graph_pass/sharedvals.cml
 668a3c2dd69ad5e9 ok test/cases/modules/graph_pass/tiny.cml
@@ -1539,11 +1548,17 @@ bfd5c4e36d823588 ok test/cases/modules/rules/check_rules.cml
 5666c69689d0db05 ok test/cases/modules/rules/check_when.cml
 a9449b97a132a283 ok test/cases/modules/rules/counts.cml
 f0b7e9f9c2f31a4f no test/cases/modules/rules/err_requires_empty.cml
-34ad48cf98e3471d no test/cases/modules/rules/err_requires_not_permission.cml
+c3b8e6e0d305a69a no test/cases/modules/rules/err_requires_not_permission.cml
 4ec4f7cbe8b3ebd7 ok test/cases/modules/rules/err_requires_on_func.cml
-2798a5b213e2cb23 no test/cases/modules/rules/err_requires_unknown.cml
+1835e64bed50a714 no test/cases/modules/rules/err_requires_unknown.cml
 224d79256405d3a2 no test/cases/modules/rules/err_rule_tag.cml
+d6b6037274494d3e ok test/cases/modules/rules/reads_pass.cml
+95e2dc6cd3540a09 ok test/cases/modules/rules/reads_target.cml
 cd04aa59ff9e8059 ok test/cases/modules/rules/requires.cml
+6cb80984000fce63 ok test/cases/modules/rules/requires_group.cml
+bdc2f65f5dd28dd0 ok test/cases/modules/rules/requires_group_target.cml
+b79b9a9655dd938f ok test/cases/modules/rules/requires_nd.cml
+16e1270f840e5240 ok test/cases/modules/rules/requires_nd_target.cml
 0c58b7568b050688 ok test/cases/modules/rules/requires_target.cml
 d4cdcd8b121aaa36 ok test/cases/modules/rules/same_module_pass.cml
 f8de024a8a466154 ok test/cases/modules/rules/simplify.cml
@@ -1988,6 +2003,7 @@ b4c8a24177615791 ok test/cases/tools/lsp/fixtures/main.cml
 1235cae4c47855a2 ok test/cases/trans/cpp/exec_mod_scalar.cml
 d832457679ac549b ok test/cases/trans/cpp/fstring.cml
 bf705a16bb502154 ok test/cases/trans/cpp/loop_state_in_place.cml
+26637802347783de ok test/cases/trans/cpp/loop_state_in_place_multi.cml
 6d8e4c50b7986f36 ok test/cases/trans/cpp/main_io.cml
 2d3348fd597bc963 ok test/cases/trans/cpp/math_scalar.cml
 63abfcb9afe7cf04 ok test/cases/trans/cpp/mod_scalar.cml
@@ -2003,6 +2019,7 @@ fc3f5a807ef6f0ac ok test/cases/trans/cpp/exec/functions.cml
 861745fe0e5aa4b3 ok test/cases/trans/cpp/exec/print_formats.cml
 329ba3fa2036f700 ok test/cases/trans/cpp/exec/recursion_limit.cml
 a686d72c36b0d9a9 ok test/cases/trans/cpp/exec/scalars.cml
+902c3b8821427636 ok test/cases/trans/cpp/exec/site_message.cml
 e9af5fcb26796cfe ok test/cases/trans/cpp/exec/strings.cml
 a94f80881f3054c0 ok test/cases/trans/cpp/exec/tagged.cml
 5d15a2912c2a2402 ok test/cases/trans/cpp/exec/tail_calls.cml
