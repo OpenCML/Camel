@@ -239,7 +239,10 @@ class RuntimeGraphDraftSession {
     /// does conflict makes a program of its own from the one it started from, which is not the
     /// context's (the callers that run a function value of the old program do this routinely). A
     /// caller that means to replace the context's program and must not fork asks first
-    /// (optimistic concurrency, design 4.3.1).
+    /// (optimistic concurrency, design 4.3.1). A session that cannot replace the context's
+    /// program — one opened over a private program (the ONNX export's bound copy, a function
+    /// value's program, a subgraph root) that the context did not install — has no version of
+    /// the context's program to compare: its conflicts are empty (H112).
     std::vector<GraphId> conflicts() const;
     /// conflicts() against `current`, which the caller names: the compare-and-swap of a commit
     /// that lost the race to another one re-checks against the program that is there now.

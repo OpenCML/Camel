@@ -4268,12 +4268,9 @@ void refuseUnendedUnrolling(
 /// Refuses a LOOP node before the export simplifies the bound function (translatePrepared).
 ///
 /// The translation itself refuses a LOOP node where it is written (evalNode), but the export
-/// simplifies the function first, and the algebraic stage of that simplification is the rules
-/// library (`std::opt::algebra` is `rules::simplify`): the rules pass edits a draft of the
-/// export's private copy and commits it with the checked commit, which compares the draft with
-/// the program the copy came from. A graph an earlier round of the simplification rewrote is a
-/// newer version in the copy, so the check reports `RewriteInvalid` and the loop is never
-/// reached. Refusing here keeps the exporter's diagnosis, at the loop, before any of that.
+/// simplifies the function first, and that simplification can rewrite or unroll the graphs
+/// around the loop before the translation sees it. Refusing here keeps the exporter's
+/// diagnosis, at the loop, before any of that.
 ///
 /// No pass removes a LOOP node (it runs its graphs, which may have effects), so a loop of the
 /// bound function still reaches the translation; the refusal is the same one, only reported
