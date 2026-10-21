@@ -498,3 +498,20 @@ EXPORTS
     ?updateRefs@Variant@rtdata@core@camel@@UEAAXAEBV?$function@$$A6APEAVObject@rtdata@core@camel@@PEAV1234@PEBVType@type@34@AEBURefTraceInfo@234@@Z@std@@PEBVType@type@34@@Z
 
     ; Imported by a target built after this list was derived; regenerate the list when this repeats.
+
+    ; Imported by a target built after this list was derived; regenerate the list when this repeats.
+    ??0DraftWritings@runtime@camel@@QEAA@AEAVGraphDraft@12@UNumericPolicy@sem@core@2@@Z
+    ??0NodeVMSchedPass@@QEAA@AEBV?$shared_ptr@VContext@context@core@camel@@@std@@@Z
+    ??0WrittenSlots@runtime@camel@@QEAA@AEBVGraphDraft@12@@Z
+    ??1DraftWritings@runtime@camel@@UEAA@XZ
+    ??1NodeVMSchedPass@@UEAA@XZ
+    ?build@DraftWritings@runtime@camel@@QEAAXXZ
+    ?callGraph@NodeVMSchedPass@@QEAA_KPEBVProgram@runtime@camel@@PEAVGCGraph@34@V?$span@$$CB_K$0?0@std@@@Z
+    ?compileRule@runtime@camel@@YA?AV?$vector@URule@runtime@camel@@V?$allocator@URule@runtime@camel@@@std@@@std@@AEAVContext@context@core@2@AEBURuleSource@12@@Z
+    ?create@TupleType@type@core@camel@@SAPEAV1234@XZ
+    ?extractWritings@runtime@camel@@YAPEBVProgram@12@AEBV?$shared_ptr@VContext@context@core@camel@@@std@@PEBV312@AEBVCostModel@12@@Z
+    ?findCostModel@runtime@camel@@YA?AV?$shared_ptr@$$CBVCostModel@runtime@camel@@@std@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@4@@Z
+    ?intern@SymbolTable@core@camel@@QEAAIV?$basic_string_view@DU?$char_traits@D@std@@@std@@@Z
+    ?rewrite@DraftWritings@runtime@camel@@QEAA?AURewriteStats@23@V?$span@$$CBURule@runtime@camel@@$0?0@std@@_K@Z
+    ?saturate@DraftWritings@runtime@camel@@QEAA?AUSaturateStats@23@V?$span@$$CBURule@runtime@camel@@$0?0@std@@AEBUBudget@23@@Z
+    ?setWritings@GraphDraft@runtime@camel@@QEAAXV?$vector@UWritingUnion@runtime@camel@@V?$allocator@UWritingUnion@runtime@camel@@@std@@@std@@@Z
