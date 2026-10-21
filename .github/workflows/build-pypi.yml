@@ -138,6 +138,17 @@ jobs:
           choco install llvm ninja cmake -y --no-progress
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Select Clang (Windows)
+        # Without this, `conan profile detect` sees the image's MSVC and writes compiler=msvc, and
+        # Conan's toolchain then sets CMAKE_GENERATOR_PLATFORM=x64 -- which CMake rejects outright
+        # for the Ninja generator ("does not support platform specification"). ci-leg.yml exports
+        # CC/CXX for the same reason; the profile must say clang, because libcamel is built with it.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "CC=clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CXX=clang++" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Verify Clang (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
