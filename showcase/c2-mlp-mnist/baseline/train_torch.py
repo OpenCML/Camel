@@ -83,15 +83,19 @@ def main() -> int:
     # == data ==
     data = Path(args.data)
     train_x = torch.from_numpy(np.load(data / "train_images.npy"))
-    train_targets = torch.from_numpy(np.load(data / "train_labels.npy"))
+    train_labels = torch.from_numpy(np.load(data / "train_labels.npy"))
     val_x = torch.from_numpy(np.load(data / "val_images.npy"))
-    val_targets = torch.from_numpy(np.load(data / "val_labels.npy"))
+    val_labels = torch.from_numpy(np.load(data / "val_labels.npy"))
+    # train_order.npy holds one epoch permutation after another, flat.  Both implementations
+    # walk this order, so a step sees the same rows on both sides.
+    train_order = np.load(data / "train_order.npy")
+    rows = len(train_x)
     dataset_id = (data / "dataset.id").read_text(encoding="utf-8").strip()
 
     model = load_model(data)
     parameters = sum(p.numel() for p in model.parameters())
-    batches = len(train_x) // args.batch
-    before = evaluate(model, val_x, val_targets)
+    batches = rows // args.batch
+    before = evaluate(model, val_x, val_labels)
     print(
         f"c2 config steps={args.steps} batch={args.batch} lr={args.lr} threads={args.threads} "
         f"params={parameters} batches={batches}"
@@ -102,9 +106,10 @@ def main() -> int:
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     started = time.perf_counter()
     for step in range(args.steps):
-        start = (step % batches) * args.batch
-        x = train_x[start : start + args.batch]
-        y = train_targets[start : start + args.batch]
+        offset = (step // batches) * rows + (step % batches) * args.batch
+        chosen = torch.from_numpy(train_order[offset : offset + args.batch])
+        x = train_x[chosen]
+        y = train_labels[chosen]
         value = loss(model(x), y)
         optimizer.zero_grad()
         value.backward()
@@ -114,7 +119,7 @@ def main() -> int:
     elapsed = time.perf_counter() - started
 
     # == evaluate ==
-    after = evaluate(model, val_x, val_targets)
+    after = evaluate(model, val_x, val_labels)
     print(
         f"c2 trained steps={args.steps} seconds={elapsed:.6f} "
         f"val_loss={after[0]:.9f} val_accuracy={after[1]:.9f}"
@@ -126,7 +131,7 @@ def main() -> int:
     saved = torch.load(checkpoint, weights_only=True)
     assert saved["dataset_id"] == dataset_id
     model.load_state_dict(saved["model"])
-    restored = evaluate(model, val_x, val_targets)
+    restored = evaluate(model, val_x, val_labels)
     drift = sum(
         (model.state_dict()[name] - saved["model"][name]).abs().sum().item()
         for name in saved["model"]
