@@ -475,3 +475,18 @@ EXPORTS
     ?writeBarrier@mm@core@camel@@YAXPEAVObject@rtdata@23@PEBVType@type@23@01@Z
     ?writeEntryResultTo@execute@camel@@YAXAEBV?$shared_ptr@VContext@context@core@camel@@@std@@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@4@_N@Z
     ?WriteToAllStreams@Logger@@SAXAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z
+
+    ; Imported by a module that was added after this list was derived: see the note at the end.
+    ?clone@Variant@rtdata@core@camel@@UEBAPEAVObject@234@AEAVIAllocator@mm@34@PEBVType@type@34@_N@Z
+    ?create@EnumDecl@type@core@camel@@SAPEAV1234@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@V?$vector@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@V?$allocator@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@2@@6@@Z
+    ?currentRuntimeProgram@Context@context@core@camel@@QEBAPEBVProgram@runtime@4@XZ
+    ?define@EnumDecl@type@core@camel@@QEAAXV?$vector@UEnumVariant@type@core@camel@@V?$allocator@UEnumVariant@type@core@camel@@@std@@@std@@@Z
+    ?equals@Variant@rtdata@core@camel@@UEBA_NPEBVObject@234@PEBVType@type@34@_N@Z
+    ?graphSpace@mm@core@camel@@YAAEAVGrowableFreeListAllocator@123@XZ
+    ?nodeAttrs@GCGraph@runtime@camel@@QEBAII@Z
+    ?nodeRef@GCGraph@runtime@camel@@QEBAIPEBUGCNode@23@@Z
+    ?print@Variant@rtdata@core@camel@@UEBAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@PEBVType@type@34@@Z
+    ?prototype@EnumDecl@type@core@camel@@QEBAPEAVEnumType@234@XZ
+    ?segmentOf@GrowableFreeListAllocator@mm@core@camel@@AEBAPEAVFreeListAllocator@234@PEAX@Z
+    ?text@attr@core@camel@@YA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@I@Z
+    ?updateRefs@Variant@rtdata@core@camel@@UEAAXAEBV?$function@$$A6APEAVObject@rtdata@core@camel@@PEAV1234@PEBVType@type@34@AEBURefTraceInfo@234@@Z@std@@PEBVType@type@34@@Z
