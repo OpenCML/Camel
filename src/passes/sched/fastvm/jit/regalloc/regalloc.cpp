@@ -371,6 +371,8 @@ void collectDefUse(
     case OpCode::LDIV:
     case OpCode::FDIV:
     case OpCode::DDIV:
+    case OpCode::IMOD:
+    case OpCode::LMOD:
         useSlot(bc.fastop[0]);
         useSlot(bc.fastop[1]);
         defSlot(bc.result);

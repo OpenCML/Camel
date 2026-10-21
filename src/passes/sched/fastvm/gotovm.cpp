@@ -166,6 +166,19 @@ static thread_local size_t s_jit_save_depth = 0;
         NEXT();                                                                                    \
     }
 
+// The remainder of the language: x % -1 is 0 (camel/utils/int_div.h), the quotient's rule.
+#define DEF_BIN_MOD_LABEL(LABEL, TYPE, ZERO_CHECK)                                                 \
+    label_##LABEL : {                                                                              \
+        TYPE lhs = fastFrameGet<TYPE>(currFrame, bc->fastop[0]);                                   \
+        TYPE rhs = fastFrameGet<TYPE>(currFrame, bc->fastop[1]);                                   \
+        if (rhs == ZERO_CHECK) {                                                                   \
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);                                        \
+        }                                                                                          \
+        TYPE res = camel::utils::remainder(lhs, rhs);                                              \
+        fastFrameSet(currFrame, bc->result, res);                                                  \
+        NEXT();                                                                                    \
+    }
+
 using namespace std;
 
 namespace {
@@ -263,6 +276,8 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             &&label_LDIV,
             &&label_FDIV,
             &&label_DDIV,
+            &&label_IMOD,
+            &&label_LMOD,
             &&label_ILT,
             &&label_LLT,
             &&label_FLT,
@@ -863,6 +878,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         DEF_BIN_DIV_LABEL(LDIV, Int64, 0);
         DEF_BIN_DIV_LABEL(FDIV, Float32, 0.0f);
         DEF_BIN_DIV_LABEL(DDIV, Float64, 0.0);
+
+        DEF_BIN_MOD_LABEL(IMOD, Int32, 0);
+        DEF_BIN_MOD_LABEL(LMOD, Int64, 0);
 
         DEF_CMP_OP_LABEL(ILT, Int32, <);
         DEF_CMP_OP_LABEL(LLT, Int64, <);

@@ -303,6 +303,7 @@
 | RETN | VLoadFromFrame / VLoadFromMemAt → VRet |
 | BRCH | VLoadFromFrame, VLoadImm32(0/1), VCopy, VTest, VCmovnz, VStoreToFrame, JzRel32, JmpRel32 |
 | JOIN | VLoadFromFrame（两路值 + 分支索引）→ VCopy, VTest, VCmovnz → VStoreToFrame |
+| IMOD/LMOD | 不映射到 V* 指令：整个字节码由 helper（`jitHelperBytecode`）执行，`collectRuntimeConstructs` 因此把含 `%` 的图按 framed 代码编译 |
 
 寄存器分配（`linearScanVReg`）对所有 V* 指令的 vreg 做 def/use 分析，得到 vreg→preg（0–7）；编码时用 preg 生成 mov/add/cmp/setcc 等。
 

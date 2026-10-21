@@ -257,6 +257,12 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
             // a loop is framed code.
             add(pc, "LOOP", fallback + " contains a loop (LBEG/LTST/LEND)");
             break;
+        case OpCode::IMOD:
+        case OpCode::LMOD:
+            // The remainder runs in the helper (it faults on a zero divisor), so the graph
+            // needs the frame a helper call runs against.
+            add(pc, "IMOD", fallback + " contains an integer remainder");
+            break;
         case OpCode::FUNC:
         case OpCode::TAIL: {
             const auto *target = getFuncExtraRuntimeGraph(&bc);
@@ -1342,6 +1348,13 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         case OpCode::COPY:
         case OpCode::FILL:
         case OpCode::ACCS:
+            build.emitCallHelper(static_cast<uint32_t>(pc), helperBytecode);
+            slotCache.clear();
+            break;
+        case OpCode::IMOD:
+        case OpCode::LMOD:
+            // The remainder of an integer division, in the helper: it faults on a zero divisor
+            // (the fault path needs the driver), and it stores its own result.
             build.emitCallHelper(static_cast<uint32_t>(pc), helperBytecode);
             slotCache.clear();
             break;

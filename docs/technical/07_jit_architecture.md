@@ -436,6 +436,7 @@ extra 字段布局如下：
 | LSUB | `VLoad/VLoadImm` → `VSub` or `VSubImm` → `VStore` | 优先 `sub dst, src` / `sub reg, imm32` |
 | LMUL | VLoad × 2 → VMul → VStore | `imul dst, src`（按下面的规则选操作数） |
 | LDIV | VLoad × 2 → VIdiv → VStore | `mov r11, rr; test r11, r11; jz .fault; cmp r11, -1; jne .div; mov dst, lr; neg dst; jmp .done; .div: push rax/rdx; mov rax, lr; cqo; idiv r11; mov dst, rax; pop rdx/rax; .done:` |
+| LMOD | 无（`jitHelperBytecode` 执行整个字节码） | 调用 helper，返回值写回结果槽；除数为零走故障出口（`DivisionByZero`） |
 | LLE..LNE | `VLoad/VLoadImm` → `VCmpSet*` or `VCmpSet*Imm` → `VStore` | 普通路径：`cmp left, right; setcc dst8; movzx dst, dst8` |
 
 **除法**：除数是 0 和 -1 以外的常量时不做检查；否则检查除数为零（走第 16 节的故障出口，诊断为 `DivisionByZero`），并把 `x / -1` 算成取负（最小整数除以 -1 的商放不下，`idiv` 会触发硬件异常；所有后端对它的结果都是回绕）。idiv 独占 rax 和 rdx，其中别的值在除法前后保存恢复。
@@ -663,7 +664,7 @@ JIT 代码没有展开信息，C++ 异常穿不过它的栈帧。但编译出的
 
 | 故障 | 检查位置 | 诊断 |
 |------|---------|------|
-| 整数除数为零（IDIV / LDIV） | 除法之前 | `RuntimeDiag::DivisionByZero`，位置是该除法 |
+| 整数除数为零（IDIV / LDIV / IMOD / LMOD；后两者在 helper 里检查） | 除法之前 | `RuntimeDiag::DivisionByZero`，位置是该除法 |
 | 浮点除数等于零（FDIV / DDIV，±0.0） | 除法之前 | 同上（解释器对浮点除零同样报故障） |
 | 原生自调用超过递归深度上限 | 调用之前 | `RuntimeDiag::MaxRecursionDepthExceeded`，位置是该调用，图名与上限同解释器 |
 | 原生自调用时机器栈将满 | 调用之前 | 同一个 `MaxRecursionDepthExceeded`，消息与解释器的嵌套调用相同（`N open calls: the native stack of the thread, K KiB, is full`） |

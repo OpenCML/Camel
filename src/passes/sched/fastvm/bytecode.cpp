@@ -90,6 +90,11 @@ std::string to_string(const OpCode &op) {
     case OpCode::DDIV:
         return "DDIV";
 
+    case OpCode::IMOD:
+        return "IMOD";
+    case OpCode::LMOD:
+        return "LMOD";
+
     case OpCode::ILT:
         return " ILT";
     case OpCode::LLT:

@@ -365,6 +365,11 @@ slot_t NodeVMSchedPass::call(
                 skipNode = kInvalidNodeRef;
                 tillNode = joinNode;
             }
+            // The body's tuple FILL of a loop whose state is kept as its components: nothing
+            // reads the tuple, and the loop takes the components themselves (ExecPlan::elidedAt).
+            if (hasLoops && !currPlan->elidedAt.empty() && currPlan->elidedAt[i]) [[unlikely]] {
+                continue;
+            }
 
             // Debugger hook: live in release builds, one load of a pointer when no observer
             // is installed. It fires after branch-skip resolution and before the node
