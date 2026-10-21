@@ -78,7 +78,7 @@ void moveup(
     }
     for (size_t i = 0; i < codes.size(); i += codes[i].opsize) {
         Bytecode &bc = codes[i];
-        if (bc.opcode == OpCode::JUMP) {
+        if (hasJumpTarget(bc.opcode)) {
             size_t target = static_cast<size_t>(bc.fastop[0]);
             if (target >= to && target < from) {
                 bc.fastop[0] += opsize;
@@ -94,7 +94,7 @@ void redirect(
     std::unordered_map<size_t, camel::source::origin_id_t> *pcOrigins) {
     for (size_t i = 0; i < codes.size(); i += codes[i].opsize) {
         Bytecode &bc = codes[i];
-        if (bc.opcode == OpCode::JUMP) {
+        if (hasJumpTarget(bc.opcode)) {
             if (static_cast<size_t>(bc.fastop[0]) > start) {
                 bc.fastop[0] += step;
             }

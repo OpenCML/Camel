@@ -550,15 +550,6 @@ PassDescriptor algebraDescriptor() {
     return d;
 }
 
-PassParam nativeLoopParameter() {
-    return PassParam{
-        "native_loop",
-        PassParamType::Bool,
-        false,
-        "run the program's LOOP nodes natively instead of lowering them to tail recursion "
-        "(debugging; slower today)"};
-}
-
 PassParam statsParameter() {
     return PassParam{
         "stats",
@@ -571,7 +562,7 @@ PassDescriptor fastVmDescriptor(bool jit) {
     PassDescriptor d;
     d.doc =
         jit ? "the bytecode interpreter with on-demand native code" : "the bytecode interpreter";
-    d.params = {nativeLoopParameter(), statsParameter()};
+    d.params = {statsParameter()};
     if (jit) {
         d.params.push_back(
             PassParam{
@@ -583,7 +574,6 @@ PassDescriptor fastVmDescriptor(bool jit) {
     }
     d.make = [jit](const context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config = jit ? makeDefaultFastVmJitConfig() : FastVMConfig{};
-        config.nativeLoop   = args.getBool("native_loop");
         config.statsPath    = args.getString("stats");
         if (jit) {
             const int64_t threshold = args.getInt("hot_threshold");

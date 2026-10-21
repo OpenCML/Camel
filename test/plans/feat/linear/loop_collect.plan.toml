@@ -10,7 +10,7 @@ desc = "The four shapes with two slots, and a For, a While and a ForWhile that r
 kind = "behavior"
 case = "../../../cases/loops/collection.cml"
 args = ["${case}", "test::loop_collect", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl", "fvm_native_loop", "jit_native_loop"]
+backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -24,7 +24,7 @@ desc = "A loop that both needs the tape and writes its array state in place: the
 kind = "behavior"
 case = "../../../cases/loops/collection_in_place.cml"
 args = ["${case}", "test::loop_collect", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl", "fvm_native_loop", "jit_native_loop"]
+backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -50,7 +50,7 @@ desc = "A hundred thousand rounds: two tapes per loop, printed by their lengths,
 kind = "behavior"
 case = "../../../cases/loops/collection_large.cml"
 args = ["${case}", "test::loop_collect_summary", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl", "fvm_native_loop", "jit_native_loop"]
+backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -64,7 +64,7 @@ desc = "A tape that outgrows CAMEL_GC_HEAP_LIMIT_MB is a memory exhaustion at th
 kind = "behavior"
 case = "../../../cases/loops/collection_oom.cml"
 args = ["${case}", "test::loop_collect_summary", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl", "fvm_native_loop", "jit_native_loop"]
+backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC_HEAP_LIMIT_MB=16"]
 expect_exit = 1
 expect_stdout_contains = ["RuntimeDiag::MemoryExhausted", "collection_oom.cml:4:13"]

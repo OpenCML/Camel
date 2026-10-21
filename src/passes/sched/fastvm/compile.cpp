@@ -215,6 +215,8 @@ static bytecode_vec_t compileRuntimeGraph(
     unordered_map<camel::runtime::gc_node_ref_t, vector<size_t>> brchTargetMap;
     unordered_map<camel::runtime::gc_node_ref_t, vector<pair<size_t, size_t>>> joinTargetMap;
     unordered_map<camel::runtime::gc_node_ref_t, size_t> valueProducerMap;
+    // By loop of the plan: the pc after its LBEG (where a round starts) and the pc of its LTST.
+    unordered_map<uint32_t, size_t> loopRoundStart, loopTestPc;
 
     // An arm runs from its entry to its tail and then must leave for the JOIN rather than fall
     // into the next arm: every arm tail laid out between its BRCH and JOIN gets a JUMP to the
@@ -266,6 +268,42 @@ static bytecode_vec_t compileRuntimeGraph(
                 header.fastop[0] = as_index(bytecodes.size());
             }
             brchTargetMap.erase(it);
+        }
+
+        // The loops of the graph that start, test a round or end one here (ExecLoop). Their
+        // instructions come before the node's own, in the order of the plan.
+        if (!plan.loops.empty()) {
+            for (const uint32_t code : plan.loopEventsAt(i)) {
+                const auto &loop = plan.loops[code / 3];
+                const auto loopOrigin =
+                    graph->nodeOrigin(plan.topo[loop.position]);
+                const size_t eventPc = bytecodes.size();
+                switch (static_cast<camel::runtime::ExecLoopEvent>(code % 3)) {
+                case camel::runtime::ExecLoopEvent::Begin:
+                    appendBytecode(bytecodes, OpCode::LBEG, 0, {}, {}, {}, true, {.loop = &loop});
+                    loopRoundStart[code / 3] = bytecodes.size();
+                    break;
+                case camel::runtime::ExecLoopEvent::Test:
+                    appendBytecode(bytecodes, OpCode::LTST, 0, {0}, {}, {}, true, {.loop = &loop});
+                    loopTestPc[code / 3] = eventPc;
+                    break;
+                case camel::runtime::ExecLoopEvent::End:
+                    bytecodes[loopTestPc.at(code / 3)].fastop[0] = as_index(eventPc);
+                    appendBytecode(
+                        bytecodes,
+                        OpCode::LEND,
+                        0,
+                        {as_index(loopRoundStart.at(code / 3))},
+                        {},
+                        {},
+                        true,
+                        {.loop = &loop});
+                    break;
+                }
+                if (localPcOrigins && loopOrigin != camel::source::kInvalidOriginId) {
+                    (*localPcOrigins)[eventPc] = loopOrigin;
+                }
+            }
         }
 
         vector<data_idx_t> normOps, withOps;
@@ -528,35 +566,10 @@ static bytecode_vec_t compileRuntimeGraph(
             break;
         }
 
-        case camel::runtime::GCNodeKind::Loop: {
-            // One instruction: the interpreter runs the rounds (FastVMSchedPass::evalLoop),
-            // calling the condition and the body graph as a higher-order operator calls its
-            // function. Three extra words: the two graphs, then the mark and the number of
-            // collection slots (bytecode.h).
-            const auto kind       = graph->loopKindOf(runtimeNodeIndex);
-            const MarkOpCode mark = kind == camel::core::LoopKind::While ? MarkOpCode::LoopWhile
-                                    : kind == camel::core::LoopKind::For ? MarkOpCode::LoopFor
-                                                                         : MarkOpCode::LoopForWhile;
-            Bytecode *bc          = appendBytecode(
-                bytecodes,
-                OpCode::SCHD,
-                record->dataIndex,
-                {},
-                normOps,
-                withOps,
-                true,
-                {.mark = mark},
-                3);
-            auto *words = reinterpret_cast<uint64_t *>(bc + bc->opsize) - 3;
-            words[0]    = reinterpret_cast<uint64_t>(program.loopCondOf(*graph, runtimeNodeIndex));
-            words[1]    = reinterpret_cast<uint64_t>(program.loopBodyOf(*graph, runtimeNodeIndex));
-            BytecodeExtra extra{};
-            extra.raw                  = 0;
-            extra.loop.mark            = mark;
-            extra.loop.collectionCount = graph->loopCollectionCountOf(runtimeNodeIndex);
-            std::memcpy(&words[2], &extra, sizeof(extra));
+        case camel::runtime::GCNodeKind::Loop:
+            // The rounds are the instructions of the events of the plan (LBEG, LTST, LEND), which
+            // were emitted before the node; the LOOP node has no instruction of its own.
             break;
-        }
 
         case camel::runtime::GCNodeKind::Data:
             [[fallthrough]];
@@ -733,6 +746,8 @@ LinkedBytecodeResult compileAndLinkGraphs(
             auto it = offsetMap.find(target);
             setFuncExtraTargetPc(&bc, it != offsetMap.end() ? it->second : *known(target));
         } break;
+        case OpCode::LTST:
+        case OpCode::LEND:
         case OpCode::JUMP: {
             // Graph-relative before, absolute from here on .
             setJumpTargetPc(&bc, getJumpTargetPc(&bc) + offsetMap.at(info.runtimeGraph));

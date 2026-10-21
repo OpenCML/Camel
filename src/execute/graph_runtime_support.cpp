@@ -322,6 +322,60 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
             }
         }
 
+        // A loop is laid out as one piece too: what its regions read from outside, the first
+        // values of its state, then the nodes of the condition, then those of the body, then the
+        // LOOP node, which ends a round.
+        if (const auto *node = graph->node(index);
+            node && node->kind == camel::runtime::GCNodeKind::Loop) {
+            const auto parts = regions.loopPartsOf(index);
+            const auto inLoop = [&](gc_node_ref_t input) {
+                const uint32_t control = regions.controlOf(input);
+                for (uint32_t part : parts) {
+                    if (part != 0 && regions.within(control, part)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            for (uint32_t part : parts) {
+                if (part == 0) {
+                    continue;
+                }
+                for (gc_node_ref_t n : subtreeOf(part)) {
+                    for (auto inputs :
+                         {graph->ctrlInputsOf(n), graph->normInputsOf(n), graph->withInputsOf(n)}) {
+                        for (gc_node_ref_t input : inputs) {
+                            if (!inLoop(input)) {
+                                visit(input);
+                            }
+                        }
+                    }
+                }
+            }
+            for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
+                visit(input);
+            }
+            for (gc_node_ref_t input : graph->normInputsOf(index)) {
+                visit(input);
+            }
+            for (gc_node_ref_t input : graph->withInputsOf(index)) {
+                if (!inLoop(input)) {
+                    visit(input);
+                }
+            }
+            for (uint32_t part : parts) {
+                if (part == 0) {
+                    continue;
+                }
+                for (gc_node_ref_t n : ownOf(part)) {
+                    visit(n);
+                }
+                for (gc_node_ref_t n : subtreeOf(part)) {
+                    visit(n);
+                }
+            }
+        }
+
         for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
             visit(input);
         }

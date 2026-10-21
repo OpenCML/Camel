@@ -259,6 +259,9 @@ std::vector<gc_node_ref_t> LoopView::regionNodes() const {
             nodes.push_back(ref);
         }
     }
+    // The slot the rounds are counted in belongs to the loop.
+    nodes.push_back(roundPort());
+    std::sort(nodes.begin(), nodes.end());
     return nodes;
 }
 
@@ -421,8 +424,11 @@ void validateRuntimeLoopInterface(
     // and, in graph form, the m captures, in the order of the node's With inputs. A loop in
     // region form captures nothing: its parts read the values where they are, and its With inputs
     // are the results of the parts.
-    if (regions && m != (condRegion != 0 ? 2u : 1u)) {
-        loopFails(graph, node, "a loop in region form has the results of its parts as With inputs");
+    if (regions && m != (condRegion != 0 ? 3u : 2u)) {
+        loopFails(
+            graph,
+            node,
+            "a loop in region form has the results of its parts and its round as With inputs");
     }
     if (bodyPorts().size() != iterableAt + k || (!regions && capturePortsOf(body).size() != m)) {
         loopFails(

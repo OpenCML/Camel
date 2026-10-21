@@ -133,8 +133,11 @@ class LoopView {
 
     // ---- A loop in region form: what its regions hold and read ----
 
-    /// The nodes of the condition and of the body region, the regions inside them included, in
-    /// node order. Empty for a loop in graph form.
+    /// The Port node, of type int64, whose slot a back end counts the rounds of the loop in (the
+    /// last With input of the node); a loop in region form only.
+    gc_node_ref_t roundPort() const { return graph_->withInputsOf(node_).back(); }
+    /// The nodes of the condition and of the body region, the regions inside them included, and
+    /// the round port, in node order. Empty for a loop in graph form.
     std::vector<gc_node_ref_t> regionNodes() const;
     /// The nodes outside the two regions that nodes inside them read, in the order they are first
     /// read: what graph form passes as captures. The constants (DATA nodes) are left out unless
