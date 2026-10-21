@@ -78,6 +78,52 @@ expect_exit = 1
 expect_output_contains = ["UnrecognizedGraphPass"]
 timeout_ms = 10000
 
+# A pass written in Camel has a top level of its own (task H37): the pass is the entry of a
+# program of its own, so a module-level `let` is computed before it runs, whether it is a
+# literal, an expression or the result of a call (design principles 10.1). Encoding the
+# function's graph alone left its capture ports unbound and they read 0.
+
+[[tests]]
+name = "camel_pass_reads_module_level_values"
+desc = "A pass reads module-level values of its module: a literal, an expression of them, the result of a call and a value a helper reads."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "values::show", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2 4 7 13\n6\n42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_module_level_values_run_each_time"
+desc = "The same pass twice: each run computes the module-level values of its program before the pass body."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "values::show", "values::show", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2 4 7 13\n6\n2 4 7 13\n6\n42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_reads_values_computed_from_a_c_module"
+desc = "A pass reads a value imported from a module written in C++ (pi) and values computed from it and from an imported function at the module's top level."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "imported_values::show", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "3.141592653589793\n1.5707963267948966 4.0\n42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_module_importing_a_camel_module_is_refused"
+desc = "A pass module importing a module written in Camel is refused with a diagnostic (a library compiled on its own imports modules written in C++ only; task H36), not run with the imported value reading 0."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "camel_import_values::show", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["imports modules written in C++ only", "camel_import_values"]
+expect_output_not_contains = ["42"]
+timeout_ms = 10000
+
 # A transaction edits the program being processed and commits a new Program (design 5.1).
 
 [[tests]]

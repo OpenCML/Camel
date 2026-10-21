@@ -22,9 +22,12 @@
  *
  * A pass is a function `(p: Program) => Program!` exported by a module written in Camel. It is
  * named on the pipeline as `<module>::<function>`, like the passes of the C++ modules. The
- * module is compiled as a library of its own and the function is encoded into a program of
- * its own, the tool program, which the context keeps; the program being processed is the
- * argument, a value of the tool program's run. The tool program runs on NodeVM.
+ * module is compiled as a program of its own whose entry is that function, the tool program,
+ * which the context keeps: its root graph holds the module's top-level values — computed before
+ * the function runs, as a program computes them before `main` (design principles 10.1) — and
+ * calls the function, whose captures are the closure of the function value that call makes. The
+ * program being processed is the argument, a value of the tool program's run. The tool program
+ * runs on NodeVM.
  */
 
 #pragma once

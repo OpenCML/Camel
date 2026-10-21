@@ -99,6 +99,17 @@ class Builder {
     /// error.
     bool buildLibrary(const camel::core::module::module_ptr_t &module);
 
+    /// Steps two and three for a library used as a program of its own whose entry is the
+    /// function `entryFunction`: the same build as buildProgram, with the call of that function
+    /// as the exit of the root graph instead of the call of `main`. The root graph holds the
+    /// top-level values of the module, so they are computed before the call, exactly as a
+    /// program computes them before `main` (design principles 10.1); the function's captures
+    /// are its value's closure, bound by that call. A pass written in Camel is run so
+    /// (UserDefinedModule::compileAsProgram). False when the function has no graph or a module
+    /// is in error.
+    bool buildLibraryEntry(
+        const camel::core::module::module_ptr_t &module, const std::string &entryFunction);
+
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
 
   private:
@@ -257,8 +268,11 @@ class Builder {
     void claimRootNodes(size_t firstNode);
     // Makes the root graph the first time a module is declared.
     void ensureRootGraph();
-    // The exit of the root graph: the call of the entry module's `main` (EntryModuleMissingMain
-    // when it has none), which takes the parameters `main` takes.
+    // The exit of the root graph: the call of the entry function — `main` for a program, the
+    // function named by `libraryEntryFunction_` for a library built as a program of its own
+    // (EntryModuleMissingMain when a program has none). It takes the parameters that function
+    // takes, and the root graph's type is that function's when the build is a library's
+    // (buildLibraryEntry), so that the program's root has the signature of its entry.
     void buildEntryCall();
     // The value of the top level of a module that a node of the root graph is: the module that
     // declares it and its name there (with the namespaces it is declared in). A capture of
@@ -274,6 +288,9 @@ class Builder {
     GCT::Tree *tree_ = nullptr;
     compile_graph_ptr_t rootGraph_;
     compile_graph_ptr_t currGraph_;
+    // The function the root graph calls, when the build is a library used as a program of its
+    // own (buildLibraryEntry); empty for a program, whose entry is `main`.
+    std::string libraryEntryFunction_;
 
     node_scope_ptr_t nodeScope_;
     graph_scope_ptr_t graphScope_;

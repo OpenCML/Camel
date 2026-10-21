@@ -116,7 +116,10 @@ class DefinitionStore {
     const DefinitionGraph *definitionOf(camel::core::OperId oper, std::string *problem = nullptr);
 
     /// A function of a library, encoded into a program of its own (kept for as long as the
-    /// context): for a native caller that runs a function written in Camel.
+    /// context): for a native caller that runs a function written in Camel. `graph` is the root
+    /// graph of that program, whose entry is the function: the module-level values of the
+    /// library are computed before the function runs (design principles 10.1). Its signature is
+    /// the function's.
     struct LibraryFunction {
         const Program *program = nullptr;
         GCGraph *graph         = nullptr;
@@ -152,9 +155,14 @@ class DefinitionStore {
     /// The operators from `oper` back to `oper` through the definitions they use, `oper`
     /// first and last; empty when there is no such cycle.
     std::vector<camel::core::OperId> cycleThrough(camel::core::OperId oper);
-    /// The library module `name`, compiled; nullptr with `problem` set when it cannot be.
+    /// The library module `name`, imported and compiled as a library; nullptr with `problem` set
+    /// when it cannot be.
     std::shared_ptr<camel::core::module::UserDefinedModule>
     library(const std::string &name, std::string &problem);
+    /// The library module `name`, imported only: no compile of its own. What a pass written in
+    /// Camel needs before it is built as a program of its own (compileAsProgram).
+    std::shared_ptr<camel::core::module::UserDefinedModule>
+    importLibrary(const std::string &name, std::string &problem);
 
     camel::core::context::Context &context_;
     std::recursive_mutex mutex_;
