@@ -31,6 +31,7 @@
 #include "build_config.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/execute/devices.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/params.h"
 #include "camel/runtime/graph.h"
@@ -343,6 +344,7 @@ string gcModeOpt            = ""; // raw --gc
 string blockLimitOpt        = ""; // raw --block-limit (megabytes)
 string graphGcMbOpt         = ""; // raw --graph-gc-mb (megabytes)
 string nativeStackGuardOpt  = ""; // raw --native-stack-guard (on|off)
+string devicesOpt           = ""; // raw --devices (cpu|ordinal[,ordinal...])
 string profileModeOpt       = ""; // raw --profile-mode (normal|full)
 size_t maxRecursionDepth    = 0;  // 0: not given on the command line
 size_t maxMacroDepth        = 0;
@@ -669,6 +671,9 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--native-stack-guard") & value("on|off", nativeStackGuardOpt)) %
              "check the native stack on every nested call (default on); off measures where the "
              "stack really ends and is not for normal use",
+         (option("--devices") & value("cpu|ordinal[,ordinal...]", devicesOpt)) %
+             "devices a pipeline may use: cpu (the host only) or CUDA ordinals in order (e.g. 0 "
+             "or 0,1); a device named here must be there",
          (option("--profile-mode") & value("normal|full", profileModeOpt)) %
              "mode of the profiler of --profile: full also opens the Perfetto UI when the report "
              "is written",
@@ -933,22 +938,20 @@ bool parseArgs(int argc, char *argv[]) {
 
         // The memory limits: --block-limit and --graph-gc-mb. Both must be read before the
         // spaces they bound exist.
-        size_t blockLimitMb  = 0;
+        size_t blockLimitMb   = 0;
         size_t graphGcFloorMb = 0;
         if (!readMegabyteLimit(Run::blockLimitOpt, "--block-limit", blockLimitMb) ||
             !readMegabyteLimit(Run::graphGcMbOpt, "--graph-gc-mb", graphGcFloorMb)) {
             std::exit(1);
         }
         if (blockLimitMb != 0 &&
-            !camel::core::mm::selectBlockSpaceLimit(
-                blockLimitMb * camel::core::mm::MB)) {
+            !camel::core::mm::selectBlockSpaceLimit(blockLimitMb * camel::core::mm::MB)) {
             std::cerr << "Error: --block-limit was read after the data-block space was set up."
                       << std::endl;
             std::exit(1);
         }
         if (graphGcFloorMb != 0) {
-            camel::runtime::setGraphCollectionFloorBytes(
-                graphGcFloorMb * camel::core::mm::MB);
+            camel::runtime::setGraphCollectionFloorBytes(graphGcFloorMb * camel::core::mm::MB);
         }
 
         // --native-stack-guard: off is the switch for measuring where the stack ends.
@@ -962,6 +965,19 @@ bool parseArgs(int argc, char *argv[]) {
                           << "'. Expected on or off." << std::endl;
                 std::exit(1);
             }
+        }
+
+        // --devices: the devices a pipeline may use (design principles 13.4). Read before any
+        // module can ask for one; a device named here is a requirement, not a preference.
+        if (!Run::devicesOpt.empty()) {
+            std::string why;
+            const auto selection = camel::execute::parseDeviceSelection(Run::devicesOpt, why);
+            if (!selection) {
+                std::cerr << "Error: --devices '" << Run::devicesOpt << "': " << why << "."
+                          << std::endl;
+                std::exit(1);
+            }
+            camel::execute::selectDevices(*selection);
         }
 
         // --profile-mode: the mode of the advanced profiler that --profile starts.

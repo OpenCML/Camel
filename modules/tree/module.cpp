@@ -4,11 +4,15 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 18, 2026
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-// Public names for type-directed intrinsics; the compiler emits ordinary graph nodes.
+// The native module `ckpt`: the checkpoint operators (and, until the tree library is written in
+// Camel, the type-directed tree intrinsics the compiler expands). The module is not called
+// `tree` because a
+// `stdlib/tree.cml` beside a `tree.cmo` would be taken for its declaration module instead of the
+// Camel tree library (H19 step 1, H51 step 13).
 #include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"
 #include "camel/core/module/builtin.h"
@@ -35,14 +39,14 @@ class TreeResolver final : public FuncTypeResolver {
 };
 // The checkpoint operators (save_tree, load_tree) are the only ones that run; the others are
 // expanded by the compiler.
-class TreeExecutor final : public Executor {
+class CkptExecutor final : public Executor {
   public:
-    TreeExecutor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
+    CkptExecutor(context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
         : Executor(std::move(ctx), std::move(ops)) {}
 };
-class TreeModule final : public BuiltinModule {
+class CkptModule final : public BuiltinModule {
   public:
-    explicit TreeModule(context_ptr_t ctx) : BuiltinModule("tree", std::move(ctx)) {
+    explicit CkptModule(context_ptr_t ctx) : BuiltinModule("ckpt", std::move(ctx)) {
         // Tensors are leaves of a checkpoint: their types must be registered.
         camel::tensor::ops::registerTensorOps();
         for (const auto &group : camel::treelib::checkpointOperatorGroups())
@@ -52,17 +56,16 @@ class TreeModule final : public BuiltinModule {
             exportEntity(
                 name,
                 OperatorGroup::create(
-                    name,
-                    {{"tree:" + name, std::make_shared<TreeResolver>(name)}}));
+                    name, {{"ckpt:" + name, std::make_shared<TreeResolver>(name)}}));
         }
     }
     bool load() override {
-        context_->registerExecutorFactory("tree", [ctx = context_]() {
-            return std::make_shared<TreeExecutor>(ctx, camel::treelib::checkpointKernels());
+        context_->registerExecutorFactory("ckpt", [ctx = context_]() {
+            return std::make_shared<CkptExecutor>(ctx, camel::treelib::checkpointKernels());
         });
         camel::treelib::declareCheckpointResources();
         camel::core::OperatorTable::instance().declare(
-            "tree",
+            "ckpt",
             {{"tree_map", false},
              {"tree_reduce", false},
              {"tree_unzip", true},
@@ -74,5 +77,5 @@ class TreeModule final : public BuiltinModule {
 };
 } // namespace
 extern "C" Module *camel_module_create(Context *ctx) {
-    return new TreeModule(ctx->shared_from_this());
+    return new CkptModule(ctx->shared_from_this());
 }

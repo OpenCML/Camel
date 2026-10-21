@@ -1,7 +1,7 @@
 module checkpoint_roundtrip
 import { Tensor, new, zeros, to_bytes, sqrt } from tensor
 import { from_array, to_array } from bytes
-import { save_tree, load_tree, tree_paths, tree_leaves } from tree
+import { save_tree, load_tree, tree_paths, tree_leaves } from ckpt
 import { sha256 } from hash
 import { exists } from fs
 

@@ -86,10 +86,11 @@ timeout_ms = 20000
 name = "requires_device"
 kind = "negative"
 case = "../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline_gpu", "std::nvm"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+# The pass needs a device, and the run was told to use the host only: the diagnostic names the
+# configuration and the program location of the first operation that cannot run there.
+args = ["--devices", "cpu", "${case}", "tiles::test_outline_gpu", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["CAMEL_TILES_DEVICE must be a nonnegative device ordinal", "region_execution.cml:6:14"]
+expect_output_contains = ["the run selected the host only (--devices cpu)", "region_execution.cml:6:14"]
 timeout_ms = 10000
 
 [[tests]]

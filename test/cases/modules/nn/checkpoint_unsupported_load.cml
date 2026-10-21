@@ -1,5 +1,5 @@
 module checkpoint_unsupported_load
-import { load_tree } from tree
+import { load_tree } from ckpt
 
 func main(): int sync {
     let s = load_tree::<{ block: { f: (x: int) => int } }>('out/never')

@@ -28,7 +28,11 @@ args = ["${timeit_nvm_10}", "${case}", "${run_nvm}"]
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 15000
+# Ten timed iterations. On the host one iteration is 0.41-0.43 s quiet and up to 0.96 s at load
+# 26-54 (H80); at load 108 the inlined pair measured 1.14 s, so ten iterations is 11-16 s and the
+# old 15 s guard killed the plain run (H101). 60 s is five times the busiest measured total and
+# still catches a hang, which takes minutes.
+timeout_ms = 60000
 
 [[tests]]
 name = "inline_nvm_timeit"
@@ -39,7 +43,8 @@ args = ["${timeit_inline_nvm_10}", "${case}", "${run_inline_nvm}"]
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 15000
+# The same ten iterations as nvm_timeit, with the same guard; see the note there.
+timeout_ms = 60000
 
 [[tests]]
 name = "fvm_timeit"

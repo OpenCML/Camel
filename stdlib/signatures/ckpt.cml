@@ -1,4 +1,4 @@
-// Signatures of the parameter-tree module: operations on a value made of structs and tuples
+// Signatures of the native module ckpt: operations on a parameter tree, a value made of structs and tuples
 // (design principles 13.5), and the checkpoints that save such a value to a directory and
 // read it back. These declarations are reference metadata.
 //

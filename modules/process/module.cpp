@@ -43,23 +43,6 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
         OperatorGroup::create(
             "cpu_count",
             {{"process:cpu_count", StaticFuncTypeResolver::create({}, {}, Type::Int64())}}),
-        OperatorGroup::create(
-            "set_terminal_raw_mode",
-            {{"process:set_terminal_raw_mode",
-              StaticFuncTypeResolver::create({}, {{Type::Bool(), false}}, Type::Void())}}),
-        OperatorGroup::create(
-            "has_input",
-            {{"process:has_input", StaticFuncTypeResolver::create({}, {}, Type::Bool())}}),
-        OperatorGroup::create(
-            "get_char",
-            {{"process:get_char", StaticFuncTypeResolver::create({}, {}, Type::String())}}),
-        OperatorGroup::create(
-            "get_chars",
-            {{"process:get_chars",
-              StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String())}}),
-        OperatorGroup::create(
-            "clear_input_buffer",
-            {{"process:clear_input_buffer", StaticFuncTypeResolver::create({}, {}, Type::Void())}}),
     };
     return groups;
 }
@@ -81,18 +64,13 @@ bool ProcessModule::load() {
     camel::core::OperatorTable::instance().declare(
         "process",
         {
-            // The terminal, the process and the machine it runs on.
+            // The process and the machine it runs on. The terminal is `io`'s (H19 step 4).
             {"exit", false},
             {"sleep", false},
             {"whoami", false},
             {"cpu_count", false},
-            {"set_terminal_raw_mode", false},
-            {"has_input", false},
-            {"get_char", false},
-            {"get_chars", false},
-            {"clear_input_buffer", false},
         });
-    // What each touches (docs/design/op-semantics 8): the process, the terminal, the machine.
+    // What each touches (docs/design/op-semantics 8): the process and the machine.
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
@@ -103,11 +81,6 @@ bool ProcessModule::load() {
                 {"sleep", externalAmbient("time:clock", AccessMode::Read)},
                 {"whoami", externalAmbient("process:environment", AccessMode::Read)},
                 {"cpu_count", externalAmbient("process:environment", AccessMode::Read)},
-                {"set_terminal_raw_mode", externalAmbient("io:terminal", AccessMode::Write)},
-                {"has_input", externalAmbient("io:stdin", AccessMode::Read)},
-                {"get_char", externalAmbient("io:stdin", AccessMode::ReadModifyWrite)},
-                {"get_chars", externalAmbient("io:stdin", AccessMode::ReadModifyWrite)},
-                {"clear_input_buffer", externalAmbient("io:stdin", AccessMode::ReadModifyWrite)},
             });
     }
     loaded_ = true;

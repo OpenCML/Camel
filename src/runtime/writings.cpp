@@ -391,13 +391,13 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
     }
 }
 
-/// Whether a node of this shape takes part in congruence, apart from the nodes it reads.
+/// Whether a node of this shape computes its value from its data inputs alone, apart from the
+/// nodes it reads. A control input is not part of this question: it orders the node, it does not
+/// make the value different (design principles 3.3, 3.4; H95), so a pure computation with a
+/// control input is a pure computation still.
 bool shapeTakesPart(
     const GraphDraft &draft, GCNodeKind kind, gc_slot_idx_t dataIndex, const Type *type,
-    std::span<const std::byte> payload, size_t ctrlInputs) {
-    if (ctrlInputs != 0) {
-        return false;
-    }
+    std::span<const std::byte> payload) {
     switch (kind) {
     case GCNodeKind::Data: {
         if (dataIndex >= 0) {
@@ -447,7 +447,7 @@ uint8_t DraftWritings::shapeOf(gc_node_ref_t node) {
         const auto *h = draft_.header(node);
         bool yes =
             h != nullptr && draft_.alive(node) &&
-            shapeTakesPart(draft_, h->kind, h->dataIndex, h->dataType, draft_.payloadOf(node), 0) &&
+            shapeTakesPart(draft_, h->kind, h->dataIndex, h->dataType, draft_.payloadOf(node)) &&
             !writtenInPlace(node);
         if (yes && h->kind == GCNodeKind::Oper) {
             yes = !readsVariable(
@@ -456,19 +456,17 @@ uint8_t DraftWritings::shapeOf(gc_node_ref_t node) {
                 draft_.withInputsOf(node),
                 [&](gc_node_ref_t in) { return writtenInPlace(in); });
         }
-        // 1: takes part; 3: would, but has control inputs (it can be the root of a rule only);
-        // 2: does not.
-        takes[node] = !yes ? 2 : draft_.ctrlInputsOf(node).empty() ? 1 : 3;
+        // 1: takes part; 2: does not. The control inputs are not asked: they order the node and
+        // do not make the value different (H95), so they neither keep it out of a class of
+        // writings nor out of a rule's term. A rewrite that replaces a node with control inputs
+        // carries them over to the writing that replaces it (`rewrite`), so the order the program
+        // wrote survives the replacement.
+        takes[node] = yes ? 1 : 2;
     }
     return takes[node];
 }
 
 bool DraftWritings::takesPart(gc_node_ref_t node) { return shapeOf(node) == 1; }
-
-bool DraftWritings::canBeRoot(gc_node_ref_t node) {
-    const uint8_t shape = shapeOf(node);
-    return shape == 1 || shape == 3;
-}
 
 namespace {
 
@@ -622,7 +620,7 @@ gc_node_ref_t DraftWritings::lookupOrAdd(
     auto &ix = *index_;
     std::optional<NodeKey> key;
     if (!greedy_ &&
-        shapeTakesPart(draft_, init.kind, init.dataIndex, init.dataType, init.payload, 0) &&
+        shapeTakesPart(draft_, init.kind, init.dataIndex, init.dataType, init.payload) &&
         !(init.kind == GCNodeKind::Oper && readsVariable(draft_, norm, with, [&](gc_node_ref_t in) {
               return writtenInPlace(in);
           }))) {
@@ -816,8 +814,8 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
     // not decide which side effects happen, so it does not trim a node with an effect, a node
     // that carries the program's order, or a value written in place. Everything else is a pure
     // computation — a writing of its own value like any other — and stays only if something that
-    // stays reads it. That includes a pure node with control inputs (shape 3): the control input
-    // orders it, it does not make it an effect. A saturation that added thousands of candidate
+    // stays reads it. That includes a pure node with control inputs: the control input orders
+    // it, it does not make it an effect. A saturation that added thousands of candidate
     // writings therefore does not leave them in the extracted program as dead nodes.
     std::vector<uint8_t> selected(slots, 0);
     std::vector<gc_node_ref_t> work;
@@ -1140,25 +1138,55 @@ bool acceptsType(
     return patternType == nullptr || nodeType == nullptr ||
            patternType->assignableFrom(const_cast<camel::core::type::Type *>(nodeType));
 }
+
+/// Whether `oper`'s declared semantics say that exchanging its two operands gives the same value
+/// for a result of type `type` (op-semantics 7.4: `BinaryLaw.commutative`, per element type;
+/// `elementOf` names the element type of an aggregate, an empty one reads the type itself). This
+/// is the fact the matcher reads to try the other order; an operator that does not declare it is
+/// read in the order the program wrote, because only the value of the operator (not a guess about
+/// its name or its shape) can justify the exchange.
+bool declaredCommutative(camel::core::OperId oper, const camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    const camel::core::sem::OperatorSemantics *declared =
+        camel::core::OperatorTable::instance().semantics(oper);
+    if (declared == nullptr || !declared->binary) {
+        return false;
+    }
+    const camel::core::sem::BinaryAlgebra &algebra = *declared->binary;
+    const std::optional<camel::core::type::TypeCode> element =
+        algebra.elementOf ? algebra.elementOf(type)
+                          : std::optional<camel::core::type::TypeCode>(type->code());
+    if (!element) {
+        return false;
+    }
+    for (const camel::core::sem::BinaryLaw &law : algebra.laws) {
+        if (law.element == *element) {
+            return law.commutative;
+        }
+    }
+    return false;
+}
 } // namespace
 
-void DraftWritings::matchFrom(
+bool DraftWritings::matchFrom(
     camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
-    std::vector<uint8_t> &bound, const std::function<void()> &emit) {
+    std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, bool commuted,
+    const std::function<bool()> &emit) {
     if (at == work.size()) {
-        emit();
-        return;
+        return emit();
     }
     const Item item  = work[at];
     const Pattern &p = *item.pattern;
     switch (p.kind) {
     case Pattern::Kind::Var:
         if (p.constOnly && !constantOf(item.node).has_value()) {
-            return;
+            return false;
         }
         if (const auto *header = draft_.header(item.node);
             header == nullptr || !acceptsType(p.type, header->dataType)) {
-            return;
+            return false;
         }
         if (bound[p.var]) {
             bool same = store_.same(context, bind[p.var], item.node);
@@ -1171,23 +1199,22 @@ void DraftWritings::matchFrom(
                        canonicalConstant(a->first, a->second) ==
                            canonicalConstant(b->first, b->second);
             }
-            if (same) {
-                matchFrom(context, work, at + 1, bind, bound, emit);
-            }
-            return;
+            return same && matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
         }
         bound[p.var] = 1;
         bind[p.var]  = item.node;
-        matchFrom(context, work, at + 1, bind, bound, emit);
-        bound[p.var] = 0;
-        return;
+        {
+            const bool matched = matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
+            bound[p.var]       = 0;
+            return matched;
+        }
     case Pattern::Kind::Constant: {
         const auto found = constantOf(item.node);
-        if (found && found->second == p.type &&
-            canonicalConstant(found->first, p.type) == canonicalConstant(p.value, p.type)) {
-            matchFrom(context, work, at + 1, bind, bound, emit);
+        if (!found || found->second != p.type ||
+            canonicalConstant(found->first, p.type) != canonicalConstant(p.value, p.type)) {
+            return false;
         }
-        return;
+        return matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
     }
     case Pattern::Kind::Op: {
         // The root of a rule is the node itself; below it, any writing of the value read.
@@ -1201,31 +1228,70 @@ void DraftWritings::matchFrom(
                 candidates.push_back(item.node);
             }
         }
-        for (gc_node_ref_t candidate : candidates) {
+        // One pairing of the pattern's operands with a candidate's data inputs. `swapped` reads
+        // the two inputs in the other order; it is legal only for a binary term whose operator's
+        // declared semantics say the exchange gives the same value for this element type.
+        const auto matchCandidate = [&](gc_node_ref_t candidate, bool swapped) -> bool {
             const auto *h = draft_.header(candidate);
             if (h == nullptr || !draft_.alive(candidate) || h->kind != GCNodeKind::Oper ||
                 h->permissions != matchPerms_ || !acceptsType(p.type, h->dataType) ||
-                !(at == 0 ? canBeRoot(candidate) : takesPart(candidate)) ||
+                !takesPart(candidate) ||
                 reinterpret_cast<const GCOperBody *>(draft_.payloadOf(candidate).data())->oper !=
                     p.oper) {
-                continue;
+                return false;
             }
             const auto inputs = draft_.normInputsOf(candidate);
             if (inputs.size() != p.args.size() || !draft_.withInputsOf(candidate).empty()) {
-                continue;
+                return false;
+            }
+            if (swapped && (inputs.size() != 2 || !declaredCommutative(p.oper, h->dataType))) {
+                return false;
+            }
+            // What this term waits for: the rewrite carries it onto the writing that replaces the
+            // root, so the law does not move the computation across a control edge's ordering.
+            const size_t savedWaits = waits != nullptr ? waits->size() : 0;
+            if (waits != nullptr) {
+                for (gc_node_ref_t wait : draft_.ctrlInputsOf(candidate)) {
+                    if (std::find(waits->begin(), waits->end(), wait) == waits->end()) {
+                        waits->push_back(wait);
+                    }
+                }
             }
             const size_t saved = work.size();
             for (size_t i = 0; i < inputs.size(); ++i) {
-                work.push_back({&p.args[i], inputs[i]});
+                const size_t input = swapped ? (i == 0 ? 1 : 0) : i;
+                work.push_back({&p.args[i], inputs[input]});
             }
-            matchFrom(context, work, at + 1, bind, bound, emit);
+            const bool matched = matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
             work.resize(saved);
+            if (waits != nullptr) {
+                waits->resize(savedWaits);
+            }
+            return matched;
+        };
+        bool accepted = false;
+        for (gc_node_ref_t candidate : candidates) {
+            accepted = matchCandidate(candidate, false) || accepted;
         }
-        return;
+        if (!accepted && commuted) {
+            // Nothing matched in the order the law wrote. A law is about values, not about the
+            // order the program wrote them in: if the operator's semantics say exchanging its
+            // operands gives the same value, the other order denotes the same left side, so the
+            // right side (built below from the law's own text) is the same value too. The
+            // natural order was tried first, so a law that writes the operands in a particular
+            // order keeps that order whenever the program matches it, and the replacement keeps
+            // the written shape. Operators that do not declare commutativity are never commuted,
+            // and a two-way rule's reverse already reads the other order (`commuted` false).
+            for (gc_node_ref_t candidate : candidates) {
+                accepted = matchCandidate(candidate, true) || accepted;
+            }
+        }
+        return accepted;
     }
     case Pattern::Kind::Compute:
-        return; // right side only
+        return false; // right side only
     }
+    return false;
 }
 
 gc_node_ref_t
@@ -1381,7 +1447,7 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
         size_t appliedInRound = 0;
         const size_t slots    = draft_.nodeSlotCount();
         for (gc_node_ref_t node = 0; node < slots; ++node) {
-            if (!draft_.alive(node) || !canBeRoot(node)) {
+            if (!draft_.alive(node) || !takesPart(node)) {
                 continue;
             }
             const camel::core::sem::PermissionMask context = contextOf(node);
@@ -1394,11 +1460,17 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                 std::vector<Item> work{{&rule.lhs, node}};
                 std::vector<gc_node_ref_t> bind(varCount, kInvalidNodeRef);
                 std::vector<uint8_t> bound(varCount, 0);
+                std::vector<gc_node_ref_t> matchedWaits(
+                    draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
                 std::optional<std::vector<gc_node_ref_t>> chosen;
-                matchFrom(context, work, 0, bind, bound, [&] {
+                std::optional<std::vector<gc_node_ref_t>> chosenWaits;
+                matchFrom(context, work, 0, bind, bound, &matchedWaits, true, [&] {
                     if (!chosen && (!rule.when || rule.when(Match{*this, node, bind}))) {
-                        chosen = bind;
+                        chosen      = bind;
+                        chosenWaits = matchedWaits;
+                        return true;
                     }
+                    return false;
                 });
                 if (!chosen) {
                     continue;
@@ -1420,9 +1492,12 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                 if (made == node) {
                     continue;
                 }
-                const std::vector<gc_node_ref_t> waits(
-                    draft_.ctrlInputsOf(node).begin(),
-                    draft_.ctrlInputsOf(node).end());
+                // Everything the match read that ordered it: the root's own control inputs and
+                // those of the operator terms the law stops reading. A law over data inputs is
+                // sound whatever the node is ordered after, but the engine must not move the
+                // computation across an effect, so the writing that replaces it waits for all of
+                // them (design principles 3.3, 3.4; H95).
+                const std::vector<gc_node_ref_t> waits = chosenWaits.value_or(std::vector<gc_node_ref_t>{});
                 // A node that already existed cannot be made to wait without risking a cycle.
                 if (!waits.empty() && made < before) {
                     continue;
@@ -1494,7 +1569,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
         std::unordered_map<camel::core::OperId, std::vector<gc_node_ref_t>> byOper;
         for (gc_node_ref_t node = 0; node < slots; ++node) {
             if (draft_.alive(node) && draft_.header(node)->kind == GCNodeKind::Oper &&
-                canBeRoot(node)) {
+                takesPart(node)) {
                 byOper[reinterpret_cast<const GCOperBody *>(draft_.payloadOf(node).data())->oper]
                     .push_back(node);
             }
@@ -1517,10 +1592,12 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
                 std::vector<Item> work{{&rule.lhs, node}};
                 std::vector<gc_node_ref_t> bind(varCount, kInvalidNodeRef);
                 std::vector<uint8_t> bound(varCount, 0);
-                matchFrom(context, work, 0, bind, bound, [&] {
+                matchFrom(context, work, 0, bind, bound, nullptr, !rule.twoWay, [&] {
                     if (!rule.when || rule.when(Match{*this, node, bind})) {
                         found.push_back(Found{r, node, bind});
+                        return true;
                     }
+                    return false;
                 });
             }
         }

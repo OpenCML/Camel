@@ -32,10 +32,5 @@ slot_t __process_exit__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __process_sleep__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __process_whoami__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __process_cpu_count__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __process_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __process_has_input__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __process_get_char__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __process_get_chars__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __process_clear_input_buffer__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getProcessOpsMap();

@@ -1,0 +1,13 @@
+/**
+ * A string where the declaration says `int`: the call is refused at the declaration's type, and
+ * the message prints the declaration's own parameter name (`max`) — the one source is
+ * `stdlib/io.cml`, not the C++ module (handover H19, steps 4 and 10).
+ */
+module io_type
+
+import { get_chars } from io
+
+func main(): int sync {
+    println(get_chars('3'))
+    return 0
+}

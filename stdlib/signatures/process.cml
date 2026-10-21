@@ -1,8 +1,8 @@
 /**
  * Signatures of the `process` module (C++ operators, modules/process).
  *
- * Every function touches the process, the terminal or the machine and is declared with effects.
- * `sleep` and `exit` are also built in: they need no import.
+ * Every function touches the process or the machine and is declared with effects. `sleep` and
+ * `exit` are also built in: they need no import. The terminal is `io`'s (H19 step 4).
  *
  * For reference only: these declarations are not compiled. They are checked against the
  * operators the module registers, and docs/stdlib-reference.md is generated from them
@@ -25,29 +25,3 @@ export func whoami(): string
 /// @effect reads the machine
 /// @example cpu_count()    // 8
 export func cpu_count(): int
-
-/// Switches the terminal to raw mode (keys arrive one by one, unechoed) or back.
-/// @effect changes the terminal
-/// @fails fault `RuntimeError` when the terminal refuses
-/// @example set_terminal_raw_mode(true)
-export func set_terminal_raw_mode(enabled: bool): void
-
-/// Whether a key press is waiting to be read.
-/// @effect reads the terminal
-/// @example has_input()    // true or false
-export func has_input(): bool
-
-/// One character of pending terminal input.
-/// @effect reads the terminal
-/// @example get_char()    // 'w'
-export func get_char(): string
-
-/// Up to max characters of pending terminal input.
-/// @effect reads the terminal
-/// @example get_chars(3)    // at most three characters
-export func get_chars(max: int): string
-
-/// Discards the terminal input that is waiting.
-/// @effect reads the terminal
-/// @example clear_input_buffer()
-export func clear_input_buffer(): void

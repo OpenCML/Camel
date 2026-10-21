@@ -39,13 +39,20 @@ expect_stdout_exact = "66.0\n14.0\n28.0\n66.0\n12.0 14.0\ntrue\ntrue\ntrue\n66.0
 timeout_ms = 60000
 
 [[tests]]
-name = "invalid_device"
+name = "missing_device"
 kind = "negative"
 case = "../../cases/modules/tiles/gpu_decorator.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+# A device named by --devices must be there, whatever this machine has: 63 is not, and the
+# diagnostic names it (the devices the machine does have are in the reason). The first use here
+# is a `@gpu` call, and the report points at the annotation that asked for a device (H117: the
+# synthesized dispatch node takes the decorated function's origin), not at `?:?:`.
+args = ["--devices", "63", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_output_contains = ["CAMEL_TILES_DEVICE must be a nonnegative device ordinal"]
+expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 1
+expect_output_contains = ["CUDA device 63 was named by --devices but is not available"]
 timeout_ms = 10000
 
 [[tests]]

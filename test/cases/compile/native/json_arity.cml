@@ -1,0 +1,12 @@
+/**
+ * The declaration of `json:decode` takes one ordinary argument: a second one is refused at the
+ * call, and the overload the message lists is the declaration's (handover H19, step 10; H115).
+ */
+module json_arity
+
+import { decode } from json
+
+func main(): int sync {
+    println(decode('1', 2))
+    return 0
+}

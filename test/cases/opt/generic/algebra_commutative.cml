@@ -1,0 +1,39 @@
+/**
+ * The same program in the two operand orders: a law whose pattern writes `x * c` must also match
+ * a program that wrote `c * x`, because `*`'s declared semantics say exchanging the operands
+ * gives the same value (OperatorSemantics::binary, BinaryLaw.commutative). After the algebra pass
+ * the two functions must be the same graph, and the shape must be the law's: `x * (c + c)`, with
+ * the variable first, because the replacement is built from the law's right side.
+ *
+ * `subtract` and `divide` write the other order of a non-commutative operator; the matcher must
+ * not read `0.0 - x` as `x - 0.0`, nor `1.0 / x` as `x / 1.0`, because `-` and `/` declare no
+ * commutativity (the value would change).
+ *
+ *   camel algebra_commutative.cml std::opt std::jgir
+ *   camel algebra_commutative.cml std::opt::algebra std::jgir
+ */
+module algebra_commutative
+
+func left(x: float): float {
+    let t = 3.0 * (x + 1.0)
+    return t + t
+}
+
+func right(x: float): float {
+    let t = (x + 1.0) * 3.0
+    return t + t
+}
+
+func subtract(x: float): float {
+    return 0.0 - x
+}
+
+func divide(x: float): float {
+    return 1.0 / x
+}
+
+func main(x: float): int sync {
+    println(left(x), right(x))
+    println(subtract(x), divide(x))
+    return 0
+}

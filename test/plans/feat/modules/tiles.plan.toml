@@ -7,9 +7,9 @@ tags = ["feat", "modules", "tiles"]
 name = "compiled_region_fresh_inputs"
 kind = "behavior"
 case = "../../../cases/modules/tiles/compiled_region.cml"
-args = ["--gc", "generational", "${case}", "tiles::test_outline_compiled", "${backend}"]
+args = ["--devices", "cpu", "--gc", "generational", "${case}", "tiles::test_outline_compiled", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_TILES_DEVICE=invalid", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\ntensor([      4.,      16.,      36.], dtype=float32)\ntensor([      2.,       4.,       6.], dtype=float32)\ntensor([      8.,      10.,      12.], dtype=float32)\ntensor([     64.,     100.,     144.], dtype=float32)\ntensor([      4.,      16.,      36.], dtype=float32)\n"
 timeout_ms = 180000
@@ -18,8 +18,8 @@ timeout_ms = 180000
 name = "compiled_region_invalidation_and_ownership"
 kind = "behavior"
 case = "../../../cases/modules/tiles/compiled_region.cml"
-args = ["${case}", "tiles::test_outline_compiled", "std::nvm"]
-envs = ["CAMEL_TILES_TEST_INVALIDATION=1", "CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "tiles::test_outline_compiled", "std::nvm"]
+envs = ["CAMEL_TILES_TEST_INVALIDATION=1"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\ntensor([      4.,      16.,      36.], dtype=float32)\ntensor([      2.,       4.,       6.], dtype=float32)\ntensor([      8.,      10.,      12.], dtype=float32)\ntensor([     64.,     100.,     144.], dtype=float32)\ntensor([      4.,      16.,      36.], dtype=float32)\n"
 timeout_ms = 180000
@@ -28,9 +28,9 @@ timeout_ms = 180000
 name = "compiled_region_tuple_and_embedded_axis"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["--gc", "generational", "${case}", "tiles::test_outline_compiled", "${backend}"]
+args = ["--devices", "cpu", "--gc", "generational", "${case}", "tiles::test_outline_compiled", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_TILES_DEVICE=invalid", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 180000
@@ -39,8 +39,8 @@ timeout_ms = 180000
 name = "compiled_region_parallel"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["--gc", "generational", "${case}", "tiles::test_outline_compiled", "std::prl(bytecode=false)"]
-envs = ["CAMEL_TILES_DEVICE=invalid", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--devices", "cpu", "--gc", "generational", "${case}", "tiles::test_outline_compiled", "std::prl(bytecode=false)"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 180000
@@ -49,8 +49,7 @@ timeout_ms = 180000
 name = "cast_like_aliases_the_same_element_type"
 kind = "behavior"
 case = "../../../cases/modules/tiles/cast_like.cml"
-args = ["${case}", "std::macro"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::macro"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -74,8 +73,7 @@ timeout_ms = 180000
 name = "cast_between_element_types_stays_on_cpu"
 kind = "negative"
 case = "../../../cases/modules/tiles/cast_dtype.cml"
-args = ["${case}"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}"]
 expect_exit = 1
 expect_output_contains = ["operator 'tensor:cast' needs a statically known f32 tensor result"]
 timeout_ms = 10000
@@ -84,8 +82,7 @@ timeout_ms = 10000
 name = "slice_bounds_rejected_before_cuda"
 kind = "negative"
 case = "../../../cases/modules/tiles/slice_bounds.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["slice bounds 0..9 are outside axis 0 of extent 3"]
 timeout_ms = 10000
@@ -94,8 +91,7 @@ timeout_ms = 10000
 name = "plan"
 kind = "behavior"
 case = "../../../cases/modules/tiles/plan.cml"
-args = ["${case}"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -119,10 +115,9 @@ timeout_ms = 10000
 
 [[tests]]
 name = "source"
-envs = ["CAMEL_TILES_DEVICE=invalid"]
 kind = "behavior"
 case = "../../../cases/modules/tiles/source.cml"
-args = ["${case}"]
+args = ["--devices", "cpu", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["extern \"C\" __global__", "k_row<3ULL", "__fadd_rn(", "reinterpret_cast<float*>(v[2])[k_row]"]
 timeout_ms = 10000
@@ -145,8 +140,7 @@ timeout_ms = 10000
 name = "selected_branch_effect"
 kind = "negative"
 case = "../../../cases/modules/tiles/branch_effect.cml"
-args = ["${case}"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}"]
 expect_exit = 1
 expect_output_contains = ["unsupported or effectful operator ':io/println'"]
 verify_script = """
@@ -160,8 +154,7 @@ timeout_ms = 10000
 name = "empty_mean"
 kind = "negative"
 case = "../../../cases/modules/tiles/empty_mean.cml"
-args = ["${case}"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}"]
 expect_exit = 1
 expect_output_contains = ["reduction core contract: empty reduction domain"]
 timeout_ms = 10000
@@ -174,8 +167,7 @@ timeout_ms = 10000
 name = "loop_structure_nvm"
 kind = "behavior"
 case = "../../../cases/modules/tiles/loop_source.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
@@ -184,8 +176,7 @@ timeout_ms = 10000
 name = "loop_structure_fvm"
 kind = "behavior"
 case = "../../../cases/modules/tiles/loop_source.cml"
-args = ["${case}", "std::fvm"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::fvm"]
 expect_exit = 0
 expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
@@ -194,8 +185,7 @@ timeout_ms = 10000
 name = "loop_structure_jit"
 kind = "behavior"
 case = "../../../cases/modules/tiles/loop_source.cml"
-args = ["${case}", "std::jit"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::jit"]
 expect_exit = 0
 expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
@@ -204,8 +194,7 @@ timeout_ms = 10000
 name = "loop_structure_prl"
 kind = "behavior"
 case = "../../../cases/modules/tiles/loop_source.cml"
-args = ["${case}", "std::prl"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::prl"]
 expect_exit = 0
 expect_stdout_contains = ["tensor([      3.,       6.,       9.], dtype=float32)", "const long long constant_3[2]", "for(unsigned long long k_iteration=0ULL;k_iteration<2ULL", "k_loop_input0=k_next0;"]
 timeout_ms = 10000
@@ -214,8 +203,7 @@ timeout_ms = 10000
 name = "loop_structure_closure_nvm"
 kind = "negative"
 case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["tiles requires a pure static For loop"]
 timeout_ms = 10000
@@ -224,8 +212,7 @@ timeout_ms = 10000
 name = "loop_structure_closure_fvm"
 kind = "negative"
 case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
-args = ["${case}", "std::fvm"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::fvm"]
 expect_exit = 1
 expect_output_contains = ["tiles requires a pure static For loop"]
 timeout_ms = 10000
@@ -234,8 +221,7 @@ timeout_ms = 10000
 name = "loop_structure_closure_prl"
 kind = "negative"
 case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
-args = ["${case}", "std::prl"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::prl"]
 expect_exit = 1
 expect_output_contains = ["tiles requires a pure static For loop"]
 timeout_ms = 10000
@@ -244,8 +230,7 @@ timeout_ms = 10000
 name = "regions.nvm"
 kind = "behavior"
 case = "../../../cases/modules/tiles/regions.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -293,8 +278,7 @@ timeout_ms = 10000
 name = "regions.fvm"
 kind = "behavior"
 case = "../../../cases/modules/tiles/regions.cml"
-args = ["${case}", "std::fvm"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::fvm"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -323,8 +307,7 @@ timeout_ms = 10000
 name = "regions.jit"
 kind = "behavior"
 case = "../../../cases/modules/tiles/regions.cml"
-args = ["${case}", "std::jit"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::jit"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -439,19 +422,101 @@ kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
 args = ["--gc", "generational", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit_hot_threshold0", "prl"]
-envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
 timeout_ms = 30000
 
 [[tests]]
-name = "gpu_preference.invalid_configuration"
+name = "gpu_preference.missing_device"
 kind = "negative"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=invalid"]
+# A device named by --devices must be there: it is a requirement, not a preference. 63 is
+# outside any machine's list, so this needs no GPU and no driver; the report names the device
+# and the first use that wanted it (the `available()` call here).
+args = ["--devices", "63", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_output_contains = ["CAMEL_TILES_DEVICE must be a nonnegative device ordinal"]
+expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 13
+expect_output_contains = ["CUDA device 63 was named by --devices but is not available"]
+timeout_ms = 10000
+
+[[tests]]
+name = "gpu_probe.once_per_process"
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_fallback.cml"
+# No device: available() probes once, and the four @gpu calls take the host fallback from that
+# cached miss instead of constructing the back end again. Before H117 this run asked the driver
+# seven times (one per preferred call). The count is asserted on the module's info log, the only
+# line the probe writes; `--devices cpu` never reaches it (see host_only_is_silent).
+args = ["-vv", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+    const lines = input.normalized.stderr.split('\n').filter((line) => line.includes('probe: constructing the CUDA backend'));
+    assert(lines.length === 1, `expected one device probe, saw ${lines.length}`);
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_probe.host_only_is_silent"
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_fallback.cml"
+# `--devices cpu` is answered before the probe: the host-only selection never constructs the
+# back end, so there is nothing to log and the probe line does not appear at all.
+args = ["-vv", "--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+    const lines = input.normalized.stderr.split('\n').filter((line) => line.includes('probe: constructing the CUDA backend'));
+    assert(lines.length === 0, `the host-only selection probed the driver ${lines.length} time(s)`);
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "gpu_preference.host_only"
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_fallback.cml"
+# --devices cpu: the host runs everything, including the `@gpu` functions, and no device is
+# asked for; the output is the one the machine without a device gives.
+args = ["--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "gpu_preference.named_device"
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_fallback.cml"
+# Device 0 is named, and the run takes the device path: available() is true and the `@gpu`
+# functions execute on it. The probe uses the surface that existed before --devices, so a
+# broken option makes this test fail rather than skip.
+args = ["--devices", "0", "${case}", "std::nvm"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 0
+expect_stdout_exact = "true\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+timeout_ms = 60000
+
+[[tests]]
+name = "gpu_preference.invalid_devices"
+kind = "negative"
+case = "../../../cases/modules/tiles/gpu_fallback.cml"
+# The option is read before anything runs, so a value that is not a device list is refused
+# then, quoting the value and saying what to write.
+args = ["--devices", "invalid", "${case}"]
+expect_exit = 1
+expect_output_contains = ["Error: --devices 'invalid': 'invalid' is not a device; write cpu or a CUDA device ordinal"]
 timeout_ms = 10000
 
 [[tests]]
@@ -460,7 +525,7 @@ kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
 args = ["--gc", "generational", "${case}", "tiles::test_outline_preferred", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 180000
@@ -471,7 +536,7 @@ kind = "behavior"
 case = "../../../cases/modules/tiles/public_pass.cml"
 args = ["--gc", "generational", "${case}", "tiles::compile", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 180000
@@ -489,8 +554,7 @@ timeout_ms = 20000
 name = "device_tree_rejects_unsupported_leaf_with_path"
 kind = "negative"
 case = "../../../cases/modules/tiles/device_tree_invalid.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["Device leaf 'block.1.label'", "unsupported type string"]
 timeout_ms = 10000

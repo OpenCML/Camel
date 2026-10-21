@@ -72,6 +72,10 @@ enum class RuntimeDiag : uint32_t {
     // A pass that does not know values with several writings was given a program that has them
     // (graph store design 3.7); an extraction before it fixes the pipeline.
     PassNeedsExtraction = 0x000062,
+    // A device the run named with `--devices` that is not there. A capability miss stays
+    // BackendUnavailable (the host runs the program); this is the run's own configuration
+    // naming a device that must exist (design principles 13.4).
+    DeviceUnavailable = 0x000070,
     // Warnings (severity bits = Warn).
     PassesNeverRun           = 0x10000F,
     ConstantExpressionFaults = 0x100015,

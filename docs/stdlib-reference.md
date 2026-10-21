@@ -39,7 +39,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [built-in](#built-in-functions) | none | C++ | 51 |
 | [str](#str) | `import { ... } from str` | C++ | 16 |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
-| [tree](#tree) | `import { ... } from tree` | C++ | 7 |
+| [ckpt](#ckpt) | `import { ... } from ckpt` | C++ | 7 |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ | 2 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 48 |
@@ -48,7 +48,8 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [random](#random) | `import { ... } from random` | C++ | 10 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
 | [fs](#fs) | `import { ... } from fs` | C++ | 15 |
-| [process](#process) | `import { ... } from process` | C++ | 8 |
+| [io](#io) | `import { ... } from io` | C++ | 5 |
+| [process](#process) | `import { ... } from process` | C++ | 3 |
 | [env](#env) | `import { ... } from env` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
 | [re](#re) | `import { ... } from re` | C++ | 1 |
@@ -1045,9 +1046,9 @@ Concatenates two binary values without decoding either one.
 - Pure.
 - Example: `concat(encode('header'), from_array([0, 255]))`
 
-<a id="tree"></a>
+<a id="ckpt"></a>
 
-## `tree`: parameter trees and checkpoints
+## `ckpt`: parameter trees and checkpoints
 
 #### `tree_map`
 
@@ -2587,47 +2588,13 @@ delete; a file or a symbolic link is an error too.
 - Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
 - Example: `remove_dir('out/old')`
 
-<a id="process"></a>
+<a id="io"></a>
 
-## `process`: process and terminal
+## `io`: terminal input
 
-Every function touches the process, the terminal or the machine and is declared with effects.
-`sleep` and `exit` are also built in: they need no import.
-
-#### `sleep`
-
-```camel
-sleep: (milliseconds: int) => void
-```
-
-Suspends the program for the given number of milliseconds.
-
-- With effects: waits.
-- Failure: fault `InvalidArgument` when the duration is negative.
-- Example: `sleep(100)`
-
-#### `whoami`
-
-```camel
-whoami: () => string
-```
-
-The name of the user the process runs as.
-
-- With effects: reads the environment.
-- Failure: fault `RuntimeError` when the name cannot be found.
-- Example: `whoami()` gives `'alice'`
-
-#### `cpu_count`
-
-```camel
-cpu_count: () => int
-```
-
-The number of hardware threads, at least 1.
-
-- With effects: reads the machine.
-- Example: `cpu_count()` gives `8`
+The terminal: what it has waiting to be read, the keys themselves, and raw mode. The standard
+streams and `print`/`println`/`input`/`eprintln` are the prelude's; `Stream` and a `stdin` value
+are later work (H19 question 5).
 
 #### `set_terminal_raw_mode`
 
@@ -2685,6 +2652,48 @@ Discards the terminal input that is waiting.
 - With effects: reads the terminal.
 - Example: `clear_input_buffer()`
 
+<a id="process"></a>
+
+## `process`: the process and the machine
+
+Every function touches the process or the machine and is declared with effects. `sleep` and
+`exit` are also built in: they need no import. The terminal is `io`'s (H19 step 4).
+
+#### `sleep`
+
+```camel
+sleep: (milliseconds: int) => void
+```
+
+Suspends the program for the given number of milliseconds.
+
+- With effects: waits.
+- Failure: fault `InvalidArgument` when the duration is negative.
+- Example: `sleep(100)`
+
+#### `whoami`
+
+```camel
+whoami: () => string
+```
+
+The name of the user the process runs as.
+
+- With effects: reads the environment.
+- Failure: fault `RuntimeError` when the name cannot be found.
+- Example: `whoami()` gives `'alice'`
+
+#### `cpu_count`
+
+```camel
+cpu_count: () => int
+```
+
+The number of hardware threads, at least 1.
+
+- With effects: reads the machine.
+- Example: `cpu_count()` gives `8`
+
 <a id="env"></a>
 
 ## `env`: environment
@@ -2717,6 +2726,12 @@ The current working directory.
 
 ## `json`
 
+A Json is a JSON value whose shape is known only when the program runs: `decode` reads a
+text, or gives an error value when the text is not JSON, and the accessors below look into
+it, each giving a value of a definite type. `encode` writes the JSON text of a value, and
+`decode_as` decodes to the type of a shape; both are computed signatures that a declaration
+cannot express, so they are not declared here (see `stdlib/signatures/json.cml`).
+
 #### `encode`
 
 ```camel
@@ -2742,29 +2757,11 @@ line.
 - Pure.
 - Example: `encode([1, 2], 2)` gives `'[\n  1,\n  2\n]'`
 
-#### `decode`
-
-```camel
-decode: (text: string) => Json!
-```
-
-The value a JSON text describes, as a `Json`: a value of a definite type whose content is
-known only when the program runs; an error value when the text is not JSON or nests deeper
-than the limit (design principles 11.2). Look into a Json with get, as_int, as_array and the
-other operators below, each of which gives a value of a definite type and takes a `Json?`, a
-`Json!` or a `Json?!` as well, so that calls chain (a `Json!` gives the two-layer result and
-its error is passed on unchanged); read a part whose shape is known with decode_as. Prints as
-its JSON text. In the examples below, `j` is a Json decoded so.
-
-- Pure.
-- Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 by default, set by `CAMEL_JSON_MAX_DEPTH`; the message gives the line and column of the bracket that goes too deep).
-- Example: `decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1` gives `80`
-
 #### `decode_as`
 
 ```camel
 decode_as: <shape: T> (text: string) => T!
-decode_as: (text: Json) => T!
+decode_as: <shape: T> (text: Json) => T!
 ```
 
 The value a JSON text (or a Json decoded before) describes, decoded to the type of shape;
@@ -2775,6 +2772,24 @@ takes whatever is there.
 - Pure.
 - Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit.
 - Example: `decode_as<[] as Map<string, int>>('{"a": 1}')` gives `{a: 1}`
+
+#### `decode`
+
+```camel
+decode: (text: string) => Json!
+```
+
+The value a JSON text describes, as a `Json`: a value of a definite type whose content is
+known only when the program runs; an error value when the text is not JSON or nests deeper
+than the limit (design principles 11.2). Look into a Json with get, as_int, as_array and the
+other operators below, each of which gives a value of a definite type and takes a `Json?`, a
+`Json!` or a `Json!?` as well, so that calls chain (a `Json!` gives the two-layer result and
+its error is passed on unchanged); read a part whose shape is known with decode_as. Prints as
+its JSON text. In the examples below, `j` is a Json decoded so.
+
+- Pure.
+- Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 by default, set by `CAMEL_JSON_MAX_DEPTH`; the message gives the line and column of the bracket that goes too deep).
+- Example: `decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1` gives `80`
 
 #### `kind`
 
@@ -2802,13 +2817,13 @@ Whether a Json is the JSON null.
 
 ```camel
 get: <key: string> (j: Json) => Json?
-get: (j: Json?) => Json?
-get: (j: Json!) => Json?!
-get: (j: Json?!) => Json?!
+get: <key: string> (j: Json?) => Json?
+get: <key: string> (j: Json!) => Json!?
+get: <key: string> (j: Json!?) => Json!?
 ```
 
 The member key of an object; null when j is not an object, has no such member, or is null
-itself (so that calls chain: j->get<'a'>->get<'b'>). A `Json!` gives a `Json?!`: the null is
+itself (so that calls chain: j->get<'a'>->get<'b'>). A `Json!` gives a `Json!?`: the null is
 the nullable layer, and the error of a document that had failed is passed on unchanged.
 
 - Pure.
@@ -2818,13 +2833,13 @@ the nullable layer, and the error of a document that had failed is passed on unc
 
 ```camel
 get: <index: int> (j: Json) => Json?
-get: (j: Json?) => Json?
-get: (j: Json!) => Json?!
-get: (j: Json?!) => Json?!
+get: <index: int> (j: Json?) => Json?
+get: <index: int> (j: Json!) => Json!?
+get: <index: int> (j: Json!?) => Json!?
 ```
 
 The element index of an array; null when j is not an array, the index is out of range, or j
-is null itself. A `Json!` gives a `Json?!`, as get<key> does.
+is null itself. A `Json!` gives a `Json!?`, as get<key> does.
 
 - Pure.
 - Example: `j->get<1>->as_int ?? 0` gives `6, for j of '[5, 6]'`
@@ -2834,11 +2849,11 @@ is null itself. A `Json!` gives a `Json?!`, as get<key> does.
 ```camel
 as_bool: (j: Json) => bool?
 as_bool: (j: Json?) => bool?
-as_bool: (j: Json!) => bool?!
-as_bool: (j: Json?!) => bool?!
+as_bool: (j: Json!) => bool!?
+as_bool: (j: Json!?) => bool!?
 ```
 
-The bool a Json holds; null for any other kind (and a `Json!` gives a `bool?!`, the error of
+The bool a Json holds; null for any other kind (and a `Json!` gives a `bool!?`, the error of
 the document passed on unchanged).
 
 - Pure.
@@ -2849,12 +2864,12 @@ the document passed on unchanged).
 ```camel
 as_int: (j: Json) => int?
 as_int: (j: Json?) => int?
-as_int: (j: Json!) => int?!
-as_int: (j: Json?!) => int?!
+as_int: (j: Json!) => int!?
+as_int: (j: Json!?) => int!?
 ```
 
 The integer a Json holds; null for any other kind (a number with a fraction is not an int),
-and a `Json!` gives an `int?!` with the error of the document passed on unchanged.
+and a `Json!` gives an `int!?` with the error of the document passed on unchanged.
 
 - Pure.
 - Example: `j->as_int ?? 0` gives `42, for j of '42'`
@@ -2864,12 +2879,12 @@ and a `Json!` gives an `int?!` with the error of the document passed on unchange
 ```camel
 as_float: (j: Json) => float?
 as_float: (j: Json?) => float?
-as_float: (j: Json!) => float?!
-as_float: (j: Json?!) => float?!
+as_float: (j: Json!) => float!?
+as_float: (j: Json!?) => float!?
 ```
 
 The number a Json holds, an integer included; null for any other kind, and a `Json!` gives a
-`float?!` with the error of the document passed on unchanged.
+`float!?` with the error of the document passed on unchanged.
 
 - Pure.
 - Example: `j->as_float ?? 0.0` gives `2.0, for j of '2'`
@@ -2879,11 +2894,11 @@ The number a Json holds, an integer included; null for any other kind, and a `Js
 ```camel
 as_string: (j: Json) => string?
 as_string: (j: Json?) => string?
-as_string: (j: Json!) => string?!
-as_string: (j: Json?!) => string?!
+as_string: (j: Json!) => string!?
+as_string: (j: Json!?) => string!?
 ```
 
-The string a Json holds; null for any other kind, and a `Json!` gives a `string?!` with the
+The string a Json holds; null for any other kind, and a `Json!` gives a `string!?` with the
 error of the document passed on unchanged.
 
 - Pure.
@@ -2894,11 +2909,11 @@ error of the document passed on unchanged.
 ```camel
 as_array: (j: Json) => Json[]?
 as_array: (j: Json?) => Json[]?
-as_array: (j: Json!) => Json[]?!
-as_array: (j: Json?!) => Json[]?!
+as_array: (j: Json!) => Json[]!?
+as_array: (j: Json!?) => Json[]!?
 ```
 
-The elements of a JSON array; null for any other kind, and a `Json!` gives a `Json[]?!` with
+The elements of a JSON array; null for any other kind, and a `Json!` gives a `Json[]!?` with
 the error of the document passed on unchanged.
 
 - Pure.
@@ -2909,12 +2924,12 @@ the error of the document passed on unchanged.
 ```camel
 as_object: (j: Json) => Map<string, Json>?
 as_object: (j: Json?) => Map<string, Json>?
-as_object: (j: Json!) => Map<string, Json>?!
-as_object: (j: Json?!) => Map<string, Json>?!
+as_object: (j: Json!) => Map<string, Json>!?
+as_object: (j: Json!?) => Map<string, Json>!?
 ```
 
 The members of a JSON object, by name; null for any other kind, and a `Json!` gives a
-`Map<string, Json>?!` with the error of the document passed on unchanged.
+`Map<string, Json>!?` with the error of the document passed on unchanged.
 
 - Pure.
 - Example: `keys(j->as_object ?? ([] as Map<string, Json>))` gives `['a', 'b'], for j of '{"b": 1, "a": 2}'`

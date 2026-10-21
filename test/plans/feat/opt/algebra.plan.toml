@@ -52,6 +52,100 @@ verify_script = '''
 '''
 
 [[tests]]
+name = "commutative.graph"
+desc = "The two operand orders of the same program become the same graph: `3.0*(x+1); t+t` and `(x+1)*3.0; t+t` both take the law's shape `x*(c+c)` = `(x+1)*6.0`, because `*`'s declared semantics say the exchange gives the same value and the replacement is built from the law's right side. The 3.0 and the doubling 2.0 are gone (H118)."
+case = "../../../cases/opt/generic/algebra_commutative.cml"
+args = ["${case}","std::opt","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout),G=n=>{const g=d.graphs.find(x=>x.name===n);assert(g,'missing '+n);return g};
+ const T=g=>{const N=new Map(g.nodes.map(n=>[n.id,n])),I=new Map();
+  for(const e of g.edges)if(e.kind==='normal'){if(!I.has(e.target))I.set(e.target,new Map());I.get(e.target).set(e.targetIndex,e.source)}
+  const M=new Map(),W=id=>{if(M.has(id))return M.get(id);const n=N.get(id);assert(n,'dead reference '+id);
+   const v={k:n.kind,l:n.label,t:n.outputType,i:[...(I.get(id)||new Map()).keys()].sort((a,b)=>a-b).map(i=>W(I.get(id).get(i)))};
+   M.set(id,v);return v};return JSON.stringify(W(g.exit))};
+ const tl=T(G('left')),tr=T(G('right'));
+ assert(tl===tr,'the two spellings are different graphs:\n'+tl+'\n'+tr);
+ assert(tl.split(':op/add_d').length-1===1,'left: expected one add, got '+tl);
+ assert(tl.split(':op/mul_d').length-1===1,'left: expected one multiply, got '+tl);
+ assert(tl.includes('"l":"6.0"'),'left: coefficient six missing');
+ assert(!tl.includes('"l":"3.0"')&&!tl.includes('"l":"2.0"'),'left: an old coefficient survived');
+}
+'''
+
+[[tests]]
+name = "commutative.graph_algebra"
+desc = "The same identity with the rules pass alone (no inlining, no folding): the matcher's read of the declared commutativity is what makes the two orders one graph."
+case = "../../../cases/opt/generic/algebra_commutative.cml"
+args = ["${case}","std::opt::algebra","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout),G=n=>{const g=d.graphs.find(x=>x.name===n);assert(g,'missing '+n);return g};
+ const T=g=>{const N=new Map(g.nodes.map(n=>[n.id,n])),I=new Map();
+  for(const e of g.edges)if(e.kind==='normal'){if(!I.has(e.target))I.set(e.target,new Map());I.get(e.target).set(e.targetIndex,e.source)}
+  const M=new Map(),W=id=>{if(M.has(id))return M.get(id);const n=N.get(id);assert(n,'dead reference '+id);
+   const v={k:n.kind,l:n.label,t:n.outputType,i:[...(I.get(id)||new Map()).keys()].sort((a,b)=>a-b).map(i=>W(I.get(id).get(i)))};
+   M.set(id,v);return v};return JSON.stringify(W(g.exit))};
+ const tl=T(G('left')),tr=T(G('right'));
+ assert(tl===tr,'the two spellings are different graphs:\n'+tl+'\n'+tr);
+ assert(tl.split(':op/add_d').length-1===1,'left: expected one add, got '+tl);
+ assert(tl.split(':op/mul_d').length-1===1,'left: expected one multiply, got '+tl);
+ assert(tl.includes('"l":"6.0"'),'left: coefficient six missing');
+}
+'''
+
+[[tests]]
+name = "commutative.graph_safe"
+desc = "Under the strict numeric policy the pair is still one graph: the exact doubling of 3.0 needs no permission, so the safe policy takes the same law and the same shape."
+case = "../../../cases/opt/generic/algebra_commutative.cml"
+args = ["${case}","std::opt(safe_fp=true)","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout),G=n=>{const g=d.graphs.find(x=>x.name===n);assert(g,'missing '+n);return g};
+ const T=g=>{const N=new Map(g.nodes.map(n=>[n.id,n])),I=new Map();
+  for(const e of g.edges)if(e.kind==='normal'){if(!I.has(e.target))I.set(e.target,new Map());I.get(e.target).set(e.targetIndex,e.source)}
+  const M=new Map(),W=id=>{if(M.has(id))return M.get(id);const n=N.get(id);assert(n,'dead reference '+id);
+   const v={k:n.kind,l:n.label,t:n.outputType,i:[...(I.get(id)||new Map()).keys()].sort((a,b)=>a-b).map(i=>W(I.get(id).get(i)))};
+   M.set(id,v);return v};return JSON.stringify(W(g.exit))};
+ const tl=T(G('left')),tr=T(G('right'));
+ assert(tl===tr,'the two spellings are different graphs under safe_fp:\n'+tl+'\n'+tr);
+ assert(tl.split(':op/mul_d').length-1===1,'left: expected one multiply, got '+tl);
+ assert(tl.includes('"l":"6.0"'),'left: coefficient six missing');
+}
+'''
+
+[[tests]]
+name = "commutative.noncommutative"
+desc = "The guard's other half: `-` and `/` declare no commutativity, so `0.0 - x` is not read as `x - 0.0` (which would give x) and `1.0 / x` is not read as `x / 1.0` (which would give x). The execution test pins the values (-2.0, 0.5)."
+case = "../../../cases/opt/generic/algebra_commutative.cml"
+args = ["${case}","std::opt::algebra","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout),G=n=>{const g=d.graphs.find(x=>x.name===n);assert(g,'missing '+n);return g};
+ const T=g=>{const N=new Map(g.nodes.map(n=>[n.id,n])),I=new Map();
+  for(const e of g.edges)if(e.kind==='normal'){if(!I.has(e.target))I.set(e.target,new Map());I.get(e.target).set(e.targetIndex,e.source)}
+  const M=new Map(),W=id=>{if(M.has(id))return M.get(id);const n=N.get(id);assert(n,'dead reference '+id);
+   const v={k:n.kind,l:n.label,t:n.outputType,i:[...(I.get(id)||new Map()).keys()].sort((a,b)=>a-b).map(i=>W(I.get(id).get(i)))};
+   M.set(id,v);return v};return JSON.stringify(W(g.exit))};
+ const s=T(G('subtract')),q=T(G('divide'));
+ assert(s.split(':op/sub_d').length-1===1,'subtract was commuted: '+s);
+ assert(q.split(':op/div_d').length-1===1,'divide was commuted: '+q);
+ assert(s.includes('"l":"0.0"'),'subtract lost its zero: '+s);
+}
+'''
+
+[[tests]]
+name = "commutative.execution"
+desc = "The pair computes the same value in both orders on every backend (18.0 = (2+1)*3 doubled), and the non-commutative functions keep their values (-2.0, 0.5), so the equal graph is also the equal program."
+case = "../../../cases/opt/generic/algebra_commutative.cml"
+args = ["${case}","--arg","x=2","std::opt","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+verify_script = '''
+({input,assert})=>assert(input.normalized.stdout.trim()==="18.0 18.0\n-2.0 0.5",input.normalized.stdout)
+'''
+
+[[tests]]
 name = "execution.reference"
 case = "../../../cases/opt/generic/algebra.cml"
 args = ["${case}","--arg","x=2","${backend}"]
@@ -571,8 +665,8 @@ args = ["${case}","std::macro","std::opt(safe_fp=false)","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
- assert(g.nodes.filter(n=>[':op/add_d',':op/mul_d'].includes(n.label)).length===5,'gradient did not simplify');
- for(const label of ['2.0','3.0','rand:rand','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
+ assert(g.nodes.filter(n=>[':op/add_d',':op/mul_d'].includes(n.label)).length===4,'gradient did not simplify');
+ for(const label of ['2.0','6.0','rand:rand','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
 }
 '''
 
@@ -583,8 +677,8 @@ args = ["${case}","std::macro","std::opt(safe_fp=true)","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
- assert(g.nodes.filter(n=>[':op/add_d',':op/mul_d'].includes(n.label)).length===5,'gradient did not simplify');
- for(const label of ['2.0','3.0','rand:rand','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
+ assert(g.nodes.filter(n=>[':op/add_d',':op/mul_d'].includes(n.label)).length===4,'gradient did not simplify');
+ for(const label of ['2.0','6.0','rand:rand','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
 }
 '''
 
@@ -644,7 +738,7 @@ verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  assert(g.normalPorts.length===1,'runtime input folded');
- assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===15,'integrated algebra policy not applied');
+ assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===10,'integrated algebra policy not applied');
  const f=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='strict_coefficients');
  assert(f.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===1,'the default policy did not combine the coefficients');
 }
@@ -658,11 +752,49 @@ verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  assert(g.normalPorts.length===1,'runtime input folded');
- assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===15,'integrated algebra policy not applied');
+ assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===14,'integrated algebra policy not applied');
  const f=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='strict_coefficients');
  assert(f.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===3,'the strict policy regrouped the coefficients');
 }
 '''
+
+[[tests]]
+name = "order.graph"
+desc = "A law over data inputs fires on a product that carries a control input, and the writing that replaces it waits for what the product waited for: the rewritten products keep their control edges, so no computation crosses the effect's ordering (design principles 3.3, 3.4; H95, H110)."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra_order.cml"
+args = ["${case}", "std::opt::inline", "std::opt::algebra", "std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
+ const nodes=g.nodes, edges=g.edges;
+ const byId=id=>nodes.find(n=>n.id===id);
+ const ctrlOf=n=>edges.filter(e=>e.target===n.id&&e.kind==='control').map(e=>byId(e.source));
+ const muls=nodes.filter(n=>n.label===':op/mul_d');
+ assert(muls.length===2,'the two scaled calls were not folded into products: '+muls.length);
+ assert(!nodes.some(n=>n.label===':op/add_d'),'the doubled product was not folded');
+ assert(nodes.some(n=>n.label==='0.2'),'coefficient 0.2 missing');
+ for(const m of muls){
+  const waits=ctrlOf(m);
+  assert(waits.length>0,'the rewritten product lost its control input');
+  assert(waits.some(w=>w.label===':io/println'),'the rewritten product no longer waits for the effect it was ordered after');
+ }
+ assert(muls.some(m=>ctrlOf(m).some(w=>muls.includes(w))),'the control edge between the two calls was lost');
+}
+'''
+
+[[tests]]
+name = "order.execution"
+desc = "The rewritten products still run after the effects they were ordered after: the print order is the source's on every back end."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra_order.cml"
+args = ["${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "first\nscaled 0.4 0.4\nlast\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 
 
 [[tests]]

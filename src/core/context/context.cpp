@@ -411,6 +411,20 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
     lastCmoLoadError_.clear();
     auto candidates = getModuleNameCandidates(currentModuleName, rawModuleName);
 
+    // A module resolves its own imports next to itself before the global search paths. The entry
+    // directory is first among those (the entry's imports resolve there), so without this the
+    // standard library's own import of `graph` — stdlib/rules.cml, compiled on demand by the
+    // algebraic pass — finds a same-named program of the entry directory (a test case named
+    // graph.cml, a user's file) instead of stdlib/graph.cmo (H112).
+    std::string importerDir;
+    if (!currentModuleName.empty()) {
+        auto importer = modules_.find(currentModuleName);
+        if (importer != modules_.end() && importer->second && !importer->second->path().empty()) {
+            importerDir = camel::utils::pathToUtf8(
+                camel::utils::pathFromUtf8(importer->second->path()).parent_path());
+        }
+    }
+
     for (const auto &name : candidates) {
         auto it = modules_.find(name);
         if (it != modules_.end()) {
@@ -421,8 +435,9 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
             return it->second;
         }
 
-        module_ptr_t module = tryLoadModule(name);
-        if (module) {
+        const auto accept = [&](module_ptr_t module) -> module_ptr_t {
+            if (!module)
+                return nullptr;
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                 "Context",
                 "Module '{}' loaded from file '{}'.",
@@ -457,6 +472,22 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
                 camel::core::module::warnUndeclaredOperatorTraits(*module);
             }
             return module;
+        };
+
+        module_ptr_t module;
+        bool resolvedNextToImporter = false;
+        if (!importerDir.empty()) {
+            auto [path, isCmo] = findModuleUnder(importerDir, name);
+            if (!path.empty()) {
+                resolvedNextToImporter = true;
+                module                 = loadModuleFrom(name, path, isCmo);
+            }
+        }
+        if (!module && !resolvedNextToImporter) {
+            module = tryLoadModule(name);
+        }
+        if (auto accepted = accept(std::move(module))) {
+            return accepted;
         }
 
         auto builtin = getBuiltinModule(name);
@@ -561,12 +592,13 @@ std::string Context::resolveRelativeModuleName(
     return join(base, ".");
 }
 
-std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &moduleName) {
+std::pair<std::string, bool>
+Context::findModuleUnder(const std::string &baseDir, const std::string &moduleName) {
     std::string relativePath = moduleName;
     std::replace(relativePath.begin(), relativePath.end(), '.', '/');
     fs::path relPath = camel::utils::pathFromUtf8(relativePath);
-    fs::path parentDir = relPath.parent_path();
-    std::string stem   = camel::utils::pathToUtf8(relPath.filename());
+    fs::path dir     = camel::utils::pathFromUtf8(baseDir) / relPath.parent_path();
+    std::string stem = camel::utils::pathToUtf8(relPath.filename());
     if (stem.empty())
         stem = camel::utils::pathToUtf8(relPath);
 
@@ -575,14 +607,14 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
     /// If D/xx is a directory, also search: 3) D/xx/xx.cmo  4) D/xx/xx.*
     // A directory is listed once per context (doc 38, section 8 item 5): looking every
     // module up by listing its directory again made N modules in one directory O(N^2).
-    auto findModuleInDir = [&](const fs::path &dir) -> std::pair<std::string, bool> {
-        const std::string key = camel::utils::pathToUtf8(dir.lexically_normal());
+    auto findIn = [&](const fs::path &directory) -> std::pair<std::string, bool> {
+        const std::string key = camel::utils::pathToUtf8(directory.lexically_normal());
         auto listing          = directoryListings_.find(key);
         if (listing == directoryListings_.end()) {
             DirectoryListing files;
             std::error_code ec;
-            if (fs::is_directory(dir, ec)) {
-                for (const auto &entry : fs::directory_iterator(dir, ec)) {
+            if (fs::is_directory(directory, ec)) {
+                for (const auto &entry : fs::directory_iterator(directory, ec)) {
                     if (!entry.is_regular_file(ec)) {
                         continue;
                     }
@@ -600,7 +632,7 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
         }
         const DirectoryListing &files = listing->second;
         if (files.cmo.contains(stem)) {
-            return {camel::utils::pathToUtf8(dir / (stem + ".cmo")), true};
+            return {camel::utils::pathToUtf8(directory / (stem + ".cmo")), true};
         }
         if (auto found = files.byStem.find(stem); found != files.byStem.end()) {
             return {found->second, camel::utils::pathFromUtf8(found->second).extension() == ".cmo"};
@@ -608,30 +640,25 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
         return {"", false};
     };
 
-    auto tryDir = [&](const fs::path &base) -> std::pair<std::string, bool> {
-        fs::path dir       = base / parentDir;
-        auto [path, isCmo] = findModuleInDir(dir);
-        if (!path.empty())
-            return {path, isCmo};
-        fs::path subdir = dir / stem;
-        return findModuleInDir(subdir);
-    };
+    auto [path, isCmo] = findIn(dir);
+    if (!path.empty())
+        return {path, isCmo};
+    return findIn(dir / stem);
+}
 
+std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &moduleName) {
     for (const auto &dir : entryConfig_.searchPaths) {
         if (dir.empty())
             continue;
         fs::path basePath = camel::utils::pathFromUtf8(dir);
         if (!basePath.is_absolute())
             basePath = camel::utils::pathFromUtf8(entryConfig_.entryDir) / basePath;
-        auto [path, isCmo] = tryDir(basePath);
-        if (!path.empty())
-            return {path, isCmo};
+        auto found = findModuleUnder(camel::utils::pathToUtf8(basePath), moduleName);
+        if (!found.first.empty())
+            return found;
     }
 
-    auto [path, isCmo] = tryDir(camel::utils::pathFromUtf8(entryConfig_.entryDir));
-    if (!path.empty())
-        return {path, isCmo};
-    return {"", false};
+    return findModuleUnder(entryConfig_.entryDir, moduleName);
 }
 
 std::vector<std::string> Context::getModuleSearchDiagnostics(const std::string &moduleName) const {
@@ -717,6 +744,11 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
         camel::utils::phase::Scope phaseScope("resolve", moduleName);
         std::tie(path, isCmo) = getModulePathAndKind(moduleName);
     }
+    return loadModuleFrom(moduleName, path, isCmo);
+}
+
+module_ptr_t
+Context::loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo) {
     if (path.empty())
         return nullptr;
     if (isCmo) {

@@ -195,7 +195,7 @@ The management and tracking of side effects is still under research (the design 
 
 ## 4.5 `#macro` functions
 
-`#macro` is a standard tag ([6.2](../design-principles.en.md), [8](../design-principles.en.md)), written before a function declaration, usable without an import:
+`#macro` is a standard tag ([6.2](../../design-principles.en.md), [8](../../design-principles.en.md)), written before a function declaration, usable without an import:
 
 ```cml
 #macro func cube(x: int): int { return x * x * x }

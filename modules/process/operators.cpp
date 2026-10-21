@@ -25,7 +25,6 @@
 #include "camel/core/process_exit.h"
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
-#include "camel/utils/utf8.h"
 #include <format>
 
 #include <memory>
@@ -39,111 +38,10 @@ using namespace camel::core::rtdata;
 
 #ifdef _WIN32
 #include <Lmcons.h>
-#include <conio.h>
 #include <windows.h>
 #else
-#include <fcntl.h>
 #include <pwd.h>
-#include <sys/select.h>
-#include <termios.h>
 #include <unistd.h>
-#endif
-
-#ifdef _WIN32
-namespace Terminal {
-static DWORD originalMode  = 0;
-static HANDLE hStdin       = GetStdHandle(STD_INPUT_HANDLE);
-static bool rawModeEnabled = false;
-bool setRawMode(bool enable) {
-    if (enable && !rawModeEnabled) {
-        if (!GetConsoleMode(hStdin, &originalMode))
-            return false;
-        DWORD rawMode = originalMode;
-        rawMode &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
-        rawMode |= ENABLE_PROCESSED_INPUT;
-        if (!SetConsoleMode(hStdin, rawMode))
-            return false;
-        rawModeEnabled = true;
-    } else if (!enable && rawModeEnabled) {
-        SetConsoleMode(hStdin, originalMode);
-        rawModeEnabled = false;
-    }
-    return true;
-}
-bool hasInput() { return _kbhit() != 0; }
-// `maxChars` counts characters (code points), and a character is read whole.
-std::string readInput(int maxChars = -1) {
-    std::string result;
-    int chars = 0;
-    while (hasInput() && (maxChars < 0 || chars < maxChars)) {
-        char ch = _getch();
-        result += ch;
-        size_t more = camel::utf8::sequenceLength(static_cast<unsigned char>(ch)) - 1;
-        while (more-- > 0 && hasInput())
-            result += static_cast<char>(_getch());
-        ++chars;
-    }
-    return result;
-}
-void clearInputBuffer() {
-    while (_kbhit())
-        _getch();
-}
-} // namespace Terminal
-#else
-#include <termios.h>
-#include <unistd.h>
-namespace Terminal {
-static struct termios originalTermios;
-static bool rawModeEnabled = false;
-bool setRawMode(bool enable) {
-    if (enable && !rawModeEnabled) {
-        if (!isatty(STDIN_FILENO))
-            return false;
-        if (tcgetattr(STDIN_FILENO, &originalTermios) == -1)
-            return false;
-        struct termios raw = originalTermios;
-        raw.c_lflag &= ~(ECHO | ICANON);
-        raw.c_cc[VMIN]  = 1;
-        raw.c_cc[VTIME] = 0;
-        if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) == -1)
-            return false;
-        rawModeEnabled = true;
-    } else if (!enable && rawModeEnabled) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &originalTermios);
-        rawModeEnabled = false;
-    }
-    return true;
-}
-bool hasInput() {
-    fd_set fds;
-    struct timeval tv = {0, 0};
-    FD_ZERO(&fds);
-    FD_SET(STDIN_FILENO, &fds);
-    return select(STDIN_FILENO + 1, &fds, nullptr, nullptr, &tv) > 0;
-}
-// `maxChars` counts characters (code points), and a character is read whole.
-std::string readInput(int maxChars = -1) {
-    std::string result;
-    char ch;
-    int chars = 0;
-    while (hasInput() && (maxChars < 0 || chars < maxChars)) {
-        if (read(STDIN_FILENO, &ch, 1) <= 0)
-            break;
-        result += ch;
-        size_t more = camel::utf8::sequenceLength(static_cast<unsigned char>(ch)) - 1;
-        while (more-- > 0 && read(STDIN_FILENO, &ch, 1) > 0)
-            result += ch;
-        ++chars;
-    }
-    return result;
-}
-void clearInputBuffer() {
-    char ch;
-    while (hasInput())
-        read(STDIN_FILENO, &ch, 1);
-}
-} // namespace Terminal
 #endif
 
 std::unordered_map<std::string, operator_t> getProcessOpsMap() {
@@ -152,11 +50,6 @@ std::unordered_map<std::string, operator_t> getProcessOpsMap() {
         {"sleep", __process_sleep__},
         {"whoami", __process_whoami__},
         {"cpu_count", __process_cpu_count__},
-        {"set_terminal_raw_mode", __process_set_terminal_raw_mode__},
-        {"has_input", __process_has_input__},
-        {"get_char", __process_get_char__},
-        {"get_chars", __process_get_chars__},
-        {"clear_input_buffer", __process_clear_input_buffer__},
     };
 }
 
@@ -210,33 +103,4 @@ slot_t __process_cpu_count__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // written and what the run holds is released as after a normal return.
 slot_t __process_exit__(ArgsView &with, ArgsView &norm, Context &ctx) {
     throw camel::core::ProcessExit{static_cast<int>(norm.get<Int64>(0))};
-}
-
-slot_t __process_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Bool enable = norm.get<Bool>(0);
-    if (!Terminal::setRawMode(enable)) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<set_terminal_raw_mode> failed");
-    }
-    return NullSlot;
-}
-
-slot_t __process_has_input__(ArgsView &with, ArgsView &norm, Context &) {
-    return toSlot(Terminal::hasInput());
-}
-
-slot_t __process_get_char__(ArgsView &with, ArgsView &norm, Context &) {
-    return toSlot(checkedString(Terminal::readInput(1), mm::autoSpace(), "process.get_char"));
-}
-
-slot_t __process_get_chars__(ArgsView &with, ArgsView &norm, Context &) {
-    Int64 maxChars = norm.get<Int64>(0);
-    return toSlot(checkedString(
-        Terminal::readInput(static_cast<int>(maxChars)),
-        mm::autoSpace(),
-        "process.get_chars"));
-}
-
-slot_t __process_clear_input_buffer__(ArgsView &with, ArgsView &norm, Context &) {
-    Terminal::clearInputBuffer();
-    return NullSlot;
 }

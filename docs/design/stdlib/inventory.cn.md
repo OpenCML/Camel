@@ -66,7 +66,7 @@
 - `min`/`max`：`math` 是两数（数值，4 重载），`array` 是数组→`T?`，`tensor` 是张量（`max(x, axis, keepdim)`）；`sum`、`mean` 在 array/statistics/tensor 各有一份，`softmax`、`exp`、`log`、`sqrt`、`abs`、`pow` 在 math 与 tensor 各一份。导入多个模块时靠重载/改名区分。
 - `range`、`slice`、`concat`、`len` 在全局与 `tensor`（range/slice/concat）里同名；`seed`/`randn` 在 `random` 与 `tensor`（带自己的 seed/random/randn）里同名。后者是否共享生成器：未验证。
 - 字节相关：`str::bytes(s)`/`str::from_bytes(xs)` 的"bytes"是 `int[]`；`bytes` 模块的 `Bytes` 另用 `to_array/from_array`、`encode/decode`；`tensor::from_bytes` 又是 `Bytes→Tensor`。`from_bytes` 有三种含义（str、tensor，加 bytes 的 from_array）。原则 11.1 的"字节序列用 `Bytes`"在 str 里没有贯彻。`bytes::concat`/`bytes::size` 与全局 `concat`/`len` 同义。
-- 序列化散落：`tensor::load_npy/save_npy`、`tree::save_tree/load_tree`、`nn::save_params`、`fs::write_*`、`json::encode/decode`，命名没有统一模式（save/load/write/replace/encode）。`fs::replace`（原子替换文件）与 `str::replace` 同名不同义。
+- 序列化散落：`tensor::load_npy/save_npy`、`ckpt::save_tree/load_tree`、`nn::save_params`、`fs::write_*`、`json::encode/decode`，命名没有统一模式（save/load/write/replace/encode）。`fs::replace`（原子替换文件）与 `str::replace` 同名不同义。
 - Set 同时有 `has` 与 `contains`（global.cml 两者都有）；Map 有 `get<key>`、`has`，原则 11.3 示例用下标 `m['a'] ?? 0`；Json 又有自己的 `get`。原则 11.4 要求"只保留一种写法"，现状没收敛。
 - 全局 `head`/`tail` 是 `slice` 的特例；`extend` 与 `concat` 功能重复；`apply<f>`（T→T）与 `map` 的区别未在文档说明（未验证它的语义）。
 - `i64`/`f64` 与 `int`/`float` 是别名（各 5 个重载）。

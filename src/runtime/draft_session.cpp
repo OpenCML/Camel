@@ -1329,7 +1329,21 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectReachableRuntimeGraphs()
 }
 
 std::vector<GraphId> RuntimeGraphDraftSession::conflicts() const {
-    return conflictsWithProgram(context_->currentRuntimeProgram());
+    const Program *current = context_->currentRuntimeProgram();
+    // A conflict is a lost race for the context's program, and only a session whose commit could
+    // replace that program can lose one: it was opened over it (mayPublish_), or it works on the
+    // program its owner installed from an earlier commit (current == program_). Then the graph
+    // ids name the same versions in both programs, and a version another commit replaced is a
+    // real conflict. A session over a private program — the ONNX export's bound copy, a function
+    // value's program, a subgraph root, a detached rewrite — holds a program that nobody else
+    // writes, whose ids are not versions of the context's program at all: comparing the two
+    // reports every graph the copy made or replaced as a conflict (H112). There is nothing to
+    // check for those, and a checked commit must not refuse work it owns.
+    const bool contextProgram = mayPublish_ || current == program_;
+    if (!contextProgram || runtimeRoot_ != program_->root()) {
+        return {};
+    }
+    return conflictsWithProgram(current);
 }
 
 std::vector<GraphId> RuntimeGraphDraftSession::conflictsWithProgram(const Program *current) const {
