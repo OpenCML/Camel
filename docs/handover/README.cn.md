@@ -177,7 +177,7 @@
 | H48 | GPU G0：剖析工具与 GPU 基准 | 无 | **已完成**（`std::profile` 与训练步基准；报告 reports/H48.md；今日没有算子被放到设备上） |
 | H59 | **严格运行器暴露的真实失败**：H43b 区域化 autodiff 让复合循环状态的梯度在投影处静默丢失（8 条，首次坏提交 `914c0eda`）；`saturate_all`/`extract` 保留饱和造出的死写法（第 9 条） | 无 | **已完成**（报告 reports/H59.md；新增回归用例 `loop_grad_composite_read`） |
 | H1 | `enum` | 无 | **已完成**（检查意见 reviews/H1.md） |
-| H8 | 基础与清理工作 | 无 | **部分完成**（第 1、2、4–7 项已合入 `927cdcb0`；第 3 项未做；报告 reports/H8.md） |
+| H8 | 基础与清理工作 | 无 | **已完成**（第 1、2、4–7 项已合入 `927cdcb0`；第 3 项在 `handover/H68-operid`：`12cbd9eb`、`bc2cf5ea`、`3a2669f9`；报告 reports/H8.md、reports/H68.md） |
 | H14 | 反引号字符串插值 | 无 | **已完成**（`2f4e413b`；报告 reports/H14.md） |
 | H15 | 复数与字面量按上下文取类型 | 无 | **已完成**（字面量 `fa67a454`；复数 `92ea1d60` 与 H15b–H15d；报告 reports/H15.md） |
 | H16 | 一批小项（Json、管道实参、enum 作键、调试构建、快照核对等） | 无 | **部分完成**（第 1–5 项已入 `e6be4d68`、`8447cc9a`；第 6、7 项未做；报告 reports/H16.md、reports/H16b.md） |
@@ -404,7 +404,8 @@ let area = match b {
 6. **建立性能与内存基线**（为图存储重构做准备，**只测量，不优化**）：选 5–8 个有代表性的程序（`test/plans/perf` 中的、一个大一点的训练示例、一个递归很深的例子如 fib、一个大参数树），在 `std::nvm`、`std::fvm`、`std::jit` 上记录：编译（建图）时间、`std::opt` 的时间、峰值内存、图占用的字节数（每节点）、执行时间。写一个脚本可重复地产生这些数字，结果写进 `docs/performance/graph-store-baseline.md`（表格加测量方法与机器信息）。
 7. **列清单（只调查，不修改）**：在 `docs/handover/reports/H8.md` 中列出：(a) 代码里仍按名字字符串判断算子、模块、类型的地方（`grep` 字符串比较与 URI 前缀），每处一行：位置、做什么、按什么判断；(b) 仍然扫描整图或整个程序去找引用的地方。这两份清单供重构时使用。
 
-**剩下什么**：第 3 项（内部算子改为按 `OperId` 引用；`__enum_make__`、`__enum_tag__` 等仍按字符串名）未做，第 1、2、4–7 项已完成。
+**剩下什么**：无。第 3 项（内部算子改为按 `OperId` 引用）在 `handover/H68-operid` 上完成，
+提交 `12cbd9eb`、`bc2cf5ea`、`3a2669f9`，见 `reports/H68.md`；第 1、2、4–7 项见 `reports/H8.md`。
 
 ---
 
