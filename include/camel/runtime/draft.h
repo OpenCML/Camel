@@ -532,12 +532,6 @@ class GraphDraft {
     /// Ends the region `id` (unless `keepRegion`) and the regions inside it; nodes that are still
     /// in them go to the region around.
     void retireRegion(uint32_t id, bool keepRegion = false);
-    /// Gives each arm that is the call of a graph (the form the front end builds) its region, the
-    /// call alone in it.
-    void regionizeArmCalls();
-    /// True when `id` is the call of the graph that is an arm (GCRegion::callSite): the arm is
-    /// that call until lowerBranchArms inlines it.
-    bool isArmCall(gc_node_ref_t id) const;
     /// The region a node is put in when it is added without one (0: the body). The front end
     /// sets it to the arm it is writing; passes leave it alone.
     uint32_t insertRegion() const { return insertRegion_; }

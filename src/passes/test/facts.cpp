@@ -30,7 +30,6 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/fact_persist.h"
 #include "camel/runtime/facts.h"
-#include "camel/runtime/loop_outline.h"
 #include "camel/runtime/reachable.h"
 
 #include <algorithm>
@@ -428,7 +427,6 @@ size_t tally(
 
 const camel::runtime::Program *
 FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
     FactStore &store = context_->facts();
     computeFacts(store, *program);
     std::map<std::string, size_t> perKind;
@@ -468,14 +466,6 @@ FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         }
     }
     os << std::format("FACTS verify equal={} differ={}\n", equal, differ);
-
-    // The program with its loops as graphs (what autodiff works on): a copy of every graph, new
-    // only where a loop was.
-    if (const Program *outlinedProgram = outlineLoopRegions(context_, program, graph);
-        outlinedProgram != program) {
-        GCGraph *outlined = outlinedProgram->root();
-        (void)tally(os, store, *outlinedProgram, outlined, "outlined");
-    }
     return program;
 }
 
@@ -530,7 +520,6 @@ FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream 
     (void)main.materializeStaticValue(
         camel::core::rtdata::toSlot<int64_t>(7), camel::core::type::Type::Int64());
     const camel::runtime::Program *changedProgram = session.commit();
-    GCGraph *changed                              = changedProgram->root();
     store.clear();
     std::map<std::string, std::map<std::string, size_t>> perGraph;
     for (const PortableFact &fact : facts) {

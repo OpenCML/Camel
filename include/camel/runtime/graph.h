@@ -124,13 +124,13 @@ enum class GCNodeKind : uint8_t {
     Dref = 14, // build-time only, see above
     // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):
     // Norm inputs the array (For, ForWhile) then the k first values of the state; With inputs
-    // the m captured values, shared by the condition graph and the body graph; Ctrl inputs
-    // ordering. Its payload names the two graphs (GCLoopRef). Its value is the
+    // the results of its two regions and the round port; Ctrl inputs ordering. Its condition
+    // and body are regions of this graph (GCRegionKind::LoopCond and LoopBody) whose ports are
+    // the state (see camel/runtime/loop.h). Its value is the
     // last state: the value when k = 1, the k-tuple when k > 1. A producer may also give it s
     // collection slots (payload collectionCount): the body then returns (state…, v…) each round
     // and the value is (state…, array…), the arrays holding the v of every round (see
-    // camel/runtime/loop.h). Consumers read it through camel/runtime/loop.h (LoopView); those
-    // that need two graphs (autodiff) take them out of the regions first (outlineLoopRegions).
+    // camel/runtime/loop.h). Consumers read it through camel/runtime/loop.h (LoopView).
     Loop = 15,
     // The place of a node a rewrite removed. A graph keeps the NodeIds of the version it came
     // from, so a removed node leaves a record with this kind and no inputs, which every

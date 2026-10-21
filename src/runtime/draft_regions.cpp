@@ -170,12 +170,6 @@ void GraphDraft::retireRegion(uint32_t id, bool keepRegion) {
     }
 }
 
-bool GraphDraft::isArmCall(gc_node_ref_t id) const {
-    const uint32_t r = nodeRegion(id);
-    return r != 0 && r < regions_.size() && regions_[r].kind == GCRegionKind::Arm &&
-           regions_[r].callSite == id;
-}
-
 uint32_t GraphDraft::loopRegionOf(gc_node_ref_t loop, GCRegionKind part) const {
     for (uint32_t r = 1; r < regions_.size(); ++r) {
         if (regions_[r].kind == part && regions_[r].owner == loop) {
@@ -259,32 +253,6 @@ bool GraphDraft::regionWithin(uint32_t inner, uint32_t outer) const {
         inner = regions_[inner].parent;
     }
     return true;
-}
-
-void GraphDraft::regionizeArmCalls() {
-    for (gc_node_ref_t brch : brchIds_) {
-        const DraftNodeHeader *h = header(brch);
-        if (!h || h->kind != GCNodeKind::Brch) {
-            continue;
-        }
-        // The call of an arm is what the JOIN reads of it, ordered after the BRCH.
-        const gc_node_ref_t join =
-            reinterpret_cast<const DraftBrchPayload *>(payloadOf(brch).data())->join;
-        const std::vector<gc_node_ref_t> results(
-            withInputsOf(join).begin(),
-            withInputsOf(join).end());
-        for (uint32_t k = 0; k < results.size(); ++k) {
-            const gc_node_ref_t call = results[k];
-            if (!alive(call) || header(call)->kind != GCNodeKind::Func || nodeRegion(call) != 0 ||
-                std::ranges::find(ctrlInputsOf(call), brch) == ctrlInputsOf(call).end()) {
-                continue;
-            }
-            const uint32_t region = addRegion(GCRegionKind::Arm, nodeRegion(brch), brch, k);
-            setNodeRegion(call, region);
-            setRegionResult(region, call);
-            setRegionInline(region, kInvalidGraphId, call);
-        }
-    }
 }
 
 } // namespace camel::runtime

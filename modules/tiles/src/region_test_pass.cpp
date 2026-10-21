@@ -274,7 +274,7 @@ void registerRegionTestPasses(
     if (std::getenv("CAMEL_ENABLE_TEST_PASSES")) {
         core::OperatorTable::instance().set(
             "tiles:test_compiled_call",
-            {.pure = false, .callsGraphs = true, .inspectsGraphs = true});
+            {.pure = false, .callsGraphs = true, .readsGraphs = true});
         registerModulePass(
             "tiles::test_outline_compiled",
             [](const core::context::context_ptr_t &ctx) {

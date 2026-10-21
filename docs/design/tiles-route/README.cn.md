@@ -262,7 +262,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 ### 10.3 Tiles 接下来的工作（按先后）
 
 1. 10.2 第 1、2 条。
-2. **支持 `LOOP`**：通过 `camel::runtime::LoopView` 读取（`docs/design/op-semantics` 11.5）；`run`、`@gpu` 拿到的已经是带 `LOOP` 的原图（读图算子声明了 `inspectsGraphs`）。先支持能确定迭代域的循环。
+2. **支持 `LOOP`**：通过 `camel::runtime::LoopView` 读取（`docs/design/op-semantics` 11.5）；`run`、`@gpu` 拿到的已经是带 `LOOP` 的原图（读图算子声明了 `readsGraphs`）。先支持能确定迭代域的循环。
 3. **其余算子与图事实迁到核心**：索引实例、归约规律、资源声明、定义图、图事实（`ctx.facts()`），去掉 Tiles 内与核心重复的推断，保持单一事实来源。
 4. **异步执行与设备常驻**：流、事件、内存池；相邻调用间的值留在设备上。
 5. **矩阵乘的性能**：接 cuBLAS（按 7.3 默认可用 f32 cuBLAS，须关闭 TF32 并保证可复现；安全模式下需逐位等于规范 FMA 链，做不到时不交给 cuBLAS），之后 Tensor Core（需 `change_precision` 许可）。

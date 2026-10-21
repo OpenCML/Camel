@@ -256,7 +256,7 @@ std::optional<LoopDomain> computeLoopDomain(std::span<const Anchor> anchors) {
         return std::nullopt;
     }
     const LoopView loop(*anchors[0].program, graph, anchors[0].node);
-    if (anchors[1].graph != (loop.inRegions() ? &graph : loop.bodyGraph())) {
+    if (anchors[1].graph != &graph) {
         return std::nullopt;
     }
     LoopDomain domain{.kind = loop.kind()};
@@ -277,10 +277,7 @@ std::vector<std::vector<Anchor>> loopAnchors(const Program &program, const GCGra
         const LoopView loop(program, graph, ref);
         all.push_back(
             {Anchor{&program, &graph, ref},
-             Anchor{
-                 &program,
-                 loop.inRegions() ? &graph : loop.bodyGraph(),
-                 loop.bodyElementParam().value_or(kInvalidNodeRef)}});
+             Anchor{&program, &graph, loop.bodyElementParam().value_or(kInvalidNodeRef)}});
     }
     return all;
 }
