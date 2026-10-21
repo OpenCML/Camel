@@ -11,7 +11,7 @@ kind = "behavior"
 case = "../../../cases/modules/graph_types.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "true\nNodeKind::Oper\n"
+expect_stdout_exact = "true\nfalse\ntrue\nfalse\n0\n1\n1\nNodeKind::Oper\n"
 timeout_ms = 10000
 
 [[tests]]
@@ -31,5 +31,5 @@ kind = "behavior"
 case = "../../../cases/modules/graph_read.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "[%0 Port : int, %1 Data : int, %2 Oper :op/mul_l : int, %3 Data : int, %4 Oper :op/add_l : int]\n[0, 0, 2, 0, 2]\n[1, 1, 1, 1, 0]\n[false, false, true, false, true]\n[none, none, :op/mul_l, none, :op/add_l]\n[int, int, int, int, int]\n[, , , , ]\n[none, compute]\n"
+expect_stdout_exact = "[%0 Port : int, %1 Data : int, %2 Oper :op/mul_l : int, %3 Data : int, %4 Oper :op/add_l : int]\n[0, 0, 2, 0, 2]\n[1, 1, 1, 1, 0]\n[false, false, true, false, true]\n[none, none, :op/mul_l, none, :op/add_l]\n[int, int, int, int, int]\n[, , , , ]\n[null, 2, null, 1, null]\n[false, true, true, true, true]\n[none, compute]\n"
 timeout_ms = 10000

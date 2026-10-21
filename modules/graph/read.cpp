@@ -268,6 +268,46 @@ slot_t tagsKernel(ArgsView &, ArgsView &norm, Context &) {
     return stringSlot(camel::core::attr::text(graph.nodeAttrs(handle->index())));
 }
 
+slot_t originKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<Handle *>(0);
+    nodeOf(handle, "graph.origin");
+    return toSlot<Int64>(static_cast<int64_t>(graphOf(handle, "graph.origin").nodeOrigin(handle->index())));
+}
+
+/// Whether `constant` reads values of this type: the scalars and the string, whose slot is the
+/// value (or a reference the graph keeps alive).
+bool constantType(const Type *type) {
+    switch (type->code()) {
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+    case TypeCode::Bool:
+    case TypeCode::String:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/// The value of a node that holds a constant of the type of the second argument (a sample of the
+/// type; its value is not read), null for any other node.
+slot_t constantKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle   = norm.get<Handle *>(0);
+    const GCNode &node   = nodeOf(handle, "graph.constant");
+    const GCGraph &graph = graphOf(handle, "graph.constant");
+    Type *wanted         = norm.type(1);
+    const Type *type     = node.dataType();
+    const auto index     = static_cast<int64_t>(-static_cast<int64_t>(node.dataIndex));
+    if (node.kind != GCNodeKind::Data || type == nullptr || type->code() != wanted->code() ||
+        node.dataIndex >= 0 || !graph.normInputsOf(handle->index()).empty() ||
+        !graph.withInputsOf(handle->index()).empty() || !graph.ctrlInputsOf(handle->index()).empty() ||
+        static_cast<size_t>(index) >= graph.staticSlots().size()) {
+        return NullSlot;
+    }
+    return makeSome(graph.staticSlots()[index], nullableOf(wanted));
+}
+
 slot_t showKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle   = norm.get<Handle *>(0);
     const GCNode &node   = nodeOf(handle, "graph.show");
@@ -323,6 +363,7 @@ const std::vector<ReadOp> &readOps() {
             {"type_name", typeNameKernel, handle(HandleKind::TypeRef), Type::String()},
             {"callee", calleeKernel, node, maybe(HandleKind::Graph)},
             {"tags", tagsKernel, node, Type::String()},
+            {"origin", originKernel, node, Type::Int64()},
             {"show", showKernel, node, Type::String()},
         };
     }();
@@ -340,6 +381,18 @@ const std::vector<oper_group_ptr_t> &readGroups() {
                 {{std::string("graph:") + op.name,
                   StaticFuncTypeResolver::create({}, {{op.param, false}}, op.result)}}));
         }
+        out.push_back(OperatorGroup::create(
+            "constant",
+            {{"graph:constant",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {2, {false, false}}},
+                  "(n: Node, sample: T) => T?, T a number, bool or string",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      if (!HandleType::is(norm[0], HandleKind::Node) || !constantType(norm[1]))
+                          return std::nullopt;
+                      return TupleType::nullable(norm[1]);
+                  })}}));
         return out;
     }();
     return groups;
@@ -351,6 +404,7 @@ const std::unordered_map<std::string, operator_t> &readKernels() {
         for (const ReadOp &op : readOps()) {
             out.emplace(op.name, op.kernel);
         }
+        out.emplace("constant", constantKernel);
         return out;
     }();
     return kernels;

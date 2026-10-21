@@ -54,21 +54,16 @@ namespace mm     = camel::core::mm;
 namespace rtdata = camel::core::rtdata;
 using camel::core::rtdata::Variant;
 
-bool isHandleType(const Type *type) {
-    for (HandleKind kind :
-         {HandleKind::Program,
-          HandleKind::Graph,
-          HandleKind::Node,
-          HandleKind::Region,
-          HandleKind::TypeRef,
-          HandleKind::Op,
-          HandleKind::Tag,
-          HandleKind::Txn}) {
-        if (HandleType::is(type, kind))
-            return true;
-    }
-    return false;
-}
+constexpr HandleKind kHandleKinds[] = {
+    HandleKind::Program,
+    HandleKind::Graph,
+    HandleKind::Node,
+    HandleKind::Region,
+    HandleKind::TypeRef,
+    HandleKind::Op,
+    HandleKind::Tag,
+    HandleKind::Txn,
+};
 
 slot_t currentKernel(ArgsView &, ArgsView &, Context &ctx) {
     const camel::runtime::Program *program = ctx.currentRuntimeProgram();
@@ -78,13 +73,22 @@ slot_t currentKernel(ArgsView &, ArgsView &, Context &ctx) {
     return toSlot(const_cast<camel::runtime::Program *>(program));
 }
 
-/// Whether two handles of one kind name the same thing of the same Program. A Program is its
-/// own identity; every other handle compares the numbers it holds.
-slot_t sameKernel(ArgsView &, ArgsView &norm, Context &) {
+slot_t equalHandles(ArgsView &norm) {
     using camel::core::rtdata::Object;
     auto *a = norm.get<Object *>(0);
     auto *b = norm.get<Object *>(1);
-    return rtdata::toSlot<rtdata::Bool>(a == b || (a != nullptr && b != nullptr && a->equals(b, norm.type(0))));
+    return rtdata::toSlot<rtdata::Bool>(a == b || a->equals(b, norm.type(0)));
+}
+slot_t eqKernel(ArgsView &, ArgsView &norm, Context &) { return equalHandles(norm); }
+slot_t neKernel(ArgsView &, ArgsView &norm, Context &) {
+    return rtdata::toSlot<rtdata::Bool>(!rtdata::fromSlot<rtdata::Bool>(equalHandles(norm)));
+}
+
+slot_t idKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<camel::graphmod::Handle *>(0);
+    return rtdata::toSlot<rtdata::Int64>(
+        handle->kind() == HandleKind::Graph ? static_cast<int64_t>(toValue(handle->graph()))
+                                            : static_cast<int64_t>(handle->index()));
 }
 
 class GraphExecutor final : public Executor {
@@ -96,7 +100,9 @@ class GraphExecutor final : public Executor {
     static std::unordered_map<std::string, operator_t> kernels() {
         auto out = readKernels();
         out.emplace("current", currentKernel);
-        out.emplace("same", sameKernel);
+        out.emplace("eq", eqKernel);
+        out.emplace("ne", neKernel);
+        out.emplace("id", idKernel);
         return out;
     }
 };
@@ -104,15 +110,7 @@ class GraphExecutor final : public Executor {
 class GraphModule final : public BuiltinModule {
   public:
     explicit GraphModule(context_ptr_t ctx) : BuiltinModule("graph", std::move(ctx)) {
-        for (HandleKind kind :
-             {HandleKind::Program,
-              HandleKind::Graph,
-              HandleKind::Node,
-              HandleKind::Region,
-              HandleKind::TypeRef,
-              HandleKind::Op,
-              HandleKind::Tag,
-              HandleKind::Txn}) {
+        for (HandleKind kind : kHandleKinds) {
             exportType(Reference(camel::graphmod::handleKindName(kind)), HandleType::get(kind));
         }
         exportType(Reference("NodeKind"), nodeKindType());
@@ -125,20 +123,39 @@ class GraphModule final : public BuiltinModule {
                 "current",
                 {{"graph:current",
                   StaticFuncTypeResolver::create({}, {}, HandleType::get(HandleKind::Program))}}));
+        // `==` and `!=` of the handle types (design principles 4.3): a library defines the
+        // operators of its own types. Two handles are equal when they name the same thing of
+        // the same Program.
+        std::vector<std::pair<std::string, resolver_ptr_t>> eq, ne;
+        for (HandleKind kind : kHandleKinds) {
+            Type *type = HandleType::get(kind);
+            eq.emplace_back("graph:eq", StaticFuncTypeResolver::create({}, {{type, false}, {type, false}}, Type::Bool()));
+            ne.emplace_back("graph:ne", StaticFuncTypeResolver::create({}, {{type, false}, {type, false}}, Type::Bool()));
+        }
+        exportEntity("__eq__", OperatorGroup::create("__eq__", eq));
+        exportEntity("__neq__", OperatorGroup::create("__neq__", ne));
+        exportDefaultImportRef("__eq__");
+        exportDefaultImportRef("__neq__");
+        // The number a handle is known by inside its Program: the GraphId of a graph, the NodeId
+        // of a node, the OperId of an operator. Stable for the Program, so a pass can key a Map
+        // by it.
         exportEntity(
-            "same",
+            "id",
             OperatorGroup::create(
-                "same",
-                {{"graph:same",
+                "id",
+                {{"graph:id",
                   DynamicFuncTypeResolver::create(
-                      {{0, {}}, {2, {false, false}}},
-                      "(a: H, b: H) => bool, H a handle type of the graph module",
+                      {{0, {}}, {1, {false}}},
+                      "(h: Graph | Node | Op) => int",
                       [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                           -> std::optional<Type *> {
-                          if (!isHandleType(norm[0]) || !norm[0]->equals(norm[1]))
-                              return std::nullopt;
-                          return Type::Bool();
+                          if (HandleType::is(norm[0], HandleKind::Graph) ||
+                              HandleType::is(norm[0], HandleKind::Node) ||
+                              HandleType::is(norm[0], HandleKind::Op))
+                              return Type::Int64();
+                          return std::nullopt;
                       })}}));
+        exportType(Reference("Value"), HandleType::get(HandleKind::Node));
     }
 
     bool load() override {
@@ -149,7 +166,7 @@ class GraphModule final : public BuiltinModule {
         });
         // The purity of every operator (design principles 3.3): a Program is immutable.
         auto &table = camel::core::OperatorTable::instance();
-        table.declare("graph", {{"current", true}, {"same", true}});
+        table.declare("graph", {{"current", true}, {"eq", true}, {"ne", true}, {"id", true}});
         for (const auto &group : readGroups()) {
             table.declare("graph", {{group->name(), true}});
         }
