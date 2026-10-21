@@ -1466,7 +1466,14 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
                              ? static_cast<const TupleType *>(fromType)
                              : nullptr;
     std::string text;
-    if (to == from) {
+    // A CAST between two struct types of one layout moves nothing (design principles 5.1 and
+    // 5.2): an anonymous value enters a named type, and an `as` between named types with the
+    // fields in the same order changes the type only. Both are one C++ struct, so there is
+    // nothing to write; a conversion that reorders the fields is a FILL, not a CAST.
+    const bool sameStruct =
+        fromType != nullptr && toType != nullptr && fromType->code() == TypeCode::Struct &&
+        toType->code() == TypeCode::Struct && program_.values.sameRepresentation(fromType, toType);
+    if (to == from || sameStruct) {
         frame.values[ref] = value;
         return;
     } else if (

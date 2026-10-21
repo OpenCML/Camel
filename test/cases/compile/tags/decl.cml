@@ -1,0 +1,44 @@
+/// The declarations of a tag and the `#` forms (design principles 6.2).
+module tags_decl
+
+export tag kernel on nodes
+export tag fast on func, nodes
+export tag readable on func, read_by std::opt
+export tag shape on type, field
+export tag width<w: int> on type, field
+tag pure = [fast, readable]
+tag finite = [kernel, fast]
+
+#kernel
+func marked(): int { return 1 }
+
+#fast
+func both(): int { return 2 }
+
+#[pure]
+func grouped(): int { return 3 }
+
+#kernel
+#fast
+func stacked(): int { return 4 }
+
+#width<32>
+type Bits = {
+    #width<8> a: int,
+    b: int,
+}
+
+#shape
+type Square = { side: int }
+
+func main(): int {
+    #kernel
+    {
+        let a = marked()
+    }
+    #finite
+    {
+        let b = both()
+    }
+    return grouped() + stacked()
+}

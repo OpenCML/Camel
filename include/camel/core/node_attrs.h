@@ -52,6 +52,11 @@
  * (OperatorTable::declareGrant): to the nodes written in the function or block it decorates,
  * the arms, loop bodies and lambdas written there included, and not to the functions they
  * call (lexical, as design principles 7.5 says of numeric permissions).
+ *
+ * A tag (camel/core/tags.h, design principles 6.2) is the other way: `#tag` before a function,
+ * type, field or block writes facts as attributes when the declaration says `on nodes`. A C++
+ * module declares both at once with tag::declareNodeTag, which registers the key and the grant
+ * of the decorator that is the tag's `@` form.
  */
 
 #pragma once

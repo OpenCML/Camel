@@ -20,40 +20,135 @@
 #include "camel_pass.h"
 
 #include "camel/core/error/diagnostics.h"
-#include "camel/utils/assert.h"
+#include "camel/core/mm/gen.h"
+#include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tagged.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/pass/base.h"
+#include "camel/execute/pass/params.h"
 #include "camel/runtime/definitions.h"
+#include "camel/utils/assert.h"
 #include "passes/sched/nodevm/nodevm.h"
 
 #include <format>
+#include <vector>
 
 using camel::core::context::context_ptr_t;
 using camel::core::error::RuntimeDiag;
+using camel::core::rtdata::Bool;
+using camel::core::rtdata::Float32;
+using camel::core::rtdata::Float64;
+using camel::core::rtdata::Int32;
+using camel::core::rtdata::Int64;
+using camel::core::rtdata::toSlot;
+using camel::core::type::TypeCode;
 using camel::runtime::Program;
 
 namespace camel::execute {
 
 namespace {
 
-/// Whether `graph` has the signature of a pass: one ordinary parameter of type Program, no
-/// with parameter, result `Program!`. `graph` is the root of the tool program, whose type is the
-/// signature of its entry (the pass function).
-bool hasPassSignature(const camel::runtime::GCGraph &graph) {
+/// One `with` parameter of a pass written in Camel: the name the pipeline writes and the type
+/// its value is converted to.
+struct CamelParam {
+    std::string name;
+    PassParamType passType = PassParamType::Bool;
+    TypeCode code          = TypeCode::Bool;
+};
+
+/// The pass parameters of `type`, in declaration order, or why it has none this pipeline can
+/// supply. A pass parameter is a bool, an int, a float or a string: the values the pipeline
+/// parses. The function's `with` parameters are its pass parameters (design principles 4.4,
+/// 9.3); they have no default in source, so the pipeline has to write each of them.
+std::optional<std::string>
+passParamsOf(const camel::core::type::FunctionType &type, std::vector<CamelParam> &params) {
+    if (!type.hasArgNames()) {
+        return "its `with` parameters have no names, so the pipeline cannot write them";
+    }
+    for (size_t i = 0; i < type.withTypesCount(); ++i) {
+        CamelParam param;
+        param.name = std::string(type.argNameAt(i));
+        if (param.name.empty()) {
+            return "one of its `with` parameters has no name";
+        }
+        switch (type.withTypeAt(i)->code()) {
+        case TypeCode::Bool:
+            param.passType = PassParamType::Bool;
+            break;
+        case TypeCode::Int32:
+        case TypeCode::Int64:
+            param.passType = PassParamType::Int;
+            break;
+        case TypeCode::Float32:
+        case TypeCode::Float64:
+            param.passType = PassParamType::Float;
+            break;
+        case TypeCode::String:
+            param.passType = PassParamType::String;
+            break;
+        default:
+            return std::format(
+                "its `with` parameter '{}' has type {}, and a pass parameter is a bool, an int, "
+                "a float or a string",
+                param.name,
+                type.withTypeAt(i)->toString());
+        }
+        param.code = type.withTypeAt(i)->code();
+        params.push_back(std::move(param));
+    }
+    return std::nullopt;
+}
+
+/// Whether `graph` has the signature of a pass: one ordinary parameter of type Program, any
+/// number of `with` parameters of a pass parameter type, result `Program!`. `params` receives
+/// the `with` parameters; `problem` says what is wrong when it has not.
+bool hasPassSignature(
+    const camel::runtime::GCGraph &graph, std::vector<CamelParam> &params, std::string &problem) {
     const auto *type = graph.funcType();
-    if (type == nullptr || type->normTypesCount() != 1 || type->withTypesCount() != 0 ||
+    if (type == nullptr || type->normTypesCount() != 1 ||
         type->normTypeAt(0)->toString() != "Program") {
+        problem = "a pass is a function (p: Program) => Program! (its `with` parameters are its parameters)";
         return false;
     }
     const auto *result = camel::core::type::asFallible(type->exitType());
-    return result != nullptr && result->payloadType()->toString() == "Program";
+    if (result == nullptr || result->payloadType()->toString() != "Program") {
+        problem = "a pass returns Program! (the program it produced)";
+        return false;
+    }
+    if (auto why = passParamsOf(*type, params)) {
+        problem = *why;
+        return false;
+    }
+    return true;
+}
+
+/// The default value a `PassParam` carries when the source has none: the pipeline fills it but
+/// the parameter is required, so `bindArgs` refuses a specification that leaves it out.
+PassParamValue zeroOf(PassParamType type) {
+    switch (type) {
+    case PassParamType::Bool:
+        return false;
+    case PassParamType::Int:
+        return int64_t{0};
+    case PassParamType::Float:
+        return 0.0;
+    case PassParamType::String:
+        return std::string();
+    }
+    return false;
 }
 
 class CamelPass final : public GraphIRPass {
   public:
-    CamelPass(const context_ptr_t &ctx, std::string module, std::string function)
-        : GraphIRPass(ctx), module_(std::move(module)), function_(std::move(function)) {}
+    CamelPass(
+        const context_ptr_t &ctx, std::string module, std::string function,
+        std::vector<CamelParam> params, const PassArgs &args)
+        : GraphIRPass(ctx),
+          module_(std::move(module)),
+          function_(std::move(function)),
+          params_(std::move(params)),
+          args_(args) {}
 
     const Program *apply(const Program *program, std::ostream &os) override {
         (void)os;
@@ -61,9 +156,44 @@ class CamelPass final : public GraphIRPass {
         bool absent     = false;
         const auto tool = context_->definitions().libraryFunction(module_, function_, problem, absent);
         ASSERT(tool.has_value(), "A registered Camel pass is available.");
+        // The values of the `with` parameters are bound to the ports of the tool graph's root
+        // frame before it runs; a string is made in the auto space and rooted by that frame, so
+        // no collection can take it away while the pass runs.
+        std::vector<slot_t> withArgs;
+        withArgs.reserve(params_.size());
+        for (const CamelParam &param : params_) {
+            switch (param.code) {
+            case TypeCode::Bool:
+                withArgs.push_back(toSlot<Bool>(args_.getBool(param.name)));
+                break;
+            case TypeCode::Int32:
+                withArgs.push_back(toSlot<Int32>(static_cast<Int32>(args_.getInt(param.name))));
+                break;
+            case TypeCode::Int64:
+                withArgs.push_back(toSlot<Int64>(args_.getInt(param.name)));
+                break;
+            case TypeCode::Float32:
+                withArgs.push_back(
+                    toSlot<Float32>(static_cast<Float32>(args_.getFloat(param.name))));
+                break;
+            case TypeCode::Float64:
+                withArgs.push_back(toSlot<Float64>(args_.getFloat(param.name)));
+                break;
+            case TypeCode::String:
+                withArgs.push_back(
+                    toSlot(::String::from(args_.getString(param.name), camel::core::mm::autoSpace())));
+                break;
+            default:
+                ASSERT(false, "A pass parameter was checked when the pass was registered.");
+            }
+        }
         NodeVMSchedPass vm(context_);
         const slot_t argument = camel::core::rtdata::toSlot(const_cast<Program *>(program));
-        const slot_t result   = vm.callGraph(tool->program, tool->graph, std::span(&argument, 1));
+        const slot_t result   = vm.callGraph(
+            tool->program,
+            tool->graph,
+            std::span(&argument, 1),
+            std::span<const slot_t>(withArgs));
         if (camel::core::rtdata::isErrorValue(result)) {
             std::ostringstream text;
             camel::core::rtdata::printTaggedSlots(
@@ -84,6 +214,8 @@ class CamelPass final : public GraphIRPass {
   private:
     std::string module_;
     std::string function_;
+    std::vector<CamelParam> params_;
+    PassArgs args_;
 };
 
 } // namespace
@@ -100,16 +232,25 @@ void registerCamelPass(
     if (!tool) {
         return;
     }
-    if (!hasPassSignature(*tool->graph)) {
-        problem = std::format(
-            "'{}::{}' is not a pass: a pass is a function (p: Program) => Program!",
-            module,
-            function);
+    std::vector<CamelParam> params;
+    if (!hasPassSignature(*tool->graph, params, problem)) {
+        problem = std::format("'{}::{}' is not a pass: {}.", module, function, problem);
         return;
     }
-    registerModulePass(module + "::" + function, [module, function](const context_ptr_t &ctx) {
-        return std::make_unique<CamelPass>(ctx, module, function);
-    });
+    PassDescriptor descriptor;
+    descriptor.doc = "A pass written in Camel: " + module + "::" + function + ".";
+    for (const CamelParam &param : params) {
+        descriptor.params.push_back(PassParam{
+            param.name,
+            param.passType,
+            zeroOf(param.passType),
+            "the `with` parameter '" + param.name + "' of " + module + "::" + function,
+            true});
+    }
+    descriptor.make = [module, function, params](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<CamelPass>(ctx, module, function, params, args);
+    };
+    registerModulePass(module + "::" + function, std::move(descriptor));
 }
 
 } // namespace camel::execute

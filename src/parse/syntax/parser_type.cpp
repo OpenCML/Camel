@@ -285,20 +285,24 @@ void ParserImpl::parsePrimaryType() {
 }
 
 /// structType  : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
-/// keyTypePair : identDef ':' typeExpr
+/// keyTypePair : tagUse* identDef ':' typeExpr
+/// A field may be tagged (`#tag x: int`, design principles 6.2).
 void ParserImpl::parseStructType() {
     const size_t m = mark();
     bump();
     {
         Scope scope(*this, false);
-        while (cur_ == TK::Identifier && !panic_) {
+        while ((cur_ == TK::Identifier || cur_ == TK::Hash) && !panic_) {
             const size_t pm = mark();
+            while (cur_ == TK::Hash) {
+                parseTagUse();
+            }
             parseIdentDef();
             if (expect(TK::Colon)) {
                 parseType();
             }
             close(pm, NK::KeyTypePair);
-            if (cur_ != TK::Comma || peek(1) != TK::Identifier) {
+            if (cur_ != TK::Comma || (peek(1) != TK::Identifier && peek(1) != TK::Hash)) {
                 break;
             }
             bump();

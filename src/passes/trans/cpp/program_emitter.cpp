@@ -83,18 +83,30 @@ std::string entryNumberText(camel::core::type::TypeCode code) {
                  camel::core::integerRangeReason<int32_t>("i32")}));
     case camel::core::type::TypeCode::Float64:
         return std::format(
-            "{{{}, {}, nullptr}}",
+            "{{{}, {}, nullptr, {}}}",
             message(RuntimeDiag::InvalidNumberText, {mark, "float", "a number"}),
             message(
                 RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'", "float", camel::core::floatRangeReason<double>("float")}));
+                {"'" + mark + "'", "float", camel::core::floatRangeReason<double>("float")}),
+            message(
+                RuntimeDiag::ConversionOutOfRange,
+                {"'" + mark + "'",
+                 "float",
+                 "the value is outside the range of an integer (" +
+                     camel::utils::integerRangeText<int64_t>() + ")"}));
     case camel::core::type::TypeCode::Float32:
         return std::format(
-            "{{{}, {}, nullptr}}",
+            "{{{}, {}, nullptr, {}}}",
             message(RuntimeDiag::InvalidNumberText, {mark, "f32", "a number"}),
             message(
                 RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'", "f32", camel::core::floatRangeReason<float>("f32")}));
+                {"'" + mark + "'", "f32", camel::core::floatRangeReason<float>("f32")}),
+            message(
+                RuntimeDiag::ConversionOutOfRange,
+                {"'" + mark + "'",
+                 "f32",
+                 "the value is outside the range of an integer (" +
+                     camel::utils::integerRangeText<int64_t>() + ")"}));
     case camel::core::type::TypeCode::Complex64:
     case camel::core::type::TypeCode::Complex128: {
         const bool single       = code == camel::core::type::TypeCode::Complex64;
@@ -106,7 +118,7 @@ std::string entryNumberText(camel::core::type::TypeCode code) {
                 "the {} part is outside the range of {} ({})", name, target, range);
         };
         return std::format(
-            "{{{}, {}, {}}}",
+            "{{{}, {}, {}, {}}}",
             message(
                 RuntimeDiag::InvalidNumberText,
                 {mark, std::string(camel::utils::complexNumberTextHelp), "a complex number"}),
@@ -115,7 +127,13 @@ std::string entryNumberText(camel::core::type::TypeCode code) {
                 {"'" + mark + "'", target, part("real")}),
             message(
                 RuntimeDiag::ConversionOutOfRange,
-                {"'" + mark + "'", target, part("imaginary")}));
+                {"'" + mark + "'", target, part("imaginary")}),
+            message(
+                RuntimeDiag::ConversionOutOfRange,
+                {"'" + mark + "'",
+                 target,
+                 "the value is outside the range of an integer (" +
+                     camel::utils::integerRangeText<int64_t>() + ")"}));
     }
     default:
         return "{nullptr, nullptr, nullptr}";

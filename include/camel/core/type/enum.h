@@ -49,6 +49,7 @@
 
 #pragma once
 
+#include "camel/core/source/ids.h"
 #include "camel/core/type/other.h"
 
 #include <atomic>
@@ -75,6 +76,10 @@ struct EnumVariant {
     VariantShape shape = VariantShape::Unit;
     std::vector<std::string> fieldNames;
     std::vector<Type *> fieldTypes;
+    /// Where each field's type is written, parallel to `fieldTypes`. It is kept for diagnostics
+    /// (a field that cannot be a map key is reported at its declaration) and is not part of the
+    /// type: two instances of a declaration differ in their fields' types, not in their origins.
+    std::vector<camel::source::origin_id_t> fieldOrigins;
 
     size_t fieldCount() const { return fieldTypes.size(); }
     /// The position of the field `name` of a struct variant.

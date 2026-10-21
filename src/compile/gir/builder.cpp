@@ -447,6 +447,13 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     Type *type               = typeNode->dataType();
     if (!gct->isFunc()) {
         unit_->typeDecls[Reference(gct->name())] = type;
+        // The tags written before the declaration (`#tag type P = ...`) belong to it, and so do
+        // those written on the fields of the struct it writes (design principles 6.2). They are
+        // read from C++ with tag::ofDeclaration / tag::ofField.
+        const TagFacts tags = tagFactsOf(gct, camel::core::tag::Type);
+        camel::core::tag::attachToDeclaration(
+            *module_, Reference(gct->name()), tags.declaration);
+        recordFieldTags(gct);
         LEAVE("DECL");
         return nullptr;
     }
@@ -473,6 +480,14 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     GCT::node_ptr_t typeLoad = gct->at(0);
     Type *type               = typeLoad->dataType();
     FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
+    // The tags written before the declaration (design principles 6.2) are resolved here, before
+    // the generic early return: they hold for the declaration (`on func`) or for the nodes of its
+    // body (`on nodes`). The body's are handed to buildFuncBody below; a tag on a lambda has no
+    // declaration to belong to.
+    const TagFacts tags = tagFactsOf(gct, camel::core::tag::Func);
+    if (!name.empty() && tags.declaration != camel::core::attr::kNoAttrs) {
+        camel::core::tag::attachToDeclaration(*module_, Reference(name), tags.declaration);
+    }
     if (isGenericHere(type)) {
         // A generic function: registered as a template when its block was entered
         // (registerGenericTemplates), built when a call asks for an instance.
@@ -489,7 +504,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);
-    buildFuncBody(gct, graph, funcType, name);
+    buildFuncBody(gct, graph, funcType, name, tags.nodes);
     if (name.empty()) {
         lambdaGraphs_[gct] = graph.get();
     }
@@ -519,7 +534,7 @@ void Builder::stampPermissions(node_handle_t operNode) const {
 
 void Builder::buildFuncBody(
     const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-    const std::string &name) {
+    const std::string &name, camel::core::attr::AttrSetId bodyTags) {
     // The function's graph has the permissions of its own body (which include those of the
     // code it is written in), not those of the place that asked for it to be built (a call
     // that instantiates a generic function, a block that declares it).
@@ -528,10 +543,12 @@ void Builder::buildFuncBody(
         numericPermissions_,
         body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0);
     // The attributes its decorators grant join those in force where it is written (each key's
-    // combine rule, camel/core/node_attrs.h), for everything written in it.
+    // combine rule, camel/core/node_attrs.h), for everything written in it; so do the facts of
+    // the tags written before it, which hold for the nodes of its body (`on nodes`).
     AttrScope attrs(
         currentAttrs_,
-        camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first));
+        camel::core::attr::unite(
+            camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first), bodyTags));
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -603,6 +620,12 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     // The permissions of this scope (they include those of the enclosing ones) are in force
     // for everything built in it, arms and lambdas included.
     NumericPermissionScope permissions(numericPermissions_, gct->numericPermissions());
+    // The tags written before the block hold for the nodes written in it (`#kernel { ... }`,
+    // design principles 6.2): they join the attributes in force where the block is written.
+    const TagFacts blockTags = tagFactsOf(gct, camel::core::tag::Nodes);
+    AttrScope attrs(
+        currentAttrs_,
+        camel::core::attr::unite(currentAttrs_, blockTags.nodes));
     // The `using namespace` written in this block are in force in it (design principles 10.2).
     UsingScope usings(*this, GCT::Tree::of(gct)->usingsOf(gct));
     bool old                  = synced_;

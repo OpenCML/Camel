@@ -516,3 +516,79 @@ expect_exit = 0
 expect_stdout_exact = "(1, 30)\n(0, 5)\n(6, 56)\n(3, 20)\n(1, 30)\n{ x: 1, y: 30 }\n{ ok: true, y: 30 }\n((0, 0), 5)\n(1, 30)\n(1, 30)\n(1, 60)\n(200, 0)\n(200, 0)\n{ ok: true, y: 200 }\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "loops.grad_loop_collect"
+desc = "A loop state that starts as `[]` and is only appended to is a collection output (design principles 3.10): the element type comes from the appended value (5.1, 5.2), the driver builds the array in one pass, and the state stays the program's value and gradient channel. The gradient reads the appended values back through the state, and 1000 rounds cost 3 blocks, not one copy per round (`std::mem::blocks()`, 10.5)."
+kind = "behavior"
+case = "../../../cases/loops/grad_loop_collect.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "6.0\n3.0\n1998.0\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.refuse_struct_data"
+desc = "A differentiable value read through a struct and converted to data (`float(p.n)`, where `n` is an `int` field computed from the parameter) is refused at the read: the conversion has no gradient channel, so the contribution would vanish without a sign (design principles 9.9)."
+kind = "negative"
+case = "../../../cases/loops/refuse_struct_data.cml"
+args = ["-E", "short", "${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 12
+expect_output_contains = ["has no gradient channel", "refuse_struct_data.cml:12:18"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.refuse_effectful_data"
+desc = "A value produced by an effectful call (`side` returns an `int` from the parameter) and converted to data is refused at the conversion: the call boundary hides the dependency, so the gradient would be dropped silently (design principles 9.9)."
+kind = "negative"
+case = "../../../cases/loops/refuse_effectful_data.cml"
+args = ["-E", "short", "${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 15
+expect_output_contains = ["has no gradient channel", "refuse_effectful_data.cml:15:16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.refuse_loop_array_state"
+desc = "A loop state with no gradient channel (`int[]`) whose next value depends on the parameter is refused at the loop, even when only another state's value is read: before H22 the int state's contribution vanished and the gradient was 2 instead of 6 (design principles 9.9, 3.10)."
+kind = "negative"
+case = "../../../cases/loops/refuse_loop_array_state.cml"
+args = ["-E", "short", "${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 9
+expect_output_contains = ["has no gradient channel", "refuse_loop_array_state.cml:9:16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.refuse_loop_iter_array"
+desc = "A loop iterating over an array computed from the parameter is refused at the loop: each round's element carries part of the contribution, but the reverse pass has no scatter for an iterated array, so before H22 the gradient was silently 0 (design principles 9.9)."
+kind = "negative"
+case = "../../../cases/loops/refuse_loop_iter_array.cml"
+args = ["-E", "short", "${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 8
+expect_output_contains = ["has no gradient channel", "refuse_loop_iter_array.cml:8:12"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.collect_multi_state"
+desc = "A collection output in a loop with several states: the body returns `(next states..., appended element...)`, so the append is part of the result and the loop value is `(states..., collection arrays...)`; the FILL projection gives the program only the states. Before the fix the body result read the states back through an ACCS of the loop value, so the append became dead and C2's training loop stopped at `EffectNotExecuted`."
+kind = "behavior"
+case = "../../../cases/loops/loop_collect_multi.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[1.0, 1.0, 1.0] 3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

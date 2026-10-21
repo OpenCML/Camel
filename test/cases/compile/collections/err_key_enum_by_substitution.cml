@@ -1,0 +1,17 @@
+module main
+
+// The key of a Map (the element of a Set) is checked again when a type variable is replaced:
+// `Set<T>` with `T` an enum whose payload cannot be a key is rejected at the call, naming the
+// field of the enum.
+
+type Boxed = enum { Empty, Weight(float) }
+
+func to_set(x: typeas T): Set<T> {
+    return [x] as Set<T>
+}
+
+func main(): int sync {
+    println(to_set(Boxed::Empty))
+    println("never printed")
+    return 0
+}

@@ -1280,3 +1280,15 @@ expect_output_contains = ["'error e' is not supported: the pattern 'error e' is 
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "error_position_pipeline"
+desc = "The position an error value records is the whole call expression (design principles 3.9, 4.4): a pipeline `x->error(m)` is `error(x, m)` written with its first argument first, so the recorded position is the start of the pipeline, not of the callee."
+kind = "negative"
+case = "../../../cases/compile/tagged/error_position_pipeline.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_line = 8
+expect_diagnostic_column = 11
+expect_output_contains = ["An error value reached the exit of 'main' without being handled: Zero: zero.", "error_position_pipeline.cml:8:11", "(name=RuntimeDiag::UnhandledError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

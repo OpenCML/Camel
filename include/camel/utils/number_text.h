@@ -48,7 +48,10 @@ namespace camel::utils {
 /// Reading a text as a number: it is one number of the language's grammar and the type holds
 /// it, or it is not a number at all, or it is a number the type cannot hold (overflow or
 /// underflow). The two refusals are different causes and are reported differently.
-enum class NumberTextStatus { Ok, NotANumber, OutOfRange };
+/// `OutOfRangeInteger` is a number written as an integer token whose value does not fit an
+/// int64 (the widest integer a literal has): a float entry argument is refused with the
+/// integer's range rather than the float's, which would be a false statement about the text.
+enum class NumberTextStatus { Ok, NotANumber, OutOfRange, OutOfRangeInteger };
 
 /// The range of the integer type T as a diagnostic writes it (`-2147483648 to 2147483647`).
 template <std::signed_integral T> std::string integerRangeText() {
@@ -78,50 +81,291 @@ template <std::floating_point T> std::string complexRangeText() {
 inline constexpr std::string_view complexNumberTextHelp =
     "a complex number (write 1+2i, -2i, 0.5-0.25i or a real number such as 1.5)";
 
-/// Reads `text` as one integer of type T: an optional sign ('-' or '+'), then decimal digits,
-/// and nothing else (no blanks, no digit separators, no base prefix).
-template <std::signed_integral T> NumberTextStatus parseWholeInteger(std::string_view text, T &out) {
-    if (!text.empty() && text.front() == '+') {
-        text.remove_prefix(1);
-        if (!text.empty() && text.front() == '-') {
-            return NumberTextStatus::NotANumber;
-        }
-    }
+namespace number_text_detail {
+
+inline bool isDecimalDigit(char c) { return c >= '0' && c <= '9'; }
+
+inline bool allDecimalDigits(std::string_view text) {
     if (text.empty()) {
-        return NumberTextStatus::NotANumber;
+        return false;
     }
-    T value{};
-    const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), value, 10);
-    if (ec == std::errc::invalid_argument) {
-        return NumberTextStatus::NotANumber;
-    }
-    if (ec == std::errc::result_out_of_range) {
-        // from_chars stops after the digits it could read; what follows decides whether the
-        // text was a number at all.
-        for (const char *p = end; p != text.data() + text.size(); ++p) {
-            if (*p < '0' || *p > '9') {
-                return NumberTextStatus::NotANumber;
-            }
+    for (const char c : text) {
+        if (!isDecimalDigit(c)) {
+            return false;
         }
-        return NumberTextStatus::OutOfRange;
     }
-    if (end != text.data() + text.size()) {
-        return NumberTextStatus::NotANumber;
-    }
-    out = value;
-    return NumberTextStatus::Ok;
+    return true;
 }
 
-/// Reads `text` as one floating-point number of type T: an optional sign, then a decimal
-/// number with digits on both sides of its optional fraction and an optional exponent (`1`,
-/// `1.5`, `1e-3`), or `inf` / `nan` as the language prints them. Nothing else: no blanks, no
-/// hexadecimal form, no suffix. A float command-line argument and each part of a complex one
-/// are read by this rule.
-template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_view text, T &out) {
-    bool negative = false;
+inline bool allHexDigits(std::string_view text) {
+    if (text.empty()) {
+        return false;
+    }
+    for (const char c : text) {
+        const bool digit = isDecimalDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        if (!digit) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool allBinaryDigits(std::string_view text) {
+    if (text.empty()) {
+        return false;
+    }
+    for (const char c : text) {
+        if (c != '0' && c != '1') {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool allOctalDigits(std::string_view text) {
+    if (text.empty()) {
+        return false;
+    }
+    for (const char c : text) {
+        if (c < '0' || c > '7') {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline unsigned digitValue(char c) {
+    if (c >= '0' && c <= '9') {
+        return static_cast<unsigned>(c - '0');
+    }
+    if (c >= 'a' && c <= 'f') {
+        return static_cast<unsigned>(c - 'a') + 10;
+    }
+    return static_cast<unsigned>(c - 'A') + 10;
+}
+
+/// An optional sign, then the body of a number token (language reference 2.5.1, 2.5.2). A sign
+/// inside the body (a second leading sign, or an exponent without digits) is left to the form
+/// check.
+inline bool splitNumberSign(std::string_view &text, bool &negative) {
+    negative = false;
     if (!text.empty() && (text.front() == '+' || text.front() == '-')) {
         negative = text.front() == '-';
         text.remove_prefix(1);
+        if (!text.empty() && (text.front() == '+' || text.front() == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The body of an integer token (reference 2.5.1): decimal digits without a leading zero (`0`),
+/// octal digits with a leading `0`, `0x` and hexadecimal digits, or `0b` and binary digits.
+/// Nothing else; `digits` is written without the radix prefix.
+struct IntegerParts {
+    unsigned radix = 10;
+    std::string_view digits;
+};
+
+inline bool integerParts(std::string_view body, IntegerParts &parts) {
+    if (body.empty()) {
+        return false;
+    }
+    if (body.size() >= 2 && body[0] == '0' && body[1] == 'x') {
+        if (!allHexDigits(body.substr(2))) {
+            return false;
+        }
+        parts = {16, body.substr(2)};
+        return true;
+    }
+    if (body.size() >= 2 && body[0] == '0' && body[1] == 'b') {
+        if (!allBinaryDigits(body.substr(2))) {
+            return false;
+        }
+        parts = {2, body.substr(2)};
+        return true;
+    }
+    if (body.size() == 1 && body[0] == '0') {
+        parts = {10, body};
+        return true;
+    }
+    if (body[0] == '0') {
+        if (!allOctalDigits(body.substr(1))) {
+            return false;
+        }
+        parts = {8, body.substr(1)};
+        return true;
+    }
+    if (!allDecimalDigits(body)) {
+        return false;
+    }
+    parts = {10, body};
+    return true;
+}
+
+/// The body of a real token (reference 2.5.2): digits, then either a point with digits after it
+/// (and an optional exponent) or an exponent. `point` and `exponent` say which parts are there;
+/// a body with neither is an integer token, not a real one. `integerDigits` is the length of the
+/// digit run before the point or the exponent.
+struct RealParts {
+    bool point     = false;
+    bool exponent  = false;
+    std::size_t integerDigits = 0;
+};
+
+inline bool realParts(std::string_view body, RealParts &parts) {
+    std::size_t i = 0;
+    while (i < body.size() && isDecimalDigit(body[i])) {
+        ++i;
+    }
+    if (i == 0) {
+        return false;
+    }
+    parts          = {};
+    parts.integerDigits = i;
+    if (i < body.size() && body[i] == '.') {
+        parts.point = true;
+        ++i;
+        const std::size_t fraction = i;
+        while (i < body.size() && isDecimalDigit(body[i])) {
+            ++i;
+        }
+        if (i == fraction) {
+            return false;
+        }
+    }
+    if (i < body.size() && (body[i] == 'e' || body[i] == 'E')) {
+        parts.exponent = true;
+        ++i;
+        if (i < body.size() && (body[i] == '+' || body[i] == '-')) {
+            ++i;
+        }
+        const std::size_t exponentDigits = i;
+        while (i < body.size() && isDecimalDigit(body[i])) {
+            ++i;
+        }
+        if (i == exponentDigits) {
+            return false;
+        }
+    }
+    return i == body.size();
+}
+
+/// The value of `digits` in `radix`, read as T; the text is known to be an integer token. A
+/// magnitude the type cannot hold is OutOfRange, never wrapped around (design principles 5.1).
+template <std::signed_integral T>
+NumberTextStatus integerValue(
+    std::string_view digits, unsigned radix, bool negative, T &out) {
+    // The largest magnitude the type holds, as an unsigned value: for a negative number the
+    // magnitude may be one more (the minimum has no positive counterpart).
+    const uint64_t maximum = static_cast<uint64_t>(std::numeric_limits<T>::max());
+    const uint64_t limit   = negative ? maximum + 1 : maximum;
+    uint64_t magnitude     = 0;
+    for (const char c : digits) {
+        const uint64_t digit = digitValue(c);
+        if (digit > limit || magnitude > (limit - digit) / radix) {
+            return NumberTextStatus::OutOfRange;
+        }
+        magnitude = magnitude * radix + digit;
+    }
+    if (negative) {
+        if (magnitude == maximum + 1) {
+            out = std::numeric_limits<T>::min();
+        } else {
+            out = static_cast<T>(-static_cast<int64_t>(magnitude));
+        }
+    } else {
+        out = static_cast<T>(magnitude);
+    }
+    return NumberTextStatus::Ok;
+}
+
+/// The value of a real body. `underflowIsZero` says what a number too small to tell from zero
+/// is: a literal (and an entry argument) reads it as zero, as the language's literal parser
+/// does; a conversion call refuses it as out of range (H15f).
+template <std::floating_point T>
+NumberTextStatus realValue(
+    std::string_view body, bool negative, T &out, bool underflowIsZero) {
+    T value{};
+    if constexpr (requires(const char *p, T &v) { std::from_chars(p, p, v); }) {
+        const auto [end, ec] = std::from_chars(
+            body.data(), body.data() + body.size(), value, std::chars_format::general);
+        if (ec == std::errc::invalid_argument || end != body.data() + body.size()) {
+            return NumberTextStatus::NotANumber;
+        }
+        if (ec == std::errc::result_out_of_range) {
+            // from_chars says the same thing for a number too large for T and one too small to
+            // tell from zero; a C conversion at T's own width tells the two apart without
+            // losing the grammar, which the checks above have already pinned. It must be T's
+            // width: 3.5e38 overflows a float but is a finite double, and reading it as a double
+            // would call it an underflow and give zero.
+            const std::string numeral(body);
+            errno         = 0;
+            char *end     = nullptr;
+            T      spread = T{};
+            if constexpr (std::is_same_v<T, float>) {
+                spread = std::strtof(numeral.c_str(), &end);
+            } else {
+                spread = std::strtod(numeral.c_str(), &end);
+            }
+            if (std::isinf(spread)) {
+                return NumberTextStatus::OutOfRange;
+            }
+            if (!underflowIsZero) {
+                return NumberTextStatus::OutOfRange;
+            }
+            value = T{};
+        }
+    } else {
+        // libc++ before version 20 has no from_chars for floating point. The characters were
+        // checked by realParts; the C library reads the decimal point of the C locale, which
+        // Camel never changes from ".".
+        const std::string numeral(body);
+        char *end = nullptr;
+        errno     = 0;
+        value     = static_cast<T>(
+            sizeof(T) <= sizeof(float) ? std::strtof(numeral.c_str(), &end)
+                                       : std::strtod(numeral.c_str(), &end));
+        if (end != numeral.c_str() + numeral.size()) {
+            return NumberTextStatus::NotANumber;
+        }
+        if (errno == ERANGE && (std::isinf(value) || value == T{})) {
+            if (std::isinf(value) || !underflowIsZero) {
+                return NumberTextStatus::OutOfRange;
+            }
+        }
+    }
+    out = negative ? -value : value;
+    return NumberTextStatus::Ok;
+}
+
+} // namespace number_text_detail
+
+/// Reads `text` as one integer of type T for a conversion function: an optional sign ('-' or
+/// '+'), then decimal digits, and nothing else (no blanks, no digit separators, no base prefix).
+/// The entry reader and a source literal use parseNumberToken, which reads a whole number token
+/// (the language's bases included).
+template <std::signed_integral T> NumberTextStatus parseWholeInteger(std::string_view text, T &out) {
+    bool negative = false;
+    if (!number_text_detail::splitNumberSign(text, negative)) {
+        return NumberTextStatus::NotANumber;
+    }
+    if (!number_text_detail::allDecimalDigits(text)) {
+        return NumberTextStatus::NotANumber;
+    }
+    return number_text_detail::integerValue(text, 10, negative, out);
+}
+
+/// Reads `text` as one floating-point number of type T for a conversion function: an optional
+/// sign, then a decimal number with digits on both sides of its optional fraction and an
+/// optional exponent (`1`, `1.5`, `1e-3`), or `inf` / `nan` as the language prints them.
+/// Nothing else: no blanks, no hexadecimal form, no suffix. A number too small to tell from zero
+/// is out of range here (H15f); the entry reader and a source literal read it as zero
+/// (parseNumberToken).
+template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_view text, T &out) {
+    bool negative = false;
+    if (!number_text_detail::splitNumberSign(text, negative)) {
+        return NumberTextStatus::NotANumber;
     }
     if (text.empty()) {
         return NumberTextStatus::NotANumber;
@@ -138,82 +382,77 @@ template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_vi
     // exponent (language reference 2.5.2: there must be digits on both sides of the point).
     // from_chars and strtod also accept `.5` and `1.`; reject them here, so that a number text
     // has the language's grammar rather than the C library's.
-    std::size_t i = 0;
-    while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
-        ++i;
-    }
-    if (i == 0) {
+    number_text_detail::RealParts parts;
+    if (!number_text_detail::realParts(text, parts)) {
         return NumberTextStatus::NotANumber;
     }
-    if (i < text.size() && text[i] == '.') {
-        ++i;
-        const std::size_t fraction = i;
-        while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
-            ++i;
-        }
-        if (i == fraction) {
-            return NumberTextStatus::NotANumber;
-        }
-    }
-    if (i < text.size() && (text[i] == 'e' || text[i] == 'E')) {
-        ++i;
-        if (i < text.size() && (text[i] == '+' || text[i] == '-')) {
-            ++i;
-        }
-        const std::size_t exponent = i;
-        while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
-            ++i;
-        }
-        if (i == exponent) {
-            return NumberTextStatus::NotANumber;
-        }
-    }
-    if (i != text.size()) {
+    return number_text_detail::realValue(text, negative, out, false);
+}
+
+/// Reads `text` as one whole number token of the language, the rule a source literal and an
+/// entry argument share (reference 2.5.1, 2.5.2): an optional sign, then an integer token
+/// (decimal, `0x` hexadecimal, `0b` binary, or octal with a leading `0`) or a real token (digits
+/// with a point and digits after it, and/or an exponent), and nothing else. A real token too
+/// small to tell from zero is zero, as a source literal is; one too large is out of range. For
+/// an integer T only an integer token fits (`12`, `0x10`, `077`; `1.5` and `1e3` do not).
+template <std::signed_integral T> NumberTextStatus parseNumberToken(std::string_view text, T &out) {
+    bool negative = false;
+    if (!number_text_detail::splitNumberSign(text, negative)) {
         return NumberTextStatus::NotANumber;
     }
-    T value{};
-    if constexpr (requires(const char *p, T &v) { std::from_chars(p, p, v); }) {
-        const auto [end, ec] = std::from_chars(
-            text.data(),
-            text.data() + text.size(),
-            value,
-            std::chars_format::general);
-        if (ec == std::errc::invalid_argument || end != text.data() + text.size()) {
-            return NumberTextStatus::NotANumber;
-        }
-        if (ec == std::errc::result_out_of_range) {
-            return NumberTextStatus::OutOfRange;
-        }
-    } else {
-        // libc++ before version 20 has no from_chars for floating point. The C library's
-        // conversion takes more than a decimal number (a hexadecimal form), so the characters
-        // are checked first; it reads the decimal point of the C locale, which Camel never
-        // changes from ".".
-        for (const char c : text) {
-            const bool allowed =
-                (c >= '0' && c <= '9') || c == '.' || c == 'e' || c == 'E' || c == '+' || c == '-';
-            if (!allowed) {
-                return NumberTextStatus::NotANumber;
-            }
-        }
-        const std::string numeral(text);
-        char *end = nullptr;
-        errno     = 0;
-        value     = static_cast<T>(
-            sizeof(T) <= sizeof(float) ? std::strtof(numeral.c_str(), &end)
-                                       : std::strtod(numeral.c_str(), &end));
-        if (end != numeral.c_str() + numeral.size()) {
-            return NumberTextStatus::NotANumber;
-        }
-        // The value is too large (infinity) or too small (rounded to zero): both are out of
-        // range, as from_chars reports them. A subnormal that is not zero is still a value of
-        // the type, so ERANGE alone is not a refusal.
-        if (errno == ERANGE && (std::isinf(value) || value == 0)) {
-            return NumberTextStatus::OutOfRange;
-        }
+    number_text_detail::IntegerParts parts;
+    if (!number_text_detail::integerParts(text, parts)) {
+        return NumberTextStatus::NotANumber;
     }
-    out = negative ? -value : value;
-    return NumberTextStatus::Ok;
+    return number_text_detail::integerValue(parts.digits, parts.radix, negative, out);
+}
+
+template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_view text, T &out) {
+    bool negative = false;
+    if (!number_text_detail::splitNumberSign(text, negative)) {
+        return NumberTextStatus::NotANumber;
+    }
+    if (text.empty()) {
+        return NumberTextStatus::NotANumber;
+    }
+    if (text == "inf") {
+        out = negative ? -std::numeric_limits<T>::infinity() : std::numeric_limits<T>::infinity();
+        return NumberTextStatus::Ok;
+    }
+    if (text == "nan") {
+        out = std::numeric_limits<T>::quiet_NaN();
+        return NumberTextStatus::Ok;
+    }
+    // An integer token first: `077` is octal 63, not the decimal 77 a real-token reading would
+    // give it, and `0xFF` is 255. A source literal takes the integer token it is written as.
+    number_text_detail::IntegerParts integer;
+    if (number_text_detail::integerParts(text, integer)) {
+        int64_t value = 0;
+        const NumberTextStatus status = number_text_detail::integerValue(
+            integer.digits, integer.radix, negative, value);
+        if (status != NumberTextStatus::Ok) {
+            return NumberTextStatus::OutOfRangeInteger;
+        }
+        out = static_cast<T>(value);
+        if (negative && value == 0) {
+            // The text wrote a sign the integer value cannot carry: `-0` at a position of a real
+            // type is the negative zero, and converting the integer zero would lose it (H15h).
+            out = -out;
+        }
+        return NumberTextStatus::Ok;
+    }
+    // Then a real token. Without a point it is a real token only when an exponent makes it one,
+    // and the lexer's real path does not take a leading-zero digit run with an exponent
+    // (`077e2` is not a token): the digits are the plain decimal kind only when they are not
+    // that ambiguous run.
+    number_text_detail::RealParts real;
+    if (!number_text_detail::realParts(text, real)) {
+        return NumberTextStatus::NotANumber;
+    }
+    if (!real.point && real.integerDigits > 1 && text.front() == '0') {
+        return NumberTextStatus::NotANumber;
+    }
+    return number_text_detail::realValue(text, negative, out, true);
 }
 
 /// The text of a floating-point number: the shortest digits that read back as the same number

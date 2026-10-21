@@ -38,6 +38,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
 #include "camel/core/type/typevar.h"
@@ -472,6 +473,9 @@ class Builder {
     // The callee expression of such a binding, for the binding used as a value
     // (partialApplicationOf builds the call from it).
     std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithCallee_;
+    // The `f<w>` expression that made the binding. Everything the partial application makes is
+    // located there: the expression itself, not the statement it is written in (H9 1.6).
+    std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithOrigin_;
     // The candidates of such a binding when the pass being used has several and the position
     // has not chosen one (H27e). The ambiguity is reported when the binding is refused for
     // good (rejectUnappliedBinding): visiting a value first must not preempt the position
@@ -796,9 +800,43 @@ class Builder {
     // Enters the scope of `graph`, an existing graph, as enterScope does for one it finds.
     void enterGraphScope(const compile_graph_ptr_t &graph, const std::string &name);
     // Builds the body of the function `gct` into `graph`, whose scope has been entered.
+    // ---- Tags (design principles 6.2) -------------------------------------------------------
+    // A `#` use written on a function, a type declaration, a field or a block adds facts
+    // (camel/core/node_attrs.h): to the declaration it is written on (`on func`, `on type`,
+    // `on field`) or to the nodes written below it (`on nodes`: the body of the function, the
+    // statements of the block). The uses are on the GCT node (GCT::Tree::tagUsesOf), put there
+    // by the GCT builder; they are resolved here, where imports and the module are known.
+    struct TagFacts {
+        camel::core::attr::AttrSetId declaration = camel::core::attr::kNoAttrs;
+        camel::core::attr::AttrSetId nodes       = camel::core::attr::kNoAttrs;
+    };
+    /// The facts of the tag uses written on `gct`, which is written at `at` (Func, Type or
+    /// Nodes). Resolved once per node and remembered. Reports a use that is wrong and throws
+    /// BuildAbortException.
+    TagFacts tagFactsOf(const GCT::node_ptr_t &gct, camel::core::tag::Position at);
+    /// The facts of a list of uses (the tags of a block, of a field), each written at `at`.
+    TagFacts tagFactsOfList(
+        const std::vector<GCT::TagUse> &uses, camel::core::tag::Position at);
+    /// Adds the facts of one use, expanding an alias group to its members.
+    void addTagFacts(
+        const GCT::TagUse &use, camel::core::tag::Position at, TagFacts &facts,
+        std::unordered_set<camel::core::tag::TagId> &seen);
+    /// The tag the written name names here: declared by this module, then imported by name or
+    /// through a module prefix. nullopt when there is none.
+    std::optional<camel::core::tag::TagId> tagNamed(const std::string &written);
+    /// The attribute value of the arguments of one use of `decl`; reports an argument that is
+    /// not a compile-time value or that the tag cannot carry.
+    camel::core::attr::AttrValueId tagValueOf(
+        const camel::core::tag::Decl &decl, const GCT::TagUse &use);
+    /// The tags written on the fields of the type declaration `decl` (its GCT node), recorded
+    /// in the module with the declaration.
+    void recordFieldTags(const GCT::node_ptr_t &decl);
+    std::unordered_map<const GCT::Node *, TagFacts> tagFacts_;
+
     void buildFuncBody(
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-        const std::string &name);
+        const std::string &name,
+        camel::core::attr::AttrSetId bodyTags = camel::core::attr::kNoAttrs);
 
     std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
@@ -938,6 +976,11 @@ class Builder {
     void rejectAmbiguousCall(
         const std::string &name, const std::string &argumentTypes,
         const std::vector<std::string> &candidates, const GCT::node_ptr_t &origin);
+    /// The same, located at an origin that is already the whole expression (a partial
+    /// application's `f<w>` rather than the `<w>` its node spans).
+    void rejectAmbiguousCallAt(
+        const std::string &name, const std::string &argumentTypes,
+        const std::vector<std::string> &candidates, camel::source::origin_id_t origin);
     /// The same for candidates that are function types: their signatures are listed in the
     /// order they were written, which is all an ordinary call and a partial application
     /// have to show.
@@ -1057,6 +1100,24 @@ class Builder {
     void markLoopStateInPlaceOne(
         const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
         size_t index, node_handle_t next);
+    /// Recognises a state that starts as an empty array and whose only use is appending one
+    /// value per round, and gives the loop a collection slot for the appended values
+    /// (design principles 3.10). The state itself stays: it is the value the program sees and
+    /// the channel its gradient uses. The slot is an extra, internal output; a FILL (or an
+    /// access, for one state) projects the loop's value back to the states alone. Must run
+    /// before autodiff and before `std::opt`: both read the loop's shape. The body then gives
+    /// the tuple of the next states and the appended values.
+    std::vector<Type *> collectLoopAppends(
+        const arm_ptr_t &body, const GCT::node_ptr_t &loop, const std::vector<Type *> &stateTypes,
+        const std::vector<bool> &emptyInitial);
+    /// Rewrites an empty-array state's `void[]` type once the body's append has told us the
+    /// element type it appends (design principles 5.1: `loop losses = [] for ...` infers from
+    /// the value appended), in the ports of the condition (when given) and of the body. Returns
+    /// false when the next value is not such an append.
+    bool inferLoopStateFromAppend(
+        const arm_ptr_t &body, const arm_ptr_t &cond, const GCT::node_ptr_t &loop,
+        std::vector<node_handle_t> &initial, std::vector<Type *> &stateTypes, size_t index,
+        node_handle_t next);
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
     /// `gct`, or, when `arms` is given, are those arms in order (built by buildArm).
     /// No arm is added to those the program wrote (design principles 3.7).

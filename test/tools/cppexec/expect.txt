@@ -59,6 +59,11 @@ test/cases/linear/nvm/var_params.cml
 test/cases/compile/module_imports/d4_cpp_computed.cml
 test/cases/consistency/faults/top_level_fault.cml
 
+# Named struct types (design principles 5.2): one C++ struct per declaration and layout; an
+# anonymous value enters a named type without moving; a named type of another order is copied
+# field by field; an array element and `append` take an anonymous literal of the named type.
+test/cases/trans/cpp/named_structs.cml
+
 # && and || as branches, null tests and narrowing (design principles 3.8).
 test/cases/consistency/logical/short_circuit.cml
 test/cases/consistency/logical/pure.cml
@@ -104,10 +109,25 @@ test/cases/compile/entry_args/complex.cml --arg z=1+2 --arg w=4i
 test/cases/compile/entry_args/complex.cml --arg z=abc --arg w=4i
 test/cases/compile/entry_args/complex.cml --arg z=1+ --arg w=4i
 test/cases/compile/entry_args/complex.cml --arg z=1e9999+2i --arg w=4i
+# A part too small to tell from zero is zero, as for a real parameter (H15h).
 test/cases/compile/entry_args/complex.cml --arg z=1+2i --arg w=1+1e-9999i
+# Each part is one number token of the language: the integer bases work in it (H15h).
+test/cases/compile/entry_args/complex.cml --arg z=1+0x10i --arg w=0x10-077i
 
-# The float parameter reads the same whole-token grammar: a leading `+` is its sign; the
-# hexadecimal float and a value out of range are refused, as camel refuses them.
+# One number grammar for an entry argument and a source literal (H15h): the integer tokens are
+# hexadecimal, binary and octal too, and a float parameter reads one as a source literal in a
+# float position does. The float still has no hexadecimal form, an integer token too large for
+# an int64 is refused, and text that is not one token is refused; the translated program and
+# camel agree on each.
+test/cases/compile/entry_args/scalars.cml --arg n=0x10 --arg rate=0xFF --arg name=hi --arg loud=true
+test/cases/compile/entry_args/scalars.cml --arg n=077 --arg rate=077 --arg name=hi --arg loud=true
+test/cases/compile/entry_args/scalars.cml --arg n=0b1010 --arg rate=1e-9999 --arg name=hi --arg loud=true
+test/cases/compile/entry_args/scalars.cml --arg n=09 --arg rate=0.5 --arg name=hi --arg loud=true
+test/cases/compile/entry_args/scalars.cml --arg n=1e3 --arg rate=0.5 --arg name=hi --arg loud=true
+test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=0xFFFFFFFFFFFFFFFF --arg name=hi --arg loud=true
+test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=0x1.8 --arg name=hi --arg loud=true
+test/cases/compile/entry_args/widths.cml --arg n=0x7FFFFFFF --arg rate=0xFF
+test/cases/compile/entry_args/widths.cml --arg n=0x80000000 --arg rate=0.5
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=+0.5 --arg name=hi --arg loud=true
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=0x1.8p1 --arg name=hi --arg loud=true
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=1e9999 --arg name=hi --arg loud=true

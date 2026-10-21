@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 21, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
 #define CONFIG_H
 #endif
 
-#define VERSION "0.2.15"
+#define VERSION "0.2.21"
 
 #include <string>
 #include <vector>
@@ -111,6 +111,7 @@ extern bool dumpTNS;       // Whether to dump Topological Node Sequence
 extern bool dumpOps;       // Whether to dump the operators of the imported modules
 extern bool dumpInstances; // Whether to dump the index semantics of every operator node
 extern bool dumpFacts;     // Whether to compute and dump the graph facts of the program
+extern bool dumpTags;      // Whether to dump the tags the program declares and the facts on its declarations
 extern bool geneCode;      // Whether to dump generate code from GIR
 extern int passUntil;      // Pass until the given pass
 } // namespace Inspect

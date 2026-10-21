@@ -76,3 +76,23 @@ expect_output_contains = ["'println' is used as a value here, but it names an op
 expect_output_not_contains = ["never printed", "cannot be called"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "partial_application_span"
+desc = "A partial application is a function value located at the expression itself: in `let g = inc<1>` both the FUNC node the value calls and the value node cover `inc<1>` (9:12-9:18), not the whole `let` statement (H9 1.6, H16 item 4)."
+kind = "behavior"
+case = "../../../cases/compile/function_values/partial_application_span.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+const func = lines.find((l) => l.includes('label="inc", type="FUNC"'))
+assert(func !== undefined, `no FUNC node for inc: ${input.normalized.stdout}`)
+assert(func.includes('span="9:12-9:18"'), `the function value made by inc<1> covers inc<1>: ${func}`)
+const fill = lines.find((l) => l.includes('type="FILL"') && l.includes('span="9:12-9:18"'))
+assert(fill !== undefined, `the partial application value covers inc<1>: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000

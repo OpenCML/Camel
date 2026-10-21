@@ -26,6 +26,7 @@
 
 #include "handle.h"
 #include "nodekind.h"
+#include "regionkind.h"
 
 #include "camel/core/error/runtime.h"
 #include "camel/core/node_attrs.h"
@@ -56,10 +57,27 @@ using camel::runtime::GCGraph;
 using camel::runtime::GCNode;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
+using camel::runtime::GCRegion;
 using camel::runtime::GraphId;
 using camel::runtime::Program;
 
 namespace camel::graphmod {
+
+/// Whether `constant` reads values of this type: the scalars and the string, whose slot is the
+/// value (or a reference the graph keeps alive).
+bool constantType(const Type *type) {
+    switch (type->code()) {
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+    case TypeCode::Bool:
+    case TypeCode::String:
+        return true;
+    default:
+        return false;
+    }
+}
 
 namespace {
 
@@ -344,22 +362,6 @@ slot_t originKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot<Int64>(static_cast<int64_t>(graphOf(handle, "graph.origin").nodeOrigin(handle->index())));
 }
 
-/// Whether `constant` reads values of this type: the scalars and the string, whose slot is the
-/// value (or a reference the graph keeps alive).
-bool constantType(const Type *type) {
-    switch (type->code()) {
-    case TypeCode::Int32:
-    case TypeCode::Int64:
-    case TypeCode::Float32:
-    case TypeCode::Float64:
-    case TypeCode::Bool:
-    case TypeCode::String:
-        return true;
-    default:
-        return false;
-    }
-}
-
 /// The value of a node that holds a constant of the type of the second argument (a sample of the
 /// type; its value is not read), null for any other node.
 slot_t constantKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -376,6 +378,69 @@ slot_t constantKernel(ArgsView &, ArgsView &norm, Context &) {
         return NullSlot;
     }
     return makeSome(graph.staticSlots()[index], nullableOf(wanted));
+}
+
+// ---- regions ----
+
+/// The region a node is in (the innermost); null for a graph that has the body only (its region
+/// table is empty). Region 0 is the body, so a node of a graph that has regions has one.
+slot_t regionOfKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<Handle *>(0);
+    nodeOf(handle, "graph.region_of");
+    const GCGraph &graph = graphOf(handle, "graph.region_of");
+    if (graph.regionCount() == 0) {
+        return NullSlot;
+    }
+    Handle *region = Handle::create(
+        HandleKind::Region,
+        handle->program(),
+        handle->graph(),
+        graph.nodeRegion(handle->index()),
+        nullptr,
+        mm::autoSpace());
+    return makeSome(toSlot(region), nullableOf(HandleType::get(HandleKind::Region)));
+}
+
+const GCRegion &regionOf(const Handle *handle, const char *site) {
+    const GCGraph &graph = graphOf(handle, site);
+    const GCRegion *region = graph.region(handle->index());
+    if (region == nullptr) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph has no such region");
+    }
+    return *region;
+}
+
+slot_t regionKindKernel(ArgsView &, ArgsView &norm, Context &) {
+    const GCRegion &region = regionOf(norm.get<Handle *>(0), "graph.region_kind");
+    const auto tag         = regionKindTag(region.kind);
+    if (!tag) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.region_kind",
+            "the region has no kind a program shows");
+    }
+    return toSlot(Variant::create(*tag, 0, mm::autoSpace()));
+}
+
+/// The region this one is in; null for the body, whose region id is 0.
+slot_t regionParentKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle     = norm.get<Handle *>(0);
+    const GCRegion &region = regionOf(handle, "graph.region_parent");
+    if (handle->index() == 0) {
+        return NullSlot;
+    }
+    const GCGraph &graph = graphOf(handle, "graph.region_parent");
+    if (graph.region(region.parent) == nullptr) {
+        return NullSlot;
+    }
+    Handle *parent = Handle::create(
+        HandleKind::Region,
+        handle->program(),
+        handle->graph(),
+        region.parent,
+        nullptr,
+        mm::autoSpace());
+    return makeSome(toSlot(parent), nullableOf(HandleType::get(HandleKind::Region)));
 }
 
 slot_t showKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -439,6 +504,9 @@ const std::vector<ReadOp> &readOps() {
             {"is_written_slot", isWrittenSlotKernel, node, Type::Bool()},
             {"origin", originKernel, node, Type::Int64()},
             {"show", showKernel, node, Type::String()},
+            {"region_of", regionOfKernel, node, maybe(HandleKind::Region)},
+            {"region_kind", regionKindKernel, handle(HandleKind::Region), regionKindType()},
+            {"region_parent", regionParentKernel, handle(HandleKind::Region), maybe(HandleKind::Region)},
         };
     }();
     return ops;
@@ -485,3 +553,4 @@ const std::unordered_map<std::string, operator_t> &readKernels() {
 }
 
 } // namespace camel::graphmod
+

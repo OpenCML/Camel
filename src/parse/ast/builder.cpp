@@ -20,6 +20,7 @@
 #include "camel/parse/ast/builder.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_semantics.h"
+#include "camel/core/tags.h"
 
 #include "camel/parse/syntax/lexer.h"
 #include "camel/parse/syntax/parser.h"
@@ -362,6 +363,8 @@ Value Builder::visitDecl(syn::Node context) {
         return visitFuncDecl(cst::FuncDecl(context));
     case NK::TypeDecl:
         return visitTypeDecl(cst::TypeDecl(context));
+    case NK::TagDecl:
+        return visitTagDecl(cst::TagDecl(context));
     case NK::RuleDecl:
         return visitRuleDecl(cst::RuleDecl(context));
     default:
@@ -544,6 +547,9 @@ Value Builder::visitBlockStmt(cst::BlockStmt context) {
     if (decorators) {
         *res << decorators;
     }
+    // The tag uses written before the block (`#tag { ... }`, design principles 6.2): a third
+    // child, after the decorators.
+    addTagUses(res, context);
     LEAVE("BlockStmt");
     return res;
 }
@@ -706,8 +712,8 @@ std::optional<uint8_t> Builder::numericAnnotationOf(cst::FuncAnno context) {
     };
     if (annotation != "numeric") {
         reject(
-            "the only annotation that takes names in parentheses is '@numeric(...)'; a "
-            "decorator takes its arguments as '@name<args>'");
+            "the only annotation that takes names in parentheses is '@numeric(...)'; a tag is "
+            "written '#name' or '#name<args>' (or '#[a, b]'), never '@name(args)'");
         return uint8_t{0};
     }
     uint8_t granted = 0;
@@ -902,6 +908,125 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     return std::vector<node_ptr_t>{lhsFunc, rhsFunc, makerDecl};
 }
 
+/*
+tagDecl : ('export')? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+        | ('export')? 'tag' identDef '=' bracketIdents ;
+A tag is a name in the namespace of functions and types (design principles 6.2). The AST keeps
+the positions as a bit set (TagPosition), the parameters as written, the members of a group and
+the passes its declaration names; the GCT builder registers the tag with them.
+*/
+Value Builder::visitTagDecl(cst::TagDecl context) {
+    ENTER("TagDecl");
+    // The name is written as a definition (`identDef`), not a reference: `tag name on ...`.
+    const auto name = context->get<cst::IdentDef>();
+    Reference ref   = qualifyRef(Reference(name ? name->text() : std::string{}));
+    node_ptr_t declNode = createNodeAs<TagDeclLoad>(ref);
+    setNodeTokenRangeByContext(declNode, context);
+    auto decl = declNode->loadAs<TagDeclLoad>();
+    decl->setDoc(docOf(context));
+
+    if (const auto params = context->get<cst::AngledParams>()) {
+        const auto paired = params->get<cst::PairedParams>();
+        for (const auto pair : paired->all<cst::KeyParamPair>()) {
+            TagDeclLoad::Param param;
+            if (const auto name = pair->get<cst::IdentDef>()) {
+                param.name = name->text();
+            }
+            if (const auto type = pair->type()) {
+                param.type = std::string(type->sourceText());
+            } else {
+                diags_->of(SemanticDiag::TagParameterMissing)
+                    .at(rangeOf(pair->firstToken(), pair->lastToken()))
+                    .commit(param.name, ref.toString());
+            }
+            decl->addParam(std::move(param));
+        }
+    }
+
+    if (const auto group = context->get<cst::BracketIdents>()) {
+        // `tag finite_math = [no_nans, no_infs]`: a group of tags, written where any of them
+        // may be written. It has no facts of its own (design principles 6.2).
+        if (const auto list = group->get<cst::IdentList>()) {
+            for (const auto ident : list->all<cst::IdentDef>()) {
+                decl->addAlias(qualifyRef(Reference(ident->text())));
+            }
+        }
+    } else {
+        if (const auto positions = context->get<cst::TagPositions>()) {
+            for (const auto ident : positions->all<cst::IdentDef>()) {
+                const std::string name(ident->text());
+                if (const auto position = camel::core::tag::positionFromName(name)) {
+                    decl->addPosition(static_cast<TagPosition>(*position));
+                } else {
+                    diags_->of(SemanticDiag::TagUnknownPosition)
+                        .at(rangeOf(ident->firstToken(), ident->lastToken()))
+                        .commit(name);
+                }
+            }
+        }
+        if (const auto readers = context->get<cst::TagReaders>()) {
+            for (const auto reader : readers->all<cst::IdentRef>()) {
+                decl->addReader(value_cast<Reference>(visitIdentRef(reader)));
+            }
+        }
+        if (decl->on() == static_cast<uint8_t>(TagPosition::None)) {
+            // No usable position was written (an unknown one was reported above): the tag could
+            // never be written, which is what it says.
+            diags_->of(SemanticDiag::TagUnknownPosition)
+                .at(rangeOf(context->firstToken(), context->lastToken()))
+                .commit("");
+        }
+    }
+
+    if (context->tok(TK::KwExport)) {
+        export_->addRef(ref);
+    }
+    LEAVE("TagDecl");
+    return declNode;
+}
+
+/*
+tagUse : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']') ;
+*/
+std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
+    std::vector<node_ptr_t> uses;
+    for (const auto ref : context->all<cst::TagRef>()) {
+        const auto name = value_cast<Reference>(visitIdentRef(ref->get<cst::IdentRef>()));
+        node_ptr_t use  = createNodeAs<TagUseLoad>(name);
+        setNodeTokenRangeByContext(use, ref);
+        if (const auto values = ref->get<cst::AngledValues>()) {
+            auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+                visitAngledValues(values));
+            if (namedDataList && namedDataList->size() > 0) {
+                // A tag takes positional arguments only: it names its parameters where it is
+                // declared, and the pass that reads the tag matches them by position.
+                diags_->of(SemanticDiag::TagArgumentNamed)
+                    .at(rangeOf(values->firstToken(), values->lastToken()))
+                    .commit(namedDataList->at(0)->load()->toString());
+            }
+            *use << dataList;
+        }
+        uses.push_back(use);
+    }
+    return uses;
+}
+
+void Builder::addTagUses(const node_ptr_t &owner, const syn::Node &context) {
+    node_ptr_t list = nullptr;
+    for (const auto tagUse : context->all<cst::TagUse>()) {
+        for (const auto &use : tagUsesOf(tagUse)) {
+            if (!list) {
+                list = createNodeAs<RepeatedLoad>("TagUse");
+                setNodeTokenRangeByContext(list, tagUse);
+            }
+            *list << use;
+        }
+    }
+    if (list) {
+        *owner << list;
+    }
+}
+
 Value Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");
 
@@ -1024,6 +1149,10 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     if (annoListNode) {
         *funcDeclNode << annoListNode;
     }
+    // The tag uses written before the function, after the decorators. They are read when the
+    // function is compiled: a tag declared `on func` belongs to the declaration, one declared
+    // `on nodes` to the nodes of its body (design principles 6.2).
+    addTagUses(funcDeclNode, context);
     *funcDeclNode << funcNode;
     setNodeTokenRangeByContext(funcDeclNode, context);
     registerAstSemanticBundle(
@@ -1227,6 +1356,9 @@ Value Builder::visitTypeDecl(cst::TypeDecl context) {
     }
 
     *typeDeclNode << typeOptNode;
+    // The tag uses written before the type declaration (design principles 6.2): read when the
+    // type is compiled, `on type` for the declaration and `on field` for its fields.
+    addTagUses(typeDeclNode, context);
     LEAVE("TypeDecl");
     return typeDeclNode;
 }
@@ -1277,6 +1409,9 @@ Value Builder::visitKeyTypePair(cst::KeyTypePair context) {
     if (context->type()) {
         *namedTypeNode << any2node(visitType(context->type()));
     }
+    // The tags of a field (design principles 6.2): kept with the named type, so that the type
+    // declaration that owns the field can record them (`#tag x: int`).
+    addTagUses(namedTypeNode, context);
     LEAVE("KeyTypePair");
     return namedTypeNode;
 }

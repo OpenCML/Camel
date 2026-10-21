@@ -28,6 +28,7 @@
 #include "camel/core/rtdata/collection.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
+#include "camel/core/type/enum.h"
 #include "camel/core/type/storage.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
@@ -41,9 +42,36 @@ namespace camel::core::type {
 // ---- Key types ----
 
 // What may be a key (design principles 11.3). The reasons are part of the diagnostic.
-std::string collectionKeyProblem(Type *type) {
+std::string collectionKeyProblem(
+    Type *type, camel::source::origin_id_t *fieldOrigin, std::string *fieldLabel) {
     if (type == nullptr) {
         return "it has no type";
+    }
+    if (const EnumType *enumType = asEnumType(type); enumType != nullptr) {
+        // An enum can be a key when every field of every variant is one (design principles
+        // 11.3): its order is the variants' declaration order, then field by field.
+        for (const EnumVariant &variant : enumType->variants()) {
+            for (size_t i = 0; i < variant.fieldTypes.size(); ++i) {
+                Type *field         = variant.fieldTypes[i];
+                std::string problem = collectionKeyProblem(field);
+                if (problem.empty()) {
+                    continue;
+                }
+                const std::string where =
+                    variant.shape == VariantShape::Struct && i < variant.fieldNames.size()
+                        ? "field '" + variant.fieldNames[i] + "' of variant '" + variant.name + "'"
+                        : "field " + std::to_string(i) + " of variant '" + variant.name + "'";
+                if (fieldOrigin != nullptr && i < variant.fieldOrigins.size()) {
+                    *fieldOrigin = variant.fieldOrigins[i];
+                }
+                if (fieldLabel != nullptr) {
+                    *fieldLabel = where;
+                }
+                return "its " + where + " of type '" + field->toString() +
+                       "' cannot be a key: " + problem;
+            }
+        }
+        return "";
     }
     switch (type->code()) {
     case TypeCode::TypeVar:
@@ -52,6 +80,8 @@ std::string collectionKeyProblem(Type *type) {
     case TypeCode::Bool:
     case TypeCode::String:
         return "";
+    case TypeCode::EnumHole:
+        return "its type is not determined here, so it cannot be a key";
     case TypeCode::Float32:
     case TypeCode::Float64:
         return "a floating-point number has no usable equality as a key (NaN is not equal to "
@@ -68,7 +98,8 @@ std::string collectionKeyProblem(Type *type) {
             return "a variable is not a value";
         }
         for (Type *member : tuple->types()) {
-            if (std::string problem = collectionKeyProblem(member); !problem.empty()) {
+            if (std::string problem = collectionKeyProblem(member, fieldOrigin, fieldLabel);
+                !problem.empty()) {
                 return "its element of type '" + member->toString() +
                        "' cannot be a key: " + problem;
             }

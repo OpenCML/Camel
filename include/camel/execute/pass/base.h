@@ -131,6 +131,17 @@ std::optional<camel::core::error::Diagnostic> passesNeverRunWarning(
     const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
 
 /**
+ * A warning (SemanticDiag::TagHasNoReader) for each tag the program writes whose declaration
+ * names the passes that read it (`read_by`) and none of them is in the pipeline: the tag then
+ * has no effect. A reader matches a pass of the list by name or by the pass's alias, and a
+ * module name (`tensor`) matches every pass of it (`tensor::fuse`). The warnings are returned
+ * in the order the tags are first written; the caller applies the warning policy and reports
+ * them.
+ */
+std::vector<camel::core::error::Diagnostic> tagsNeverReadWarnings(
+    const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
+
+/**
  * Applies passes to the given graph.
  *
  * Return value contract:

@@ -24,6 +24,9 @@
 
 #include "parser_impl.h"
 
+#include <algorithm>
+#include <array>
+
 #include "camel/parse/syntax/lexer.h"
 
 namespace camel::parse::syntax {
@@ -311,7 +314,10 @@ bool ParserImpl::startsDecl(TK kind) const {
     case TK::KwSync:
     case TK::KwMacro:
     case TK::At:
+    case TK::Hash:
         return true;
+    case TK::Identifier:
+        return atTagDecl(0);
     default:
         return false;
     }
@@ -331,6 +337,7 @@ bool ParserImpl::startsStmt(TK kind) const {
     case TK::KwReturn:
     case TK::KwThrow:
     case TK::At:
+    case TK::Hash:
         return true;
     default:
         return startsExpr(kind);
@@ -379,9 +386,11 @@ uint32_t ParserImpl::afterModifiers() const {
 }
 
 /// decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-///      | dataDecl | funcDecl | typeDecl | ruleDecl
+///      | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 /// Decided on the first token; after `export`, `inner` and `outer` on the next one or two
-/// (`export inner type` is an exported type, `export inner func` a function).
+/// (`export inner type` is an exported type, `export inner func` a function). The word `tag`
+/// is not reserved: a declaration starts with it only when a tag name follows (`atTagDecl`),
+/// so a value called `tag` still reads as a value.
 void ParserImpl::parseDecl() {
     switch (cur_) {
     case TK::KwModule:
@@ -397,10 +406,16 @@ void ParserImpl::parseDecl() {
         return parseDataDecl();
     case TK::KwType:
         return parseTypeDecl();
+    case TK::Hash:
+        // A tagged function, type or block declaration (the tags come first).
+        return parseAnnotatedStmt();
     case TK::KwExport: {
         const TK next = peek(1);
         if (atRuleDecl(1)) {
             return parseRuleDecl();
+        }
+        if (atTagDecl(1)) {
+            return parseTagDecl();
         }
         if (next == TK::KwLet || next == TK::KwVar || next == TK::KwType || next == TK::LBrace ||
             ((next == TK::KwInner || next == TK::KwOuter) && peek(2) == TK::KwType)) {
@@ -412,6 +427,9 @@ void ParserImpl::parseDecl() {
     case TK::KwOuter:
         return peek(1) == TK::KwType ? parseTypeDecl() : parseFuncDecl();
     default:
+        if (atTagDecl(0)) {
+            return parseTagDecl();
+        }
         if (atRuleDecl(0)) {
             return parseRuleDecl();
         }
@@ -449,6 +467,10 @@ void ParserImpl::parseStmt() {
     case TK::KwExport:
         return parseFuncDecl();
     case TK::At:
+        return parseAnnotatedStmt();
+    case TK::Hash:
+        // `#tag func ...`, `#tag type ...` or `#tag { ... }`: the tags are read first, then
+        // what they are written on (parseAnnotatedStmt).
         return parseAnnotatedStmt();
     case TK::KwInner:
     case TK::KwOuter:
@@ -733,30 +755,171 @@ void ParserImpl::parseFuncAnno() {
     close(m, NK::FuncAnno);
 }
 
-/// A statement that starts with annotations: a function declaration, or an annotated block
-/// (blockStmt's second form; `@numeric(...)` on a block, design principles 7.5). The annotations
-/// are read first; a block follows when the next token is '{' or `sync {`, anything else continues
-/// the function declaration. After an annotation '{' is always a block, never a struct literal.
+/// A statement that starts with annotations or tag uses: a function declaration, a type
+/// declaration, or an annotated/tagged block (blockStmt's second form; `@numeric(...)` on a
+/// block, design principles 7.5; `#tag { ... }` on a block, 6.2). They are read first; a block
+/// follows when the next token is '{' or `sync {`, a type declaration when it is 'type',
+/// anything else continues the function declaration. After a tag use '{' is always a block,
+/// never a struct literal.
 void ParserImpl::parseAnnotatedStmt() {
     const size_t m = mark();
-    while (cur_ == TK::At) {
-        parseFuncAnno();
-    }
+    parseFrontMatter();
     if (cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace)) {
         parseStmtBlock();
         return close(m, NK::BlockStmt);
     }
+    if (cur_ == TK::KwType) {
+        return parseTypeDeclRest(m);
+    }
     parseFuncDeclRest(m);
 }
 
-/// funcDecl : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
+/// frontMatter : (funcAnno | tagUse)*
+void ParserImpl::parseFrontMatter() {
+    while (cur_ == TK::At || cur_ == TK::Hash) {
+        if (cur_ == TK::At) {
+            parseFuncAnno();
+        } else {
+            parseTagUse();
+        }
+    }
+}
+
+/// funcDecl : frontMatter ('with' angledParams)? 'export'? implMark? modifiers?
 ///            'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
 void ParserImpl::parseFuncDecl() {
     const size_t m = mark();
-    while (cur_ == TK::At) {
-        parseFuncAnno();
-    }
+    parseFrontMatter();
     parseFuncDeclRest(m);
+}
+
+/// tagDecl : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+///         | 'export'? 'tag' identDef '=' bracketIdents
+///
+/// A tag is a name in the namespace of functions and types (design principles 6.2): the
+/// positions after `on` say where it may be written, `read_by` names the passes that read it,
+/// and the second form makes it the group of the tags in the list (`tag finite_math = [no_nans,
+/// no_infs]`). `tag`, `on` and `read_by` are contextual: they are not reserved words, and a
+/// declaration starts with `tag` only when a name, `<` or `=` follows it.
+void ParserImpl::parseTagDecl() {
+    const size_t m = mark();
+    eat(TK::KwExport);
+    bump(); // `tag`
+    expectName(NK::IdentDef);
+    if (eat(TK::Assign)) {
+        parseBracketedIdents(TK::RBracket, NK::BracketIdents);
+        close(m, NK::TagDecl);
+        return;
+    }
+    if (cur_ == TK::Lt || cur_ == TK::LAngle) {
+        parseAngledParams();
+    }
+    if (!atWord(0, "on")) {
+        unexpected({e(TK::Identifier)});
+        return close(m, NK::TagDecl);
+    }
+    bump(); // `on`
+    parseTagPositions();
+    if (atWord(0, "read_by")) {
+        bump();
+        parseTagReaders();
+    }
+    close(m, NK::TagDecl);
+}
+
+/// Whether a tag declaration starts at offset `n`: `tag` followed by a name and then `<`, `=`,
+/// or the contextual `on`. A `tag` followed by anything else is an ordinary name.
+bool ParserImpl::atTagDecl(uint32_t n) const {
+    if (!atWord(n, "tag") || peek(n + 1) != TK::Identifier) {
+        return false;
+    }
+    const TK third = peek(n + 2);
+    return third == TK::Lt || third == TK::LAngle || third == TK::Assign || atWord(n + 2, "on");
+}
+
+/// tagPositions : tagPositionName (',' tagPositionName)* ','?
+void ParserImpl::parseTagPositions() {
+    const size_t m = mark();
+    parseTagPositionName();
+    while (cur_ == TK::Comma && !atWord(1, "read_by") &&
+           (peek(1) == TK::Identifier || isKeyword(peek(1))) && !panic_) {
+        bump();
+        parseTagPositionName();
+    }
+    eat(TK::Comma);
+    close(m, NK::TagPositions);
+}
+
+/// tagPositionName : IDENTIFIER
+/// The words a tag's `on` lists: `func`, `type`, `field`, `nodes`, `param` (design principles
+/// 6.2). The first three are keywords of the language, the last two are not; after `on` all
+/// five are read as names, and one that is none of them is reported by the AST builder.
+void ParserImpl::parseTagPositionName() {
+    static const std::array<std::string_view, 5> kPositions = {
+        "func", "type", "field", "nodes", "param"};
+    const bool name = cur_ == TK::Identifier &&
+                      std::ranges::find(kPositions, tree_.tokens_.text(pos_)) !=
+                          kPositions.end();
+    const bool keyword = isKeyword(cur_) &&
+                         std::ranges::find(kPositions, tree_.tokens_.text(pos_)) !=
+                             kPositions.end();
+    if (!name && !keyword) {
+        unexpected({e(TK::Identifier)});
+        return;
+    }
+    const size_t m = mark();
+    bump();
+    close(m, NK::IdentDef);
+}
+
+/// tagReaders : identRef (',' identRef)* ','?
+void ParserImpl::parseTagReaders() {
+    const size_t m = mark();
+    parseIdentRef(NK::IdentRef);
+    while (cur_ == TK::Comma && peek(1) == TK::Identifier && !panic_) {
+        bump();
+        parseIdentRef(NK::IdentRef);
+    }
+    eat(TK::Comma);
+    close(m, NK::TagReaders);
+}
+
+/// tagUse : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
+/// The `#` forms of design principles 6.2: `#name`, `#name<args>` and the group
+/// `#[a, b<v>]`. `#` used to start a comment; it is now always a tag (2.1).
+void ParserImpl::parseTagUse() {
+    const size_t m = mark();
+    bump(); // `#`
+    if (cur_ == TK::LBracket) {
+        bump();
+        {
+            Scope scope(*this, false);
+            if (cur_ != TK::RBracket && !panic_) {
+                parseTagRef();
+                while (cur_ == TK::Comma && peek(1) != TK::RBracket && !panic_) {
+                    bump();
+                    parseTagRef();
+                }
+            }
+            eat(TK::Comma);
+        }
+        if (!panic_) {
+            expect(TK::RBracket);
+        }
+    } else if (!panic_) {
+        parseTagRef();
+    }
+    close(m, NK::TagUse);
+}
+
+/// tagRef : identRef angledValues?
+void ParserImpl::parseTagRef() {
+    const size_t m = mark();
+    parseIdentRef(NK::IdentRef);
+    if (cur_ == TK::LAngle) {
+        parseAngledValues();
+    }
+    close(m, NK::TagRef);
 }
 
 /// The part of funcDecl after its annotations; `m` marks where the declaration began.
@@ -876,11 +1039,17 @@ void ParserImpl::parseDataDecl() {
     close(m, NK::DataDecl);
 }
 
-/// typeDecl : implMark? 'type' identRef
+/// typeDecl : frontMatter? implMark? 'type' identRef
 ///            ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
 ///            (typeExpr | STRING)
 void ParserImpl::parseTypeDecl() {
     const size_t m = mark();
+    parseFrontMatter();
+    parseTypeDeclRest(m);
+}
+
+/// The part of typeDecl after the tags that may precede it; `m` marks where it began.
+void ParserImpl::parseTypeDeclRest(size_t m) {
     if (cur_ == TK::KwInner || cur_ == TK::KwOuter) {
         parseImplMark();
     }

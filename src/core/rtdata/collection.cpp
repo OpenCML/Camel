@@ -27,6 +27,8 @@
 
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/rtdata/variant.h"
+#include "camel/core/type/enum.h"
 #include "collection_tree.h"
 
 #include <algorithm>
@@ -226,6 +228,22 @@ void Table::updateRefs(const RefRelocator &relocate, const type::Type *type) {
 // it, so a collection is determined by its entries and by nothing else.
 int compareKeys(slot_t a, slot_t b, const type::Type *keyType) {
     const auto three = [](auto x, auto y) { return x < y ? -1 : (y < x ? 1 : 0); };
+    if (const auto *enumType = type::asEnumType(keyType); enumType != nullptr) {
+        // Design principles 11.3: variants in the order they are declared, then field by field.
+        const Variant *lhs = fromSlot<Variant *>(a);
+        const Variant *rhs = fromSlot<Variant *>(b);
+        if (const int byTag = three(lhs->tag(), rhs->tag()); byTag != 0) {
+            return byTag;
+        }
+        const auto &fields = enumType->variant(lhs->tag()).fieldTypes;
+        for (size_t i = 0; i < fields.size(); ++i) {
+            const int order = compareKeys(lhs->get(i), rhs->get(i), fields[i]);
+            if (order != 0) {
+                return order;
+            }
+        }
+        return 0;
+    }
     switch (keyType->code()) {
     case TypeCode::Int64:
         return three(fromSlot<Int64>(a), fromSlot<Int64>(b));

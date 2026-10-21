@@ -195,3 +195,14 @@ assert(out.includes('[Error]: Attempted division by zero.') && out.includes('(na
 assert(out.includes('tensor_definitions.cml:52:'), `located at the division of the definition: ${out}`)
 }
 """
+
+[[tests]]
+name = "gradients_numel_shape"
+desc = "An element count is a shape, not data whose gradient is dropped: differentiating the definition graph of `tensor_definitions::mean` (`sum(x) / (numel(x) as float)`) uses `numel(x)` as a constant shape count, so the mean is 2.5 and the gradient of the mean is 1/n per element (sum 1.0). This is the definition-level form of the `tensor:numel` exemption (design principles 9.9, 5.4)."
+kind = "behavior"
+case = "../../../cases/definitions/numel_shape.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "2.5\n1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

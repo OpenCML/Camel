@@ -1215,9 +1215,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             return false;
         };
         if (takesCallSite()) {
-            node_handle_t location = currGraph_->addStaticDataNode(
-                tt::as_shared<Data>(
-                    std::make_shared<StringData>(sourceLocationOf(gct->at(0)->origin()))));
+            // The position the value records is the whole call expression: `error(k, m)`, and
+            // `x->error(m)` written as a pipeline, which is the same call (design principles
+            // 4.4, 3.9). The call node's own span is its argument list, so the callee and the
+            // arguments together are the expression.
+            const camel::source::origin_id_t where = expressionPositionOf(gct);
+            node_handle_t location                 = currGraph_->addStaticDataNode(
+                tt::as_shared<Data>(std::make_shared<StringData>(sourceLocationOf(where))));
             registerNodeOrigin(context_, location, gct, "gir.data");
             normInputs.push_back({location, gct});
             normInputTypes.push_back(Type::String());

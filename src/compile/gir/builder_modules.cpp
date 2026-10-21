@@ -218,6 +218,13 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
                     eraseCompileGraph(optDecorated.value())));
             continue;
         }
+        if (auto declared = module_->declaredTag(name); declared.has_value()) {
+            // A tag is a name the module exports like any other (design principles 6.2): a module
+            // that imports it gets the tag itself, so a `#` use of it resolves there.
+            module_->exportEntity(
+                ref, camel::core::module::detail::EntityAccess::makeTag(*declared));
+            continue;
+        }
         if (auto optType = unit_->typeDecls.find(ref); optType != unit_->typeDecls.end()) {
             module_->exportType(ref, optType->second);
             continue;

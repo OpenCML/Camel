@@ -35,6 +35,7 @@
 #include "camel/parse/syntax/parser.h"
 
 #include <initializer_list>
+#include <string_view>
 
 namespace camel::parse::syntax {
 
@@ -189,6 +190,23 @@ class ParserImpl {
     void parseFuncDecl();
     void parseFuncDeclRest(size_t m);
     void parseAnnotatedStmt();
+    /// The `@` decorators and `#` tag uses before a declaration or a block, in either order.
+    void parseFrontMatter();
+    /// At `tag` naming a tag declaration (offset `n`): `tag name<...> on ...`, `tag name on ...`
+    /// or `tag name = [...]`.
+    bool atTagDecl(uint32_t n) const;
+    void parseTagDecl();
+    /// One `#` form: `#name`, `#name<args>`, or `#[a, b<v>]` (each member a tagRef).
+    void parseTagUse();
+    /// tagRef : identRef angledValues?
+    void parseTagRef();
+    /// tagPositions : tagPositionName (',' tagPositionName)* ','?
+    void parseTagPositions();
+    /// A position name: `func`, `type`, `field`, `nodes`, `param` (design principles 6.2). The
+    /// first three are keywords of the language; all five are names here only.
+    void parseTagPositionName();
+    /// `read_by` names: identRef (',' identRef)*
+    void parseTagReaders();
     /// At `operator` followed by an operator symbol, right after `func`: the name of an
     /// operator overload rather than a function named `operator`.
     bool atOperatorName() const;
@@ -200,6 +218,8 @@ class ParserImpl {
     void parseRuleBody();
     void parseDataDecl();
     void parseTypeDecl();
+    /// typeDecl after the tags and decorators that may precede it; `m` marks where it began.
+    void parseTypeDeclRest(size_t m);
     void parseRetStmt();
     void parseImplMark();
     void parseModifiers();
@@ -216,6 +236,25 @@ class ParserImpl {
     void parseEnumField();
     /// Whether a function declaration follows after the modifiers at the current token.
     uint32_t afterModifiers() const;
+    /// The index of the `n`-th token after the current one (0 is the current token), trivia
+    /// skipped.
+    uint32_t offsetOf(uint32_t n) const {
+        uint32_t i = pos_;
+        while (n > 0 && toks_[i].kind != TK::Eof) {
+            ++i;
+            while (isTrivia(toks_[i].kind)) {
+                ++i;
+            }
+            --n;
+        }
+        return i;
+    }
+    /// The token at offset `n` is the identifier `word` (a contextual keyword: `tag`, `on` and
+    /// `read_by` are not reserved words).
+    bool atWord(uint32_t n, std::string_view word) const {
+        const uint32_t i = offsetOf(n);
+        return toks_[i].kind == TK::Identifier && tree_.tokens_.text(i) == word;
+    }
     /// `{` at token offset `n` opens a struct literal: `{ name: ...` or `{ ...`.
     bool braceIsStruct(uint32_t n) const {
         const TK next = peek(n + 1);

@@ -114,7 +114,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::ConstructNotSupported", "err_var_parameter.cml:5:5:"]
+expect_output_contains = ["name=SemanticDiag::ConstructNotSupported", "err_var_parameter.cml:5:13:"]
 
 [[tests]]
 name = "partial_application.err_ambiguous"
@@ -126,7 +126,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_ambiguous.cml:12:18:", "<k: int> (x: int) => int", "<k: int> (x: float) => float", "annotate the literal with its type"]
+expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_ambiguous.cml:12:13:", "<k: int> (x: int) => int", "<k: int> (x: float) => float", "annotate the literal with its type"]
 
 [[tests]]
 name = "partial_application.err_entering_ambiguous"
@@ -138,7 +138,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_entering_ambiguous.cml:10:18:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float", "annotate the literal with its type"]
+expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_entering_ambiguous.cml:10:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float", "annotate the literal with its type"]
 
 [[tests]]
 name = "partial_application.context_arguments"
@@ -188,7 +188,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_overload_choice_name.cml:18:18:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float"]
+expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_overload_choice_name.cml:18:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float"]
 
 [[tests]]
 name = "partial_application.err_context_argument_name"

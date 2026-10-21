@@ -995,6 +995,11 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     auto &bound = boundWithArgs_[targetNode];
     bound.insert(bound.end(), inputs.begin(), inputs.end());
     boundWithCallee_.try_emplace(targetNode, gct->at(0));
+    // The `f<w>` expression the binding was made by: a partial application is located there,
+    // at the callee and the angled arguments together (design principles 5.1), not at the
+    // statement it is written in (H9 1.6). Its span is derived where the binding is used as a
+    // value (partialApplicationOf), so an ordinary `f<w>(x)` allocates nothing extra.
+    boundWithOrigin_.try_emplace(targetNode, gct);
     LEAVE("WITH");
     return targetNode;
 }

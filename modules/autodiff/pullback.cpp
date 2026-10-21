@@ -630,6 +630,16 @@ struct LoopBodyPlan {
     /// slot, collecting a constant 1 per round, so the reverse loop knows how many rounds ran.
     std::vector<Type *> collectionTypes;
     std::vector<Type *> collectionElemTypes;
+    /// Slots the builder already gave the loop (an empty-array state appended to in place,
+    /// Builder::collectLoopAppends): they come before the tape and are not residuals of this
+    /// pullback. The tape is what the reverse pass reads.
+    std::vector<Type *> existingCollectionTypes;
+    std::vector<Type *> existingCollectionElemTypes;
+    std::vector<Type *> tapeCollectionTypes;
+    /// For each state with no tangent: whether the value the body gives it depends on an
+    /// active port. That is a gradient the loop would drop silently (design principles 9.9),
+    /// so the loop is refused when it is rewritten.
+    std::vector<bool> stateNextTainted;
     bool roundCounter = false;
 };
 
@@ -721,12 +731,19 @@ struct Refusal {
 /// runs over one round's collected values (design principles 9.9).
 class Backward final : public VjpBuilder {
   public:
+    /// `differentiated` are the forward ports whose gradient this pass computes: the parameter
+    /// of a `grad`/`with_grad` call, or every port a pullback returns a tangent for. A port that
+    /// merely has a tangent (an ordinary tensor argument used as data) is not one, and neither
+    /// is anything derived from it: no gradient is being computed there, so nothing can be lost.
     Backward(
         GraphDraft &forward, GraphDraft &target,
         const std::unordered_map<gc_node_ref_t, CallSite> &sites, const GraphScope &scope,
-        std::vector<Refusal> &refusals, bool residualPorts = false)
+        std::vector<Refusal> &refusals, std::vector<gc_node_ref_t> differentiated,
+        bool residualPorts = false)
         : forward_(forward), target_(target), sites_(sites), inPlace_(&forward == &target),
-          scope_(scope), refusals_(refusals), residualPorts_(residualPorts) {}
+          scope_(scope), refusals_(refusals),
+          differentiated_(differentiated.begin(), differentiated.end()),
+          residualPorts_(residualPorts) {}
 
     /// Target-graph node holding the primal value `primal`.
     gc_node_ref_t ref(gc_node_ref_t primal);
@@ -741,6 +758,12 @@ class Backward final : public VjpBuilder {
     void run(const std::vector<gc_node_ref_t> &order);
     /// Full gradient of a primal value; zero when none reached it.
     gc_node_ref_t gradient(gc_node_ref_t primal);
+
+    /// Whether `node` is a value that depends on a differentiated parameter but has no
+    /// gradient channel of its own (design principles 9.9). Such a value may be carried as an
+    /// aggregate element and read later, but using it as data would drop the parameter's
+    /// contribution silently, so the backward pass refuses that use (see run).
+    bool tainted(gc_node_ref_t node) const { return tainted_.contains(node); }
 
     /// Primal nodes captured by the target graph, in closure order, after dropping unused ones.
     std::vector<gc_node_ref_t> finishCaptures();
@@ -810,7 +833,13 @@ class Backward final : public VjpBuilder {
     std::vector<Refusal> &refusals_;
     std::vector<gc_node_ref_t> refused_;
     std::unordered_set<gc_node_ref_t> primals_;
+    /// The ports whose gradient this pass computes; activity starts here, not at every port
+    /// that happens to have a tangent.
+    std::unordered_set<gc_node_ref_t> differentiated_;
     std::unordered_set<gc_node_ref_t> active_;
+    /// Values that depend on a differentiated parameter but have no tangent of their own: the
+    /// contribution of that parameter cannot be carried through them (design principles 9.9).
+    std::unordered_set<gc_node_ref_t> tainted_;
     mutable std::unordered_map<gc_node_ref_t, Tangent> gradients_;
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> toTarget_;
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> toPrimal_;
@@ -1497,14 +1526,33 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
 
 void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     const LoopDraftView view(*draft_.program(), draft_, loop);
-    ASSERT(
-        view.collectionCount() == 0,
-        "autodiff: a 'loop' that already collects values reached the forward rewrite.");
+    // The builder may already have given the loop collection slots (an empty-array state whose
+    // only use is `append`, Builder::collectLoopAppends). They are part of the loop's value,
+    // before the tape, and are preserved here.
+    const size_t existingCollections = view.collectionCount();
     const LoopBodyPlan &bodyPlan =
         engine_.loopBodyPlanFor(view.bodyGraph(), view.stateCount(), view.iterable().has_value());
     const size_t k               = bodyPlan.stateTypes.size();
     const size_t m               = bodyPlan.captureTypes.size();
     const size_t r               = bodyPlan.residualTypes.size();
+    // A state with no tangent whose next value depends on an active value loses that value's
+    // gradient at the round boundary. The body knows which states those are; refuse the loop
+    // here, where the source loop is, rather than let the tape skip it (9.9).
+    for (size_t j = 0; j < k; ++j) {
+        if (!carriesGradient(bodyPlan.stateTypes[j]) && j < bodyPlan.stateNextTainted.size() &&
+            bodyPlan.stateNextTainted[j]) {
+            failAt(
+                draft_.nodeOrigin(loop),
+                std::format(
+                    "a 'loop' state of type '{}' has no gradient channel, but its next value "
+                    "depends on a differentiated parameter{}; the loop would drop that "
+                    "parameter's contribution without a diagnostic. Make the state carry a "
+                    "gradient (a float, or an aggregate of floats), or stop depending on the "
+                    "differentiated value",
+                    bodyPlan.stateTypes[j]->toString(),
+                    whereIs(draft_.nodeOrigin(loop))));
+        }
+    }
     // A loop whose value has no tangent cannot carry a gradient, and one none of whose ports has
     // a tangent has nothing to send back: leave it alone (its captures get no gradient, which is
     // right: they cannot influence the value). Such a plan was not given a tape at all, so it
@@ -1520,8 +1568,11 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
         return;
     }
     ASSERT(
-        bodyPlan.collectionTypes.size() == (r == 0 ? 1u : r),
-        "autodiff: a loop body's collection slots do not match the values its round collects.");
+        bodyPlan.existingCollectionTypes.size() == existingCollections,
+        "autodiff: a loop's existing collection slots do not match its body's.");
+    ASSERT(
+        bodyPlan.tapeCollectionTypes.size() == (r == 0 ? 1u : r),
+        "autodiff: a loop body's tape slots do not match the values its round collects.");
     const PullbackPlan site = makePlanTypes(bodyPlan.portTypes, bodyPlan.stateValueType, carriesGradient);
     // The site's inputs: the captures (the node's With inputs), then the first values of the
     // state (its Norm inputs), the order visitCallSite reads them in.
@@ -1539,40 +1590,58 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     draft_.setNodeDataType(loop, valueType);
     draft_.setNodeDataIndex(loop, draft_.allocateRuntimeSlot(valueType));
     draft_.addDependency(bodyPlan.graphs.forward);
-    // The loop's users see the state alone; the tape is read through the node below.
+    // The loop's users see the state alone; the tape is read through the node below. The
+    // builder already inserted that projection when it normalised the loop; reuse it rather
+    // than redirect it to itself (a cycle), and add one only for a loop that has none.
     gc_node_ref_t state = kInvalidNodeRef;
-    if (k == 1) {
-        state = draft_.addAccsNode(bodyPlan.stateTypes.front(), 0u);
-    } else {
-        std::vector<size_t> slots(k);
-        for (size_t j = 0; j < k; ++j) {
-            slots[j] = j;
+    for (gc_node_ref_t user : draft_.normUsersOf(loop)) {
+        if (k == 1 && kindOf(draft_, user) == GCNodeKind::Accs) {
+            state = user;
+            break;
         }
-        state = draft_.addFillNode(
-            bodyPlan.stateValueType, rt::makeFillPayload(rt::GCFillKind::Tuple, slots));
+        if (k > 1 && kindOf(draft_, user) == GCNodeKind::Fill &&
+            typeOf(draft_, user) == bodyPlan.stateValueType) {
+            state = user;
+            break;
+        }
     }
     const uint64_t origin = draft_.nodeOrigin(loop);
-    draft_.setNodeOrigin(state, origin);
-    redirectValue(loop, state);
-    if (k == 1) {
-        draft_.setNormInputs(state, std::span<const gc_node_ref_t>(&loop, 1));
-    } else {
-        std::vector<gc_node_ref_t> components;
-        for (size_t j = 0; j < k; ++j) {
-            const gc_node_ref_t component = addAccs(draft_, bodyPlan.stateTypes[j], loop, j);
-            draft_.setNodeOrigin(component, origin);
-            components.push_back(component);
+    if (state == kInvalidNodeRef) {
+        if (k == 1) {
+            state = draft_.addAccsNode(bodyPlan.stateTypes.front(), 0u);
+        } else {
+            std::vector<size_t> slots(k);
+            for (size_t j = 0; j < k; ++j) {
+                slots[j] = j;
+            }
+            state = draft_.addFillNode(
+                bodyPlan.stateValueType, rt::makeFillPayload(rt::GCFillKind::Tuple, slots));
         }
-        auto *const empty = ::Tuple::create(k, mm::autoSpace());
-        const gc_node_ref_t source = draft_.materializeStaticValue(
-            toSlot<camel::core::rtdata::Object *>(empty), bodyPlan.stateValueType);
-        draft_.setNormInputs(state, std::span<const gc_node_ref_t>(&source, 1));
-        draft_.setWithInputs(state, components);
+        draft_.setNodeOrigin(state, origin);
+        redirectValue(loop, state);
+        if (k == 1) {
+            draft_.setNormInputs(state, std::span<const gc_node_ref_t>(&loop, 1));
+        } else {
+            std::vector<gc_node_ref_t> components;
+            for (size_t j = 0; j < k; ++j) {
+                const gc_node_ref_t component = addAccs(draft_, bodyPlan.stateTypes[j], loop, j);
+                draft_.setNodeOrigin(component, origin);
+                components.push_back(component);
+            }
+            auto *const empty = ::Tuple::create(k, mm::autoSpace());
+            const gc_node_ref_t source = draft_.materializeStaticValue(
+                toSlot<camel::core::rtdata::Object *>(empty), bodyPlan.stateValueType);
+            draft_.setNormInputs(state, std::span<const gc_node_ref_t>(&source, 1));
+            draft_.setWithInputs(state, components);
+        }
+    } else {
+        draft_.setNodeOrigin(state, origin);
     }
     std::vector<gc_node_ref_t> tapes;
-    for (size_t c = 0; c < bodyPlan.collectionTypes.size(); ++c) {
-        const gc_node_ref_t tape =
-            addAccs(draft_, bodyPlan.collectionTypes[c], loop, k + c);
+    for (size_t c = 0; c < bodyPlan.tapeCollectionTypes.size(); ++c) {
+        const gc_node_ref_t tape = addAccs(
+            draft_, bodyPlan.tapeCollectionTypes[c], loop,
+            static_cast<uint32_t>(k + existingCollections + c));
         draft_.setNodeOrigin(tape, origin);
         tapes.push_back(tape);
     }
@@ -1582,7 +1651,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     reverse.stateTypes      = bodyPlan.stateTypes;
     reverse.captureTypes    = bodyPlan.captureTypes;
     reverse.residualTypes   = bodyPlan.residualTypes;
-    reverse.collectionTypes = bodyPlan.collectionTypes;
+    reverse.collectionTypes = bodyPlan.tapeCollectionTypes;
     reverse.stateValueType  = bodyPlan.stateValueType;
     reverse.dyType          = bodyPlan.dyType;
     reverse.tangentsType    = site.tangentsType;
@@ -1621,7 +1690,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     const rt::GraphId closureKey = engine_.group().reserve("autodiff.loop/" + key, key);
     // What the reverse pass captures, in order: the tape, then the captures whose gradient it
     // starts from zero.
-    std::vector<Type *> closureTypes = bodyPlan.collectionTypes;
+    std::vector<Type *> closureTypes = bodyPlan.tapeCollectionTypes;
     std::vector<gc_node_ref_t> captures;
     for (gc_node_ref_t tape : tapes) {
         captures.push_back(tape);
@@ -2236,22 +2305,86 @@ void Backward::refuseWhenActive(
 
 void Backward::run(const std::vector<gc_node_ref_t> &order) {
     primals_.insert(order.begin(), order.end());
-    // Activity analysis: a value is active when it has a tangent and depends on a parameter that
-    // has one. Gradients only flow between active values, so values derived from constants or
-    // integers (e.g. a scale computed from a shape) need no rule and cost nothing.
-    std::unordered_set<gc_node_ref_t> ports(
-        forward_.withPorts().begin(),
-        forward_.withPorts().end());
-    ports.insert(forward_.normPorts().begin(), forward_.normPorts().end());
+    // Activity analysis: a value is active when it has a tangent and depends on a port whose
+    // gradient is being computed. An ordinary argument (a tensor of labels, a scale) can have a
+    // tangent type and still be data: it is not in `differentiated_`, so nothing derived from it
+    // is active and no gradient can be lost through it. Gradients only flow between active
+    // values, so values derived from constants or integers need no rule and cost nothing.
     checkVariableReads(order);
     //
     // A function value has no tangent, but a closure carries the values it captured: one that
     // captured an active value is active too, as a carrier. No gradient is ever accumulated
     // on it; it only makes what is computed from it active, so that a call it is passed to is
     // not mistaken for a constant (see visit, FUNC).
+    // An aggregate that has a tangent carries its differentiable elements; a non-differentiable
+    // element it was built from (an `int` field of a struct that also has `float` fields) is
+    // not a loss as long as nobody reads it as data. Reads of such a field taint the access
+    // instead (visitAccs seeds it from its source). A loop with a tangent is the same: its
+    // differentiable state can be read, and a read of a state with no channel is the loss.
+    const auto structural = [&](gc_node_ref_t node, Type *type) {
+        const GCNodeKind kind = kindOf(forward_, node);
+        if (kind != GCNodeKind::Fill) {
+            return false;
+        }
+        return (type->code() == TypeCode::Tuple || type->code() == TypeCode::Struct) &&
+               tangentTypeOf(type) != nullptr;
+    };
+    // A branch's condition, its arm selector, and a `where`'s mask are control: the value
+    // chooses which data is read, and the reader's gradient flows through the chosen data, not
+    // through the choice. Those inputs are exempt from the taint check; reading the condition
+    // as data (a cast to float, arithmetic) is not.
+    const auto controlInput = [&](gc_node_ref_t node, gc_node_ref_t input) {
+        const GCNodeKind kind = kindOf(forward_, node);
+        const Type *inputType = typeOf(forward_, input);
+        if (kind == GCNodeKind::Join && kindOf(forward_, input) == GCNodeKind::Brch) {
+            return true;
+        }
+        if (kind == GCNodeKind::Brch) {
+            return inputType->code() == TypeCode::Bool;
+        }
+        if (kind == GCNodeKind::Oper) {
+            const auto payload = forward_.payloadOf(node);
+            if (payload.size() >= sizeof(rt::GCOperBody)) {
+                const std::string uri(reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri());
+                if (uri == "tensor:where" || uri == ":op/where") {
+                    const auto norm = forward_.normInputsOf(node);
+                    return !norm.empty() && input == norm.front();
+                }
+                if (inputType->code() == TypeCode::Bool) {
+                    return false;
+                }
+            }
+        }
+        return false;
+    };
+    // A shape or a length is a discrete property of a value, not data whose gradient could
+    // flow: using it to reshape or index is control, and differentiating through it is not
+    // defined. Such a value is not tainted even when its input is active.
+    const auto metadataOper = [&](gc_node_ref_t node) {
+        if (kindOf(forward_, node) != GCNodeKind::Oper) {
+            return false;
+        }
+        const auto payload = forward_.payloadOf(node);
+        if (payload.size() < sizeof(rt::GCOperBody)) {
+            return false;
+        }
+        const std::string_view uri = reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri();
+        return uri == "tensor:shape" || uri == ":op/len_arr" || uri == ":op/len_str" ||
+               uri == "tensor:rank" || uri == "tensor:numel";
+    };
     for (gc_node_ref_t node : order) {
         Type *const type   = typeOf(forward_, node);
         const bool carrier = holdsFunction(type);
+        bool inputActive    = false;
+        bool inputTainted   = false;
+        for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+            for (gc_node_ref_t input : inputs) {
+                inputActive |= active_.contains(input);
+                if (!controlInput(node, input)) {
+                    inputTainted |= tainted_.contains(input);
+                }
+            }
+        }
         // A variable is state, not a differentiable input: its cell is never active, and a
         // read of it (checked above) is a constant of the call.
         if ((tangentTypeOf(type) == nullptr && !carrier) || isCellType(type)) {
@@ -2263,7 +2396,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             if (kindOf(forward_, node) == GCNodeKind::Loop) {
                 for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
                     for (gc_node_ref_t input : inputs) {
-                        if (active_.contains(input)) {
+                        if (active_.contains(input) || tainted_.contains(input)) {
                             failAt(
                                 forward_.nodeOrigin(node),
                                 std::format(
@@ -2278,6 +2411,12 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                     }
                 }
             }
+            // A value that cannot carry a gradient but is computed from one is tainted: it may
+            // still be stored, but using it as data is the silent loss design principles 9.9
+            // forbids. An aggregate with a tangent is not tainted as a whole; its field read is.
+            if (!structural(node, type) && !metadataOper(node) && (inputActive || inputTainted)) {
+                tainted_.insert(node);
+            }
             continue;
         }
         if (kindOf(forward_, node) == GCNodeKind::Oper &&
@@ -2285,15 +2424,40 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             continue;
         }
         // A function passed in from outside is given: it does not depend on a parameter.
-        bool active = ports.contains(node) && tangentTypeOf(type) != nullptr;
-        for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
-            for (gc_node_ref_t input : inputs) {
-                active |= active_.contains(input);
-            }
+        bool active = differentiated_.contains(node) && tangentTypeOf(type) != nullptr;
+        active |= inputActive || inputTainted;
+        if (!active) {
+            continue;
         }
-        if (active) {
-            active_.insert(node);
+        // The value has a gradient channel, but a data input that has none means the gradient
+        // stops here without a diagnostic. Refuse the use rather than return a partial answer.
+        if (!structural(node, type) && inputTainted) {
+            const gc_node_ref_t source = [&] {
+                for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+                    for (gc_node_ref_t input : inputs) {
+                        if (tainted_.contains(input)) {
+                            return input;
+                        }
+                    }
+                }
+                return kInvalidNodeRef;
+            }();
+            failAt(
+                forward_.nodeOrigin(node),
+                std::format(
+                    "a value of type '{}' depends on a differentiated parameter but has no "
+                    "gradient channel, and it is used as data here{}; the parameter's "
+                    "contribution would be dropped without a diagnostic. Use a value that can "
+                    "carry a gradient (a float, or an aggregate of floats){}",
+                    typeOf(forward_, source)->toString(),
+                    whereIs(forward_.nodeOrigin(node)),
+                    source == kInvalidNodeRef
+                        ? std::string()
+                        : std::format(
+                              "; the value with no channel comes from {}",
+                              whereIs(forward_.nodeOrigin(source)))));
         }
+        active_.insert(node);
     }
     for (auto it = order.rbegin(); it != order.rend(); ++it) {
         auto found = gradients_.find(*it);
@@ -2708,7 +2872,14 @@ void Backward::visitOper(gc_node_ref_t node) {
     }
     const camel::core::VjpRule rule = DerivativeRegistry::instance().findRule(uri);
     if (rule == nullptr) {
-        fail(std::format("no derivative rule for operator '{}'", uri));
+        failAt(
+            forward_.nodeOrigin(node),
+            std::format(
+                "no derivative rule for operator '{}' of type '{}'{}: a differentiated value "
+                "passes through it, so its gradient cannot be dropped silently",
+                uri,
+                typeOf(forward_, node)->toString(),
+                whereIs(forward_.nodeOrigin(node))));
     }
     std::vector<gc_node_ref_t> inputs;
     for (gc_node_ref_t input : forward_.normInputsOf(node)) {
@@ -2971,11 +3142,18 @@ void Engine::build(Pending &pending) {
     const gc_node_ref_t dy = addPort(*pullback, tangentTypeOf(plan.valueType));
     pullback->appendNormPort(dy);
 
-    Backward backward(forward, *pullback, rewrite.sites(), pending.scope, refusals_);
+    const auto ports = portsOf(forward);
+    std::vector<gc_node_ref_t> differentiated;
+    for (size_t i = 0; i < ports.size(); ++i) {
+        if (plan.tangentIndex(i)) {
+            differentiated.push_back(ports[i]);
+        }
+    }
+    Backward backward(
+        forward, *pullback, rewrite.sites(), pending.scope, refusals_, std::move(differentiated));
     backward.seed(value, dy);
     backward.run(valueOrder(forward, value));
 
-    const auto ports = portsOf(forward);
     std::vector<gc_node_ref_t> tangents;
     for (size_t i = 0; i < ports.size(); ++i) {
         if (plan.tangentIndex(i)) {
@@ -3078,21 +3256,73 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
     ForwardRewrite rewrite(*this, *source, scope);
     rewrite.run();
     const gc_node_ref_t value = valueNode(*source);
+    // The builder may already have split this body's result into the states and one or more
+    // collection slots (Builder::collectLoopAppends). They come first, before the tape; the
+    // gradient still flows through the states alone, so the backward pass below is seeded with
+    // the state value, not with the whole tuple.
+    size_t existingCollections = 0;
+    if (kindOf(*source, value) == GCNodeKind::Fill) {
+        const auto withIns = source->withInputsOf(value);
+        const auto payload = source->payloadOf(value);
+        if (payload.size() >= sizeof(rt::GCFillBody)) {
+            const auto *fill = reinterpret_cast<const rt::GCFillBody *>(payload.data());
+            if (fill->fillKind == rt::GCFillKind::Tuple &&
+                fill->slots().size() == withIns.size() && withIns.size() > stateCount) {
+                existingCollections = withIns.size() - stateCount;
+            }
+        }
+    }
+    std::vector<gc_node_ref_t> stateNext(stateCount, kInvalidNodeRef);
+    std::vector<gc_node_ref_t> existingValues;
+    for (size_t j = 0; j < stateCount; ++j) {
+        stateNext[j] = (stateCount == 1 && existingCollections == 0)
+                           ? value
+                           : addAccs(*source, plan.stateTypes[j], value, j);
+    }
+    const auto existingComponents = source->withInputsOf(value);
+    for (size_t c = 0; c < existingCollections; ++c) {
+        const gc_node_ref_t collection = existingComponents[stateCount + c];
+        existingValues.push_back(collection);
+        Type *const elementType = typeOf(*source, collection);
+        plan.existingCollectionElemTypes.push_back(elementType);
+        plan.existingCollectionTypes.push_back(ArrayType::create(elementType));
+    }
+    const gc_node_ref_t stateValue =
+        existingCollections == 0
+            ? value
+            : (stateCount == 1 ? stateNext.front()
+                               : addAggregate(*source, plan.stateValueType, stateNext));
 
     auto pullback = std::make_unique<GraphDraft>();
     const gc_node_ref_t dy = addPort(*pullback, plan.dyType);
     pullback->appendNormPort(dy);
-    Backward backward(*source, *pullback, rewrite.sites(), scope, refusals_, /*residualPorts=*/true);
-    backward.seed(value, dy);
-    backward.run(valueOrder(*source, value));
-
-    // The tangents of the body's ports, in the order the site's pullback returns them. Asking for
-    // them may add residuals (a zero tangent of an aggregate reads the primal), so the residual
-    // list is read afterwards: the loop collects what this pullback ended up reading.
     std::vector<gc_node_ref_t> primalPorts(withPorts.begin(), withPorts.end());
     for (size_t j = 0; j < stateCount; ++j) {
         primalPorts.push_back(normPorts[firstState + j]);
     }
+    std::vector<gc_node_ref_t> differentiated;
+    for (size_t i = 0; i < primalPorts.size(); ++i) {
+        if (plan.graphs.tangentIndex(i)) {
+            differentiated.push_back(primalPorts[i]);
+        }
+    }
+    Backward backward(
+        *source, *pullback, rewrite.sites(), scope, refusals_, std::move(differentiated),
+        /*residualPorts=*/true);
+    backward.seed(stateValue, dy);
+    backward.run(valueOrder(*source, stateValue));
+
+    // A state with no tangent that the body computes from an active value would lose that
+    // value's gradient at the round boundary. Record it for the caller, which knows the loop
+    // and can refuse it with the loop's location.
+    plan.stateNextTainted.assign(stateCount, false);
+    for (size_t j = 0; j < stateCount; ++j) {
+        plan.stateNextTainted[j] = stateNext[j] != kInvalidNodeRef && backward.tainted(stateNext[j]);
+    }
+
+    // The tangents of the body's ports, in the order the site's pullback returns them. Asking for
+    // them may add residuals (a zero tangent of an aggregate reads the primal), so the residual
+    // list is read afterwards: the loop collects what this pullback ended up reading.
     std::vector<gc_node_ref_t> tangents;
     for (size_t i = 0; i < plan.portTypes.size(); ++i) {
         if (plan.graphs.tangentIndex(i)) {
@@ -3113,15 +3343,11 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
     pullback->setFuncType(
         FunctionType::create(param_vec_t{}, pullbackParams, plan.graphs.tangentsType));
 
-    // The body the loop runs: the next state, then the values one round collects.
-    std::vector<gc_node_ref_t> components;
-    if (stateCount == 1) {
-        components.push_back(value);
-    } else {
-        for (size_t j = 0; j < stateCount; ++j) {
-            components.push_back(addAccs(*source, plan.stateTypes[j], value, j));
-        }
-    }
+    // The body the loop runs: the next state, then the values one round collects. The builder's
+    // collections, if any, stay first; the tape follows.
+    std::vector<gc_node_ref_t> components = stateNext;
+    components.insert(components.end(), existingValues.begin(), existingValues.end());
+    plan.collectionElemTypes = plan.existingCollectionElemTypes;
     for (gc_node_ref_t residual : residuals) {
         components.push_back(residual);
         plan.collectionElemTypes.push_back(typeOf(*source, residual));
@@ -3133,7 +3359,17 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
         plan.collectionElemTypes.push_back(Type::Int64());
         components.push_back(addLoopInt(*source, 1));
     }
+    plan.tapeCollectionTypes.clear();
+    for (size_t c = plan.existingCollectionElemTypes.size(); c < plan.collectionElemTypes.size(); ++c) {
+        if (plan.collectionElemTypes[c] == nullptr) {
+            fail("autodiff: internal error: a loop tape slot has no element type.");
+        }
+        plan.tapeCollectionTypes.push_back(ArrayType::create(plan.collectionElemTypes[c]));
+    }
     for (Type *element : plan.collectionElemTypes) {
+        if (element == nullptr) {
+            fail("autodiff: internal error: a loop collection has no element type.");
+        }
         plan.collectionTypes.push_back(ArrayType::create(element));
     }
     std::vector<Type *> resultTypes = plan.stateTypes;
@@ -3173,7 +3409,13 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     const gc_node_ref_t value              = valueNode(*draft);
     const std::vector<gc_node_ref_t> order = valueOrder(*draft, value);
 
-    Backward backward(*draft, *draft, rewrite.sites(), scope, refusals_);
+    const auto withPorts = draft->withPorts();
+    // `grad` and `with_grad` differentiate the first `with` parameter only. The other `with`
+    // parameters and every ordinary parameter are data, even when their type has a tangent.
+    Backward backward(
+        *draft, *draft, rewrite.sites(), scope, refusals_,
+        withPorts.empty() ? std::vector<gc_node_ref_t>{}
+                          : std::vector<gc_node_ref_t>{withPorts.front()});
     const slot_t one = type->exitType()->code() == TypeCode::Float32
                            ? toSlot<camel::core::rtdata::Float32>(1.0f)
                            : toSlot<camel::core::rtdata::Float64>(1.0);
@@ -3182,7 +3424,7 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
 
     // The differential form differentiates the first `with` parameter (9.9); the other `with`
     // parameters are constants and the ordinary parameters are data.
-    gc_node_ref_t result = backward.gradient(draft->withPorts().front());
+    gc_node_ref_t result = backward.gradient(withPorts.front());
     if (withValue) {
         const std::array<gc_node_ref_t, 2> pair{value, result};
         result = addAggregate(*draft, signature->functionType->exitType(), pair);

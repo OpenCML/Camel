@@ -685,13 +685,20 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
 
 slot_t NodeVMSchedPass::callGraph(
     const camel::runtime::Program *program, camel::runtime::GCGraph *graph,
-    std::span<const slot_t> arguments) {
+    std::span<const slot_t> arguments, std::span<const slot_t> withArguments) {
     camel::execute::RunScope runScope(programs_, *context_, program);
     Frame *frame      = framePool_.acquire(graph);
     const auto ports  = graph->normPorts();
     ASSERT(ports.size() == arguments.size(), "callGraph needs one argument per parameter.");
     for (size_t i = 0; i < ports.size(); ++i) {
         frame->set(graph->node(ports[i])->dataIndex, arguments[i]);
+    }
+    const auto withPorts = graph->withPorts();
+    ASSERT(
+        withPorts.size() == withArguments.size(),
+        "callGraph needs one argument per with parameter.");
+    for (size_t i = 0; i < withPorts.size(); ++i) {
+        frame->set(graph->node(withPorts[i])->dataIndex, withArguments[i]);
     }
     return call(graph, frame, program);
 }

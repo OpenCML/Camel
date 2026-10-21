@@ -3,7 +3,7 @@
 
 The script is the single source of every number in README/RESULTS.md:
 
-  * it prepares the data (make_data.py) and removes the previous checkpoints;
+  * it prepares the data (make_data.py), including the shared batch order;
   * it runs the Camel program and the PyTorch baseline on the same data and the same
     starting weights, and measures the training time, the throughput and the peak memory
     of each process (psutil), plus the compile time of the Camel program (a
@@ -34,7 +34,6 @@ import json
 import os
 import platform
 import re
-import shutil
 import statistics
 import subprocess
 import sys
@@ -54,7 +53,7 @@ MAKE_DATA = HERE / "make_data.py"
 # compute the same f32 formulas but sum in a different order (BLAS/tensor kernels) and Adam
 # compounds the difference over every step, so the comparison is a bounded-error one.
 TOL_INIT_LOSS = 1.0e-5      # relative; the same weights and data, one forward pass
-TOL_STEP_LOSS = 1.0e-2      # relative; every logged training loss
+TOL_STEP_LOSS = 1.0e-2      # scaled relative (unit floor); every logged training loss
 TOL_VAL_LOSS = 1.0e-2       # relative; the final validation loss
 TOL_VAL_ACC = 1.0e-2        # absolute; the final validation accuracy (one percentage point)
 
@@ -130,7 +129,7 @@ def run_command(command: list[str], env: dict[str, str], timeout: float | None =
     }
 
 
-def prepare_data(args, data: Path) -> dict:
+def prepare_data(args, data: Path, epochs: int) -> dict:
     command = [
         python_executable(),
         str(MAKE_DATA),
@@ -140,6 +139,8 @@ def prepare_data(args, data: Path) -> dict:
         str(args.train),
         "--val",
         str(args.val),
+        "--epochs",
+        str(epochs),
         "--seed",
         str(args.seed),
         "--source",
@@ -239,6 +240,11 @@ def relative(a: float, b: float) -> float:
     return abs(a - b) / max(abs(a), abs(b), 1.0e-12)
 
 
+def scaled(a: float, b: float) -> float:
+    """A relative difference with a unit floor: small losses are compared in loss units."""
+    return abs(a - b) / max(1.0, abs(a), abs(b))
+
+
 def compare_runs(camel: dict, torch: dict) -> tuple[list[dict], bool]:
     rows = []
     ok = True
@@ -280,7 +286,7 @@ def compare_runs(camel: dict, torch: dict) -> tuple[list[dict], bool]:
         raise SystemExit(f"different logged steps: {sorted(camel_steps)} != {sorted(torch_steps)}")
     worst_step, worst_value = 0, 0.0
     for step in sorted(camel_steps):
-        value = relative(camel_steps[step], torch_steps[step])
+        value = scaled(camel_steps[step], torch_steps[step])
         if value > worst_value:
             worst_step, worst_value = step, value
     add(
@@ -485,8 +491,11 @@ canonical algorithm on the same back end; across implementations the comparison 
 bounded-error one. The bounds are {TOL_INIT_LOSS:.0e} (relative) for the initial loss,
 {TOL_STEP_LOSS:.0e} for every logged training loss, {TOL_VAL_LOSS:.0e} for the final
 validation loss and {TOL_VAL_ACC:.0e} (absolute) for the final validation accuracy.
-`compare.py` exits non-zero when one of them is not met. The checkpoint line is not a
-comparison between the two: each implementation must load back exactly what it saved.
+The training-loss row is a relative difference with a unit floor,
+`|a - b| / max(1, |a|, |b|)`: a logged step can be close to zero, where a relative bound
+would measure rounding noise rather than a divergence. `compare.py` exits non-zero when one
+of them is not met. The checkpoint line is not a comparison between the two: each
+implementation must load back exactly what it saved.
 
 ## Performance
 
@@ -557,6 +566,10 @@ def main() -> int:
         )
     data = Path(args.data) if args.data else HERE / "artifacts" / args.profile
     results_path = Path(args.results) if args.results else HERE / "RESULTS.md"
+    batches = args.train // args.batch
+    if batches < 1:
+        parser.error("--batch is larger than the training set")
+    epochs = (args.steps + batches - 1) // batches
 
     sys.stdout.write(
         f"c2 compare: profile={args.profile} train={args.train} val={args.val} "
@@ -565,14 +578,15 @@ def main() -> int:
 
     if args.reuse_data and (data / "manifest.json").is_file():
         manifest = json.loads((data / "manifest.json").read_text(encoding="utf-8"))
-        sys.stdout.write(f"c2 compare: reusing {data}\n")
+        if manifest.get("epochs", 0) < epochs:
+            sys.stdout.write(
+                f"c2 compare: {data} holds {manifest.get('epochs', 0)} epochs, {epochs} are needed\n"
+            )
+            manifest = prepare_data(args, data, epochs)
+        else:
+            sys.stdout.write(f"c2 compare: reusing {data}\n")
     else:
-        manifest = prepare_data(args, data)
-
-    # A previous checkpoint is left by the previous run; `save_tree` refuses to replace a
-    # directory, so the harness removes it (see the README's "遇到的问题").
-    shutil.rmtree(data / "checkpoint", ignore_errors=True)
-    (data / "checkpoint-torch.pt").unlink(missing_ok=True)
+        manifest = prepare_data(args, data, epochs)
 
     if args.skip_compile_time:
         compile_times = [float("nan")]

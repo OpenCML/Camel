@@ -50,6 +50,9 @@ struct PassParam {
     PassParamType type = PassParamType::Bool;
     PassParamValue defaultValue;
     std::string doc;
+    /// A parameter without a default: the pipeline must write it. A pass written in Camel sets
+    /// this for each of the function's `with` parameters (they have no default in source).
+    bool required = false;
 };
 
 /// The parameters of one pass invocation, defaults filled in. Asking for a name the pass did

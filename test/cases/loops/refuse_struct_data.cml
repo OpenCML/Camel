@@ -1,0 +1,18 @@
+// A differentiable value read through a struct and turned into data: `n` is an `int` field
+// computed from `x`, and `float(n)` reads it as a number. The conversion has no derivative
+// channel, so the gradient would silently drop `x`'s contribution; it is refused at the read
+// (design principles 9.9).
+import { grad } from autodiff
+
+type P = { w: float, n: int }
+
+with <x: float>
+func f(): float {
+    let p = { w: x * x, n: int(x * 10.0) }
+    return p.w * float(p.n)
+}
+
+func main(): int sync {
+    println(grad(f)<2.0>())
+    return 0
+}

@@ -26,6 +26,7 @@
 #include "camel/core/data/composite/tuple.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/enum.h"
@@ -33,6 +34,7 @@
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
+#include "camel/utils/number_text.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/token.h"
 #include "camel/utils/type.h"
@@ -315,15 +317,17 @@ template <typename Diags, typename Range>
 static void reportLiteralCastFailure(
     Diags &diags, const Range &range, const data_ptr_t &data, Type *type,
     const std::string &written = {}, bool explicitCast = false) {
-    if (data->type()->code() == TypeCode::String) {
+    if (data->type()->code() == TypeCode::String || type->code() == TypeCode::String) {
+        // Either way round (`'1.5'` where a float is expected, `42` where a text is expected):
+        // a value and a text are not converted implicitly (design principles 5.1).
         if (explicitCast) {
             diags->of(SemanticDiag::DynamicCastForbidden)
                 .at(range)
-                .commit("string", type->toString());
+                .commit(data->type()->toString(), type->toString());
         } else {
             diags->of(SemanticDiag::DeclaredTypeMismatch)
                 .at(range)
-                .commit("string", type->toString());
+                .commit(data->type()->toString(), type->toString());
         }
         return;
     }
@@ -476,6 +480,19 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     };
     std::vector<node_ptr_t> visited(stmtNodes->size(), nullptr);
     std::vector<bool> failed(stmtNodes->size(), false);
+    // A tag declaration is registered before anything is lowered (design principles 6.2): a `#`
+    // use written before it in this module reads it, and so does every tag of a type or a
+    // field. It lowers to no node, so it takes no part in the two passes below.
+    for (const auto &stmt : *stmtNodes) {
+        if (stmt->type() != AST::LoadType::Stmt ||
+            stmt->loadAs<AST::StmtLoad>()->stmtType() != AST::StmtType::Tag) {
+            continue;
+        }
+        try {
+            visitTagDecl(stmt);
+        } catch (const BuildAbortException &) {
+        }
+    }
     for (size_t i = 0; i < stmtNodes->size(); ++i) {
         const auto &stmt = stmtNodes->at(i);
         if (!isTypeDecl(stmt)) {
@@ -786,6 +803,11 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     case AST::StmtType::Block:
         stmtNode = visitStmtBlock(ast);
         break;
+    case AST::StmtType::Tag:
+        // A tag declaration has no node: it is registered when the module is entered
+        // (visitTagDecl, visitModule), so that a use written before it reads it.
+        LEAVE("Stmt");
+        return nullptr;
     default:
         throw std::runtime_error("Unknown statement type");
     }
@@ -1041,6 +1063,72 @@ void Builder::checkOperatorDeclaration(
 /*
 FuncDecl(Ref ref) : FuncAnno* anno, FuncData ;
 */
+/*
+tagDecl : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+        | 'export'? 'tag' identDef '=' bracketIdents ;
+The tag is registered here, before any type is declared (visitModule), so that a `#` use reads
+it. It lowers to no node: a tag is a compile-time name, not a value of the program (design
+principles 6.2).
+*/
+void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
+    ENTER("TagDecl");
+    const auto decl = ast->loadAs<AST::TagDeclLoad>();
+    camel::core::tag::Decl tag;
+    tag.module = module_->name();
+    tag.ident  = decl->ref().toString();
+    tag.name   = tag.module.empty() ? tag.ident : tag.module + "::" + tag.ident;
+    tag.on     = static_cast<camel::core::tag::Positions>(decl->on());
+    for (const auto &param : decl->params()) {
+        tag.params.push_back({param.name, param.type});
+    }
+    for (const auto &alias : decl->aliases()) {
+        tag.aliases.push_back(alias);
+    }
+    for (const auto &reader : decl->readBy()) {
+        tag.readBy.push_back(reader.toString());
+    }
+    const auto id = camel::core::tag::declare(std::move(tag));
+    module_->addDeclaredTag(decl->ref().toString(), id);
+    LEAVE("TagDecl");
+}
+
+std::vector<GCT::TagUse> Builder::tagUsesOf(const AST::node_ptr_t &ast) {
+    std::vector<GCT::TagUse> uses;
+    if (ast == nullptr) {
+        return uses;
+    }
+    for (size_t i = 0; i < ast->size(); ++i) {
+        const auto &child = ast->at(i);
+        if (child->type() != AST::LoadType::Repeated ||
+            child->loadAs<AST::RepeatedLoad>()->nodeName() != "TagUse") {
+            continue;
+        }
+        for (const auto &useAst : *child) {
+            GCT::TagUse use;
+            use.name   = useAst->loadAs<AST::TagUseLoad>()->name().toString();
+            use.origin = useAst->load()->origin();
+            for (size_t a = 0; a < useAst->size(); ++a) {
+                // The uses are attached as a list of `Data` lists (one per use); the arguments
+                // are compile-time values, lowered like any other expression. The GIR builder
+                // keeps the constant ones and reports the others.
+                const AST::node_ptr_t &dataList = useAst->at(a);
+                for (const auto &argument : *dataList) {
+                    use.args.push_back(visitData(argument));
+                }
+            }
+            uses.push_back(std::move(use));
+        }
+    }
+    return uses;
+}
+
+void Builder::attachTagUses(const GCT::node_ptr_t &gct, const AST::node_ptr_t &ast) {
+    if (gct == nullptr) {
+        return;
+    }
+    tree_->addTagUses(gct, tagUsesOf(ast));
+}
+
 node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     ENTER("FuncDecl");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for FuncDecl");
@@ -1066,9 +1154,15 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
 
     // Decorator annotations are lowered to ANNO nodes attached after FUNC payload.
     // Each ANNO node owns one lowered GCT expression (currently lowered from funcAnno -> Data).
-    if (ast->size() > 1) {
-        const auto &annoListNode = ast->atAs<AST::RepeatedLoad>(0);
-        for (const auto &annoAst : *annoListNode) {
+    // The tag uses written before the declaration are in a repeated child of their own; they
+    // are kept beside the node (Tree::addTagUses), not in it.
+    for (size_t i = 0; i + 1 < ast->size(); ++i) {
+        const auto &child = ast->at(i);
+        if (child->type() != AST::LoadType::Repeated ||
+            child->loadAs<AST::RepeatedLoad>()->nodeName() != "FuncAnno") {
+            continue;
+        }
+        for (const auto &annoAst : *child) {
             ASSERT(annoAst->type() == AST::LoadType::Data, "FuncAnno should lower to AST Data.");
             node_ptr_t annoExprNode = visitData(annoAst);
             node_ptr_t annoNode     = tree_->makeAnno();
@@ -1076,6 +1170,7 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
             *funcNode << annoNode;
         }
     }
+    attachTagUses(funcNode, ast);
 
     LEAVE("FuncDecl");
     return funcNode;
@@ -1152,6 +1247,16 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         }
         ~InProgress() { context.leaveTypeDeclaration(); }
     } inProgress{*context_, module_.get(), typeLoad->ref().toString()};
+    // The declaration's node is made first: the tags written on its fields are recorded on it
+    // while the type is lowered (visitStructType).
+    node_ptr_t declNode = tree_->makeDecl(typeLoad->ref(), false);
+    struct FieldTagOwner {
+        Builder &self;
+        node_ptr_t outer;
+        FieldTagOwner(Builder &b, node_ptr_t owner)
+            : self(b), outer(std::exchange(b.fieldTagOwner_, owner)) {}
+        ~FieldTagOwner() { self.fieldTagOwner_ = outer; }
+    } fieldTagOwner(*this, declNode);
     if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
         // The name is in scope before the variants are read, so that a variant field can hold
         // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
@@ -1243,8 +1348,9 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         // is through (see visitModule).
         module_->exportType(typeLoad->ref(), type);
     }
-    node_ptr_t declNode = tree_->makeDecl(typeLoad->ref(), false);
     *declNode << tree_->makeType(type, typeLoad->implMark());
+    // The tags written before the declaration itself (`#tag type P = ...`).
+    attachTagUses(declNode, ast);
     LEAVE("TypeDecl");
     return declNode;
 }
@@ -1325,9 +1431,17 @@ Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDecl
     }
     std::vector<std::pair<std::string, Type *>> fields;
     std::unordered_set<string> fieldNames;
+    // The tags written on the fields belong to the type declaration (visitTypeDecl made its
+    // node the owner); a named struct type is declared here, not through visitStructType.
+    const node_ptr_t fieldTagOwner = std::exchange(fieldTagOwner_, nullptr);
+    size_t fieldIndex              = 0;
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedType   = child->loadAs<AST::NamedTypeLoad>();
         const string &fieldName = namedType->getRef().ident();
+        if (fieldTagOwner != nullptr) {
+            tree_->addFieldTagUses(fieldTagOwner, fieldIndex, tagUsesOf(child));
+        }
+        ++fieldIndex;
         // The fields are read in the order written: that order is the type's, and every
         // instance keeps it (design principles 5.2).
         Type *fieldType = visitType(child->atAs<AST::TypeLoad>(0));
@@ -1384,6 +1498,9 @@ Builder::buildEnumVariants(const AST::node_ptr_t &ast, const EnumType *instance)
         std::unordered_set<string> fieldNames;
         for (const auto &field : *fieldTypes) {
             variant.fieldTypes.push_back(visitType(field));
+            // Where the field's type is written: a field that cannot be a key is reported
+            // there (a map key of enum type, design principles 11.3).
+            variant.fieldOrigins.push_back(field->load()->origin());
         }
         if (variant.shape == VariantShape::Struct) {
             for (const string &fieldName : variant.fieldNames) {
@@ -1551,7 +1668,12 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
     ENTER("StmtBlock");
     // Ensure the AST node is of the expected type (Stmt)
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for StmtBlock");
-    if (decorators && ast->size() > 1) {
+    // The block's children after the statement list are its decorators (`FuncAnno`) and the
+    // tags written before it (`#tag { ... }`); only a decorator list makes it decorated.
+    const bool decorated =
+        decorators && ast->size() > 1 && ast->at(1)->type() == AST::LoadType::Repeated &&
+        ast->at(1)->loadAs<AST::RepeatedLoad>()->nodeName() == "FuncAnno";
+    if (decorated) {
         LEAVE("StmtBlock");
         return visitDecoratedBlock(ast);
     }
@@ -1647,6 +1769,9 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
     LEAVE("StmtBlock");
     setOriginFromAst(context_, execNode, ast, camel::source::OriginKind::GctNode, "gct.block");
     registerGctSemantic(context_, execNode, ast);
+    // The tags written before the block (`#kernel { ... }`): they hold for the statements
+    // written in it (design principles 6.2).
+    attachTagUses(execNode, ast);
     // Return the ExecLoad node representing the processed statement block
     return execNode;
 }
@@ -2699,51 +2824,50 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     } break;
     case LiteralType::Integer: {
         // Exact arithmetic. A literal that an int cannot hold used to wrap around
-        // (`9223372036854775808` was the smallest int, as was `1e400`).
-        const IntegerLiteral parsed = parseIntegerLiteral(str);
-        if (parsed.status == IntegerLiteralStatus::OutOfRange) {
+        // (`9223372036854775808` was the smallest int, as was `1e400`). The value is read by
+        // the same whole-number-token rule an entry argument is (camel/utils/number_text.h):
+        // one grammar, one parser for the two places a number is written as text.
+        int64_t value = 0;
+        switch (camel::utils::parseNumberToken<int64_t>(str, value)) {
+        case camel::utils::NumberTextStatus::Ok:
+            break;
+        case camel::utils::NumberTextStatus::OutOfRange:
+        case camel::utils::NumberTextStatus::OutOfRangeInteger:
             diags_->of(SemanticDiag::LiteralNotRepresentable)
                 .at(ast->load()->tokenRange())
                 .commit(
                     str, "int", "out of range (-9223372036854775808 to 9223372036854775807)");
             throw BuildAbortException();
-        }
-        if (parsed.status == IntegerLiteralStatus::Invalid) {
+        default:
             diags_->of(SemanticDiag::InvalidLiteral)
                 .at(ast->load()->tokenRange())
                 .commit("integer", str);
             throw BuildAbortException();
         }
-        if (parsed.inexact) {
-            // `1e-2` is the int 0. Whether such a literal should be a float or an error is
-            // not decided; until then the dropped fraction is at least said.
-            std::string asReal = str;
-            if (const size_t e = asReal.find_first_of("eE"); e != std::string::npos) {
-                asReal.insert(e, ".0");
-            }
-            diags_->of(SemanticDiag::IntegerLiteralTruncated)
-                .at(ast->load()->tokenRange())
-                .commit(str, std::to_string(parsed.value), asReal);
-        }
-        data       = makeDataFromLiteral(parsed.value);
+        data       = makeDataFromLiteral(value);
         exactValue = literal::Value::fromIntegerText(str);
     } break;
     case LiteralType::Real: {
-        // The double nearest to the number written. One too large for a double was an
+        // The double nearest to the number written, read by the same whole-number-token rule an
+        // entry argument is (camel/utils/number_text.h). One too large for a double was an
         // exception that reached the user as bare text.
-        try {
-            data = makeDataFromLiteral(parseNumber<double>(str));
-        } catch (const std::overflow_error &) {
+        double value = 0.0;
+        switch (camel::utils::parseNumberToken<double>(str, value)) {
+        case camel::utils::NumberTextStatus::Ok:
+            break;
+        case camel::utils::NumberTextStatus::OutOfRange:
+        case camel::utils::NumberTextStatus::OutOfRangeInteger:
             diags_->of(SemanticDiag::LiteralNotRepresentable)
                 .at(ast->load()->tokenRange())
                 .commit(str, "float", "out of range (at most about 1.8e308 in magnitude)");
             throw BuildAbortException();
-        } catch (const std::invalid_argument &) {
+        default:
             diags_->of(SemanticDiag::InvalidLiteral)
                 .at(ast->load()->tokenRange())
                 .commit("real", str);
             throw BuildAbortException();
         }
+        data       = makeDataFromLiteral(value);
         exactValue = literal::Value::fromRealText(str);
     } break;
     case LiteralType::Imaginary: {
@@ -3024,6 +3148,84 @@ std::string sourceTextAt(
 
 } // namespace
 
+bool Builder::rejectTextInLiteral(const data_ptr_t &data, Type *type, camel::source::origin_id_t where) {
+    if (data == nullptr || type == nullptr || type->assignableFrom(data->type())) {
+        return false;
+    }
+    // A text where the position expects another type is a type mismatch, not a literal that
+    // does not fit: there is no implicit text-to-number (or text-to-anything) conversion
+    // (design principles 5.1). The element's own position is where it is written, as H27c
+    // reports an element whose value does not fit (see the GIR builder's literalElementInType).
+    if (data->type()->code() == TypeCode::String) {
+        diags_->of(SemanticDiag::DeclaredTypeMismatch)
+            .atOrigin(where)
+            .commit("string", type->toString());
+        return true;
+    }
+    if (!isComposite(data->type()->code())) {
+        return false;
+    }
+    const auto *written = tree_->literalElementsOf(data);
+    const auto elementAt = [&](size_t index, camel::source::origin_id_t fallback) {
+        const Tree::LiteralElement *element =
+            written != nullptr && index < written->size() ? &(*written)[index] : nullptr;
+        return element != nullptr && element->origin != camel::source::kInvalidOriginId
+                   ? element->origin
+                   : fallback;
+    };
+    if (type->code() == TypeCode::Struct && data->type()->code() == TypeCode::Struct) {
+        auto *structType = tt::as_ptr<StructType>(type);
+        const auto object = std::dynamic_pointer_cast<StructData>(data);
+        if (structType == nullptr || object == nullptr ||
+            object->raw().size() != structType->size()) {
+            return false;
+        }
+        size_t index = 0;
+        for (const auto &[name, fieldValue] : object->raw()) {
+            const std::optional<size_t> fieldIndex = structType->findField(name);
+            if (!fieldIndex.has_value()) {
+                return false;
+            }
+            const camel::source::origin_id_t fieldWhere = elementAt(index, where);
+            ++index;
+            if (rejectTextInLiteral(fieldValue, structType->typeAt(*fieldIndex), fieldWhere)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (type->code() == TypeCode::Tuple && data->type()->code() == TypeCode::Tuple) {
+        auto *tupleType    = tt::as_ptr<TupleType>(type);
+        const auto object  = std::dynamic_pointer_cast<TupleData>(data);
+        if (tupleType == nullptr || object == nullptr ||
+            object->raw().size() != tupleType->size()) {
+            return false;
+        }
+        for (size_t index = 0; index < object->raw().size(); ++index) {
+            if (rejectTextInLiteral(
+                    object->raw()[index], tupleType->typeAt(index), elementAt(index, where))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (type->code() == TypeCode::Array && data->type()->code() == TypeCode::Array) {
+        auto *arrayType      = tt::as_ptr<ArrayType>(type);
+        const auto object    = std::dynamic_pointer_cast<ArrayData>(data);
+        Type *elementType    = arrayType != nullptr ? arrayType->elemType() : nullptr;
+        if (elementType == nullptr || object == nullptr) {
+            return false;
+        }
+        for (size_t index = 0; index < object->raw().size(); ++index) {
+            if (rejectTextInLiteral(
+                    object->raw()[index], elementType, elementAt(index, where))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST::node_ptr_t &ast) {
     // A literal of the declared type, converted now (`let x: float = 1`). A declared `T?` /
     // `T!` and a type written with a type variable (decided when the generic function is
@@ -3084,6 +3286,14 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
         // element (field) type — they are positions with an expected type too (design
         // principles 5.1). Converting its data now would keep the type its values give it.
         if (!isUnresolvedLiteral(value->data())) {
+            // A text field of a composite literal is reported at the field itself, as a type
+            // mismatch; a lone text value keeps the declaration's position, as H15g reports it
+            // (`let x: int = '42'` is a mismatch at the declaration), and anything else the
+            // conversion cannot take is reported for the literal as a whole below.
+            if (isComposite(value->data()->type()->code()) &&
+                rejectTextInLiteral(value->data(), type, value->origin())) {
+                throw BuildAbortException();
+            }
             if (data_ptr_t converted = value->data()->convertTo(type)) {
                 return tree_->makeData(converted);
             }
@@ -3223,12 +3433,15 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
     factory.setElemType(elemType);
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
+    // Each element's position, as the ordinary build keeps it (H27c/H15h).
+    std::vector<Tree::LiteralElement> literalElements;
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         bool nested         = false;
         node_ptr_t dataNode = visitDataInto(item, elemType, nested);
         if (!nested) {
             dataNode = literalNodeInType(dataNode, elemType, item);
         }
+        literalElements.push_back(writtenElement(dataNode));
         auto [data, _] = extractData(dataNode, execNode, dangling);
         try {
             factory.add(data);
@@ -3241,6 +3454,9 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
         }
     }
     const data_ptr_t built = factory.build();
+    if (!dangling) {
+        tree_->setLiteralElements(built, std::move(literalElements));
+    }
     node_ptr_t res         = tree_->makeData(built);
     // The literal is the value of the type asked for when the two types are the same. When
     // they are not (a named struct type, say), the caller still applies the declared value or
@@ -3278,7 +3494,10 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
     // The fields are built in the type's order (the declaration's order for a named type),
     // not the order they are written in: a literal at a position of a struct type is a value
     // of that type (design principles 5.2), so `{ y: 1, x: 2 }` at `Point` is a `Point` whose
-    // fields are `x, y`.
+    // fields are `x, y`. Each field keeps the position it was written at, for diagnostics
+    // (H27c/H15h): a field the field type cannot take is reported at the field, not at the
+    // literal.
+    std::unordered_map<std::string, Tree::LiteralElement> literalElementsByName;
     for (size_t i = 0; i < sType->size(); ++i) {
         const std::string name(sType->fieldName(i));
         const AST::node_ptr_t *written = nullptr;
@@ -3308,12 +3527,14 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
         } else if (!nested) {
             fieldNode = literalNodeInType(fieldNode, fieldType, valueAst);
         }
-        auto [data, fieldDangling] = extractData(fieldNode, execNode);
+        literalElementsByName.emplace(name, writtenElement(fieldNode));
+        auto [data, fieldDangling] = extractData(fieldNode, execNode, dangling);
         if (fieldDangling) {
             dangling = true;
         }
-        if (!fieldDangling && (data == nullptr || data->type() == nullptr ||
-                               !fieldType->assignableFrom(data->type()))) {
+        if (!fieldDangling &&
+            (data == nullptr || data->type() == nullptr ||
+             !fieldType->assignableFrom(data->type()))) {
             // A field written as a variable keeps its own type (design principles 5.1): the
             // literal is of an unnamed struct type whose field is of another type, and the
             // conversion at the position it is written in reports it, as it would without
@@ -3329,6 +3550,20 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
         // another type reports it.
         LEAVE("StructData");
         return visitData(ast);
+    }
+    if (!dangling) {
+        // A StructData holds its fields in the type's order, so the elements are recorded in
+        // that order whatever order they were written in; a diagnostic then points at the
+        // element that failed, not at the literal.
+        const auto object = std::dynamic_pointer_cast<StructData>(built);
+        std::vector<Tree::LiteralElement> literalElements;
+        if (object != nullptr) {
+            literalElements.reserve(object->raw().size());
+            for (const auto &[name, _] : object->raw()) {
+                literalElements.push_back(literalElementsByName.at(name));
+            }
+        }
+        tree_->setLiteralElements(built, std::move(literalElements));
     }
     node_ptr_t res = tree_->makeData(built);
     // The literal is a value of the type the position gives it: its fields are that type's
@@ -3354,9 +3589,10 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
     std::unordered_set<string> fieldNames;
-    // The value each field was written as and its position, in the order the data holds them
-    // (design principles 5.1; see visitArrayData).
-    std::vector<Tree::LiteralElement> literalElements;
+    // The value each field was written as and its position, keyed by name: a StructData holds its
+    // fields in name order, and the conversion walks the elements by index (design principles
+    // 5.1; see visitArrayData).
+    std::unordered_map<std::string, Tree::LiteralElement> literalElementsByName;
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
@@ -3367,13 +3603,21 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
-        literalElements.push_back(writtenElement(dataNode));
+        literalElementsByName.emplace(name, writtenElement(dataNode));
         auto [data, _] = extractData(dataNode, execNode, dangling);
         factory.add(name, data);
     }
 
     auto structData = factory.build();
     if (!dangling) {
+        const auto object = std::dynamic_pointer_cast<StructData>(structData);
+        std::vector<Tree::LiteralElement> literalElements;
+        if (object != nullptr) {
+            literalElements.reserve(object->raw().size());
+            for (const auto &[name, _] : object->raw()) {
+                literalElements.push_back(literalElementsByName.at(name));
+            }
+        }
         tree_->setLiteralElements(structData, std::move(literalElements));
     }
     node_ptr_t res = tree_->makeData(structData);
@@ -3398,14 +3642,22 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     TupleDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
+    // Each element's position and exact value, as for an array or struct literal (H27c/H15h):
+    // a tuple is positional, and an element the element type cannot take is reported at the
+    // element.
+    std::vector<Tree::LiteralElement> literalElements;
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
+        literalElements.push_back(writtenElement(dataNode));
         auto [data, _]      = extractData(dataNode, execNode, dangling);
         factory.add(data);
     }
 
     auto tupleData = factory.build();
+    if (!dangling) {
+        tree_->setLiteralElements(tupleData, std::move(literalElements));
+    }
     node_ptr_t res = tree_->makeData(tupleData);
 
     // If there are dangling nodes, attach them to the execution node
@@ -3771,10 +4023,24 @@ Type *Builder::visitStructType(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StructType");
 
     StructTypeFactory factory;
+    // The fields of the struct a type declaration writes are its own: a tag written on one of
+    // them belongs to that declaration (visitTypeDecl). A struct written anywhere else has no
+    // declaration to hold its field tags, which is reported rather than dropped.
+    const node_ptr_t owner = std::exchange(fieldTagOwner_, nullptr);
+    size_t index           = 0;
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedType = child->loadAs<AST::NamedTypeLoad>();
         const string &name    = namedType->getRef().ident();
-        Type *type            = visitType(child->atAs<AST::TypeLoad>(0));
+        if (owner != nullptr) {
+            tree_->addFieldTagUses(owner, index, tagUsesOf(child));
+        } else {
+            for (const auto &use : tagUsesOf(child)) {
+                diags_->of(SemanticDiag::TagOnUnnamedField).atOrigin(use.origin).commit(
+                    namedType->getRef().toString());
+            }
+        }
+        ++index;
+        Type *type = visitType(child->atAs<AST::TypeLoad>(0));
 
         if (!factory.add(name, type)) {
             diags_->of(SemanticDiag::DuplicateDictKey).at(namedType->tokenRange()).commit(name);
@@ -4156,11 +4422,19 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     if (const CollectionType *coll = asCollectionTypeOrPrototype(base);
         coll != nullptr && !arguments.empty() && arguments.front().type != nullptr) {
         // The key of a map, the element of a set (DESIGN-QUESTION(map-key-types)).
-        Type *keyType = arguments.front().type;
-        if (std::string problem = collectionKeyProblem(keyType); !problem.empty()) {
-            diags_->of(SemanticDiag::CollectionKeyNotAllowed)
-                .at(ast->load()->tokenRange())
-                .commit(keyType->toString(), coll->toString(), problem);
+        Type *keyType                          = arguments.front().type;
+        camel::source::origin_id_t fieldOrigin = camel::source::kInvalidOriginId;
+        std::string fieldLabel;
+        if (std::string problem = collectionKeyProblem(keyType, &fieldOrigin, &fieldLabel);
+            !problem.empty()) {
+            auto diag = diags_->of(SemanticDiag::CollectionKeyNotAllowed)
+                            .at(ast->load()->tokenRange());
+            if (fieldOrigin != camel::source::kInvalidOriginId) {
+                // The enum is a key for what its fields are: say where the field that is not
+                // one is declared.
+                diag.relatedOrigin(fieldOrigin, fieldLabel + " is declared here");
+            }
+            diag.commit(keyType->toString(), coll->toString(), problem);
             throw BuildAbortException();
         }
     }

@@ -57,7 +57,7 @@ await withServer(async (ls) => {
     checkEq(item('total').detail, 'int', 'a variable carries its type')
     checkEq(item('identity').detail, 'func identity(x: typeas T): T', 'a function its header')
     checkEq(item('identity').documentation, 'Returns its argument.', 'and its documentation')
-    check(item('norm2').detail.includes('(p: { x: int, y: int }) => int'),
+    check(item('norm2').detail.includes('(p: Point) => int'),
         'an imported function its signature', item('norm2'))
     check(item('println').detail.includes('(x: T, ...rest: U...) => T'),
         'a library function its signature', item('println'))
@@ -152,7 +152,7 @@ ${body}
     check(sh.signatures[0].label.includes('scale') && sh.activeParameter === 1,
         'an imported function, in a call that is not finished', sh)
     checkEq(sh.signatures[0].parameters.map((p) => sh.signatures[0].label.slice(...p.label)),
-        ['p: { x: int, y: int }', 'k: int'], 'its parameters')
+        ['p: Point', 'k: int'], 'its parameters')
     m = edit(MAIN.replace("println(format<i, s, d>('{} {} {}'))", 'println(/*p*/)'))
     sh = await help(m, 'p')
     check(sh.signatures[0].label.startsWith('println: '), 'a library function', sh)
