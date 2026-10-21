@@ -177,9 +177,11 @@ class GraphModule final : public BuiltinModule {
         for (const auto &group : readGroups()) {
             table.declare("graph", {{group->name(), true}});
         }
-        // A transaction is a state that edits change: none of its operators is pure.
+        // A transaction is a state that edits change: none of its operators is pure, except the
+        // two that read a function value.
         for (const auto &group : txnGroups()) {
-            table.declare("graph", {{group->name(), false}});
+            const bool reads = group->name() == "program_of" || group->name() == "graph_of";
+            table.declare("graph", {{group->name(), reads}});
         }
         loaded_ = true;
         return true;

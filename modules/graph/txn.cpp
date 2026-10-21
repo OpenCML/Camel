@@ -33,7 +33,9 @@
 #include "handle.h"
 
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/foreign.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
@@ -63,12 +65,17 @@ namespace err = camel::core::error;
 struct TxnState {
     TxnState(const context_ptr_t &context, const Program *base)
         : base(base), session(context, base) {}
+    /// A transaction over one function and what it reaches, committed to a Program of its own
+    /// that is not the context's (the running program is left as it is).
+    TxnState(const context_ptr_t &context, const Program *base, GCGraph *root)
+        : base(base), session(context, base, root), detached(true) {}
 
     /// The Program the transaction was opened on. The transaction keeps it alive (the foreign
     /// resource traces it) until the transaction is released.
     const Program *base;
     RuntimeGraphDraftSession session;
-    bool done = false;
+    bool detached = false;
+    bool done     = false;
 };
 
 ForeignResourceDescriptor txnDescriptor() {
@@ -129,6 +136,26 @@ draftOf(TxnState &state, const Handle *node, const char *site) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
     }
     return {draft, node->index()};
+}
+
+/// The Function that is the root of `program`, of the type of `sample`; an error value when the
+/// graph has another signature or captures values (a function value made here has no closure).
+slot_t functionOf(const Program *program, Type *sample, Context &) {
+    static const char *site = "<graph::to_function>";
+    const GCGraph *graph = program->root();
+    const TupleType *resultType = TupleType::fallible(sample);
+    if (graph == nullptr || graph->funcType() == nullptr ||
+        !(sample->assignableFrom(graph->funcType()) || graph->funcType()->assignableFrom(sample))) {
+        return makeError("SignatureMismatch", "the function has another signature than the sample", site);
+    }
+    if (!graph->closureNodes().empty()) {
+        return makeError("ClosureNotEmpty", "the function captures values", site);
+    }
+    // The program is held by no one but this call until the function is made.
+    mm::NoCollectionScope noCollection;
+    static const TupleType *noClosure = TupleType::create();
+    auto *function = ::Function::create(program, graph->id(), noClosure, mm::autoSpace());
+    return makeOk(toSlot(function), resultType);
 }
 
 slot_t openKernel(ArgsView &, ArgsView &norm, Context &ctx) {
@@ -203,7 +230,8 @@ slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
     static const TupleType *resultType = TupleType::fallible(HandleType::get(HandleKind::Program));
     slot_t result;
     try {
-        const Program *committed = state->session.commitChecked();
+        const Program *committed =
+            state->detached ? state->session.commit(true) : state->session.commitChecked();
         result = makeOk(toSlot(const_cast<Program *>(committed)), resultType);
     } catch (const GraphCommitConflict &conflict) {
         result = makeError("GraphConflict", conflict.what(), "<graph::commit>");
@@ -215,6 +243,58 @@ slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
     state->done = true;
     wrapper->dispose();
     return result;
+}
+
+/// A transaction over a function value and the graphs it reaches.
+slot_t ofKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    auto *function = norm.get<::Function *>(0);
+    auto *state =
+        new TxnState(ctx.shared_from_this(), function->program(), function->graph());
+    return toSlot(ForeignResourceObject::create(mm::autoSpace(), txnDescriptor(), state));
+}
+
+/// The function value the transaction of `open_function` makes of its function, of the type of the
+/// sample: the commit's errors, and `SignatureMismatch` and `ClosureNotEmpty`.
+slot_t toKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    auto *wrapper = norm.get<ForeignResourceObject *>(0);
+    if (wrapper->disposed()) {
+        return makeError("TxnUsed", "the transaction was committed or aborted already", "<graph::to_function>");
+    }
+    auto *state = wrapper->resourceAs<TxnState>();
+    if (!state->detached) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.to_function",
+            "the transaction is not one of a function; commit it");
+    }
+    Type *sample = norm.type(1);
+    slot_t result;
+    try {
+        const Program *committed = state->session.commit(true);
+        result                   = functionOf(committed, sample, ctx);
+    } catch (const mm::MemoryExhausted &) {
+        throw;
+    } catch (const std::exception &failure) {
+        result = makeError("GraphInvalid", failure.what(), "<graph::to_function>");
+    }
+    state->done = true;
+    wrapper->dispose();
+    return result;
+}
+
+slot_t programOfKernel(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot(const_cast<Program *>(norm.get<::Function *>(0)->program()));
+}
+
+slot_t graphOfKernel(ArgsView &, ArgsView &norm, Context &) {
+    auto *function = norm.get<::Function *>(0);
+    return toSlot(Handle::create(
+        HandleKind::Graph,
+        function->program(),
+        function->graphId(),
+        0,
+        nullptr,
+        mm::autoSpace()));
 }
 
 slot_t abortKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -232,6 +312,24 @@ struct TxnOp {
     std::vector<Type *> params;
     Type *result;
 };
+
+/// The type rule of an operator on a function value: `open_function` and the like take one (a function of
+/// any type), `to` a transaction and one. The result is as `make` gives it from the type of the
+/// last operand.
+resolver_ptr_t functionRule(size_t operands, std::string text, Type *(*make)(Type *sample)) {
+    return DynamicFuncTypeResolver::create(
+        {{0, {}}, {static_cast<int>(operands), std::vector<bool>(operands, false)}},
+        std::move(text),
+        [operands, make](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+            -> std::optional<Type *> {
+            const bool first = operands == 1 ? norm[0]->code() == TypeCode::Function
+                                             : HandleType::is(norm[0], HandleKind::Txn);
+            if (!first || norm.back()->code() != TypeCode::Function) {
+                return std::nullopt;
+            }
+            return make(norm.back());
+        });
+}
 
 const std::vector<TxnOp> &txnOps() {
     static const std::vector<TxnOp> ops = [] {
@@ -265,6 +363,27 @@ const std::vector<oper_group_ptr_t> &txnGroups() {
                   std::make_unique<StaticFuncTypeResolver>(
                       FunctionType::create({}, params, op.result))}}));
         }
+        const auto add = [&](const char *name, resolver_ptr_t rule) {
+            out.push_back(OperatorGroup::create(
+                name,
+                {{std::string("graph:") + name, std::move(rule)}}));
+        };
+        add("open_function",
+            functionRule(1, "(f: F) => Txn", [](Type *) -> Type * {
+                return HandleType::get(HandleKind::Txn);
+            }));
+        add("to_function",
+            functionRule(2, "(t: Txn, sample: F) => F!", [](Type *sample) -> Type * {
+                return TupleType::fallible(sample);
+            }));
+        add("program_of",
+            functionRule(1, "(f: F) => Program", [](Type *) -> Type * {
+                return HandleType::get(HandleKind::Program);
+            }));
+        add("graph_of",
+            functionRule(1, "(f: F) => Graph", [](Type *) -> Type * {
+                return HandleType::get(HandleKind::Graph);
+            }));
         return out;
     }();
     return groups;
@@ -276,6 +395,10 @@ const std::unordered_map<std::string, operator_t> &txnKernels() {
         for (const TxnOp &op : txnOps()) {
             out.emplace(op.name, op.kernel);
         }
+        out.emplace("open_function", ofKernel);
+        out.emplace("to_function", toKernel);
+        out.emplace("program_of", programOfKernel);
+        out.emplace("graph_of", graphOfKernel);
         return out;
     }();
     return kernels;

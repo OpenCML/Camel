@@ -211,3 +211,18 @@ args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "unus
 expect_exit = 0
 expect_stdout_exact = "7\n4\n"
 timeout_ms = 20000
+
+# A function to a function (design 5.1): a transaction over one function and what it reaches,
+# committed to a program of its own; the function value that comes out runs like the original.
+
+[[tests]]
+name = "function_rewritten_in_place"
+desc = "x + 0 is removed from a function value's graph; the new function has no such add and computes the same."
+kind = "behavior"
+case = "../../../cases/modules/graph_function.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "target\n1\n0\n15\n15\nSignatureMismatch\n"
+timeout_ms = 20000
