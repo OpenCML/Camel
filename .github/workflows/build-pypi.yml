@@ -163,7 +163,23 @@ jobs:
         run: python -m pip install --upgrade pip "conan>=2.10"
 
       - name: Conan default profile
-        run: conan profile detect --force
+        # Adjusted the way ci.yml adjusts it: the detected cppstd is 14, and taskflow 3.10.0
+        # requires 17, so `conan install` otherwise ends with "Current cppstd (14) is lower than
+        # the required C++ standard (17)" and no wheel is ever built.
+        run: |
+          conan profile detect --force
+          profile="$(conan profile path default)"
+          # Not `sed -i`: on the Windows runner its rename crosses devices and fails.
+          python - "$profile" <<'EOF'
+          import re, sys
+          path = sys.argv[1]
+          text = open(path, encoding="utf-8").read()
+          text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
+          # The image has the 14.4x toolset; v143 makes Conan ask vcvars for 14.3, which is absent.
+          text = re.sub(r"(?m)^compiler\.runtime_version=v143$", "compiler.runtime_version=v144", text)
+          open(path, "w", encoding="utf-8", newline="\n").write(text)
+          EOF
+          cat "$profile"
 
       - name: Install npm dependencies (skip husky / postinstall conan wipe)
         run: npm ci --ignore-scripts
