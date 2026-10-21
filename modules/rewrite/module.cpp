@@ -44,6 +44,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
+#include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/rules.h"
@@ -51,7 +52,10 @@
 #include "src/passes/sched/nodevm/nodevm.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <deque>
 #include <format>
 #include <limits>
@@ -337,47 +341,174 @@ slot_t extractKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 
 // ---- the check of a rule (graph store decision 5) ----
 
-/// A value of a scalar type, as the operators read it.
-struct Sample {
-    TypeCode code;
-    slot_t slot;
-    double asDouble;
+/// A tensor sample: its elements as bytes, so it outlives the calls that follow. A collection may
+/// move the Array a value was made in, and the next call reads the sample again; the copy has no
+/// references into the GC heap.
+struct TensorSample {
+    TypeCode dtype = TypeCode::Float32;
+    std::vector<int64_t> shape;
+    std::vector<uint8_t> bytes;
 };
 
-/// Random values of one scalar type. Floats include the special values the permissions of the
-/// rule do not rule out.
+/// A value of a parameter type, as the operators read it. `tensor` is set for a tensor type, whose
+/// slot is made afresh right before each call (`Sampler::materialize`).
+struct Sample {
+    TypeCode code       = TypeCode::Void;
+    slot_t slot         = 0;
+    double asDouble     = 0.0;
+    std::shared_ptr<TensorSample> tensor;
+};
+
+/// The element type a tensor dtype holds.
+const Type *tensorElementType(TypeCode dtype) {
+    switch (dtype) {
+    case TypeCode::Float32:
+        return Type::Float32();
+    case TypeCode::Int64:
+        return Type::Int64();
+    case TypeCode::Bool:
+        return Type::Bool();
+    default:
+        return nullptr;
+    }
+}
+
+/// Random values of one parameter type (the scalar ones and the tensors the shape reader knows).
+/// Floats include the special values the permissions of the rule do not rule out.
 class Sampler {
   public:
     Sampler(uint64_t seed, camel::core::sem::PermissionMask needs) : rng_(seed), needs_(needs) {}
 
-    Sample value(TypeCode code, bool constant) {
-        switch (code) {
+    Sample value(const Type *type, bool constant) {
+        const auto shape = camel::runtime::fact::shapeOfType(type);
+        if (shape) {
+            return tensor(*shape, constant);
+        }
+        switch (type->code()) {
         case TypeCode::Int64: {
             const int64_t v = pickInt(constant);
-            return {code, toSlot<Int64>(v), static_cast<double>(v)};
+            return {TypeCode::Int64, toSlot<Int64>(v), static_cast<double>(v), nullptr};
         }
         case TypeCode::Int32: {
             const int32_t v = static_cast<int32_t>(pickInt(constant));
-            return {code, toSlot<Int32>(v), static_cast<double>(v)};
+            return {TypeCode::Int32, toSlot<Int32>(v), static_cast<double>(v), nullptr};
         }
         case TypeCode::Float64: {
-            const double v = pickFloat(constant, code);
-            return {code, toSlot<Float64>(v), v};
+            const double v = pickFloat(constant, TypeCode::Float64);
+            return {TypeCode::Float64, toSlot<Float64>(v), v, nullptr};
         }
         case TypeCode::Float32: {
-            const float v = static_cast<float>(pickFloat(constant, code));
-            return {code, toSlot<Float32>(v), static_cast<double>(v)};
+            const float v = static_cast<float>(pickFloat(constant, TypeCode::Float32));
+            return {TypeCode::Float32, toSlot<Float32>(v), static_cast<double>(v), nullptr};
         }
         case TypeCode::Bool: {
             const bool v = (rng_() & 1) != 0;
-            return {code, toSlot<Bool>(v), v ? 1.0 : 0.0};
+            return {TypeCode::Bool, toSlot<Bool>(v), v ? 1.0 : 0.0, nullptr};
         }
         default:
             throw std::invalid_argument("a parameter of a rule has a type the check cannot make");
         }
     }
 
+    /// The sample as an argument slot. A scalar keeps its slot; a tensor is an Array made now,
+    /// from the bytes of the sample. Call it right before the call that reads the argument: no
+    /// allocation may run in between (the Array can move).
+    slot_t materialize(Sample &sample) {
+        if (sample.tensor == nullptr) {
+            return sample.slot;
+        }
+        const TensorSample &t = *sample.tensor;
+        const Type *element   = tensorElementType(t.dtype);
+        if (element == nullptr) {
+            throw std::invalid_argument("a tensor parameter has an element type the check cannot make");
+        }
+        auto *arrayType = ArrayType::create(const_cast<Type *>(element));
+        Array *array    = Array::create(mm::autoSpace(), arrayType, t.shape, true);
+        if (array->byteSize() != t.bytes.size()) {
+            throw std::logic_error("a tensor sample and its array have different sizes");
+        }
+        if (!t.bytes.empty()) {
+            std::memcpy(array->dataAs<uint8_t>(), t.bytes.data(), t.bytes.size());
+        }
+        sample.slot = toSlot(array);
+        return sample.slot;
+    }
+
   private:
+    /// A tensor of the type's element type. The shape is the one the type carries; an unknown
+    /// rank is a vector of three and an unknown extent is two. A type with a large known shape is
+    /// sampled in the same rank at two elements per extent (elementwise laws do not depend on
+    /// the extents, and the check stays small).
+    Sample tensor(const camel::runtime::fact::TensorShape &shape, bool constant) {
+        auto sample  = std::make_shared<TensorSample>();
+        sample->dtype = shape.dtype.value_or(TypeCode::Float32);
+        const TypeCode dtype = sample->dtype;
+        const Type *element  = tensorElementType(dtype);
+        if (element == nullptr) {
+            throw std::invalid_argument(
+                "a tensor parameter has an element type the check cannot make");
+        }
+        std::vector<int64_t> dims;
+        if (shape.dims) {
+            dims = *shape.dims;
+        } else {
+            dims = {3};
+        }
+        int64_t elements = 1;
+        for (int64_t &extent : dims) {
+            if (extent < 0) {
+                extent = 2;
+            }
+            elements *= extent;
+        }
+        if (elements > 1024) {
+            for (int64_t &extent : dims) {
+                extent = 2;
+            }
+            elements = 1;
+            for (int64_t extent : dims) {
+                elements *= extent;
+            }
+        }
+        sample->shape = dims;
+        switch (dtype) {
+        case TypeCode::Float32: {
+            // The bytes of a vector of bytes are not aligned for a float: fill a typed buffer and
+            // copy it in (the same on the way out, `tensorElement`).
+            std::vector<float> values(static_cast<size_t>(elements));
+            for (float &value : values) {
+                value = static_cast<float>(pickFloat(false, TypeCode::Float32));
+            }
+            sample->bytes.resize(values.size() * sizeof(float));
+            std::memcpy(sample->bytes.data(), values.data(), sample->bytes.size());
+            break;
+        }
+        case TypeCode::Int64: {
+            std::vector<int64_t> values(static_cast<size_t>(elements));
+            for (int64_t &value : values) {
+                value = pickInt(false);
+            }
+            sample->bytes.resize(values.size() * sizeof(int64_t));
+            std::memcpy(sample->bytes.data(), values.data(), sample->bytes.size());
+            break;
+        }
+        case TypeCode::Bool: {
+            sample->bytes.resize(static_cast<size_t>(elements));
+            for (int64_t i = 0; i < elements; ++i) {
+                sample->bytes[static_cast<size_t>(i)] = (rng_() & 1) != 0 ? 1 : 0;
+            }
+            break;
+        }
+        default:
+            throw std::invalid_argument(
+                "a tensor parameter has an element type the check cannot make");
+        }
+        Sample result;
+        result.code   = shape.dtype.value_or(TypeCode::Float32);
+        result.tensor = std::move(sample);
+        return result;
+    }
+
     int64_t pickInt(bool constant) {
         static const int64_t edges[] = {
             0,
@@ -405,7 +536,7 @@ class Sampler {
         const bool noNans  = (needs_ & camel::core::sem::kNoNans) != 0;
         const bool noInfs  = (needs_ & camel::core::sem::kNoInfs) != 0;
         const bool noZeros = (needs_ & camel::core::sem::kNoSignedZeros) != 0;
-        std::vector<double> specials{0.0, 1.0, -1.0, 2.0, 0.5, 3.0, 0.1};
+        std::vector<double> specials{0.0, 1.0, -1.0, 2.0, -2.0, 0.5, -0.5, 3.0, -3.0, 4.0, 0.1};
         // A special has to be a value of the parameter's own type: 1e300 is finite as a float64
         // and an infinity as a float32, which would smuggle an infinity past `no_infs` and make
         // every float32 rule that assumes finiteness fail its own check.
@@ -432,7 +563,13 @@ class Sampler {
         if (roll < 3) {
             return specials[rng_() % specials.size()];
         }
-        const double range = constant ? 64.0 : 1000.0;
+        if (constant) {
+            // A coefficient a law reads is normally a value its element type holds exactly, and
+            // the guards of the coefficient laws are about those values. Small integers are exact
+            // in every element type; the inexact specials above still reach the guards.
+            return static_cast<double>(static_cast<int64_t>(rng_() % 129) - 64);
+        }
+        const double range = 1000.0;
         return (static_cast<double>(rng_() % 2000001) / 1000000.0 - 1.0) * range;
     }
 
@@ -440,36 +577,83 @@ class Sampler {
     camel::core::sem::PermissionMask needs_;
 };
 
+/// Whether two float results agree: NaN agrees with NaN, and otherwise bit for bit when the rule
+/// needs no permission, or within the numeric contract below when it does.
+bool agreeFloat(double x, double y, bool single, const camel::core::sem::RewriteErrorBound &bound,
+    double scale) {
+    if (std::isnan(x) || std::isnan(y)) {
+        return std::isnan(x) && std::isnan(y);
+    }
+    if (!bound.checkable) {
+        return true; // no contract to compare against (reported as unchecked)
+    }
+    if (bound.ulps == 0.0 && bound.relative == 0.0) {
+        return single ? std::bit_cast<uint32_t>(static_cast<float>(x)) ==
+                                std::bit_cast<uint32_t>(static_cast<float>(y)) &&
+                            std::signbit(x) == std::signbit(y)
+                      : std::bit_cast<uint64_t>(x) == std::bit_cast<uint64_t>(y);
+    }
+    if (std::isinf(x) || std::isinf(y)) {
+        return x == y;
+    }
+    const double eps       = single ? 1.2e-7 : 2.3e-16;
+    const double magnitude = std::abs(x) + std::abs(y) + scale;
+    // The smallest subnormal: a rounding in the subnormal range is absolute, not relative.
+    const double smallest  = single ? 1.4e-45 : 4.9e-324;
+    const double allowed   = (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * smallest;
+    return std::abs(x - y) <= allowed;
+}
+
+/// One element of a tensor sample, as a double (the bytes of a sample are not aligned for the
+/// element type).
+double tensorElement(const TensorSample &t, size_t at) {
+    switch (t.dtype) {
+    case TypeCode::Float32: {
+        float value = 0.0F;
+        std::memcpy(&value, t.bytes.data() + at * sizeof(float), sizeof(float));
+        return value;
+    }
+    case TypeCode::Int64: {
+        int64_t value = 0;
+        std::memcpy(&value, t.bytes.data() + at * sizeof(int64_t), sizeof(int64_t));
+        return static_cast<double>(value);
+    }
+    default:
+        return t.bytes[at] != 0 ? 1.0 : 0.0;
+    }
+}
+
+/// Whether two tensor results agree elementwise (the scalar rule above, per element): a NaN agrees
+/// with a NaN, an exact rule compares bits (a signed zero included), a permission-bound rule uses
+/// its bound per element.
+bool agreeTensor(const TensorSample &a, const TensorSample &b,
+    const camel::core::sem::RewriteErrorBound &bound, double scale) {
+    if (a.dtype != b.dtype || a.shape != b.shape || a.bytes.size() != b.bytes.size()) {
+        return false;
+    }
+    if (a.dtype != TypeCode::Float32) {
+        return a.bytes == b.bytes;
+    }
+    const size_t count = a.bytes.size() / sizeof(float);
+    for (size_t i = 0; i < count; ++i) {
+        if (!agreeFloat(tensorElement(a, i), tensorElement(b, i), true, bound, scale)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// Whether two results agree: bit for bit when the rule needs no permission (a NaN is a NaN),
 /// otherwise within the numeric contract of the rule's permissions and the operators' declared
 /// bounds (camel/core/operator_semantics.h, rewriteErrorBound).
 bool agree(
     const Sample &a, const Sample &b, const camel::core::sem::RewriteErrorBound &bound,
     double scale) {
+    if (a.tensor != nullptr || b.tensor != nullptr) {
+        return a.tensor != nullptr && b.tensor != nullptr && agreeTensor(*a.tensor, *b.tensor, bound, scale);
+    }
     if (a.code == TypeCode::Float64 || a.code == TypeCode::Float32) {
-        const bool single = a.code == TypeCode::Float32;
-        const double x = a.asDouble, y = b.asDouble;
-        if (std::isnan(x) || std::isnan(y)) {
-            return std::isnan(x) && std::isnan(y);
-        }
-        if (!bound.checkable) {
-            return true; // no contract to compare against (reported as unchecked)
-        }
-        if (bound.ulps == 0.0 && bound.relative == 0.0) {
-            return single ? fromSlot<Float32>(a.slot) == fromSlot<Float32>(b.slot) &&
-                                std::signbit(x) == std::signbit(y)
-                          : a.slot == b.slot;
-        }
-        if (std::isinf(x) || std::isinf(y)) {
-            return x == y;
-        }
-        const double eps       = single ? 1.2e-7 : 2.3e-16;
-        const double magnitude = std::abs(x) + std::abs(y) + scale;
-        // The smallest subnormal: a rounding in the subnormal range is absolute, not relative.
-        const double smallest  = single ? 1.4e-45 : 4.9e-324;
-        const double allowed =
-            (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * smallest;
-        return std::abs(x - y) <= allowed;
+        return agreeFloat(a.asDouble, b.asDouble, a.code == TypeCode::Float32, bound, scale);
     }
     if (a.code == TypeCode::Int32) {
         return fromSlot<Int32>(a.slot) == fromSlot<Int32>(b.slot);
@@ -478,6 +662,39 @@ bool agree(
 }
 
 std::string sampleText(const Sample &s) {
+    if (s.tensor != nullptr) {
+        const TensorSample &t = *s.tensor;
+        std::string text       = std::format("tensor<{}>", typeCodeToString(t.dtype));
+        text += " [";
+        for (size_t i = 0; i < t.shape.size(); ++i) {
+            text += (i == 0 ? "" : ", ") + std::to_string(t.shape[i]);
+        }
+        text += "] {";
+        const size_t count = t.dtype == TypeCode::Float32 ? t.bytes.size() / sizeof(float)
+            : t.dtype == TypeCode::Int64                    ? t.bytes.size() / sizeof(int64_t)
+                                                            : t.bytes.size();
+        const size_t shown = std::min<size_t>(count, 8);
+        for (size_t i = 0; i < shown; ++i) {
+            if (i != 0) {
+                text += ", ";
+            }
+            switch (t.dtype) {
+            case TypeCode::Float32:
+                text += std::format("{}", static_cast<float>(tensorElement(t, i)));
+                break;
+            case TypeCode::Int64:
+                text += std::to_string(static_cast<int64_t>(tensorElement(t, i)));
+                break;
+            default:
+                text += t.bytes[i] != 0 ? "true" : "false";
+                break;
+            }
+        }
+        if (count > shown) {
+            text += ", ...";
+        }
+        return text + "}";
+    }
     switch (s.code) {
     case TypeCode::Int64:
         return std::to_string(fromSlot<Int64>(s.slot));
@@ -490,18 +707,33 @@ std::string sampleText(const Sample &s) {
     }
 }
 
-Sample resultOf(slot_t slot, TypeCode code) {
-    switch (code) {
+Sample resultOf(slot_t slot, const Type *type) {
+    if (camel::runtime::fact::shapeOfType(type)) {
+        const auto *array = fromSlot<Array *>(slot);
+        auto tensor       = std::make_shared<TensorSample>();
+        tensor->dtype     = array->dtype();
+        tensor->shape.assign(array->shape(), array->shape() + array->rank());
+        if (array->byteSize() != 0) {
+            const auto *bytes = array->dataAs<uint8_t>();
+            tensor->bytes.assign(bytes, bytes + array->byteSize());
+        }
+        Sample sample;
+        sample.code   = type->code();
+        sample.slot   = slot;
+        sample.tensor = std::move(tensor);
+        return sample;
+    }
+    switch (type->code()) {
     case TypeCode::Int64:
-        return {code, slot, static_cast<double>(fromSlot<Int64>(slot))};
+        return {TypeCode::Int64, slot, static_cast<double>(fromSlot<Int64>(slot)), nullptr};
     case TypeCode::Int32:
-        return {code, slot, static_cast<double>(fromSlot<Int32>(slot))};
+        return {TypeCode::Int32, slot, static_cast<double>(fromSlot<Int32>(slot)), nullptr};
     case TypeCode::Float32:
-        return {code, slot, static_cast<double>(fromSlot<Float32>(slot))};
+        return {TypeCode::Float32, slot, static_cast<double>(fromSlot<Float32>(slot)), nullptr};
     case TypeCode::Float64:
-        return {code, slot, fromSlot<Float64>(slot)};
+        return {TypeCode::Float64, slot, fromSlot<Float64>(slot), nullptr};
     default:
-        return {code, slot, fromSlot<Bool>(slot) ? 1.0 : 0.0};
+        return {type->code(), slot, fromSlot<Bool>(slot) ? 1.0 : 0.0, nullptr};
     }
 }
 
@@ -569,7 +801,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         const camel::runtime::GCGraph *lhsGraph = program->graph(lhsId);
         const auto *lhsType                     = lhsGraph->funcType();
         const size_t params                     = lhsType->normTypesCount();
-        const TypeCode resultCode               = lhsType->exitType()->code();
+        const Type *resultType                  = lhsType->exitType();
         const size_t steps = stepsOf(*lhsGraph) + stepsOf(*program->graph(rhsId));
         const double declaredUlps =
             declaredUlpsOf(*lhsGraph) + declaredUlpsOf(*program->graph(rhsId));
@@ -596,14 +828,23 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             double scale = 1.0;
             for (size_t i = 0; i < params; ++i) {
                 const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
-                values.push_back(sampler.value(lhsType->normTypeAt(i)->code(), isConst));
-                args.push_back(values.back().slot);
+                values.push_back(sampler.value(lhsType->normTypeAt(i), isConst));
                 scale = std::max(scale, std::abs(values.back().asDouble) + 1.0);
             }
+            // A tensor argument is an Array: it is made right before the call that reads it, so no
+            // allocation can move it in between (and the call below is a safepoint).
+            const auto fillArgs = [&] {
+                args.resize(values.size());
+                for (size_t i = 0; i < values.size(); ++i) {
+                    args[i] = sampler.materialize(values[i]);
+                }
+            };
+            fillArgs();
             const Sample left =
-                resultOf(vm.callGraph(program, program->graph(lhsId), args), resultCode);
+                resultOf(vm.callGraph(program, program->graph(lhsId), args), resultType);
+            fillArgs();
             const Sample right =
-                resultOf(vm.callGraph(program, program->graph(rhsId), args), resultCode);
+                resultOf(vm.callGraph(program, program->graph(rhsId), args), resultType);
             if (!agree(left, right, bound, std::min(scale * scale, std::numeric_limits<double>::max()))) {
                 std::string at;
                 for (size_t i = 0; i < values.size(); ++i) {
@@ -648,8 +889,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                 for (size_t i = 0; i < params; ++i) {
                     const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
                     Type *type         = lhsType->normTypeAt(i);
-                    Sample value       = sampler.value(type->code(), isConst);
-                    args.push_back(value.slot);
+                    Sample value       = sampler.value(type, isConst);
                     values.push_back(value);
                     scale = std::max(scale, std::abs(value.asDouble) + 1.0);
                     if (isConst) {
@@ -664,10 +904,18 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                 }
                 ++fired;
                 const camel::runtime::Program *rewritten = session.commitChecked();
+                const auto fillArgs = [&] {
+                    args.resize(values.size());
+                    for (size_t i = 0; i < values.size(); ++i) {
+                        args[i] = sampler.materialize(values[i]);
+                    }
+                };
+                fillArgs();
                 const Sample before =
-                    resultOf(vm.callGraph(program, program->graph(lhsId), args), resultCode);
+                    resultOf(vm.callGraph(program, program->graph(lhsId), args), resultType);
+                fillArgs();
                 const Sample after =
-                    resultOf(vm.callGraph(rewritten, rewritten->graph(lhsId), args), resultCode);
+                    resultOf(vm.callGraph(rewritten, rewritten->graph(lhsId), args), resultType);
                 if (!agree(before, after, bound, std::min(scale * scale, std::numeric_limits<double>::max()))) {
                     std::string at;
                     for (const Sample &value : values) {
