@@ -1411,7 +1411,7 @@ function invalidPlan(planPath, error) {
  * environment, with all their assertions:
  *
  *   [[sweeps]]
- *   name = "poison"                     # the tests are named "<name>:<original name>"
+ *   name = "poison"                     # named "<name>:<source plan id>:<original name>"
  *   plans = ["../modules", "../linear"] # plan files or directories, relative to this plan
  *   exclude = ["modules/onnx"]          # substrings of plan paths that are left out
  *   envs = ["CAMEL_GC_POISON=1"]
@@ -1432,7 +1432,6 @@ function expandSweeps(doc, planPath) {
         const exclude = (sweep.exclude || []).map((item) => String(item))
         const scale = Number.isFinite(sweep.timeout_scale) ? sweep.timeout_scale : 1
         const prefix = sweep.skip_env_prefix || null
-        const rename = (name) => `${sweep.name}:${name}`
         // `fast_sample = N` keeps N tests per source plan in the fast layer and puts the rest in
         // the slow one: the default developer run still checks the property against every plan,
         // and the full sweep (every eligible test) is `--tier all` away. The
@@ -1445,13 +1444,22 @@ function expandSweeps(doc, planPath) {
         const fastSample = Number.isInteger(sweep.fast_sample) && sweep.fast_sample > 0 ? sweep.fast_sample : 0
         const riskTags = new Set((sweep.risk_tags || []).map((tag) => String(tag)))
         const riskSample = Number.isInteger(sweep.risk_sample) && sweep.risk_sample > 0 ? sweep.risk_sample : 0
-        const sources = sweep.plans
+        // A plan named twice (a directory target and a file inside it, say) is one source: two
+        // expansions of it would be two copies with the same name and the same work.
+        const sources = [...new Set(sweep.plans
             .flatMap((entry) => walkPlans(path.resolve(path.dirname(planPath), entry)))
             .filter((source) => source !== planPath)
-            .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item)))
+            .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item))))]
             .sort()
         for (const source of sources) {
             const { doc: sourceDoc, tests: sourceTests } = loadPlanTests(source)
+            // A copy is named after the sweep, its source plan and the source test. The source
+            // plan is part of the name because two plans may both have a test called `shapes`
+            // (H120): without it the copies collide, and a back end waits for, and compares
+            // against, whichever copy of its reference ran last. `id` is the plan's stable
+            // identifier, unique across the run; the fallback matches loadPlanTests.
+            const sourceId = sourceDoc.id || path.basename(source, '.plan.toml')
+            const rename = (name) => `${sweep.name}:${sourceId}:${name}`
             const risky = (sourceDoc.tags || []).some((tag) => riskTags.has(String(tag)))
             const sampleCount = fastSample > 0 && risky && riskSample > fastSample ? riskSample : fastSample
             const eligible = []

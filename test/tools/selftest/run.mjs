@@ -16,6 +16,8 @@
 //     is the target, and run in full when its FILE is the target;
 //   * the risk-based fast sample of a `[[sweeps]]` entry: three copies for a plan tagged
 //     collections, one for the rest, every copy under `--tier all`;
+//   * the identity of a sweep copy: two source plans that both have a test named `shapes` keep
+//     four distinct names, and one source test reused under two sweeps keeps two (H120);
 //   * a benchmark whose timed pass fails: `--timeit` then reports the failed iteration with no
 //     mean (H66), and the runner reports that failure instead of throwing on the missing metric;
 //   * the `--changed` mapping: directory rule first, file rules second, the base branch and its
@@ -315,8 +317,8 @@ if (!sweepFast.output.includes('[SUMMARY] total: 13, pass: 13, fail: 0')) {
     problems.push(`sweep fast: unexpected summary (${summaryLine(sweepFast.output)})`)
 }
 const fastPoison = statusLines(sweepFast.output).filter((line) => line.startsWith('PASS poison:'))
-const riskyPoison = fastPoison.filter((line) => line.includes('poison:risky.'))
-const plainPoison = fastPoison.filter((line) => line.includes('poison:plain.'))
+const riskyPoison = fastPoison.filter((line) => line.includes('poison:selftest.sweep.risky:'))
+const plainPoison = fastPoison.filter((line) => line.includes('poison:selftest.sweep.plain:'))
 if (fastPoison.length !== 4 || riskyPoison.length !== 3 || plainPoison.length !== 1) {
     problems.push(
         `sweep fast sampled ${fastPoison.length} copies (risky ${riskyPoison.length}, plain ${plainPoison.length}), expected 3 + 1`
@@ -330,6 +332,55 @@ if (!sweepAll.output.includes('[SUMMARY] total: 18, pass: 18, fail: 0')) {
 if (statusLines(sweepAll.output).filter((line) => line.includes('poison:')).length !== 9) {
     problems.push('sweep --tier all did not keep every copy')
 }
+
+// --- a sweep copy's identity carries its source plan (H120) ------------------------------------
+// Two source plans both have a test named `shapes`. A copy is named
+// `<sweep>:<source plan id>:<source test>`; the source plan is what keeps the two apart. Before
+// it was part of the name both plans' copies were called `poison:shapes.*`, and a back end waited
+// for, and compared against, whichever `poison:shapes.nvm` ran last: the run reported a false
+// failure (`differs from poison:shapes.nvm` or `reference back end did not run`) although every
+// test had run. The fixture's two `shapes` print different words, so a reference that resolved
+// to the other plan fails on `stdout_normalized` instead of passing by accident.
+const collisionPlan = path.join(here, 'sweep_names', 'collision.plan.toml')
+const collision = runRunner([collisionPlan])
+if (collision.status !== 0) problems.push(`sweep collision: runner exit ${collision.status}, expected 0`)
+if (!collision.output.includes('[SUMMARY] total: 4, pass: 4, fail: 0')) {
+    problems.push(`sweep collision: unexpected summary (${summaryLine(collision.output)})`)
+}
+const collisionExpected = [
+    'PASS poison:selftest.sweep.collision.alpha:shapes.nvm',
+    'PASS poison:selftest.sweep.collision.alpha:shapes.fvm',
+    'PASS poison:selftest.sweep.collision.beta:shapes.nvm',
+    'PASS poison:selftest.sweep.collision.beta:shapes.fvm',
+]
+if (statusLines(collision.output).join('\n') !== collisionExpected.join('\n')) {
+    problems.push(`sweep collision ran: ${statusLines(collision.output).join(', ')}`)
+}
+if (collision.output.includes('poison:shapes.')) {
+    problems.push('sweep collision: a copy is still named after the source test alone')
+}
+fs.rmSync(path.join(scratchRoot, `run-${collision.pid}`), { recursive: true, force: true })
+
+// The other direction: one source test legitimately reused under two sweeps is two identities,
+// and each copy's back ends compare against their own sweep's base. The fixture prints the
+// sweep's environment variable, so the two sweeps' outputs differ and a copy that resolved its
+// reference against the other sweep would fail.
+const reusePlan = path.join(here, 'sweep_names', 'reuse.plan.toml')
+const reuse = runRunner([reusePlan])
+if (reuse.status !== 0) problems.push(`sweep reuse: runner exit ${reuse.status}, expected 0`)
+if (!reuse.output.includes('[SUMMARY] total: 4, pass: 4, fail: 0')) {
+    problems.push(`sweep reuse: unexpected summary (${summaryLine(reuse.output)})`)
+}
+const reuseExpected = [
+    'PASS poison:selftest.sweep.reuse.source:shapes.nvm',
+    'PASS poison:selftest.sweep.reuse.source:shapes.fvm',
+    'PASS poison_again:selftest.sweep.reuse.source:shapes.nvm',
+    'PASS poison_again:selftest.sweep.reuse.source:shapes.fvm',
+]
+if (statusLines(reuse.output).join('\n') !== reuseExpected.join('\n')) {
+    problems.push(`sweep reuse ran: ${statusLines(reuse.output).join(', ')}`)
+}
+fs.rmSync(path.join(scratchRoot, `run-${reuse.pid}`), { recursive: true, force: true })
 
 // --- the --changed mapping ---------------------------------------------------------------------
 const hasPlan = (selection, name) => selection !== null && selection.names.includes(name)

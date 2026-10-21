@@ -472,7 +472,13 @@ Optional timeout for the verification script process. Default is `5000`.
 
 A plan may list `[[sweeps]]` next to its tests. A sweep runs the tests of other plans again
 under an extra environment, with all their assertions; the copies are named
-`<sweep name>:<original name>` and count as tests of the plan that lists the sweep.
+`<sweep name>:<source plan id>:<original name>` and count as tests of the plan that lists the
+sweep. The source plan's `id` (its file name when it has none) is part of the name because two
+source plans may both have a test called `shapes` — `feat/compile/enum` and `feat/para/handoff`
+do. Without it the copies collide, and a back end waits for, and compares against, whichever
+copy of its first back end ran last: the run reports a failure although every test ran (H120).
+One source test reused under two sweeps keeps two distinct copies, one per sweep name. A source
+plan listed twice in the same sweep is expanded once.
 
 ```toml
 [[sweeps]]

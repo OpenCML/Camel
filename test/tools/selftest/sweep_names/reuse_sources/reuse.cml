@@ -1,0 +1,10 @@
+// Fixture of test/tools/selftest/run.mjs: prints the environment of the sweep that is running it,
+// so reusing this source under two sweeps gives two different outputs.
+module reuse
+
+import { get_env } from sys
+
+func main(): int sync {
+    println(get_env('SELFTEST_SWEEP'))
+    return 0
+}

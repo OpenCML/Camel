@@ -1,0 +1,8 @@
+// Fixture of test/tools/selftest/run.mjs: prints its own name so the two `shapes` of
+// collision.plan.toml have different output.
+module beta
+
+func main(): int sync {
+    println('beta')
+    return 0
+}
