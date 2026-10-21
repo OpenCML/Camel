@@ -845,9 +845,10 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     if (!draft.alive(callNodeId)) {
                         continue;
                     }
-                    // A callee projected out of a branch JOIN is devirtualized by the static
-                    // path once the branch arms are regions of this graph: the closure FILL and
-                    // the call are then in one graph, so no split across the branch is needed.
+                    // A callee projected out of a branch JOIN stays in the branch's own graph: the arms
+                    // are regions of this graph, so the exporter evaluates the branch and calls an
+                    // arm's closure inside its If. No rewrite across the branch is needed, and the
+                    // sibling JOINs such a rewrite would add are not executable.
                     if (camel::runtime::devirtualizeStaticCallInDraft(
                             session,
                             draft,
