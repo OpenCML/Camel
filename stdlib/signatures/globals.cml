@@ -29,7 +29,7 @@ inner func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int 
 
 /// x as a 64-bit integer.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program
 /// @example int(2.9)    // 2
 inner func int(x: i32): int {
     return ':op/*tol'
@@ -49,7 +49,7 @@ inner func int(x: string): int {
 
 /// The same as int.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN
 /// @example i64('42')    // 42
 inner func i64(x: i32): int {
     return ':op/*tol'
@@ -69,7 +69,7 @@ inner func i64(x: string): int {
 
 /// x as a 32-bit integer.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN
 /// @example i32(7)    // 7
 inner func i32(x: i32): i32 {
     return ':op/*toi'
@@ -89,7 +89,7 @@ inner func i32(x: string): i32 {
 
 /// x as a 64-bit float.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one number; use parse_float to handle that in the program
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow); use parse_float to handle that in the program
 /// @example float(3)    // 3
 inner func float(x: i32): float {
     return ':op/*tod'
@@ -109,7 +109,7 @@ inner func float(x: string): float {
 
 /// The same as float.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not a number
+/// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow)
 /// @example f64('2.5')    // 2.5
 inner func f64(x: i32): float {
     return ':op/*tod'
@@ -129,7 +129,7 @@ inner func f64(x: string): float {
 
 /// x as a 32-bit float.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not a number
+/// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f32 (overflow or underflow)
 /// @example f32(0.5)    // 0.5
 inner func f32(x: i32): f32 {
     return ':op/*tof'

@@ -35,6 +35,13 @@ class FramePool;
 class TaskflowFramePool;
 class FrameView;
 
+/// The frame log prints at most this many elements of an array; above the limit the line
+/// carries the array's type, address and length. Arrays a diagnostic deals with are small (the
+/// test plans' largest printed array has 40 elements), while the collections whose element-wise
+/// logging made a Debug run quadratic are thousands (H31: 5,000 and 10,000 elements). 64 keeps
+/// every small array whole and still bounds one line to 64 elements.
+inline constexpr size_t kFrameLogArrayLimit = 64;
+
 /// The fault of a call whose frame does not fit what is left of a frame pool of `poolBytes`: a
 /// located MaxRecursionDepthExceeded (the pool is sized for the recursion limit; a recursion of
 /// functions with very large frames can fill it before the count is reached).
@@ -134,8 +141,13 @@ class Frame : public rtdata::Object {
                         mm::formatAddress(const_cast<Frame *>(this), true),
                         idx,
                         dynamicAreaType_->size()));
+                // A slot never written holds DeadSlot (the fill of a fresh Debug bump
+                // allocation) or kDebugUninitializedSlot (the fill the Debug taskflow frame
+                // pool gives a frame before use). NullSlot is a legitimate empty element and
+                // stays readable.
                 ASSERT(
-                    dynamicArea_[idx] != mm::kDebugUninitializedSlot,
+                    dynamicArea_[idx] != mm::kDebugUninitializedSlot &&
+                        dynamicArea_[idx] != DeadSlot,
                     std::format(
                         "[{}] Accessing uninitialized slot: idx = {}",
                         mm::formatAddress(const_cast<Frame *>(this), true),
@@ -160,10 +172,15 @@ class Frame : public rtdata::Object {
             // a frame slot can hold a collection a higher-order operator is still filling (a
             // map re-reads its own result slot every round to write through the relocated
             // pointer), and printing a large array at every round is what turned a 10,000
-            // element map into a quadratic Debug run. See H31.
+            // element map into a quadratic Debug run. Arrays above kFrameLogArrayLimit
+            // therefore print as their type, address and length (H31).
             if (::Logger::ShouldEmit(::LogLevel::Info, "Frame")) {
                 std::ostringstream oss;
-                rtdata::printSlot(oss, rtdata::toSlot(res), typeAt<type::Type>(index));
+                rtdata::printSlotCapped(
+                    oss,
+                    rtdata::toSlot(res),
+                    typeAt<type::Type>(index),
+                    kFrameLogArrayLimit);
                 CAMEL_LOG_INFO_S(
                     "Frame",
                     "[{}] Getting data of graph <{}> at index {} ({}): {}",
@@ -323,7 +340,8 @@ class FrameView {
             size_t idx = static_cast<size_t>(index);
             EXEC_WHEN_DEBUG({
                 ASSERT(
-                    dynamicArea_[idx] != mm::kDebugUninitializedSlot,
+                    dynamicArea_[idx] != mm::kDebugUninitializedSlot &&
+                        dynamicArea_[idx] != DeadSlot,
                     std::format("Accessing uninitialized slot: idx = {}", index));
             });
             res = rtdata::fromSlot<T>(dynamicArea_[idx]);

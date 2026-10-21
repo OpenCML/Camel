@@ -1,0 +1,15 @@
+/**
+ * float('1e-9999'): a number text too small for float is out of range (it used to be read as
+ * zero on a platform whose float parser reports underflow only by the value), which the message
+ * says, rather than not a number (H15f).
+ */
+module float_text_underflow
+
+func conv(s: string): float { return float(s) }
+
+func main(): int sync {
+    println(conv('1.5'))
+    println(conv('1e-9999'))
+    println('not reached')
+    return 0
+}
