@@ -134,6 +134,12 @@ class RuntimeGraphDraftSession {
     GraphDraft *tryDraft(const GCGraph *graph);
     const GraphDraft *tryDraft(const GCGraph *graph) const;
 
+    /// Lets the commit keep a cycle of inputs in a graph it encodes. A session that builds a
+    /// shape no back end runs (the ONNX export's split of branched calls) sets it; the back
+    /// ends refuse a cyclic graph when they build its execution plan. Off by default: a commit
+    /// is acyclic (design 5.4).
+    void allowNonExecutable(bool allowed) { nonExecutableAllowed_ = allowed; }
+
     GraphDraft &edit(GCGraph *graph);
     GraphDraft &rootDraft();
 
@@ -169,6 +175,7 @@ class RuntimeGraphDraftSession {
     const Program *program_ = nullptr;
     mutable std::unique_ptr<Program> work_;
     GCGraph *runtimeRoot_ = nullptr;
+    bool nonExecutableAllowed_ = false;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
     /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself.
     /// The commit drops those it encodes back to the same content (sameContent).

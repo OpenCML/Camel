@@ -307,8 +307,9 @@ const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
     size_t *rewrites, RewriteMemo *memo, bool (*mayRewrite)(const GCGraph &),
-    bool checkScreens) {
+    bool checkScreens, bool allowNonExecutable) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
+    session.allowNonExecutable(allowNonExecutable);
     size_t total = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
         if ((mayRewrite && !mayRewrite(*g)) || (memo && memo->leftAlone(passName, g))) {

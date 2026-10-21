@@ -175,6 +175,14 @@ void validateRuntimeGraphTypes(const GCGraph *graph);
 /// the reference table (graphs refer to graphs only through it; the FUNC payload is an index
 /// into it by construction, checked by validateRuntimeGraphPayload). Run on each graph once the
 /// whole set of a commit is encoded.
-void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph);
+void validateRuntimeGraphCalls(
+    const Program &program, const GCGraph *graph, bool requireAcyclic = true);
+/// The edge invariants (graph_edges.cpp): no cycle of inputs, and the types agree along the
+/// edges. Run with validateRuntimeGraphCalls, because the types of a call's callee are read.
+/// Throws std::runtime_error naming the graph, the nodes and what disagrees.
+/// An acyclic graph is the executable state (design 3.7): with `requireAcyclic` false the check
+/// for cycles is left to the back ends, which build an execution order and refuse a cycle.
+void validateRuntimeGraphEdges(
+    const Program &program, const GCGraph *graph, bool requireAcyclic = true);
 
 } // namespace camel::runtime
