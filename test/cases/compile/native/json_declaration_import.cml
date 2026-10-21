@@ -1,0 +1,21 @@
+/**
+ * The declarations of `json` are what an importer sees: `decode` gives a `Json!`, `get<key>`
+ * and `get<index>` are read from the declaration, and the accessors give a nullable result
+ * (the two-layer `Json!?` for a document that had failed); every call reaches the C++ operator
+ * (handover H19, step 10; H115).
+ */
+module json_declaration_import
+
+import { Json, decode, kind, get, as_int, as_string, as_array } from json
+
+func report(j: Json): int sync {
+    println(kind(j))
+    println(j->get<'a'>->get<1>->as_int ?? -1)
+    println(j->get<'s'>->as_string ?? '?')
+    println(len(j->get<'a'>->as_array ?? []))
+    return 0
+}
+
+func main(): int sync {
+    return decode('{"a": [1, 2], "s": "hi"}') ?-> report !! 1
+}

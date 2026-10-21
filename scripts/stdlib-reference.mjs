@@ -26,6 +26,12 @@
 // A library module written in Camel (stdlib/<module>.cml) is its own signature file: its
 // `export func` declarations and their `///` comments are read the same way.
 //
+// When a declaration cannot express an operator — its result type comes from a type rule, or
+// from a type argument — that operator stays in the C++ resolver and keeps its entry in
+// stdlib/signatures/<module>.cml, for reference only (json: `encode`, `decode_as`; handover
+// H115). The module's `computed` field names that file; the reference reads the declaration
+// file and the computed entries together, and --verify-ops checks both.
+//
 // --verify-ops runs `camel inspect --ops` on a program that imports every module and compares,
 // per module: every registered operator (name, parameter counts) has a declaration whose URI
 // pattern matches it, every declaration matches a registered operator, and @pure / @effect is
@@ -83,7 +89,19 @@ const MODULES = [
     },
     { name: 'os', title: '`os`: the process and the machine', kind: 'cpp' },
     { name: 'sys', title: '`sys`: environment', kind: 'cpp' },
-    { name: 'json', title: '`json`', kind: 'cpp' },
+    {
+        name: 'json',
+        title: '`json`',
+        kind: 'cpp',
+        // The declarations, in stdlib/json.cml. `encode` and `decode_as` are computed
+        // signatures — the value's type must have a JSON form, and the result type is the type
+        // of the shape argument — so a declaration cannot express them; their entries, and the
+        // check against the registered operators, come from the signature file that names them
+        // (handover H115).
+        source: 'json.cml',
+        declaration: true,
+        computed: 'signatures/json.cml',
+    },
     { name: 're', title: '`re`: regular expressions', kind: 'cpp' },
     { name: 'crypto', title: '`crypto`', kind: 'cpp' },
     { name: 'para', title: '`para`: unordered iteration', kind: 'cpp' },
@@ -149,9 +167,9 @@ function bracketed(text, open) {
     throw new Error(`unbalanced brackets in: ${text}`)
 }
 
-function parseDeclarations(module) {
-    const file = sourceOf(module)
+function readDeclarations(file, module) {
     const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
+    const relative = path.relative(REPO_ROOT, file).replace(/\\/g, '/')
     const keyword = 'export func'
     const entries = []
     const sectionNotes = new Map()
@@ -190,6 +208,7 @@ function parseDeclarations(module) {
                 name: valueMatch[1],
                 section,
                 line: i + 1,
+                file: relative,
                 value: true,
                 with: [],
                 norm: [],
@@ -230,6 +249,7 @@ function parseDeclarations(module) {
                 name,
                 section,
                 line: i + 1,
+                file: relative,
                 with: splitParams(withText),
                 norm: splitParams(args.inner),
                 result,
@@ -266,6 +286,28 @@ function parseDeclarations(module) {
             pendingUri = null
         }
     }
+    return entries
+}
+
+// The declarations of a module: its own file, and, when a declaration cannot express every
+// operator, the signature file that keeps the computed ones. The computed entries come first:
+// they are the module's entry points (`encode`, `decode_as`), and the rest follow in the order
+// of the declaration file.
+function parseDeclarations(module) {
+    const files = [sourceOf(module)]
+    if (module.computed) {
+        files.unshift(path.join(STDLIB_DIR, module.computed))
+    }
+    const entries = []
+    const sectionNotes = new Map()
+    for (const file of files) {
+        const part = readDeclarations(file, module)
+        for (const [name, notes] of part.sectionNotes) {
+            if (!sectionNotes.has(name)) sectionNotes.set(name, notes)
+        }
+        entries.push(...part)
+    }
+    entries.sectionNotes = sectionNotes
     return entries
 }
 
@@ -476,10 +518,10 @@ function verifyOps() {
                 }
                 const declaredPure = entry.purity === 'pure'
                 if (entry.purity === null) {
-                    problems.push(`${file}:${entry.line}: '${entry.name}' says neither @pure nor @effect`)
+                    problems.push(`${entry.file}:${entry.line}: '${entry.name}' says neither @pure nor @effect`)
                 } else if (declaredPure !== (op.purity === 'pure')) {
                     problems.push(
-                        `${file}:${entry.line}: '${entry.name}' is ${declaredPure ? '@pure' : '@effect'} but ${op.uri} is registered ${op.purity}`,
+                        `${entry.file}:${entry.line}: '${entry.name}' is ${declaredPure ? '@pure' : '@effect'} but ${op.uri} is registered ${op.purity}`,
                     )
                 }
             }
@@ -487,13 +529,13 @@ function verifyOps() {
         for (const entry of entries) {
             const hit = ops.some((op) => op.name === entry.name && uriMatches(entry.uri, op.uri))
             if (!hit) {
-                problems.push(`${file}:${entry.line}: '${entry.name}' (${entry.uri}) is declared but no such operator is registered`)
+                problems.push(`${entry.file}:${entry.line}: '${entry.name}' (${entry.uri}) is declared but no such operator is registered`)
             }
             if (entries.find((each) => each.name === entry.name) !== entry) {
                 continue
             }
-            if (entry.doc.length === 0) problems.push(`${file}:${entry.line}: '${entry.name}' has no description`)
-            if (entry.examples.length === 0) problems.push(`${file}:${entry.line}: '${entry.name}' has no @example`)
+            if (entry.doc.length === 0) problems.push(`${entry.file}:${entry.line}: '${entry.name}' has no description`)
+            if (entry.examples.length === 0) problems.push(`${entry.file}:${entry.line}: '${entry.name}' has no @example`)
         }
     }
     // A signature file without a module of the reference would never be checked.
