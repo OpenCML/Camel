@@ -65,6 +65,7 @@
 #include "camel/core/symbol.h"
 #include "camel/core/type/base.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -226,6 +227,46 @@ struct NumericPolicy {
     }
     bool operator==(const NumericPolicy &) const = default;
 };
+
+// ---- The numeric contract of a rewrite -----------------------------------------------------
+
+/**
+ * The error a rewrite may introduce, from the numeric contract of the operators it uses
+ * (design principles 7.2-7.4; rewrite design 4, `check`). `declaredUlps` is the sum of the
+ * declarations of the operators the rule's two sides use: none for an exact operator, one ulp
+ * for a correctly rounded step, the declared `ulpBound` of a bounded math function, and one for
+ * an operator that declares nothing. `steps` is the number of the rule's rounding steps.
+ *
+ * A rule that needs no permission must agree bit for bit. The permissions do not share one
+ * uniform rounding bound:
+ *   reassociate        moving the grouping may move each rounding: `steps + 1` ulps on top of
+ *                      the declarations;
+ *   contract           a fused multiply-add rounds once where the two sides round twice: no
+ *                      extra ulps (the declarations already cover one rounding per step);
+ *   approx_math        the bounded operator's declared `ulpBound` is in `declaredUlps`;
+ *   change_precision   each step may round in bf16, the least precision 7.3 allows: 2^-8
+ *                      relative per step;
+ *   finite_math        the check excludes the NaN, infinity, signed zero and subnormal samples
+ *                      the assumptions rule out; the finite values keep the rounding bound;
+ *   nondeterministic   no numeric bound exists, so the check cannot certify the rule.
+ */
+struct RewriteErrorBound {
+    /// False when the permissions have no numeric contract (`nondeterministic`): the check can
+    /// compare nothing and reports the rule as unchecked.
+    bool checkable = true;
+    /// The allowed difference, in units of the element epsilon and of the magnitude.
+    double ulps = 0.0;
+    /// The allowed difference relative to the magnitude, independent of the element epsilon.
+    double relative = 0.0;
+};
+
+/// The error one operator node may add, in ulps of its element type, from its declaration.
+double stepUlps(const NumericSemantics &numeric);
+
+/// The bound of a rule that needs `needs`, has `steps` rounding steps and whose operators
+/// declare `declaredUlps` between them (see RewriteErrorBound).
+RewriteErrorBound
+rewriteErrorBound(PermissionMask needs, size_t steps, double declaredUlps);
 
 // ---- Binary algebra (design section 7b) -----------------------------------------------------
 

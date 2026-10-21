@@ -1,0 +1,38 @@
+/**
+ * The float laws of the standard rules and the permissions they need: `combine` has same-sign
+ * coefficients, so `reassociate` (granted by default) is enough; `mixed` may cancel and `chain`
+ * may drop an overflowing intermediate, so they need `no_infs` and `no_signed_zeros`;
+ * `double` doubles an integral coefficient, which is exact and needs nothing.
+ */
+module float_target
+
+func combine(x: float): float {
+    return x * 3.0 + x * 5.0
+}
+
+func mixed(x: float): float {
+    return x * 3.0 + x * -5.0
+}
+
+func chain(x: float): float {
+    return (x * 3.0) * 2.0
+}
+
+func double(x: float): float {
+    return x * 3.0 + x * 3.0
+}
+
+@numeric(finite_math)
+func granted_mixed(x: float): float {
+    return x * 3.0 + x * -5.0
+}
+
+@numeric(no_infs)
+func granted_chain(x: float): float {
+    return (x * 3.0) * 2.0
+}
+
+func main(): int sync {
+    println(combine(2.0), mixed(2.0), chain(2.0), double(2.0), granted_mixed(2.0), granted_chain(2.0))
+    return 0
+}

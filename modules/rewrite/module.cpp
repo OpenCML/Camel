@@ -28,11 +28,14 @@
 
 #include "rule.h"
 
+#include "analysis.h"
+
 #include "../graph/handle.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/module/builtin.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/string.h"
@@ -411,16 +414,21 @@ class Sampler {
 };
 
 /// Whether two results agree: bit for bit when the rule needs no permission (a NaN is a NaN),
-/// otherwise within a small multiple of the rounding of the steps (the rule changed the order or
-/// the grouping, so the rounding differs).
-bool agree(const Sample &a, const Sample &b, camel::core::sem::PermissionMask needs, double scale, size_t steps) {
+/// otherwise within the numeric contract of the rule's permissions and the operators' declared
+/// bounds (camel/core/operator_semantics.h, rewriteErrorBound).
+bool agree(
+    const Sample &a, const Sample &b, const camel::core::sem::RewriteErrorBound &bound,
+    double scale) {
     if (a.code == TypeCode::Float64 || a.code == TypeCode::Float32) {
         const bool single = a.code == TypeCode::Float32;
         const double x = a.asDouble, y = b.asDouble;
         if (std::isnan(x) || std::isnan(y)) {
             return std::isnan(x) && std::isnan(y);
         }
-        if (needs == 0) {
+        if (!bound.checkable) {
+            return true; // no contract to compare against (reported as unchecked)
+        }
+        if (bound.ulps == 0.0 && bound.relative == 0.0) {
             return single ? fromSlot<Float32>(a.slot) == fromSlot<Float32>(b.slot) &&
                                 std::signbit(x) == std::signbit(y)
                           : a.slot == b.slot;
@@ -428,9 +436,12 @@ bool agree(const Sample &a, const Sample &b, camel::core::sem::PermissionMask ne
         if (std::isinf(x) || std::isinf(y)) {
             return x == y;
         }
-        const double eps = single ? 1.2e-7 : 2.3e-16;
-        return std::abs(x - y) <=
-               64.0 * static_cast<double>(steps + 1) * eps * (std::abs(x) + std::abs(y) + scale);
+        const double eps       = single ? 1.2e-7 : 2.3e-16;
+        const double magnitude = std::abs(x) + std::abs(y) + scale;
+        // The smallest subnormal: a rounding in the subnormal range is absolute, not relative.
+        const double allowed =
+            (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * 4.9e-324;
+        return std::abs(x - y) <= allowed;
     }
     if (a.code == TypeCode::Int32) {
         return fromSlot<Int32>(a.slot) == fromSlot<Int32>(b.slot);
@@ -475,6 +486,23 @@ size_t stepsOf(const camel::runtime::GCGraph &graph) {
     return steps;
 }
 
+/// The ulps the operators of one side declare between them (operator_semantics.h, stepUlps).
+double declaredUlpsOf(const camel::runtime::GCGraph &graph) {
+    const auto &table = camel::core::OperatorTable::instance();
+    double ulps       = 0.0;
+    for (camel::runtime::gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+        const camel::runtime::GCNode *node = graph.node(ref);
+        if (node->kind != camel::runtime::GCNodeKind::Oper || !node->hasPayload()) {
+            continue;
+        }
+        const camel::core::sem::OperatorSemantics *declared =
+            table.semantics(graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper);
+        ulps += camel::core::sem::stepUlps(
+            declared != nullptr ? declared->numeric : camel::core::sem::NumericSemantics{});
+    }
+    return ulps;
+}
+
 /// `check(rules, samples, seed)`: for every rule, `samples` random instances (random constants
 /// for the const parameters, random values for the others) of its two sides, which must agree.
 /// Returns the report; a line starting with FAIL is a rule that does not hold.
@@ -515,9 +543,22 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         const size_t params                     = lhsType->normTypesCount();
         const TypeCode resultCode               = lhsType->exitType()->code();
         const size_t steps = stepsOf(*lhsGraph) + stepsOf(*program->graph(rhsId));
+        const double declaredUlps =
+            declaredUlpsOf(*lhsGraph) + declaredUlpsOf(*program->graph(rhsId));
+        // The bound is the numeric contract of the permissions the rule needs, read together
+        // with the operators' declarations (not one uniform rounding bound).
+        const camel::core::sem::RewriteErrorBound bound =
+            camel::core::sem::rewriteErrorBound(needs, steps, declaredUlps);
         Sampler sampler(seed * 1000003u + index, needs);
         NodeVMSchedPass vm(ctx.shared_from_this());
         std::string failure;
+        if (!bound.checkable) {
+            // `nondeterministic` has no numeric contract: there is nothing to compare against,
+            // and reporting `ok` would say the rule was checked. It was not.
+            report += std::format(
+                "unchecked {}: the permissions it needs have no numeric bound\n", name);
+            continue;
+        }
         // A condition is part of the equation: the two sides need not agree on values the
         // condition rejects, and the tool cannot ask the condition about sampled values. Such a
         // rule is checked by the engine path below only.
@@ -535,7 +576,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                 resultOf(vm.callGraph(program, program->graph(lhsId), args), resultCode);
             const Sample right =
                 resultOf(vm.callGraph(program, program->graph(rhsId), args), resultCode);
-            if (!agree(left, right, needs, scale * scale, steps)) {
+            if (!agree(left, right, bound, std::min(scale * scale, std::numeric_limits<double>::max()))) {
                 std::string at;
                 for (size_t i = 0; i < values.size(); ++i) {
                     at += (i == 0 ? "" : ", ") + sampleText(values[i]);
@@ -556,7 +597,9 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             camel::runtime::Rule one = std::move(compiled.front());
             one.twoWay               = false;
             const camel::core::sem::NumericPolicy policy{needs, true};
-            const int64_t instances = std::min<int64_t>(samples, 8);
+            // A condition selects its instances: a rule whose condition accepts few constants
+            // needs more draws before it can be seen firing.
+            const int64_t instances = std::min<int64_t>(samples, conditional ? 64 : 8);
             for (int64_t instance = 0; instance < instances && failure.empty(); ++instance) {
                 ++tried;
                 std::vector<Sample> consts;
@@ -572,12 +615,14 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                     draft.normPorts().begin(),
                     draft.normPorts().end());
                 std::vector<slot_t> args;
+                std::vector<Sample> values;
                 double scale = 1.0;
                 for (size_t i = 0; i < params; ++i) {
                     const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
                     Type *type         = lhsType->normTypeAt(i);
                     Sample value       = sampler.value(type->code(), isConst);
                     args.push_back(value.slot);
+                    values.push_back(value);
                     scale = std::max(scale, std::abs(value.asDouble) + 1.0);
                     if (isConst) {
                         const auto constant = draft.materializeStaticValue(value.slot, type);
@@ -595,12 +640,21 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                     resultOf(vm.callGraph(program, program->graph(lhsId), args), resultCode);
                 const Sample after =
                     resultOf(vm.callGraph(rewritten, rewritten->graph(lhsId), args), resultCode);
-                if (!agree(before, after, needs, scale * scale, steps)) {
+                if (!agree(before, after, bound, std::min(scale * scale, std::numeric_limits<double>::max()))) {
+                    std::string at;
+                    for (const Sample &value : values) {
+                        at += (at.empty() ? "" : ", ") + sampleText(value);
+                    }
                     failure = std::format(
-                        "FAIL {}: the rewritten left side differs: {} and {}",
+                        "FAIL {}: the rewritten left side differs at ({}): {} and {} "
+                        "(bound {} ulps, {} relative, scale {})",
                         name,
+                        at,
                         sampleText(before),
-                        sampleText(after));
+                        sampleText(after),
+                        bound.ulps,
+                        bound.relative,
+                        scale * scale);
                 }
             }
             if (failure.empty() && fired == 0) {
@@ -646,6 +700,7 @@ class RewriteExecutor final : public Executor {
             {"saturate", saturateKernel},
             {"extract", extractKernel},
             {"check", checkKernel},
+            {"analysis", camel::rewritemod::analysisKernel},
         };
     }
 };
@@ -705,6 +760,45 @@ class RewriteModule final : public BuiltinModule {
                               when->exitType()->code() != TypeCode::Bool)
                               return std::nullopt;
                           return RuleType::get();
+                      })}}));
+        // `__analysis` (rewrite design 4): the compiled form of an `analysis` declaration. Its
+        // arity is 5 + 3n: name, initial, join, widen, the queried node, then for each `on`
+        // clause its pattern function, its fact function and the mask of its `const` parameters.
+        exportEntity(
+            "__analysis",
+            OperatorGroup::create(
+                "__analysis",
+                {{"rewrite:analysis",
+                  DynamicFuncTypeResolver::create(
+                      {{0, {}}, {-1, {}}},
+                      "(name: string, initial: F, join: F, widen: F, node: Node, ...) => T",
+                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
+                          if (norm.size() < 5 || (norm.size() - 5) % 3 != 0 ||
+                              norm[0]->code() != TypeCode::String) {
+                              return std::nullopt;
+                          }
+                          for (size_t i = 1; i < 4; ++i) {
+                              if (norm[i]->code() != TypeCode::Function) {
+                                  return std::nullopt;
+                              }
+                          }
+                          if (!HandleType::is(norm[4], HandleKind::Node)) {
+                              return std::nullopt;
+                          }
+                          for (size_t i = 5; i < norm.size(); i += 3) {
+                              if (norm[i]->code() != TypeCode::Function ||
+                                  norm[i + 1]->code() != TypeCode::Function ||
+                                  norm[i + 2]->code() != TypeCode::Int64) {
+                                  return std::nullopt;
+                              }
+                          }
+                          const auto *initial =
+                              static_cast<const FunctionType *>(norm[1]);
+                          if (initial->exitType() == nullptr) {
+                              return std::nullopt;
+                          }
+                          return initial->exitType();
                       })}}));
         const auto rulesOf = [](Type *array) {
             if (array->code() != TypeCode::Array) {

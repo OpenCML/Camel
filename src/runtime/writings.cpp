@@ -720,8 +720,12 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         }
     }
 
-    // What stays: every node that is the only writing of its value, what the graph names (its
-    // ports, entry, exit, result), and the writing chosen for every value that is read.
+    // What stays: what the graph names (its ports, entry, exit, result), every node that takes
+    // no part in the classes (an effect, a control node, a written variable: it has no other
+    // writing and is not reached through a value), and the writing chosen for every value that
+    // is read. A pure node that was never merged is a writing of its own value like any other:
+    // it stays only if something that stays reads it, so a saturation that added thousands of
+    // candidate writings does not leave them in the extracted program as dead nodes.
     std::vector<uint8_t> selected(slots, 0);
     std::vector<gc_node_ref_t> work;
     const auto select = [&](gc_node_ref_t node) {
@@ -731,7 +735,7 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         }
     };
     for (gc_node_ref_t node = 0; node < slots; ++node) {
-        if (draft_.alive(node) && !multi[node]) {
+        if (draft_.alive(node) && !multi[node] && !takesPart(node)) {
             select(node);
         }
     }

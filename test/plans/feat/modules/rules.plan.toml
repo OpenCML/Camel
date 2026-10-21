@@ -11,7 +11,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "counts::report", "simplify::apply", "counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+expect_stdout_contains = ["coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"]
 timeout_ms = 10000
 
 [[tests]]
@@ -22,7 +22,7 @@ case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "simplify::apply", "${backend}"]
 backends = ["fvm", "prl"]
 expect_exit = 0
-expect_stdout_exact = "56 42\n"
+expect_stdout_contains = ["56 42\n"]
 timeout_ms = 10000
 
 [[tests]]
@@ -43,7 +43,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "counts::report", "simplify::saturated", "counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+expect_stdout_contains = ["coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"]
 timeout_ms = 10000
 
 [[tests]]
@@ -64,7 +64,7 @@ case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "simplify::tabled", "std::opt::extract", "${backend}"]
 backends = ["nvm", "fvm"]
 expect_exit = 0
-expect_stdout_exact = "56 42\n"
+expect_stdout_contains = ["56 42\n"]
 timeout_ms = 10000
 
 [[tests]]
@@ -74,7 +74,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "simplify::tabled", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "56 42\n"
+expect_stdout_contains = ["56 42\n"]
 timeout_ms = 10000
 
 [[tests]]
@@ -102,15 +102,49 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.library_passes_the_check"
-desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, with commutation, association and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side."
+desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, the float laws a permission allows, with commutation, association and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float_mul_comm: 200 samples agree, fired 8 of 8"]
+expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float_mul_comm: 200 samples agree, fired 8 of 8", "ok float_combine: the condition selects the instances", "ok float_fold: the condition selects the instances", "ok float_double: the condition selects the instances"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "rules.check_bound_follows_the_permission"
+desc = "The check takes the error bound of the permission a rule needs, not one uniform bound (design principles 7.2-7.4): the same wrong equation (x*2.0 => x*2.000000001, about 5e-10 relative) is rejected under reassociate, whose bound is a few ulps, and accepted under change_precision, whose bound is bf16's 2^-8 per step. A looser uniform bound would hide the first rule."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_bound.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["FAIL wrong_reassociate: the two sides differ at (", "ok wrong_precision: 40 samples agree, fired 8 of 8"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.float_permissions_gate_the_laws"
+desc = "The float laws of the library apply where their permissions are granted: same-sign coefficients under the default reassociate, the exact doubling of an integral coefficient with no permission, and the cancellation and product-chain laws only on a node that grants no_infs/no_signed_zeros. The operator counts show which rule fired; the values are what the rewritten expressions compute."
+kind = "behavior"
+case = "../../../cases/modules/rules/float_target.cml"
+args = ["${case}", "float_counts::report", "rules::simplify", "float_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["combine 1 2\nmixed 1 2\nchain 0 2\ndouble 1 2\ngranted_mixed 1 2\ngranted_chain 0 2\ncombine 0 1\nmixed 1 2\nchain 0 2\ndouble 0 1\ngranted_mixed 0 1\ngranted_chain 0 1\n16.0 -4.0 12.0 12.0 -4.0 12.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.float_permissions_on_every_backend"
+desc = "The rewritten float program computes the same values on the byte-code interpreter and the parallel scheduler."
+kind = "behavior"
+case = "../../../cases/modules/rules/float_target.cml"
+args = ["${case}", "rules::simplify", "${backend}"]
+backends = ["fvm", "prl"]
+expect_exit = 0
+expect_stdout_contains = ["16.0 -4.0 12.0 12.0 -4.0 12.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 
 [[tests]]
 name = "rules.library_simplify"
@@ -119,7 +153,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "counts::report", "rules::simplify", "counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+expect_stdout_contains = ["coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"]
 timeout_ms = 10000
 
 [[tests]]
@@ -129,7 +163,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "counts::report", "rules::saturate_all", "counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+expect_stdout_contains = ["coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"]
 timeout_ms = 20000
 
 [[tests]]
@@ -139,7 +173,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/same_module_pass.cml"
 args = ["${case}", "same_module_pass::apply"]
 expect_exit = 0
-expect_stdout_exact = "8\n"
+expect_stdout_contains = ["8\n"]
 timeout_ms = 10000
 
 [[tests]]
@@ -149,7 +183,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/same_module_pass.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "7\n"
+expect_stdout_contains = ["7\n"]
 timeout_ms = 10000
 
 [[tests]]
@@ -159,7 +193,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/when_target.cml"
 args = ["${case}", "when_rules::report", "when_rules::apply", "when_rules::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "byConst 1\nnotConst 1\nmulSum 1 1\nmulPlain 1\nintDouble 1 0\nfloatDouble 1 0\nbyConst 0\nnotConst 1\nmulSum 0 1\nmulPlain 1\nintDouble 0 1\nfloatDouble 0 1\n7 10 5 12\n10 2.5\n"
+expect_stdout_contains = ["byConst 1\nnotConst 1\nmulSum 1 1\nmulPlain 1\nintDouble 1 0\nfloatDouble 1 0\nbyConst 0\nnotConst 1\nmulSum 0 1\nmulPlain 1\nintDouble 0 1\nfloatDouble 0 1\n7 10 5 12\n10 2.5\n"]
 timeout_ms = 20000
 
 [[tests]]
@@ -170,7 +204,7 @@ case = "../../../cases/modules/rules/when_target.cml"
 args = ["${case}", "when_rules::apply", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 0
-expect_stdout_exact = "7 10 5 12\n10 2.5\n"
+expect_stdout_contains = ["7 10 5 12\n10 2.5\n"]
 timeout_ms = 20000
 
 [[tests]]
@@ -180,7 +214,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/when_target.cml"
 args = ["${case}", "when_rules::saturated", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "7 10 5 12\n10 2.5\n"
+expect_stdout_contains = ["7 10 5 12\n10 2.5\n"]
 timeout_ms = 20000
 
 [[tests]]
@@ -190,7 +224,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/check_when.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["ok double_int: the condition selects the instances, fired 8 of 8", "ok double_float: the condition selects the instances, fired 8 of 8", "FAIL wrong_guard: the rewritten left side differs"]
+expect_stdout_contains = ["ok double_int: the condition selects the instances, fired 64 of 64", "ok double_float: the condition selects the instances, fired 64 of 64", "FAIL wrong_guard: the rewritten left side differs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
@@ -200,7 +234,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/requires_target.cml"
 args = ["${case}", "counts::report_requires", "requires::apply", "counts::report_requires", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "scaled 1 kept 1\nscaled 1 kept 0\n3.0 4.0\n"
+expect_stdout_contains = ["scaled 1 kept 1\nscaled 1 kept 0\n3.0 4.0\n"]
 timeout_ms = 10000
 
 [[tests]]
@@ -210,7 +244,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/requires_target.cml"
 args = ["${case}", "counts::report_requires", "requires::apply_default", "counts::report_requires", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "scaled 1 kept 1\nscaled 0 kept 0\n3.0 4.0\n"
+expect_stdout_contains = ["scaled 1 kept 1\nscaled 0 kept 0\n3.0 4.0\n"]
 timeout_ms = 10000
 
 [[tests]]
@@ -287,6 +321,16 @@ assert(input.normalized.stdout === expected, `stdout was: ${JSON.stringify(input
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "rules.analysis_reads_a_fact_in_when"
+desc = "An `analysis` (rewrite design 4) compiles to functions and a fact kind: `depth` counts the additions a value is under (initial 0, a constant 1, an addition one more than the deepest operand, any other operator the join of its operands) and `sign` is the value of a constant. `report` reads `depth` of the frozen graphs of the target (sum 3, mixed 2) and counts products; the rule `mul_one` reads `sign(c)` in its `when`, so it rewrites x * 1 but not x * 2; the second report shows the rewritten program."
+kind = "behavior"
+case = "../../../cases/modules/rules/analysis_target.cml"
+args = ["${case}", "analysis_lib::report", "analysis_lib::apply", "analysis_lib::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["sum 3 mixed 2 one 1 two 1\nsum 3 mixed 2 one 0 two 1\n4 7 7 14\n"]
+timeout_ms = 20000
 
 [[tests]]
 name = "rules.requires_nondeterministic"

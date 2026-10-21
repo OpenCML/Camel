@@ -218,6 +218,12 @@ class ParserImpl {
     void parseRuleDeclRest(size_t m);
     void parseRuleContext();
     void parseRuleBody();
+    /// At the name `analysis` (offset `n`) that starts an analysis declaration.
+    bool atAnalysisDecl(uint32_t n) const;
+    void parseAnalysisDecl();
+    /// analysisDecl after the tags and decorators that may precede it; `m` marks where it began.
+    void parseAnalysisDeclRest(size_t m);
+    void parseAnalysisClause();
     void parseDataDecl();
     void parseTypeDecl();
     /// typeDecl after the tags and decorators that may precede it; `m` marks where it began.
