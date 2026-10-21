@@ -25,6 +25,7 @@
 #include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop_lowering.h"
+#include "camel/core/rtdata/aggregate.h"
 #include "camel/core/rtdata/view.h"
 #include "camel/utils/log.h"
 #include "opperf.h"
@@ -429,6 +430,9 @@ slot_t FastVMSchedPass::callElement(const HigherOrderCallSite &site, Frame *fram
     slot_t result = call(site.entryPc, frame);
 #endif
     --nestedCalls_;
+    // The result is handed straight to its store: `map` copies the element bytes into the output
+    // array, `filter` reads a boolean, `foreach` drops it. A view is therefore harmless here; the
+    // stores where a value outlives the element materialise it (H29).
     return result;
 }
 
@@ -709,7 +713,14 @@ void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
         void beforeRound(size_t) {}
         slot_t initialState(size_t j) { return currFrame.get<slot_t>(nargs[first + j]); }
         slot_t stateValue() { return currFrame.get<slot_t>(self); }
-        void setStateValue(slot_t value) { currFrame.set(self, value); }
+        void setStateValue(slot_t value) {
+            // The next round reads this value: it is a value, not a view of this round's element
+            // (H29). The loop state is a store that outlives the element, so materialise here.
+            const type::Type *stateType = currFrame.typeAt<Type>(self);
+            value = camel::core::rtdata::materializeCallResult(value, stateType);
+            CAMEL_ASSERT_NOT_VIEW(value, stateType, "a loop state");
+            currFrame.set(self, value);
+        }
         slot_t callRound(
             const camel::execute::LoopShape &shape, camel::runtime::GCGraph *target,
             const slot_t *element) {
@@ -764,6 +775,15 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
     slot_t init          = currFrame.get<slot_t>(wargs[1]);
 
+    // The accumulator type, resolved once: a value stored into the accumulator outlives the
+    // element read that produced it, so the store materialises it (H29).
+    const type::Type *accumulatorType = nullptr;
+    if (Function *fn = currFrame.get<Function *>(wargs[0]); fn != nullptr) {
+        accumulatorType = fn->graph() != nullptr && fn->graph()->funcType() != nullptr
+                              ? fn->graph()->funcType()->exitType()
+                              : nullptr;
+    }
+
     // Preserve left-fold semantics: an empty array returns the initial value immediately.
     if (arrSize == 0) {
         currFrame.set(self, init);
@@ -783,7 +803,12 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
             Frame *frame = framePool_.acquire(site.runtimeGraph);
             populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
 
-            currFrame.set(self, callElement(site, frame));
+            // The accumulator is the value the next round reads, so it is a value, not a view of the
+            // element this round read (H29). The store is the boundary: materialise here.
+            const slot_t next = camel::core::rtdata::materializeCallResult(
+                callElement(site, frame), accumulatorType);
+            CAMEL_ASSERT_NOT_VIEW(next, accumulatorType, "the reduce accumulator");
+            currFrame.set(self, next);
         }
     });
 }

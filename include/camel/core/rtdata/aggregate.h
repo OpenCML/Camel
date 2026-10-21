@@ -9,7 +9,8 @@
  */
 
 /*
- * The slot data of a real Struct/Tuple, from the header the class itself defines.
+ * The slot data of a real Struct/Tuple, from the header the class itself defines, and the
+ * store-side materialisation that keeps a view out of a value that survives the element read.
  *
  * The array store path bulk-copies a slot-shaped compact element into a materialised Struct or
  * Tuple. It used to compute the offset of `data_` by hand (`sizeof(void *) + 2 * sizeof(uint32_t)`),
@@ -22,6 +23,7 @@
 
 #include "struct.h"
 #include "tuple.h"
+#include "view.h"
 
 namespace camel::core::rtdata {
 
@@ -42,6 +44,41 @@ inline slot_t *aggregateSlotsMut(slot_t value) {
     return reinterpret_cast<slot_t *>(
         const_cast<std::byte *>(reinterpret_cast<const std::byte *>(object)) +
         Struct::slotDataOffset());
+}
+
+/**
+ * Materialises a view that is about to be stored where it outlives the element read that
+ * produced it (H29). A view is tied to its read -- a slot-shaped element is read through one
+ * reused thread-local cell, every other one through a ring -- so a value kept across the next
+ * read names the wrong bytes. The store is the boundary: `reduce`'s accumulator, a loop's state.
+ *
+ * A callback result that is stored immediately does not need this: `map`'s output store copies
+ * the element bytes and `filter`'s predicate is a boolean, so the view dies with the round. Only
+ * a value that survives goes through here.
+ *
+ * This is inline and reads the view flag directly, because it runs once per element on the
+ * surviving path: a scalar result pays one type comparison, a real Struct/Tuple two loads, and
+ * only a view allocates (in the auto space, one real Struct/Tuple).
+ */
+inline slot_t materializeCallResult(slot_t value, const type::Type *exitType) {
+    if (exitType == nullptr) {
+        return value;
+    }
+    const type::TypeCode code = exitType->code();
+    if (code == type::TypeCode::Struct) {
+        const auto *object = fromSlot<const Struct *>(value);
+        if (object == nullptr || !object->isView()) {
+            return value;
+        }
+    } else if (code == type::TypeCode::Tuple) {
+        const auto *object = fromSlot<const Tuple *>(value);
+        if (object == nullptr || !object->isView()) {
+            return value;
+        }
+    } else {
+        return value;
+    }
+    return materializeIfView(value, exitType);
 }
 
 } // namespace camel::core::rtdata
