@@ -49,7 +49,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [time](#time) | `import { ... } from time` | C++ | 3 |
 | [fs](#fs) | `import { ... } from fs` | C++ | 15 |
 | [os](#os) | `import { ... } from os` | C++ | 8 |
-| [sys](#sys) | `import { ... } from sys` | C++ | 2 |
+| [env](#env) | `import { ... } from env` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
 | [re](#re) | `import { ... } from re` | C++ | 1 |
 | [crypto](#crypto) | `import { ... } from crypto` | C++ | 2 |
@@ -2685,9 +2685,9 @@ Discards the terminal input that is waiting.
 - With effects: reads the terminal.
 - Example: `clear_input_buffer()`
 
-<a id="sys"></a>
+<a id="env"></a>
 
-## `sys`: environment
+## `env`: environment
 
 Both functions read the environment of the process and are declared with effects.
 

@@ -48,6 +48,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ModuleRenamed,
+            {
+                "ModuleRenamed",
+                "The module '{0}' was renamed to '{1}'.",
+                "Import '{1}' instead; '{0}' is no longer a module (handover H114).",
+            },
+        },
+        {
             SemanticDiag::ModuleParseFailed,
             {
                 "ModuleParseFailed",

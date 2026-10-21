@@ -1,7 +1,7 @@
 module tiles_row_bits
 import { Tensor, load_npy, save_npy, sum } from tensor
 import { run, inspect } from tiles
-import { get_env } from sys
+import { get_env } from env
 func centered(x: Tensor<f32>): Tensor<f32> {
     return x * 1.0 - sum(x, 1, true)
 }

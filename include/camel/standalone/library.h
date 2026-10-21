@@ -42,7 +42,7 @@ inline double now() {
     return duration_cast<duration<double>>(system_clock::now().time_since_epoch()).count();
 }
 
-/// `sys.get_env(name)` (sys:get_env, modules/sys/operators.cpp): the variable's value, or the
+/// `env.get_env(name)` (env:get_env, modules/env/operators.cpp): the variable's value, or the
 /// empty string when it is not set.
 inline Str getEnv(const Str &name) {
     // The one place that reads the environment (camel/utils/env.h): through the wide interface

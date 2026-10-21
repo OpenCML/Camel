@@ -82,7 +82,7 @@ so `--rules frozen` and `--rules frozen+D1` still give the earlier classificatio
       no state, and since the restoration of the parallel scheduler (graphs run as task graphs)
       independent reads are executed in an unspecified order; optimisation passes may reorder them
       too. Without this rule every such program is EFFECT_MISMATCH although exit code, output and
-      written files agree. Pure reads are the operators of PURE_READ_OPERATORS: `sys:get_env` (no
+      written files agree. Pure reads are the operators of PURE_READ_OPERATORS: `env:get_env` (no
       operator of the libraries writes the environment) and `tensor:load_npy`. What stays
       order-bearing: every other effect (prints, file writes, random numbers, the clock, thread
       settings, ...), in their order among themselves; WHICH reads happen and with which arguments
@@ -156,7 +156,7 @@ CLOCK_OR_RANDOM_V2 = re.compile(r"^time:|rand|random")
 FILE_WRITING = re.compile(r"^(tensor:save_npy|nn:save_params|onnx:export_model|fs:.*write.*)$")
 # D11: operators that only read. ENV: nothing can write what they read. FILE: reads a file, so its
 # position relative to the file-writing operators of the same run stays order-bearing.
-PURE_READ_ENV = {"sys:get_env"}
+PURE_READ_ENV = {"env:get_env"}
 PURE_READ_FILE = {"tensor:load_npy"}
 PURE_READ_OPERATORS = PURE_READ_ENV | PURE_READ_FILE
 HERE = Path(__file__).resolve().parent

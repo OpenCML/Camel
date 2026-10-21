@@ -24,6 +24,28 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
+name = "env.basic"
+desc = "Exercises environment and working-directory queries from the env module."
+kind = "behavior"
+case = "../../../cases/modules/std/env/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "env.string_equality"
+desc = "Strings created by a module compare by content with literals, and branches on the comparison pick the right arm."
+kind = "behavior"
+case = "../../../cases/modules/std/env/string_equality.cml"
+args = ["${case}"]
+envs = ["CAMEL_TEST_STRING_EQ=abc"]
+expect_exit = 0
+expect_stdout_contains = ["eq_empty=true ne_empty=false eq_value=true", "arm unset", "arm set", "picked=12"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
 name = "fs.basic"
 desc = "Exercises directory creation, file IO, metadata queries, and chunk reads from the fs module."
 kind = "behavior"
@@ -209,28 +231,6 @@ kind = "behavior"
 case = "../../../cases/modules/std/statistics/basic.cml"
 args = ["${case}"]
 expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
-
-[[tests]]
-name = "sys.basic"
-desc = "Exercises environment and working-directory queries from the sys module."
-kind = "behavior"
-case = "../../../cases/modules/std/sys/basic.cml"
-args = ["${case}"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 4000
-
-[[tests]]
-name = "sys.string_equality"
-desc = "Strings created by a module compare by content with literals, and branches on the comparison pick the right arm."
-kind = "behavior"
-case = "../../../cases/modules/std/sys/string_equality.cml"
-args = ["${case}"]
-envs = ["CAMEL_TEST_STRING_EQ=abc"]
-expect_exit = 0
-expect_stdout_contains = ["eq_empty=true ne_empty=false eq_value=true", "arm unset", "arm set", "picked=12"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 

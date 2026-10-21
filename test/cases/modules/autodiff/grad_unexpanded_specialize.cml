@@ -9,7 +9,7 @@
 module grad_unexpanded_specialize
 
 import { grad, with_grad } from autodiff
-import { get_env } from sys
+import { get_env } from env
 
 with <w: float>
 func cell(h: float): float {

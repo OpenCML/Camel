@@ -1,7 +1,7 @@
 module tiles_extrema_bits
 import { Tensor, load_npy, save_npy, maximum, minimum, relu, max, reshape } from tensor
 import { run, inspect } from tiles
-import { get_env } from sys
+import { get_env } from env
 func hi(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return maximum(a, b) }
 func lo(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return minimum(a, b) }
 func positive(a: Tensor<f32>): Tensor<f32> { return relu(a) }

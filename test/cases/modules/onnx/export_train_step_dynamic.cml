@@ -12,7 +12,7 @@ import { Tensor, relu, sum, reshape, shape } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }
 

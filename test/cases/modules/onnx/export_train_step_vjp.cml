@@ -10,7 +10,7 @@ import { Tensor, reshape, sum, tanh, where } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 // A hard sign with a straight-through gradient scaled by 0.5: the rule, not the body, is what
 // the gradient uses.

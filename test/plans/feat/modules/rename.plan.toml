@@ -1,0 +1,32 @@
+id = "modules.rename"
+order = 374
+tier = "fast"
+tags = ["feat", "modules", "rename", "diagnostic"]
+
+# A module rename is complete when the new name imports and the old one is not silently an alias
+# (handover H114): the old spelling is a located diagnostic that names the new module. One pair of
+# tests per renamed module; `rename_identity.plan.toml` proves the graph itself did not change.
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "rename.env_new_name"
+desc = "`env` imports and its two operators read the environment and the working directory."
+case = "../../../cases/modules/rename/env_new.cml"
+args = ["${case}"]
+expect_stdout_exact = "true\ntrue\n"
+
+[[tests]]
+name = "rename.env_old_name_diagnosed"
+desc = "`import ... from sys` is refused at the import, naming `env`; there is no deprecated alias."
+kind = "negative"
+case = "../../../cases/modules/rename/env_old.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ModuleRenamed"
+expect_diagnostic_code = "0x03000185"
+expect_output_contains = ["env_old.cml:6:", "The module 'sys' was renamed to 'env'.", "Import 'env' instead"]

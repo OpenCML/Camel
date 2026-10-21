@@ -17,15 +17,15 @@
 
 namespace {
 
-class SysExecutor : public Executor {
+class EnvExecutor : public Executor {
   public:
-    SysExecutor(
+    EnvExecutor(
         camel::core::context::context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
         : Executor(std::move(ctx), std::move(ops)) {}
 };
 
 } // namespace
 
-executor_ptr_t createSysExecutor(camel::core::context::context_ptr_t ctx) {
-    return std::make_shared<SysExecutor>(std::move(ctx), getSysOpsMap());
+executor_ptr_t createEnvExecutor(camel::core::context::context_ptr_t ctx) {
+    return std::make_shared<EnvExecutor>(std::move(ctx), getEnvOpsMap());
 }

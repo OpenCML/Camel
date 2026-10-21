@@ -6,7 +6,7 @@
  */
 module timeit_failure
 
-import { get_env } from sys
+import { get_env } from env
 import { try_read_text, write_text } from fs
 
 func main(): int sync {

@@ -2,7 +2,7 @@
 module tiles_async_execution
 import { Tensor, load_npy, save_npy, zeros } from tensor
 import { Device, upload, download, run_device } from tiles
-import { get_env } from sys
+import { get_env } from env
 func step(x: Tensor<f32>): Tensor<f32> { return x * 2.0 + 1.0 }
 func identity(x: Tensor<f32>): Tensor<f32> { return x }
 func pair(x: Tensor<f32>): (Tensor<f32>, Tensor<f32>, Tensor<f32>) {

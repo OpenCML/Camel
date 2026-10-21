@@ -1,0 +1,15 @@
+/**
+ * A stable sample for the `sys` -> `env` rename: every value is a literal and `std::jgir` is a
+ * translation pass, so the graph does not depend on the environment or on the machine, and the
+ * only thing the rename may change is the module name in the two operator URIs.
+ */
+module env_identity
+
+import { get_env, get_cwd } from env
+
+func main(): int sync {
+    let path = get_env('PATH')
+    let cwd = get_cwd()
+    println(path, cwd)
+    return 0
+}

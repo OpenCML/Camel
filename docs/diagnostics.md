@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-201 diagnostics: 184 errors, 17 warnings.
+202 diagnostics: 185 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -169,6 +169,7 @@ prints one entry.
 | `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
 | `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
 | `0x03000182` | [SemanticDiag::StaticIndicesNotTuple](#staticindicesnottuple) | Error |
+| `0x03000185` | [SemanticDiag::ModuleRenamed](#modulerenamed) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -4367,6 +4368,35 @@ func main(): int {
 }
 ```
 
+### ModuleRenamed
+
+`0x03000185` · Error · `SemanticDiag::ModuleRenamed`
+
+**Message**
+
+```text
+The module '{0}' was renamed to '{1}'.
+```
+
+**Help**
+
+```text
+Import '{1}' instead; '{0}' is no longer a module (handover H114).
+```
+
+**Example** (`test/cases/modules/rename/env_old.cml`, run as `camel test/cases/modules/rename/env_old.cml`)
+
+```camel
+module env_old
+
+import { get_env } from sys
+
+func main(): int sync {
+    println(get_env('PATH'))
+    return 0
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -4928,7 +4958,7 @@ Check for infinite recursion. A call in tail position takes no frame, so write a
 ```camel
 module depth_value
 
-import { get_env } from sys
+import { get_env } from env
 
 func via(f: (n: int) => int, n: int): int {
     return if n == 0 then 0 else 1 + f(n - 1)

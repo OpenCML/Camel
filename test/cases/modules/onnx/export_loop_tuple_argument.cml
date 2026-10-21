@@ -7,7 +7,7 @@
 module export_loop_tuple_argument
 import { Tensor, reshape, sum, tanh } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func walk(s: (Tensor, int)): (Tensor, int) {
     return if s.1 >= 6 || sum(s.0 * s.0) < 1.0 then s else walk((tanh(s.0) * 0.3 + s.0 * 0.6, s.1 + 1))

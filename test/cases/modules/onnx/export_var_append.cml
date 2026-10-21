@@ -7,7 +7,7 @@
 module export_var_append
 import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func forward(x: Tensor): Tensor sync {
     var parts: float[] = []

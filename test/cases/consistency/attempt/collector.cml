@@ -7,7 +7,7 @@
  */
 module collector
 
-import { get_env } from sys
+import { get_env } from env
 
 func build(i: int, d: int): string[] {
     let xs = range(0, 20)->map<(x: int): string => format<x + i>('item {}')>

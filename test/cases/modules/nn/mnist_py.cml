@@ -10,7 +10,7 @@ import {
 } from tensor
 import { py_import, py_call, py_wrap, py_unwrap, py_exec, py_attr, PyObject } from python
 import { round } from math
-import { get_env } from sys
+import { get_env } from env
 
 let num_classes = 10
 

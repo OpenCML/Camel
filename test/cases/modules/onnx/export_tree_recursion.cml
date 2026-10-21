@@ -6,7 +6,7 @@
 module export_tree_recursion
 import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func tree(h: Tensor): Tensor {
     return if sum(h) < 1.0 then h else tree(h * 0.5) + tree(h * 0.25)

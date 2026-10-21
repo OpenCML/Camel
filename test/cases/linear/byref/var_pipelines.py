@@ -227,7 +227,7 @@ def make_arms_program(rng: random.Random, k: int):
             body.append(f"    println('arms{j} +{dk}: {{}} {{}}'->format<x{v}, v{v}>)")
             r, c, printed = sim(ENV_VALUE + dk, x, start)
             expected += printed + [f"arms{j} +{dk}: {r} {c}"]
-    source = f"module var_pipelines_arms_{k}\n\nimport {{ get_env }} from sys\n\n" + "\n".join(functions) + "func main(): int sync {\n" + "\n".join(body) + "\n    return 0\n}\n"
+    source = f"module var_pipelines_arms_{k}\n\nimport {{ get_env }} from env\n\n" + "\n".join(functions) + "func main(): int sync {\n" + "\n".join(body) + "\n    return 0\n}\n"
     return source, expected
 
 

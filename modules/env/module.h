@@ -20,10 +20,10 @@
 #pragma once
 #include "camel/core/module/builtin.h"
 
-class SysModule : public camel::core::module::BuiltinModule {
+class EnvModule : public camel::core::module::BuiltinModule {
   public:
-    SysModule(camel::core::context::context_ptr_t ctx);
-    ~SysModule() override = default;
+    EnvModule(camel::core::context::context_ptr_t ctx);
+    ~EnvModule() override = default;
     bool load() override;
     static camel::core::module::module_ptr_t create(camel::core::context::context_ptr_t ctx);
 };

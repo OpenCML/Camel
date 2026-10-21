@@ -10,7 +10,7 @@ module export_gated_gru_forward
 
 import { Tensor, sigmoid, tanh, slice, reshape, shape, zeros, mean, abs } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 type Gru = {
     w_ir: Tensor, w_iz: Tensor, w_in: Tensor,

@@ -27,8 +27,8 @@ camel test/modules/statistics/basic.cml
 # this 模块（zen）
 camel test/modules/this/basic.cml
 
-# sys 模块（get_env, get_cwd）
-camel test/modules/sys/basic.cml
+# env 模块（get_env, get_cwd）
+camel test/modules/env/basic.cml
 
 # fs 模块（read_text, write_text）
 camel test/modules/fs/basic.cml

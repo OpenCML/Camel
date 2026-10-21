@@ -5,7 +5,7 @@
 module missing_file
 
 import { read_text } from fs
-import { get_cwd } from sys
+import { get_cwd } from env
 
 func main(): int sync {
     println(read_text(get_cwd() + '/不存在 文件 🐪.txt'))

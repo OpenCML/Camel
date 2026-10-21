@@ -7,7 +7,7 @@
 module export_linear_recursion
 import { Tensor, reshape, sum, tanh } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 // The result of the call is added to.
 func pile(h: Tensor): Tensor {

@@ -10,7 +10,7 @@
 module ort_loop_values
 import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 // pair: the state and the number of steps, stopped by a norm threshold or a maximum count.
 func shrink(h: Tensor, k: int): (Tensor, int) {

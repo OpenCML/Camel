@@ -8,7 +8,7 @@
  */
 module many
 
-import { get_env } from sys
+import { get_env } from env
 
 func leaf(d: int): int { return 100 / d }
 func mid(d: int): int { return leaf(d) + 1 }

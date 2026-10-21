@@ -9,7 +9,7 @@
  */
 module jit_framed_faults
 
-import { get_env } from sys
+import { get_env } from env
 
 func pick(xs: int[], i: int): int {
     return xs[i] * 2

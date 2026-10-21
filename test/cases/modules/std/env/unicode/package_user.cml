@@ -6,7 +6,7 @@
 module package_user
 
 import { twice } from helper
-import { get_env } from sys
+import { get_env } from env
 
 func main(): int sync {
     'package={}'->format<twice(21)>->println

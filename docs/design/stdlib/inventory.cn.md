@@ -43,7 +43,7 @@
 | time | 时钟与格式化 | 3 | now（float 秒）/strftime/strptime | 25 / 14 | |
 | fs | 文件系统 | 13 | read_text/try_read_text/read_bytes/read_chunk/write_text/write_bytes/replace/exists/is_file/is_dir/file_size/mkdir/mkdirs | 13 / 4 | 全部 @effect |
 | os | 进程与终端 | 8 | sleep/whoami/cpu_count/set_terminal_raw_mode/has_input/get_char/get_chars/clear_input_buffer | 7 / 1 | 另有 exit 在全局 |
-| sys | 环境 | 2 | get_env/get_cwd | 105 / 33（几乎都是入口参数用 get_env） | |
+| env | 环境 | 2 | get_env/get_cwd | 105 / 33（几乎都是入口参数用 get_env） | |
 | json | `Json` 类型与编解码 | 12 | encode/decode/decode_as；kind/is_null/get/as_bool/as_int/as_float/as_string/as_array/as_object | 17 / 2 | |
 | re | 正则 | 1 | test | 4 / 1 | |
 | crypto | 哈希 | 2 | sha256（str/Bytes 两重载）/sha256_rounds | 6 / 0 | |
@@ -61,7 +61,7 @@
 ### 2.1 同一件事多处实现或多个名字
 
 - `sleep`：全局 `sleep` 与 `os::sleep` 是同一个算子（signature 里的 URI 都是 `os:sleep`）。
-- `exit` 在全局，其余进程功能在 `os`；环境变量/工作目录在 `sys`，用户名/CPU 数在 `os`。`os` 与 `sys` 的划分没有依据。
+- `exit` 在全局，其余进程功能在 `os`；环境变量/工作目录在 `env`，用户名/CPU 数在 `os`。`os` 与 `sys` 的划分没有依据。
 - 排序：`algo` 导出 sort/insert_sort/quick_sort/merge_sort 四个名字（只接受数字元素），`array::sort_by` 是另一条路；原则 11.3 说"只有 `sort`，返回新数组"，docs/language 5.2.1 也写"每种只有一个名字"，实际不符。没有对任意可比较元素的通用 `sort`。
 - `min`/`max`：`math` 是两数（数值，4 重载），`array` 是数组→`T?`，`tensor` 是张量（`max(x, axis, keepdim)`）；`sum`、`mean` 在 array/statistics/tensor 各有一份，`softmax`、`exp`、`log`、`sqrt`、`abs`、`pow` 在 math 与 tensor 各一份。导入多个模块时靠重载/改名区分。
 - `range`、`slice`、`concat`、`len` 在全局与 `tensor`（range/slice/concat）里同名；`seed`/`randn` 在 `random` 与 `tensor`（带自己的 seed/random/randn）里同名。后者是否共享生成器：未验证。
@@ -96,7 +96,7 @@
 ### 2.4 错误约定（原则 3.9：可能失败的操作返回 `T!`，故障是程序错误）
 
 - `fs` 几乎全是故障：`read_text`、`read_bytes`、`read_chunk`、`write_*`、`file_size`、`mkdir(s)` 打不开文件都是 fault；只有 `try_read_text` 返回 `string!`。文件缺失是典型的"可能失败的操作"，应是 `T!`；`mkdir` 同时返回 bool 又可能故障。
-- `sys::get_env` 找不到变量是 fault（RuntimeError），应当是 `string?`；`os::set_terminal_raw_mode` 终端拒绝是 fault。
+- `env::get_env` 找不到变量是 fault（RuntimeError），应当是 `string?`；`os::set_terminal_raw_mode` 终端拒绝是 fault。
 - `time::strptime` 文本与格式不符是 fault（TimeFormatFailed），而 `parse_int` 对同类问题返回 `int!`。
 - `re::test` 的坏正则是 fault（可以接受，但与 `json::decode` 的坏文本返回 `Json!` 的处理不同）。
 - 空集合：`head([])`、`random::choice([])` 是 fault，`array::min/max/find`、`statistics::median/quantile` 返回 `T?`。
@@ -106,7 +106,7 @@
 ### 2.5 效应、资源、纯度声明
 
 - 纯度：仓库内模块有测试强制逐个声明（`warnUndeclaredOperatorTraits` 对第三方给警告；test/plans/feat/modules/stdlib_registry.plan.toml）。但 `tree` 为过测试把永不成节点的名字声明为有副作用（评审 frontend #10）；`math` 无数值声明（评审 modules #15）。
-- 资源：C++ 侧已有 `declareResources`（fs、os、sys、time、random、para、algo、nn::save_params、tree、tiles 都有），内建 print/println/input 在 builtin_semantics.cpp 声明。资源名是 `io:stdout`、`io:stdin`、`io:terminal`、`time:clock`、`process:environment`、`process`、`rand:generator`、`fs`、`profiler`，与原则 3.3 约定的默认资源名（`stdout/stderr/stdin/fs/clock/env`）不一致；`stderr` 没有对应的输出函数。
+- 资源：C++ 侧已有 `declareResources`（fs、os、env、time、random、para、algo、nn::save_params、tree、tiles 都有），内建 print/println/input 在 builtin_semantics.cpp 声明。资源名是 `io:stdout`、`io:stdin`、`io:terminal`、`time:clock`、`process:environment`、`process`、`rand:generator`、`fs`、`profiler`，与原则 3.3 约定的默认资源名（`stdout/stderr/stdin/fs/clock/env`）不一致；`stderr` 没有对应的输出函数。
 - 签名文件里的 `@effect` 是自由文本（"reads a file"、"advances the generator"、"what f does"），不是资源名；`.cml` 签名头注明"for reference only: not compiled"。算子的类型规则、纯度、资源、故障在 C++ 注册、OperatorTable 声明、signatures/*.cml 三处各写一遍（评审 frontend #10）。
 - 语言层面 `uses`/`pure`/`resource` 的语法：docs/language 里没有出现（只有 design-principles 与 blueprint 描述），推断尚未实现；所以库作者现在无法用 Camel 声明资源。
 - `random` 全部 @effect（全局生成器）；原则 13.5 的键式纯随机数尚未实现。
@@ -141,7 +141,7 @@
 | 正则完整接口 | 只有 `test` | 日志过滤、文本抽取（examples/text/log_filter） |
 | 字符串缺口 | 无 lines/按码点 len 与切片/pad/rfind/strip_prefix/分行/大小写以外的 Unicode 处理；`len` 按字节（globals.cml 文档），原则 11.1 要求按码点 | 文本处理、分词、示例 word_frequency |
 | 通用 `sort`、`group_by`、`zip` 以外的集合 | array::sort_by 只有键排序；无 group_by（需 Map，array.cml 头注释已说明）；无 chunk/window/partition/dedup_by | 数据处理示例 |
-| 进程与命令行 | 无 spawn/exec；无命令行解析（只有 sys::get_env 与 `--arg`） | 工具型程序、调用外部命令、智能体的代码执行工具 |
+| 进程与命令行 | 无 spawn/exec；无命令行解析（只有 env::get_env 与 `--arg`） | 工具型程序、调用外部命令、智能体的代码执行工具 |
 | 日志 | 无 | 长时间训练与智能体 |
 | 哈希与摘要扩展 | 只有 sha256；无 md5/sha1/blake3/hmac、随机字节、编码（base64/hex） | 检查点清单哈希、数据版本（训练稿 8.2） |
 | 序列化格式 | 只有 json、.npy、tree 检查点；无 safetensors/msgpack/yaml/toml | 模型权重交换（PyTorch/HF 生态） |

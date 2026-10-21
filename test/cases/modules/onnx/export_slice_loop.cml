@@ -6,7 +6,7 @@
 module export_slice_loop
 import { Tensor, reshape, slice, sum, shape, tanh, zeros } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 // A loop over the time axis that stops early: the number of steps depends on the data, so the
 // slice of step t has a start and an end that depend on the model input.

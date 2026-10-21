@@ -1,0 +1,11 @@
+/**
+ * The old spelling is no longer a module: the diagnostic names `env` (handover H114).
+ */
+module env_old
+
+import { get_env } from sys
+
+func main(): int sync {
+    println(get_env('PATH'))
+    return 0
+}

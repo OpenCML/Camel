@@ -74,7 +74,7 @@ const MODULES = [
     { name: 'time', title: '`time`', kind: 'cpp' },
     { name: 'fs', title: '`fs`: files', kind: 'cpp' },
     { name: 'os', title: '`os`: process and terminal', kind: 'cpp' },
-    { name: 'sys', title: '`sys`: environment', kind: 'cpp' },
+    { name: 'env', title: '`env`: environment', kind: 'cpp' },
     { name: 'json', title: '`json`', kind: 'cpp' },
     { name: 're', title: '`re`: regular expressions', kind: 'cpp' },
     { name: 'crypto', title: '`crypto`', kind: 'cpp' },

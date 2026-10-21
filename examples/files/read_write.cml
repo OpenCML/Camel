@@ -6,7 +6,7 @@ module read_write
 
 import { split, trim_end } from str
 import { exists, is_file, mkdirs, write_text, try_read_text, file_size } from fs
-import { get_env } from sys
+import { get_env } from env
 
 func load(path: string): string {
     let r = try_read_text(path)

@@ -60,7 +60,7 @@ result may be any of them, and it has an external effect when its traits say so.
 | `:io/input`, `os:get_char(s)`, `os:clear_input_buffer` | read-modify-write `io:stdin`, external |
 | `fs:*`, `nn:save_params`, `tensor:load_npy`, `tensor:save_npy` | read or read-modify-write `fs`, external |
 | `rand:*`, `tensor:seed`, `tensor:random`, `tensor:randn` | write or read-modify-write the module's generator, external |
-| `time:*`, `os:*`, `sys:*` | the clock, the process, its environment, the terminal, external |
+| `time:*`, `os:*`, `env:*` | the clock, the process, its environment, the terminal, external |
 | `:profiler/*`, `para:rendezvous`, `tensor:(set_)num_threads` | their ambient state, external |
 | `tiles:upload` | allocates `tiles:device`; read-modify-write `tiles:driver`, external |
 | `tiles:download`, `tiles:run`, `tiles:benchmark` | read the device values among operand 0; `tiles:driver`, external |

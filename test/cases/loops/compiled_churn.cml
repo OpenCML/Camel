@@ -4,7 +4,7 @@
 // from under it.
 module compiled_churn
 
-import { get_env } from sys
+import { get_env } from env
 
 func churn(n: int): int {
     let (total, s) = loop total = 0, s = '' while total < n do (total + 1, string(total))

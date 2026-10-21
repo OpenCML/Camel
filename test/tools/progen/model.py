@@ -370,7 +370,7 @@ def emit(prog: N) -> str:
     split = prog.a.get("split")
     out = [f"module {prog.a['module']}", ""]
     if prog.a.get("env"):
-        out += ["import { get_env } from sys", ""]
+        out += ["import { get_env } from env", ""]
     if split is None:
         out += type_decls_src(prog, False)
         out += globals_src(prog, False)

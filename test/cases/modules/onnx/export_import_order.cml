@@ -7,7 +7,7 @@ module export_import_order
 
 import { export_model } from onnx
 import { Tensor, random, ones, zeros, layer_norm, reshape, shape } from tensor
-import { get_env } from sys
+import { get_env } from env
 
 func main(): int sync {
     let w = random([8, 8], -1.0, 1.0)

@@ -8,7 +8,7 @@
 module branch_shape_contract
 
 import { Tensor, zeros, ones } from tensor
-import { get_env } from sys
+import { get_env } from env
 
 func pick(flag: bool): Tensor {
     return if flag then zeros([2, 3]) else ones([3, 2])

@@ -26,7 +26,7 @@
 namespace ctx = camel::core::context;
 
 // 算子实现
-slot_t __sys_get_env__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __sys_get_cwd__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __env_get_env__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __env_get_cwd__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
-std::unordered_map<std::string, operator_t> getSysOpsMap();
+std::unordered_map<std::string, operator_t> getEnvOpsMap();

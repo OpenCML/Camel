@@ -22,6 +22,7 @@
 #include <filesystem>
 #include <mutex>
 #include <tuple>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "camel/core/context/context.h"
@@ -375,10 +376,29 @@ std::vector<module_ptr_t> Context::allUserModules() const {
     return result;
 }
 
+namespace {
+
+/// The modules that were renamed, old spelling to new (handover H114). There is no alias: an
+/// import of an old spelling is refused with a diagnostic that names the module that replaced it,
+/// so a program cannot keep compiling against a name the design retired.
+const std::unordered_map<std::string, std::string> &renamedModules() {
+    static const std::unordered_map<std::string, std::string> renamed = {
+        {"sys", "env"},
+    };
+    return renamed;
+}
+
+} // namespace
+
 module_ptr_t
 Context::importModule(const std::string &rawModuleName, const std::string &currentModuleName) {
     if (rawModuleName.empty()) {
         return modules_[""]; // builtin module already loaded
+    }
+
+    if (auto renamed = renamedModules().find(rawModuleName); renamed != renamedModules().end()) {
+        throw DiagnosticBuilder::of(SemanticDiag::ModuleRenamed)
+            .commit(rawModuleName, renamed->second);
     }
 
     CAMEL_LOG_INFO_S(

@@ -211,6 +211,10 @@ enum class SemanticDiag : uint32_t {
     // not determine (design principles 5.9). 0x17E and up.
     LambdaParameterWithoutType = 0x00017E,
 
+    // Module renames (handover H114). The old spelling is not an alias and is not a module: an
+    // import of it is refused, and the diagnostic names the module that replaced it.
+    ModuleRenamed = 0x000185,
+
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
     IgnoredSideEffect            = 0x100002,

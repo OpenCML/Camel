@@ -298,7 +298,7 @@ Found clean: every `onMoved` (arrays re-derive `dataPtr_`, tensors their shape a
 pointers; the others have no pointer into themselves); every `updateRefs` for typed slots; no
 `static`, `thread_local`, module-state member or stored lambda holds a reference; the built-in
 operators and the operators of `algo`, `crypto`, `fs`, `io`, `math`, `os`, `para`, `re`, `sim`,
-`statistics`, `sys`, `this`, `time`, `pyplot`, `nn`, `autodiff` (run time) keep to rule 1; the
+`statistics`, `env`, `this`, `time`, `pyplot`, `nn`, `autodiff` (run time) keep to rule 1; the
 higher-order operators of all three schedulers re-read after every element call; no address of
 auto-space memory is given to NumPy, DLPack or Python (they copy).
 

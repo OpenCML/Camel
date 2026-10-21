@@ -28,29 +28,29 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::type;
 
-SysModule::SysModule(context_ptr_t ctx) : BuiltinModule("sys", ctx) {
+EnvModule::EnvModule(context_ptr_t ctx) : BuiltinModule("env", ctx) {
     exportEntity(
         "get_env",
         OperatorGroup::create(
             "get_env",
-            {{"sys:get_env",
+            {{"env:get_env",
               StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String())}}));
     exportEntity(
         "get_cwd",
         OperatorGroup::create(
             "get_cwd",
-            {{"sys:get_cwd", StaticFuncTypeResolver::create({}, {}, Type::String())}}));
+            {{"env:get_cwd", StaticFuncTypeResolver::create({}, {}, Type::String())}}));
 }
 
-module_ptr_t SysModule::create(context_ptr_t ctx) { return std::make_shared<SysModule>(ctx); }
+module_ptr_t EnvModule::create(context_ptr_t ctx) { return std::make_shared<EnvModule>(ctx); }
 
-bool SysModule::load() {
+bool EnvModule::load() {
     if (loaded_)
         return true;
-    context_->registerExecutorFactory("sys", [ctx = context_]() { return createSysExecutor(ctx); });
+    context_->registerExecutorFactory("env", [ctx = context_]() { return createEnvExecutor(ctx); });
     // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
-        "sys",
+        "env",
         {
             // The environment of the process.
             {"get_env", false},
@@ -61,7 +61,7 @@ bool SysModule::load() {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
         camel::core::OperatorTable::instance().declareResources(
-            "sys",
+            "env",
             {
                 {"get_env", externalAmbient("process:environment", AccessMode::Read)},
                 {"get_cwd", externalAmbient("process:environment", AccessMode::Read)},
@@ -72,5 +72,5 @@ bool SysModule::load() {
 }
 
 extern "C" {
-Module *camel_module_create(Context *ctx) { return new SysModule(ctx->shared_from_this()); }
+Module *camel_module_create(Context *ctx) { return new EnvModule(ctx->shared_from_this()); }
 }

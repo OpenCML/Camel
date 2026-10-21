@@ -4,7 +4,7 @@
 module main
 
 import { plot } from pyplot
-import { get_env } from sys
+import { get_env } from env
 
 func main(): int sync {
     let data = [1.0, 2.0, 3.0]

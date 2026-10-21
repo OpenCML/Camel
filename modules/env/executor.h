@@ -21,4 +21,4 @@
 
 #include "camel/core/context/context.h"
 #include "camel/execute/executor.h"
-executor_ptr_t createSysExecutor(camel::core::context::context_ptr_t ctx);
+executor_ptr_t createEnvExecutor(camel::core::context::context_ptr_t ctx);

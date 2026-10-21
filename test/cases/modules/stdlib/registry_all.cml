@@ -7,6 +7,7 @@ module registry_all
 import algo
 import bytes
 import crypto
+import env
 import fs
 import graph
 import io
@@ -19,7 +20,6 @@ import re
 import sim
 import statistics
 import str
-import sys
 import this
 import time
 import tree

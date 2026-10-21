@@ -58,7 +58,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `time` | `now`, `strftime`, `strptime` |
 | `fs` | `exists`, `is_file`, `is_dir`, `mkdir`, `mkdirs`, `remove`, `remove_dir`, `read_text`, `try_read_text`, `write_text`, `file_size`, `read_chunk`, `read_bytes`, `write_bytes`, `replace` |
 | `json` | the type `Json`; `encode`, `decode`, `decode_as`; `kind`, `is_null`, `get`, `as_bool`, `as_int`, `as_float`, `as_string`, `as_array`, `as_object` |
-| `os`, `sys` | `whoami`, `cpu_count`, terminal input; `get_cwd`, `get_env` |
+| `os`, `env` | `whoami`, `cpu_count`, terminal input; `get_cwd`, `get_env` |
 | `re` | `test` |
 | `crypto` | `sha256`, `sha256_rounds` |
 | `this` | `zen` |

@@ -21,7 +21,7 @@ module e13_l2b_adaptive_iter
 import { Tensor, mean, abs, reshape, ones, save_npy } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
-import { get_env } from sys
+import { get_env } from env
 import { export_model } from onnx
 
 type Sc = { w: Tensor }

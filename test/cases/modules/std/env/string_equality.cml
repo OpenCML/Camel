@@ -1,10 +1,10 @@
 /**
- * Strings created inside a module (sys.get_env) compare by content with string
+ * Strings created inside a module (env.get_env) compare by content with string
  * literals, and a branch on that comparison selects the right arm.
  */
 module string_equality
 
-import { get_env } from sys
+import { get_env } from env
 
 func unsetArm(): int sync {
     println('arm unset')
