@@ -328,6 +328,28 @@ which the call-count threshold used to leave interpreted. The compiled round is 
 8.4 ns for the same work as a compiled tail recursion; the difference is the two helper calls and
 the frame traffic of every round. The target 0.155 s is therefore still 2.3 times away.
 
+H56 (`handover/H56-fvm-loop-round`) took the interpreter's own round down, without changing the
+bytecode or the plan: the state bindings (`bindLoopState`) are copied in place and inline for the
+shapes a loop actually has — the components of a multi-value state (`ExecLoop::stateComponents`),
+and the one value that is the state itself — instead of running every component through
+`LoopShape`; a round that collects nothing writes its next state where it stands instead of calling
+`takeLoopRound`; `camel::profile`'s flag is read inline inside libcamel (the exported `enabled()`
+stays for modules); and the loop events take their `ExecLoop` from a constant offset
+(`BytecodeHeader::loopPayload`) instead of `extra()`'s opcode switch. Paired and alternating — the
+loop and the tail recursion in the same minutes, whole-process CPU time, core 3 — on the same host:
+
+| | `std::fvm` loop | tail recursion, `std::fvm` | the loop per round |
+|---|---|---|---|
+| H43 tree | 44.9 ns | 30.3 ns | 14.7 ns slower |
+| H56 | 28.4–30.2 ns | 30.0–32.1 ns | 0.1–3.8 ns faster (never slower, five batches) |
+
+An event now costs 8.1 ns against 3.3 for an ordinary bytecode (it was 15.8), so a round of this
+shape is four bytecodes (13.6 ns) and the two events (16.3 ns). What an event still does: two
+dispatches, the two port bindings, the round counter, the safepoint poll and the profile flag. The
+next step is the round as one superinstruction (`LTST`, the straight-line body, `LEND`), which is
+worth an estimated 3–5 ns; `std::jit` gains from the same shared helpers (35.0 → 21.6 ns a round),
+and a `for` loop is 32.6 ns a round because its `LTST` also fetches the element from the array.
+
 What is left, and why the targets of H43 are not met yet:
 
 - `std::nvm` is at 152 ns a round against a target of 70. NodeVM runs a node at a time: 23 ns a
@@ -339,17 +361,21 @@ What is left, and why the targets of H43 are not met yet:
   costs about 6.8 ns of dispatch and handler, and a round is six of them; a loop cannot be twice as
   fast as the same work written as a recursion over parameters, both being interpreted. Reaching
   24.5 ns needs fewer round trips through the dispatch loop: a compiled loop (next item), or a
-  superinstruction that runs a round inside one bytecode.
-- `std::jit` now runs the rounds of the loop in compiled code (36.3 ns a round against 45.7 in the
-  interpreter), but each round is still two calls of the helpers that run `loop_frame.h`, and the
-  state is read from and written to the frame on both sides of them. The same work as a tail
-  recursion is 8.4 ns a round when compiled; closing the gap needs the common shape lowered
-  natively (the test and the end of the round inline, the state in registers) rather than the
-  three events as calls, which is the next step, not item 2.
+  superinstruction that runs a round inside one bytecode. After H56 the round is 28.4–30.2 ns
+  against a 31 ns tail recursion — the ruling's bar (no slower than the tail recursion of the same
+  work) is met; 24.5 ns still needs the round as one instruction, which is the next step.
+- `std::jit` now runs the rounds of the loop in compiled code (21.6 ns a round against 35.0 in the
+  interpreter after H56; measured 36.3 in the interpreter when H43 wrote this), but each round is
+  still two calls of the helpers that run `loop_frame.h`, and the state is read from and written to
+  the frame on both sides of them. The same work as a tail recursion is 8.4 ns a round when
+  compiled; closing the gap needs the common shape lowered natively (the test and the end of the
+  round inline, the state in registers) rather than the three events as calls, which is the next
+  step, not item 2.
 
-Next steps: the native lowering of the common loop shape (LTST/LEND inline, state in registers);
-a superinstruction for the round (the condition, the
-test and the body of a loop whose regions are straight-line bytecode run by one instruction);
+Next steps, in the order they are worth measuring: a superinstruction for the round (the condition,
+the test and the body of a loop whose regions are straight-line bytecode run by one instruction —
+the interpreter's remaining 16 ns a round, of which two dispatches and one back jump are the part
+this removes); the native lowering of the common loop shape (LTST/LEND inline, state in registers);
 the k values of the state passed as arguments to a compiled loop body; the translation of a loop to
 an ONNX Loop; autodiff on the regions.
 

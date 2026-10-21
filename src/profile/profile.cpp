@@ -53,6 +53,10 @@
 
 namespace camel::profile {
 
+namespace detail {
+std::atomic<bool> enabledFlag{false};
+} // namespace detail
+
 namespace {
 
 using Clock = std::chrono::steady_clock;
@@ -64,7 +68,6 @@ uint64_t nowNs() {
         std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - gOrigin).count());
 }
 
-bool gEnabled = false;
 std::thread::id gThread;
 
 /// The counters a step boundary reads: what the run has done so far.
@@ -359,15 +362,15 @@ std::vector<Row> operatorRows() {
 // The session
 // ---------------------------------------------------------------------------
 
-bool enabled() noexcept { return gEnabled; }
+bool enabled() noexcept { return detail::enabledFlag.load(std::memory_order_relaxed); }
 
 void enable() {
-    if (gEnabled) {
+    if (detail::enabledFlag.load(std::memory_order_relaxed)) {
         return;
     }
     gOrigin  = Clock::now();
     gThread  = std::this_thread::get_id();
-    gEnabled = true;
+    detail::enabledFlag.store(true, std::memory_order_relaxed);
 }
 
 void reset() {
@@ -507,7 +510,7 @@ double measurementOverheadNs() {
 // ---------------------------------------------------------------------------
 
 operator_t profiledOperator(std::string_view uri, operator_t op) {
-    if (op == nullptr || !gEnabled || isThunk(op)) {
+    if (op == nullptr || !detail::enabledFlag.load(std::memory_order_relaxed) || isThunk(op)) {
         return op;
     }
     auto it = gTimedIndex.find(std::string(uri));

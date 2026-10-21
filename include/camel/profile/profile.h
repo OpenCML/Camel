@@ -51,6 +51,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <iosfwd>
 #include <ostream>
@@ -59,9 +60,28 @@
 
 namespace camel::profile {
 
+#ifdef CAMEL_DLL_EXPORTS
+namespace detail {
+/// The flag enabled() reads. Only the core's own translation units see it: libcamel exports
+/// functions, not variables, so a module (and the tool) keeps calling the function.
+extern std::atomic<bool> enabledFlag;
+} // namespace detail
+#endif
+
 /// Whether the session is recording. Out of line on purpose: libcamel is a DLL on Windows,
 /// which exports functions but not variables. One call, no branch in the caller's hot path.
 bool enabled() noexcept;
+
+/// `enabled()` for the core's own hot paths, where the call is measurable: an interpreter asks
+/// once a round of a loop (camel/execute/loop_frame.h). Inside libcamel it is the flag itself;
+/// anywhere else it is the exported call.
+inline bool enabledInline() noexcept {
+#ifdef CAMEL_DLL_EXPORTS
+    return detail::enabledFlag.load(std::memory_order_relaxed);
+#else
+    return enabled();
+#endif
+}
 
 /// Starts recording (the driver's thread). Idempotent; `reset` empties what was recorded.
 void enable();

@@ -421,7 +421,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
-        camel::execute::loopBegin(*currFrame, *bc->extra()->loop);
+        camel::execute::loopBegin(*currFrame, *bc->loopPayload());
 
         NEXT();
     }
@@ -431,7 +431,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
-        if (camel::execute::loopTest(*currFrame, *bc->extra()->loop)) {
+        if (camel::execute::loopTest(*currFrame, *bc->loopPayload())) {
             pc = getJumpTargetPc(bc);
             JUMP();
         }
@@ -446,7 +446,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
 
         if (camel::execute::loopEnd(
                 *currFrame,
-                *bc->extra()->loop,
+                *bc->loopPayload(),
                 camel::execute::loopRoundSafepoint([&] { fastVmCallBoundarySafepoint(); }))) {
             pc = getJumpTargetPc(bc);
             JUMP();
