@@ -426,7 +426,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_starts_with = "2 7 3.0 42 1.5\nConversionOutOfRange\n"
+expect_stdout_starts_with = "2 2 2 1.5 7 3.0 42 1.5\nConversionOutOfRange\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 

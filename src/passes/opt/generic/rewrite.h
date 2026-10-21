@@ -40,9 +40,11 @@ using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphDraft;
 
 /// Bounded local scalar arithmetic. safeFp restricts float rules to strict equivalence.
-size_t algebraDraft(GraphDraft &draft, bool safeFp = false);
+/// With neutralOnly, only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x).
+size_t algebraDraft(GraphDraft &draft, bool safeFp = false, bool neutralOnly = false);
 /// The same under an explicit policy (camel/core/operator_semantics.h): safeFp is the strict one.
-size_t algebraDraft(GraphDraft &draft, const camel::core::sem::NumericPolicy &policy);
+size_t algebraDraft(
+    GraphDraft &draft, const camel::core::sem::NumericPolicy &policy, bool neutralOnly = false);
 
 /// Bypass a non-anchor forwarding gate by putting its waits on mandatory consumers.
 /// Conditional value consumers and costly shared barriers stay gates; edgeBudget bounds growth.
@@ -129,6 +131,7 @@ const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
     size_t *rewrites = nullptr, RewriteMemo *memo = nullptr,
-    bool (*mayRewrite)(const camel::runtime::GCGraph &) = nullptr, bool checkScreens = false);
+    bool (*mayRewrite)(const camel::runtime::GCGraph &) = nullptr, bool checkScreens = false,
+    bool allowNonExecutable = false);
 
 } // namespace camel::passes::generic

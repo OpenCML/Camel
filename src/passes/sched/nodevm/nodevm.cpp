@@ -656,11 +656,24 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     camel::runtime::GCGraph *graph = program->root();
     (void)os;
     ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
-    programs_.setMain(program);
+    camel::execute::RunScope runScope(programs_, *context_, program);
     Frame *rootFrame = framePool_.acquire(graph);
     slot_t result    = call(graph, rootFrame);
     context_->captureProcessExitCode(graph, result);
     return nullptr;
+}
+
+slot_t NodeVMSchedPass::callGraph(
+    const camel::runtime::Program *program, camel::runtime::GCGraph *graph,
+    std::span<const slot_t> arguments) {
+    camel::execute::RunScope runScope(programs_, *context_, program);
+    Frame *frame      = framePool_.acquire(graph);
+    const auto ports  = graph->normPorts();
+    ASSERT(ports.size() == arguments.size(), "callGraph needs one argument per parameter.");
+    for (size_t i = 0; i < ports.size(); ++i) {
+        frame->set(graph->node(ports[i])->dataIndex, arguments[i]);
+    }
+    return call(graph, frame, program);
 }
 
 void NodeVMSchedPass::evalMarkedOperator(

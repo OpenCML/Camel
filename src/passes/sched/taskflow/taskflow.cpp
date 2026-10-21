@@ -1053,7 +1053,7 @@ TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostrea
     // context's program keeps its LOOP nodes: camel/runtime/loop_lowering.h).
     const camel::runtime::Program *lowered =
         camel::runtime::lowerLoopsToTailRecursion(context_, program);
-    programs_.setMain(lowered);
+    camel::execute::RunScope runScope(programs_, *context_, lowered);
     graph = lowered->root();
 
     forceLinear_ = options_.linear;

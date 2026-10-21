@@ -872,14 +872,20 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         };
 
         Frame *siteFrame = currFrame ? currFrame : rootActiveFrame;
+        // Frames go back in the order they were taken: the one that was executing, then the
+        // frames this activation still has pushed above its root, and the root last. A lowered
+        // loop's `next` frame is one of those pushed frames — no return has released it, and
+        // the frame of the faulting call sits above it — so releasing the root first rewound
+        // past it: silently in a Release build, as the pool's assertion in a Debug one
+        // (H31 4.1).
         releaseFrame(currFrame);
-        if (currFrame != rootActiveFrame) {
-            releaseFrame(rootActiveFrame);
-        }
         nestedCalls_ = nestedCallsBase;
         while (stackDepth_ > stackDepthBase) {
             releaseFrame(frameStack_[stackDepth_ - 1]);
             --stackDepth_;
+        }
+        if (currFrame != rootActiveFrame) {
+            releaseFrame(rootActiveFrame);
         }
 
         throw reportRuntimeFault(
@@ -903,13 +909,13 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         };
 
         releaseFrame(currFrame);
-        if (currFrame != rootActiveFrame) {
-            releaseFrame(rootActiveFrame);
-        }
         nestedCalls_ = nestedCallsBase;
         while (stackDepth_ > stackDepthBase) {
             releaseFrame(frameStack_[stackDepth_ - 1]);
             --stackDepth_;
+        }
+        if (currFrame != rootActiveFrame) {
+            releaseFrame(rootActiveFrame);
         }
         throw;
     }

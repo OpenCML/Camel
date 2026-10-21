@@ -1,0 +1,9 @@
+/** `rule` and `when` are names that mean something only where a rule declaration starts. */
+module names
+
+func main(): int sync {
+    let rule = 3
+    let when = 4
+    println(rule + when)
+    return 0
+}

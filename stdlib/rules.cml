@@ -1,0 +1,60 @@
+/**
+ * The standard rules of arithmetic (rewrite design 7): the ones that hold bit for bit, for the
+ * integers and for the floats, written as rules. `check_rules.cml`-style checking runs over every
+ * one of them (the plan modules.rules_library): no rule enters this file before it passes.
+ *
+ * `simplify` applies the rules that always make an expression smaller, one way, to a fixpoint;
+ * `saturate_all` adds the rules that rearrange (commutation, association, distribution) to the
+ * saturation and extracts the smallest writing of each value.
+ */
+module rules
+import { Program } from graph
+import { rewrite, saturate, extract } from rewrite
+
+// ---- Integers: wrapping arithmetic, every law is exact ----
+
+export rule int_add_zero(x: int) { x + 0 => x }
+export rule int_zero_add(x: int) { 0 + x => x }
+export rule int_sub_zero(x: int) { x - 0 => x }
+export rule int_mul_one(x: int) { x * 1 => x }
+export rule int_one_mul(x: int) { 1 * x => x }
+export rule int_mul_zero(x: int) { x * 0 => 0 }
+export rule int_zero_mul(x: int) { 0 * x => 0 }
+export rule int_div_one(x: int) { x / 1 => x }
+export rule int_neg_neg(x: int) { -(-x) => x }
+export rule int_sub_self(x: int) { x - x => 0 }
+export rule int_combine(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
+export rule int_fold(x: int, const c1: int, const c2: int) { (x * c1) * c2 => x * (c1 * c2) }
+export rule int_fold_add(x: int, const c1: int, const c2: int) { (x + c1) + c2 => x + (c1 + c2) }
+
+export rule int_add_comm(a: int, b: int) { a + b <=> b + a }
+export rule int_mul_comm(a: int, b: int) { a * b <=> b * a }
+export rule int_add_assoc(a: int, b: int, c: int) { (a + b) + c <=> a + (b + c) }
+export rule int_mul_assoc(a: int, b: int, c: int) { (a * b) * c <=> a * (b * c) }
+export rule int_distribute(a: int, b: int, c: int) { a * (b + c) <=> a * b + a * c }
+
+// ---- Floats: only what rounding does not touch ----
+
+export rule float_mul_one(x: float) { x * 1.0 => x }
+export rule float_one_mul(x: float) { 1.0 * x => x }
+export rule float_add_minus_zero(x: float) { x + -0.0 => x }
+export rule float_sub_zero(x: float) { x - 0.0 => x }
+export rule float_div_one(x: float) { x / 1.0 => x }
+export rule float_neg_neg(x: float) { -(-x) => x }
+
+export rule float_add_comm(a: float, b: float) { a + b <=> b + a }
+export rule float_mul_comm(a: float, b: float) { a * b <=> b * a }
+
+/// The rules that make an expression smaller, applied one way to a fixpoint.
+export func simplify(p: Program): Program! {
+    return rewrite(p, [int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg])
+}
+
+/// Every rule, both ways where it holds both ways; the smallest writing of each value.
+export func saturate_all(p: Program): Program! {
+    let tabled = saturate(p, [int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm], 6)
+    return match tabled {
+        case error e => tabled
+        case q => extract(q, 'nodes')
+    }
+}

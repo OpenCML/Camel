@@ -35,6 +35,13 @@ class FramePool;
 class TaskflowFramePool;
 class FrameView;
 
+/// The frame log prints at most this many elements of an array; above the limit the line
+/// carries the array's type, address and length. Arrays a diagnostic deals with are small (the
+/// test plans' largest printed array has 40 elements), while the collections whose element-wise
+/// logging made a Debug run quadratic are thousands (H31: 5,000 and 10,000 elements). 64 keeps
+/// every small array whole and still bounds one line to 64 elements.
+inline constexpr size_t kFrameLogArrayLimit = 64;
+
 /// The fault of a call whose frame does not fit what is left of a frame pool of `poolBytes`: a
 /// located MaxRecursionDepthExceeded (the pool is sized for the recursion limit; a recursion of
 /// functions with very large frames can fill it before the count is reached).
@@ -134,8 +141,13 @@ class Frame : public rtdata::Object {
                         mm::formatAddress(const_cast<Frame *>(this), true),
                         idx,
                         dynamicAreaType_->size()));
+                // A slot never written holds DeadSlot (the fill of a fresh Debug bump
+                // allocation) or kDebugUninitializedSlot (the fill the Debug taskflow frame
+                // pool gives a frame before use). NullSlot is a legitimate empty element and
+                // stays readable.
                 ASSERT(
-                    dynamicArea_[idx] != mm::kDebugUninitializedSlot,
+                    dynamicArea_[idx] != mm::kDebugUninitializedSlot &&
+                        dynamicArea_[idx] != DeadSlot,
                     std::format(
                         "[{}] Accessing uninitialized slot: idx = {}",
                         mm::formatAddress(const_cast<Frame *>(this), true),
@@ -156,16 +168,28 @@ class Frame : public rtdata::Object {
             res = staticArea_->get<T>(idx);
         }
         EXEC_WHEN_DEBUG({
-            std::ostringstream oss;
-            rtdata::printSlot(oss, rtdata::toSlot(res), typeAt<type::Type>(index));
-            CAMEL_LOG_INFO_S(
-                "Frame",
-                "[{}] Getting data of graph <{}> at index {} ({}): {}",
-                mm::formatAddress(const_cast<Frame *>(this), true),
-                graphName(),
-                index,
-                typeCodeToString(codeAt(index)),
-                oss.str());
+            // The text of the value, and reading it at all, is for a log line that is emitted:
+            // a frame slot can hold a collection a higher-order operator is still filling (a
+            // map re-reads its own result slot every round to write through the relocated
+            // pointer), and printing a large array at every round is what turned a 10,000
+            // element map into a quadratic Debug run. Arrays above kFrameLogArrayLimit
+            // therefore print as their type, address and length (H31).
+            if (::Logger::ShouldEmit(::LogLevel::Info, "Frame")) {
+                std::ostringstream oss;
+                rtdata::printSlotCapped(
+                    oss,
+                    rtdata::toSlot(res),
+                    typeAt<type::Type>(index),
+                    kFrameLogArrayLimit);
+                CAMEL_LOG_INFO_S(
+                    "Frame",
+                    "[{}] Getting data of graph <{}> at index {} ({}): {}",
+                    mm::formatAddress(const_cast<Frame *>(this), true),
+                    graphName(),
+                    index,
+                    typeCodeToString(codeAt(index)),
+                    oss.str());
+            }
         });
         return res;
     }
@@ -179,16 +203,22 @@ class Frame : public rtdata::Object {
             return;
         }
         EXEC_WHEN_DEBUG({
-            std::ostringstream oss;
-            rtdata::printSlot(oss, rtdata::toSlot(value), typeAt<type::Type>(index));
-            CAMEL_LOG_INFO_S(
-                "Frame",
-                "[{}] Setting data of graph <{}> at index {} ({}): {}",
-                mm::formatAddress(this, true),
-                graphName(),
-                index,
-                typeCodeToString(codeAt(index)),
-                oss.str());
+            // The index and the type, not the value: a set publishes a result, and the result
+            // of a higher-order operator is an array (or a struct holding one) that the
+            // operator fills *through the loop* after storing it (evalMarkedOperator_map_arr
+            // stores it first so a safepoint in the element call keeps it alive). Reading such
+            // a value asserts on its unwritten elements and costs a full pass per set. The
+            // get line keeps the value; the printer renders an unwritten element as
+            // "<uninitialized>" (rtdata/print.cpp).
+            if (::Logger::ShouldEmit(::LogLevel::Info, "Frame")) {
+                CAMEL_LOG_INFO_S(
+                    "Frame",
+                    "[{}] Setting data of graph <{}> at index {} ({})",
+                    mm::formatAddress(this, true),
+                    graphName(),
+                    index,
+                    typeCodeToString(codeAt(index)));
+            }
         });
         if (index > 0) {
             size_t idx = static_cast<size_t>(index);
@@ -310,7 +340,8 @@ class FrameView {
             size_t idx = static_cast<size_t>(index);
             EXEC_WHEN_DEBUG({
                 ASSERT(
-                    dynamicArea_[idx] != mm::kDebugUninitializedSlot,
+                    dynamicArea_[idx] != mm::kDebugUninitializedSlot &&
+                        dynamicArea_[idx] != DeadSlot,
                     std::format("Accessing uninitialized slot: idx = {}", index));
             });
             res = rtdata::fromSlot<T>(dynamicArea_[idx]);
@@ -574,6 +605,16 @@ class FramePool {
     void traceActiveFrames(
         const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) const {
         forEachActiveFrame([&](Frame *frame) {
+            // The graph being run stays: its version may be held by no program any more.
+            if (frame->runtimeGraph_ != nullptr) {
+                relocate(
+                    static_cast<camel::core::rtdata::Object *>(frame->runtimeGraph_),
+                    nullptr,
+                    camel::core::rtdata::RefTraceInfo{
+                        .ownerKind = "Frame",
+                        .slotName  = "graph",
+                    });
+            }
             if (frame->staticArea_ && frame->staticDataLayout()) {
                 frame->staticArea_->updateRefs(relocate, frame->staticDataLayout());
             }

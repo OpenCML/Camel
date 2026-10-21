@@ -321,9 +321,12 @@ the graph is read in holds under it (`Program::graph(id)`; the accessors
 therefore has a `Program` in hand: a pass has the one it is given, an activation
 the program of the function value it was called through (`Function::program()`),
 a draft the one it was decoded against (`GraphDraft::program()`). A graph does not
-keep other graphs alive either: a program does (a `Program` is rooted as a whole,
-`GCGraphManager`), and a graph a transformation makes outside every commit is
-kept by `Context::retainRuntimeGraphs`.
+keep other graphs alive either: a `Program` does. A `Program` is an object of the graph space
+that traces the graphs of its table, a function value traces the `Program` it was made in, and
+`GCGraphManager` frees the `Program`s and graph versions that nothing reaches (see
+`docs/technical/23_gc_runtime_lifetime.md`, "Graph space lifetime"). A graph a transformation
+makes outside every commit (a gradient built while the program runs) is a `Program` on top of
+the one it was made over; it lives as long as a function value of it does.
 
 The payload of a draft `FUNC` and `LOOP` node is the same index (`GCFuncRef`,
 `GCLoopRef`) into the draft's own table `GraphDraft::payloadGraphs()`, whose entries are

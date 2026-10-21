@@ -30,7 +30,14 @@
 #include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
+#include "camel/passes/test/edges.h"
+#include "camel/passes/test/keepfn.h"
+#include "camel/passes/test/rules.h"
+#include "camel/passes/test/saturate.h"
+#include "camel/passes/test/writings.h"
+#include "camel/runtime/writings.h"
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/test/exhaust_perm_space.h"
@@ -488,12 +495,54 @@ PassDescriptor devirtualizeDescriptor() {
     return d;
 }
 
+PassDescriptor extractDescriptor() {
+    PassDescriptor d;
+    d.doc    = "one writing for every value that has several, chosen by a cost model";
+    d.params = {PassParam{
+        "cost",
+        PassParamType::String,
+        std::string("weighted"),
+        "the cost model: 'nodes' (every node costs one), 'weighted' (a division costs more than a "
+        "product, a product more than a sum), or one a module registered"}};
+    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<ExtractPass>(ctx, args.getString("cost"));
+    };
+    return d;
+}
+
+PassDescriptor dceDescriptor() {
+    PassDescriptor d;
+    d.doc    = "dead code elimination";
+    d.params = {PassParam{
+        "values_only",
+        PassParamType::Bool,
+        false,
+        "remove only the constants and pure operations that no node reads, not gates and syncs "
+        "(the reference for passes that do the same, such as one written in Camel)"}};
+    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<DeadCodePass>(ctx, args.getBool("values_only"));
+    };
+    return d;
+}
+
 PassDescriptor algebraDescriptor() {
     PassDescriptor d;
     d.doc    = "algebraic simplification";
-    d.params = {safeFpParameter()};
-    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<AlgebraPass>(ctx, args.getBool("safe_fp"));
+    d.params = {
+        safeFpParameter(),
+        PassParam{
+            "neutral_only",
+            PassParamType::Bool,
+            false,
+            "apply only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), not the "
+            "merging of like terms and constant factors (the reference for passes that do the "
+            "same)"},
+    };
+    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<AlgebraPass>(
+            ctx,
+            args.getBool("safe_fp"),
+            args.getBool("neutral_only"));
     };
     return d;
 }
@@ -677,8 +726,9 @@ PassScopePtr initPassScope() {
                              {"specialize", def(specializeDescriptor())},
                              {"fold", def(PASS(ConstantFoldPass))},
                              {"algebra", def(algebraDescriptor())},
+                             {"extract", def(extractDescriptor())},
                              {"cse", def(PASS(CommonSubexpressionPass))},
-                             {"dce", def(PASS(DeadCodePass))},
+                             {"dce", def(dceDescriptor())},
                              {"ctrl", def(PASS(ControlReductionPass))},
                          })},
                     {"taskflow", def(taskflowDescriptor())},
@@ -965,6 +1015,19 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kResourcesTestPass, ResourcesTestPass),
         TEST_PASS(kControlTestPass, ControlTestPass),
         TEST_PASS(kChunksTestPass, ChunksTestPass),
+        TEST_PASS(kEdgesCycleTestPass, EdgesCycleTestPass),
+        TEST_PASS(kEdgesTypeTestPass, EdgesTypeTestPass),
+        TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
+        TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
+        TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kWritingsTestPass, WritingsTestPass),
+        TEST_PASS(kTabledTestPass, TabledTestPass),
+        TEST_PASS(kSaturateTestPass, SaturateTestPass),
+        TEST_PASS(kRulesTestPass, RulesTestPass),
+        TEST_PASS(kRulesGreedyTestPass, RulesGreedyTestPass),
+        TEST_PASS(kSaturateSafeTestPass, SaturateSafeTestPass),
+        TEST_PASS(kSaturateWideTestPass, SaturateWideTestPass),
+        TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
         TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
@@ -1139,7 +1202,18 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
         // No such module: the name stays unknown and is reported by the caller.
     } catch (const std::exception &) {
     }
-    return resolvePass(spec);
+    resolved = resolvePass(spec);
+    if (resolved.problem || resolved.factory) {
+        return resolved;
+    }
+    // A function written in Camel: the module is a library of its own, compiled now.
+    std::string problem;
+    camel::execute::registerCamelPass(ctx, name.substr(0, sep), name.substr(sep + 2), problem);
+    resolved = resolvePass(spec);
+    if (!resolved.factory && !problem.empty()) {
+        resolved.problem = problem;
+    }
+    return resolved;
 }
 
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
@@ -1271,6 +1345,27 @@ PassApplyResult applyPassesDetailed(
                     return {nullptr, PassApplyStatus::Failed};
                 }
             }
+            // A program with graphs that have several writings per value: a pass that consumes
+            // it (a back end, an exporter) gets one writing per value, picked by the default
+            // cost; a pass that does not know the state does not get the program.
+            if (camel::runtime::hasWritings(*program)) {
+                const bool consumes = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
+                                      dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr;
+                if (consumes) {
+                    CAMEL_LOG_INFO_S(
+                        "Pass",
+                        "run | passes | extract before {}: one writing per value, cost model "
+                        "'weighted'",
+                        p);
+                    program = camel::runtime::extractWritings(
+                        ctx, program, *camel::runtime::findCostModel("weighted"));
+                    ctx->settleRuntimeGraphs(program);
+                } else if (!pass->acceptsWritings()) {
+                    setPipelineStage("pass:" + specName(p));
+                    ctx->rtmDiags()->of(RuntimeDiag::PassNeedsExtraction).commit(p);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
+            }
             try {
                 program = pass->apply(program, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {
@@ -1319,6 +1414,8 @@ PassApplyResult applyPassesDetailed(
             camel::core::mm::autoSpace().safepoint(std::format("after pass {}", p));
             // What the pass had to say about the program, before the next pass runs it.
             deliverPassWarnings(*ctx, p);
+            // The programs the pass made and nothing holds are no longer needed.
+            ctx->settleRuntimeGraphs(program);
             if (ctx->rtmDiags()->hasErrors()) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
                 return {nullptr, PassApplyStatus::Failed};

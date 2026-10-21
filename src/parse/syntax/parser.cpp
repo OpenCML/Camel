@@ -264,7 +264,7 @@ void ParserImpl::recover(bool inBlock, bool topLevel) {
                 break;
             }
             if (pos_ != start && tok().newlineBefore() &&
-                (topLevel ? startsDecl(cur_) : startsStmt(cur_))) {
+                (topLevel ? startsDecl(cur_) || atRuleDecl(0) : startsStmt(cur_))) {
                 break;
             }
             // A declaration keyword starts a declaration wherever it stands.
@@ -346,7 +346,7 @@ void ParserImpl::parseProgram() {
         if (cur_ == TK::Semi) {
             // One separator between declarations was taken already.
             error(SyntaxError::Kind::ExtraSemicolon, {}, pos_);
-        } else if (startsDecl(cur_)) {
+        } else if (startsDecl(cur_) || atRuleDecl(0)) {
             parseDecl();
             if (!panic_) {
                 eat(TK::Semi);
@@ -379,7 +379,7 @@ uint32_t ParserImpl::afterModifiers() const {
 }
 
 /// decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-///      | dataDecl | funcDecl | typeDecl
+///      | dataDecl | funcDecl | typeDecl | ruleDecl
 /// Decided on the first token; after `export`, `inner` and `outer` on the next one or two
 /// (`export inner type` is an exported type, `export inner func` a function).
 void ParserImpl::parseDecl() {
@@ -399,6 +399,9 @@ void ParserImpl::parseDecl() {
         return parseTypeDecl();
     case TK::KwExport: {
         const TK next = peek(1);
+        if (atRuleDecl(1)) {
+            return parseRuleDecl();
+        }
         if (next == TK::KwLet || next == TK::KwVar || next == TK::KwType || next == TK::LBrace ||
             ((next == TK::KwInner || next == TK::KwOuter) && peek(2) == TK::KwType)) {
             return parseExportDecl();
@@ -409,6 +412,9 @@ void ParserImpl::parseDecl() {
     case TK::KwOuter:
         return peek(1) == TK::KwType ? parseTypeDecl() : parseFuncDecl();
     default:
+        if (atRuleDecl(0)) {
+            return parseRuleDecl();
+        }
         return parseFuncDecl();
     }
 }
@@ -1003,10 +1009,12 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
     close(m, kind);
 }
 
-/// keyParamPair : 'var'? identDef ':' typeExpr ('=' dataExpr)?
+/// keyParamPair : ('var' | 'const')? identDef ':' typeExpr ('=' dataExpr)?
 void ParserImpl::parseKeyParamPair() {
     const size_t m = mark();
-    eat(TK::KwVar);
+    if (!eat(TK::KwVar)) {
+        eat(TK::KwConst);
+    }
     parseIdentDef();
     if (!panic_ && expect(TK::Colon)) {
         parseType();
@@ -1036,7 +1044,7 @@ void ParserImpl::parseParentParams() {
     }
     {
         Scope scope(*this, false);
-        if (cur_ == TK::Identifier || cur_ == TK::KwVar) {
+        if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst) {
             parsePairedParams(TK::RParen);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {
             unexpected({e(TK::Comma), e(TK::RParen), e(TK::KwVar), e(TK::Identifier)});

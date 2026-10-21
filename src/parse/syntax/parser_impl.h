@@ -193,6 +193,11 @@ class ParserImpl {
     /// operator overload rather than a function named `operator`.
     bool atOperatorName() const;
     void parseOperatorName();
+    /// At the name `rule` (offset `n`) that starts a rule declaration.
+    bool atRuleDecl(uint32_t n) const;
+    void parseRuleDecl();
+    void parseRuleContext();
+    void parseRuleBody();
     void parseDataDecl();
     void parseTypeDecl();
     void parseRetStmt();

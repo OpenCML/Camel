@@ -29,6 +29,9 @@
 #include "camel/runtime/graph.h"
 #include "compile.h"
 #include <array>
+#include <map>
+#include <mutex>
+#include <optional>
 #include <cstdlib>
 #include <memory>
 #include <string_view>
@@ -104,6 +107,79 @@ struct FastVMConfig {
     std::string statsPath;
 };
 
+/// The ranges of the bytecode vector that no live graph version uses: a graph made while the
+/// program runs gets one, and gives it back when the collector frees the version (CodeLease,
+/// kept in the version's plan), so that a program that makes graphs without end does not fill
+/// the vector.
+class CodeSpace {
+  public:
+    /// The start of a free range of `length` bytecodes (taken), if there is one.
+    std::optional<size_t> allocate(size_t length) {
+        std::lock_guard lock(mutex_);
+        for (auto it = free_.begin(); it != free_.end(); ++it) {
+            if (it->second >= length) {
+                const size_t start = it->first;
+                const size_t left  = it->second - length;
+                free_.erase(it);
+                if (left != 0) {
+                    free_.emplace(start + length, left);
+                }
+                return start;
+            }
+        }
+        return std::nullopt;
+    }
+    void release(size_t start, size_t length) {
+        if (length == 0) {
+            return;
+        }
+        std::lock_guard lock(mutex_);
+        auto next = free_.lower_bound(start);
+        if (next != free_.end() && start + length == next->first) {
+            length += next->second;
+            next = free_.erase(next);
+        }
+        if (next != free_.begin()) {
+            auto previous = std::prev(next);
+            if (previous->first + previous->second == start) {
+                start = previous->first;
+                length += previous->second;
+                free_.erase(previous);
+            }
+        }
+        free_.emplace(start, length);
+    }
+    bool hasFree() const {
+        std::lock_guard lock(mutex_);
+        return !free_.empty();
+    }
+    size_t freeBytecodes() const {
+        std::lock_guard lock(mutex_);
+        size_t total = 0;
+        for (const auto &[start, length] : free_) {
+            total += length;
+        }
+        return total;
+    }
+
+  private:
+    mutable std::mutex mutex_;
+    std::map<size_t, size_t> free_;
+};
+
+/// Gives a graph version's bytecode range back to its code space when the version is freed.
+struct CodeLease {
+    CodeLease(std::shared_ptr<CodeSpace> space, size_t start, size_t length)
+        : space(std::move(space)), start(start), length(length) {}
+    CodeLease(const CodeLease &)            = delete;
+    CodeLease &operator=(const CodeLease &) = delete;
+    ~CodeLease() { space->release(start, length); }
+
+    std::shared_ptr<CodeSpace> space;
+    size_t start;
+    size_t length;
+};
+
 class FastVMSchedPass : public RuntimeGraphSchedulePass {
   public:
     struct CallResult {
@@ -146,6 +222,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     // written by any of them.
     bytecode_vec_t ownBytecodes_;
     bytecode_vec_t &bytecodes_;
+    // Which ranges of the pass's own bytecodes are free (a host's image is never written).
+    std::shared_ptr<CodeSpace> codeSpace_ = std::make_shared<CodeSpace>();
+    void leaseCode(camel::runtime::GCGraph *graph, size_t start, size_t length);
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap_;
     // The programs whose graphs the run executes (a frozen graph names its callees by id).
     camel::execute::RunPrograms programs_;

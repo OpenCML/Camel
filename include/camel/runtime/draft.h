@@ -492,6 +492,22 @@ class GraphDraft {
     std::span<const gc_node_ref_t> regionPortsOf(uint32_t id) const {
         return {regionPorts_.data() + regions_[id].portBegin, regions_[id].portCount};
     }
+    /// The equivalences between the nodes of the draft (writings.h): the draft is not in the
+    /// executable state while there are any. Until they are extracted, the nodes can only be
+    /// added to: every member that changes or removes a node refuses (std::logic_error),
+    /// except inside a WritingScope, which the engine of writings.h opens.
+    std::span<const WritingUnion> writings() const { return writings_; }
+    void setWritings(std::vector<WritingUnion> log);
+    class WritingScope {
+      public:
+        explicit WritingScope(GraphDraft &draft) : draft_(draft) { ++draft_.writingScope_; }
+        ~WritingScope() { --draft_.writingScope_; }
+        WritingScope(const WritingScope &)            = delete;
+        WritingScope &operator=(const WritingScope &) = delete;
+
+      private:
+        GraphDraft &draft_;
+    };
     /// The region node `id` is in, 0 when it is in none but the body.
     uint32_t nodeRegion(gc_node_ref_t id) const;
     void setNodeRegion(gc_node_ref_t id, uint32_t region);
@@ -621,6 +637,14 @@ class GraphDraft {
     std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
     std::vector<GCRegion> regions_; // empty, or region 0 (the body) then the others
     std::vector<gc_node_ref_t> regionPorts_;
+    std::vector<WritingUnion> writings_;
+    uint32_t writingScope_ = 0;
+    void requireOneWriting(const char *what) const {
+        if (!writings_.empty() && writingScope_ == 0) [[unlikely]] {
+            refuseWithWritings(what);
+        }
+    }
+    [[noreturn]] void refuseWithWritings(const char *what) const;
     std::vector<gc_node_ref_t> sourceRefsById_;
     std::vector<gc_node_ref_t> draftIdsBySourceRef_;
     gc_cnt_t liveNodeCount_ = 0;

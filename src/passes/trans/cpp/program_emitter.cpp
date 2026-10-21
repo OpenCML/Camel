@@ -19,7 +19,9 @@
 
 #include "program_emitter.h"
 
+#include "camel/core/error/runtime.h"
 #include "camel/core/module/module.h"
+#include "camel/core/numeric_convert.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/graph_runtime_support.h"
@@ -47,6 +49,63 @@ namespace {
 
 bool isAnonymous(const std::string &name) {
     return name.size() >= 4 && name.starts_with("__") && name.ends_with("__");
+}
+
+/// The EntryNumberText of a parameter of `main` (camel/standalone/entry.h) as a C++
+/// initializer: the sentences InvalidNumberText and ConversionOutOfRange give a number text
+/// that cannot be read, rendered from the diagnostics catalogue with the text left as mark 0
+/// (the running program fills it in, entry.h). A complex parameter gets the second
+/// ConversionOutOfRange sentence for its imaginary part; the other kinds have none.
+std::string entryNumberText(camel::core::type::TypeCode code) {
+    using camel::core::error::RuntimeDiag;
+    const std::string mark = SiteTable::valueMark(0);
+    const auto message     = [](RuntimeDiag diag, std::vector<std::string> args) {
+        return cppStringLiteral(camel::core::error::runtimeDiagMessage(diag, std::move(args)));
+    };
+    switch (code) {
+    case camel::core::type::TypeCode::Int32:
+    case camel::core::type::TypeCode::Int64:
+        return std::format(
+            "{{{}, {}, nullptr}}",
+            message(RuntimeDiag::InvalidNumberText, {mark, "int", "an integer"}),
+            message(
+                RuntimeDiag::ConversionOutOfRange,
+                {"'" + mark + "'",
+                 "int",
+                 camel::core::integerRangeReason<int64_t>("int")}));
+    case camel::core::type::TypeCode::Float32:
+    case camel::core::type::TypeCode::Float64:
+        return std::format(
+            "{{{}, {}, nullptr}}",
+            message(RuntimeDiag::InvalidNumberText, {mark, "float", "a number"}),
+            message(
+                RuntimeDiag::ConversionOutOfRange,
+                {"'" + mark + "'", "float", camel::core::floatRangeReason<double>("float")}));
+    case camel::core::type::TypeCode::Complex64:
+    case camel::core::type::TypeCode::Complex128: {
+        const bool single       = code == camel::core::type::TypeCode::Complex64;
+        const char *target      = single ? "c64" : "c128";
+        const std::string range = single ? camel::utils::complexRangeText<float>()
+                                         : camel::utils::complexRangeText<double>();
+        const auto part         = [&](const char *name) {
+            return std::format(
+                "the {} part is outside the range of {} ({})", name, target, range);
+        };
+        return std::format(
+            "{{{}, {}, {}}}",
+            message(
+                RuntimeDiag::InvalidNumberText,
+                {mark, std::string(camel::utils::complexNumberTextHelp), "a complex number"}),
+            message(
+                RuntimeDiag::ConversionOutOfRange,
+                {"'" + mark + "'", target, part("real")}),
+            message(
+                RuntimeDiag::ConversionOutOfRange,
+                {"'" + mark + "'", target, part("imaginary")}));
+    }
+    default:
+        return "{nullptr, nullptr, nullptr}";
+    }
 }
 
 /// The graph of a function constant (`Function(graph=main, ...)`) in a DATA node of `graph`.
@@ -290,6 +349,7 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     const auto *rootType                 = root->funcType();
     std::unordered_map<gc_node_ref_t, std::string> parameterValue;
     std::string parameters;
+    std::string numberText;
     for (size_t i = 0; i < names.size(); ++i) {
         const bool isWith        = i < withCount;
         const size_t k           = isWith ? i : i - withCount;
@@ -361,6 +421,8 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
             parameters.empty() ? "" : ", ",
             cppStringLiteral(names[i]),
             kind);
+        numberText += (numberText.empty() ? "" : ", ") +
+                      entryNumberText(type != nullptr ? type->code() : TypeCode::Void);
         parameterValue[port] = std::move(value);
     }
     // The reports of a wrong or missing argument, at the entry function, as camel gives them.
@@ -460,9 +522,10 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
         "/// Runs `main` with the arguments of the command line and gives the exit code of the\n"
         "/// program.\n"
         "int entry(int argc, char **argv) {{\n"
-        "    const rt::EntryArguments args(argc, argv, {{{}}}, {}, {});\n"
+        "    const rt::EntryArguments args(argc, argv, {{{}}}, {{{}}}, {}, {});\n"
         "{}}}\n",
         parameters,
+        numberText,
         invalid,
         missing,
         body);

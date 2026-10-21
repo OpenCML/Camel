@@ -457,6 +457,46 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
 }
 
 /*
+ruleDecl : EXPORT? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}'
+           (IDENTIFIER dataExpr)? ;
+*/
+any Formatter::visitRuleDecl(cst::RuleDecl context) {
+    string result = context->has(TK::KwExport) ? "export rule " : "rule ";
+    result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (const auto ruleContext = context->get<cst::RuleContext>()) {
+        result += any_cast<string>(visitRuleContext(ruleContext));
+    }
+    result += any_cast<string>(visitParentParams(context->get<cst::ParentParams>()));
+    result += " { " + any_cast<string>(visitRuleBody(context->get<cst::RuleBody>())) + " }";
+    if (const auto condition = context->expr()) {
+        result += " when " + any_cast<string>(visitExpr(condition));
+    }
+    return result;
+}
+
+/*
+ruleContext : '<' identDef (',' identDef)* ','? '>' ;
+*/
+any Formatter::visitRuleContext(cst::RuleContext context) {
+    string result = "<";
+    bool first    = true;
+    for (const auto name : context->all<cst::IdentDef>()) {
+        result += (first ? "" : ", ") + any_cast<string>(visitIdentDef(name));
+        first = false;
+    }
+    return result + ">";
+}
+
+/*
+ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
+*/
+any Formatter::visitRuleBody(cst::RuleBody context) {
+    const auto sides = context->exprs();
+    return any_cast<string>(visitExpr(sides[0])) + (context->has(TK::Equiv) ? " <=> " : " => ") +
+           any_cast<string>(visitExpr(sides[1]));
+}
+
+/*
 namespaceDecl : NAMESPACE identRef '{' SEP? (namespaceItem SEP?)* '}' ;
 */
 any Formatter::visitNamespaceDecl(cst::NamespaceDecl context) {
@@ -613,7 +653,7 @@ any Formatter::visitKeyValuePair(cst::KeyValuePair context) {
 keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
 */
 any Formatter::visitKeyParamPair(cst::KeyParamPair context) {
-    string result = context->tok(TK::KwVar) ? "var " : "";
+    string result = context->tok(TK::KwVar) ? "var " : context->tok(TK::KwConst) ? "const " : "";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     const auto &typeExpr = context->type();
     const auto &dataExpr = context->expr();
@@ -1431,6 +1471,9 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(StmtBlock)
         CAMEL_FORMAT(FuncAnno)
         CAMEL_FORMAT(FuncDecl)
+        CAMEL_FORMAT(RuleDecl)
+        CAMEL_FORMAT(RuleContext)
+        CAMEL_FORMAT(RuleBody)
         CAMEL_FORMAT(DataDecl)
         CAMEL_FORMAT(TypeDecl)
         CAMEL_FORMAT(RetStmt)

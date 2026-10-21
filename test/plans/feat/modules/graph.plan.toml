@@ -1,0 +1,275 @@
+id = "modules.graph"
+order = 376
+tier = "fast"
+tags = ["feat", "modules", "graph"]
+
+# The graph module: a program as a value.
+
+[[tests]]
+name = "types_and_node_kind"
+kind = "behavior"
+case = "../../../cases/modules/graph_types.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "true\nfalse\ntrue\nfalse\n0\n1\n1\nNodeKind::Oper\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "node_kinds_match_the_graph"
+desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in NodeId order (compared once with the std::jgir dump of the same program)."
+kind = "behavior"
+case = "../../../cases/modules/graph_kinds.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "10\n[__root__, pick, total, kinds, main, __g_6__, __g_7__, __g_8__, __g_9__, __g_10__, __g_11__]\n[[NodeKind::Data, NodeKind::Call], [NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Join, NodeKind::Brch, NodeKind::Func, NodeKind::Func], [NodeKind::Port, NodeKind::Data, NodeKind::Data, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Gate], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "reads_of_one_graph"
+desc = "The nodes, inputs, users, purity and printed form of a small graph."
+kind = "behavior"
+case = "../../../cases/modules/graph_read.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "[%0 Port : int, %1 Data : int, %2 Oper :op/mul_l : int, %3 Data : int, %4 Oper :op/add_l : int]\n[0, 0, 2, 0, 2]\n[1, 1, 1, 1, 0]\n[false, false, true, false, true]\n[none, none, :op/mul_l, none, :op/add_l]\n[int, int, int, int, int]\n[, , , , ]\n[null, 2, null, 1, null]\n[false, true, true, true, true]\n[none, compute]\n"
+timeout_ms = 10000
+
+# A pass written in Camel is a function (p: Program) => Program! exported by a module; it runs
+# on the tool program the context keeps, with the program being processed as its argument.
+
+[[tests]]
+name = "camel_pass_runs_on_the_program"
+desc = "A Camel pass reads the program being processed and returns it; the pipeline goes on."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "identity::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2\n[__root__, main]\n42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_error_stops_the_pipeline"
+desc = "A pass that returns an error value fails with its kind and message, and the program does not run."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "identity::refuse", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GraphPassFailed", "error NotSupported: this program has too few graphs"]
+expect_output_not_contains = ["42"]
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_function_that_is_not_a_pass_is_refused"
+desc = "An exported function of another signature is not a pass; the diagnostic says what a pass is."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "identity::helper", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["is not a pass", "(p: Program) => Program!"]
+timeout_ms = 10000
+
+[[tests]]
+name = "unknown_camel_pass"
+desc = "A module that exports no such function leaves the pass unknown."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "identity::nosuch", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["UnrecognizedGraphPass"]
+timeout_ms = 10000
+
+# A transaction edits the program being processed and commits a new Program (design 5.1).
+
+[[tests]]
+name = "txn_replace_and_commit"
+desc = "x + 0 is replaced by x in a transaction; the committed program no longer has the add and runs as before."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::count_adds", "probes::fold_zero_adds", "probes::count_adds", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n0\n126\ntext\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "txn_commit_twice_is_an_error_value"
+desc = "The second commit of a transaction gives the error TxnUsed."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::commit_twice", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "TxnUsed\n126\ntext\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "txn_invalid_edit_is_refused_at_commit"
+desc = "A string put where an int is passed: the commit names the graph, the node and the broken edge."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::break_types", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GraphInvalid", "passes a string as ordinary argument 0 of 'inc', which takes a int"]
+expect_output_not_contains = ["126"]
+timeout_ms = 10000
+
+[[tests]]
+name = "txn_conflict"
+desc = "Two transactions edit one graph; the second commit gives the error GraphConflict."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::conflict", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "GraphConflict\n126\ntext\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "txn_erase_of_a_read_value_is_a_fault"
+desc = "Erasing a node whose value is read is refused, naming the operator."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::erase_read", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["graph.erase", "the value of the node is still read"]
+timeout_ms = 10000
+
+[[tests]]
+name = "txn_abort"
+desc = "An aborted transaction changes nothing."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::abort_unused", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "126\ntext\n"
+timeout_ms = 10000
+
+# A pass written in Camel against the C++ pass that does the same: the neutral elements of the
+# integer operations (x + 0, 0 + x, x - 0, x * 1, 1 * x) are removed, and the program that comes
+# out is the same graph by graph (the dumps differ only in source origin ids).
+
+[[tests]]
+name = "neutral_elements_by_std_opt_algebra"
+desc = "The reference: std::opt::algebra restricted to the neutral elements."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_target.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_elements_by_a_camel_pass"
+desc = "neutral::integers, written in Camel with the graph module, gives the same graphs."
+kind = "differential"
+case = "../../../cases/modules/graph_pass/neutral_target.cml"
+args = ["${case}", "neutral::integers", "std::jgir"]
+expect_exit = 0
+compare_to = "neutral_elements_by_std_opt_algebra"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_elements_program_still_runs"
+desc = "The program after the Camel pass computes what it did."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_target.cml"
+args = ["${case}", "neutral::integers", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "7\n11\n7\n10\n"
+timeout_ms = 20000
+
+# Unused values: after folding and inlining, constants and pure operations that no node reads are
+# left behind. unused::values (Camel) removes them like std::opt::dce restricted to values.
+
+[[tests]]
+name = "unused_values_by_std_opt_dce"
+desc = "The reference: std::opt::dce restricted to values, after folding and inlining."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/unused_target.cml"
+args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "std::opt::dce(values_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unused_values_by_a_camel_pass"
+desc = "unused::values, written in Camel with the graph module, gives the same graphs."
+kind = "differential"
+case = "../../../cases/modules/graph_pass/unused_target.cml"
+args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "unused::values", "std::jgir"]
+expect_exit = 0
+compare_to = "unused_values_by_std_opt_dce"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unused_values_program_still_runs"
+desc = "The program after the Camel pass computes what it did."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/unused_target.cml"
+args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "unused::values", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "7\n4\n"
+timeout_ms = 20000
+
+# A function to a function (design 5.1): a transaction over one function and what it reaches,
+# committed to a program of its own; the function value that comes out runs like the original.
+
+[[tests]]
+name = "function_rewritten_in_place"
+desc = "x + 0 is removed from a function value's graph; the new function has no such add and computes the same."
+kind = "behavior"
+case = "../../../cases/modules/graph_function.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "target\n1\n0\n15\n15\nSignatureMismatch\n"
+timeout_ms = 20000
+
+# Facts the core keeps (design 10): effects of a graph, the shape of a tensor node, the
+# permissions a node was granted, read without a pass computing them again.
+
+[[tests]]
+name = "facts_of_graphs_and_nodes"
+desc = "A graph that only computes has no external effect, one that prints has; the shape of a tensor value; no permissions are granted."
+kind = "behavior"
+case = "../../../cases/modules/graph_facts.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "false\ntrue\ntrue\ntrue\n[-, -, f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
+timeout_ms = 10000
+
+# Written (`var`) slots: both passes leave the nodes whose value may be written in place alone.
+
+[[tests]]
+name = "neutral_elements_with_var_by_std_opt_algebra"
+desc = "The reference on a program with var slots."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_var_target.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_elements_with_var_by_a_camel_pass"
+desc = "neutral::integers skips the written slots as the C++ pass does, so the graphs are equal."
+kind = "differential"
+case = "../../../cases/modules/graph_pass/neutral_var_target.cml"
+args = ["${case}", "neutral::integers", "std::jgir"]
+expect_exit = 0
+compare_to = "neutral_elements_with_var_by_std_opt_algebra"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_elements_with_var_still_runs"
+desc = "The program after the Camel pass prints what it did."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_var_target.cml"
+args = ["${case}", "neutral::integers", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "5\n7\n3\n"
+timeout_ms = 20000

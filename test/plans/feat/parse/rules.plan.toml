@@ -1,0 +1,78 @@
+id = "parse.rules"
+order = 303
+tier = "fast"
+tags = ["feat", "parse", "rules"]
+desc = "Rule declarations (rewrite design 2): `rule name(params) { left => right } when condition`, `<=>`, `const` parameters. The grammar reads them and the formatter writes them; the compiler makes the pair of functions and the function that makes the Rule (module rewrite)."
+
+[[tests]]
+name = "rules.ast"
+desc = "The AST of a rule is the pair of functions name__lhs and name__rhs and the function name that makes the Rule."
+kind = "behavior"
+case = "../../../cases/parse/rules/values.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["FuncDecl: mul_one__lhs", "FuncDecl: mul_one__rhs", "FuncDecl: mul_one", "FuncDecl: swap__lhs", "FuncDecl: swap__rhs"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "rules.pending_parts"
+desc = "The condition (`when`) and the context (`rule fuse<f, g>`) are read but not compiled yet: a located ConstructNotSupported."
+kind = "behavior"
+case = "../../../cases/parse/rules/declared.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 10
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "rules.values"
+desc = "A rule is a function that makes a value of the type Rule: the module rewrite reads its name, direction and const parameters back, and the two functions can be called."
+kind = "behavior"
+case = "../../../cases/parse/rules/values.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_contains = ["mul_one false 0", "swap true 2", "7 7"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "rules.names_stay_names"
+desc = "A variable may be called `rule` or `when`."
+kind = "behavior"
+case = "../../../cases/parse/rules/names.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["7"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "rules.needs_an_arrow"
+desc = "A rule body without `=>` or `<=>` is a located syntax error that names both."
+kind = "behavior"
+case = "../../../cases/parse/rules/no_arrow.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_line = 3
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "rules.format_snapshot"
+desc = "camel-format writes the rule declarations on one line each, the condition after the closing brace."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/parse/rules/declared.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/rules_format.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

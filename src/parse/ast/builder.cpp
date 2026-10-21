@@ -362,6 +362,8 @@ Value Builder::visitDecl(syn::Node context) {
         return visitFuncDecl(cst::FuncDecl(context));
     case NK::TypeDecl:
         return visitTypeDecl(cst::TypeDecl(context));
+    case NK::RuleDecl:
+        return visitRuleDecl(cst::RuleDecl(context));
     default:
         return Value();
     }
@@ -762,6 +764,144 @@ funcDecl   :
         EXPORT? implMark? modifiers?
         FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
+/*
+ruleDecl : 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}'
+           (IDENTIFIER dataExpr)? ;
+ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
+
+A rule is the shorthand of a pair of functions with the same parameters, the left one the pattern
+and the right one what it becomes (rewrite design 2.1, graph store 5.2), and of the function that
+makes the rule from them:
+
+    func name__lhs(params) => left
+    func name__rhs(params) => right
+    func name() => __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
+
+`__rule` is an operator of the module `rewrite`, imported by the declaration itself. The rule is
+the function `name`: it is exported, imported and listed like any function (a library function
+has no module-level values), and the engines of the module call the functions of a list to get
+the rules. `consts` has bit i set when the parameter i is `const`.
+*/
+Value Builder::visitRuleDecl(cst::RuleDecl context) {
+    ENTER("RuleDecl");
+    const std::string name = std::string(context->get<cst::IdentDef>()->text());
+    const Reference ref    = qualifyRef(Reference(name));
+    if (context->has(TK::KwExport)) {
+        export_->addRef(ref);
+    }
+    if (context->get<cst::RuleContext>()) {
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(rangeOf(context->get<cst::RuleContext>()->firstToken()))
+            .commit("rule<...>", "a rule over functions is not implemented");
+    }
+    const auto body   = context->get<cst::RuleBody>();
+    const auto sides  = body->exprs();
+    const bool twoWay = body->has(TK::Equiv);
+    const auto params = context->get<cst::ParentParams>();
+    if (context->expr()) {
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(rangeOf(context->expr().firstToken()))
+            .commit("when", "the condition of a rule is not implemented");
+    }
+    int64_t consts = 0;
+    if (const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams()) {
+        int bit = 0;
+        for (const auto pair : paired->all<cst::KeyParamPair>()) {
+            if (pair->has(TK::KwConst)) {
+                consts |= int64_t{1} << bit;
+            }
+            ++bit;
+        }
+    }
+
+    if (!ruleImportAdded_) {
+        ruleImportAdded_ = true;
+        auto import_     = std::make_shared<ImportLoad>();
+        import_->setTokenRange(extractTokenRangeFromContext(context));
+        import_->setPath("rewrite");
+        import_->setRefs({Reference("__rule")});
+        imports_.push_back(import_);
+    }
+
+    // One side as a function of the rule's parameters: `func name__<side>(params) => expr`.
+    const auto side = [&](const std::string &suffix, syn::Node expr) {
+        const Reference sideRef = qualifyRef(Reference(name + suffix));
+        node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
+        setNodeTokenRangeByContext(funcTypeNode, context);
+        *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
+        if (params) {
+            *funcTypeNode << any2node(visitParentParams(params));
+        } else {
+            *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
+        }
+        node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
+        setNodeTokenRangeByContext(typeOptNode, context);
+        *funcTypeNode << typeOptNode;
+
+        node_ptr_t funcNode = createNodeAs<FuncDataLoad>(sideRef);
+        setNodeTokenRangeByContext(funcNode, context);
+        *funcNode << funcTypeNode;
+        *funcNode << any2node(visitBlockExpr(expr));
+
+        node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(sideRef);
+        *funcDeclNode << funcNode;
+        setNodeTokenRangeByContext(funcDeclNode, context);
+        return funcDeclNode;
+    };
+    node_ptr_t lhsFunc = side("__lhs", sides[0]);
+    node_ptr_t rhsFunc = side("__rhs", sides[1]);
+
+    // func name() => __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
+    const auto literal = [&](LiteralType type, const std::string &text) {
+        node_ptr_t literalNode = createNodeAs<LiteralLoad>(Literal(type, text));
+        setNodeTokenRangeByContext(literalNode, context);
+        return literalNode;
+    };
+    const auto reference = [&](const std::string &text) {
+        node_ptr_t refNode = createNodeAs<RefDataLoad>(Reference(text));
+        setNodeTokenRangeByContext(refNode, context);
+        return refNode;
+    };
+    node_ptr_t args = createNodeAs<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(args, context);
+    *args << literal(LiteralType::String, name);
+    *args << literal(LiteralType::Boolean, twoWay ? "true" : "false");
+    *args << literal(LiteralType::Integer, "0"); // the numeric permissions: tags, not yet
+    *args << literal(LiteralType::Integer, std::to_string(consts));
+    *args << reference(name + "__lhs");
+    *args << reference(name + "__rhs");
+    node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
+    setNodeTokenRangeByContext(call, context);
+    *call << reference("__rule") << args << createNodeAs<RepeatedLoad>("NamedData");
+
+    node_ptr_t exprStmt = createNodeAs<ExprStmtLoad>();
+    setNodeTokenRangeByContext(exprStmt, context);
+    *exprStmt << call;
+    node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
+    setNodeTokenRangeByContext(stmts, context);
+    *stmts << exprStmt;
+    node_ptr_t block = createNodeAs<StmtBlockLoad>();
+    setNodeTokenRangeByContext(block, context);
+    *block << stmts;
+
+    node_ptr_t makerType = createNodeAs<FuncTypeLoad>();
+    setNodeTokenRangeByContext(makerType, context);
+    *makerType << createNodeAs<RepeatedLoad>("NamedPair") << createNodeAs<RepeatedLoad>("NamedPair");
+    node_ptr_t makerTypeOpt = createNodeAs<OptionalLoad>("Type");
+    setNodeTokenRangeByContext(makerTypeOpt, context);
+    *makerType << makerTypeOpt;
+    node_ptr_t makerNode = createNodeAs<FuncDataLoad>(ref);
+    setNodeTokenRangeByContext(makerNode, context);
+    *makerNode << makerType << block;
+    node_ptr_t makerDecl = createNodeAs<FuncDeclLoad>(ref);
+    unwrapNodeAs<FuncDeclLoad>(makerDecl)->setDoc(docOf(context));
+    *makerDecl << makerNode;
+    setNodeTokenRangeByContext(makerDecl, context);
+
+    LEAVE("RuleDecl");
+    return std::vector<node_ptr_t>{lhsFunc, rhsFunc, makerDecl};
+}
+
 Value Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");
 
@@ -1174,8 +1314,9 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     if (context->tok(TK::KwVar)) {
         isVar = true;
     }
+    const bool isConst = context->has(TK::KwConst);
     Reference ref(context->get<cst::IdentDef>()->text());
-    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar);
+    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar, isConst);
     setNodeTokenRangeByContext(namedPairNode, context);
     *namedPairNode << any2node(visitType(context->type()));
     node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");

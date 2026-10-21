@@ -330,6 +330,18 @@ class GenerationalAllocatorWithGC : public IAllocator {
     bool isObjectAddressStable(rtdata::Object *object) const;
 
     void setObjectRootSet(std::vector<rtdata::Object *> *rootSet);
+    /// Called by a major collection once it has marked what it reaches, before the spaces are
+    /// swept: the graph space holds Programs and graphs, which it frees when unmarked.
+    void setGraphSweeper(std::function<void()> sweeper);
+    /// Asks for a major collection at the next safepoint, for a space the collector does not
+    /// budget itself (the graph space: Programs and graph versions).
+    void requestMajorCollection(std::string_view reason);
+    /// Marks everything the roots, the frames and the handles reach, without sweeping or moving
+    /// anything, and gives the graph space to the sweeper: the Programs and graph versions
+    /// nothing reaches are freed. For a caller that is not at a safepoint (a pass installing a
+    /// program): no object of the auto space is touched, so no raw pointer into it is
+    /// invalidated.
+    void collectGraphSpace();
 
     void registerExternalRootTracer(const void *owner, std::string name, ExternalRootTracer tracer);
 
@@ -523,6 +535,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // Untyped roots are reserved for graph carriers whose updateRefs implementation owns its
     // layout. Runtime frames and temporary values must register typed external tracers instead.
     std::vector<rtdata::Object *> *rootObjectSet_{};
+    std::function<void()> graphSweeper_;
     struct ExternalRootTracerEntry {
         const void *owner = nullptr;
         std::string name;

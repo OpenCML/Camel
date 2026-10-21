@@ -107,6 +107,20 @@ struct RuntimeSpecializationKeyHasher {
     size_t operator()(const RuntimeSpecializationKey &key) const;
 };
 
+/// A commit lost a race: the program the session started from is no longer the program of the
+/// context, and a graph the session read or wrote has another version in the program that is.
+/// The caller may open a new session on the current program and do the work again.
+class GraphCommitConflict : public std::runtime_error {
+  public:
+    GraphCommitConflict(std::vector<GraphId> graphs, const std::string &message)
+        : std::runtime_error(message), graphs_(std::move(graphs)) {}
+    /// The graphs that differ.
+    const std::vector<GraphId> &graphs() const { return graphs_; }
+
+  private:
+    std::vector<GraphId> graphs_;
+};
+
 class RuntimeGraphDraftSession {
   public:
     /// A session over the graphs reachable from the root of `program`.
@@ -134,6 +148,11 @@ class RuntimeGraphDraftSession {
     GraphDraft *tryDraft(const GCGraph *graph);
     const GraphDraft *tryDraft(const GCGraph *graph) const;
 
+    /// The state of the graphs the commit encodes (graph.h, GraphState); the validator applies
+    /// the rules of that state. A session that builds a shape no back end runs (the ONNX
+    /// export's split of branched calls) says NonExecutable. Executable by default.
+    void setGraphState(GraphState state) { graphState_ = state; }
+
     GraphDraft &edit(GCGraph *graph);
     GraphDraft &rootDraft();
 
@@ -151,6 +170,15 @@ class RuntimeGraphDraftSession {
     /// private rewrite, such as lowering loops before it runs) the program is left as it is and
     /// the new program is kept alive as a detached one (Context::trackDetachedRuntimeProgram).
     const Program *commit(bool detached = false);
+    /// The graphs the session read or wrote (decoded or edited) whose version in the context's
+    /// program is not the one it started from; empty while the context's program is still the
+    /// session's. A commit of a stale session does not fail: it makes a program of its own from
+    /// the one it started from, which is not the context's (the callers that run a function
+    /// value of the old program do this routinely). A caller that means to replace the context's
+    /// program asks first (optimistic concurrency, design 4.3.1).
+    std::vector<GraphId> conflicts() const;
+    /// commit(), but throws GraphCommitConflict when conflicts() is not empty.
+    const Program *commitChecked();
 
   private:
     struct DraftEntry {
@@ -169,6 +197,7 @@ class RuntimeGraphDraftSession {
     const Program *program_ = nullptr;
     mutable std::unique_ptr<Program> work_;
     GCGraph *runtimeRoot_ = nullptr;
+    GraphState graphState_ = GraphState::Executable;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
     /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself.
     /// The commit drops those it encodes back to the same content (sameContent).

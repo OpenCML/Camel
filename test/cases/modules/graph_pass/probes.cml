@@ -1,0 +1,103 @@
+module probes
+import { Program, Node, Graph, graphs, name, nodes, inputs, op, op_name, constant, type_of, type_name, open, replace, erase, commit, abort } from graph
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+func isZero(n: Node): bool {
+    return match constant(n, 0) {
+        case null => false
+        case v => v == 0
+    }
+}
+
+func isAddZero(n: Node): bool {
+    let ins = inputs(n)
+    return opText(n) == ':op/add_l' && len(ins) == 2 && isZero(ins[1])
+}
+
+func isAdd(n: Node): bool {
+    return opText(n) == ':op/add_l'
+}
+
+func isString(n: Node): bool {
+    return typeText(n) == 'string'
+}
+
+func mainNodes(p: Program): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == 'main'>
+    return nodes(found[0])
+}
+
+/// Replaces `x + 0` by `x`.
+export func fold_zero_adds(p: Program): Program! sync {
+    let t = open(p)
+    let hits = mainNodes(p)->filter<isAddZero>
+    hits->foreach<(n: Node) => replace(t, n, inputs(n)[0])>
+    return commit(t)
+}
+
+export func count_adds(p: Program): Program! sync {
+    println(len(mainNodes(p)->filter<isAdd>))
+    return p
+}
+
+export func commit_twice(p: Program): Program! sync {
+    let t = open(p)
+    let first = commit(t)
+    let second = commit(t)
+    println(match second {
+        case error e => e.kind
+        case v => 'ok'
+    })
+    return first
+}
+
+/// A string where an integer is read: the commit refuses.
+export func break_types(p: Program): Program! sync {
+    let t = open(p)
+    let adds = mainNodes(p)->filter<isAddZero>
+    let texts = mainNodes(p)->filter<isString>
+    replace(t, adds[0], texts[0])
+    return commit(t)
+}
+
+/// The value of the node is still read.
+export func erase_read(p: Program): Program! sync {
+    let t = open(p)
+    let adds = mainNodes(p)->filter<isAddZero>
+    erase(t, adds[0])
+    return commit(t)
+}
+
+export func abort_unused(p: Program): Program! sync {
+    let t = open(p)
+    abort(t)
+    return p
+}
+
+/// Two transactions edit the same graph; the one that commits second conflicts.
+export func conflict(p: Program): Program! sync {
+    let first = open(p)
+    let second = open(p)
+    let adds = mainNodes(p)->filter<isAddZero>
+    replace(first, adds[0], inputs(adds[0])[0])
+    replace(second, adds[0], inputs(adds[0])[0])
+    let kept = commit(first)
+    println(match commit(second) {
+        case error e => e.kind
+        case v => 'ok'
+    })
+    return kept
+}

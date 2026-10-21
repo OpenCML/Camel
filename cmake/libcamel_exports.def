@@ -2,6 +2,8 @@
 ; CMakeLists.txt). One symbol per line, as the dependent targets import it; a Debug-only
 ; symbol belongs in libcamel_exports_debug.def. Regenerate from the dependent targets'
 EXPORTS
+    ; The standalone bridge: a program std::cpp generated calls it, so no import table names it.
+    ?call@bridge@standalone@camel@@YA?AUValue@123@V?$basic_string_view@DU?$char_traits@D@std@@@std@@AEBV?$vector@UValue@bridge@standalone@camel@@V?$allocator@UValue@bridge@standalone@camel@@@std@@@6@1W4Kind@4123@@Z
     ??0CamelParser@parse@camel@@QEAA@V?$shared_ptr@VDiagnostics@error@core@camel@@@std@@@Z
     ??0Data@data@core@camel@@QEAA@PEAVType@type@23@@Z
     ??0Data@data@core@camel@@QEAA@XZ
@@ -106,6 +108,7 @@ EXPORTS
     ?collectReachableRuntimeGraphs@RuntimeGraphDraftSession@runtime@camel@@QEBA?AV?$vector@PEAVGCGraph@runtime@camel@@V?$allocator@PEAVGCGraph@runtime@camel@@@std@@@std@@XZ
     ?collectRuntimeBranchArmRegion@execute@camel@@YA?AURuntimeBranchArmRegion@12@PEAVGCGraph@runtime@2@I_K@Z
     ?commit@RuntimeGraphDraftSession@runtime@camel@@QEAAPEBVProgram@23@_N@Z
+    ?commitChecked@RuntimeGraphDraftSession@runtime@camel@@QEAAPEBVProgram@23@XZ
     ?compile@UserDefinedModule@module@core@camel@@QEAA_NW4CompileStage@234@@Z
     ?compileGraphOpaque@UserDefinedModuleAccess@detail@module@core@camel@@SAPEBXAEBVUserDefinedModule@345@@Z
     ?completions@SemanticModel@semantic@service@camel@@QEBA?AV?$vector@UCompletion@semantic@service@camel@@V?$allocator@UCompletion@semantic@service@camel@@@std@@@std@@I@Z
@@ -136,6 +139,7 @@ EXPORTS
     ?ctrlOutputsOf@GCGraph@runtime@camel@@QEBA?AV?$span@$$CBI$0?0@std@@I@Z
     ?ctrlUsersOf@GraphDraft@runtime@camel@@QEBA?AV?$span@$$CBI$0?0@std@@I@Z
     ?currentRuntimeOrigin@SourceContext@source@camel@@QEBA_KXZ
+    ?currentRuntimeProgram@Context@context@core@camel@@QEBAPEBVProgram@runtime@4@XZ
     ?declare@OperatorTable@core@camel@@QEAAXV?$basic_string_view@DU?$char_traits@D@std@@@std@@V?$initializer_list@U?$pair@V?$basic_string_view@DU?$char_traits@D@std@@@std@@_N@std@@@5@@Z
     ?declareDefinition@OperatorTable@core@camel@@QEAAXV?$basic_string_view@DU?$char_traits@D@std@@@std@@UDefinition@sem@23@@Z
     ?declareResources@OperatorTable@core@camel@@QEAAXV?$basic_string_view@DU?$char_traits@D@std@@@std@@UResourceSpec@sem@23@@Z
@@ -230,6 +234,7 @@ EXPORTS
     ?getValue@FactStore@fact@runtime@camel@@QEAA?AV?$shared_ptr@$$CBX@std@@IV?$span@$$CBUAnchor@fact@runtime@camel@@$0?0@6@_K@Z
     ?graph@Function@@QEBAPEAVGCGraph@runtime@camel@@XZ
     ?graphOrigin@DebugMap@source@camel@@QEBA_KW4GraphId@runtime@3@@Z
+    ?graphSpace@mm@core@camel@@YAAEAVGrowableFreeListAllocator@123@XZ
     ?hasErrors@Diagnostics@error@core@camel@@QEBA_NXZ
     ?hasExternalEffect@OperatorTable@core@camel@@QEBA_NI@Z
     ?hasNodePayload@GCGraph@runtime@camel@@QEBA_NXZ
@@ -261,6 +266,7 @@ EXPORTS
     ?isErrorValue@rtdata@core@camel@@YA_N_K@Z
     ?isPure@OperatorTable@core@camel@@QEBA_NI@Z
     ?isPure@OperatorTable@core@camel@@QEBA_NV?$basic_string_view@DU?$char_traits@D@std@@@std@@@Z
+    ?isReplaceable@generic@passes@camel@@YA_NAEBVGraphDraft@runtime@3@I@Z
     ?isViewSlot@rtdata@core@camel@@YA_N_KPEBVType@type@23@@Z
     ?iterable@LoopDraftView@runtime@camel@@QEBA?AV?$optional@I@std@@XZ
     ?iterable@LoopView@runtime@camel@@QEBA?AV?$optional@I@std@@XZ
@@ -291,6 +297,7 @@ EXPORTS
     ?myStrptime@@YA_NAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@0AEAUtm@@@Z
     ?name@GCGraph@runtime@camel@@QEBAAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ
     ?nextState@LoopView@runtime@camel@@QEBAIXZ
+    ?nodeAttrs@GCGraph@runtime@camel@@QEBAII@Z
     ?nodeAttrs@GraphDraft@runtime@camel@@QEBAII@Z
     ?nodeBy@Node@syntax@parse@camel@@QEBA?AV1234@H_K@Z
     ?nodeOrigin@GCGraph@runtime@camel@@QEBA_KI@Z
@@ -299,6 +306,7 @@ EXPORTS
     ?nodePermissions@GCGraph@runtime@camel@@QEBAEI@Z
     ?nodePermissions@GraphDraft@runtime@camel@@QEBAEI@Z
     ?noGradient@core@camel@@YAXAEAVVjpBuilder@12@AEBUVjpCall@12@@Z
+    ?nodeRef@GCGraph@runtime@camel@@QEBAIPEBUGCNode@23@@Z
     ?normalizeDiagnosticName@error@core@camel@@YA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@V?$basic_string_view@DU?$char_traits@D@std@@@5@@Z
     ?normInputsOf@GraphDraft@runtime@camel@@QEBA?AV?$span@$$CBI$0?0@std@@I@Z
     ?normOutputsOf@GCGraph@runtime@camel@@QEBA?AV?$span@$$CBI$0?0@std@@I@Z
@@ -329,12 +337,15 @@ EXPORTS
     ?payloadOf@GraphDraft@runtime@camel@@QEBA?AV?$span@$$CBW4byte@std@@$0?0@std@@I@Z
     ?permSpace@mm@core@camel@@YAAEAVGrowableBumpAllocator@123@XZ
     ?print@Tree@gct@compile@camel@@QEBAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@@Z
+    ?printSlotCapped@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@_KPEAVType@type@23@1@Z
     ?printTaggedSlots@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@PEB_KPEBVTupleType@type@23@@Z
     ?printValue@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@_KPEAVType@type@23@@Z
     ?programOfRuntimeGraph@Context@context@core@camel@@QEBAPEBVProgram@runtime@4@PEBVGCGraph@64@@Z
+    ?prototype@EnumDecl@type@core@camel@@QEBAPEAVEnumType@234@XZ
     ?pureDataLayout@type@core@camel@@YAPEBUDataLayout@123@PEBVType@123@@Z
     ?pureViewOf@rtdata@core@camel@@YA_KPEBW4byte@std@@PEBVType@type@23@PEBUDataLayout@723@_K@Z
     ?putValue@FactStore@fact@runtime@camel@@QEAAXIV?$span@$$CBUAnchor@fact@runtime@camel@@$0?0@std@@V?$shared_ptr@$$CBX@6@_K@Z
+    ?reaches@generic@passes@camel@@YA_NAEBVGraphDraft@runtime@3@II@Z
     ?readPureComplex@rtdata@core@camel@@YA_KPEBW4byte@std@@W4TypeCode@type@23@@Z
     ?rebind@Function@@QEAAXPEBVProgram@runtime@camel@@W4GraphId@34@@Z
     ?refAt@SyntaxIndex@semantic@service@camel@@QEBAPEBURef@234@I@Z
@@ -363,6 +374,7 @@ EXPORTS
     ?replaceAllCtrlUses@GraphDraft@runtime@camel@@QEAAXII@Z
     ?replaceAllValueUses@GraphDraft@runtime@camel@@QEAAXII@Z
     ?replaceInput@GraphDraft@runtime@camel@@QEAAXW4DraftEdgeKind@23@III@Z
+    ?replaceNode@generic@passes@camel@@YAXAEAVGraphDraft@runtime@3@II@Z
     ?report@phase@utils@camel@@YAXXZ
     ?requireKnownPasses@@YAXAEBV?$vector@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@V?$allocator@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@2@@std@@AEBV?$shared_ptr@VContext@context@core@camel@@@2@@Z
     ?reserve@GraphDraftGroup@runtime@camel@@QEAA?AW4GraphId@23@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@0@Z
@@ -375,6 +387,7 @@ EXPORTS
     ?resource@ForeignResourceObject@rtdata@core@camel@@QEAAPEAXXZ
     ?retargetBranchArmAnchors@GraphDraft@runtime@camel@@QEAAXIII@Z
     ?returnKind@GCGraph@runtime@camel@@QEBA?AW4GCReturnKind@23@XZ
+    ?returnNodeRef@GCGraph@runtime@camel@@QEBAIXZ
     ?rootDraft@RuntimeGraphDraftSession@runtime@camel@@QEAAAEAVGraphDraft@23@XZ
     ?rowMajorView@sem@core@camel@@YA?AV?$optional@UStridedView@sem@core@camel@@@std@@AEBUIndexedInstance@123@AEBUAccess@123@V?$span@$$CB_J$0?0@5@@Z
     ?runtimeDataType@GCGraph@runtime@camel@@QEBAPEBVTupleType@type@core@3@XZ
@@ -382,6 +395,7 @@ EXPORTS
     ?runtimeProgram@Context@context@core@camel@@QEAAPEBVProgram@runtime@4@XZ
     ?sameShape@Array@@QEBA_NPEBV1@@Z
     ?scale@ExprPool@sem@core@camel@@QEAAI_JI@Z
+    ?segmentOf@GrowableFreeListAllocator@mm@core@camel@@AEBAPEAVFreeListAllocator@234@PEAX@Z
     ?selectCollectorMode@mm@core@camel@@YA_NW4CollectorMode@123@@Z
     ?semanticTokenModifiers@semantic@service@camel@@YAAEBV?$vector@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@V?$allocator@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@2@@std@@XZ
     ?semanticTokens@SemanticModel@semantic@service@camel@@QEBA?AV?$vector@USemanticToken@semantic@service@camel@@V?$allocator@USemanticToken@semantic@service@camel@@@std@@@std@@XZ
@@ -437,6 +451,8 @@ EXPORTS
     ?tangentElementIndex@core@camel@@YA?AV?$optional@_K@std@@PEAVType@type@12@_K@Z
     ?tangentTypeOf@core@camel@@YAPEAVType@type@12@PEAV3412@@Z
     ?text@Node@syntax@parse@camel@@QEBA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ
+    ?text@attr@core@camel@@YA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@I@Z
+    ?toString@fact@runtime@camel@@YA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AEBUTensorShape@123@@Z
     ?to_string@error@core@camel@@YA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@W4DiagType@123@@Z
     ?to_string@error@core@camel@@YA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@W4Severity@123@@Z
     ?toJson@Diagnostic@error@core@camel@@QEBA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ
@@ -472,3 +488,13 @@ EXPORTS
     ?writeBarrier@mm@core@camel@@YAXPEAVObject@rtdata@23@PEBVType@type@23@01@Z
     ?writeEntryResultTo@execute@camel@@YAXAEBV?$shared_ptr@VContext@context@core@camel@@@std@@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@4@_N@Z
     ?WriteToAllStreams@Logger@@SAXAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z
+
+    ; Imported by a module that was added after this list was derived: see the note at the end.
+    ?clone@Variant@rtdata@core@camel@@UEBAPEAVObject@234@AEAVIAllocator@mm@34@PEBVType@type@34@_N@Z
+    ?create@EnumDecl@type@core@camel@@SAPEAV1234@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@V?$vector@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@V?$allocator@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@2@@6@@Z
+    ?define@EnumDecl@type@core@camel@@QEAAXV?$vector@UEnumVariant@type@core@camel@@V?$allocator@UEnumVariant@type@core@camel@@@std@@@std@@@Z
+    ?equals@Variant@rtdata@core@camel@@UEBA_NPEBVObject@234@PEBVType@type@34@_N@Z
+    ?print@Variant@rtdata@core@camel@@UEBAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@PEBVType@type@34@@Z
+    ?updateRefs@Variant@rtdata@core@camel@@UEAAXAEBV?$function@$$A6APEAVObject@rtdata@core@camel@@PEAV1234@PEBVType@type@34@AEBURefTraceInfo@234@@Z@std@@PEBVType@type@34@@Z
+
+    ; Imported by a target built after this list was derived; regenerate the list when this repeats.
