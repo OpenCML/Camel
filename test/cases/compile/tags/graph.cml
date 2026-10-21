@@ -1,0 +1,31 @@
+/// Node tags: the facts of `on nodes` hold for everything written in the region they precede,
+/// and an inner same-name tag with a parameter wins (design principles 6.2).
+module tags_nodes
+
+export tag plain on nodes
+export tag scale<k: int> on nodes
+export tag heavy on func, nodes
+
+#scale<2>
+func doubled(x: int): int {
+    return x * 2
+}
+
+#heavy
+func weighed(x: int): int {
+    return x + 1
+}
+
+#scale<3>
+func main(): int {
+    var a = doubled(3)
+    #plain
+    {
+        a = a * 4
+    }
+    #scale<5>
+    {
+        a = a * 5
+    }
+    return weighed(a)
+}

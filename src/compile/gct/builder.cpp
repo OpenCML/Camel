@@ -26,6 +26,7 @@
 #include "camel/core/data/composite/tuple.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/enum.h"
@@ -479,6 +480,19 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     };
     std::vector<node_ptr_t> visited(stmtNodes->size(), nullptr);
     std::vector<bool> failed(stmtNodes->size(), false);
+    // A tag declaration is registered before anything is lowered (design principles 6.2): a `#`
+    // use written before it in this module reads it, and so does every tag of a type or a
+    // field. It lowers to no node, so it takes no part in the two passes below.
+    for (const auto &stmt : *stmtNodes) {
+        if (stmt->type() != AST::LoadType::Stmt ||
+            stmt->loadAs<AST::StmtLoad>()->stmtType() != AST::StmtType::Tag) {
+            continue;
+        }
+        try {
+            visitTagDecl(stmt);
+        } catch (const BuildAbortException &) {
+        }
+    }
     for (size_t i = 0; i < stmtNodes->size(); ++i) {
         const auto &stmt = stmtNodes->at(i);
         if (!isTypeDecl(stmt)) {
@@ -789,6 +803,11 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     case AST::StmtType::Block:
         stmtNode = visitStmtBlock(ast);
         break;
+    case AST::StmtType::Tag:
+        // A tag declaration has no node: it is registered when the module is entered
+        // (visitTagDecl, visitModule), so that a use written before it reads it.
+        LEAVE("Stmt");
+        return nullptr;
     default:
         throw std::runtime_error("Unknown statement type");
     }
@@ -1044,6 +1063,72 @@ void Builder::checkOperatorDeclaration(
 /*
 FuncDecl(Ref ref) : FuncAnno* anno, FuncData ;
 */
+/*
+tagDecl : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+        | 'export'? 'tag' identDef '=' bracketIdents ;
+The tag is registered here, before any type is declared (visitModule), so that a `#` use reads
+it. It lowers to no node: a tag is a compile-time name, not a value of the program (design
+principles 6.2).
+*/
+void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
+    ENTER("TagDecl");
+    const auto decl = ast->loadAs<AST::TagDeclLoad>();
+    camel::core::tag::Decl tag;
+    tag.module = module_->name();
+    tag.ident  = decl->ref().toString();
+    tag.name   = tag.module.empty() ? tag.ident : tag.module + "::" + tag.ident;
+    tag.on     = static_cast<camel::core::tag::Positions>(decl->on());
+    for (const auto &param : decl->params()) {
+        tag.params.push_back({param.name, param.type});
+    }
+    for (const auto &alias : decl->aliases()) {
+        tag.aliases.push_back(alias);
+    }
+    for (const auto &reader : decl->readBy()) {
+        tag.readBy.push_back(reader.toString());
+    }
+    const auto id = camel::core::tag::declare(std::move(tag));
+    module_->addDeclaredTag(decl->ref().toString(), id);
+    LEAVE("TagDecl");
+}
+
+std::vector<GCT::TagUse> Builder::tagUsesOf(const AST::node_ptr_t &ast) {
+    std::vector<GCT::TagUse> uses;
+    if (ast == nullptr) {
+        return uses;
+    }
+    for (size_t i = 0; i < ast->size(); ++i) {
+        const auto &child = ast->at(i);
+        if (child->type() != AST::LoadType::Repeated ||
+            child->loadAs<AST::RepeatedLoad>()->nodeName() != "TagUse") {
+            continue;
+        }
+        for (const auto &useAst : *child) {
+            GCT::TagUse use;
+            use.name   = useAst->loadAs<AST::TagUseLoad>()->name().toString();
+            use.origin = useAst->load()->origin();
+            for (size_t a = 0; a < useAst->size(); ++a) {
+                // The uses are attached as a list of `Data` lists (one per use); the arguments
+                // are compile-time values, lowered like any other expression. The GIR builder
+                // keeps the constant ones and reports the others.
+                const AST::node_ptr_t &dataList = useAst->at(a);
+                for (const auto &argument : *dataList) {
+                    use.args.push_back(visitData(argument));
+                }
+            }
+            uses.push_back(std::move(use));
+        }
+    }
+    return uses;
+}
+
+void Builder::attachTagUses(const GCT::node_ptr_t &gct, const AST::node_ptr_t &ast) {
+    if (gct == nullptr) {
+        return;
+    }
+    tree_->addTagUses(gct, tagUsesOf(ast));
+}
+
 node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     ENTER("FuncDecl");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for FuncDecl");
@@ -1069,9 +1154,15 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
 
     // Decorator annotations are lowered to ANNO nodes attached after FUNC payload.
     // Each ANNO node owns one lowered GCT expression (currently lowered from funcAnno -> Data).
-    if (ast->size() > 1) {
-        const auto &annoListNode = ast->atAs<AST::RepeatedLoad>(0);
-        for (const auto &annoAst : *annoListNode) {
+    // The tag uses written before the declaration are in a repeated child of their own; they
+    // are kept beside the node (Tree::addTagUses), not in it.
+    for (size_t i = 0; i + 1 < ast->size(); ++i) {
+        const auto &child = ast->at(i);
+        if (child->type() != AST::LoadType::Repeated ||
+            child->loadAs<AST::RepeatedLoad>()->nodeName() != "FuncAnno") {
+            continue;
+        }
+        for (const auto &annoAst : *child) {
             ASSERT(annoAst->type() == AST::LoadType::Data, "FuncAnno should lower to AST Data.");
             node_ptr_t annoExprNode = visitData(annoAst);
             node_ptr_t annoNode     = tree_->makeAnno();
@@ -1079,6 +1170,7 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
             *funcNode << annoNode;
         }
     }
+    attachTagUses(funcNode, ast);
 
     LEAVE("FuncDecl");
     return funcNode;
@@ -1155,6 +1247,16 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         }
         ~InProgress() { context.leaveTypeDeclaration(); }
     } inProgress{*context_, module_.get(), typeLoad->ref().toString()};
+    // The declaration's node is made first: the tags written on its fields are recorded on it
+    // while the type is lowered (visitStructType).
+    node_ptr_t declNode = tree_->makeDecl(typeLoad->ref(), false);
+    struct FieldTagOwner {
+        Builder &self;
+        node_ptr_t outer;
+        FieldTagOwner(Builder &b, node_ptr_t owner)
+            : self(b), outer(std::exchange(b.fieldTagOwner_, owner)) {}
+        ~FieldTagOwner() { self.fieldTagOwner_ = outer; }
+    } fieldTagOwner(*this, declNode);
     if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
         // The name is in scope before the variants are read, so that a variant field can hold
         // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
@@ -1246,8 +1348,9 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         // is through (see visitModule).
         module_->exportType(typeLoad->ref(), type);
     }
-    node_ptr_t declNode = tree_->makeDecl(typeLoad->ref(), false);
     *declNode << tree_->makeType(type, typeLoad->implMark());
+    // The tags written before the declaration itself (`#tag type P = ...`).
+    attachTagUses(declNode, ast);
     LEAVE("TypeDecl");
     return declNode;
 }
@@ -1328,9 +1431,17 @@ Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDecl
     }
     std::vector<std::pair<std::string, Type *>> fields;
     std::unordered_set<string> fieldNames;
+    // The tags written on the fields belong to the type declaration (visitTypeDecl made its
+    // node the owner); a named struct type is declared here, not through visitStructType.
+    const node_ptr_t fieldTagOwner = std::exchange(fieldTagOwner_, nullptr);
+    size_t fieldIndex              = 0;
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedType   = child->loadAs<AST::NamedTypeLoad>();
         const string &fieldName = namedType->getRef().ident();
+        if (fieldTagOwner != nullptr) {
+            tree_->addFieldTagUses(fieldTagOwner, fieldIndex, tagUsesOf(child));
+        }
+        ++fieldIndex;
         // The fields are read in the order written: that order is the type's, and every
         // instance keeps it (design principles 5.2).
         Type *fieldType = visitType(child->atAs<AST::TypeLoad>(0));
@@ -1554,7 +1665,12 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
     ENTER("StmtBlock");
     // Ensure the AST node is of the expected type (Stmt)
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for StmtBlock");
-    if (decorators && ast->size() > 1) {
+    // The block's children after the statement list are its decorators (`FuncAnno`) and the
+    // tags written before it (`#tag { ... }`); only a decorator list makes it decorated.
+    const bool decorated =
+        decorators && ast->size() > 1 && ast->at(1)->type() == AST::LoadType::Repeated &&
+        ast->at(1)->loadAs<AST::RepeatedLoad>()->nodeName() == "FuncAnno";
+    if (decorated) {
         LEAVE("StmtBlock");
         return visitDecoratedBlock(ast);
     }
@@ -1650,6 +1766,9 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
     LEAVE("StmtBlock");
     setOriginFromAst(context_, execNode, ast, camel::source::OriginKind::GctNode, "gct.block");
     registerGctSemantic(context_, execNode, ast);
+    // The tags written before the block (`#kernel { ... }`): they hold for the statements
+    // written in it (design principles 6.2).
+    attachTagUses(execNode, ast);
     // Return the ExecLoad node representing the processed statement block
     return execNode;
 }
@@ -3901,10 +4020,24 @@ Type *Builder::visitStructType(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for StructType");
 
     StructTypeFactory factory;
+    // The fields of the struct a type declaration writes are its own: a tag written on one of
+    // them belongs to that declaration (visitTypeDecl). A struct written anywhere else has no
+    // declaration to hold its field tags, which is reported rather than dropped.
+    const node_ptr_t owner = std::exchange(fieldTagOwner_, nullptr);
+    size_t index           = 0;
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedType = child->loadAs<AST::NamedTypeLoad>();
         const string &name    = namedType->getRef().ident();
-        Type *type            = visitType(child->atAs<AST::TypeLoad>(0));
+        if (owner != nullptr) {
+            tree_->addFieldTagUses(owner, index, tagUsesOf(child));
+        } else {
+            for (const auto &use : tagUsesOf(child)) {
+                diags_->of(SemanticDiag::TagOnUnnamedField).atOrigin(use.origin).commit(
+                    namedType->getRef().toString());
+            }
+        }
+        ++index;
+        Type *type = visitType(child->atAs<AST::TypeLoad>(0));
 
         if (!factory.add(name, type)) {
             diags_->of(SemanticDiag::DuplicateDictKey).at(namedType->tokenRange()).commit(name);

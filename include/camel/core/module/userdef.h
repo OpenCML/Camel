@@ -63,7 +63,9 @@ class UserDefinedModule : public Module {
     // Set while compile() runs: a module imported back by a module it imports is not compiled
     // again from inside its own compilation.
     bool compiling_ = false;
-    // compileAsLibrary(): the graph builder of its own the module was built by, kept with it.
+    // compileAsLibrary(): the graph builder the module was built by, kept with it. It is the
+    // program's builder (Context::graphBuildSession), shared rather than owned: see
+    // compileAsLibrary.
     std::shared_ptr<void> libraryBuilder_;
     // compileAsProgram(): the graph builder of each program of its own, one per entry function,
     // kept with the module for as long as the graphs it made are used.
@@ -96,13 +98,15 @@ class UserDefinedModule : public Module {
         Failed          ///< The module does not compile; its diagnostics say why.
     };
     /**
-     * Compiles the module as a library of its own (docs/design/op-semantics, section 9): parsed,
-     * declared and built by a graph builder that is not the program's, without an entry
-     * function, so that it can be compiled after the program that uses it was built (the
-     * definition libraries of operators). It imports modules written in C++ only: a module
-     * written in Camel it imported would be declared to the program's builder, so such an
-     * import is refused. Done at once when the module is done already (the program imported
-     * and built it). False when it is in error; its diagnostics say why.
+     * Compiles the module as a library (docs/design/op-semantics, section 9): parsed, declared
+     * and built without a call of an entry function, so that it can be compiled after the
+     * program that uses it was built (the definition libraries of operators, and the functions
+     * the graph module calls). It is built by the graph builder of its program: the modules
+     * written in Camel it imports were declared there when its construction tree was built, and
+     * building it there keeps the graphs those modules export the ones this one names (so a
+     * pass module may import `array`, or any other library written in Camel). Done at once when
+     * the module is done already (the program imported and built it). False when it is in
+     * error; its diagnostics say why.
      */
     bool compileAsLibrary();
     /**
@@ -120,7 +124,9 @@ class UserDefinedModule : public Module {
      * the values they stand for.
      *
      * The build is a program of its own and does not replace the graph the module was loaded as
-     * part of; its builder is kept with the module, like the one of compileAsLibrary.
+     * part of; its builder is kept with the module, like the one of compileAsLibrary. The modules
+     * written in Camel that this one imports are declared to that builder, in import order, and
+     * built before it, so the pass may name what a Camel library exports.
      */
     ProgramStatus compileAsProgram(
         const std::string &entryFunction, std::string &problem,

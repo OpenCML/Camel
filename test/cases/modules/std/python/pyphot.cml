@@ -30,16 +30,16 @@ def _bits_from_camel(bits_list):
 def _phot_to_signals_pair(py_result):
     r = py_result
     def ch(c):
-        # c 可能是 numpy array，避免 if c 触发 truth value of array 歧义
+        // c 可能是 numpy array，避免 if c 触发 truth value of array 歧义
         if c is None or len(c) == 0:
             return [[], []]
-        arr = list(c)  # 统一转 list 再处理
+        arr = list(c)  // 统一转 list 再处理
         if arr and (hasattr(arr[0], 'real') and hasattr(arr[0], 'imag')):
             return [[x.real for x in arr], [x.imag for x in arr]]
         return [[float(x) for x in arr], [0.0] * len(arr)]
     return [ch(r[0]), ch(r[1])]
 
-# py_wrap(signals) 得到 ((rx, ix), (ry, iy))，转为 phot 期望的 [x_complex, y_complex]
+// py_wrap(signals) 得到 ((rx, ix), (ry, iy))，转为 phot 期望的 [x_complex, y_complex]
 def _signals_from_camel(tup):
     rx, ix = tup[0][0], tup[0][1]
     ry, iy = tup[1][0], tup[1][1]

@@ -5,8 +5,9 @@
 // `(p: Program) => Program!` exported by a module, named on the pipeline as `<module>::<function>`.
 // These declarations are reference metadata.
 //
-// A module that holds passes is compiled as a library of its own: it may import modules written
-// in C++ only, and not the library `array`.
+// A module that holds passes is compiled as a program of its own, whose entry is the pass: its
+// module-level values are computed before the pass runs. It may import modules written in C++ and
+// libraries written in Camel (for example `array`); the imports are declared and built with it.
 
 // ---- the program ----
 
@@ -173,6 +174,30 @@ inner func origin(n: Node): int {
     return 'graph:origin'
 }
 
+// ---- regions ----
+
+/// The innermost region the node is in. A graph with the body only has no region table, so the
+/// answer is null; in a graph that has regions, region 0 is the body and every node has one.
+/// @pure
+/// @example region_of(n)
+inner func region_of(n: Node): Region? {
+    return 'graph:region_of'
+}
+
+/// The kind of the region: `Root`, `Arm`, `LoopCond`, `LoopBody`, `Inline`, `Block` or `Dead`.
+/// @pure
+/// @example region_kind(r) == RegionKind::Inline
+inner func region_kind(r: Region): RegionKind {
+    return 'graph:region_kind'
+}
+
+/// The region the region is in; null for the body (region 0).
+/// @pure
+/// @example region_parent(r)
+inner func region_parent(r: Region): Region? {
+    return 'graph:region_parent'
+}
+
 /// The node on one line: its id, kind, operator and type.
 /// @pure
 /// @example show(n)    // '%2 Oper :op/mul_l : int'
@@ -240,6 +265,16 @@ inner func open(p: Program): Txn {
 /// @example replace(t, n, inputs(n)[0])
 inner func replace(t: Txn, old: Node, new: Node): void {
     return 'graph:replace'
+}
+
+/// Adds a value the transaction creates to the graph's static values and gives the node that
+/// holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+/// space because a value a transaction creates may be live at a safepoint where its draft is not
+/// traced.
+/// @effect changes the transaction
+/// @example add_constant(t, g, 7)
+inner func add_constant(t: Txn, g: Graph, value: T): Node {
+    return 'graph:add_constant'
 }
 
 /// Removes a node whose value nobody reads. A fault when the value is read or the node anchors its graph.

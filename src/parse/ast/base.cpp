@@ -48,6 +48,8 @@ std::string to_string(LoadType type) {
         return "Repeated";
     case LoadType::Optional:
         return "Optional";
+    case LoadType::TagUse:
+        return "TagUse";
     default:
         throw std::runtime_error("Unknown LoadType");
     }

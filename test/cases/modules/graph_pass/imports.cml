@@ -1,0 +1,14 @@
+module imports
+import { flat_map } from array
+import { Program } from graph
+
+func expanded(x: int): int[] {
+    return [x, x + 1]
+}
+
+/// A pass whose module imports a Camel library (`array`): the library's graphs are declared
+/// with the pass module's, so its `flat_map` is available to the pass.
+export func count(p: Program): Program! sync {
+    println([1, 2, 3]->flat_map<expanded>)
+    return p
+}

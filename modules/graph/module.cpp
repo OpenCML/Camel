@@ -27,6 +27,7 @@
 #include "handle.h"
 #include "nodekind.h"
 #include "read.h"
+#include "regionkind.h"
 #include "txn.h"
 
 #include "camel/core/context/context.h"
@@ -47,6 +48,7 @@ using namespace camel::core::type;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
 using camel::graphmod::nodeKindType;
+using camel::graphmod::regionKindType;
 using camel::graphmod::factGroups;
 using camel::graphmod::factKernels;
 using camel::graphmod::readGroups;
@@ -122,6 +124,7 @@ class GraphModule final : public BuiltinModule {
             exportType(Reference(camel::graphmod::handleKindName(kind)), HandleType::get(kind));
         }
         exportType(Reference("NodeKind"), nodeKindType());
+        exportType(Reference("RegionKind"), regionKindType());
         for (const auto &group : readGroups()) {
             exportEntity(group->name(), group);
         }

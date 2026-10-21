@@ -831,6 +831,40 @@ GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) {
 
 GraphDraft &RuntimeGraphDraftSession::rootDraft() { return edit(runtimeRoot_); }
 
+void RuntimeGraphDraftSession::traceStaticSlots(
+    const camel::core::rtdata::Object::RefRelocator &relocate, const Type *ownerType) {
+    for (auto &[graph, entry] : drafts_) {
+        GraphDraft &draft        = *entry->draft;
+        const auto slots         = draft.staticSlots();
+        const auto types         = draft.staticSlotTypes();
+        const size_t slotCount   = std::min(slots.size(), types.size());
+        // Slot 0 is the static tuple itself (appendStaticSlot reserves it as Void); the values
+        // start at 1.
+        for (size_t i = 1; i < slotCount; ++i) {
+            Type *type = types[i];
+            if (!shouldTraverseStaticSlotType(type) || slots[i] == NullSlot) {
+                continue;
+            }
+            Object *value = fromSlot<Object *>(slots[i]);
+            if (value == nullptr) {
+                continue;
+            }
+            Object *moved = relocate(
+                value,
+                type,
+                camel::core::rtdata::RefTraceInfo{
+                    .owner     = nullptr,
+                    .ownerType = ownerType,
+                    .slotType  = type,
+                    .ownerKind = "Txn",
+                    .slotName  = "draft",
+                    .slotIndex = i,
+                });
+            draft.relocateStaticSlot(i, toSlot<Object *>(moved));
+        }
+    }
+}
+
 GCGraph *RuntimeGraphDraftSession::findSpecialization(const RuntimeSpecializationKey &key) const {
     if (auto it = specializationCache_.find(key); it != specializationCache_.end()) {
         return it->second;

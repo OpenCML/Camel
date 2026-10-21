@@ -378,6 +378,48 @@ func norm(x: float, y: float): float {
 - The permissions are recorded on every node of the graph: `std::rgir` and `std::gir` show `numeric="..."` on the nodes that have any, `camel inspect -a` and `-c` on the blocks. Common-subexpression merging and tensor fusion do not merge nodes with different permissions.
 - An unknown permission, another name followed by parentheses (`@foo(x)`) and an empty `@numeric()` are compile-time errors, `SemanticDiag::InvalidAnnotation`.
 
+### 7.6.2 Tags: `#`
+
+`#` no longer starts a comment (the `#!` of the first line aside): it writes a **tag** (design principles 6.2). A tag is a name in the same namespace as functions and types: declared in this module, imported by name, or qualified as `module::tag`.
+
+A tag is declared at the top level of a module; after `on` come the positions it may be written at:
+
+```cml
+export tag kernel on nodes                  // before a block, function or type: the nodes in it
+export tag fast on func, nodes              // also the function's own declaration
+export tag width<w: int> on type, field     // with parameters, which are compile-time values
+tag finite = [kernel, fast]                 // a group: its members apply together
+```
+
+The positions are `func` (a function declaration), `type` (a type declaration), `field` (a struct field), `nodes` (the nodes written in the region) and `param` (reserved). `read_by` says which passes read the tag; when none of them is in the pipeline a warning is reported where the tag is written.
+
+There are three forms of `#`, written before a function, a type declaration, a struct field or a block:
+
+```cml
+#kernel
+func matmul(a: T, b: T): T { ... }
+
+#width<32>
+type Packed = {
+    #width<8> a: int,
+    b: int,
+}
+
+func main(): int {
+    #fast
+    {
+        // the nodes written here carry fast
+    }
+    return 0
+}
+```
+
+`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, and an argument of a type a tag cannot carry yet (a floating-point one for now, see H2b).
+
+A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag written before a function body or a block holds for the nodes written in it, it accumulates with same-name tags outside by the attribute's combine rule, and an inner same-name tag with a parameter takes the inner value. A tag of `on func`, `on type` and `on field` belongs to the declaration itself: a C++ module reads it with `tag::ofDeclaration` / `tag::ofField`; reading it from Camel code waits for the first stage of generics.
+
+`@name(arguments)` is not how a tag is written: it is reported as an annotation, and the message points at `#name`.
+
 ## 7.7 Type declarations
 
 ```

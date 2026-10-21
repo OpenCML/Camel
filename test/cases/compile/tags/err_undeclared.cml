@@ -1,0 +1,5 @@
+/// A tag that is not declared.
+module err_undeclared
+
+#nope
+func main(): int { return 0 }

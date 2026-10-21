@@ -55,6 +55,7 @@
 #include <deque>
 #include <functional>
 #include <iosfwd>
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -68,6 +69,17 @@
 
 namespace camel::compile::gct {
 
+/// One `#` tag use (design principles 6.2) as written, before it is resolved: the name as
+/// written (qualified by the namespaces of its module), its arguments lowered to data nodes
+/// (a tag takes compile-time values), and where it is written. A use is kept beside the node it
+/// is written on, not in the node: a Node is 32 bytes and the compiler, not the program, reads
+/// these.
+struct TagUse {
+    std::string name;
+    std::vector<node_ptr_t> args;
+    origin_id_t origin = camel::source::kInvalidOriginId;
+};
+
 class Tree {
   public:
     Tree() = default;
@@ -79,6 +91,16 @@ class Tree {
     /// builder has set it.
     node_ptr_t root() const { return root_; }
     void setRoot(node_ptr_t root) { root_ = root; }
+
+    // ---- Tags written with `#` (design principles 6.2) --------------------------------------
+    /// The tag uses written before `node` (a function, a block, or a type declaration).
+    void addTagUses(const Node *node, std::vector<TagUse> uses);
+    /// The tag uses of `node`; nullptr when it has none.
+    const std::vector<TagUse> *tagUsesOf(const Node *node) const;
+    /// The tag uses written on field `field` of the struct type `decl` declares.
+    void addFieldTagUses(const Node *decl, size_t field, std::vector<TagUse> uses);
+    /// The fields of `decl` that have tag uses, by field index; nullptr when none has.
+    const std::map<size_t, std::vector<TagUse>> *fieldTagUsesOf(const Node *decl) const;
 
     // One function per kind of node. A new node has no children, no origin and no parent.
     // A name is the written reference (`a::b`); one that is empty or ends in `::` is not a
@@ -209,6 +231,8 @@ class Tree {
     std::deque<data_ptr_t> constants_;
     std::unordered_map<const Node *, std::vector<Reference>> usings_;
     std::unordered_map<const Node *, std::vector<std::string>> namespaces_;
+    std::unordered_map<const Node *, std::vector<TagUse>> tagUses_;
+    std::unordered_map<const Node *, std::map<size_t, std::vector<TagUse>>> fieldTagUses_;
     std::unordered_map<const Node *, literal::Value> literalValues_;
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.

@@ -24,6 +24,7 @@
 #include "camel/core/module/introspect.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/rtdata/foreign.h"
+#include "camel/core/tags.h"
 #include "camel/core/type.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
@@ -358,7 +359,7 @@ int runCommand(int argc, char *argv[]) {
                 }
             }
             if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps &&
-                !Inspect::dumpInstances && !Inspect::dumpFacts) {
+                !Inspect::dumpInstances && !Inspect::dumpFacts && !Inspect::dumpTags) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -370,7 +371,7 @@ int runCommand(int argc, char *argv[]) {
                 mainModule->compile(CompileStage::GCT);
             }
             if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps ||
-                Inspect::dumpInstances || Inspect::dumpFacts) {
+                Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags) {
                 mainModule->compile(CompileStage::Done);
             }
         } else {
@@ -386,7 +387,7 @@ int runCommand(int argc, char *argv[]) {
             // the diagnostics instead of materializing a half-built graph (the shape of an
             // access violation: the dump used to walk it and die).
             if ((Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpInstances ||
-                 Inspect::dumpFacts) &&
+                 Inspect::dumpFacts || Inspect::dumpTags) &&
                 !mainModule->loaded()) {
                 ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
                 compileSummary(false);
@@ -403,6 +404,15 @@ int runCommand(int argc, char *argv[]) {
             if (Inspect::dumpInstances) {
                 if (ctx->runtimeProgram()->root()) {
                     camel::runtime::dumpOperatorInstances(*ctx->runtimeProgram(), os);
+                }
+            }
+            if (Inspect::dumpTags) {
+                // What the program declares as tags, and the facts written on its declarations
+                // and fields (design principles 6.2). The `on nodes` facts are node attributes,
+                // shown by the graph dumps (`attrs=`).
+                auto modules = ctx->allUserModules();
+                for (const auto &module : modules) {
+                    camel::core::tag::dump(*module, os);
                 }
             }
             if (Inspect::dumpFacts) {
@@ -441,6 +451,13 @@ int runCommand(int argc, char *argv[]) {
                 // Not added to a container, so the warning policy is applied here.
                 if (applyWarningPolicy(*neverRun)) {
                     commandLineWarnings.push_back(std::move(*neverRun));
+                }
+            }
+            // A tag whose declaration names the passes that read it, written into a pipeline
+            // that has none of them: nothing reads it, so writing it had no effect.
+            for (auto &unread : tagsNeverReadWarnings(Run::resolvedPassList, ctx)) {
+                if (applyWarningPolicy(unread)) {
+                    commandLineWarnings.push_back(std::move(unread));
                 }
             }
         }
