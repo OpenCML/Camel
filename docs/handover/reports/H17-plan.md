@@ -1,5 +1,7 @@
 # H17 实施计划：原生多维数组与缓冲区
 
+> 状态（2026-10-21）：**已被 [arrays-memory/plan.cn.md](../../design/arrays-memory/plan.cn.md) 取代**，本文件保留作历史，不再维护；两者冲突时以新计划为准。本文件里的 `Buffer` 名字对应现在的 `mm::Block`（H28 改名）。
+
 分支：`handover/H17-arrays-plan`（基于最新 `develop`）。本文件只是计划，没有实现；按
 [交接说明](../README.cn.md) 第 5 节"先交计划的任务"，由协调者在 `reviews/H17.md` 批复后再动手。
 
