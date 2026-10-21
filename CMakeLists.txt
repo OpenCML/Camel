@@ -212,6 +212,7 @@ add_subdirectory(modules/autodiff)
 add_subdirectory(modules/tree)
 add_subdirectory(modules/bytes)
 add_subdirectory(modules/graph)
+add_subdirectory(modules/rewrite)
 add_subdirectory(modules/onnx)
 
 # CLI and tools: link the libcamel shell (camel-cli lives under tools).
