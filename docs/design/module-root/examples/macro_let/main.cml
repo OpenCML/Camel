@@ -1,4 +1,4 @@
-macro func square(x: int): int {
+#macro func square(x: int): int {
     return x * x
 }
 

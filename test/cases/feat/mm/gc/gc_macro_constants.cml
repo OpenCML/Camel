@@ -4,9 +4,9 @@
  */
 module gc_macro_constants
 
-macro func table(n: int): (int, string)[] { return concat([(1, 'one')], [(n, 'more')]) }
-macro func names(): string[] { return concat(['beta'], ['gamma']) }
-macro func nested(): string[][] { return [names(), concat(names(), ['delta'])] }
+#macro func table(n: int): (int, string)[] { return concat([(1, 'one')], [(n, 'more')]) }
+#macro func names(): string[] { return concat(['beta'], ['gamma']) }
+#macro func nested(): string[][] { return [names(), concat(names(), ['delta'])] }
 
 func main(): int sync {
     println(table(4), names())

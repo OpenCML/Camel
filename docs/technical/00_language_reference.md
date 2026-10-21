@@ -43,7 +43,7 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
   `as`, `let`, `var`, `use`, `from`, `func`, `type`, `enum`, `with`, `wait`, `const`, `keyof`,  
   `return`, `module`, `import`, `export`, `typeas`, `typeof`, `using`, `namespace`,
   `if`, `then`, `else`, `match`, `case`, `for`, `in`, `of`, `try`, `catch`, `finally`, `throw`, `raise`,  
-  `sync`, `macro`, `inner`, `outer`, `atomic`, `shared`,  
+  `sync`, `inner`, `outer`, `atomic`, `shared`,  
   `null`, `true`, `false`。  
 - **多字符记号**：`...`（省略号）在词法中优先于 `.`；`..` 为双点。
 
@@ -280,7 +280,7 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 
 - **funcDecl**：`(with angledParams)? export? implMark? modifiers? func identRef parentParams (':' typeExpr)? stmtBlock`。
   - **implMark**：`inner` | `outer`。  
-  - **modifiers**：`atomic`、`shared`、`sync`、`macro` 等组合。  
+  - **modifiers**：`atomic`、`shared`、`sync` 等组合；`#macro` 是函数声明前的标准标签，不是修饰符。  
   - **parentParams**：`'(' pairedParams? ','? ')'`；**keyParamPair**：`var? identDef ':' typeExpr ('=' dataExpr)?`。  
   - 例：`func fib(n: int): int { ... }`、`func main(): int sync { ... }`、`with <predicate: (p: Point) => bool> func my_filter(...)`。
 

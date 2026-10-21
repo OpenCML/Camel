@@ -112,25 +112,6 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->macro func early(n: int): int {
-#^^^^^ storage.modifier.camel
-#      ^^^^ meta.function.definition.camel storage.type.function.camel
-#           ^^^^^ meta.function.definition.camel entity.name.function.camel
-#                ^ meta.parens.camel punctuation.section.parens.begin.camel
-#                 ^ meta.parens.camel variable.parameter.camel
-#                  ^ meta.parens.camel punctuation.separator.colon.camel
-#                    ^^^ meta.parens.camel support.type.primitive.camel
-#                       ^ meta.parens.camel punctuation.section.parens.end.camel
-#                        ^ punctuation.separator.colon.camel
-#                          ^^^ support.type.primitive.camel
-#                              ^ meta.block.camel punctuation.section.block.begin.camel
->    return n * 2
-#    ^^^^^^ meta.block.camel keyword.control.flow.camel
-#             ^ meta.block.camel keyword.operator.arithmetic.camel
-#               ^ meta.block.camel constant.numeric.integer.decimal.camel
->}
-#^ meta.block.camel punctuation.section.block.end.camel
->
 >atomic shared func marked(): void {
 #^^^^^^ storage.modifier.camel
 #       ^^^^^^ storage.modifier.camel

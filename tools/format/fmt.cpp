@@ -750,11 +750,10 @@ implMark    : INNER | OUTER ;
 any Formatter::visitImplMark(cst::ImplMark context) { return context->text(); }
 
 /*
-modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
+modifiers   : (ATOMIC | SHARED | SYNC)+ ;
 */
 any Formatter::visitModifiers(cst::Modifiers context) {
     string result;
-    context->tokCount(TK::KwMacro) ? result += "macro " : result;
     context->tokCount(TK::KwAtomic) ? result += "atomic " : result;
     context->tokCount(TK::KwShared) ? result += "shared " : result;
     context->tokCount(TK::KwSync) ? result += "sync " : result;

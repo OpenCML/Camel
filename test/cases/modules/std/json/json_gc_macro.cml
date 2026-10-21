@@ -8,7 +8,7 @@ module json_gc_macro
 
 import { Json, decode, get, as_string, as_array } from json
 
-macro func table(): Json! {
+#macro func table(): Json! {
     return decode('{"rows": ["r0", "r1", "r2"], "name": "t"}')
 }
 

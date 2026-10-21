@@ -540,6 +540,10 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);
+    if (camel::core::tag::declaresMacro(tags.declaration)) {
+        graph->draft().setFlags(static_cast<uint8_t>(
+            graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+    }
     buildFuncBody(gct, graph, funcType, name, tags);
     // A declaration tag whose argument names a function (`#vjp<cube_rule>`) keeps that graph
     // in the reference table of the function's graph: the fact is a graph reference, and the

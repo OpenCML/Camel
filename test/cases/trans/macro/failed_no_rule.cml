@@ -3,8 +3,8 @@ module failed_no_rule
 import { grad } from autodiff
 import { sin } from math
 
-// math:sin has no derivative rule, so std::macro cannot expand `grad(f)`: a compile-time error
-// at the grad call that names the operator. The program does not run.
+// math:sin has no derivative rule, so std::macro cannot expand `grad(f)`: a run-time fault at
+// the grad call that names the operator. The program does not run.
 with <x: float>
 func f(): float {
     return sin(x) * x

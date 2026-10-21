@@ -137,7 +137,7 @@
 - **写在消耗图的遍之后的遍永远不会运行。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）执行程序，翻译遍（`std::gir`、`std::rgir`、`std::cpp`、`onnx::export`、字节码和即时编译的转储）翻译程序；二者都不把图传下去，流水线到此结束。`camel f.cml std::nvm std::opt::inline` 在节点虚拟机上运行程序，永远不会运行 `std::opt::inline`。这种写法被接受，但在任何东西运行之前会在 stderr 上给出警告 `RuntimeDiag::PassesNeverRun`（`0x0410000F`，阶段 `pass:<消耗图的遍>`），列出不会运行的遍（见“警告”）。
 - **语言不限制遍的顺序，而顺序可能有影响。** 一个遍并不承诺得到与另一种顺序相同的图：它修改图，并且可能有副作用。“任意遍序列给出相同行为”不是 Camel 的性质。
 - **标准优化遍**（`std::opt::devirtualize`、`std::opt::specialize`、`std::opt::inline`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt`、`tensor::fuse`）力求保持程序的结果。这是对这些遍的质量要求，由测试检查，不是语言保证。
-- **`std::macro` 是可选的。** 没有它，`macro` 函数就是一个随程序运行的普通函数。
+- **`std::macro` 是可选的。** 没有它，`#macro` 函数就是一个随程序运行的普通函数。
 - **建立在遍之上的库可以有前置条件。** `autodiff` 库要求先运行 `std::macro`，`grad` / `with_grad` / `vjp` 才能展开：没有运行过宏的图缺少求导所需的信息。这是该库的约束，不是语言核心的约束。
 
 ### 遍的参数
@@ -190,15 +190,15 @@
 
 ### `std::macro` 报告什么
 
-当每个实参都是常量时，`std::macro` 把对 `macro` 函数或宏算子的调用替换为它的结果。有两种情况会让调用留在程序里：
+当每个实参都是常量时，`std::macro` 把对 `#macro` 函数或宏算子的调用替换为它的结果。有两种情况会让调用留在程序里：
 
 - **某个实参不是常量。** 这是正常情况，不是失败；什么都不打印。带 `-v` 时 stderr 上有一行日志指出这次调用和那个实参：`[WARN] <Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
-- **求值失败**：某个算子抛出错误（除以零、`autodiff: no derivative rule for operator ...`）、有异常逃逸，或者求值所需的嵌套调用数超过求值器的上限（64，除非 `--max-macro-depth` 或 `CAMEL_MAX_MACRO_DEPTH` 另有指定）。这是编译期错误（见设计原则 8）：`RuntimeDiag::MacroEvaluationFailed`（`0x0400000E`，阶段 `pass:std::macro`），定位在这次调用，并带有原因（`short` 格式，后面还有建议和诊断名）：`(m)m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero. ...` 流水线在此停止，退出码为 1；后面的遍不运行，程序不执行。
+- **求值失败**：某个算子抛出错误（除以零、`autodiff: no derivative rule for operator ...`）、有异常逃逸，或者求值所需的嵌套调用数超过求值器的上限（64，除非 `--max-macro-depth` 或 `CAMEL_MAX_MACRO_DEPTH` 另有指定）。这是运行时故障，是遍运行中的故障（见设计原则 8）：`RuntimeDiag::MacroEvaluationFailed`（`0x0400000E`，阶段 `pass:std::macro`），定位在这次调用，并带有原因（`short` 格式，后面还有建议和诊断名）：`(m)m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero. ...` 流水线在此停止，退出码为 1；后面的遍不运行，程序不执行。
 
 这条规则的后果：
 
-- 一次失败的宏调用会使程序被拒绝，**即使这次调用在运行期永远不会到达**（调用位于没有任何地方调用的函数里，或位于没有被选中的分支里）：`std::macro` 对每一个实参都是常量的宏调用求值。
-- 深度超过求值器上限（默认 64 帧）的宏递归是一次失败的求值，所以不带 `std::macro` 能运行的程序，带上它可能被拒绝（对 `macro func count(n) = if n == 0 then 0 else 1 + count(n - 1)` 调用 `count(40)`）。消息给出上限以及提高它的办法：`'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls (at 'count'). The limit is set with --max-macro-depth <n> or CAMEL_MAX_MACRO_DEPTH=<n>.`
+- 一次失败的宏调用会使遍停止，**即使这次调用在运行期永远不会到达**（调用位于没有任何地方调用的函数里，或位于没有被选中的分支里）：`std::macro` 对每一个实参都是常量的宏调用求值。
+- 深度超过求值器上限（默认 64 帧）的宏递归是一次失败的求值，所以不带 `std::macro` 能运行的程序，带上它可能失败（对 `#macro func count(n) = if n == 0 then 0 else 1 + count(n - 1)` 调用 `count(40)`）。消息给出上限以及提高它的办法：`'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls (at 'count'). The limit is set with --max-macro-depth <n> or CAMEL_MAX_MACRO_DEPTH=<n>.`
 - 失败的求值在失败之前已经产生的效应，发生在遍运行的时候（遍的每一轮一次）。它们不会重复，因为程序不运行。
 - 流水线里没有 `std::macro` 时一切照旧：这次调用是普通调用，只有在被执行到时才可能失败。
 - `onnx.export_model` 在程序运行期间用同一个求值器展开它所导出函数中的宏；那里求值失败是同一条诊断，阶段为 `run`。
@@ -302,7 +302,7 @@
 | `std::jit` 编译为原生代码的代码中的递归（分支臂已被内联的自递归函数，例如在 `std::opt::inline` 之后）占用的原生栈 | 无单独的上限：递归深度按上一行计数 | 上一行的选项和变量 | 默认上限下与解释执行给出同一条诊断（`camel f.cml std::opt::inline std::jit`：`depth(999)` 运行，`depth(1000)` 是 `MaxRecursionDepthExceeded`）。原生栈将满的检查不覆盖已编译的代码：上限调得很高而递归确实很深时，进程以段错误结束，没有诊断（上限为 1000000 时，20000 层的递归能运行，100000 层的递归崩溃） |
 | `std::tf` 上线程的原生栈 | 与下一行相同：计数之外，线程的栈用掉十六分之十五时拒绝再嵌套一次调用 | `ulimit -s` 等（工作线程的栈至少 8 MiB：Unix 上进程的栈上限、Windows 上可执行文件的栈大小更大时取后者） | 在该调用处给出 `MaxRecursionDepthExceeded`；此时消息给出打开的调用数和栈的大小。默认上限（1000）在 Linux 默认的 8 MiB 栈下远够不到这里（见下文的实测） |
 | 线程的原生栈，所有执行后端 | 线程的栈（Linux 上主线程默认 8 MiB） | `ulimit -s` 之类 | 在原生栈将满（Unix 上剩余不足十六分之一，且至少保留 128 KiB；Windows 为 SEH 故障展开保留十六分之十五）时还要嵌套的调用，在到达上面的上限之前就被拒绝，诊断为 `MaxRecursionDepthExceeded`；消息说明原生栈已满。正是这一点使调高的上限不至于以段错误告终。栈的边界在 Linux（glibc）、Windows 和 macOS 上读取（Windows 也已验证；macOS 已实现，但没有编译或运行过）；在其他平台上，上限不能调高到默认值以上 |
-| `std::macro` 对 `macro` 函数的提前求值 | 64 个求值器帧（32 层的自递归：`count(31)` 被求值，`count(32)` 不被求值） | `--max-macro-depth <n>`、`CAMEL_MAX_MACRO_DEPTH=<n>`（1 到 1000000） | 求值失败：在该调用处给出错误 `RuntimeDiag::MacroEvaluationFailed`，流水线停止（见“`std::macro` 报告什么”）。求值器在原生栈上嵌套（每帧约 630 字节），栈将满时以同样的方式停下 |
+| `std::macro` 对 `#macro` 函数的提前求值 | 64 个求值器帧（32 层的自递归：`count(31)` 被求值，`count(32)` 不被求值） | `--max-macro-depth <n>`、`CAMEL_MAX_MACRO_DEPTH=<n>`（1 到 1000000） | 求值失败：在该调用处给出运行时故障 `RuntimeDiag::MacroEvaluationFailed`，流水线停止（见“`std::macro` 报告什么”）。求值器在原生栈上嵌套（每帧约 630 字节），栈将满时以同样的方式停下 |
 | 图空间（程序的运行时图；一个函数约占 1 到 2 KB） | 总共 256 MB，随程序的需要按段保留 | `CAMEL_GRAPH_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`（`0x04000014`，退出码 1），定位在正在编码其图的函数，指出空间、用量、上限和变量。程序本身放不下时阶段为 `compile`，是某个遍使它增长时阶段为 `pass:<name>` |
 | 永久空间（类型和布局；一个函数约占 0.6 到 2 KB，遍创建的内容永不释放） | 总共 256 MB，按段 | `CAMEL_PERM_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`，同上，除非知道正在编译的函数，否则没有位置 |
 | 元空间（正在编译的图的常量和函数值；每个拥有它的函数、lambda 或分支臂约 1.2 KB） | 总共 256 MB，按段 | `CAMEL_META_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`，阶段 `compile`，定位在正在编译的函数 |

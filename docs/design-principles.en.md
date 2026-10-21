@@ -481,7 +481,7 @@ Keywords are kept only for modifiers that change semantics (such as `sync`, `exp
 - **`macro` itself defines no stage and is not required.** When there is no `std::macro` pass in the pipeline, a macro function is just an ordinary function. `std::macro` is a stage of the pipeline, not compile time.
 - A value is either a compile-time constant or the return value of a macro; only these two can be processed by a macro.
 - When a macro function body has side effects, it is treated like any other normal function: the effects happen at the time of evaluation. This is expected behaviour and cannot be avoided from a practical viewpoint.
-- **Failure of macro evaluation**: treated as a run-time fault, like a fault during the run of any pass. (The implementation still reports a compile error; the change is pending, handover task H2 item 6.)
+- **Failure of macro evaluation**: treated as a run-time fault, like a fault during the run of any pass.
 - Loops in `std::macro` run at most 1 million rounds (adjustable, like the recursion limit).
 - The two kinds of early computation are kept apart (6.5).
 

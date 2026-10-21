@@ -219,9 +219,8 @@ DraftGraphBuilder::addCallNode(camel::core::type::Type *type, const runtime::GCC
 runtime::DraftNodeRef 
 DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
-    const uint8_t runtimeFlags = static_cast<uint8_t>(
-        (target->funcType() && target->funcType()->modifiers().macro()) ? runtime::kGCNodeFlagMacro
-                                                                        : 0);
+    const uint8_t runtimeFlags =
+        target->draft().isMacroGraph() ? runtime::kGCNodeFlagMacro : 0;
     const runtime::gc_node_ref_t id = draft_->addFuncNode(
         runtime::kInvalidGraphId,
         target->funcType()->exitType(),
@@ -254,7 +253,7 @@ DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t 
     const runtime::gc_node_ref_t id =
         draft_->addOperNode(op->funcType()->exitType(), nullptr, op->uri(), dataIndex);
     const auto node = ref(id);
-    if (op->funcType()->modifiers().macro()) {
+    if (camel::core::OperatorTable::instance().isMacro(op->uri())) {
         draft_->setNodeRuntimeFlags(id, runtime::kGCNodeFlagMacro);
     }
     registerOperTarget(node, op);

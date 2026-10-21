@@ -312,7 +312,6 @@ bool ParserImpl::startsDecl(TK kind) const {
     case TK::KwAtomic:
     case TK::KwShared:
     case TK::KwSync:
-    case TK::KwMacro:
     case TK::At:
     case TK::Hash:
         return true;
@@ -448,7 +447,7 @@ void ParserImpl::parseDecl() {
 ///      | blockStmt | staticForExpr
 /// blockStmt : 'wait'? stmtBlock | funcAnno+ stmtBlock
 /// Decided on the first token, except:
-///   - modifiers (`sync`, `macro`, ...) are skipped to see what they modify: `func` (a
+///   - modifiers (`sync`, ...) are skipped to see what they modify: `func` (a
 ///     declaration), `{` after a lone `sync` (a block), anything else (a lambda expression);
 ///   - `{` is a struct literal when it is `{}`, `{ name: ...` or `{ ...`, a block otherwise;
 ///     the same after `wait`.
@@ -486,8 +485,7 @@ void ParserImpl::parseStmt() {
         return peek(1) == TK::KwType ? parseTypeDecl() : parseFuncDecl();
     case TK::KwAtomic:
     case TK::KwShared:
-    case TK::KwSync:
-    case TK::KwMacro: {
+    case TK::KwSync: {
         const uint32_t n = afterModifiers();
         if (peek(n) == TK::KwFunc) {
             return parseFuncDecl();
@@ -1133,7 +1131,7 @@ void ParserImpl::parseImplMark() {
     close(m, NK::ImplMark);
 }
 
-/// modifiers : ('atomic' | 'shared' | 'sync' | 'macro')+
+/// modifiers : ('atomic' | 'shared' | 'sync')+
 void ParserImpl::parseModifiers() {
     const size_t m = mark();
     while (isModifier(cur_)) {

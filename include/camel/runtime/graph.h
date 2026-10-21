@@ -177,10 +177,15 @@ enum GCNodeFlag : uint8_t {
     kGCNodeFlagConstant = 1 << 1,
 };
 
-/// Properties a graph has besides its nodes (GCGraph::flags). Bit 0 was the flag of a graph
-/// that carried a derivative rule as a closure value (the old `@vjp` decorator); a rule is a
-/// graph reference of the declaration now (kGraphRefRule), so no flag says it.
+/// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {
+    /// The function of the graph is a macro (design principles 8): `std::macro` may evaluate a
+    /// call of it ahead of time and materialise the result as a constant. The fact is the
+    /// standard tag `#macro` on the declaration, or, for an operator value, the operator's
+    /// declared macro trait; it is recorded on the graph so that a runtime graph keeps it.
+    /// Bit 0 was once the flag of a graph that carried a derivative rule as a closure value
+    /// (the old `@vjp` decorator); that is a graph reference now (kGraphRefRule).
+    kGraphFlagMacro = 1 << 0,
     /// A commit looked at the graph's gates: none waits on nothing (GraphDraft::
     /// dissolveUnorderedGates). A graph without it is looked at by the next commit that
     /// reaches it; a graph with it is left as it is unless it is edited.

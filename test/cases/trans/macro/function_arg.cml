@@ -3,11 +3,11 @@
  */
 module macro_function_arg
 
-macro func id_func(): (x: int) => int {
+#macro func id_func(): (x: int) => int {
     return (x: int): int => { return x }
 }
 
-macro func apply_once(f: (x: int) => int, x: int): int {
+#macro func apply_once(f: (x: int) => int, x: int): int {
     return f(x)
 }
 

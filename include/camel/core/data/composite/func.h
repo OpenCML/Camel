@@ -63,7 +63,7 @@ class FunctionData : public CompositeData {
     const camel::runtime::Program *program() const { return program_; }
     camel::runtime::GraphId graphId() const { return graphId_; }
     type::FunctionType *funcType() const;
-    bool isMacro() const { return funcType() && funcType()->modifiers().macro(); }
+    bool isMacro() const;
     const data_vec_t &closure() const { return closure_; }
 
     virtual std::vector<std::string> refs() const override;

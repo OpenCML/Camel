@@ -158,8 +158,9 @@ int 1 string a
 | 修饰符 | 含义 |
 |---|---|
 | `sync` | 函数有副作用、需要被同步（[4.3.3](04_execution_model.md#433-sync-func函数修饰符)） |
-| `macro` | 可以被 `std::macro` 遍提前求值（[4.5](04_execution_model.md#45-macro-函数)） |
 | `atomic`、`shared`、`inner`、`outer` | 保留：能被解析，没有任何语义 |
+
+`#macro` 不是修饰符，是写在函数声明前的标准标签（[4.5](04_execution_model.md#45-macro-函数)）。
 
 ### 7.4.5 运算符重载
 

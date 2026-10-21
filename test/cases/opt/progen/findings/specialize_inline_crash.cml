@@ -16,7 +16,7 @@ func f6(a7: (a0: string) => int): string {
     }, string(10)>;
 }
 
-macro func r16(a17: int, a18: string): string {
+#macro func r16(a17: int, a18: string): string {
     return if (a17 <= 0) then '' else r16(a17 - 1, match a18 {
         case 'cd' => ''
         case 'ab' => {

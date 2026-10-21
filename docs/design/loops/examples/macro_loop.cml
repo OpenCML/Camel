@@ -5,7 +5,7 @@
  */
 module macro_loop
 
-macro func count(i: int, n: int, acc: int): int {
+#macro func count(i: int, n: int, acc: int): int {
     return if i >= n then acc else count(i + 1, n, acc + i)
 }
 

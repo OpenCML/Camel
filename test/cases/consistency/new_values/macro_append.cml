@@ -4,7 +4,7 @@
  */
 module macro_append
 
-macro func squares(n: int): int[] sync {
+#macro func squares(n: int): int[] sync {
     var out: int[] = []
     out = out->append<0>
     out = out->append<1>

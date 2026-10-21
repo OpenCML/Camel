@@ -1186,8 +1186,7 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
     // A macro, and a function with a derivative rule of its own, are not differentiated
     // through their bodies.
     const auto opaque = [](const GCGraph *graph) {
-        return graph == nullptr || graph->funcType() == nullptr ||
-               graph->funcType()->modifiers().macro() || hasRule(graph);
+        return graph == nullptr || graph->isMacro() || hasRule(graph);
     };
     GCGraph *graph  = nullptr;
     auto withInputs = draft_.withInputsOf(call);
@@ -1992,7 +1991,7 @@ void ForwardRewrite::rewriteClosureCall(
         portTypes.push_back(graph->node(capture)->dataType());
     }
     const bool carriesFlow = tangentTypeOf(type->exitType()) != nullptr && anyTangent(portTypes);
-    if (!carriesFlow || type->modifiers().macro()) {
+    if (!carriesFlow || graph->isMacro()) {
         return; // nothing to differentiate: the call stays, a constant to the reverse pass
     }
     const std::vector<gc_node_ref_t> withInputs = copyOf(draft_.withInputsOf(call));
@@ -2106,7 +2105,7 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
     const auto portTypes   = portTypesOf(callee);
     Type *valueType        = type->exitType();
     const bool carriesFlow = tangentTypeOf(valueType) != nullptr && anyTangent(portTypes);
-    if (!carriesFlow || type->modifiers().macro()) {
+    if (!carriesFlow || callee->isMacro()) {
         return;
     }
     if (hasRule(callee)) {

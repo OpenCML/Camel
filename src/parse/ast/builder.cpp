@@ -692,9 +692,6 @@ Value Builder::visitFuncData(cst::FuncData context) {
         if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
         }
-        if (modifier->tokCount(TK::KwMacro) > 0) {
-            modSet.insert(Modifier::Macro);
-        }
     }
     funcType->setModifiers(modSet);
 
@@ -1658,9 +1655,6 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         }
         if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
-        }
-        if (modifier->tokCount(TK::KwMacro) > 0) {
-            modSet.insert(Modifier::Macro);
         }
     }
     funcType->setModifiers(modSet);
@@ -4575,9 +4569,6 @@ Value Builder::visitFuncType(cst::FuncType context) {
         }
         if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
-        }
-        if (modifier->tokCount(TK::KwMacro) > 0) {
-            modSet.insert(Modifier::Macro);
         }
     }
     funcType->setModifiers(modSet);

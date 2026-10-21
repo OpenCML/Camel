@@ -32,7 +32,6 @@ enum Modifier : uint32_t {
     Atomic = 1 << 1,
     Shared = 1 << 2,
     Sync   = 1 << 3,
-    Macro  = 1 << 4,
 };
 
 enum class ExitType {
@@ -50,8 +49,6 @@ inline std::string to_string(Modifier mod) {
         return "shared";
     case Modifier::Sync:
         return "sync";
-    case Modifier::Macro:
-        return "macro";
     case Modifier::None:
         return "";
     default:
@@ -67,8 +64,6 @@ inline Modifier from_string(const std::string &str) {
         return Modifier::Shared;
     if (str == "sync")
         return Modifier::Sync;
-    if (str == "macro")
-        return Modifier::Macro;
     return Modifier::None;
 }
 
@@ -105,7 +100,6 @@ class ModifierSet {
     bool atomic() const { return has(Modifier::Atomic); }
     bool shared() const { return has(Modifier::Shared); }
     bool sync() const { return has(Modifier::Sync); }
-    bool macro() const { return has(Modifier::Macro); }
 
     bool empty() const { return mask == static_cast<ModifierMask>(Modifier::None); }
 
@@ -114,7 +108,7 @@ class ModifierSet {
 
     operator std::string() const {
         std::vector<std::string> result;
-        for (auto mod : {Modifier::Atomic, Modifier::Shared, Modifier::Sync, Modifier::Macro}) {
+        for (auto mod : {Modifier::Atomic, Modifier::Shared, Modifier::Sync}) {
             if (has(mod)) {
                 result.emplace_back(to_string(mod));
             }

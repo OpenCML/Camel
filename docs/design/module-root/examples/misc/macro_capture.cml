@@ -5,7 +5,7 @@ func noisy(tag: string): int sync {
 
 let base = noisy('evaluating base')
 
-macro func plus_base(x: int): int {
+#macro func plus_base(x: int): int {
     return x + base
 }
 

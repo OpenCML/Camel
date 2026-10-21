@@ -1,5 +1,5 @@
 // macro function: evaluated early by std::macro, the result becomes a constant.
-macro func square(x: int): int {
+#macro func square(x: int): int {
     return x * x
 }
 

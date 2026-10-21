@@ -639,7 +639,7 @@ Each is implemented as recommended here; the tag is in the code.
   checked at compile time (key type, duplicate keys) but built by the `CAST` each time it is
   executed. `std::opt::fold` does not fold a `CAST` to a module type, nor an operator over a
   collection (none has a folder registered). A program that wants the table built once puts
-  it in a `macro func` and runs `std::macro`, which works (section 8).
+  it in a `#macro func` and runs `std::macro`, which works (section 8).
 - **`map_values`, `filter` and friends are not in the library** (section 6.2): generic
   functions cannot be exported from a module.
 - **No persistent tree** (sections 5.2 and 9).

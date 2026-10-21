@@ -432,6 +432,10 @@ struct OperatorSemantics {
     bool callsGraphs = false;
     /// It reads the graphs of the function values it receives instead of only calling them.
     bool readsGraphs = false;
+    /// The operator is a macro operator (design principles 8): `std::macro` may evaluate a call
+    /// of it ahead of time when its arguments are constants. `grad` and `with_grad` are the
+    /// macro operators of this repository; a declaration tag is not an operator trait.
+    bool macro = false;
     /// The index semantics (camel/core/index_semantics.h): the instance of one call. Empty when
     /// not declared: the operator reads its operands whole and writes its result whole, and
     /// nothing is known about which elements depend on which.

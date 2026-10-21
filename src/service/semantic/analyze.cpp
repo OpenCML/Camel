@@ -152,12 +152,13 @@ class Recorder : public camel::compile::SemanticRecorder {
     }
     void callResolved(
         origin_id_t call, origin_id_t callee, camel::runtime::GraphId graph,
-        const std::string &operatorUri, FunctionType *type) override {
+        const std::string &operatorUri, FunctionType *type, bool macro) override {
         facts.push_back(
             {.kind  = RawFact::Kind::CallResolved,
              .at    = callee,
              .other = call,
              .type  = type,
+             .flag  = macro,
              .graph = graph,
              .uri   = operatorUri});
     }
@@ -748,11 +749,7 @@ class ModelBuilder {
                     break;
                 }
                 const uint32_t type = typeId(fact.type);
-                bool macro          = false;
-                try {
-                    macro = static_cast<FunctionType *>(fact.type)->modifiers().macro();
-                } catch (...) {
-                }
+                const bool macro    = fact.flag;
                 if (auto ref = findRef(*where)) {
                     RefFacts &rf = file.refFacts[*ref];
                     addUnique(rf.callTypes, type);
@@ -822,7 +819,7 @@ class ModelBuilder {
                     }
                     if (graph->funcType()) {
                         ext.signatures.push_back(sourceSpelling(graph->funcType()->toString()));
-                        ext.macro = ext.macro || graph->funcType()->modifiers().macro();
+                        ext.macro = ext.macro || graph->draft().isMacroGraph();
                     }
                     if (auto where = functionOfGraph(graph->graphId())) {
                         addUnique(ext.definitions, *where);

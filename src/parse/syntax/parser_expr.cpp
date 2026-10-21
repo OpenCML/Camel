@@ -82,7 +82,6 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::KwTry:
     case TK::KwLoop:
     case TK::KwSync:
-    case TK::KwMacro:
     case TK::KwAtomic:
     case TK::KwShared:
         return true;
@@ -569,7 +568,6 @@ void ParserImpl::parsePrimary() {
     case TK::Lt:
     case TK::LAngle:
     case TK::KwSync:
-    case TK::KwMacro:
     case TK::KwAtomic:
     case TK::KwShared:
         return parseFuncData();

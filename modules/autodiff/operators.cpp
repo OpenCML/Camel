@@ -40,7 +40,6 @@ namespace camel::autodiff {
 namespace {
 
 namespace mm = camel::core::mm;
-using ::Modifier;
 using ::ModifierSet;
 using camel::core::context::Context;
 using camel::core::error::RuntimeDiag;
@@ -65,11 +64,7 @@ class GradResolver final : public type::FuncTypeResolver {
         if (!gradient) {
             return std::nullopt;
         }
-        return FunctionType::create(
-            {},
-            {{norm[0], false}},
-            gradient->functionType,
-            Modifier::Macro);
+        return FunctionType::create({}, {{norm[0], false}}, gradient->functionType);
     }
 
     std::optional<std::string> explainRejection(
@@ -197,7 +192,8 @@ void registerOperatorMetadata() {
     // they refuse a loop there as everywhere else (OperatorTraits::readsGraphs; op-semantics
     // 11.4). A custom rule is a declaration tag (`#vjp<rule>`), not an operator of this module.
     for (const char *name : {"autodiff:grad", "autodiff:with_grad"}) {
-        camel::core::OperatorTable::instance().set(name, {.pure = false, .readsGraphs = true});
+        camel::core::OperatorTable::instance().set(
+            name, {.pure = false, .readsGraphs = true, .macro = true});
     }
     camel::core::OperatorTable::instance().set(
         "autodiff:stop_gradient",

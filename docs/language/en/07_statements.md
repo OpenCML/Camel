@@ -158,8 +158,9 @@ int 1 string a
 | Modifier | Meaning |
 |---|---|
 | `sync` | The function has side effects and needs to be synchronised ([4.3.3](04_execution_model.md#433-sync-func-function-modifier)) |
-| `macro` | Can be evaluated ahead of time by the `std::macro` pass ([4.5](04_execution_model.md#45-macro-functions)) |
 | `atomic`, `shared`, `inner`, `outer` | Reserved: they are parsed and have no semantics at all |
+
+`#macro` is not a modifier but a standard tag written before a function declaration ([4.5](04_execution_model.md#45-macro-functions)).
 
 ### 7.4.5 Operator overloading
 

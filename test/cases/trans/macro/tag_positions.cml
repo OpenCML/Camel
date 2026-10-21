@@ -1,0 +1,27 @@
+module tag_positions
+
+// #macro is a tag on a function declaration (design principles 6.2, 8). It may be written on
+// a top-level function, on a nested one, and on a generic function; each is evaluated ahead of
+// time by std::macro when its arguments are constants.
+
+#macro func square(x: int): int {
+    return x * x
+}
+
+func wrapper(): int {
+    #macro func twice(x: int): int {
+        return x + x
+    }
+    return twice(3)
+}
+
+#macro func pick(x: typeas T): T {
+    return x
+}
+
+func main(): int sync {
+    println(square(7))
+    println(wrapper())
+    println(pick(5))
+    return 0
+}

@@ -156,7 +156,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "failed_evaluation.error"
-desc = "A macro call with constant arguments whose evaluation fails is a compile-time error of std::macro: RuntimeDiag::MacroEvaluationFailed at the call (19:13), with the reason. The program does not run. The effect the evaluation performed before failing has happened at pass time (once per round of the pass)."
+desc = "A macro call with constant arguments whose evaluation fails is a run-time fault of std::macro: RuntimeDiag::MacroEvaluationFailed at the call (19:13), with the reason. The program does not run. The effect the evaluation performed before failing has happened at pass time (once per round of the pass)."
 kind = "behavior"
 case = "../../../cases/trans/macro/failed_evaluation.cml"
 args = ["${case}", "std::macro", "std::nvm"]
@@ -219,7 +219,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "failed_no_rule.error"
-desc = "grad over an operator without a derivative rule cannot be expanded by std::macro: a compile-time error located at the operator whose rule is missing (10:12), whose message names the operator and the macro call (15:13); the program does not start."
+desc = "grad over an operator without a derivative rule cannot be expanded by std::macro: a run-time fault located at the operator whose rule is missing (10:12), whose message names the operator and the macro call (15:13); the program does not start."
 kind = "behavior"
 case = "../../../cases/trans/macro/failed_no_rule.cml"
 args = ["${case}", "std::macro", "std::fvm"]
@@ -239,7 +239,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "failed_depth.error"
-desc = "A macro recursion deeper than the 64-frame evaluation limit is a failed evaluation: an error at the call (17:13) naming the limit, and the program does not run, although it runs without std::macro (next test). count(20) on the line before is evaluated without a diagnostic."
+desc = "A macro recursion deeper than the 64-frame evaluation limit is a failed evaluation: a run-time fault at the call (17:13) naming the limit, and the program does not run, although it runs without std::macro (next test). count(20) on the line before is evaluated without a diagnostic."
 kind = "behavior"
 case = "../../../cases/trans/macro/failed_depth.cml"
 args = ["${case}", "std::macro", "std::nvm"]
@@ -260,7 +260,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "failed_depth.without_macro"
-desc = "The program that std::macro rejects for the evaluation depth runs without the pass and prints 20, 100, 7."
+desc = "The program that std::macro fails on for the evaluation depth runs without the pass and prints 20, 100, 7."
 kind = "behavior"
 case = "../../../cases/trans/macro/failed_depth.cml"
 args = ["${case}", "std::nvm"]
@@ -276,7 +276,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "failed_unreached.error"
-desc = "Consequence of the macro-failure rule: a failing macro call in a function nothing calls is rejected by std::macro, at the call (11:12), although the program never reaches it."
+desc = "Consequence of the macro-failure rule: a failing macro call in a function nothing calls stops std::macro, at the call (11:12), although the program never reaches it."
 kind = "behavior"
 case = "../../../cases/trans/macro/failed_unreached.cml"
 args = ["${case}", "std::macro", "std::nvm"]
@@ -337,6 +337,81 @@ verify_script = """
 ({ input, assert }) => {
 assert(input.normalized.stderr === '', `stderr: ${input.normalized.stderr}`)
 assert(input.normalized.stdout.trim() === '20\n7', `unexpected stdout: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tag_positions"
+desc = "The #macro tag is written on a function declaration, and only there: a top-level function, a nested one and a generic template are all expanded ahead of time when their arguments are constants (49, 6, 5)."
+kind = "behavior"
+case = "../../../cases/trans/macro/tag_positions.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stdout.trim() === '49\n6\n5', `unexpected stdout: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "tag_on_block.error"
+desc = "#macro is declared on func, not on nodes: written before a block it is SemanticDiag::TagNotAtPosition at the tag name (7:6), not silently ignored."
+kind = "behavior"
+case = "../../../cases/trans/macro/tag_on_block.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagNotAtPosition"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 6
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "tag_with_argument.error"
+desc = "The standard #macro tag declares no parameter: #macro<1> is SemanticDiag::TagArgumentCount at the tag name (6:2)."
+kind = "behavior"
+case = "../../../cases/trans/macro/tag_with_argument.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 2
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "round_budget.error"
+desc = "A loop evaluated ahead of time runs at most --max-macro-rounds rounds: with --max-macro-rounds 3 the evaluation fails as a run-time fault of std::macro at the call (12:13), naming the limit."
+kind = "behavior"
+case = "../../../cases/trans/macro/round_budget.cml"
+args = ["--max-macro-rounds", "3", "${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 13
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.output
+assert(/more than 3 rounds ahead of time/.test(out), `limit missing: ${out}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "round_budget.default"
+desc = "With the default macro-round limit the same loop finishes ahead of time and the program prints 500500."
+kind = "behavior"
+case = "../../../cases/trans/macro/round_budget.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stdout.trim() === '500500', `unexpected stdout: ${input.normalized.stdout}`)
 }
 """
 timeout_ms = 4000

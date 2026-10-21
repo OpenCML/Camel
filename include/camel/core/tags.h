@@ -282,6 +282,11 @@ bool declaresIndependentElements(const camel::runtime::GCGraph &graph);
 /// per named function after its body is built (Builder::visitFuncNode).
 void markIndependentElements(camel::runtime::GraphDraft &draft, attr::AttrSetId declaration);
 
+/// Whether the declaration facts carry the standard tag `macro` (design principles 8): the
+/// function may be evaluated ahead of time by `std::macro`. The compiler records the answer on
+/// the function's graph (kGraphFlagMacro), which is what the runtime reads.
+bool declaresMacro(attr::AttrSetId declaration);
+
 /// The facts attached to the declaration `name` of `module` (`on func`, `on type`).
 attr::AttrSetId ofDeclaration(const module::Module &module, const Reference &name);
 /// The facts attached to the overload `signature` of the declaration `name`.
