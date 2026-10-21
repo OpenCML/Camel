@@ -731,12 +731,19 @@ struct Refusal {
 /// runs over one round's collected values (design principles 9.9).
 class Backward final : public VjpBuilder {
   public:
+    /// `differentiated` are the forward ports whose gradient this pass computes: the parameter
+    /// of a `grad`/`with_grad` call, or every port a pullback returns a tangent for. A port that
+    /// merely has a tangent (an ordinary tensor argument used as data) is not one, and neither
+    /// is anything derived from it: no gradient is being computed there, so nothing can be lost.
     Backward(
         GraphDraft &forward, GraphDraft &target,
         const std::unordered_map<gc_node_ref_t, CallSite> &sites, const GraphScope &scope,
-        std::vector<Refusal> &refusals, bool residualPorts = false)
+        std::vector<Refusal> &refusals, std::vector<gc_node_ref_t> differentiated,
+        bool residualPorts = false)
         : forward_(forward), target_(target), sites_(sites), inPlace_(&forward == &target),
-          scope_(scope), refusals_(refusals), residualPorts_(residualPorts) {}
+          scope_(scope), refusals_(refusals),
+          differentiated_(differentiated.begin(), differentiated.end()),
+          residualPorts_(residualPorts) {}
 
     /// Target-graph node holding the primal value `primal`.
     gc_node_ref_t ref(gc_node_ref_t primal);
@@ -826,6 +833,9 @@ class Backward final : public VjpBuilder {
     std::vector<Refusal> &refusals_;
     std::vector<gc_node_ref_t> refused_;
     std::unordered_set<gc_node_ref_t> primals_;
+    /// The ports whose gradient this pass computes; activity starts here, not at every port
+    /// that happens to have a tangent.
+    std::unordered_set<gc_node_ref_t> differentiated_;
     std::unordered_set<gc_node_ref_t> active_;
     /// Values that depend on a differentiated parameter but have no tangent of their own: the
     /// contribution of that parameter cannot be carried through them (design principles 9.9).
@@ -2295,13 +2305,11 @@ void Backward::refuseWhenActive(
 
 void Backward::run(const std::vector<gc_node_ref_t> &order) {
     primals_.insert(order.begin(), order.end());
-    // Activity analysis: a value is active when it has a tangent and depends on a parameter that
-    // has one. Gradients only flow between active values, so values derived from constants or
-    // integers (e.g. a scale computed from a shape) need no rule and cost nothing.
-    std::unordered_set<gc_node_ref_t> ports(
-        forward_.withPorts().begin(),
-        forward_.withPorts().end());
-    ports.insert(forward_.normPorts().begin(), forward_.normPorts().end());
+    // Activity analysis: a value is active when it has a tangent and depends on a port whose
+    // gradient is being computed. An ordinary argument (a tensor of labels, a scale) can have a
+    // tangent type and still be data: it is not in `differentiated_`, so nothing derived from it
+    // is active and no gradient can be lost through it. Gradients only flow between active
+    // values, so values derived from constants or integers need no rule and cost nothing.
     checkVariableReads(order);
     //
     // A function value has no tangent, but a closure carries the values it captured: one that
@@ -2416,7 +2424,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             continue;
         }
         // A function passed in from outside is given: it does not depend on a parameter.
-        bool active = ports.contains(node) && tangentTypeOf(type) != nullptr;
+        bool active = differentiated_.contains(node) && tangentTypeOf(type) != nullptr;
         active |= inputActive || inputTainted;
         if (!active) {
             continue;
@@ -3134,11 +3142,18 @@ void Engine::build(Pending &pending) {
     const gc_node_ref_t dy = addPort(*pullback, tangentTypeOf(plan.valueType));
     pullback->appendNormPort(dy);
 
-    Backward backward(forward, *pullback, rewrite.sites(), pending.scope, refusals_);
+    const auto ports = portsOf(forward);
+    std::vector<gc_node_ref_t> differentiated;
+    for (size_t i = 0; i < ports.size(); ++i) {
+        if (plan.tangentIndex(i)) {
+            differentiated.push_back(ports[i]);
+        }
+    }
+    Backward backward(
+        forward, *pullback, rewrite.sites(), pending.scope, refusals_, std::move(differentiated));
     backward.seed(value, dy);
     backward.run(valueOrder(forward, value));
 
-    const auto ports = portsOf(forward);
     std::vector<gc_node_ref_t> tangents;
     for (size_t i = 0; i < ports.size(); ++i) {
         if (plan.tangentIndex(i)) {
@@ -3281,7 +3296,19 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
     auto pullback = std::make_unique<GraphDraft>();
     const gc_node_ref_t dy = addPort(*pullback, plan.dyType);
     pullback->appendNormPort(dy);
-    Backward backward(*source, *pullback, rewrite.sites(), scope, refusals_, /*residualPorts=*/true);
+    std::vector<gc_node_ref_t> primalPorts(withPorts.begin(), withPorts.end());
+    for (size_t j = 0; j < stateCount; ++j) {
+        primalPorts.push_back(normPorts[firstState + j]);
+    }
+    std::vector<gc_node_ref_t> differentiated;
+    for (size_t i = 0; i < primalPorts.size(); ++i) {
+        if (plan.graphs.tangentIndex(i)) {
+            differentiated.push_back(primalPorts[i]);
+        }
+    }
+    Backward backward(
+        *source, *pullback, rewrite.sites(), scope, refusals_, std::move(differentiated),
+        /*residualPorts=*/true);
     backward.seed(stateValue, dy);
     backward.run(valueOrder(*source, stateValue));
 
@@ -3296,10 +3323,6 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
     // The tangents of the body's ports, in the order the site's pullback returns them. Asking for
     // them may add residuals (a zero tangent of an aggregate reads the primal), so the residual
     // list is read afterwards: the loop collects what this pullback ended up reading.
-    std::vector<gc_node_ref_t> primalPorts(withPorts.begin(), withPorts.end());
-    for (size_t j = 0; j < stateCount; ++j) {
-        primalPorts.push_back(normPorts[firstState + j]);
-    }
     std::vector<gc_node_ref_t> tangents;
     for (size_t i = 0; i < plan.portTypes.size(); ++i) {
         if (plan.graphs.tangentIndex(i)) {
@@ -3386,7 +3409,13 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     const gc_node_ref_t value              = valueNode(*draft);
     const std::vector<gc_node_ref_t> order = valueOrder(*draft, value);
 
-    Backward backward(*draft, *draft, rewrite.sites(), scope, refusals_);
+    const auto withPorts = draft->withPorts();
+    // `grad` and `with_grad` differentiate the first `with` parameter only. The other `with`
+    // parameters and every ordinary parameter are data, even when their type has a tangent.
+    Backward backward(
+        *draft, *draft, rewrite.sites(), scope, refusals_,
+        withPorts.empty() ? std::vector<gc_node_ref_t>{}
+                          : std::vector<gc_node_ref_t>{withPorts.front()});
     const slot_t one = type->exitType()->code() == TypeCode::Float32
                            ? toSlot<camel::core::rtdata::Float32>(1.0f)
                            : toSlot<camel::core::rtdata::Float64>(1.0);
@@ -3395,7 +3424,7 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
 
     // The differential form differentiates the first `with` parameter (9.9); the other `with`
     // parameters are constants and the ordinary parameters are data.
-    gc_node_ref_t result = backward.gradient(draft->withPorts().front());
+    gc_node_ref_t result = backward.gradient(withPorts.front());
     if (withValue) {
         const std::array<gc_node_ref_t, 2> pair{value, result};
         result = addAggregate(*draft, signature->functionType->exitType(), pair);

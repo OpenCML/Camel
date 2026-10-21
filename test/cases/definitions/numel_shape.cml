@@ -1,0 +1,19 @@
+// An element count is a shape, not data whose gradient is dropped: the definition graph of
+// `tensor_definitions::mean` is `sum(x) / (numel(x) as float)`, and differentiating it must use
+// `numel(x)` as a constant shape count. The gradient of the mean is 1/n per element, so its sum
+// is 1.0 (design principles 9.9, 5.4).
+import { grad } from autodiff
+import { Tensor, new, sum } from tensor
+import tensor_definitions
+
+with <x: Tensor<f32>>
+func mean_of(): float {
+    return tensor_definitions::mean(x)
+}
+
+func main(): int sync {
+    let x: Tensor<f32> = new([[1.0, 2.0, 3.0, 4.0]])
+    println(mean_of<x>())
+    println(sum(grad(mean_of)<x>()))
+    return 0
+}
