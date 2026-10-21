@@ -535,9 +535,31 @@ PassDescriptor dceDescriptor() {
     return d;
 }
 
+/// The algebraic simplification under the core's name: the rules library's pass
+/// (`rules::simplify`, or `rules::simplify_strict` for `safe_fp=true`), so the laws live once,
+/// in stdlib/rules.cml. `neutral_only` has no library equivalent; it keeps the C++ reference
+/// mode (the integer neutral elements only) that graph.plan.toml compares a Camel pass against.
+const camel::runtime::Program *runRulesAlgebra(
+    const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
+    bool safeFp, std::ostream &os);
+
+class RulesAlgebraPass final : public GraphIRPass {
+  public:
+    RulesAlgebraPass(const camel::core::context::context_ptr_t &ctx, bool safeFp)
+        : GraphIRPass(ctx), safeFp_(safeFp) {}
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        return runRulesAlgebra(context_, program, safeFp_, os);
+    }
+
+  private:
+    bool safeFp_;
+};
+
 PassDescriptor algebraDescriptor() {
     PassDescriptor d;
-    d.doc    = "algebraic simplification";
+    d.doc    = "algebraic simplification (the rules library's simplified form: the laws of "
+               "stdlib/rules.cml, under the strict numeric policy when safe_fp is true)";
     d.params = {
         safeFpParameter(),
         PassParam{
@@ -545,14 +567,16 @@ PassDescriptor algebraDescriptor() {
             PassParamType::Bool,
             false,
             "apply only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), not the "
-            "merging of like terms and constant factors (the reference for passes that do the "
-            "same)"},
+            "merging of like terms and constant factors (the C++ reference for passes that do the "
+            "same; the rules library has no neutral-only mode)"},
     };
     d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<AlgebraPass>(
-            ctx,
-            args.getBool("safe_fp"),
-            args.getBool("neutral_only"));
+        if (args.getBool("neutral_only")) {
+            return std::unique_ptr<GraphIRPass>(
+                std::make_unique<AlgebraPass>(ctx, false, true));
+        }
+        return std::unique_ptr<GraphIRPass>(
+            std::make_unique<RulesAlgebraPass>(ctx, args.getBool("safe_fp")));
     };
     return d;
 }
@@ -1332,6 +1356,90 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
     }
     return resolved;
 }
+
+namespace {
+
+/// Whether `after` holds graphs of content different from `before`: a graph's revision changes
+/// only when a commit encoded different content for it (graph.h), and a graph one of the two
+/// holds and the other does not counts. The program objects themselves differ after every
+/// commit, so pointer inequality would call every pass a change.
+bool programContentChanged(
+    const camel::runtime::Program *before, const camel::runtime::Program *after) {
+    if (after == nullptr) {
+        return true;
+    }
+    if (after == before) {
+        return false;
+    }
+    for (camel::runtime::GCGraph *graph : after->graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        const camel::runtime::GCGraph *old = before->graph(graph->id());
+        if (old == nullptr || old->revision() != graph->revision()) {
+            return true;
+        }
+    }
+    for (camel::runtime::GCGraph *graph : before->graphs()) {
+        if (graph != nullptr && after->graph(graph->id()) == nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+PassRunResult applyRegisteredPass(
+    const camel::runtime::Program *program, const std::string &spec, const context_ptr_t &ctx,
+    std::ostream &os) {
+    ResolvedPass resolved = resolvePassWithModule(spec, ctx);
+    if (resolved.problem) {
+        throw invalidParameterDiagnostic(spec, *resolved.problem, resolved.errorLocation);
+    }
+    if (!resolved.factory) {
+        listAvailablePasses(spec);
+        setPipelineStage("pass:" + specName(spec));
+        auto unknown  = DiagnosticBuilder::of(RuntimeDiag::UnrecognizedGraphPass).commit(spec);
+        unknown.stage = "pass:" + specName(spec);
+        setPipelineStage("");
+        throw unknown;
+    }
+    const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
+    auto pass            = resolved.factory(ctx);
+    const camel::runtime::Program *produced = pass->apply(program, os);
+    if (produced == nullptr) {
+        return {nullptr, true};
+    }
+    if (ctx) {
+        deliverPassWarnings(*ctx, spec);
+        // A pass that ran on the installed program publishes a new one; its old program is no
+        // longer needed. A pass over a private program (onnx.export's working copy) does not
+        // install it, and the caller keeps it alive (the commit tracked it as detached).
+        if (publishes && ctx->currentRuntimeProgram() == produced) {
+            ctx->settleRuntimeGraphs(produced);
+        }
+        if (ctx->rtmDiags()->hasErrors()) {
+            return {nullptr, true};
+        }
+    }
+    return {produced, programContentChanged(program, produced)};
+}
+
+namespace {
+
+const camel::runtime::Program *runRulesAlgebra(
+    const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
+    bool safeFp, std::ostream &os) {
+    const PassRunResult result = applyRegisteredPass(
+        program,
+        safeFp ? "rules::simplify_strict" : "rules::simplify",
+        ctx,
+        os);
+    return result.program;
+}
+
+} // namespace
 
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {

@@ -40,9 +40,9 @@ verify_script = '''
  const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
  const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label.startsWith(':op/add_')).length,m=g(name).nodes.filter(n=>n.label.startsWith(':op/mul_')).length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
  for(const name of ['strict','strict32','integer_coefficients','integer32','integer_chain'])counts(name,0,1);
- counts('underflow_sensitive',safe?1:0,1);
+ counts('underflow_sensitive',0,2);
  for(const name of ['strict_coefficients','relaxed_coefficients'])counts(name,safe?1:0,safe?2:1);
- counts('mixed_permissions',1,2);counts('shared_product',safe?1:0,safe?1:2);
+ counts('mixed_permissions',1,2);counts('shared_product',0,2);
  const mul=g('strict').nodes.find(n=>n.label===':op/mul_d');
  assert(g('strict').nodes.some(n=>n.label==='6.0'),'coefficient six missing');
  assert(mul.origin&&mul.source,'consumer source lost');
@@ -571,8 +571,8 @@ args = ["${case}","std::macro","std::opt(safe_fp=false)","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
- assert(g.nodes.filter(n=>[':op/add_d',':op/mul_d'].includes(n.label)).length===4,'gradient did not simplify');
- for(const label of ['2.0','6.0','rand:rand','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
+ assert(g.nodes.filter(n=>[':op/add_d',':op/mul_d'].includes(n.label)).length===5,'gradient did not simplify');
+ for(const label of ['2.0','3.0','rand:rand','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
 }
 '''
 
@@ -583,8 +583,8 @@ args = ["${case}","std::macro","std::opt(safe_fp=true)","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
- assert(g.nodes.filter(n=>[':op/add_d',':op/mul_d'].includes(n.label)).length===4,'gradient did not simplify');
- for(const label of ['2.0','6.0','rand:rand','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
+ assert(g.nodes.filter(n=>[':op/add_d',':op/mul_d'].includes(n.label)).length===5,'gradient did not simplify');
+ for(const label of ['2.0','3.0','rand:rand','rand:seed'])assert(g.nodes.filter(n=>n.label===label).length===1,label+' missing or duplicated');
 }
 '''
 
@@ -644,7 +644,9 @@ verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  assert(g.normalPorts.length===1,'runtime input folded');
- assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===11,'integrated algebra policy not applied');
+ assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===15,'integrated algebra policy not applied');
+ const f=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='strict_coefficients');
+ assert(f.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===1,'the default policy did not combine the coefficients');
 }
 '''
 
@@ -657,6 +659,8 @@ verify_script = '''
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  assert(g.normalPorts.length===1,'runtime input folded');
  assert(g.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===15,'integrated algebra policy not applied');
+ const f=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='strict_coefficients');
+ assert(f.nodes.filter(n=>/^:op\/(add|mul)_/.test(n.label)).length===3,'the strict policy regrouped the coefficients');
 }
 '''
 
@@ -689,7 +693,7 @@ verify_script = '''
  const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
  const counts=(name,add,mul)=>{const a=g(name).nodes.filter(n=>n.label==='tensor:add').length,m=g(name).nodes.filter(n=>n.label==='tensor:multiply').length;assert(a===add&&m===mul,name+': '+a+' adds, '+m+' multiplies')};
  counts('merged',safe?1:0,safe?2:1);counts('merged_explicit',safe?1:0,safe?2:1);
- counts('chain',0,2);counts('inexact',1,2);counts('shared_product',safe?1:0,safe?1:2);
+ counts('chain',0,2);counts('inexact',1,2);counts('shared_product',0,2);
 }
 '''
 
@@ -752,3 +756,39 @@ verify_script = '''
  counts('shared_product',0,2);counts('chain',0,2);counts('inexact',1,2);
 }
 '''
+
+# The laws the rules library has and the old C++ pass did not: x * 0, x - x, x / 1, -(-x) for
+# the integer element types, and the same division/negation laws on an element-wise tensor. Each
+# function's graph keeps no operator where the law fired, so `std::opt::algebra` alone (without
+# fold) is enough to see the library is the pass. The values are the source's.
+
+[[tests]]
+name = "library.laws.graph"
+desc = "std::opt::algebra is rules::simplify: x * 0, x - x, x / 1 and -(-x) leave no operator, the coefficient combine still gives x * 8, and the tensor division/negation laws fire."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra_library.cml"
+args = ["${case}","std::opt::algebra","std::jgir"]
+verify_script = '''
+({input,assert})=>{
+ const d=JSON.parse(input.normalized.stdout);
+ const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
+ const ops=name=>g(name).nodes.filter(n=>n.label.startsWith(':op/')||n.label.startsWith('tensor:')).length;
+ for(const name of ['int_zero','int_sub_self','int_div_one','int_neg_neg','tensor_div_one','tensor_neg_neg'])
+   assert(ops(name)===0,name+': law did not fire ('+ops(name)+' operators left)');
+ assert(ops('int_combine')===1,'coefficient law did not fold to one product');
+ assert(g('int_combine').nodes.some(n=>n.label==='8'),'coefficient eight missing');
+}
+'''
+
+[[tests]]
+name = "library.laws.execution"
+desc = "The values of the library laws are the source's on every back end."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra_library.cml"
+args = ["${case}","std::opt::algebra","${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "0 0 7 7 16\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
