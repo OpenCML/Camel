@@ -47,6 +47,12 @@ Reading a value:
 - scalars are literals; a struct or tuple is a directory with one file per leaf, named by the
   leaf's dotted path (the layout `nn.save_params` writes); nested aggregates do not nest
   directories;
+- a number text is read by the language's whole-token grammar (`camel/utils/number_text.h`):
+  text that is not a number is `RuntimeDiag::InvalidNumberText`, and a number the declared type
+  cannot hold (overflow or underflow) is `ConversionOutOfRange`, whose reason gives the range; a
+  complex text is two such numbers and the reason names the part. The refusal is the sentence of
+  that diagnostic, not a phrase of the reader, so `std::cpp`'s `EntryArguments` says the same
+  (the translator renders the sentences into the generated program);
 - a module-defined type is read by the loader its module registered with
   `registerEntryArgumentLoader(typeCode, loader)`. The core knows no tensor: the tensor module
   registers a loader that reads a `.npy` file and checks it against the declared type with the

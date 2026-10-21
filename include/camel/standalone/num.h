@@ -178,41 +178,35 @@ To truncate(From value, const char *target, const Site &site) {
     return static_cast<To>(value);
 }
 
-/// The integer written in `text`, which must be that integer and nothing else (`int(s)`);
-/// anything else is InvalidNumberText at `site`, with the text, what it was to become and
-/// what it must be (values 0, 1, 2).
+/// The integer written in `text`, which must be that integer and nothing else (`int(s)`). The
+/// two refusals are the two causes (camel/core/numeric_convert.h, the same rule): `invalid`
+/// reports a text that is not a number, `outOfRange` a number the type cannot hold (the range is
+/// in its message). The text is the only value either report draws at run time (all others are
+/// in the rendered message).
 template <std::signed_integral To>
-To integerFromText(std::string_view text, const char *target, const Site &site) {
+To integerFromText(std::string_view text, const Site &invalid, const Site &outOfRange) {
     To value{};
     switch (camel::utils::parseWholeInteger<To>(text, value)) {
     case camel::utils::NumberTextStatus::Ok:
         return value;
     case camel::utils::NumberTextStatus::OutOfRange:
-        fault(
-            site,
-            {std::string(text),
-             std::string(target) + " (the number is outside its range)",
-             "an integer"});
+        fault(outOfRange, {std::string(text)});
     default:
-        fault(site, {std::string(text), target, "an integer"});
+        fault(invalid, {std::string(text)});
     }
 }
 
-/// The number written in `text` (`float(s)`), under the same rule; values as above.
+/// The number written in `text` (`float(s)`), under the same rule and with the same two refusals.
 template <std::floating_point To>
-To floatFromText(std::string_view text, const char *target, const Site &site) {
+To floatFromText(std::string_view text, const Site &invalid, const Site &outOfRange) {
     To value{};
     switch (camel::utils::parseWholeFloat<To>(text, value)) {
     case camel::utils::NumberTextStatus::Ok:
         return value;
     case camel::utils::NumberTextStatus::OutOfRange:
-        fault(
-            site,
-            {std::string(text),
-             std::string(target) + " (the number is outside its range)",
-             "a number"});
+        fault(outOfRange, {std::string(text)});
     default:
-        fault(site, {std::string(text), target, "a number"});
+        fault(invalid, {std::string(text)});
     }
 }
 

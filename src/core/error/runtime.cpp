@@ -114,6 +114,10 @@ RuntimeFault::RuntimeFault(
     : diag_(diag), formatArgs_(std::move(formatArgs)), detail_(std::move(detail)), cause_(cause),
       hint_(std::move(hint)), policy_(policy) {}
 
+std::string runtimeDiagMessage(RuntimeDiag diag, const std::vector<std::string> &args) {
+    return formatIndexedMessage(getDiagInfo(diag).message, args);
+}
+
 const char *RuntimeFault::what() const noexcept {
     if (!what_.empty()) {
         return what_.c_str();

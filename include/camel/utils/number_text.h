@@ -41,10 +41,42 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 
 namespace camel::utils {
 
+/// Reading a text as a number: it is one number of the language's grammar and the type holds
+/// it, or it is not a number at all, or it is a number the type cannot hold (overflow or
+/// underflow). The two refusals are different causes and are reported differently.
 enum class NumberTextStatus { Ok, NotANumber, OutOfRange };
+
+/// The range of the integer type T as a diagnostic writes it (`-2147483648 to 2147483647`).
+template <std::signed_integral T> std::string integerRangeText() {
+    return std::to_string(std::numeric_limits<T>::min()) + " to " +
+           std::to_string(std::numeric_limits<T>::max());
+}
+
+/// The range of the floating-point type T as a diagnostic writes it (`at most about 3.4e38 in
+/// magnitude`); the same words name the range of a literal (literal::rangeText).
+template <std::floating_point T> std::string_view floatRangeText() {
+    if constexpr (std::is_same_v<T, float>) {
+        return "at most about 3.4e38 in magnitude";
+    } else {
+        return "at most about 1.8e308 in magnitude";
+    }
+}
+
+/// The range of one part of a complex number whose parts are of type T (`each part at most
+/// about 3.4e38 in magnitude`).
+template <std::floating_point T> std::string complexRangeText() {
+    return std::string("each part ") + std::string(floatRangeText<T>());
+}
+
+/// How a complex number is written, in the words an entry argument's refusal uses: the two
+/// parts and the sign of the imaginary one, an imaginary-only form, or a real number (which is
+/// its real part, design principles 5.1).
+inline constexpr std::string_view complexNumberTextHelp =
+    "a complex number (write 1+2i, -2i, 0.5-0.25i or a real number such as 1.5)";
 
 /// Reads `text` as one integer of type T: an optional sign ('-' or '+'), then decimal digits,
 /// and nothing else (no blanks, no digit separators, no base prefix).
@@ -173,7 +205,10 @@ template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_vi
         if (end != numeral.c_str() + numeral.size()) {
             return NumberTextStatus::NotANumber;
         }
-        if (errno == ERANGE && std::isinf(value)) {
+        // The value is too large (infinity) or too small (rounded to zero): both are out of
+        // range, as from_chars reports them. A subnormal that is not zero is still a value of
+        // the type, so ERANGE alone is not a refusal.
+        if (errno == ERANGE && (std::isinf(value) || value == 0)) {
             return NumberTextStatus::OutOfRange;
         }
     }

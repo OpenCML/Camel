@@ -176,7 +176,7 @@ args = ["${case}", "--arg", "n=three", "--arg", "rate=0.5", "--arg", "name=hi", 
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'n' of 'main': 'three' is not an integer"]
+expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert the string 'three' to int"]
 expect_output_not_contains = ["hi "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -190,7 +190,7 @@ args = ["${case}", "--arg", "n=3", "--arg", "rate=0x1.8p1", "--arg", "name=hi", 
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'rate' of 'main': '0x1.8p1' is not a number"]
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '0x1.8p1' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
@@ -204,7 +204,7 @@ args = ["${case}", "--arg", "n=3", "--arg", "rate=1.", "--arg", "name=hi", "--ar
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'rate' of 'main': '1.' is not a number"]
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '1.' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
@@ -218,7 +218,7 @@ args = ["${case}", "--arg", "n=3", "--arg", "rate=.5", "--arg", "name=hi", "--ar
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'rate' of 'main': '.5' is not a number"]
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '.5' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
@@ -232,7 +232,7 @@ args = ["${case}", "--arg", "n=3", "--arg", "rate= 0.5", "--arg", "name=hi", "--
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'rate' of 'main': ' 0.5' is not a number"]
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string ' 0.5' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
@@ -246,36 +246,50 @@ args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5 ", "--arg", "name=hi", "--
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'rate' of 'main': '0.5 ' is not a number"]
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '0.5 ' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.float_overflow_refused"
-desc = "A number too large for the declared float is a value that does not fit, refused rather than read as infinity (the whole-token parser reports it out of range)."
+desc = "A number too large for the declared float is a value that does not fit, refused rather than read as infinity: the message says it is out of range and names the range, not that it is not a number."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=1e9999", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'rate' of 'main': '1e9999' is not a number"]
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '1e9999' to float: the value is outside the range of float (at most about 1.8e308 in magnitude)"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.float_underflow_refused"
-desc = "A number too small for the declared float is a value that does not fit, refused rather than read as zero (the whole-token parser reports it out of range)."
+desc = "A number too small for the declared float is a value that does not fit, refused rather than read as zero: the message says it is out of range and names the range, not that it is not a number."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=1e-9999", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'rate' of 'main': '1e-9999' is not a number"]
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '1e-9999' to float: the value is outside the range of float (at most about 1.8e308 in magnitude)"]
 expect_output_not_contains = ["hi 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.int_overflow_refused"
+desc = "An integer text that is a number but does not fit int is refused as out of range, with the range in the message; it is not 'not an integer'."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=99999999999999999999", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert '99999999999999999999' to int: the value is outside the range of int (-9223372036854775808 to 9223372036854775807)"]
+expect_output_not_contains = ["hi "]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
 
@@ -300,7 +314,7 @@ args = ["${case}", "--arg", "n=3", "--arg", "rate=INF", "--arg", "name=hi", "--a
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'rate' of 'main': 'INF' is not a number"]
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string 'INF' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
@@ -558,7 +572,7 @@ args = ["${case}", "--arg", "z=0x1.8p1", "--arg", "w=-2"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 11
-expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "'0x1.8p1' is not a complex number"]
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '0x1.8p1' to a complex number"]
 expect_output_not_contains = ["3+0i"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
@@ -572,7 +586,7 @@ args = ["${case}", "--arg", "z=1.", "--arg", "w=-2"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 11
-expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "'1.' is not a complex number"]
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '1.' to a complex number"]
 expect_output_not_contains = ["1+0i"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
@@ -586,7 +600,7 @@ args = ["${case}", "--arg", "z= 1.5", "--arg", "w=-2"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 11
-expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "' 1.5' is not a complex number"]
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string ' 1.5' to a complex number"]
 expect_output_not_contains = ["1.5+0i"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
@@ -624,7 +638,7 @@ args = ["${case}", "--arg", "z=1+2", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 11
-expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "'1+2' is not a complex number"]
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '1+2' to a complex number"]
 expect_output_not_contains = ["0+4i", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -638,7 +652,7 @@ args = ["${case}", "--arg", "z=1+2j", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 11
-expect_output_contains = ["'1+2j' is not a complex number"]
+expect_output_contains = ["Cannot convert the string '1+2j' to a complex number"]
 expect_output_not_contains = ["0+4i"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -652,7 +666,7 @@ args = ["${case}", "--arg", "z=abc", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 11
-expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "'abc' is not a complex number", "or a real number such as 1.5"]
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string 'abc' to a complex number", "or a real number such as 1.5"]
 expect_output_not_contains = ["0+4i"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -666,9 +680,37 @@ args = ["${case}", "--arg", "z=1+", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 11
-expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "'1+' is not a complex number"]
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '1+' to a complex number"]
 expect_output_not_contains = ["0+4i"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_real_out_of_range"
+desc = "A complex text whose real part is a number c128 cannot hold is refused as out of range, naming the part and the range; it is not 'not a complex number'."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1e9999+2i", "--arg", "w=4i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'z' of 'main': Cannot convert '1e9999+2i' to c128: the real part is outside the range of c128 (each part at most about 1.8e308 in magnitude)"]
+expect_output_not_contains = ["0+4i"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_imaginary_out_of_range"
+desc = "A complex text whose imaginary part is a number c64 cannot hold is refused as out of range, naming the imaginary part and the range."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1+2i", "--arg", "w=1+1e-9999i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'w' of 'main': Cannot convert '1+1e-9999i' to c64: the imaginary part is outside the range of c64 (each part at most about 3.4e38 in magnitude)"]
+expect_output_not_contains = ["1+2i"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
