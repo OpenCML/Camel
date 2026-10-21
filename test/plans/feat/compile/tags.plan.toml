@@ -286,3 +286,56 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 1
 expect_output_contains = ["The tag 'reassociate' is declared with the name of a permission of the language."]
 
+
+[[tests]]
+name = "independent.node"
+desc = "`#independent` on a user function declaration reaches the runtime graph: std::jgir shows it as an attribute of the function graph's exit node, and a function declared without the tag has none. The tag is on the declaration, not on every node of the body: the exit node is the one that stands for what the function gives."
+kind = "behavior"
+case = "../../../cases/compile/tags/independent.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const dump = JSON.parse(input.normalized.stdout)
+const byName = new Map(dump.graphs.map((g) => [g.name, g]))
+const exitAttrs = (name) => {
+  const g = byName.get(name)
+  assert(g, `graph ${name} is not in the dump`)
+  const n = g.nodes.find((node) => node.id === g.exit)
+  assert(n, `graph ${name} has no exit node`)
+  return n.attrs || {}
+}
+assert(exitAttrs('twice').independent === true, `twice: ${JSON.stringify(exitAttrs('twice'))}`)
+assert(!('independent' in exitAttrs('plain')), `plain: ${JSON.stringify(exitAttrs('plain'))}`)
+}
+"""
+
+[[tests]]
+name = "independent.query"
+desc = "The runtime query tag::declaresIndependentElements reads the fact from the encoded graph, without the module that declared the function: test::tags prints yes for the tagged function and no for the other one."
+kind = "behavior"
+case = "../../../cases/compile/tags/independent.cml"
+args = ["${case}", "test::tags"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 11
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+for (const line of [
+  'TAGS independent twice yes',
+  'TAGS independent plain no',
+  'TAGS independent main no',
+]) assert(out.includes(line), `missing: ${line}`)
+}
+"""
+
+[[tests]]
+name = "independent.run"
+desc = "A tagged function runs to the same result on the four back ends: the declaration is a fact, not a change of semantics."
+kind = "behavior"
+case = "../../../cases/compile/tags/independent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 11
+expect_stdout_exact = ""

@@ -532,6 +532,11 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);
     buildFuncBody(gct, graph, funcType, name, tags);
+    // A declaration fact that has to live on the graph itself: a scheduler reads
+    // `#independent` from the exit node of the function it is about to call (design 3.6).
+    if (!name.empty()) {
+        camel::core::tag::markIndependentElements(graph->draft(), tags.declaration);
+    }
     if (name.empty()) {
         lambdaGraphs_[gct] = graph.get();
     }

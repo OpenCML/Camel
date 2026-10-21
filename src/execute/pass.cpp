@@ -71,6 +71,7 @@
 #include "passes/test/native_call.h"
 #include "passes/test/resources.h"
 #include "passes/test/semantics.h"
+#include "passes/test/tags.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/profile/profile.h"
@@ -1083,6 +1084,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
         TEST_PASS(kResourcesTestPass, ResourcesTestPass),
         TEST_PASS(kControlTestPass, ControlTestPass),
+        TEST_PASS(kTagsTestPass, TagsTestPass),
         TEST_PASS(kChunksTestPass, ChunksTestPass),
         TEST_PASS(kEdgesCycleTestPass, EdgesCycleTestPass),
         TEST_PASS(kEdgesTypeTestPass, EdgesTypeTestPass),

@@ -247,6 +247,19 @@ Facts factsOfField(const module::Module &module, const Reference &typeName, size
 Facts factsOf(const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node);
 Facts factsOf(const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t node);
 
+/// Whether the function of `graph` declares its elements independent (design principles 3.6):
+/// the standard tag `independent` on the function declaration. The fact is on the graph's exit
+/// node (markIndependentElements), so it survives into the runtime graph and is read without
+/// the module that declared the function. False for a graph whose exit node is not set.
+bool declaresIndependentElements(const camel::runtime::GraphDraft &draft);
+bool declaresIndependentElements(const camel::runtime::GCGraph &graph);
+
+/// Puts the `independent` fact of a function's declaration on the graph's exit node, the node
+/// that stands for what the function gives. `declaration` is the set tagFactsOfList built for
+/// the declaration; without the `independent` key this does nothing. The compiler calls it once
+/// per named function after its body is built (Builder::visitFuncNode).
+void markIndependentElements(camel::runtime::GraphDraft &draft, attr::AttrSetId declaration);
+
 /// The facts attached to the declaration `name` of `module` (`on func`, `on type`).
 attr::AttrSetId ofDeclaration(const module::Module &module, const Reference &name);
 /// The facts attached to the overload `signature` of the declaration `name`.
