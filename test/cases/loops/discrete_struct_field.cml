@@ -1,7 +1,7 @@
 // A differentiable value read through a struct and turned into data: `n` is an `int` field
-// computed from `x`, and `float(n)` reads it as a number. The conversion has no derivative
-// channel, so the gradient would silently drop `x`'s contribution; it is refused at the read
-// (design principles 9.9).
+// computed from `x`, and `float(n)` reads it as a number. An integer's derivative is zero by
+// definition (design principles 9.9), so `float(p.n)` is a constant of the call -- 20 at x = 2 --
+// and the gradient is the one of `x * x * 20`, 80, not a refusal.
 import { grad } from autodiff
 
 type P = { w: float, n: int }

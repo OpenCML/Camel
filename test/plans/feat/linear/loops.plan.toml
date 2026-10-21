@@ -529,54 +529,46 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.refuse_struct_data"
-desc = "A differentiable value read through a struct and converted to data (`float(p.n)`, where `n` is an `int` field computed from the parameter) is refused at the read: the conversion has no gradient channel, so the contribution would vanish without a sign (design principles 9.9)."
-kind = "negative"
-case = "../../../cases/loops/refuse_struct_data.cml"
-args = ["-E", "short", "${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 12
-expect_output_contains = ["has no gradient channel", "refuse_struct_data.cml:12:18"]
+name = "loops.discrete_struct_field"
+desc = "A differentiable value read through a struct and turned into data (`float(p.n)`, where `n` is an `int` field computed from the parameter): an integer's derivative is zero by definition (design principles 9.9), so the conversion is a constant of the call and the gradient is 80 at x = 2 (the gradient of `x * x * 20`), not a refusal."
+kind = "behavior"
+case = "../../../cases/loops/discrete_struct_field.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "80.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "loops.refuse_effectful_data"
-desc = "A value produced by an effectful call (`side` returns an `int` from the parameter) and converted to data is refused at the conversion: the call boundary hides the dependency, so the gradient would be dropped silently (design principles 9.9)."
-kind = "negative"
-case = "../../../cases/loops/refuse_effectful_data.cml"
-args = ["-E", "short", "${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 15
-expect_output_contains = ["has no gradient channel", "refuse_effectful_data.cml:15:16"]
+name = "loops.discrete_effectful_value"
+desc = "A value produced by an effectful call whose type is discrete (`side` returns an `int` from the parameter) and read as data: the integer's derivative is zero by definition (design principles 9.9), so `float(n)` is the constant 20 at x = 2 and the printed gradient is 20."
+kind = "behavior"
+case = "../../../cases/loops/discrete_effectful_value.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "side\n20.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "loops.refuse_loop_array_state"
-desc = "A loop state with no gradient channel (`int[]`) whose next value depends on the parameter is refused at the loop, even when only another state's value is read: before H22 the int state's contribution vanished and the gradient was 2 instead of 6 (design principles 9.9, 3.10)."
-kind = "negative"
-case = "../../../cases/loops/refuse_loop_array_state.cml"
-args = ["-E", "short", "${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 9
-expect_output_contains = ["has no gradient channel", "refuse_loop_array_state.cml:9:16"]
+name = "loops.discrete_loop_state"
+desc = "A loop state whose elements are discrete (`int[]`) and whose next value is computed from the parameter: the integer state contributes nothing (derivative zero by definition, design principles 9.9), so only the float state's doubling is differentiated and the gradient is 2, not a refusal."
+kind = "behavior"
+case = "../../../cases/loops/discrete_loop_state.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "loops.refuse_loop_iter_array"
-desc = "A loop iterating over an array computed from the parameter is refused at the loop: each round's element carries part of the contribution, but the reverse pass has no scatter for an iterated array, so before H22 the gradient was silently 0 (design principles 9.9)."
-kind = "negative"
-case = "../../../cases/loops/refuse_loop_iter_array.cml"
-args = ["-E", "short", "${case}", "std::nvm"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 8
-expect_output_contains = ["has no gradient channel", "refuse_loop_iter_array.cml:8:12"]
+name = "loops.discrete_loop_iterable"
+desc = "A loop iterating over an `int[]` computed from the parameter: the elements are discrete, so their derivative is zero by definition (design principles 9.9), the sum of the elements is a constant of the call (6 at w = 2) and the gradient is 0."
+kind = "behavior"
+case = "../../../cases/loops/discrete_loop_iterable.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "0.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
