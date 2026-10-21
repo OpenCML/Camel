@@ -4,7 +4,7 @@
  */
 module depth_map
 
-import { get_env } from sys
+import { get_env } from env
 
 func depth(n: int): int {
     return if n == 0 then 0 else 1 + depth(n - 1)

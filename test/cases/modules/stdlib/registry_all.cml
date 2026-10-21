@@ -6,20 +6,20 @@ module registry_all
 
 import algo
 import bytes
-import crypto
+import hash
+import env
 import fs
 import graph
 import io
 import json
 import math
-import os
+import process
 import para
 import random
 import re
 import sim
 import statistics
 import str
-import sys
 import this
 import time
 import ckpt

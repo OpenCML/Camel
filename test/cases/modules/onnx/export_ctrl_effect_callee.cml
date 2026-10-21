@@ -8,7 +8,7 @@ module export_ctrl_effect_callee
 
 import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func shrink(t: Tensor): Tensor sync {
     println('EFFECT inside a callee')

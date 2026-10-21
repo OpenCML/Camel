@@ -6,7 +6,7 @@
 module export_float_array
 import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func pack(x: Tensor): Tensor {
     return reshape([sum(x * 2.0), 1.5, sum(x)], [3])

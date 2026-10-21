@@ -4933,7 +4933,7 @@ Check for infinite recursion. A call in tail position takes no frame, so write a
 ```camel
 module depth_value
 
-import { get_env } from sys
+import { get_env } from env
 
 func via(f: (n: int) => int, n: int): int {
     return if n == 0 then 0 else 1 + f(n - 1)

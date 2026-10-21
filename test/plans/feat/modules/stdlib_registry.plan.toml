@@ -20,14 +20,14 @@ verify_script = """
 const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
 assert(ops.length > 300, `only ${ops.length} operators listed`)
 const modules = new Set(ops.map((o) => o.module))
-for (const m of ['<builtin>', 'algo', 'crypto', 'fs', 'io', 'json', 'math', 'os', 'para', 'random', 're', 'sim', 'statistics', 'str', 'sys', 'this', 'time']) {
+for (const m of ['<builtin>', 'algo', 'hash', 'fs', 'io', 'json', 'math', 'process', 'para', 'random', 're', 'sim', 'statistics', 'str', 'env', 'this', 'time']) {
   assert(modules.has(m), `module ${m} is not listed`)
 }
 const undeclared = ops.filter((o) => o.purity === 'undeclared').map((o) => o.uri)
 assert(undeclared.length === 0, `operators without a purity declaration: ${undeclared.join(', ')}`)
 const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
-const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'sys:get_env', 'sys:get_cwd',
-  'fs:read_text', 'fs:try_read_text', 'fs:exists', 'fs:file_size', 'fs:write_text', 'os:whoami', 'os:cpu_count', 'os:sleep', 'os:exit',
+const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'env:get_env', 'env:get_cwd',
+  'fs:read_text', 'fs:try_read_text', 'fs:exists', 'fs:file_size', 'fs:write_text', 'process:whoami', 'process:cpu_count', 'process:sleep', 'process:exit',
   'io:set_terminal_raw_mode', 'io:has_input', 'io:get_char', 'io:get_chars', 'io:clear_input_buffer',
   ':io/print', ':io/println', ':io/input', ':op/assn', ':op/assn_owned', 'para:rendezvous',
   ':mark/map_arr', ':mark/foreach_arr']
@@ -35,7 +35,7 @@ for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
 const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median', 'algo:sort', 'algo:argsort',
-  're:test', 'json:encode', 'json:decode', 'crypto:sha256_str', 'crypto:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
+  're:test', 'json:encode', 'json:decode', 'hash:sha256_str', 'hash:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3).
   ':struct/append_arr', ':struct/extend_arr', 'algo:sort', 'algo:quick_sort', 'algo:insert_sort', 'algo:merge_sort']
 for (const uri of pure) {

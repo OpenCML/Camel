@@ -1,0 +1,11 @@
+/**
+ * The old spelling is simply not a module: the import is an ordinary unknown-module error.
+ */
+module process_old
+
+import { whoami } from os
+
+func main(): int sync {
+    println(whoami())
+    return 0
+}

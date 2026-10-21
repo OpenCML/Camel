@@ -8,7 +8,7 @@
 module unordered_foreach_timing
 
 import { now } from time
-import { sleep } from os
+import { sleep } from process
 import { unordered_foreach } from para
 
 func main(): int sync {

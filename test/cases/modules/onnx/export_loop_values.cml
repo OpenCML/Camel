@@ -9,7 +9,7 @@ module export_loop_values
 import { Tensor, reshape, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 type P = { w: Tensor }
 

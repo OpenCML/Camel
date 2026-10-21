@@ -3,7 +3,7 @@
  */
 module exit_imported
 
-import { exit } from os
+import { exit } from process
 
 func stop(code: int): int sync {
     println('stopping')

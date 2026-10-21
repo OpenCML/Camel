@@ -486,7 +486,7 @@ Rules buildRules() {
 
     // ---- Modules with a standalone translation ----
     r["time:now"]         = runtimeFunction("now", false);
-    r["sys:get_env"]      = runtimeFunction("getEnv", false);
+    r["env:get_env"]      = runtimeFunction("getEnv", false);
     r["statistics:mean"]  = runtimeFunction("statisticsMean");
     r["statistics:stdev"] = runtimeFunction("statisticsStdev");
     // random draws as modules/random does, through camel/utils/random.h (standalone/random.h).
@@ -550,8 +550,8 @@ Rules buildRules() {
         r[std::format("math:im_{}", t)]   = runtimeFunction("complexImag");
     }
 
-    // ---- The end of the program (`exit(n)`, `os.exit(n)`) ----
-    for (const char *uri : {":exit", "exit", "os:exit"}) {
+    // ---- The end of the program (`exit(n)`, `process.exit(n)`) ----
+    for (const char *uri : {":exit", "exit", "process:exit"}) {
         r[uri] = {
             [](OperatorCall &c) -> std::optional<std::string> {
                 return std::format("rt::exit({})", c.norm(0).text);

@@ -1,0 +1,11 @@
+/**
+ * The old spelling is simply not a module: the import is an ordinary unknown-module error.
+ */
+module env_old
+
+import { get_env } from sys
+
+func main(): int sync {
+    println(get_env('PATH'))
+    return 0
+}

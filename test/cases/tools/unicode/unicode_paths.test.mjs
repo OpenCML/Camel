@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // H9 item 3: the process boundary on Windows. A user name, a PATH entry or a checkout whose path
-// holds characters the process code page cannot express used to break `sys.basic`: Camel strings
+// holds characters the process code page cannot express used to break `env.basic`: Camel strings
 // are UTF-8 and guaranteed to be, while what the process hands the program (the command line, the
 // environment, the current directory, the module search paths) arrived as bytes of the code page.
 // This script builds such a world under CAMEL_TEST_TMPDIR (the runner's per-test scratch
@@ -20,7 +20,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
-const CASES = path.join(ROOT, 'test', 'cases', 'modules', 'std', 'sys', 'unicode')
+const CASES = path.join(ROOT, 'test', 'cases', 'modules', 'std', 'env', 'unicode')
 const RUN = path.join(process.env.CAMEL_TEST_TMPDIR || path.join(ROOT, 'tmp', 'test'), 'unicode-paths')
 const home = process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest')
 const camel = path.join(home, 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
@@ -145,7 +145,7 @@ function main() {
     )
 
     // 4. The installation itself under a non-ASCII path: CAMEL_HOME names a junction to the build
-    //    output, and the program is started through it, so the stdlib (sys, fs) is found there.
+    //    output, and the program is started through it, so the stdlib (env, fs) is found there.
     const link = path.join(RUN, '安装 目录 🐪')
     fs.mkdirSync(link, { recursive: true })
     const sdk = path.join(link, 'sdk')

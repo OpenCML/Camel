@@ -10,7 +10,7 @@ import { Tensor, relu, mean, reshape, flatten, new } from tensor
 import { with_grad } from autodiff
 import { conv2d, max_pool2d, sgd } from nn
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 type Cnn = {
     conv1_w: Tensor, conv1_b: Tensor,

@@ -1,0 +1,15 @@
+/**
+ * `env` is the module that reads the environment and the working directory (handover H114,
+ * which renamed `sys`); this proves the new name imports and its operators run.
+ */
+module env_new
+
+import { get_env, get_cwd } from env
+
+func main(): int sync {
+    let path = get_env('PATH')
+    let cwd = get_cwd()
+    println(path->len > 0)
+    println(cwd->len > 0)
+    return 0
+}

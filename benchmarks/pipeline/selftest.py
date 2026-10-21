@@ -129,7 +129,7 @@ check("the rule set before D11 still resolves, without the flag", (OLD.read_orde
 
 
 def env(name):
-    return ev("sys:get_env", f"string={name}|||", name)
+    return ev("env:get_env", f"string={name}|||", name)
 
 
 def load(path, truncated=False):

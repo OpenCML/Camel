@@ -22,6 +22,7 @@
 #include <filesystem>
 #include <mutex>
 #include <tuple>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "camel/core/context/context.h"

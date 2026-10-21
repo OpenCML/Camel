@@ -1,7 +1,7 @@
 module tiles_loop_device
 import { Tensor, load_npy, save_npy } from tensor
 import { run, source } from tiles
-import { get_env } from sys
+import { get_env } from env
 
 func scalar(a: float, bias: float): float {
     return loop s = a for k in [2147483649, -2147483649, 9007199254740993, 9007199254740995] do s * 0.5 + float(k) + bias

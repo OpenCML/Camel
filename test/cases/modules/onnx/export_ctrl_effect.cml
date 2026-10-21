@@ -8,7 +8,7 @@ module export_ctrl_effect
 
 import { Tensor, reshape, relu } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func scaled(t: Tensor): Tensor sync {
     println('EFFECT inside exported function')

@@ -4,7 +4,7 @@
  */
 module equal_branch_values
 
-import { get_env } from sys
+import { get_env } from env
 
 func left(): float sync {
     println('left')

@@ -1,0 +1,13 @@
+/**
+ * `hash` is the module of cryptographic hashes (handover H114, which renamed `crypto`); this
+ * proves the new name imports and its operators run.
+ */
+module hash_new
+
+import { sha256, sha256_rounds } from hash
+
+func main(): int sync {
+    println(sha256("abc"))
+    println(sha256_rounds("abc", 1) == sha256("abc"))
+    return 0
+}

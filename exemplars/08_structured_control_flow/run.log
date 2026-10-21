@@ -105,7 +105,7 @@ digraph GraphIR {
         N25 [label=":io/println", type="OPER", role="effect;export-capability", origin=347, span="20:62-20:69", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
         N26 [label="Function(graph=__g_6__, tupleSlots=0)", type="DATA", origin=349, span="21:17-21:47", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="(t: Tensor) => Tensor"];
         N27 [label="ONNX_OUT", type="DATA", origin=353, span="21:60-21:70", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
-        N28 [label="sys:get_env", type="OPER", role="effect;export-capability", origin=354, span="21:52-21:59", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
+        N28 [label="env:get_env", type="OPER", role="effect;export-capability", origin=354, span="21:52-21:59", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
         N29 [label="onnx:export_model", type="OPER", role="effect;export-capability", origin=355, span="21:4-21:16", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="void"];
         N2A [label="exported", type="DATA", origin=357, span="22:12-22:22", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
         N2B [label=":io/println", type="OPER", role="effect;export-capability", origin=358, span="22:4-22:11", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];

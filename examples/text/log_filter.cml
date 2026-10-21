@@ -8,7 +8,7 @@ import { test } from re
 import { split, trim, find, substr } from str
 import { count } from array
 import { mkdirs, write_text, try_read_text } from fs
-import { get_env } from sys
+import { get_env } from env
 
 type Entry = { time: string, level: string, message: string }
 

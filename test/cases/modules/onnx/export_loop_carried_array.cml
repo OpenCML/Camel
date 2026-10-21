@@ -6,7 +6,7 @@
 module export_loop_carried_array
 import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func walk(x: Tensor, xs: int[], k: int): Tensor {
     return if k >= 3 || sum(x * x) < 1.0 then x * 2.0 else walk(x, [k], k + 1)

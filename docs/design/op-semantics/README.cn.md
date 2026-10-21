@@ -719,7 +719,7 @@ granted = 节点的许可列 ∪ (law.order == Unordered ? {a} : ∅)
 > - **结果**：`ResultAlias` 照 8.1；另有 `allocates`：结果是新的资源（`:var/new` 新建单元，`tiles:upload` 新建设备内存）。
 > - **外部效应与 traits**：声明的 `externalEffect` 只能在 traits 允许外部效应时为真（不是 pure、不是 stateOnly）；反过来可以细化：赋值族在 traits 里算外部效应（没有"写变量"这一位），资源声明说它只写程序自己的单元。效应摘要（`effectSummaryOf`）仍由 traits 算出，不变（8.3）。随机数的生成照 8.1 的注释算外部效应，见 14.4 的待问。
 > - **查询**（`camel/runtime/resources.h`）：`resourcesOf`（每个节点：OPER 读声明；FUNC、LOOP、被调函数可知的 CALL 读所运行的图的足迹并映射到节点的输入）、`footprintOf`（一张图对它收到的资源、环境状态与程序外做了什么；递归按最小不动点，按图的序号与声明纪元缓存）、`originOf`/`mayAlias`（同一次激活里两个不同的新建、或新建与收到的值，不是同一资源；两个端口可能是）、`resourceConflict`（`Resource`：重叠区域且至少一写；`External`：都有外部效应）、`dependsOn`（只看数据边）与 `orderedBefore`（含控制边）分开（8.2）、`requiredOrderings`（一张图里必须保持先后的成对节点，分支的不同臂不算一对；图没有排序的一对即设计原则第 15 节未决的情形）。
-> - **已声明**：`:var/*` 与赋值族、控制台与 profiler、`fs`、`random`、`time`、`os`、`sys`、`nn:save_params`、`para:rendezvous`、`algo` 的就地形式、张量的有效应算子、Tiles 的算子（14.4）。`:mark/` 高阶算子、`python`、`pyplot`、`onnx`、`autodiff` 未声明，照保守读法，与今天一样排序。
+> - **已声明**：`:var/*` 与赋值族、控制台与 profiler、`fs`、`random`、`time`、`process`、`env`、`nn:save_params`、`para:rendezvous`、`algo` 的就地形式、张量的有效应算子、Tiles 的算子（14.4）。`:mark/` 高阶算子、`python`、`pyplot`、`onnx`、`autodiff` 未声明，照保守读法，与今天一样排序。
 >
 > 细节见 `docs/technical/41_resources_and_definitions.md` 第 1 节。
 

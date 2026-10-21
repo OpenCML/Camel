@@ -49,11 +49,11 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [time](#time) | `import { ... } from time` | C++ | 3 |
 | [fs](#fs) | `import { ... } from fs` | C++ | 15 |
 | [io](#io) | `import { ... } from io` | C++ | 5 |
-| [os](#os) | `import { ... } from os` | C++ | 3 |
-| [sys](#sys) | `import { ... } from sys` | C++ | 2 |
+| [process](#process) | `import { ... } from process` | C++ | 3 |
+| [env](#env) | `import { ... } from env` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
 | [re](#re) | `import { ... } from re` | C++ | 1 |
-| [crypto](#crypto) | `import { ... } from crypto` | C++ | 2 |
+| [hash](#hash) | `import { ... } from hash` | C++ | 2 |
 | [para](#para) | `import { ... } from para` | C++ | 3 |
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
@@ -2652,9 +2652,9 @@ Discards the terminal input that is waiting.
 - With effects: reads the terminal.
 - Example: `clear_input_buffer()`
 
-<a id="os"></a>
+<a id="process"></a>
 
-## `os`: the process and the machine
+## `process`: the process and the machine
 
 Every function touches the process or the machine and is declared with effects. `sleep` and
 `exit` are also built in: they need no import. The terminal is `io`'s (H19 step 4).
@@ -2694,9 +2694,9 @@ The number of hardware threads, at least 1.
 - With effects: reads the machine.
 - Example: `cpu_count()` gives `8`
 
-<a id="sys"></a>
+<a id="env"></a>
 
-## `sys`: environment
+## `env`: environment
 
 Both functions read the environment of the process and are declared with effects.
 
@@ -2950,9 +2950,9 @@ Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 - Failure: fault `RegexInvalid` when pattern is not a regular expression.
 - Example: `test('[0-9]+', 'room 42')` gives `true`
 
-<a id="crypto"></a>
+<a id="hash"></a>
 
-## `crypto`
+## `hash`
 
 #### `sha256`
 
@@ -2972,7 +2972,7 @@ sha256: (s: Bytes) => string
 ```
 
 The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits. The two overloads are
-two operators (`crypto:sha256_str`, `crypto:sha256_bytes`); the one is chosen when the program is
+two operators (`hash:sha256_str`, `hash:sha256_bytes`); the one is chosen when the program is
 compiled.
 
 - Pure.

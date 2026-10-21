@@ -1,0 +1,27 @@
+/**
+ * Signatures of the `process` module (C++ operators, modules/process).
+ *
+ * Every function touches the process or the machine and is declared with effects. `sleep` and
+ * `exit` are also built in: they need no import. The terminal is `io`'s (H19 step 4).
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ */
+
+/// Suspends the program for the given number of milliseconds.
+/// @effect waits
+/// @fails fault `InvalidArgument` when the duration is negative
+/// @example sleep(100)
+export func sleep(milliseconds: int): void
+
+/// The name of the user the process runs as.
+/// @effect reads the environment
+/// @fails fault `RuntimeError` when the name cannot be found
+/// @example whoami()    // 'alice'
+export func whoami(): string
+
+/// The number of hardware threads, at least 1.
+/// @effect reads the machine
+/// @example cpu_count()    // 8
+export func cpu_count(): int

@@ -18,7 +18,7 @@ module e13_l2x2_tensor_arms
 import { Tensor, relu, mean, reshape, zeros, save_npy } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
-import { get_env } from sys
+import { get_env } from env
 import { export_model } from onnx
 
 type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }

@@ -16,7 +16,7 @@
  */
 module jitcov_workloads
 
-import { get_env } from sys
+import { get_env } from env
 
 type Point = {
     x: int,

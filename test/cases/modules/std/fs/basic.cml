@@ -5,7 +5,7 @@ module main
 
 import { exists, is_file, is_dir, mkdir, mkdirs, read_text, write_text, file_size, read_chunk } from fs
 import { decode } from bytes
-import { get_env } from sys
+import { get_env } from env
 
 func main(): int sync {
     println("=== FS Module Basic Tests ===")

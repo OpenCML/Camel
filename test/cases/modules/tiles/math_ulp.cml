@@ -1,7 +1,7 @@
 module tiles_math_ulp
 import { Tensor, load_npy, save_npy, exp, log } from tensor
 import { run, inspect } from tiles
-import { get_env } from sys
+import { get_env } from env
 func exponential(x: Tensor<f32>): Tensor<f32> { return exp(x) }
 func logarithm(x: Tensor<f32>): Tensor<f32> { return log(x) }
 func main(): int sync {

@@ -1,6 +1,6 @@
 module broken_branch
 
-import { get_env } from sys
+import { get_env } from env
 
 // Used with the test-only passes test::leak_branch_arm and test::share_branch_arm, which break
 // the branch below (a node between the BRCH and the JOIN that belongs to no arm, or to two) and

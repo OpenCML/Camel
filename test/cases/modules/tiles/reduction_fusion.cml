@@ -1,6 +1,6 @@
 module tiles_reduction_fusion
 import { Tensor, reshape, sum, mean, transpose, save_npy } from tensor
-import { get_env } from sys
+import { get_env } from env
 import { run, inspect } from tiles
 
 func sample(i: int): float { return float(i % 17 - 8) * 0.125 }

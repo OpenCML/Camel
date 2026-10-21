@@ -8,7 +8,7 @@ module export_dynamic
 
 import { Tensor, reshape, zeros, shape } from tensor
 import { export_model, supported_operators } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func forward(x: Tensor, w: Tensor): Tensor {
     let n = shape(x)[0]

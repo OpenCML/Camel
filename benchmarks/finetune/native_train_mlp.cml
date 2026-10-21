@@ -12,7 +12,7 @@ module native_train_mlp
 import { Tensor, relu, mean, load_npy } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
-import { get_env } from sys
+import { get_env } from env
 import { weight } from camel_bench
 
 type Mlp = {

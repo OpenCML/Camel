@@ -6,7 +6,7 @@
 module export_loop_values_array
 import { Tensor, reshape, sum, tanh } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func walk(h: Tensor, k: int): (Tensor, int[]) {
     return if k >= 6 || sum(h * h) < 1.0 then (h, [k, k + 1]) else walk(tanh(h) * 0.3 + h * 0.6, k + 1)

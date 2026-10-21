@@ -5,7 +5,7 @@ module json_config
 
 import json
 import { mkdirs, write_text, try_read_text } from fs
-import { get_env } from sys
+import { get_env } from env
 
 type Config = { host: string, port: int, verbose: bool }
 

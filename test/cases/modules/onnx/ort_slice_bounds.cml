@@ -7,7 +7,7 @@
 module ort_slice_bounds
 import { Tensor, reshape, slice, sum } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func head(x: Tensor): Tensor {
     return slice(x, 0, 0, int(sum(x)))

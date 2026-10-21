@@ -58,9 +58,9 @@ func main(): int sync {
 | `time` | `now`、`strftime`、`strptime` |
 | `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`remove`、`remove_dir`、`read_text`、`try_read_text`、`write_text`、`file_size`、`read_chunk`、`read_bytes`、`write_bytes`、`replace` |
 | `json` | 类型 `Json`；`encode`、`decode`、`decode_as`；`kind`、`is_null`、`get`、`as_bool`、`as_int`、`as_float`、`as_string`、`as_array`、`as_object` |
-| `os`、`sys` | `whoami`、`cpu_count`、终端输入；`get_cwd`、`get_env` |
+| `process`、`env` | `whoami`、`cpu_count`、终端输入；`get_cwd`、`get_env` |
 | `re` | `test` |
-| `crypto` | `sha256`、`sha256_rounds` |
+| `hash` | `sha256`、`sha256_rounds` |
 | `this` | `zen` |
 | `algo` | `sort`、`merge_sort`、`merge_sorted_arrays` 等排序函数（都返回新数组，每种只有一个名字） |
 | `statistics` | `mean`、`stdev`、`variance`、`median`、`quantile` |

@@ -5,7 +5,7 @@
 module file_written_before_fault
 
 import { write_text, read_text, mkdirs } from fs
-import { get_env } from sys
+import { get_env } from env
 
 func main(): int sync {
     let dir = get_env('CAMEL_TEST_DIR')

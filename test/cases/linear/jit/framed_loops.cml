@@ -7,7 +7,7 @@
  */
 module jit_framed_loops
 
-import { get_env } from sys
+import { get_env } from env
 
 func churn(n: int, acc: int): int {
     return if n == 0 then acc else churn(n - 1, acc + len(string(n) + 'x'))

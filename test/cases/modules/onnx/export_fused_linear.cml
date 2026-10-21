@@ -6,7 +6,7 @@
 module export_fused_linear
 import { Tensor, reshape, relu, sum } from tensor
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 func net(x: Tensor): Tensor {
     let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25], [3, 2])

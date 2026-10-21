@@ -13,7 +13,7 @@ module e9_branch_step
 import { Tensor, relu, mean, reshape, new } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
-import { get_env } from sys
+import { get_env } from env
 import { export_model } from onnx
 
 type Mlp = { w1: Tensor, b1: Tensor, w2: Tensor, b2: Tensor }

@@ -8,7 +8,7 @@
 module fs_remove
 
 import { exists, mkdirs, write_text, remove, remove_dir } from fs
-import { get_env } from sys
+import { get_env } from env
 import { find } from str
 
 /// The kind and location of a `void!`, or ok.

@@ -11,7 +11,7 @@ import { Tensor, relu, mean, reshape, flatten, new } from tensor
 import { with_grad } from autodiff
 import { conv2d, batch_norm_train, sgd } from nn
 import { export_model } from onnx
-import { get_env } from sys
+import { get_env } from env
 
 type CnnBn = {
     conv1_w: Tensor, conv1_b: Tensor, bn1_g: Tensor, bn1_b: Tensor,

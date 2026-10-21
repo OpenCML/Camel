@@ -1,6 +1,6 @@
 // Ten million rounds of a two-value loop (sub-step 4 of the loop work: LOOP against the
 // equivalent tail recursion, bench_tail.cml). N rounds from the environment, default 10000000.
-import { get_env } from sys
+import { get_env } from env
 
 func main(): int sync {
     let text = get_env('N')

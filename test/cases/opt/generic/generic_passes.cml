@@ -7,7 +7,7 @@
  */
 module generic_passes
 
-import { get_env } from sys
+import { get_env } from env
 
 func main(): int sync {
     let a = 3 + 4 * 5

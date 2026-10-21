@@ -1,7 +1,7 @@
 module tiles_arithmetic_bits
 import { Tensor, load_npy, save_npy, sqrt } from tensor
 import { run } from tiles
-import { get_env } from sys
+import { get_env } from env
 func arithmetic(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>) {
     return (a + b, a - b, a * b, a / b, sqrt(a), a * b + a)
 }

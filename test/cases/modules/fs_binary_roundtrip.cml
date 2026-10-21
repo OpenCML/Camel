@@ -2,7 +2,7 @@
 module fs_binary_roundtrip
 import { write_bytes, read_bytes, read_chunk, file_size } from fs
 import { to_array, from_array } from bytes
-import { get_env } from sys
+import { get_env } from env
 func main(): int sync {
     // The scratch directory the runner gives every test; see bytes_values.cml.
     let scratch = get_env('CAMEL_TEST_TMPDIR')

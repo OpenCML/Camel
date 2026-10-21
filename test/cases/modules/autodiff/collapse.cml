@@ -6,7 +6,7 @@
 module collapse
 
 import { grad } from autodiff
-import { get_env } from sys
+import { get_env } from env
 
 func sq(x: float): float {
     return x * x
