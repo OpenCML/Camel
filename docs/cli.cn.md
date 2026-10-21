@@ -54,6 +54,7 @@
 - `--block-limit <megabytes>`：数据块空间的上限（默认 2048 MB，取值 1 到 2^20 MB）；它只防范失控的分配，最后一个持有者消失时块的内存立即归还  
 - `--graph-gc-mb <megabytes>`：图空间比上次回收后多出这么多时要求回收（默认 64）  
 - `--native-stack-guard <on|off>`：嵌套调用前是否检查原生栈（默认 `on`）；`off` 只用于测量栈真正到哪里结束，不供正常使用  
+- `--devices <cpu|ordinal[,ordinal...]>`：一条流水线可以使用的设备（设计原则 13.4）：`cpu` 表示只用主机，或者按流水线可用的次序写 CUDA 序号（例如 `0`、`0,1`）。这里点名的设备必须存在：缺失时是运行时故障 `DeviceUnavailable`，报告中点出这个设备以及机器上实际有的设备；不给这个选项时，缺失只意味着程序在主机上运行（见 `modules/tiles/README.md` 的 "Tiles"）。今天一条流水线在第一个序号上执行，多卡执行是 G7。`--devices cpu` 下 `tiles:available()` 为假，需要设备的操作报错，而不是悄悄移到 GPU 上。它取代环境变量 `CAMEL_TILES_DEVICE`，后者不再被读取  
 - `--profile-mode <normal|full>`：`--profile` 启动的剖析器模式；`full` 在写出报告时同时打开 Perfetto 界面（需要 `--profile`）  
 - `-n`, `--no-cache`：不使用缓存模块  
 - `-I`, `--include <dir>`：添加模块搜索路径（可多次使用）  

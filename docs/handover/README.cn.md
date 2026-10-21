@@ -6,7 +6,7 @@
 
 **判断标准不是"能运行、测试通过"，而是"符合 Camel 的长期设计"。** 能跑但不优雅、绕开通用机制、按名字写特例的实现会被退回。第 2 节列出了退回最多的几类问题，提交前逐条自查。
 
-更新：2026-10-19。
+更新：2026-10-22。
 
 ---
 
@@ -185,7 +185,8 @@
 | H54 | CPU 每算子开销：小矩阵不进线程池、首次调用的 6 ms、分派成本（见 reviews/H24-H25-H26.md 末尾） | 无 | **已完成**（报告 reports/H54.md：首次 6 ms = 池构造 31 条线程，小算子首调 1.58 ms → 21 µs；惊群唤醒改为只点醒所需 worker，3 块区域 950 → 82 µs；阈值统一为 `kMinWorkPerWorkerNs = 40 µs` 一个常数；mlp_step 93.95 → 48.14 ms、transformer_step 6.63 → 5.83 ms、链 9.31 → 8.84 ms，链已贴地板。**后续**：优化器那一步紧接着由 H64 做成一次对整张量的遍历——每参数 11 → 1.56 ns，mlp_step 48.14 → 31.38 ms，阈值在 3 块区域上的边界见 reports/H64.md 3.3） |
 | H51 | 泛型第一期：按结构展开（`match type`、`static for`、`static loop`、`t.[n]`、可变元数），`tree_map` 等改用 Camel 写 | 无 | **进行中**（计划已批 reviews/H51-plan.md，按 15 步实施；步骤 1–2 `match type` + 类型分支 + 实例返回类型推断已入，报告 reports/H51a.md；步骤 3–4 `fields T` + `static for` + `t.[n]` 已入，报告 reports/H51b.md；步骤 4 的结构体/元组推导式 `{ static for … }` / `( static for … )` 已入（含每个父一次 `ACCS` 的复用、空形状、`0x17A`），报告 reports/H79.md，验收 957/957；H79 的两个待决问题（`fields` / `match type` 之后的类型位置，`fields ()` 因此可写；推导式字段类型取自值）已由 H90 裁定并落地，报告 reports/H90.md；步骤 5 `static loop` 已入，报告 reports/H86.md；步骤 6 的 `indices`（`static for (j) in indices ts` / `static loop ... in indices ts`，新码 `0x17E`）已入，报告 reports/H96.md，rest 参数/`..ts`/`..e`/`constas`/`StaticTuple` 仍未做（见 H96 §6）。**写 `tree_*.cml` 前必读**：H19 计划 §1.6 更正了本计划 §1.6 的优先级——`Context::getModulePathAndKind`（`context.cpp:547`）在同一目录里先找 `xx.cmo` 再看 `xx.*`，所以与 C++ 模块同名的 `.cml` 是静默死代码而不是遮蔽它；把 `tree_*` 改成 Camel 写的那一步必须**同一个提交**里把 C++ 的 `tree` 模块改名为 `ckpt`，否则新文件永远不生效） |
 | H50 | GPU G4–G5：支持面（bf16/Tensor Core 等）、使用已授予的许可、融合、优化器多张量融合（先交计划） | H49 计划获批 | **未开始** |
-| H49 | GPU G1–G3：放置标签、设备上的数组值、驻留与异步、整段编译与缓存（先交计划） | H48 的基准可用 | **部分完成**（H49a：区域/树传输合批，小往返 97.6→56.3 µs、同步点 5→2；报告 reports/H49a.md；动态形状、回传图类型、无设备时不重试 `cuInit` 按 author 裁定仍未做） |
+| H105 | H49 G1 第一项：`--devices`——运行时选择流水线可以使用的设备；点名的设备缺失时点名报错而不是静默回退；`CAMEL_TILES_DEVICE` 退役 | 无 | **已完成**（报告 reports/H105.md；核心 `include/camel/execute/devices.h`/`src/execute/devices.cpp` 解析并保存选择，`RuntimeDiag::DeviceUnavailable` `0x04000070`，Tiles 后端校验每个点名的序号、`--devices cpu` 只跑主机且需要设备的操作报错；4 条新用例（选中的设备/不存在的设备/主机/非法值），26 条计划从旧环境变量改用 `--devices cpu`；`feat/modules/tiles` 64/64、`feat/modules`、`smoke` 见报告第 5 节；`@gpu`/`#gpu` 的保证语义与其余待决问题见报告第 7 节） |
+| H49 | GPU G1–G3：放置标签、设备上的数组值、驻留与异步、整段编译与缓存（先交计划） | H48 的基准可用 | **部分完成**（H49a：区域/树传输合批，小往返 97.6→56.3 µs、同步点 5→2；报告 reports/H49a.md。H105：G1 的 `--devices` 已落地，报告 reports/H105.md；API 面仍是旧的 `@gpu` 偏好 + 运行期分派，`#gpu`/`#cpu` 标签、无设备时不重试 `cuInit`、动态形状、回传图类型仍未做，`@gpu` 的保证语义待作者裁定） |
 | H47 | Tiles 现状与差距报告（只读，可并入 H48 的第一份报告） | 无 | **已完成**（报告 reports/H47.md；H49a 更正了它对 `run` 归因：4.9 ms 中约 3.2 ms 是 `tensor:sum` 串行归约） |
 | H48 | GPU G0：剖析工具与 GPU 基准 | 无 | **已完成**（`std::profile` 与训练步基准；报告 reports/H48.md；今日没有算子被放到设备上） |
 | H59 | **严格运行器暴露的真实失败**：H43b 区域化 autodiff 让复合循环状态的梯度在投影处静默丢失（8 条，首次坏提交 `914c0eda`）；`saturate_all`/`extract` 保留饱和造出的死写法（第 9 条） | 无 | **已完成**（报告 reports/H59.md；新增回归用例 `loop_grad_composite_read`） |

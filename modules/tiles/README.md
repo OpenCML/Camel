@@ -354,8 +354,13 @@ support was not built. CUDA Driver and NVRTC are loaded lazily, so importing the
 module does not require a GPU. On Windows, the matching NVRTC builtins DLL must
 be installed alongside NVRTC.
 
-- `CAMEL_TILES_DEVICE`: nonnegative CUDA device ordinal (default 0), selected at
-  first backend initialization.
+The device a run uses is given on the command line with `--devices`
+(`docs/cli.md`): without it the back end takes CUDA device 0, and the host runs
+the program when there is none; `--devices 2` requires device 2, and a missing
+one is `DeviceUnavailable` rather than a fallback; `--devices cpu` runs wholly on
+the host. `CAMEL_TILES_DEVICE`, which selected the ordinal before, is no longer
+read.
+
 - `CAMEL_TILES_NVRTC`: preferred NVRTC library path.
 - Windows also searches `CUDA_PATH/bin` and the Toolkit directory found at build
   time. Linux uses the loader search path and the configured Toolkit library path.
