@@ -22,6 +22,7 @@
 #include "camel/utils/windows_parser_guard.h"
 
 #include "camel/core/module/userdef.h"
+#include "core/module/entity_internal.h"
 #include "core/module/userdef_internal.h"
 
 #include "camel/compile/gir/encode.h"
@@ -39,6 +40,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <format>
 
 namespace fs = std::filesystem;
 
@@ -238,9 +240,83 @@ bool UserDefinedModule::compileAsLibrary() {
 
 void UserDefinedModule::setProgramGraph(
     const std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root) {
+    if (buildingProgramOfItsOwn_) {
+        // compileAsProgram() builds a program of its own from this module: its root graph is
+        // kept with that program's builder, and the graph this module was loaded as part of
+        // (the program that uses it, or the library of compileAsLibrary) stays as it was.
+        stage_  = CompileStage::Done;
+        loaded_ = true;
+        return;
+    }
     compileGraph_ = root;
     stage_        = CompileStage::Done;
     loaded_       = true;
+}
+
+UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
+    const std::string &entryFunction, std::string &problem,
+    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root) {
+    if (compiling_) {
+        return ProgramStatus::Failed;
+    }
+    if (!compile(CompileStage::GCT)) {
+        return ProgramStatus::Failed;
+    }
+    for (const auto &site : importSites()) {
+        if (std::dynamic_pointer_cast<UserDefinedModule>(site.mod) && site.mod.get() != this) {
+            // The same restriction as compileAsLibrary (task H36 joins the two): a module written
+            // in Camel that this one imports would have to be declared to the builder of another
+            // program, and its export table is the program's.
+            diagnostics_->of(SemanticDiag::ModuleNotFound)
+                .commit(
+                    site.mod->name(),
+                    "a library compiled on its own (" + name_ +
+                        ") imports modules written in C++ only");
+            return ProgramStatus::Failed;
+        }
+    }
+    struct Compiling {
+        bool &flag;
+        explicit Compiling(bool &f) : flag(f) { flag = true; }
+        ~Compiling() { flag = false; }
+    } compiling(compiling_);
+    struct BuildingProgramOfItsOwn {
+        bool &flag;
+        explicit BuildingProgramOfItsOwn(bool &f) : flag(f) { flag = true; }
+        ~BuildingProgramOfItsOwn() { flag = false; }
+    } buildingProgramOfItsOwn(buildingProgramOfItsOwn_);
+    camel::utils::phase::Scope phaseScope("library", name_);
+    auto builder = std::make_shared<camel::compile::gir::Builder>(context_);
+    builder->declareModule(shared_from_this(), *gct_, diagnostics_);
+    if (diagnostics_->hasErrors()) {
+        return ProgramStatus::Failed;
+    }
+    // The export table is filled by the declaration: the function the program runs must be one
+    // non-generic function of this module, exactly as registerCamelPass demands of a pass.
+    const auto entity = getExportedEntity(Reference(entryFunction));
+    if (!entity) {
+        problem = std::format("'{}' exports no '{}'", name_, entryFunction);
+        return ProgramStatus::NoSuchFunction;
+    }
+    using Access = detail::EntityAccess;
+    if (Access::isGenericTemplate(*entity) || !Access::isGraphSet(*entity) ||
+        !Access::graphSet(*entity) || Access::graphSet(*entity)->size() != 1) {
+        problem = std::format("'{}::{}' is not one non-generic function", name_, entryFunction);
+        return ProgramStatus::NotAFunction;
+    }
+    if (!builder->buildLibraryEntry(shared_from_this(), entryFunction) ||
+        diagnostics_->hasErrors()) {
+        return ProgramStatus::Failed;
+    }
+    root = builder->rootGraph();
+    if (root == nullptr) {
+        return ProgramStatus::Failed;
+    }
+    // The builder owns what the graphs of the program refer to and lives as long as the module.
+    programBuilders_.push_back(builder);
+    stage_  = CompileStage::Done;
+    loaded_ = true;
+    return ProgramStatus::Built;
 }
 
 void UserDefinedModule::declareTypes() { (void)compile(CompileStage::GCT); }

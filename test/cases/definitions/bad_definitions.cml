@@ -29,3 +29,11 @@ export func noisy(x: Tensor<f32>): Tensor<f32> sync {
 export func generic(x: typeas T): T {
     return x
 }
+
+let first_axis = 1
+
+/// Declared for tensor:matmul: it reads a value of the module's top level, so its graph takes
+/// its parameter and a capture, not exactly the declared parameters (task H37).
+export func captured(x: Tensor<f32>): Tensor<f32> {
+    return softmax(x, first_axis - 1)
+}
