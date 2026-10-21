@@ -34,6 +34,7 @@
 #include "camel/init.h"
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/parse.h"
+#include "camel/profile/profile.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/utils/command_line.h"
@@ -326,6 +327,12 @@ int runCommand(int argc, char *argv[]) {
     };
 
     try {
+        // `std::profile` reports the phase split of the compilation, which starts before any pass
+        // runs: the recorder has to be recording before the first module is parsed. The report
+        // is taken by the pass's report at the end of the run, so no phase file is written.
+        if (selectedCommand == Command::Run && pipelineNamesProfile(Run::resolvedPassList)) {
+            phase::enableRecording();
+        }
         std::optional<phase::Scope> parsePhase(std::in_place, "parse", "main");
         const bool parsedOk = parser->parse(*input);
         parsePhase.reset();
@@ -615,6 +622,16 @@ int runCommand(int argc, char *argv[]) {
             memperf::stop();
 
             memperf::report(os);
+
+            // `std::profile`: the report of the whole run. It is written here because only the
+            // driver has seen the compilation, the pipeline and the fallback pass; the session
+            // itself was started by the pass. The text form joins the program's output; under
+            // `--output-format json` it goes to standard error, so the diagnostics array on the
+            // standard output keeps its shape.
+            if (camel::profile::enabled()) {
+                std::ostream &reportOut = useJsonFormat ? std::cerr : os;
+                camel::profile::reportText(reportOut, camel::profile::reportOptions());
+            }
 
             if (!useJsonFormat && warningsNotShown() > 0) {
                 std::cerr << "camel: " << warningsNotShown()

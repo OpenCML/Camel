@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace camel::utils::phase {
 
@@ -61,6 +62,10 @@ bool enabled();
 /// Starts recording; the report goes to `path` (`-`: standard error) when report() is called.
 /// The time origin of the report is this call. Calling it again only replaces the path.
 void enable(const std::string &path);
+
+/// Starts recording without a report file: another reader (the report of `std::profile`, which
+/// asks for snapshot()) takes the phases. No file is written by report() in this mode.
+void enableRecording();
 
 /// Starts recording when the environment variable CAMEL_TIME_PHASES names a path.
 void enableFromEnvironment();
@@ -103,5 +108,18 @@ void report();
 
 /// The report as JSON, without stopping: what report() writes. For tests.
 std::string toJson();
+
+/// One phase as another report reads it (the `std::profile` report writes the compilation
+/// phases in its own table). A phase that is still open has wallNs = the time so far.
+struct PhaseRecord {
+    std::string name;
+    std::string detail;
+    uint32_t depth = 0; // how many phases were open when this one opened
+    int64_t startNs = 0;
+    int64_t wallNs  = 0;
+};
+/// The phases recorded so far, in the order they opened (a parent precedes its children), copies
+/// of them. Empty when recording is off.
+std::vector<PhaseRecord> snapshot();
 
 } // namespace camel::utils::phase

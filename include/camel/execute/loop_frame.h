@@ -33,6 +33,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/rtdata/aggregate.h"
 #include "camel/execute/loop_driver.h"
+#include "camel/profile/profile.h"
 #include "camel/runtime/exec_plan.h"
 
 #include <cstddef>
@@ -143,6 +144,11 @@ inline bool loopEnd(
     takeLoopRound(detail::loopShapeOf(loop), host, frame.get<slot_t>(loop.bodyResultSlot));
     frame.set(loop.roundSlot, toSlot(round + 1));
     roundDone(loop, static_cast<size_t>(round + 1));
+    // One round of this loop ended: the step boundary and the per-step numbers of `std::profile`
+    // (camel/profile/profile.h). One out-of-line call when profiling is off, once per round.
+    if (camel::profile::enabled()) [[unlikely]] {
+        camel::profile::loopRound(loop.origin);
+    }
     if (loop.hasCond) {
         detail::bindLoopState(frame, loop, loop.stateCount);
     }

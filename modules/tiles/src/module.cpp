@@ -24,6 +24,7 @@
 #include "camel/core/type/tree.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/function_call.h"
+#include "camel/profile/profile.h"
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
@@ -32,6 +33,7 @@
 #include "tiles/internal/compiled_region.h"
 #include "tiles/internal/dispatch.h"
 #include "tiles/internal/graph_values.h"
+#include "tiles/internal/profile_hooks.h"
 #include "tiles/internal/regions.h"
 #include "tiles/internal/tree_transfer.h"
 #include "tiles/program.h"
@@ -587,6 +589,38 @@ class TilesModule final : public BuiltinModule {
     bool load() override {
         if (loaded_)
             return true;
+        // `std::profile` (camel/profile/profile.h): what the CUDA path of this module did. Each
+        // hook asks the session itself, so a run without the pass records nothing.
+        profile_hooks::kernel = [](const char *label) {
+            if (camel::profile::enabled()) {
+                camel::profile::kernelLaunch(label);
+            }
+        };
+        profile_hooks::toDevice = [](uint64_t bytes) {
+            if (camel::profile::enabled()) {
+                camel::profile::transferToDevice(bytes);
+            }
+        };
+        profile_hooks::toHost = [](uint64_t bytes) {
+            if (camel::profile::enabled()) {
+                camel::profile::transferToHost(bytes);
+            }
+        };
+        profile_hooks::synchronise = [](const char *what) {
+            if (camel::profile::enabled()) {
+                camel::profile::synchronise(what);
+            }
+        };
+        profile_hooks::deviceCompile = [](const char *what, uint64_t ns) {
+            if (camel::profile::enabled()) {
+                camel::profile::deviceCompile(what, ns);
+            }
+        };
+        profile_hooks::device = [](const char *name) {
+            if (camel::profile::enabled()) {
+                camel::profile::setDevice(name);
+            }
+        };
         context_->registerExecutorFactory("tiles", [ctx = context_]() -> executor_ptr_t {
             return std::make_shared<Executor>(
                 ctx,

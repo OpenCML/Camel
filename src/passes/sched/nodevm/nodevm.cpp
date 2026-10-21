@@ -28,6 +28,8 @@
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/loop_frame.h"
 #include "camel/execute/observer.h"
+#include "camel/profile/operators.h"
+#include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
 #include "camel/utils/log.h"
@@ -595,7 +597,7 @@ slot_t NodeVMSchedPass::call(
                     const std::string uri(body->uri());
                     auto found = context_->execMgr().find(uri);
                     if (found) {
-                        opFunc = *found;
+                        opFunc = camel::profile::profiledOperator(uri, *found);
                         currPlan->resolvedOpers[nodeRef].store(opFunc, std::memory_order_relaxed);
                     } else {
                         if (camel::core::OperatorTable::instance().isMarked(body->oper)) {
@@ -696,6 +698,9 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     camel::runtime::GCGraph *graph = program->root();
     (void)os;
     ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
+    if (camel::profile::enabled()) {
+        camel::profile::setBackend("std::nvm");
+    }
     camel::execute::RunScope runScope(programs_, *context_, program);
     Frame *rootFrame = framePool_.acquire(graph);
     slot_t result    = call(graph, rootFrame);

@@ -73,6 +73,7 @@
 #include "passes/test/semantics.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
+#include "passes/trans/profile/profile.h"
 #include "passes/trans/stats/stats.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
@@ -562,6 +563,41 @@ PassParam statsParameter() {
         "append per-graph bytecode and execution counts of the run to this file"};
 }
 
+PassDescriptor profileDescriptor() {
+    PassDescriptor d;
+    d.doc =
+        "profiles the run (design docs/design/gpu/README.cn.md 5.6): the device and the time of "
+        "every operator, the operators and kernels of one step, the host/device transfers, the "
+        "synchronisations, the phase split of the compilation, and the element-wise loops that "
+        "run on the host; the report is written when the run ends";
+    d.params = {
+        PassParam{
+            "top",
+            PassParamType::Int,
+            int64_t{24},
+            "rows of the operator table; 0 writes every operator that ran"},
+        PassParam{
+            "hints",
+            PassParamType::Bool,
+            true,
+            "report the element-wise loops that run on the host, and why they did not go to a "
+            "device"},
+        PassParam{
+            "json",
+            PassParamType::String,
+            std::string(),
+            "also write the report as one JSON object to this file"},
+    };
+    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+        camel::profile::ReportOptions options;
+        const int64_t top = args.getInt("top");
+        options.top       = top < 0 ? 0 : static_cast<size_t>(top);
+        options.hints     = args.getBool("hints");
+        return std::make_unique<ProfilePass>(ctx, options, args.getString("json"));
+    };
+    return d;
+}
+
 PassDescriptor fastVmDescriptor(bool jit) {
     PassDescriptor d;
     d.doc =
@@ -662,6 +698,7 @@ PassScopePtr initPassScope() {
                          GraphVizDumpPass,
                          (GraphVizDumpConfig{.rich = true, .annotateRoles = true})))},
                     {"stats", def(PASS(GraphStatsPass))},
+                    {"profile", def(profileDescriptor())},
                     {"cpp",
                      def(PASS(CppDumpPass),
                          {
@@ -798,6 +835,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::rmir", "std::fastvm::jit::dump::rmir"},
     {"std::mir", "std::fastvm::jit::dump::mir"},
     {"std::tfg", "std::tfdump"},
+    {"std::prof", "std::profile"},
 };
 
 struct ModulePassRegistry {
@@ -1398,6 +1436,15 @@ std::map<std::string, std::vector<std::string>> declaredReadersOf(
 }
 
 } // namespace
+
+bool pipelineNamesProfile(const std::vector<std::string> &passes) {
+    for (const auto &spec : passes) {
+        if (resolveAlias(specName(spec)) == "std::profile") {
+            return true;
+        }
+    }
+    return false;
+}
 
 std::vector<Diagnostic> tagsNeverReadWarnings(
     const std::vector<std::string> &passes, const context_ptr_t &ctx) {

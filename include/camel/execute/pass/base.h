@@ -131,6 +131,13 @@ std::optional<camel::core::error::Diagnostic> passesNeverRunWarning(
     const std::vector<std::string> &passes, const camel::core::context::context_ptr_t &ctx);
 
 /**
+ * True when the pipeline names `std::profile` (or an alias of it) anywhere: the driver turns on
+ * the phase recorder before compiling, because the report of that pass carries the phase split
+ * of the compilation, which starts before any pass can run.
+ */
+bool pipelineNamesProfile(const std::vector<std::string> &passes);
+
+/**
  * A warning (SemanticDiag::TagHasNoReader) for each tag the program writes whose declaration
  * names the passes that read it (`read_by`) and none of them is in the pipeline: the tag then
  * has no effect. A reader matches a pass of the list by name or by the pass's alias, and a

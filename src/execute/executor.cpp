@@ -22,6 +22,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/effect_trace.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/profile/operators.h"
 #include "camel/utils/log.h"
 
 #include <mutex>
@@ -120,7 +121,7 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
 }
 
 std::string ExecutorManager::getNameOfAnOperator(const operator_t &tracedOp) const {
-    const operator_t op = camel::core::effect_trace::unwrap(tracedOp);
+    const operator_t op = camel::profile::unwrapThunk(camel::core::effect_trace::unwrap(tracedOp));
     for (const auto &[protocol, executor] : loadedExecutors) {
         std::string name = executor->getNameOfAnOperator(op);
         if (!name.empty()) {
