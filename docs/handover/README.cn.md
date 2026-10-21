@@ -655,6 +655,7 @@ nvm、taskflow 得 `(1, 30)`（正确），fvm、jit 得 `(3, 20)`。`feat/examp
 2. **JIT 编译含循环的图**：x64 后端实现 `LBEG`/`LTST`/`LEND`（现在含循环的图解释执行，被调函数照常编译）。
 3. **自动微分读区域**：删除 `outlineLoopRegions`/`regionizeLoops`/`raiseBranchArms`/`lowerBranchArms` 这些过渡层与 `LoopView` 的子图模式。
 4. **ONNX 导出循环**（读区域，映射到 `Loop`）。
-5. 改掉仍带"降低"字样的名字（`loops.*_lowered`、`OperatorTraits::inspectsGraphs`）。
-6. **性能目标**（`docs/technical/39_loops.md`，1000 万轮两个状态的 `while`）：现在 nvm 1.96 s、fvm 1.02 s、jit 0.99 s；目标 nvm ≤ 0.7 s、fvm/jit ≤ 手写尾递归 0.49 s 的一半。剖析后逐步逼近。
-7. `feat/trans/cpp.agree_with_fvm`（slow 层）在里程碑时运行。
+5. 删除 NodeVM 的 `evalLoop` 回退（`0e88d09d`）：前端已直接建循环区域，确认不再有子图形式的 `LOOP` 后删除。
+6. 改掉仍带"降低"字样的名字（`loops.*_lowered`、`OperatorTraits::inspectsGraphs`）。
+7. **性能目标**（`docs/technical/39_loops.md`，1000 万轮两个状态的 `while`）：现在 nvm 1.96 s、fvm 1.02 s、jit 0.99 s；目标 nvm ≤ 0.7 s、fvm/jit ≤ 手写尾递归 0.49 s 的一半。剖析后逐步逼近。
+8. `feat/trans/cpp.agree_with_fvm`（slow 层）在里程碑时运行。
