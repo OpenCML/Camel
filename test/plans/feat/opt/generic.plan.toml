@@ -1423,6 +1423,45 @@ assert(JSON.stringify(specialized) === JSON.stringify(['fib$spec123', 'fib$spec1
 timeout_ms = 8000
 
 [[tests]]
+name = "specialization_survives_the_round.copy_is_reused_in_a_later_round"
+desc = "A specialization belongs to the program, not to the session that made it, and a later round that binds the same (function, values) gets the copy back instead of making a second one -- while the program still reaches it. walk's first argument drives the unrolling (walk(6) makes walk(5), which makes walk(4), ...) and its second comes from a cell, so the arithmetic stays in the graph and the call spin(k % 2) is never specialized either; spin is recursive, so every copy keeps reaching a recursion, is not inlined and stays reachable from the root in the rounds that follow. The copy walk(4) made in the first round is handed back to the walk(5) copy's request in a later round (walk$spec7 calls walk$spec1): the 7 copies the program reaches are all the table holds (a table that lives with the session would make 5 more copies -- 12 walk copies, 17 graphs, 254 nodes). The other side is here too: tick's three copies are inlined into main in the round that makes them, so the commit drops their entries and the table reports 7, not the 10 a table that pinned the graphs it named would count. The reachable program is 12 graphs and 174 nodes."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialization_survives_the_round.cml"
+args = ["${case}", "std::opt", "std::stats", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const at = out.indexOf('GRAPH_STATS ')
+const stats = JSON.parse(out.slice(at + 'GRAPH_STATS '.length, out.indexOf('}', at) + 1))
+assert(stats.specializations === 7, `expected the 7 specializations the program still reaches, got ${stats.specializations}`)
+assert(stats.graphs === 12 && stats.nodes === 174, `unexpected program shape: ${stats.graphs} graphs, ${stats.nodes} nodes`)
+const graphs = JSON.parse(out.slice(out.indexOf('}', at) + 1).trim()).graphs
+const names = graphs.map((g) => g.name)
+const specialized = names.filter((name) => name.startsWith('walk$')).sort()
+assert(JSON.stringify(specialized) === JSON.stringify(['walk$spec0', 'walk$spec1', 'walk$spec10', 'walk$spec11', 'walk$spec6', 'walk$spec7', 'walk$spec8']), `the copies that survive are not the ones the program reaches: ${specialized}`)
+assert(!names.some((name) => name.startsWith('tick$')), `a copy whose caller inlined it must not be kept: ${names.filter((name) => name.startsWith('tick$'))}`)
+const copy = graphs.find((g) => g.name === 'walk$spec7')
+assert(copy !== undefined, 'the walk(5) copy the first round made is missing')
+const callees = copy.nodes.filter((n) => n.kind === 'FUNC').map((n) => n.label)
+assert(callees.includes('walk$spec1'), `the walk(5) copy made a second walk(4) instead of reusing the one the first round made: ${callees}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "specialization_survives_the_round.results_are_unchanged"
+desc = "The copies the simplifier reuses compute the same values: the optimized program prints what the plain one does."
+kind = "behavior"
+case = "../../../cases/opt/generic/specialization_survives_the_round.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "87\n16\n45\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "fold_cast.failing_is_kept"
 desc = "A conversion of a constant that fails is not folded: the CAST stays in the simplified graph, and compiling is not an error."
 kind = "behavior"

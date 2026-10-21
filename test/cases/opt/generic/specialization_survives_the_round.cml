@@ -1,0 +1,51 @@
+module specialization_survives_the_round
+
+// std::opt simplifies in rounds. Each round specializes the calls it can bind, folds what that
+// made constant, and inlines; a specialization belongs to the program, so a later round that
+// needs the same (function, values) gets the copy back instead of making a second one -- as long
+// as the program still reaches that copy.
+//
+// `n` drives the unrolling: every copy of walk calls walk(n - 1, e) with n bound, so the copies
+// form the chain walk(6), walk(5), walk(4), ... and each round keeps asking for the values the
+// round before made.
+//
+// The second argument comes from a cell (`var k`), and a read of a cell is not folded: the
+// arithmetic on `k` stays in the graph, so a copy is never small enough to be folded away. spin
+// is called with k % 2, which is not constant either, so that call is not specialized either; it
+// keeps every copy reaching a recursion, and the inliner leaves a copy that reaches one in place.
+// A copy whose chain no longer reached a recursion would eventually be inlined into its caller
+// and the table would have to drop it again (see tick below): this call is what keeps these
+// copies reachable from the root in later rounds.
+//
+// The constants are all different on purpose: cse merges equal constants, and rewriting walk
+// itself would change its revision and invalidate every entry made for it.
+func spin(n: int): int {
+    return if n <= 0 then 1 else spin(n - 1)
+}
+
+func walk(n: int, k: int): int {
+    let a = k % 97
+    let b = a * 3 + 10
+    let c = b % 89
+    let d = c * 7 - 5
+    let e = d % 83
+    return if n <= 0 then k else walk(n - 1, e) + spin(k % 2)
+}
+
+// tick's copies are inlined into main in the round that makes them, so the commit drops their
+// table entries: the table is a cache, not an owner, and the count must not grow with copies
+// nothing reaches any more.
+func tick(k: int): int {
+    return k * 7 + 1
+}
+
+func main(): int sync {
+    var k = 5
+    let p = walk(6, k)
+    let q = walk(4, k)
+    let t = tick(1) + tick(2) + tick(3)
+    println(p)
+    println(q)
+    println(t)
+    return 0
+}
