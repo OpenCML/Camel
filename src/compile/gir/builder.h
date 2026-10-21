@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1081,7 +1081,8 @@ class Builder {
     // variable's last writer in this graph and, in a sync block, in the block's chain.
     node_handle_t readVariable(node_handle_t variable);
     // `:var/get` or `:var/peek` applied to `variable`, recorded as a read.
-    node_handle_t readVariableThrough(node_handle_t variable, const std::string &group);
+    node_handle_t readVariableThrough(
+        node_handle_t variable, camel::core::OperId oper);
     // The value `variable` holds (`:var/peek`): the same as readVariable, but the variable keeps
     // its array available for writing in place (the read does not take the array away).
     node_handle_t peekVariable(node_handle_t variable);
@@ -1093,7 +1094,14 @@ class Builder {
     // takes the variable or its value is only known once the callee is resolved.
     node_handle_t visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call);
     // The node of `:var/new` or `:var/get` applied to `input`.
-    node_handle_t variableOperator(const std::string &group, node_handle_t input);
+    node_handle_t variableOperator(camel::core::OperId oper, node_handle_t input);
+    /// The group of an operator the compiler emits itself (`oper::EnumMake` and the like): the
+    /// built-in module registered it; an id is fixed at start-up, the group when that module is
+    /// loaded, which is before any module of a program is compiled.
+    oper_group_ptr_t internalOperatorGroup(camel::core::OperId oper);
+    /// The DREF of such an operator: the construction node carries the id, so the group is not
+    /// looked up by a name the program could shadow (visitDRefNode).
+    GCT::node_ptr_t internalOperatorDref(camel::core::OperId oper);
     // The immutable name an argument expression denotes: the name itself or a field of it
     // (`s`, `s.x`). Empty for a variable and for an expression that is not a name.
     std::optional<std::string> immutableNameOf(const GCT::node_ptr_t &expr);
@@ -1228,13 +1236,24 @@ class Builder {
     /// `match e { case Shape::Circle(r) => ... }`.
     node_handle_t visitEnumMatch(
         const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::EnumType *type);
-    /// A call of the compiler's own operator `op` over the given GCT operands (a DREF of the
-    /// operator and the operands), built like any call.
-    /// A call the graph makes itself (`__enum_make__` and its like): `typeArgument` is given as
-    /// `f::<T>`, for an operator whose result type is decided by a type the program does not
-    /// write. The operands are GCT nodes; the call is lowered as a written one would be.
+    /// A call of the compiler's own operator `oper` over the given GCT operands (a DREF of the
+    /// operator and the operands), built like any call. The operator is the built-in module's,
+    /// found by the id the table fixed at start-up (there is no name lookup, so nothing the
+    /// program declares under an internal name changes what the compiler emits).
+    /// `typeArgument` is given as `f::<T>`, for an operator whose result type is decided by a
+    /// type the program does not write. The operands are GCT nodes; the call is lowered as a
+    /// written one would be.
+    node_handle_t applyInternalOperator(
+        camel::core::OperId oper, camel::core::type::Type *typeArgument,
+        const std::vector<GCT::node_ptr_t> &operands, const GCT::node_ptr_t &origin);
+    /// The same, for an operator group the program may overload (`__eq__`): the overloads of
+    /// every layer are the ones a written call of the name would use (design principles 10.2).
     node_handle_t applyInternalOperator(
         const char *op, camel::core::type::Type *typeArgument,
+        const std::vector<GCT::node_ptr_t> &operands, const GCT::node_ptr_t &origin);
+    /// The call with the given callee DREF: what both applyInternalOperator forms make.
+    node_handle_t applyInternalOperatorCall(
+        const GCT::node_ptr_t &callee, camel::core::type::Type *typeArgument,
         const std::vector<GCT::node_ptr_t> &operands, const GCT::node_ptr_t &origin);
     /// The type of a node whose value is of enum type: its result slot is of that type too
     /// (the operator's placeholder type is not what the value is kept as; a slot of a type
@@ -1477,9 +1496,16 @@ class Builder {
 
     /// Binds `node` to a fresh name no program can write, so that arms can capture it.
     std::string bindTemporary(node_handle_t node);
-    /// The call `op(<name>)` of one of the built-in operators over tagged values.
+    /// The call `oper(<name>)` of one of the built-in operators over tagged values, by the id of
+    /// the compiler's own operator (`oper::TagIsNull` and the like; internalOperatorDref).
+    node_handle_t applyTagOperator(
+        camel::core::OperId oper, const std::string &name, const GCT::node_ptr_t &origin);
+    /// The call `<op>(<name>)` of a group the program may overload (`__not__`).
     node_handle_t
     applyTagOperator(const char *op, const std::string &name, const GCT::node_ptr_t &origin);
+    /// The call with the given callee DREF: what both applyTagOperator forms make.
+    node_handle_t applyTagOperatorCall(
+        const GCT::node_ptr_t &callee, const std::string &name, const GCT::node_ptr_t &origin);
     /// A CAST of `value` to `target`, made by the compiler (no conversion rule is consulted).
     node_handle_t
     castNodeTo(node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);

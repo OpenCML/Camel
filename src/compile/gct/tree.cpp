@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 13, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -256,6 +256,20 @@ node_ptr_t Tree::makeDRef(const std::string &name) {
     return node;
 }
 
+node_ptr_t Tree::makeDRef(OperId oper, const std::string &name) {
+    Node *node          = makeDRef(name);
+    operRefs_[node]     = oper;
+    return node;
+}
+
+std::optional<OperId> Tree::operRefOf(const Node *node) const {
+    const auto it = operRefs_.find(node);
+    if (it == operRefs_.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
 node_ptr_t Tree::makeVari() { return makeNode(NodeKind::VARI); }
 
 node_ptr_t Tree::makeWait() { return makeNode(NodeKind::WAIT); }
@@ -405,8 +419,15 @@ node_ptr_t Tree::clone(const Node *node) {
     case NodeKind::DECL:
     case NodeKind::FUNC:
     case NodeKind::NREF:
+        copy->payload_.name = intern(*node->payload_.name);
+        break;
     case NodeKind::DREF:
         copy->payload_.name = intern(*node->payload_.name);
+        // A DREF the compiler made for an operator by id stands for the same operator in the
+        // copy.
+        if (const auto oper = Tree::of(node)->operRefOf(node)) {
+            operRefs_[copy] = *oper;
+        }
         break;
     case NodeKind::CASE:
         if (node->caseType() == CaseType::Enum) {

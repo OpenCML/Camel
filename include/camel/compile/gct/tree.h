@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 13, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,6 +57,7 @@
 #include <iosfwd>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -66,8 +67,12 @@
 #include "camel/common/ref.h"
 #include "camel/compile/gct/node.h"
 #include "camel/compile/literal.h"
+#include "camel/core/operator_table.h"
 
 namespace camel::compile::gct {
+
+/// The table's operator index (see the DREF the compiler makes for an operator by id).
+using OperId = camel::core::OperId;
 
 /// One `#` tag use (design principles 6.2) as written, before it is resolved: the name as
 /// written (qualified by the namespaces of its module), its arguments lowered to data nodes
@@ -112,6 +117,14 @@ class Tree {
     node_ptr_t makeFunc(const std::string &name);
     node_ptr_t makeNRef(const std::string &name);
     node_ptr_t makeDRef(const std::string &name);
+    /// A DREF the compiler makes for an operator it already knows by id (`oper::EnumMake`):
+    /// the graph builder finds the group from the id, in the built-in module, instead of
+    /// resolving `name` through the scopes and imports of the program. `name` is the group's
+    /// entity name, kept as the node's label (the GCT dump, a diagnostic about the node).
+    node_ptr_t makeDRef(OperId oper, const std::string &name);
+    /// The id of the operator a DREF made by makeDRef(OperId, name) stands for; nullopt for
+    /// every other node.
+    std::optional<OperId> operRefOf(const Node *node) const;
     node_ptr_t makeVari();
     node_ptr_t makeWait();
     node_ptr_t makeLink(size_t argCount);
@@ -235,6 +248,9 @@ class Tree {
     std::unordered_map<const Node *, std::vector<Reference>> usings_;
     std::unordered_map<const Node *, std::vector<std::string>> namespaces_;
     std::unordered_map<const Node *, std::vector<TagUse>> tagUses_;
+    // The DREFs the compiler made for an operator it knows by id (makeDRef(OperId, name)),
+    // and that id: a DREF's payload is its name, so the id is kept beside the node.
+    std::unordered_map<const Node *, OperId> operRefs_;
     std::unordered_map<const Node *, std::map<size_t, std::vector<TagUse>>> fieldTagUses_;
     std::unordered_map<const Node *, literal::Value> literalValues_;
     // Keyed by the data object: a composite literal's elements are converted from it, and a
