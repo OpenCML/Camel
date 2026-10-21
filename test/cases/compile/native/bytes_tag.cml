@@ -1,0 +1,10 @@
+/**
+ * The name of the declaration matches the operator's and the module does not: that is what the
+ * exceptional binding `#op` is for (handover H19, step 1).
+ */
+module bytes_tag
+
+import bytes
+
+#op<'bytes:size'>
+export func size(content: Bytes): int

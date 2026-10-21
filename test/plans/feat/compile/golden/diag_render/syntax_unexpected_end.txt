@@ -1,8 +1,13 @@
-error[SyntaxDiag::UnexpectedEndOfFile]: The file ends in the middle of a construct; expected '{' or 'sync'.
-  --> <ROOT>/test/cases/compile/diag_render/syntax_unexpected_end.cml:3:17
+error[SyntaxDiag::MissingClosingDelimiter]: Expected '}' before the end of the file, to close the '{'.
+  --> <ROOT>/test/cases/compile/diag_render/syntax_unexpected_end.cml:4:14
    |
- 3 | func main(): int
-   |                 ^
-help: Something opened earlier is not finished: check the last declaration of the file.
+ 4 |     let x = 1
+   |              ^
+note: the '{' that is not closed is opened
+  --> <ROOT>/test/cases/compile/diag_render/syntax_unexpected_end.cml:3:18
+   |
+ 3 | func main(): int {
+   |                  -
+help: Every '{' needs its '}'. The note shows the '{' that is still open here.
 
 camel: 1 error

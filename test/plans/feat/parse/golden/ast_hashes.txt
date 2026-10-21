@@ -314,11 +314,11 @@ e161ae730c757b4e ok showcase/c2-mlp-mnist/train.cml
 99a1aa3bfd6baad7 ok showcase/c6-vae/train.cml
 4fff9407e41ec7ae ok showcase/d5-tree-lstm/train.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
+f8a426c8e96936da ok stdlib/bytes.cml
 173076cd43673a6b ok stdlib/perf.cml
 5bed5b6facc3fd63 ok stdlib/rules.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 0539c1402fbe163c ok stdlib/signatures/algo.cml
-63d195595160cec9 ok stdlib/signatures/bytes.cml
 ba50ff52809dea87 ok stdlib/signatures/crypto.cml
 651e80439e059f51 ok stdlib/signatures/fs.cml
 d04883da10736f87 no stdlib/signatures/globals.cml
@@ -455,7 +455,7 @@ e9ec18c7481e88be no test/cases/compile/diag_render/syntax_missing_paren.cml
 12a7a1b69807fe66 no test/cases/compile/diag_render/syntax_missing_then.cml
 58aa54cc7b96a3d0 no test/cases/compile/diag_render/syntax_missing_token.cml
 c8a2aea79398ad4a no test/cases/compile/diag_render/syntax_stray_closer.cml
-80d97963904d6004 no test/cases/compile/diag_render/syntax_unexpected_end.cml
+3453aa077d16a883 no test/cases/compile/diag_render/syntax_unexpected_end.cml
 c8c8348a8e154358 no test/cases/compile/diag_render/syntax_unexpected_token.cml
 4d487e2cae71a5fa ok test/cases/compile/diag_render/warning_dropped_effect.cml
 9165ddabb83666c9 ok test/cases/compile/diag_render/werror_no_position.cml
@@ -756,6 +756,15 @@ aa6e3c1cddb68984 ok test/cases/compile/namespace_rules/p29_using_block.cml
 43a07054734e599a ok test/cases/compile/namespace_rules/p33_reopen_using.cml
 08e77648cbe27041 ok test/cases/compile/namespace_rules/p34_ambiguous_qualified.cml
 25e1cd83d3e6642d ok test/cases/compile/namespace_rules/p35_ambiguous_type.cml
+f2039bef9588c755 ok test/cases/compile/native/bytes_arity.cml
+c6c7399fc11cf48c ok test/cases/compile/native/bytes_tag.cml
+46e0440e9bc3e10a ok test/cases/compile/native/bytes_tag_qualified.cml
+720787a777ead755 ok test/cases/compile/native/bytes_tag_use.cml
+a08398ab5e4ba3b7 ok test/cases/compile/native/bytes_type.cml
+73e34f5410cddf22 ok test/cases/compile/native/generic.cml
+56df9aa3996cbbf9 ok test/cases/compile/native/generic_module.cml
+c7fe2aa20c0b534e ok test/cases/compile/native/missing.cml
+627cb2d4cbd33d70 ok test/cases/compile/native/missing_module.cml
 6ff823b21e5dd2c8 no test/cases/compile/not_supported/is_operator.cml
 3292f35f88354816 ok test/cases/compile/not_supported/list_comprehension.cml
 2ca92d4290a1bd4b no test/cases/compile/not_supported/non_null_assert.cml
@@ -1774,6 +1783,8 @@ d5350cbd17ad4ab0 ok test/cases/modules/tiles/batch_matmul.cml
 86113175d9f9f4c4 ok test/cases/modules/tiles/boundaries.cml
 d7f09150b2048d4a ok test/cases/modules/tiles/branch_effect.cml
 8deb1282283424ad ok test/cases/modules/tiles/branches.cml
+56d563603d97ff10 ok test/cases/modules/tiles/cast_dtype.cml
+d39356dc4df797d4 ok test/cases/modules/tiles/cast_like.cml
 fa8efa1b9430518e ok test/cases/modules/tiles/compiled_region.cml
 0f969d23938d7bac ok test/cases/modules/tiles/consistency.cml
 3f924524b970918f ok test/cases/modules/tiles/core_views.cml

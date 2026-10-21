@@ -1,0 +1,9 @@
+/**
+ * An integer where the declaration says `Bytes`: rejected at the call, and the message lists the
+ * declaration's signature, parameter name included (handover H19, step 1).
+ */
+import bytes
+
+func main(): int sync {
+    return bytes::size(1)
+}

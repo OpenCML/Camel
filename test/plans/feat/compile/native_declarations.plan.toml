@@ -1,0 +1,122 @@
+id = "compile.native_declarations"
+order = 340
+tier = "fast"
+tags = ["feat", "compile", "modules", "native", "declaration", "generics"]
+desc = "A body-less `export func` in a `.cml` is the declaration of an operator of a C++ module: the declaration is the signature, a call checks against it and reaches the operator, and a generic declaration is instantiated by type (handover H19, step 1)"
+
+# Design principles 6.4 (a primitive is an operator written in C++, and its signature is written
+# once) and 6.2 (the tag that names the exception); handover H19, step 1.
+#
+# The four cases the step has to prove: a declaration of a generic operator mixed with ordinary
+# functions of the module; a declaration whose operator is not loaded (a located diagnostic, not
+# silence); a call of the wrong arity and of the wrong type; and the `#op` exception for a name
+# whose module is not the declaration's.
+
+[defaults]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 12000
+
+# ---- A generic declaration, mixed with ordinary functions ----
+
+[[tests]]
+name = "native.generic_declaration"
+desc = "`at` is declared once, with a type variable, and called on `int[]` and on `string[]`: the same declaration serves both, and the ordinary function of the module that calls it works too."
+kind = "behavior"
+case = "../../../cases/compile/native/generic.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5\n5\ngamma\nbeta\n"
+
+[[tests]]
+name = "native.generic_declaration_fvm"
+desc = "The same on the bytecode VM."
+kind = "behavior"
+case = "../../../cases/compile/native/generic.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "5\n5\ngamma\nbeta\n"
+
+[[tests]]
+name = "native.operator_on_the_graph"
+desc = "On the graph a call of a declaration is an OPER of the operator's URI, instantiated: the index operator over `int` and over `string`, not a CALL of `at` and not a graph of the declaration."
+kind = "behavior"
+case = "../../../cases/compile/native/generic.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+const operands = lines.filter((l) => l.includes('label=":op/idx_arr"'))
+assert(operands.length >= 2, `expected the index operator, got ${operands.length}`)
+assert(operands.some((l) => l.includes('value_type="int"')), `no int instance: ${operands.join(' | ')}`)
+assert(operands.some((l) => l.includes('value_type="string"')), `no string instance: ${operands.join(' | ')}`)
+assert(!input.normalized.stdout.includes('native_generic::at'), 'the declaration was built as a graph of its own')
+}
+"""
+
+# ---- A declaration whose operator is not loaded ----
+
+[[tests]]
+name = "native.declaration_not_loaded"
+desc = "The declaration names `nowhere:absent`, which no loaded module implements: one diagnostic at the declaration, in the module that wrote it, before anything runs."
+kind = "negative"
+case = "../../../cases/compile/native/missing.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeDeclarationNotLoaded"
+expect_diagnostic_code = "0x03000176"
+expect_output_contains = ["missing_module.cml:", "nowhere:absent", "which no loaded module implements"]
+
+# ---- The declaration is the signature a call is checked against ----
+
+[[tests]]
+name = "native.wrong_arity"
+desc = "Two arguments where the declaration has one: refused at the call, and the overload the message lists is the declaration's own."
+kind = "negative"
+case = "../../../cases/compile/native/bytes_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_arity.cml:10:23", "(Bytes, Bytes)", "<bytes:size>: (content: Bytes) => int"]
+
+[[tests]]
+name = "native.wrong_type"
+desc = "An `int` where the declaration says `Bytes`: refused at the call, and the signature in the message has the parameter name the declaration gave it — the `.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/bytes_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_type.cml:8:23", "argument types: <> (int)", "<bytes:size>: (content: Bytes) => int"]
+
+# ---- The exception tag ----
+
+[[tests]]
+name = "native.tag_exception"
+desc = "`#op<'bytes:size'>` binds a name of another module to an operator of `bytes`: the name imported from the declaration and the operator's own name both reach it."
+kind = "behavior"
+case = "../../../cases/compile/native/bytes_tag_use.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n3\n"
+
+[[tests]]
+name = "native.tag_exception_qualified"
+desc = "The group a declaration makes is the module's own entity, so naming the module reaches it as `bytes::size` reaches a C++ module's operator."
+kind = "behavior"
+case = "../../../cases/compile/native/bytes_tag_qualified.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "4\n"
+
+# ---- A `.cml` beside a `.cmo` is that module's declarations, and has no bodies ----
+
+[[tests]]
+name = "native.declaration_module_has_no_body"
+desc = "A `bytes.cml` written beside a `bytes.cmo` declares that module's operators; a body in it is a diagnostic located at the function, not a function silently dropped."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/native/declaration_module_body.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+timeout_ms = 120000
