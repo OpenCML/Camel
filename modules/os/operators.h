@@ -32,10 +32,5 @@ slot_t __os_exit__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __os_sleep__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __os_whoami__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __os_cpu_count__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __os_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __os_has_input__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __os_get_char__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __os_get_chars__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __os_clear_input_buffer__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getOSOpsMap();

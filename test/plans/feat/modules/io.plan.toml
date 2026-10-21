@@ -1,0 +1,70 @@
+id = "modules.io"
+order = 377
+tier = "fast"
+tags = ["feat", "modules", "io", "terminal"]
+
+# `io` is the terminal until `Stream` exists (H19 steps 4 and 10): what stdin has waiting, the keys
+# themselves, and raw mode. The standard streams and `print`/`println`/`input` are the prelude's.
+# The cases below need no interactive terminal: the read side is fed through a pipe, and the
+# effects and resources are read from the graph and from `inspect --ops`.
+
+[[tests]]
+name = "terminal_read_write_roundtrip"
+desc = "`roundtrip.mjs` writes two characters into the child's stdin (a pipe); the program sees them with `has_input`, reads them with `get_char`/`get_chars` and writes them back, and turning raw mode off succeeds."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/modules/io/roundtrip.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["io terminal read/write round trip passed"]
+timeout_ms = 20000
+
+[[tests]]
+name = "raw_mode_needs_a_terminal"
+desc = "Turning raw mode off is a no-op that returns `void`; turning it on where stdin is not a terminal is a `RuntimeError` fault value at the call, not an exit."
+kind = "behavior"
+case = "../../../cases/modules/io/raw_mode.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "ok\nRuntimeError\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "effect_on_the_graph"
+desc = "`std::jgir` marks the `io:get_chars` node with the `effect` role: the module declares the terminal operators impure (design principles 3.3), so the node is ordered and never folded away."
+kind = "behavior"
+case = "../../../cases/modules/io/effect_graph.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+timeout_ms = 10000
+verify_script = """
+({ input, assert }) => {
+const dump = JSON.parse(input.normalized.stdout)
+const main = dump.graphs.find((g) => g.nodes.some((n) => n.label === 'io:get_chars'))
+assert(main, 'no graph calls io:get_chars')
+const node = main.nodes.find((n) => n.label === 'io:get_chars')
+assert(node.roles.includes('effect'), `io:get_chars roles: ${JSON.stringify(node.roles)}`)
+}
+"""
+
+[[tests]]
+name = "declared_resources"
+desc = "`inspect --ops` reports the resources the module registered: the readers touch `io:stdin` (read or read-modify-write) and raw mode writes `io:terminal`, all external."
+kind = "behavior"
+case = "../../../cases/modules/io/resources.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
+const byUri = Object.fromEntries(ops.map((o) => [o.uri, o]))
+const resources = (uri) => byUri[uri] && byUri[uri].semantics && byUri[uri].semantics.resources
+assert(resources('io:set_terminal_raw_mode') === 'write ambient io:terminal; external', resources('io:set_terminal_raw_mode'))
+assert(resources('io:has_input') === 'read ambient io:stdin; external', resources('io:has_input'))
+assert(resources('io:get_char') === 'rmw ambient io:stdin; external', resources('io:get_char'))
+assert(resources('io:get_chars') === 'rmw ambient io:stdin; external', resources('io:get_chars'))
+assert(resources('io:clear_input_buffer') === 'rmw ambient io:stdin; external', resources('io:clear_input_buffer'))
+}
+"""

@@ -48,7 +48,8 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [random](#random) | `import { ... } from random` | C++ | 10 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
 | [fs](#fs) | `import { ... } from fs` | C++ | 15 |
-| [os](#os) | `import { ... } from os` | C++ | 8 |
+| [io](#io) | `import { ... } from io` | C++ | 5 |
+| [os](#os) | `import { ... } from os` | C++ | 3 |
 | [sys](#sys) | `import { ... } from sys` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
 | [re](#re) | `import { ... } from re` | C++ | 1 |
@@ -2587,47 +2588,13 @@ delete; a file or a symbolic link is an error too.
 - Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
 - Example: `remove_dir('out/old')`
 
-<a id="os"></a>
+<a id="io"></a>
 
-## `os`: process and terminal
+## `io`: terminal input
 
-Every function touches the process, the terminal or the machine and is declared with effects.
-`sleep` and `exit` are also built in: they need no import.
-
-#### `sleep`
-
-```camel
-sleep: (milliseconds: int) => void
-```
-
-Suspends the program for the given number of milliseconds.
-
-- With effects: waits.
-- Failure: fault `InvalidArgument` when the duration is negative.
-- Example: `sleep(100)`
-
-#### `whoami`
-
-```camel
-whoami: () => string
-```
-
-The name of the user the process runs as.
-
-- With effects: reads the environment.
-- Failure: fault `RuntimeError` when the name cannot be found.
-- Example: `whoami()` gives `'alice'`
-
-#### `cpu_count`
-
-```camel
-cpu_count: () => int
-```
-
-The number of hardware threads, at least 1.
-
-- With effects: reads the machine.
-- Example: `cpu_count()` gives `8`
+The terminal: what it has waiting to be read, the keys themselves, and raw mode. The standard
+streams and `print`/`println`/`input`/`eprintln` are the prelude's; `Stream` and a `stdin` value
+are later work (H19 question 5).
 
 #### `set_terminal_raw_mode`
 
@@ -2684,6 +2651,48 @@ Discards the terminal input that is waiting.
 
 - With effects: reads the terminal.
 - Example: `clear_input_buffer()`
+
+<a id="os"></a>
+
+## `os`: the process and the machine
+
+Every function touches the process or the machine and is declared with effects. `sleep` and
+`exit` are also built in: they need no import. The terminal is `io`'s (H19 step 4).
+
+#### `sleep`
+
+```camel
+sleep: (milliseconds: int) => void
+```
+
+Suspends the program for the given number of milliseconds.
+
+- With effects: waits.
+- Failure: fault `InvalidArgument` when the duration is negative.
+- Example: `sleep(100)`
+
+#### `whoami`
+
+```camel
+whoami: () => string
+```
+
+The name of the user the process runs as.
+
+- With effects: reads the environment.
+- Failure: fault `RuntimeError` when the name cannot be found.
+- Example: `whoami()` gives `'alice'`
+
+#### `cpu_count`
+
+```camel
+cpu_count: () => int
+```
+
+The number of hardware threads, at least 1.
+
+- With effects: reads the machine.
+- Example: `cpu_count()` gives `8`
 
 <a id="sys"></a>
 

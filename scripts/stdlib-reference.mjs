@@ -73,7 +73,15 @@ const MODULES = [
     { name: 'random', title: '`random`', kind: 'cpp' },
     { name: 'time', title: '`time`', kind: 'cpp' },
     { name: 'fs', title: '`fs`: files', kind: 'cpp' },
-    { name: 'os', title: '`os`: process and terminal', kind: 'cpp' },
+    {
+        name: 'io',
+        title: '`io`: terminal input',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles (H19).
+        source: 'io.cml',
+        declaration: true,
+    },
+    { name: 'os', title: '`os`: the process and the machine', kind: 'cpp' },
     { name: 'sys', title: '`sys`: environment', kind: 'cpp' },
     { name: 'json', title: '`json`', kind: 'cpp' },
     { name: 're', title: '`re`: regular expressions', kind: 'cpp' },

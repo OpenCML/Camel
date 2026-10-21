@@ -57,7 +57,9 @@ result may be any of them, and it has an external effect when its traits say so.
 | `:struct/append_arr_in_place`, `:op/set_index_in_place` | read-modify-write of operand 0; the result is that object |
 | `algo:*_in_place` | read-modify-write of an object (operand 0); the result is that object |
 | `:io/print`, `:io/println`, `tensor:show` | write `io:stdout`, external |
-| `:io/input`, `os:get_char(s)`, `os:clear_input_buffer` | read-modify-write `io:stdin`, external |
+| `:io/input`, `io:get_char(s)`, `io:clear_input_buffer` | read-modify-write `io:stdin`, external |
+| `io:has_input` | read `io:stdin`, external |
+| `io:set_terminal_raw_mode` | write `io:terminal`, external |
 | `fs:*`, `nn:save_params`, `tensor:load_npy`, `tensor:save_npy` | read or read-modify-write `fs`, external |
 | `rand:*`, `tensor:seed`, `tensor:random`, `tensor:randn` | write or read-modify-write the module's generator, external |
 | `time:*`, `os:*`, `sys:*` | the clock, the process, its environment, the terminal, external |

@@ -117,6 +117,26 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_type.cml:11:17", "argument types: <> (int)", "<str:trim>: (s: string) => string"]
 
+# ---- The declarations of `io`: the terminal's signatures (handover H19, steps 4 and 10) ----
+
+[[tests]]
+name = "native.io_wrong_arity"
+desc = "`io:get_chars` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's, parameter name included."
+kind = "negative"
+case = "../../../cases/compile/native/io_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "io_arity.cml:10:22", "(int, int)", "<io:get_chars>: (max: int) => string"]
+
+[[tests]]
+name = "native.io_wrong_type"
+desc = "A `string` where the declaration says `int`: refused at the call, and the signature in the message has the parameter name the declaration gave it — `stdlib/io.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/io_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "io_type.cml:11:22", "argument types: <> (string)", "<io:get_chars>: (max: int) => string"]
+
 # ---- A declaration the module does not export is private (handover H94, ruling 3) ----
 
 [[tests]]
