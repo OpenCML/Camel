@@ -242,7 +242,7 @@
 | H10 | 测试提速 | H9 第 4 项 | **已完成**（`68933cc2`、`318c4d65`；fast 层的 2 分钟目标未在空闲 8 核机验证；报告 reports/H10.md） |
 | H11 | 健壮性与小缺陷 | 无 | **已完成**（第 1–4 项已合入；报告 reports/H11.md） |
 | H4 | 已裁定未开工的小项 | 各小项另注 | **已完成**（H4a `37e447a6`、H4b `0581d473`、H4c/H4f `e6d20306`、H4d `45bbdc14`+`638b6893`、H4e `1ad52472`；报告 reports/H4.md） |
-| H6 | 地基遗留 | 无 | **部分完成**（第 3、4、6、7 项已完成 `e954fe90`；第 5 项由 H80 完成，见 reports/H80.md；第 1、2 项未做；报告 reports/H6.md） |
+| H6 | 地基遗留 | 无 | **部分完成**（第 3、4、6、7 项已完成 `e954fe90`；第 5 项由 H80 完成，见 reports/H80.md；第 2 项由 H85 部分完成（traits 与 `#independent` 已做，控制边约简待裁定），见 reports/H85.md；第 1 项未做；报告 reports/H6.md） |
 | H12 | 拆分建图器（纯搬移） | H11 之后 | **已完成**（10 个纯搬移提交；报告 reports/H12.md） |
 | H2 | 标签机制与数值许可改为标签 | 无 | **部分完成**（第 1–5、7、8 项完成：第 1–3、7、8 项在 `856af859`，第 4 项 `7b4147c1`（许可是标签、默认按 7.3、`#strict` 经 `effectivePermissions` 清空全部许可、删除 `@numeric(...)`），第 5 项在本分支（`@vjp` 改为 `#vjp<rule>` 声明标签、规则是图引用 `kGraphRefRule`、删除宏求值与 `attachRule`）；第 6 项 `#macro` 未做；报告 reports/H77.md） |
 | H7 | 资源与副作用 | H2 | **未开始** |
@@ -379,14 +379,14 @@ let area = match b {
 地基工作在额度用尽前收尾，下列条目没有完成（详见各条地基的合并提交说明与 `docs/reviews/2026-10-19/` 的对应条目）：
 
 1. **前端**（审查 frontend）：第 6 条，期望类型合并为一条通道；第 7 条，`append` 的就地改写改走通用的 `setInPlaceForm`（牵涉 `std::cpp` 发射器、ONNX 导出器与测试）；第 15 条，语言服务器的类型与命名空间解析取自编译器（编译器先要记录类型名的声明来源）；`TypeCode::Byte` 的移除（会移动类型码与转换表，单独做）。`from_bytes::<T>` 按类型分 URI、`load_tree` 运行时读类型，等泛型（设计稿 `docs/design/generic-structure`）实现后再改，不在本任务。
-2. **运行时**（审查 runtime）：第 9 条 `:graph/original` 改为引用表中的关系；第 10 条控制边约简移出编码器与建图器；`OperatorTraits` 的位由语义记录推出。用户函数声明"元素互不依赖"（3.6）用节点上的标签实现。
+2. **运行时**（审查 runtime）：第 9 条 `:graph/original` 改为引用表中的关系；第 10 条控制边约简移出编码器与建图器；`OperatorTraits` 的位由语义记录推出。用户函数声明"元素互不依赖"（3.6）用节点上的标签实现。（H85 部分完成：`:graph/original` 已在 `43286534f` 随循环 lowering 删除，不是改成关系；traits 由 `OperatorTraits::traitsOf` 唯一推出；`#independent` 标签与运行时查询已实现；控制边约简的搬移会让 `path_assigned.allocs` 从 1 次分配变成 2 次，因“不改变行为”撤回，见 `reports/H85.md` 待决问题 3。）
 3. **遍参数**：`--timeit` 不加入模块登记的默认遍；`CAMEL_OPT_GROWTH_BUDGET` 改为 `std::opt::inline` 的参数；调试用的跟踪变量是否改为参数，按第 4 节提问。
 4. ~~声明上的标签~~ 已并入 H2。原文：在节点标签机制（`include/camel/core/node_attrs.h`）之上，为函数、类型声明、结构体字段增加声明上的标签，登记方式相同；`fields T` 与 `match type` 能读到（随泛型第一期一起做时再接入）；**`@vjp` 改为函数声明上的标签**（值为规则函数的图引用），自动微分直接读取，删除 `modules/autodiff/operators.cpp` 中靠宏求值与 `attachRule` 的做法；测试覆盖跨模块使用与模块缓存。
 5. **未跑完全套测试**：三条地基（遍参数、效应统一、前端清理）合并时只跑了相关计划与冒烟测试。先跑一次全套，把与第 1.2 节基线相比新增的失败逐个修掉，写进报告。**这一项最先做。**（H80 在 Linux 主机上跑了 fast/slow/perf/gpu/GC/poison 全层：fast 层 0 失败、基线 19 项全转绿；新增的 GC、poison、tiles 三簇已转交 H73/H74/H75，见 `reports/H80.md`。）
 6. **`#` 不再是注释**（4.1）：词法只保留首行 `#!`；仓库中所有 `#` 注释改为 `//`（`.cml` 文件、测试、文档示例、编辑器语法文件）；与 H2 同时合并。
 7. **撤回默认流水线登记**（设计原则 9.2 已改）：删除 `registerDefaultPipelinePass`、`--no-module-passes` 及相关测试与文档；遍参数语法与模块登记遍名保留。需要某个遍的库（如自动微分需要 `std::macro`）在前提不满足时给出说明要加哪个遍的诊断。
 
-**剩下什么**：第 1 项（前端四条与 `TypeCode::Byte`）、第 2 项（`:graph/original` 已删，其余运行时条目）、第 5 项（三条地基合并后的全套测试收尾）未做；第 3、4、6、7 项已完成。
+**剩下什么**：第 1 项（前端四条与 `TypeCode::Byte`）、第 5 项（三条地基合并后的全套测试收尾）未做；第 3、4、6、7 项已完成；第 2 项的 `:graph/original`、traits、`#independent` 由 H85 完成，控制边约简因行为变化待裁定（`reports/H85.md`），前端部分仍属第 1 项。
 
 ---
 

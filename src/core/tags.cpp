@@ -161,6 +161,15 @@ void declareStandardTags() {
         op.on     = Func;
         op.params = {{"uri", "string"}};
         declare(std::move(op));
+
+        // `#independent` on a function: its elements do not depend on each other (design
+        // principles 3.6), so a scheduler may run its element calls at once. The fact is on
+        // the declaration and, through markIndependentElements, on the graph's exit node.
+        Decl independent;
+        independent.name  = "independent";
+        independent.ident = "independent";
+        independent.on    = Func;
+        declare(std::move(independent));
     });
 }
 
@@ -508,6 +517,47 @@ sem::PermissionMask effectivePermissions(
     const sem::NumericPolicy &policy) {
     const Facts facts = factsOf(graph, node);
     return facts.strict ? sem::kNoPermissions : policy.effective(facts.permissions);
+}
+
+namespace {
+
+// The standard tag (declareStandardTags) and the node attribute its fact is carried in.
+constexpr std::string_view kIndependent = "independent";
+
+attr::AttrKey independentKey() {
+    const auto key = attr::findKey(kIndependent);
+    return key ? *key : attr::kNoKey;
+}
+
+} // namespace
+
+bool declaresIndependentElements(const camel::runtime::GraphDraft &draft) {
+    const attr::AttrKey key = independentKey();
+    const auto exit         = draft.exitNode();
+    if (key == attr::kNoKey || exit == camel::runtime::kInvalidNodeRef) {
+        return false;
+    }
+    return attr::valueOf(draft.nodeAttrs(exit), key) != attr::kNoValue;
+}
+
+bool declaresIndependentElements(const camel::runtime::GCGraph &graph) {
+    const attr::AttrKey key = independentKey();
+    const auto exit         = graph.exitNodeRef();
+    if (key == attr::kNoKey || exit == camel::runtime::kInvalidNodeRef) {
+        return false;
+    }
+    return attr::valueOf(graph.nodeAttrs(exit), key) != attr::kNoValue;
+}
+
+void markIndependentElements(camel::runtime::GraphDraft &draft, attr::AttrSetId declaration) {
+    const attr::AttrKey key = independentKey();
+    const auto exit         = draft.exitNode();
+    if (key == attr::kNoKey || exit == camel::runtime::kInvalidNodeRef ||
+        attr::valueOf(declaration, key) == attr::kNoValue) {
+        return;
+    }
+    draft.setNodeAttrs(
+        exit, attr::unite(draft.nodeAttrs(exit), attr::single(key, attr::unit())));
 }
 
 void attachToField(
