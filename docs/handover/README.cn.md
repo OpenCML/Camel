@@ -194,6 +194,7 @@
 | H46 | `std::cpp` 生成代码中 `rt::Site` 预渲染的递归深度消息损坏 | 无 | 甲车道，小项 |
 | H44 | ONNX 重名输出、折叠常量的 Safe 结构体 CAST（不依赖它展开）、结构体循环状态 | 无 | 丁车道 |
 | H40b | 块压力请求全量收集、重写 `gc_pacing`、回归用例、更正 C2 叙述 | 无 | 乙车道 |
+| H40c | 块压力按块身份只计一次；晋升后接管块时登记（H40b 评审第 1、2 项） | 无 | 乙车道 |
 | H43 | 区域与循环的收尾（前端直接建循环区域、删除降低机制、JIT 的循环指令、自动微分读区域、ONNX 导出循环） | 无 | 丙车道交给施工方 |
 | H42 | 模块导出表改为每个程序一份，不再修改进程级的共享表（`clearExportedNamespaces`） | 无 | 丙车道 |
 | H41 | **缺陷**：`ort_loop_values`、`ort_grad_loop_values`、`lsp.editing`、`examples.ml.export_onnx_translate` 在 fsh-dev 上失败（H5 名义结构体之后） | 无 | 丁车道，优先 |
