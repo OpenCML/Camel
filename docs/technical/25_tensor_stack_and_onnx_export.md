@@ -322,7 +322,9 @@ Every node evaluates to either a constant or a symbolic tensor:
   (paired `Loop`s, which is also how the gradient of a loop is exported);
   everything else is refused with a located diagnostic. Accepted class, in
   one statement: a tail recursion whose changing arguments are tensors and
-  scalars of fixed dtype and shape and whose result is a tensor, a scalar
+  scalars of fixed dtype and shape, or tuples and structs of them (a tuple or
+  struct argument is carried leaf by leaf, so its leaves must keep their dtype
+  and shape), and whose result is a tensor, a scalar
   (float, int, bool) or a tuple or struct of these, nested, each leaf a
   carried value, a value computed from them where the recursion returns, or
   a constant (an integer counter is an int64 output); and, for the gradient,

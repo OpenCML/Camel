@@ -476,7 +476,11 @@ What differs from the design above:
   `modules/onnx/exporter.cpp`):
   - the carried values are the arguments a recursive call changes (found by a
     first, discarded evaluation of the body); the others stay what they are
-    outside the loop, so constants keep folding inside the body;
+    outside the loop, so constants keep folding inside the body. A carried
+    argument that is a tuple or struct is carried leaf by leaf, in the order of
+    its fields: one `Loop` state input per leaf, the body entry rebuilds the
+    tuple or struct from those inputs, and the loop's outputs are rebuilt into
+    the value the recursion returns (H44's outline; `ort_struct_loop`);
   - the body is the function's own graph evaluated once. A branch that
     separates "return" from "call again" becomes an `If` whose outputs are the
     continue flag and the next state: each side is computed only when it is
@@ -507,9 +511,10 @@ What differs from the design above:
     data-dependent loop: `func spin(h: Tensor, k: int): (Tensor, int)`,
     stopped by a threshold on the state or a maximum count.
   Refused, each with a diagnostic at the recursive call or the export request:
-  a carried value whose dtype or shape changes between calls; a tuple, struct
-  or array argument that changes (the carried values themselves are the
-  arguments: tensors and scalars, not a tuple passed whole); a leaf of the
+  a carried value whose dtype or shape changes between calls; an argument that
+  a recursive call changes and that holds a value a loop cannot carry (an
+  array, a string, a function), such as a struct with an array field (the
+  diagnostic names the argument and what it holds); a leaf of the
   result that is neither a tensor nor a scalar: a function, or an int array
   built from values that depend on the model input (the diagnostic names the
   element of the result and what it is); returning paths whose results differ
@@ -518,8 +523,12 @@ What differs from the design above:
   `pass_export_loop`, `export_dynamic_recursion`, `ort_loop_values` (tuple,
   two returning paths, struct, three carried values, nested tuple with a
   carried float and a bool: NumPy and the native run for 0, 1, several and
-  the maximum number of steps), `export_loop_values_array` (refusal); both
-  entries write equivalent models (`pass_export.py equiv`).
+  the maximum number of steps), `ort_struct_loop` (a carried struct of two
+  tensors and a counter, the same as a tuple, a struct in a struct, and a
+  struct of scalar leaves), `export_loop_tuple_argument` (one tuple argument
+  carried, flattened), `export_loop_values_array` and
+  `export_loop_carried_array` (refusals); both entries write equivalent
+  models (`pass_export.py equiv`).
 - **Linear recursion** (the recursive call is not the last action). A function
   `f(a) = E(a, if c(a) then E'(a, f(step(a))) else B(a))` with ONE recursive
   call on one side of ONE two-way branch is the pair of loops it denotes:

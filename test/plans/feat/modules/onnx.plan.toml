@@ -1614,6 +1614,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
 
 [[tests]]
+name = "ort_struct_loop"
+desc = "Tail recursions that CARRY a struct or tuple argument, exported as one ONNX Loop: the argument is flattened into one Loop state per leaf in the order of its fields, the body entry rebuilds the struct from those leaves, and the Loop's outputs are rebuilt into the struct the recursion returned (H44's outline). Four models: a struct of two tensors and a counter, the same as a tuple, a struct in a struct, and a struct of scalar leaves. Each passes onnx.checker's full check with exactly one Loop; on ONNX Runtime, for inputs on which the recursion stops after 0, 1 and several steps and at its maximum count, every output matches the recursion written in NumPy and Camel's native run (counters int64 and exact). The exporter used to refuse a carried tuple or struct ('pass the elements as separate arguments')."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_struct_loop.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort struct loop: worst", "steps [0, 1, 2, 3, 5, 6]", "PASS"]
+expect_output_not_contains = ["FAIL", "MISMATCH"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
 name = "ort_grad_loop_values"
 desc = "The gradient of tail recursions that return a tensor state together with an integer counter (as a tuple, with the counter entering the loss as a number, as a struct, and with two more differentiable carried values, a tensor and a float) exports as paired ONNX Loops: the pullback of such a recursion takes a tuple or struct of cotangents. The model passes onnx.checker's full check; on ONNX Runtime, for loops of 0, 1, 2, 3, 5 and 6 (the maximum) steps, values and gradients match a NumPy reverse sweep and Camel's native run, and the counter, an int64 output, is exact. The exporter used to refuse the call of the pullback."
 kind = "behavior"
@@ -1666,11 +1680,36 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_tuple_argument"
-desc = "A tail recursion whose depth depends on the model input and whose state is one tuple argument that every call replaces is refused by export_model at the call of the recursion; the diagnostic names the argument and says to pass the elements as separate arguments. (It used to say only that 'a tuple, struct or array, or values of different types, differ between the paths'.)"
+desc = "A tail recursion whose depth depends on the model input and whose state is one tuple argument that every call replaces: the tuple is flattened into one carried value per element at the Loop's entry and rebuilt at both ends (H44's outline), so the model has one Loop, two outputs, and a state input per element. It used to be refused ('pass the elements as separate arguments')."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_tuple_argument.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_loop_tuple_argument.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_loop_tuple_argument.onnx'))
+const loops = model.ops.filter((o) => o === 'Loop').length
+assert(loops === 1, `expected one Loop, got ${model.ops}`)
+assert(model.outputs.length === 2, `expected two outputs, got ${model.outputs}`)
+assert(model.inputs.length === 1, `expected one model input, got ${model.inputs}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "export_loop_carried_array"
+desc = "A tail recursion whose depth depends on the model input and which carries an int array that changes every call is refused by export_model at the recursive call: a loop carries tensors and scalars, and tuples and structs of them (H44's outline), but an array has no carried form. The diagnostic names the argument."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_loop_carried_array.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_loop_carried_array.onnx"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1678,11 +1717,11 @@ async ({ input, assert }) => {
 const fs = await import('fs')
 const path = await import('path')
 const text = input.normalized.output
-assert(text.includes("in 'walk': argument 1 of a recursion whose depth depends on the model input"), 'missing detail: ' + text)
-assert(text.includes('is a tuple, struct or array that a recursive call changes; a loop carries tensors and scalars: pass the elements as separate arguments'), 'missing condition: ' + text)
-assert(/[(]at [^ ]*export_loop_tuple_argument[.]cml:18:48[)]/.test(text), 'missing source position of the call: ' + text)
+assert(text.includes("a recursive call changes argument 2 of a recursion whose depth depends on the model input"), 'missing detail: ' + text)
+assert(text.includes('which is a value of type'), 'missing condition: ' + text)
+assert(text.includes('; a loop carries tensors and scalars and tuples and structs of them'), 'missing carried kinds: ' + text)
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
-assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_tuple_argument.onnx')), 'a refused export must not write a model')
+assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_carried_array.onnx')), 'a refused export must not write a model')
 }
 """
 timeout_ms = 8000

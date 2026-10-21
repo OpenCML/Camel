@@ -1,0 +1,21 @@
+/**
+ * Refused: a tail recursion whose depth depends on the model input and which carries an int
+ * array that changes every call. A loop carries tensors and scalars, and tuples and structs of
+ * them (H44's outline); an array has no carried form, so the diagnostic names the argument.
+ */
+module export_loop_carried_array
+import { Tensor, reshape, sum } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func walk(x: Tensor, xs: int[], k: int): Tensor {
+    return if k >= 3 || sum(x * x) < 1.0 then x * 2.0 else walk(x, [k], k + 1)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    println(len([0]))
+    export_model((x: Tensor): Tensor => walk(x, [0], 0), (x), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

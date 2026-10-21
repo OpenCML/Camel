@@ -1335,7 +1335,7 @@ cec0468331d216da ok test/cases/loops/reduce_view.cml
 a910f1e9cdce417e ok test/cases/loops/refuse_loop_no_channel.cml
 cba7b09e77a994a5 ok test/cases/loops/shapes.cml
 c24be36afcb891ea ok test/cases/loops/state_in_place.cml
-e0e4f96e956c3237 ok test/cases/loops/state_in_place_multi.cml
+f350a6371bce7def ok test/cases/loops/state_in_place_multi.cml
 09531a936b6bca82 ok test/cases/loops/struct_state.cml
 63e444a96478d95f ok test/cases/loops/tuple_destructure.cml
 de8066e46383fc72 ok test/cases/macro/hof_calls.cml
@@ -1389,6 +1389,7 @@ ed6df62d74e5272d ok test/cases/modules/autodiff/loop_grad_composite_read.cml
 aa9aa9806bb83360 ok test/cases/modules/autodiff/loop_grad_product.cml
 b3bcd3eb62ecc858 ok test/cases/modules/autodiff/loop_grad_refuse_capture.cml
 e84622c94a2d8b1d ok test/cases/modules/autodiff/loop_grad_refuse_iterable.cml
+427a407b36c1738d ok test/cases/modules/autodiff/loop_grad_struct_state.cml
 6e3201e5f5cd61a9 ok test/cases/modules/autodiff/loop_grad_sum.cml
 cf2929f08028ea5d ok test/cases/modules/autodiff/loop_grad_tuple_state.cml
 8fc0fbecd0196e7d ok test/cases/modules/autodiff/loop_grad_zero_rounds.cml
@@ -1493,7 +1494,8 @@ dfcdc358f8899895 ok test/cases/modules/onnx/export_fold.cml
 2b16cd1ad76c9ae9 ok test/cases/modules/onnx/export_impure.cml
 a5cb606d1706f876 ok test/cases/modules/onnx/export_linear_recursion.cml
 213a75621a1ea6c5 ok test/cases/modules/onnx/export_loop.cml
-5ca241b35ca735c3 ok test/cases/modules/onnx/export_loop_tuple_argument.cml
+a7abdac87433d3c3 ok test/cases/modules/onnx/export_loop_carried_array.cml
+b16851b55429187b ok test/cases/modules/onnx/export_loop_tuple_argument.cml
 1b98b13a18e29679 ok test/cases/modules/onnx/export_loop_values.cml
 d78b916da6b894a9 ok test/cases/modules/onnx/export_loop_values_array.cml
 6c965a6e657aeb56 ok test/cases/modules/onnx/export_nontail_recursion.cml
@@ -1532,6 +1534,7 @@ ff6fd235145286c7 ok test/cases/modules/onnx/ort_loop_values.cml
 fdad0e442dc10bf1 ok test/cases/modules/onnx/ort_slice_bounds.cml
 a6ba553e7b069a11 ok test/cases/modules/onnx/ort_slice_start.cml
 e197d8423e2f1ed0 ok test/cases/modules/onnx/ort_struct_casts.cml
+c19be08ac2d2f425 ok test/cases/modules/onnx/ort_struct_loop.cml
 cc8cafd8789e11bf ok test/cases/modules/onnx/ort_time_axis.cml
 e15984c2e0e43aa6 ok test/cases/modules/onnx/ort_train_dynamic.cml
 7386dea19b4446a4 ok test/cases/modules/onnx/entry/constant.cml
@@ -1781,6 +1784,8 @@ d5350cbd17ad4ab0 ok test/cases/modules/tiles/batch_matmul.cml
 86113175d9f9f4c4 ok test/cases/modules/tiles/boundaries.cml
 d7f09150b2048d4a ok test/cases/modules/tiles/branch_effect.cml
 8deb1282283424ad ok test/cases/modules/tiles/branches.cml
+56d563603d97ff10 ok test/cases/modules/tiles/cast_dtype.cml
+d39356dc4df797d4 ok test/cases/modules/tiles/cast_like.cml
 fa8efa1b9430518e ok test/cases/modules/tiles/compiled_region.cml
 0f969d23938d7bac ok test/cases/modules/tiles/consistency.cml
 3f924524b970918f ok test/cases/modules/tiles/core_views.cml
@@ -2095,6 +2100,7 @@ d0ff0c1893586f15 ok test/plans/feat/format/golden/type_params.cml
 2315461a1f5065f7 ok test/plans/feat/parse/golden/numbers_format.cml
 af9cae3548b41112 no test/plans/feat/parse/golden/rules_format.cml
 64ae4705339287e4 ok test/tools/jitcov/workloads.cml
+f5a4ae9c5b8cfcfd ok test/tools/selftest/benchmark_failure.cml
 382e4f4981ff7cd6 ok test/tools/selftest/sweep/probe.cml
 4c6b6e3195b9ef66 ok probes/probe_d000.cml
 5131da37189b4814 ok probes/probe_d001.cml
