@@ -26,6 +26,7 @@
 #include "state.h"
 
 #include "../tensor/kernels/elementwise.h"
+#include "../tensor/kernels/update.h"
 #include "../tensor/npy.h"
 #include "../tensor/tensor.h"
 #include "../tensor/type.h"
@@ -195,18 +196,21 @@ struct AdamConfig {
 
 /// in: param, grad, m, v; out: param, m, v.
 LeafUpdate adamLeaf(const AdamConfig &c) {
-    const double correct1 = 1.0 - std::pow(c.beta1, static_cast<double>(c.step));
-    const double correct2 = 1.0 - std::pow(c.beta2, static_cast<double>(c.step));
-    return [c, correct1, correct2](Type *type, std::span<const slot_t> in, std::span<slot_t> out) {
-        auto update =
-            [&](double p, double g, double m, double v, double &np, double &nm, double &nv) {
-                nm = c.beta1 * m + (1.0 - c.beta1) * g;
-                nv = c.beta2 * v + (1.0 - c.beta2) * g * g;
-                np = p - c.lr * (nm / correct1) / (std::sqrt(nv / correct2) + c.eps);
-            };
+    // The formula lives in the tensor kernel (kernels/update.h): one definition, used both by the
+    // fused pass over a tensor leaf and by the scalar path below.
+    const k::AdaptiveUpdateRates rates{
+        .lr       = c.lr,
+        .beta1    = c.beta1,
+        .beta2    = c.beta2,
+        .eps      = c.eps,
+        .correct1 = 1.0 - std::pow(c.beta1, static_cast<double>(c.step)),
+        .correct2 = 1.0 - std::pow(c.beta2, static_cast<double>(c.step)),
+    };
+    return [rates](Type *type, std::span<const slot_t> in, std::span<slot_t> out) {
         if (!isTensorLeaf(type)) {
             double np, nm, nv;
-            update(
+            k::adaptiveUpdateOne(
+                rates,
                 floatValue(type, in[0]),
                 floatValue(type, in[1]),
                 floatValue(type, in[2]),
@@ -227,16 +231,18 @@ LeafUpdate adamLeaf(const AdamConfig &c) {
         requireSameShape(p, m, "adam");
         requireSameShape(p, v, "adam");
         Array *np = newLike(p), *nm = newLike(p), *nv = newLike(p);
-        const float *pp = p->dataAs<float>(), *pg = g->dataAs<float>();
-        const float *pm = m->dataAs<float>(), *pv = v->dataAs<float>();
-        float *op = np->dataAs<float>(), *om = nm->dataAs<float>(), *ov = nv->dataAs<float>();
-        for (uint64_t i = 0; i < p->numel(); ++i) {
-            double a, b, d;
-            update(pp[i], pg[i], pm[i], pv[i], a, b, d);
-            op[i] = static_cast<float>(a);
-            om[i] = static_cast<float>(b);
-            ov[i] = static_cast<float>(d);
-        }
+        // One pass over whole tensors, in double per element, split by the tensor module's grain
+        // policy; the values are bit for bit those of the element-by-element loop it replaces.
+        k::adaptiveUpdate(
+            static_cast<int64_t>(p->numel()),
+            rates,
+            p->dataAs<float>(),
+            g->dataAs<float>(),
+            m->dataAs<float>(),
+            v->dataAs<float>(),
+            np->dataAs<float>(),
+            nm->dataAs<float>(),
+            nv->dataAs<float>());
         out[0] = toSlot<Array *>(np);
         out[1] = toSlot<Array *>(nm);
         out[2] = toSlot<Array *>(nv);

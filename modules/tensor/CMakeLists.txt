@@ -19,6 +19,8 @@ add_camel_module(
     kernels/parallel.cpp
     kernels/reduce.cpp
     kernels/unary_generic.cpp
+    kernels/update.cpp
+    kernels/update_generic.cpp
     ops/catalog.cpp
     ops/binary_ops.cpp
     ops/creation_ops.cpp
@@ -54,7 +56,8 @@ set_source_files_properties(kernels/unary_generic.cpp
 # x86-64: add AVX2+FMA and AVX-512F GEMM and unary units, selected at runtime after a CPU check.
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")
   target_sources(tensor_cmo_objects PRIVATE
-    kernels/gemm_avx2.cpp kernels/gemm_avx512.cpp kernels/unary_avx2.cpp kernels/unary_avx512.cpp)
+    kernels/gemm_avx2.cpp kernels/gemm_avx512.cpp kernels/unary_avx2.cpp kernels/unary_avx512.cpp
+    kernels/update_avx2.cpp)
   set_source_files_properties(kernels/gemm_avx2.cpp
     PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
   set_source_files_properties(kernels/unary_avx2.cpp
@@ -63,6 +66,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")
     PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx2;-mfma")
   set_source_files_properties(kernels/unary_avx512.cpp
     PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx2;-mfma;-ffp-contract=on")
+  # The fused update is the one per-ISA unit whose arithmetic must stay rounded as written: its
+  # values are the bits the scalar loop it replaced produced, so it is compiled with the project's
+  # -ffp-contract=off, not with the unary units' opt-in.
+  set_source_files_properties(kernels/update_avx2.cpp
+    PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
   target_compile_definitions(tensor_cmo_objects PRIVATE CAMEL_TENSOR_HAS_AVX2_UNIT=1)
 endif()
 

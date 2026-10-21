@@ -34,6 +34,19 @@ tags = ["perf", "training", "gpu"]
 # step 118 us. H48's 16.2 ms step and 45-78 us matmul were measured on the same host at load 85-90,
 # where the pool's wakeup storm dominated.
 #
+# H64 (the optimizer's own step, reports/H64.md) made Adam one pass over whole tensors instead of a
+# double loop per parameter with a libm sqrt call. What the plan measured before and after it,
+# medians of ten runs, alternating baseline and new in one window at load 31-32:
+#
+#   dependency_chain.nvm      8.78 ->  8.82 ms    mlp_step.nvm       48.24 -> 31.38 ms
+#   dependency_chain.fvm      8.74 ->  8.78 ms    mlp_step.fvm       48.79 -> 33.36 ms
+#   transformer_step.nvm      6.15 ->  5.89 ms
+#
+# and the C2 step behind them: 0.96 ms before, 0.63 ms after; the update is 0.16 ms of it, one pass
+# at 1.56 ns per parameter, against 0.65 ms the old loop took for the same 101770 parameters at
+# load 20 (1.19 ms in the step at load 65). The chain runs no optimizer, which is why it does not
+# move.
+#
 # std::nvm has no budget at all: by the author's ruling (reviews/H24-H25-H26.md, H43 item 7) it
 # is the node-at-a-time reference implementation, the performance is fvm's and jit's to carry, and
 # its per-step numbers are recorded here only to be compared against.
