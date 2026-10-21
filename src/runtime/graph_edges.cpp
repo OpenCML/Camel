@@ -68,7 +68,7 @@ class EdgeChecker {
   private:
     /// The equivalences between nodes (the Tabled state): a graph validated as another state has
     /// none; in this one each names two nodes that compute a value of the same type, in the same
-    /// region, neither with a control input, and the graph says so by its flag.
+    /// region, and the graph says so by its flag.
     void checkWritings() {
         const auto log = graph_.writings();
         if (log.empty() != graph_.executable()) {
@@ -107,9 +107,6 @@ class EdgeChecker {
                 bad("is between nodes of different types");
             } else if (graph_.nodeRegion(entry.a) != graph_.nodeRegion(entry.b)) {
                 bad("is between nodes of different regions");
-            } else if (
-                !graph_.ctrlInputsOf(entry.a).empty() || !graph_.ctrlInputsOf(entry.b).empty()) {
-                bad("names a node with a control input");
             }
         }
     }

@@ -137,27 +137,27 @@ timeout_ms = 30000
 
 [[tests]]
 name = "saturate.default"
-desc = "The local algebra of std::opt::algebra as rules (exact commutation, neutral elements of wrapping integers, x*c+x*c, x*c1+x*c2, (x*c1)*c2, the last two needing reassociate for floats), saturated under the default numeric policy and extracted by node count, leaves the same operators as std::opt::algebra on every function of the algebra corpus: the products and sums of `strict`, `underflow_sensitive`, the coefficient functions and the integer ones fold into one product, `mixed_permissions` (a product outside the block that grants reassociate) is left alone. Known difference: `shared_product` has control inputs (it is `sync`), a node with a control input takes no part, so it is left as written (std::opt::algebra folds it). The program prints what it printed on every back end."
+desc = "The local algebra of std::opt::algebra as rules (exact commutation, neutral elements of wrapping integers, x*c+x*c, x*c1+x*c2, (x*c1)*c2, the last two needing reassociate for floats), saturated under the default numeric policy and extracted by node count, leaves the same operators as std::opt::algebra on every function of the algebra corpus: the products and sums of `strict`, `underflow_sensitive`, the coefficient functions and the integer ones fold into one product, `mixed_permissions` (a product outside the block that grants reassociate) is left alone. `shared_product` is `sync`: the sum waits for the println, and the product that replaces it takes over that wait (waits=1), so it folds as in std::opt::algebra. The program prints what it printed on every back end."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
 args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate", "${backend}"]
 backends = ["nvm", "fvm"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 0
-expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=0 mul=1", "SATURATE strict_coefficients add=0 mul=1", "SATURATE relaxed_coefficients add=0 mul=1", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=1 mul=1", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=0 mul=1", "SATURATE strict_coefficients add=0 mul=1", "SATURATE relaxed_coefficients add=0 mul=1", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=1", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
 name = "saturate.safe"
-desc = "The same rules under the strict policy (safe_fp): only the exact ones apply, as in std::opt::algebra(safe_fp=true): `underflow_sensitive` (0.1 is not a whole number), the float coefficient functions and `mixed_permissions` keep their sums; `strict`, the integer functions and the f32 one fold."
+desc = "The same rules under the strict policy (safe_fp): only the exact ones apply, as in std::opt::algebra(safe_fp=true): `underflow_sensitive` (0.1 is not a whole number), the float coefficient functions and `mixed_permissions` keep their sums; `strict`, the integer functions and the f32 one fold; `shared_product` also folds (x*c + x*c with a whole c is exact; std::opt::algebra(safe_fp=true) leaves it because its product is shared)."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
 args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_safe", "${backend}"]
 backends = ["nvm", "fvm"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 0
-expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=1 mul=1", "SATURATE strict_coefficients add=1 mul=2", "SATURATE relaxed_coefficients add=1 mul=2", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=1 mul=1", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=1 mul=1", "SATURATE strict_coefficients add=1 mul=2", "SATURATE relaxed_coefficients add=1 mul=2", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=1", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 

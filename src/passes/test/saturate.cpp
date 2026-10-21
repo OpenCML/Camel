@@ -33,6 +33,7 @@
 
 #include <array>
 #include <bit>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
@@ -173,22 +174,42 @@ const Program *saturateProgram(
         "shared_product",
         "strict32",
         "integer32"};
+    std::set<std::string> targets = kTargets;
+    if (const char *extra = std::getenv("CAMEL_SATURATE_TARGET")) {
+        targets.insert(extra);
+    }
     const std::vector<Rule> rules = corpusRules();
     RuntimeGraphDraftSession session(ctx, program);
     std::vector<std::pair<std::string, GraphId>> done;
     for (GCGraph *graph : program->graphs()) {
-        if (!kTargets.contains(graph->name())) {
+        if (!targets.contains(graph->name())) {
             continue;
         }
         GraphDraft &draft = session.edit(graph);
+        const auto t0 = std::chrono::steady_clock::now();
         DraftWritings writings(draft, policy);
         writings.build();
+        os << "SATURATE-TIME " << graph->name() << " build_ms="
+           << std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - t0).count() << "\n";
         Budget budget;
         if (const char *rounds = std::getenv("CAMEL_SATURATE_ROUNDS")) {
             budget.rounds = static_cast<size_t>(std::atoi(rounds));
         }
+        const auto began = std::chrono::steady_clock::now();
         const SaturateStats stats = writings.saturate(rules, budget);
+        os << "SATURATE-TIME " << graph->name() << " ms="
+           << std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - began)
+                  .count()
+           << "\n";
+        const auto t1 = std::chrono::steady_clock::now();
         const ExtractStats extracted = writings.extract(*findCostModel("nodes"), ctx.get());
+        os << "SATURATE-TIME " << graph->name() << " extract_ms="
+           << std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - t1).count() << "\n";
+        os << "SATURATE-TIME " << graph->name() << " find_ms=" << static_cast<int>(stats.findSeconds * 1000)
+           << " apply_ms=" << static_cast<int>(stats.applySeconds * 1000) << "\n";
         os << "SATURATE-INFO " << graph->name() << " rounds=" << stats.rounds
            << " matches=" << stats.matches << " writings=" << stats.newWritings
            << " unions=" << stats.unions << " saturated=" << stats.saturated
@@ -197,17 +218,18 @@ const Program *saturateProgram(
     }
     const Program *next = session.commit();
     for (const auto &[name, id] : done) {
-        size_t adds = 0, muls = 0;
+        size_t adds = 0, muls = 0, waits = 0;
         const GCGraph *graph = next->graph(id);
         for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
             if (graph->node(ref)->kind != GCNodeKind::Oper) {
                 continue;
             }
             const auto uri = graph->nodeBodyAs<GCOperBody>(ref)->uri();
+            waits += graph->ctrlInputsOf(ref).empty() ? 0 : 1;
             adds += uri.starts_with(":op/add_");
             muls += uri.starts_with(":op/mul_");
         }
-        os << "SATURATE " << name << " add=" << adds << " mul=" << muls << "\n";
+        os << "SATURATE " << name << " add=" << adds << " mul=" << muls << " waits=" << waits << "\n";
     }
     return next;
 }

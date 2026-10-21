@@ -43,7 +43,8 @@ classes of the inputs) are one value. Merging two values repairs the users of th
 until nothing merges (egg's `rebuild`). Only a pure function of its inputs takes part: constants
 (bit for bit, so `0.0` is not `-0.0`; not GC-traced), conversions, accesses, pure operators; not
 a node with a control input, not one written in place, not one reading a variable. Every other
-node is alone in its class. Nodes of different permissions or regions are never merged.
+node is alone in its class. (A pure node with control inputs does not take part in congruence,
+but a rule can be rooted at it: section 4.) Nodes of different permissions or regions are never merged.
 
 While a draft has equivalences, every member that changes or removes a node refuses
 (`std::logic_error`) unless it runs inside `GraphDraft::WritingScope`, which the engine opens.
@@ -61,6 +62,13 @@ operators, computed constants). `DraftWritings::saturate(rules, Budget)`:
    and merged with the matched node under `needs`;
 3. stop when a round finds nothing new or a **count** budget (rounds, new writings, unions) is
    used up. There is no time budget: the same rules, graph and budget give the same writings.
+
+**Control inputs.** A pure node that waits for something (a `sync` function's sum waits for the
+`println` before it) can be the root of a rule, never an inner node of its left side. The
+writing the rule adds has no control inputs; extraction gives the writing that stays the control
+inputs of every writing of its value that had some (mapped to the writings chosen for them), so
+the order the program wrote is kept. Rules are tried only at the nodes whose operator is the
+head of their left side (an index built at the start of each round).
 
 The rules of `test/passes` (`test::saturate`) are the local algebra of `std::opt::algebra`: exact
 commutation, neutral elements of wrapping integers, `x*c + x*c`, `x*c1 + x*c2`, `(x*c1)*c2`
@@ -89,9 +97,13 @@ declare `acceptsWritings()` gets a diagnostic instead of the program.
 
 ## 7. Open points
 
-- A node with a control input takes no part (so `sync` functions are not folded); the design's
-  rule (the control inputs of the matched root go to the replacement root) is not implemented.
-- Matching looks at every node for every rule each round; a head-symbol index would make a
-  round proportional to the candidates.
+- Matching tries each rule at every node with its head operator each round, rebuilding that index
+  every round; an index kept up to date between rounds would only matter for graphs where most
+  nodes are new each round.
+- Measured on one function of 3n nodes (`wide_program(n)` of the scale tool, with the algebra
+  rules): n = 10000, 40000, 80000 saturate in 89, 471 and 1008 ms (find 48/229/476, apply
+  40/239/527, extraction 23/209/450): linear. Asking, for every candidate, whether a value is
+  written in place was walking its users each time (1.6 s at n = 20000); it is asked once per
+  node now.
 - `jitFnToGraph_` entries of freed graphs and encoded graphs bound to no program stay until the
   context ends (graph space).

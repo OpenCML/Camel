@@ -209,6 +209,9 @@ struct SaturateStats {
     size_t newWritings  = 0;
     size_t unions       = 0;
     bool saturated      = false; // a round found nothing new
+    // Where the time went, for measuring (nothing in the engine reads them).
+    double findSeconds  = 0;
+    double applySeconds = 0;
 };
 
 struct ExtractStats {
@@ -255,6 +258,10 @@ class DraftWritings : private WritingObserver {
     /// Asserts that `a` and `b` are the same value under `perms`, then closes over congruence.
     /// Returns true when that changed the classes.
     bool assertEqual(gc_node_ref_t a, gc_node_ref_t b, uint8_t perms = 0, uint16_t rule = 0);
+    /// The same without the closure over congruence, which the caller does with rebuild() once
+    /// it has made all its merges (a saturation round).
+    bool assertEqualDeferred(
+        gc_node_ref_t a, gc_node_ref_t b, uint8_t perms = 0, uint16_t rule = 0);
     /// The node that computes this, in the class it belongs to: an existing one, or a new one
     /// with the inputs `norm` and `with` (any members of their classes). A node that does not
     /// take part in congruence is always new.
@@ -288,7 +295,12 @@ class DraftWritings : private WritingObserver {
 
   private:
     struct Index;
+    /// 1: the node takes part in congruence and in every match; 3: it only could be the root of
+    /// a rule (it has control inputs, which a replacement takes over); 2: it does not.
+    uint8_t shapeOf(gc_node_ref_t node);
+    bool writtenInPlace(gc_node_ref_t node);
     bool takesPart(gc_node_ref_t node);
+    bool canBeRoot(gc_node_ref_t node);
     uint8_t contextOf(gc_node_ref_t node) const;
     struct Item {
         const Pattern *pattern;
