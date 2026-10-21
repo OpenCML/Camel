@@ -1318,6 +1318,7 @@ f5599ee347287b8f ok test/cases/modules/fs_binary_roundtrip.cml
 2dddeba382c1e7c6 ok test/cases/modules/graph_facts.cml
 e3c3e7a58fd7dfbd ok test/cases/modules/graph_function.cml
 962fd5d756f31d27 ok test/cases/modules/graph_kinds.cml
+6b32f6500be795d4 ok test/cases/modules/graph_program.cml
 2bf16e790a51c832 ok test/cases/modules/graph_read.cml
 3ecd593045740867 ok test/cases/modules/graph_types.cml
 e8977b1396aaf490 ok test/cases/modules/tree_operations.cml
