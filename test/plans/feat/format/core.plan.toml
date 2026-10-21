@@ -162,3 +162,17 @@ snapshot_compare = "text_exact"
 golden = "./golden/static_for_and_access.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "format.subscript_snapshot"
+desc = "A subscript of an array keeps its shape: a slice writes the colons it was given and one space after a colon that a part follows (`xs[a: b]`, `xs[: b]`, `xs[a: 4: 1]`), an omitted part stays omitted, and an int-array index is written as it is."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/subscript.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/subscript.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

@@ -1,0 +1,74 @@
+id = "modules.tensor.subscript"
+order = 366
+tier = "fast"
+tags = ["feat", "modules", "tensor", "subscript", "diagnostics"]
+
+[[tests]]
+name = "take_rows"
+desc = "`t[idx]` on a tensor is take (design principles 5.4): the rows the indices name, in that order, a repeated index repeating its row; the result's shape is `[len(idx)] + shape(t)[1:]`."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/take_rows.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["[3]", "9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "slice_view"
+desc = "`t[a:b]`, `t[:b]`, `t[a:]`, `t[:]` on a rank-1 tensor slice the first axis (design principles 5.4): an end equal to the extent is in range, and an end before the start is the empty slice (3.9)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/slice_view.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[2]\n5.0\n[2]\n[2]\n[4]\n[4]\n[0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "slice_const_bounds"
+desc = "A subscript slice whose constant bounds leave a statically known first extent is a compile-time error (design principles 3.9), the same rule as the function form of slice."
+kind = "negative"
+case = "../../../../cases/modules/tensor/subscript/slice_const_bounds.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["slice bounds 0..9 are outside the first dimension of extent 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "slice_rank2"
+desc = "A slice of the first dimension of a tensor of rank 2 or more is a view with strides: it waits for H17 (design principles 5.4) and is refused at compile time, instead of being lowered to a copy that would not share the block."
+kind = "negative"
+case = "../../../../cases/modules/tensor/subscript/slice_rank2.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["rank 2 or more", "H17"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "slice_multidim"
+desc = "A subscript that slices one dimension and indexes another (`m[:, 0]`) is a view with strides: the syntax is accepted and the form is refused with a located ConstructNotSupported that names H17 (design principles 5.4)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/subscript/slice_multidim.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_output_contains = ["a subscript that slices a dimension other than the first", "H17"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "slice_step"
+desc = "A subscript slice with a step other than the constant 1 is a view with strides: refused at compile time, naming H17 (design principles 5.4)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/subscript/slice_step.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["a slice step other than the constant 1", "H17"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

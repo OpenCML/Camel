@@ -80,6 +80,17 @@ await withServer(async (ls) => {
     m = edit(MAIN.replace('    let q = scale(p, 2)', '    let q = scale(p, 2)\n    let w = scale(p, 3).x/*c*/'))
     checkEq(labels(await complete(m, 'c')), ['x', 'y'], 'fields of the result of a call')
 
+    // ---- completion: inside the brackets of a subscript ----
+    // A subscript is an expression position like any other: the names in scope are offered in
+    // it, and the parts of a slice are expressions too.
+    m = edit(MAIN.replace('    let first = pair.0', '    let first = [sum][/*c*/0]'))
+    names = labels(await complete(m, 'c'))
+    check(names.includes('sum') && names.includes('total'), 'completion inside a subscript', names.slice(0, 12))
+    m = edit(MAIN.replace('    let first = pair.0', '    let first = [sum][/*c*/:2]'))
+    check(labels(await complete(m, 'c')).includes('sum'), 'completion before the colon of a slice')
+    m = edit(MAIN.replace('    let first = pair.0', '    let first = [sum][2:/*c*/]'))
+    check(labels(await complete(m, 'c')).includes('sum'), 'completion after the colon of a slice')
+
     // ---- completion: members of a module after `::` ----
     m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')
         .replace('    return 0\n}', '    let r = math::/*c*/\n    return 0\n}'))

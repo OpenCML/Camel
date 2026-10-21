@@ -1,0 +1,13 @@
+/**
+ * A slice with a step other than 1 is a view with strides: it waits for H17 (design principles
+ * 5.4). On a tensor the step must be a constant, and anything but 1 is refused at compile time.
+ */
+module subscript_slice_step
+import { Tensor, reshape, shape } from tensor
+
+func main(): int sync {
+    println('ran')
+    let b = reshape([1.0, 2.0, 3.0, 4.0], [4])
+    println(shape(b[0:4:2]))
+    return 0
+}

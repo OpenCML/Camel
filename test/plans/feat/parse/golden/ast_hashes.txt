@@ -321,7 +321,7 @@ c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 63d195595160cec9 ok stdlib/signatures/bytes.cml
 ba50ff52809dea87 ok stdlib/signatures/crypto.cml
 651e80439e059f51 ok stdlib/signatures/fs.cml
-d04883da10736f87 no stdlib/signatures/globals.cml
+c56e790b4495860b no stdlib/signatures/globals.cml
 d4463420ce2229eb ok stdlib/signatures/graph.cml
 e496c47662032c01 ok stdlib/signatures/json.cml
 fb5e438235b1009b ok stdlib/signatures/math.cml
@@ -1190,6 +1190,7 @@ ad80ceb4d3c7a1fb ok test/cases/format/mixed_arguments.cml
 5b09db9d5fb90816 ok test/cases/format/options.cml
 eb74f3b204df0390 no test/cases/format/pattern_empty.cml
 34864c94814e96bd ok test/cases/format/static_for_and_access.cml
+351e78128c8cac8d ok test/cases/format/subscript.cml
 6e2b9f9a38158b5e no test/cases/format/syntax_error.cml
 e39a9bd8bac6e3d2 ok test/cases/format/tuple_singleton.cml
 e08b2bd788c596de ok test/cases/format/type_params.cml
@@ -1232,6 +1233,11 @@ cade80fbdfe90649 ok test/cases/linear/byref/wait_direct_user.cml
 2154074cfa77c28c ok test/cases/linear/faults/float_divide_by_zero_hot.cml
 851483c26023d543 ok test/cases/linear/faults/modulo_by_zero.cml
 234ba1ec17b9399c ok test/cases/linear/faults/recursion_depth_hot.cml
+cf4e768d09ff3281 ok test/cases/linear/faults/subscript_last_empty.cml
+9b623b1cc7c6ed44 ok test/cases/linear/faults/subscript_slice_negative.cml
+56dbc3947bbbf6c7 ok test/cases/linear/faults/subscript_slice_out_of_range.cml
+206facb8b004b054 ok test/cases/linear/faults/subscript_step.cml
+a8a0442d459a180e ok test/cases/linear/faults/subscript_take_index.cml
 e95c2579bc1c33bc ok test/cases/linear/jit/branch_join.cml
 39f19ed942fd5f18 ok test/cases/linear/jit/builtin_operator_chain.cml
 506b945f37f11af7 ok test/cases/linear/jit/call_chain_hot.cml
@@ -1777,6 +1783,12 @@ c94f319853f3de3d ok test/cases/modules/tensor/shape_types/propagated_mismatch.cm
 8a4d913fbf964637 ok test/cases/modules/tensor/shape_types/reshape_gives_shape.cml
 8c8d9c67874a3b38 ok test/cases/modules/tensor/shape_types/unknown_extent.cml
 0462cda6b204a82b ok test/cases/modules/tensor/shape_types/unshaped_argument.cml
+64097db714a1fbde ok test/cases/modules/tensor/subscript/slice_const_bounds.cml
+45acef58e1b64d85 ok test/cases/modules/tensor/subscript/slice_multidim.cml
+d47458f9ea70875b ok test/cases/modules/tensor/subscript/slice_rank2.cml
+dfc6dbbd2f929bf6 ok test/cases/modules/tensor/subscript/slice_step.cml
+36d04282796a44d2 ok test/cases/modules/tensor/subscript/slice_view.cml
+755f1585d52f2f45 ok test/cases/modules/tensor/subscript/take_rows.cml
 e008e0f5a2223daa ok test/cases/modules/tiles/arithmetic_bits.cml
 d33e9841916e408e ok test/cases/modules/tiles/async_execution.cml
 ab7bc82f390b81f8 ok test/cases/modules/tiles/async_execution_fault.cml
@@ -2002,6 +2014,7 @@ c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml
 cc32392fed36cd2f ok test/cases/parse/rulings/reserved_and.cml
 a24945bb64fb63aa no test/cases/parse/syntax/missing_then.cml
 2b17772c82721c98 ok test/cases/parse/syntax/postfix_access.cml
+296c3ba76674282f ok test/cases/parse/syntax/subscript_forms.cml
 41c46559f542a83c ok test/cases/parse/syntax/tuple_and_parenthesis.cml
 143c065877f2fe57 ok test/cases/perf/dependency_chain.cml
 5f96692ce95b7e92 ok test/cases/perf/fib_recursive.cml
@@ -2096,11 +2109,13 @@ a5db29965a226f05 ok test/plans/feat/format/golden/namespace.cml
 84451c2364b8eb0c ok test/plans/feat/format/golden/options.cml
 0207c9a93bb1c8b3 no test/plans/feat/format/golden/pattern_empty.cml
 da9c89554298b9b2 ok test/plans/feat/format/golden/static_for_and_access.cml
+028bf7fc5c63ff0b ok test/plans/feat/format/golden/subscript.cml
 69ecdfed21290bb7 ok test/plans/feat/format/golden/tuple_singleton.cml
 d0ff0c1893586f15 ok test/plans/feat/format/golden/type_params.cml
 2315461a1f5065f7 ok test/plans/feat/parse/golden/numbers_format.cml
 af9cae3548b41112 no test/plans/feat/parse/golden/rules_format.cml
 64ae4705339287e4 ok test/tools/jitcov/workloads.cml
+f5a4ae9c5b8cfcfd ok test/tools/selftest/benchmark_failure.cml
 382e4f4981ff7cd6 ok test/tools/selftest/sweep/probe.cml
 4c6b6e3195b9ef66 ok probes/probe_d000.cml
 5131da37189b4814 ok probes/probe_d001.cml
@@ -2195,8 +2210,8 @@ f99f5f838d2ee288 no probes/probe_s056.cml
 ffd3fdc279b12b44 ok probes/probe_s057.cml
 1e69f516f0f75418 no probes/probe_s058.cml
 cd370ffc7e270474 ok probes/probe_s059.cml
-5da2f4ff05c3538b ok probes/probe_s060.cml
-3fe124544533c954 ok probes/probe_s061.cml
+6b667df823aaf3f2 ok probes/probe_s060.cml
+7eddb1e8cec26c19 ok probes/probe_s061.cml
 c1e1b84fddf3e53a ok probes/probe_s062.cml
 4d738831bc764c86 ok probes/probe_s063.cml
 9a7e39113ca8c573 ok probes/probe_s064.cml

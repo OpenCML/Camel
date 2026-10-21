@@ -1,0 +1,21 @@
+module subscript_format
+
+func part(xs: int[], a: int, b: int): int[] {
+return xs[a:b ]
+}
+
+func until(xs: int[], b: int): int[] {
+  return xs[ :b]
+}
+
+func whole(xs: int[]): int[] {
+    return xs[:]
+}
+
+func stepped(xs: int[], a: int): int[] {
+    return xs[a : 4 : 1]
+}
+
+func rows(xs: int[], idx: int[]): int[] {
+    return xs[idx]
+}
