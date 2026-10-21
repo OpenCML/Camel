@@ -22,6 +22,8 @@
 #include "camel/core/operator_semantics.h"
 #include "camel/core/tags.h"
 
+#include <cctype>
+#include <cstdint>
 #include <functional>
 #include <set>
 
@@ -32,6 +34,7 @@
 #include "camel/utils/scope.h"
 #include "camel/utils/token.h"
 #include "camel/utils/type.h"
+#include "camel/utils/utf8.h"
 
 #define DEBUG_LEVEL -1
 
@@ -3853,7 +3856,8 @@ namespace {
 
 /// The text of a formatted string that is not an interpolation: only `\${` is decoded here,
 /// because it is what keeps `${` from starting an interpolation. Every character escape, the
-/// backtick included, is left for decodeEscapes, the one table of every string literal.
+/// backtick and the bare `\$` (not followed by `{`) included, is left for decodeEscapes, the one
+/// table of every string literal.
 std::string decodeFStringText(std::string_view text) {
     std::string out;
     out.reserve(text.size());
@@ -3870,6 +3874,25 @@ std::string decodeFStringText(std::string_view text) {
     return out;
 }
 
+/// An interpolation is empty when it holds no token that is neither white space nor a comment
+/// (the author's criterion, H89 ruling 3). White space is never a token, so this is: every token
+/// is Eof or a comment. `Command` (the ignored `#!` line) and `Error` are not comments, and either
+/// leaves the interpolation non-empty.
+bool isEmptyInterpolation(const syn::TokenBuffer &tokens) {
+    for (const syn::Token &token : tokens.tokens()) {
+        switch (token.kind) {
+        case syn::TokenKind::Eof:
+        case syn::TokenKind::LineComment:
+        case syn::TokenKind::DocComment:
+        case syn::TokenKind::BlockComment:
+            break;
+        default:
+            return false;
+        }
+    }
+    return true;
+}
+
 /// Shown when the text taken as a format specification contains `=>`: the ':' of a lambda's
 /// return type at the top level of an interpolation was read as the start of the specification.
 /// The same sentence is used where the format check fails (gir/builder_operators.cpp).
@@ -3878,16 +3901,64 @@ constexpr std::string_view kLambdaNeedsParenthesesHint =
     "interpolation: the ':' of the return type is read as the start of the format "
     "specification. Write it as ${((x: int): int => x)}";
 
+/// The end (just past the closing `}`) of a valid `\u{H…}` escape that starts at `i`, or npos.
+/// Valid means what decodeEscapes decodes: 1 to 6 hex digits and a Unicode scalar value.
+size_t unicodeEscapeEnd(std::string_view text, size_t i) {
+    if (i + 2 >= text.size() || text[i] != '\\' || text[i + 1] != 'u' || text[i + 2] != '{') {
+        return std::string_view::npos;
+    }
+    size_t j       = i + 3;
+    size_t digits  = 0;
+    uint32_t value = 0;
+    while (j < text.size() && digits < 6 && std::isxdigit(static_cast<unsigned char>(text[j]))) {
+        const char d = text[j];
+        value        = value * 16 + (d <= '9' ? d - '0' : (d | 0x20) - 'a' + 10);
+        ++digits;
+        ++j;
+    }
+    if (digits == 0 || j >= text.size() || text[j] != '}' || !camel::utf8::isScalarValue(value)) {
+        return std::string_view::npos;
+    }
+    return j + 1;
+}
+
 /// The pattern text for `format`: the literal braces of a formatted string are doubled, so
-/// `format` prints them.
+/// `format` prints them. A valid `\u{H…}` is a character escape, not format syntax: its braces are
+/// left alone for decodeEscapes, which doubles a brace the escape produces (H89). An invalid one
+/// is kept as written, so its braces are format syntax and are doubled here.
 std::string escapeFormatBraces(std::string_view text) {
     std::string out;
     out.reserve(text.size());
-    for (const char c : text) {
+    size_t i = 0;
+    while (i < text.size()) {
+        const char c = text[i];
+        if (c == '\\') {
+            // An even run of backslashes is `\\` pairs; the last backslash of an odd run opens
+            // an escape.
+            size_t run = 0;
+            while (i + run < text.size() && text[i + run] == '\\') {
+                ++run;
+            }
+            out.append(text.substr(i, run - (run % 2)));
+            i += run - (run % 2);
+            if (run % 2 == 0) {
+                continue;
+            }
+            const size_t end = unicodeEscapeEnd(text, i);
+            if (end != std::string_view::npos) {
+                out.append(text.substr(i, end - i));
+                i = end;
+                continue;
+            }
+            out += text[i];
+            ++i;
+            continue;
+        }
         if (c == '{' || c == '}') {
             out += c;
         }
         out += c;
+        ++i;
     }
     return out;
 }
@@ -3953,9 +4024,11 @@ Value Builder::visitFStringData(cst::Literal context) {
         cursor = static_cast<size_t>(part.close) + 1;
 
         syn::TokenBuffer tokens = syn::Lexer::tokenizeRange(source, part.exprBegin, part.exprEnd);
-        // A buffer of nothing but Eof is `${}` (or `${:spec}`): an interpolation without an
-        // expression is its own mistake, not a parse error inside an expression (H20 item 1).
-        if (tokens.size() == 1) {
+        // No token that is neither white space nor a comment is `${}`, `${ }`, `${:spec}` or
+        // `${/*c*/}`: an interpolation without an expression is its own mistake, not a parse
+        // error inside an expression (H20 item 1, H89 ruling 3). `${/**/ 1}` has a token and is
+        // an expression.
+        if (isEmptyInterpolation(tokens)) {
             diags_->of(SyntaxDiag::EmptyInterpolation).at(interpolationRange(part)).commit();
             failed = true;
             continue;

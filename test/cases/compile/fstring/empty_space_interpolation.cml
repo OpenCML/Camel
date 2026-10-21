@@ -1,0 +1,5 @@
+module fstring_empty_space_interpolation
+func main(): int sync {
+    print(`A ${ }`)
+    return 0
+}

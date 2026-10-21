@@ -98,7 +98,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fstring_escapes"
-desc = "Every string uses the same escape table: a backtick is a character escape in an ordinary string, a double-quoted string and a formatted string alike; the fstring-only `\\${` still means a literal `${`, and in an ordinary string it stays an unknown escape."
+desc = "Every string uses the same escape table: a backtick and a dollar sign are character escapes in a single-quoted, a double-quoted, a triple-quoted and a formatted string alike; the formatted string's `\\${` still means a literal `${`."
 kind = "behavior"
 case = "../../../cases/compile/fstring/escapes.cml"
 args = ["${case}", "${backend}"]
@@ -113,7 +113,16 @@ const want = [
   "single: `",
   "double: `",
   "formatted: `",
-  "literal interpolation: \\${x}",
+  "single dollar: $",
+  "double dollar: $",
+  "formatted dollar: $",
+  "triple dollar: $",
+  "literal interpolation: ${x}",
+  "unicode: 中",
+  "unicode: 中",
+  "braces from escapes: [{][}]",
+  "braces from escapes: [{][}][{][}]",
+  "invalid unicode kept: \\u{xyz}",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -132,6 +141,53 @@ expect_diagnostic_line = 3
 expect_diagnostic_column = 14
 expect_output_contains = ["no expression to format"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fstring_empty_space_interpolation"
+desc = "White space alone is no expression either: `${ }` is the same empty interpolation, reported over the whole `${...}`."
+kind = "negative"
+case = "../../../cases/compile/fstring/empty_space_interpolation.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::EmptyInterpolation"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 14
+expect_output_contains = ["no expression to format"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fstring_empty_comment_interpolation"
+desc = "The criterion is 'no token that is neither white space nor a comment': a comment-only interpolation `${/*c*/}` is empty (H89 ruling 3)."
+kind = "negative"
+case = "../../../cases/compile/fstring/empty_comment_interpolation.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::EmptyInterpolation"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 14
+expect_output_contains = ["no expression to format"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fstring_comment_then_expression"
+desc = "A comment is not the whole interpolation when an expression follows it: `${/**/ 1}` formats `1`, with and without a specification."
+kind = "behavior"
+case = "../../../cases/compile/fstring/comment_then_expression.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["A 1", "B 2"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
 timeout_ms = 8000
 
 [[tests]]
