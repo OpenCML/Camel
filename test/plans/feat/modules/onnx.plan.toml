@@ -1432,7 +1432,7 @@ timeout_ms = 8000
 name = "export_tree_recursion"
 # Slow layer: measured 32.7 s in the full serial run (docs/handover/reports/H10.md).
 tier = "slow"
-desc = "A function that calls itself twice on one path with a depth that depends on the model input (tree recursion) is refused by export_model with a diagnostic at the second recursive call; it used to fail with an unlocated allocation error from simplification. The refusal comes when the doubling graph outgrows one runtime graph; since a node is a 16-byte record and an edge one entry (graph model step 3) a graph holds several times more nodes, so the unrolling runs further before it stops (measured in one container, release build: 9 s before, 39 s after; hence the timeout)."
+desc = "A function that calls itself twice on one path with a depth that depends on the model input (tree recursion) is refused by export_model with a diagnostic that names the two calls outside tail position, located at the second one. The refusal is a shape test now rather than a budget running out: export turns recursion into loops only for a linear recursion, so the case fails immediately instead of unrolling until the doubling graph outgrows one runtime graph."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_tree_recursion.cml"
 args = ["${case}"]
@@ -1442,7 +1442,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('calls itself more than once on one path (tree recursion)'), 'missing detail: ' + text)
+assert(text.includes('calls the function again in 2 places outside tail position'), 'missing detail: ' + text)
+assert(text.includes('only with one recursive call (a linear recursion)'), 'missing the shape it can export: ' + text)
 assert(/[(]at [^ ]*export_tree_recursion[.]cml:12:[0-9]+[)]/.test(text), 'missing source position of the call: ' + text)
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
 }
