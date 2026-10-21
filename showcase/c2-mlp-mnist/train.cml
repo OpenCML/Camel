@@ -2,8 +2,13 @@
 //
 // The model is a struct of four tensors, so the starting weights, the gradient and the
 // optimizer state are all values of the same type: `with_grad` gives a gradient of the
-// model type and `adam` consumes it without the program naming a leaf.  The whole training
-// run is one `loop`, the evaluation is one call, and the checkpoint is `save_tree`.
+// model type and `adam` consumes it without the program naming a leaf.  The training run is
+// one `loop` that also collects the loss of every step, the evaluation is one call, and the
+// checkpoint is `save_tree`.
+//
+// The batch order comes from `train_order.npy`, which make_data.py wrote: one permutation
+// per epoch, shared with the PyTorch counterpart so a step sees the same rows on both
+// sides.  `take` gathers the rows and the labels of a batch from it.
 //
 // The `// == name ==` lines delimit the sections compare.py counts, so the two
 // implementations can be lined up side by side in RESULTS.md.
@@ -14,7 +19,7 @@
 module c2_mlp_mnist
 
 // == imports ==
-import { Tensor, abs, argmax, load_npy, numel, relu, set_num_threads, shape, slice, sum } from tensor
+import { Tensor, abs, argmax, cast, load_npy, numel, relu, set_num_threads, shape, slice, sum, take } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { load_tree, save_tree, tree_map, tree_paths, tree_reduce } from tree
@@ -40,11 +45,12 @@ func logits(x: Tensor): Tensor {
 }
 
 // == loss ==
-// The training loss of one minibatch.  Its `with` parameter is the whole parameter tree,
-// so `with_grad` gives back a tree of the same shape.  The targets are one-hot rows.
+// The training loss of one minibatch.  Its `with` parameter is the whole parameter tree, so
+// `with_grad` gives back a tree of the same shape.  The targets are integer class labels;
+// the cast says so to the overload, since a tensor loaded from a file has no static dtype.
 with <m: Mlp>
-func loss(x: Tensor, targets: Tensor): float {
-    return softmax_cross_entropy(logits<m>(x), targets)
+func loss(x: Tensor, labels: Tensor): float {
+    return softmax_cross_entropy(logits<m>(x), cast(labels, 'int64'))
 }
 
 // == data ==
@@ -61,13 +67,23 @@ func load_model(data: string): Mlp {
 
 // == evaluate ==
 // Validation: the loss over all rows at once and the fraction classified correctly.
-func evaluate(m: Mlp, x: Tensor, targets: Tensor): (float, float) {
+func evaluate(m: Mlp, x: Tensor, labels: Tensor): (float, float) {
     let value = logits<m>(x)
-    let correct = sum(argmax(value, 1) == argmax(targets, 1))
-    return (softmax_cross_entropy(value, targets), float(correct) / float(shape(x)[0]))
+    let class_ids = cast(labels, 'int64')
+    let correct = sum(argmax(value, 1) == class_ids)
+    return (softmax_cross_entropy(value, class_ids), float(correct) / float(shape(x)[0]))
 }
 
 // == entry ==
+// The loop collects the loss of every step; the curve is printed afterwards, outside the
+// timed region, in the order the steps produced it.
+sync func report(losses: float[], steps: int, log_every: int) {
+    range(0, steps)->filter<(i: int): bool => i % log_every == 0>->foreach<sync (i: int) => sync {
+        `c2 step=${i} loss=${losses[i]:.9f}`->println
+        return null
+    }>
+}
+
 func main(
     data: string, steps: int, batch: int, lr: float, log_every: int, threads: int
 ): int sync {
@@ -75,52 +91,53 @@ func main(
 
     // == data ==
     let train_x = load_npy(data + '/train_images.npy')
-    let train_targets = load_npy(data + '/train_targets.npy')
+    let train_labels = load_npy(data + '/train_labels.npy')
     let val_x = load_npy(data + '/val_images.npy')
-    let val_targets = load_npy(data + '/val_targets.npy')
+    let val_labels = load_npy(data + '/val_labels.npy')
+    let order = load_npy(data + '/train_order.npy')
     let dataset_id = trim(read_text(data + '/dataset.id'))
 
     let model = load_model(data)
     let leaves = tree_paths(model)
     let params = tree_reduce<(count: int, leaf: Tensor): int => count + numel(leaf)>(model, 0)
-    let batches = shape(train_x)[0] / batch
-    let before = evaluate(model, val_x, val_targets)
+    let rows = shape(train_x)[0]
+    let batches = rows / batch
+    let before = evaluate(model, val_x, val_labels)
     `c2 config steps=${steps} batch=${batch} lr=${lr} threads=${threads} params=${params} batches=${batches}`->println
     `c2 init val_loss=${before.0:.9f} val_accuracy=${before.1:.9f}`->println
 
     // == train ==
-    // One loop carries the model, the optimizer state and the step number.  The batches
-    // are contiguous slices of the shuffled file, so a step needs no shuffling machinery.
+    // One loop carries the model, the optimizer state, the step number and the loss curve.
+    // A step's rows come from the epoch's permutation in the flat `order` tensor: every
+    // epoch reshuffles, and the PyTorch counterpart walks the same order.
     let started = now()
     let loss_with_grad = with_grad(loss)
-    let (trained, state) = loop m = model, opt = adam_state(model), step = 0
+    let (trained, state, final_step, losses) = loop m = model, opt = adam_state(model), step = 0, losses = [] as float[]
         while step < steps
-        do sync {
-            let start = (step % batches) * batch
-            let x = slice(train_x, 0, start, start + batch)
-            let y = slice(train_targets, 0, start, start + batch)
+        do {
+            let offset = (step / batches) * rows + (step % batches) * batch
+            let chosen = slice(order, 0, offset, offset + batch)
+            let x = take(train_x, chosen)
+            let y = take(train_labels, chosen)
             let (value, gradient) = loss_with_grad<m>(x, y)
             let next = adam(m, gradient, opt, lr)
-            if step % log_every == 0 then {
-                `c2 step=${step} loss=${value:.9f}`->println
-            }
-            return (next.0, next.1, step + 1)
+            return (next.0, next.1, step + 1, losses->append<value>)
         }
     let elapsed = now() - started
+    report(losses, steps, log_every)
 
     // == evaluate ==
-    let after = evaluate(trained, val_x, val_targets)
+    let after = evaluate(trained, val_x, val_labels)
     `c2 trained steps=${steps} seconds=${elapsed:.6f} val_loss=${after.0:.9f} val_accuracy=${after.1:.9f}`->println
 
     // == checkpoint ==
     // The checkpoint is the parameter tree and the identity of the data it was trained on;
     // reading it back checks that identity and the SHA-256 of every leaf.  `save_tree`
-    // refuses a directory that already exists, so a second run needs a fresh `data` copy
-    // (compare.py removes the directory first); see the README's "遇到的问题".
+    // replaces a directory as a whole, so the next run writes over the previous one.
     let dir = data + '/checkpoint'
     save_tree(dir, trained, dataset_id)
     let restored = load_tree::<Mlp>(dir, dataset_id) !! model
-    let after_restore = evaluate(restored, val_x, val_targets)
+    let after_restore = evaluate(restored, val_x, val_labels)
     let drift = tree_reduce<(total: float, leaf: float): float => total + leaf>(
         tree_map<(a: Tensor, b: Tensor): float => sum(abs(a - b))>(trained, restored), 0.0)
     `c2 checkpoint val_loss=${after_restore.0:.9f} val_accuracy=${after_restore.1:.9f} l1_drift=${drift:.9f}`->println

@@ -1,0 +1,33 @@
+/// Named struct types in the C++ translation (design principles 5.2): a named type is one C++
+/// struct named by its declaration; an anonymous value of that layout enters it without moving;
+/// two named types of one layout convert by `as` without moving; a type whose fields are in
+/// another order is copied into the declaration order; an array of named elements takes
+/// anonymous literals; and `append` takes an anonymous literal of the element type.
+module named_structs
+
+type Point = { x: int, y: int }
+type Spot = { x: int, y: int }
+type Swapped = { y: int, x: int }
+
+func norm(p: Point): int { return p.x - p.y }
+func swap(p: Point): Point { return { y: p.y, x: p.x } }
+
+func main(): int sync {
+    let p: Point = { x: 5, y: 2 }
+    let q = { x: 7, y: 3 }
+    let s = p as Spot
+    let w: Swapped = { y: 11, x: 4 }
+    let r = w as Point
+    let ps = [p, q, r]
+    println(norm(p), norm(q), norm(s as Point))
+    println(r.x, r.y, swap(p))
+    println(ps->map<(p: Point): int => p.x - p.y>)
+    println(ps, w)
+    var acc: Point[] = []
+    range(0, 3)->foreach<sync (i: int) => sync {
+        acc = acc->append<{ x: i, y: 10 - i }>
+        return null
+    }>
+    println(acc)
+    return 0
+}

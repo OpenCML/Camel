@@ -280,6 +280,24 @@ const TupleType *asTuple(const Type *type) {
                                                               : nullptr;
 }
 
+/// The C++ name of the struct declaration of a named struct type: the declaration's name,
+/// module-qualified as the type system writes it (`models::Point` becomes `models_Point`), with
+/// the instance's type arguments when it is generic (`Pair<int>` becomes `Pair_int`). The name
+/// scope of the generated file makes it unique.
+std::string declaredStructName(const Type *type) {
+    const auto *record        = static_cast<const StructType *>(type);
+    const std::string stated  = record->decl()->name();
+    const std::string spelled = type->toString();
+    std::string name          = cppIdentifier(stated);
+    if (spelled != stated && spelled.starts_with(stated)) {
+        name += "_";
+        for (char c : spelled.substr(stated.size())) {
+            name += std::isalnum(static_cast<unsigned char>(c)) != 0 ? c : '_';
+        }
+    }
+    return name;
+}
+
 /// Whether `root` is `owner` or contains it through the fields of a composite or the variants
 /// of an enum. A recursive enum closes the graph, so the walk keeps a visited set; it is an
 /// explicit stack because a type's nesting is not bounded by anything but the source.
@@ -407,23 +425,69 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
     } else if (t->code() == TypeCode::Struct && t == camel::core::type::errorType()) {
         out = "rt::Error";
     } else if (tuple != nullptr || t->code() == TypeCode::Struct) {
-        // A struct of the generated file, declared after the types of its members.
+        // A struct of the generated file, declared after the types of its members. Values with
+        // the same layout have the same C++ representation: an anonymous struct value enters a
+        // named type of that layout without moving (design principles 5.2), so the two must be
+        // one C++ type, and a named type is another name for that type. The layout is the field
+        // names and the C++ types of their values, in order (the declaration's order for a
+        // named type, the written order for an anonymous one).
         const bool isTuple = tuple != nullptr;
         const auto *record = static_cast<const StructType *>(t);
         const size_t n     = isTuple ? tuple->size() : record->size();
-        std::vector<std::pair<std::string, std::string>> members; // type, name
+        struct Member {
+            const Type *type = nullptr;
+            std::string cpp;
+            std::string name;
+        };
+        std::vector<Member> members;
+        std::string layout = isTuple ? "T;" : "S;";
         for (size_t i = 0; i < n; ++i) {
             const Type *m = isTuple ? tuple->typeAt(i) : record->typeAt(i);
             auto mt       = payload(m);
             if (!mt) {
                 return std::nullopt;
             }
-            members.emplace_back(*mt, fieldName(t, i));
+            Member member{m, *mt, fieldName(t, i)};
+            // A member that is itself a struct is keyed by the representation it denotes, not
+            // by the name this use happens to give it.
+            if (m != nullptr && m->code() == TypeCode::Struct) {
+                if (auto r = representation(m)) {
+                    member.cpp = *r;
+                }
+            }
+            layout += std::format("{}:{}={};", member.name.size(), member.name, member.cpp);
+            members.push_back(std::move(member));
         }
-        const std::string name = names_.unique(isTuple ? "Tuple" : "Record");
-        std::string decl       = std::format("/// {}\nstruct {} {{\n", t->toString(), name);
-        for (const auto &[mt, mn] : members) {
-            decl += std::format("    {} {};\n", mt, mn);
+        if (const auto existing = layouts_.find(layout); existing != layouts_.end()) {
+            // One C++ struct already has this layout. A named type gets a name of its own for
+            // it (the declaration's); an anonymous one is simply that struct.
+            if (!isTuple && record->named()) {
+                const std::string canonical = existing->second;
+                std::string alias           = declaredStructName(t);
+                // A named type is declared once per program; the name still has to avoid the
+                // names the file already uses.
+                alias = names_.unique(alias);
+                declarations_ +=
+                    std::format("/// {}\nusing {} = {};\n\n", t->toString(), alias, canonical);
+                types_.emplace(key, alias);
+                representations_.emplace(key, canonical);
+                return alias;
+            }
+            types_.emplace(key, existing->second);
+            representations_.emplace(key, existing->second);
+            return existing->second;
+        }
+        std::string name;
+        if (isTuple) {
+            name = names_.unique("Tuple");
+        } else if (record->named()) {
+            name = names_.unique(declaredStructName(t));
+        } else {
+            name = names_.unique("Record");
+        }
+        std::string decl = std::format("/// {}\nstruct {} {{\n", t->toString(), name);
+        for (const Member &member : members) {
+            decl += std::format("    {} {};\n", member.cpp, member.name);
         }
         decl += std::format("    bool operator==(const {} &) const = default;\n}};\n", name);
         // Its text, as the runtime prints it: `(1, a)` and `{ x: 1, y: 2.5 }`.
@@ -436,12 +500,14 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
             if (!isTuple) {
                 decl += std::format("    out += \"{}: \";\n", record->fieldName(i));
             }
-            decl += std::format("    appendText(out, v.{});\n", members[i].second);
+            decl += std::format("    appendText(out, v.{});\n", members[i].name);
         }
         decl += std::format("    out += \"{}\";\n}}\n\n", isTuple ? ")" : " }");
         declarations_ += decl;
+        layouts_.emplace(layout, name);
+        representations_.emplace(key, name);
         out = name;
-} else if (t->code() == camel::core::type::EnumType::typeCode()) {
+    } else if (t->code() == camel::core::type::EnumType::typeCode()) {
         const auto *enumType = static_cast<const camel::core::type::EnumType *>(t);
         if (enumType->pending() || !enumType->complete()) {
             return std::nullopt; // a prototype, or an instance whose argument is a hole
@@ -794,6 +860,28 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         types_.emplace(key, *out);
     }
     return out;
+}
+
+std::optional<std::string> ProgramValues::representation(const Type *t) {
+    if (t == nullptr) {
+        return std::nullopt;
+    }
+    std::optional<std::string> cpp = type(t);
+    if (!cpp) {
+        return std::nullopt;
+    }
+    if (t->code() == TypeCode::Struct) {
+        if (const auto it = representations_.find(t->mangle()); it != representations_.end()) {
+            return it->second;
+        }
+    }
+    return cpp;
+}
+
+bool ProgramValues::sameRepresentation(const Type *a, const Type *b) {
+    const auto left  = representation(a);
+    const auto right = representation(b);
+    return left.has_value() && right.has_value() && *left == *right;
 }
 
 std::string ProgramValues::fieldName(const Type *t, size_t i) const {

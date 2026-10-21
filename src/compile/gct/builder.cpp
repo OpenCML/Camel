@@ -3406,7 +3406,20 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
             fieldNode = literalNodeInType(fieldNode, fieldType, valueAst);
         }
         literalElementsByName.emplace(name, writtenElement(fieldNode));
-        auto [data, _] = extractData(fieldNode, execNode, dangling);
+        auto [data, fieldDangling] = extractData(fieldNode, execNode, dangling);
+        if (fieldDangling) {
+            dangling = true;
+        }
+        if (!fieldDangling &&
+            (data == nullptr || data->type() == nullptr ||
+             !fieldType->assignableFrom(data->type()))) {
+            // A field written as a variable keeps its own type (design principles 5.1): the
+            // literal is of an unnamed struct type whose field is of another type, and the
+            // conversion at the position it is written in reports it, as it would without
+            // building the literal in the position's type.
+            LEAVE("StructData");
+            return visitData(ast);
+        }
         factory.add(name, data);
     }
     const data_ptr_t built = factory.buildAs(sType);

@@ -59,6 +59,11 @@ test/cases/linear/nvm/var_params.cml
 test/cases/compile/module_imports/d4_cpp_computed.cml
 test/cases/consistency/faults/top_level_fault.cml
 
+# Named struct types (design principles 5.2): one C++ struct per declaration and layout; an
+# anonymous value enters a named type without moving; a named type of another order is copied
+# field by field; an array element and `append` take an anonymous literal of the named type.
+test/cases/trans/cpp/named_structs.cml
+
 # && and || as branches, null tests and narrowing (design principles 3.8).
 test/cases/consistency/logical/short_circuit.cml
 test/cases/consistency/logical/pure.cml

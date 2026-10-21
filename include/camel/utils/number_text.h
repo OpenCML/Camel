@@ -434,6 +434,11 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
             return NumberTextStatus::OutOfRangeInteger;
         }
         out = static_cast<T>(value);
+        if (negative && value == 0) {
+            // The text wrote a sign the integer value cannot carry: `-0` at a position of a real
+            // type is the negative zero, and converting the integer zero would lose it (H15h).
+            out = -out;
+        }
         return NumberTextStatus::Ok;
     }
     // Then a real token. Without a point it is a real token only when an exponent makes it one,
