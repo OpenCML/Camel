@@ -395,7 +395,7 @@ The positions are `func` (a function declaration), `type` (a type declaration), 
 
 The core carries a set of **numeric permission tags** (design principles 7.2), written without an import and `on func, nodes`: `reassociate`, `contract`, `approx_math`, `change_precision`, `no_nans`, `no_infs`, `no_signed_zeros`, `flush_subnormals`, and the group `finite_math` that holds the last four. `#contract` and `@numeric(contract)` grant the same thing and land in the same permission column (so a dump shows the same `numeric="..."`), and the defaults do not change (7.3): `reassociate` and `contract` are allowed anyway, the tag only states the permission; the others still have to be written. `#finite_math` means all four assumptions, as `@numeric(finite_math)` does.
 
-A rule declaration may be preceded by `#requires<permission, ...>` (permission names only; the group `finite_math` expands to its four members): the engine applies the rule only where the numeric policy of the nodes allows those permissions ([46 Rules](../technical/46_rules.md)). A requirement that names something else, a tag of the program written there, or `#requires` outside a rule is a located error, never a silent pass.
+A rule declaration may be preceded by `#requires<permission, ...>` (permission names only; the group `finite_math` expands to its four members): the engine applies the rule only where the numeric policy of the nodes allows those permissions ([46 Rules](../../technical/46_rules.md)). A requirement that names something else, a tag of the program written there, or `#requires` outside a rule is a located error, never a silent pass.
 
 There are three forms of `#`, written before a function, a type declaration, a struct field or a block:
 

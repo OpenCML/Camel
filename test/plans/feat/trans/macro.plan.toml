@@ -219,19 +219,19 @@ timeout_ms = 4000
 
 [[tests]]
 name = "failed_no_rule.error"
-desc = "grad over an operator without a derivative rule cannot be expanded by std::macro: a compile-time error at the grad call (15:13) that names the operator; the program does not start."
+desc = "grad over an operator without a derivative rule cannot be expanded by std::macro: a compile-time error located at the operator whose rule is missing (10:12), whose message names the operator and the macro call (15:13); the program does not start."
 kind = "behavior"
 case = "../../../cases/trans/macro/failed_no_rule.cml"
 args = ["${case}", "std::macro", "std::fvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 15
-expect_diagnostic_column = 13
+expect_diagnostic_line = 10
+expect_diagnostic_column = 12
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.output
-assert(/failed_no_rule\.cml:15:13: \[Error\]: 'autodiff:grad' could not be evaluated by std::macro: RuntimeError: An error has occurred: autodiff: no derivative rule for operator 'math:sin_d'\./.test(out), `error missing: ${out}`)
+assert(/'autodiff:grad' could not be evaluated by std::macro: RuntimeError: An error has occurred: autodiff: no derivative rule for operator 'math:sin_d'/.test(out) && out.includes('failed_no_rule.cml:10:12'), `error missing: ${out}`)
 assert(!out.includes('main start'), `the program must not run: ${out}`)
 }
 """

@@ -542,7 +542,13 @@ ruleDecl : EXPORT? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}
            (IDENTIFIER dataExpr)? ;
 */
 any Formatter::visitRuleDecl(cst::RuleDecl context) {
-    string result = context->has(TK::KwExport) ? "export rule " : "rule ";
+    string result;
+    // The tags written before the rule (`#requires<...>`, design principles 6.2, 7.2): each on a
+    // line of its own, as before a function or a type declaration.
+    for (const auto &tagUse : context->all<cst::TagUse>()) {
+        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+    }
+    result += context->has(TK::KwExport) ? "export rule " : "rule ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     if (const auto ruleContext = context->get<cst::RuleContext>()) {
         result += any_cast<string>(visitRuleContext(ruleContext));
