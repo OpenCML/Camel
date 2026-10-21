@@ -411,6 +411,10 @@ function applyNormalizers(text, names) {
             output = normalizePathText(output)
         } else if (name === 'normalize_addresses') {
             output = output.replace(/0x[0-9a-fA-F]+/g, '<ADDR>')
+        } else if (name === 'normalize_origins') {
+            // The source origin ids of a GIR dump depend on what was compiled before the dumped
+            // program (a pass module written in Camel takes some).
+            output = output.replace(/"origin": "[0-9]+"/g, '"origin": "<ORIGIN>"')
         } else if (name === 'normalize_duration_seconds') {
             output = output.replace(/computed in [0-9]+\.[0-9]+ seconds/g, 'computed in <TIME> seconds')
         }

@@ -322,7 +322,7 @@ void multiply(
 template <typename T>
 bool simplify(
     GraphDraft &draft, gc_node_ref_t node, const Arithmetic &ops, const sem::NumericPolicy &policy,
-    const WrittenSlots &written) {
+    const WrittenSlots &written, bool neutralOnly) {
     const auto inputs = draft.normInputsOf(node);
     if (inputs.size() != 2 || !draft.withInputsOf(node).empty()) {
         return false;
@@ -360,6 +360,9 @@ bool simplify(
                 return true;
             }
         }
+    }
+    if (neutralOnly) {
+        return false;
     }
     if (op == ops.add) {
         const auto left  = term<T>(draft, a, node, ops, ty, written);
@@ -419,7 +422,7 @@ bool simplify(
 }
 } // namespace
 
-size_t algebraDraft(GraphDraft &draft, const sem::NumericPolicy &policy) {
+size_t algebraDraft(GraphDraft &draft, const sem::NumericPolicy &policy, bool neutralOnly) {
     // Fixed-depth matching, and at most four times the original node count in visits. The queue
     // revisits affected users without repeatedly scanning the graph or expanding shared DAGs.
     const size_t slots  = draft.nodeSlotCount();
@@ -451,16 +454,16 @@ size_t algebraDraft(GraphDraft &draft, const sem::NumericPolicy &policy) {
         // invoking host signed-overflow UB while calculating coefficients.
         switch (ops->element) {
         case type::TypeCode::Int32:
-            done = simplify<uint32_t>(draft, id, *ops, policy, written);
+            done = simplify<uint32_t>(draft, id, *ops, policy, written, neutralOnly);
             break;
         case type::TypeCode::Int64:
-            done = simplify<uint64_t>(draft, id, *ops, policy, written);
+            done = simplify<uint64_t>(draft, id, *ops, policy, written, neutralOnly);
             break;
         case type::TypeCode::Float32:
-            done = simplify<float>(draft, id, *ops, policy, written);
+            done = simplify<float>(draft, id, *ops, policy, written, neutralOnly);
             break;
         case type::TypeCode::Float64:
-            done = simplify<double>(draft, id, *ops, policy, written);
+            done = simplify<double>(draft, id, *ops, policy, written, neutralOnly);
             break;
         default:
             break;
@@ -478,10 +481,11 @@ size_t algebraDraft(GraphDraft &draft, const sem::NumericPolicy &policy) {
     return changed;
 }
 
-size_t algebraDraft(GraphDraft &draft, bool safeFp) {
+size_t algebraDraft(GraphDraft &draft, bool safeFp, bool neutralOnly) {
     return algebraDraft(
         draft,
-        safeFp ? sem::NumericPolicy::strict() : sem::NumericPolicy::relaxed());
+        safeFp ? sem::NumericPolicy::strict() : sem::NumericPolicy::relaxed(),
+        neutralOnly);
 }
 
 bool mayAlgebra(const camel::runtime::GCGraph &graph) {
@@ -588,7 +592,7 @@ AlgebraPass::apply(const camel::runtime::Program *program, std::ostream &) {
         program,
         "std::opt::algebra",
         [&](camel::runtime::GraphDraft &draft) {
-            return camel::passes::generic::algebraDraft(draft, safeFp_);
+            return camel::passes::generic::algebraDraft(draft, safeFp_, neutralOnly_);
         },
         nullptr,
         nullptr,

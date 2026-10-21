@@ -145,6 +145,7 @@
 | 遍 | 参数（默认值） |
 | --- | --- |
 | `std::opt`、`std::opt::algebra` | `safe_fp: bool = false`（严格等价的浮点算式；设计原则 7.4） |
+| `std::opt::algebra` | `neutral_only: bool = false`（只做整数的单位元化简 `x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`，不做同类项与常数因子合并；用作同类遍（例如用 Camel 写的遍）的对照基准） |
 | `std::opt`、`std::opt::inline`（及 `::small` / `::arm` / `::hybrid`）、`std::opt::specialize`、`std::opt::devirtualize` | `growth_budget: int = 4096`（特化和内联可复制的节点数；用完后剩下的调用仍是调用；0 表示不再复制；`std::opt` 的所有轮次共用一个预算） |
 | `std::fvm`、`std::jit` | `native_loop: bool = false`（程序自己的 LOOP 节点原生运行，而不是降为尾递归；调试器下总是如此），`stats: string = ""`（把本次运行每张图的字节码数与执行计数追加写入该文件） |
 | `std::jit` | `hot_threshold: int = 1`（同一调用点调用多少次后编译一张图；0 表示第一次调用就编译） |

@@ -71,13 +71,16 @@ class CommonSubexpressionPass : public RuntimeGraphRewritePass {
 
 class AlgebraPass : public RuntimeGraphRewritePass {
   public:
-    explicit AlgebraPass(const camel::core::context::context_ptr_t &ctx, bool safeFp = false)
-        : RuntimeGraphRewritePass(ctx), safeFp_(safeFp) {}
+    explicit AlgebraPass(
+        const camel::core::context::context_ptr_t &ctx, bool safeFp = false,
+        bool neutralOnly = false)
+        : RuntimeGraphRewritePass(ctx), safeFp_(safeFp), neutralOnly_(neutralOnly) {}
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
     bool safeFp_;
+    bool neutralOnly_;
 };
 
 class DeadCodePass : public RuntimeGraphRewritePass {

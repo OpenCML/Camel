@@ -160,6 +160,8 @@ class DefinitionStore {
     std::recursive_mutex mutex_;
     std::unordered_map<camel::core::OperId, Entry> entries_;
     std::map<std::string, std::shared_ptr<camel::core::module::UserDefinedModule>> libraries_;
+    /// The libraries that are not there: no such module, or not written in Camel.
+    std::set<std::string> absentLibraries_;
     struct FunctionEntry {
         std::optional<LibraryFunction> found;
         std::string problem;

@@ -140,3 +140,39 @@ args = ["${case}", "probes::abort_unused", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "126\ntext\n"
 timeout_ms = 10000
+
+# A pass written in Camel against the C++ pass that does the same: the neutral elements of the
+# integer operations (x + 0, 0 + x, x - 0, x * 1, 1 * x) are removed, and the program that comes
+# out is the same graph by graph (the dumps differ only in source origin ids).
+
+[[tests]]
+name = "neutral_elements_by_std_opt_algebra"
+desc = "The reference: std::opt::algebra restricted to the neutral elements."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_target.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_elements_by_a_camel_pass"
+desc = "neutral::integers, written in Camel with the graph module, gives the same graphs."
+kind = "differential"
+case = "../../../cases/modules/graph_pass/neutral_target.cml"
+args = ["${case}", "neutral::integers", "std::jgir"]
+expect_exit = 0
+compare_to = "neutral_elements_by_std_opt_algebra"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_elements_program_still_runs"
+desc = "The program after the Camel pass computes what it did."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_target.cml"
+args = ["${case}", "neutral::integers", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "7\n11\n7\n10\n"
+timeout_ms = 20000

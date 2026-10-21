@@ -1,0 +1,91 @@
+module neutral
+import { flatten } from algo
+import { Program, Node, Graph, graphs, nodes, inputs, with_inputs, op, op_name, constant, type_of, type_name, is_anchor, open, replace, commit } from graph
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+func isInt(n: Node, value: int): bool {
+    return match constant(n, 0) {
+        case null => false
+        case v => v == value
+    }
+}
+
+func isInt32(n: Node, value: int): bool {
+    let zero: i32 = 0
+    let one: i32 = 1
+    let wanted: i32 = if value == 0 then zero else one
+    return match constant(n, wanted) {
+        case null => false
+        case v => v == wanted
+    }
+}
+
+func isAdd(text: string): bool { return text == ':op/add_l' || text == ':op/add_i' }
+func isSub(text: string): bool { return text == ':op/sub_l' || text == ':op/sub_i' }
+func isMul(text: string): bool { return text == ':op/mul_l' || text == ':op/mul_i' }
+
+/// Whether the constant node `n` is the neutral element `value` (0 or 1) of an operation on
+/// numbers of the type `type`.
+func neutral(n: Node, ty: string, value: int): bool {
+    return if ty == 'int' then isInt(n, value) else (ty == 'i32' && isInt32(n, value))
+}
+
+/// The operand that stays when the operation x + 0, 0 + x, x - 0, x * 1 or 1 * x is replaced
+/// by it, or the node itself when the operation is none of them. A subtraction is neutral on
+/// its right only; when both operands are neutral the left one stays.
+func keptOf(n: Node, ins: Node[]): Node {
+    let text = opText(n)
+    let ty = typeText(n)
+    let rightNeutral = (isAdd(text) && neutral(ins[1], ty, 0)) || (isSub(text) && neutral(ins[1], ty, 0)) || (isMul(text) && neutral(ins[1], ty, 1))
+    let leftNeutral = (isAdd(text) && neutral(ins[0], ty, 0)) || (isMul(text) && neutral(ins[0], ty, 1))
+    let sameTypes = typeText(ins[0]) == ty && typeText(ins[1]) == ty
+    return if !sameTypes then n else if rightNeutral then ins[0] else if leftNeutral then ins[1] else n
+}
+
+func kept(n: Node): Node {
+    let ins = inputs(n)
+    return if len(ins) == 2 && len(with_inputs(n)) == 0 && !is_anchor(n) then keptOf(n, ins) else n
+}
+
+func isHit(n: Node): bool {
+    return kept(n) != n
+}
+
+/// The hits whose kept operand is not itself a hit of the round: replacing them together is
+/// sound. The rest are the hits of the next round.
+func independent(hits: Node[]): Node[] {
+    return hits->filter<(n: Node): bool => len(hits->filter<(m: Node): bool => m == kept(n)>) == 0>
+}
+
+func allNodes(p: Program): Node[] {
+    return flatten(graphs(p)->map<(g: Graph): Node[] => nodes(g)>)
+}
+
+func replaceHits(p: Program, hits: Node[]): Program! sync {
+    let t = open(p)
+    independent(hits)->foreach<(n: Node) => replace(t, n, kept(n))>
+    return commit(t)
+}
+
+func settle(p: Program): Program! sync {
+    let hits = allNodes(p)->filter<isHit>
+    return if len(hits) == 0 then p else replaceHits(p, hits) ?-> settle
+}
+
+/// x + 0, 0 + x, x - 0, x * 1 and 1 * x of the integers, replaced by x.
+export func integers(p: Program): Program! {
+    return settle(p)
+}

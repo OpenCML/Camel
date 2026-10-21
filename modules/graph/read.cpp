@@ -268,6 +268,26 @@ slot_t tagsKernel(ArgsView &, ArgsView &norm, Context &) {
     return stringSlot(camel::core::attr::text(graph.nodeAttrs(handle->index())));
 }
 
+/// Whether the node anchors its graph: its exit, output or return node, or the head or tail of
+/// a branch arm. A rewrite keeps such a node; a transaction does not replace or erase it.
+slot_t isAnchorKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle   = norm.get<Handle *>(0);
+    nodeOf(handle, "graph.is_anchor");
+    const GCGraph &graph = graphOf(handle, "graph.is_anchor");
+    const auto ref       = handle->index();
+    bool anchor = ref == graph.exitNodeRef() || ref == graph.outputNodeRef() ||
+                  ref == graph.returnNodeRef();
+    for (const GCNode *node : graph.nodes()) {
+        if (anchor || node->kind != GCNodeKind::Brch) {
+            continue;
+        }
+        for (const auto &arm : graph.branchArmsOf(graph.nodeRef(node))) {
+            anchor = anchor || arm.head == ref || arm.tail == ref;
+        }
+    }
+    return toSlot<Bool>(anchor);
+}
+
 slot_t originKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
     nodeOf(handle, "graph.origin");
@@ -363,6 +383,7 @@ const std::vector<ReadOp> &readOps() {
             {"type_name", typeNameKernel, handle(HandleKind::TypeRef), Type::String()},
             {"callee", calleeKernel, node, maybe(HandleKind::Graph)},
             {"tags", tagsKernel, node, Type::String()},
+            {"is_anchor", isAnchorKernel, node, Type::Bool()},
             {"origin", originKernel, node, Type::Int64()},
             {"show", showKernel, node, Type::String()},
         };

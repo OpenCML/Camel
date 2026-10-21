@@ -493,9 +493,21 @@ PassDescriptor devirtualizeDescriptor() {
 PassDescriptor algebraDescriptor() {
     PassDescriptor d;
     d.doc    = "algebraic simplification";
-    d.params = {safeFpParameter()};
-    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<AlgebraPass>(ctx, args.getBool("safe_fp"));
+    d.params = {
+        safeFpParameter(),
+        PassParam{
+            "neutral_only",
+            PassParamType::Bool,
+            false,
+            "apply only the integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), not the "
+            "merging of like terms and constant factors (the reference for passes that do the "
+            "same)"},
+    };
+    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<AlgebraPass>(
+            ctx,
+            args.getBool("safe_fp"),
+            args.getBool("neutral_only"));
     };
     return d;
 }

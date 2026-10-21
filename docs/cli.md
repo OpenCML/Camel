@@ -144,6 +144,7 @@ Settings of a pass are parameters, no longer environment variables:
 | Pass | Parameters (default) |
 | --- | --- |
 | `std::opt`, `std::opt::algebra` | `safe_fp: bool = false` (strictly equivalent float algebra; design principles 7.4) |
+| `std::opt::algebra` | `neutral_only: bool = false` (apply only the integer neutral elements `x + 0`, `0 + x`, `x - 0`, `x * 1`, `1 * x`, not the merging of like terms and constant factors; the reference for passes that do the same, such as one written in Camel) |
 | `std::opt`, `std::opt::inline` (and `::small` / `::arm` / `::hybrid`), `std::opt::specialize`, `std::opt::devirtualize` | `growth_budget: int = 4096` (nodes specialization and inlining may copy before the remaining calls are left as calls; 0 stops them; one budget for all rounds of `std::opt`) |
 | `std::fvm`, `std::jit` | `native_loop: bool = false` (run the program's LOOP nodes natively instead of lowering them to tail recursion; a debugger always does), `stats: string = ""` (append per-graph bytecode and execution counts of the run to this file) |
 | `std::jit` | `hot_threshold: int = 1` (calls from one call site before a graph is compiled; 0 compiles at the first call) |
