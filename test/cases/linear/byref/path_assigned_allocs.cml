@@ -7,13 +7,23 @@
 // (`let kept = v`) takes the array out of the cell's keeping, so the write after it copies, and
 // `kept` keeps the value it was read as. The last loop is the control: a read in every round
 // makes every round's write copy, so the counter is not always zero.
-func main(): int sync {
-    var v = [
+//
+// The array is made by a call, not written as a literal here, so that its construction is
+// chained to the statement that reads the blocks: a call is a statement in the sync chain, while
+// a literal's construction has no ordering at all (its only effect is the allocation itself) and
+// may fall on either side of a measurement window. The windows below therefore measure only the
+// writes.
+func make_array(): int[] {
+    return [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ]
+}
+
+func main(): int sync {
+    var v = make_array()
     let s0 = std::mem::blocks()
     v[0] = 1
     let s1 = std::mem::blocks()

@@ -605,9 +605,6 @@ class EncodeSession {
                 graph->draft().returnKind());
         }
 
-        // Later statements may make an earlier control edge redundant. Clean up once before
-        // freezing, with a smaller work cap than the explicit optimization stage.
-        camel::runtime::reduceControlDependencies(*prepared.draft, 8192);
         // The regions keep their ids; one whose owner is not reachable is dead.
         const GraphDraft &built = graph->draft();
         const auto mapped       = [&](runtime::gc_node_ref_t ref) {

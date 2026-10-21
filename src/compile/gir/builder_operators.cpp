@@ -1074,6 +1074,12 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // An array variable is written where it is when the statement is part of a sync block: the
     // outermost element set takes the variable's own array (`:var/take`) and the store keeps it
     // as the variable's, so nothing downstream copies. The read must not take the array away.
+    //
+    // Whether the value is shared is not asked here, and no count of edges answers it: the copy
+    // is decided at run time by the cell's own mark (`:op/assn_owned` sets it, `:var/get` and
+    // `:op/assn` clear it, `:var/peek` leaves it). A control edge only orders two nodes and
+    // reads no value (design principles 3.3, 3.4), so adding one cannot make this statement
+    // copy; see handover H95 for the measurement that shows both.
     const bool inPlace     = synced_ && rootType->code() == TypeCode::Array;
     node_handle_t rootRead = inPlace ? peekVariable(variable) : readVariable(variable);
     const auto make        = [&](GCT::node_ptr_t node, const GCT::node_ptr_t &at) {

@@ -248,16 +248,21 @@ func main(): int {
 从现有代码可见，`wait` 的核心语义落实在 `waitExpr -> WaitLoad` 路径。  
 `WAIT stmtBlock` 的 AST 标记目前未在 GCT builder 中形成对称的专门 lower 逻辑（即 block 级 waited 标志未被同等消费）；这不影响 `wait expr` 主路径，但属于后续可增强点。
 
-### 3.5 控制边约简现在在哪（H85 调查结论）
+### 3.5 控制边约简现在在哪（H95 结论）
 
-控制边的传递约简目前仍有两个入口：
+控制边的传递约简只有一个入口：`std::opt::ctrl`（`ControlReductionPass::apply`，预算 `250000`）。建图器不做传递约简：`shouldAddSyncCtrlLink` 只在“同一前驱已经是直接值输入”时跳过一次控制边（`hasDirectDataDependency`），这是精确、局部的去重，不查路径。编码前的 `reduceControlDependencies(*prepared.draft, 8192)` 已删除。`include/camel/runtime/control.h` 的规则不变：删除 Port/Data 控制输入和值已蕴含的边，保留 BRCH/JOIN 边界与 GATE 的第一条 CTRL。
 
-1. 编码前的 `src/compile/gir/graph_encode.cpp` 调 `reduceControlDependencies(*prepared.draft, 8192)`；
-2. `std::opt::ctrl`（`ControlReductionPass::apply`）对已有图再做一次，预算 `250000`。
+H95 复测 H85 对比过的 6 个程序：带不带 `std::opt::ctrl` 都与改动前逐字节相同，唯一例外是 `test/cases/linear/byref/element_assigned.cml` 在不带 `std::opt::ctrl` 时多一条 `:var/take -> :op/assn_owned` 的 CTRL 边。那是 `:var/take` 与随后 `:op/assn_owned` 之间真实的顺序要求（`assn_owned` 要排在取出之后），`std::opt::ctrl` 的传递约简会把它删掉；它不是使用关系，见下。
 
-建图器 `shouldAddSyncCtrlLink` 在加同步控制边之前还会做一次 64 步的路径检查，跳过已经被值/控制路径蕴含的边。`include/camel/runtime/control.h` 是三者共用的约简实现，规则是删除 Port/Data 控制输入和值已蕴含的边，保留 BRCH/JOIN 边界与 GATE 的第一条 CTRL。
+H85 把 `path_assigned_allocs.cml` 的 `2 0 0` 读成“多出的控制边让 `:var/take` 的结果多了一个使用者，原地改写因此又复制了一次”。H95 用分配计数和运行轨迹复核，结论不同：
 
-审查 runtime 第 10 条建议把前两处都收到 `std::opt::ctrl`，只让建图器做“直接值输入”的局部去重。H85 按此实现并对比了 6 个程序的 `std::jgir`：带 `std::opt::ctrl` 时全部逐字节相同，不带这个遍时 `test/cases/linear/byref/element_assigned.cml` 会多一条 CTRL，而 `test/cases/linear/byref/path_assigned_allocs.cml` 的分配计数从 `1 0 0` 变成 `2 0 0`——多出的控制边让 `:var/take` 的结果在 `:op/assn_owned` 那里多了一个使用者，原地改写因此复制了一次。也就是说，“多余的控制边只增加顺序”这个前提在当前的持有/共享判定下不成立。由于 H85 要求第 1–3 项不改变行为且 `feat/linear` 必须全绿，这次没有把这两处删掉；调查与待决问题见 `docs/handover/reports/H85.md`。
+1. 两个图（有/无约简）里 `:var/take` 都只复制一次，`path_assigned_allocs.cml` 的整段复制序列完全相同，计数差不在复制上。
+2. 第一个测量窗口里多出的 320 字节块是**数组字面量自己的构造**：GIR 是 `字面量(Data) -> COPY -> :var/new`，`COPY` 在无约简的图里被排在第一个 `std::mem::blocks()` 之后，在基线的图里排在它之前。
+3. 原因不在共享判定，而在顺序没有被写进图：`:op/mem::blocks()` 这个语句节点没有任何输入（jgir 里是根），`var v = [...]` 的声明也不进入同步链（`lastSyncedNode_` 只由读、调用、分支、循环更新），所以“先构造还是先测量”不受边约束；`computeExecutionOrder` 是从出口出发的 DFS 后序，边集一变，两个互不约束的节点就换了位置。字面量的构造除了这一次分配没有可观察效应，因此图没有违反 3.3/3.4，是测量窗口写得过宽。
+
+H95 把该用例改成用调用构造数组（`make_array()`）：调用是同步链上的语句，构造稳定地落在第一个窗口之前。四个后端在有/无 `std::opt::ctrl` 时都是 `1 0 0`。
+
+原地改写的共享判定不数使用者：`:var/take` 只在变量单元格没有“独占数组”标记时复制，`:op/assn_owned` 置位，`:var/get`、`:op/assn` 清除，`:var/peek` 保留。控制边只表达顺序、不读值（3.3、3.4），所以加一条控制边不会让这条语句复制。
 
 ## 4. 核心 GIR 节点职责
 
@@ -370,4 +375,4 @@ func main(): int {
 
 ## 10. 一句话总结
 
-`JOIN` 负责“把分支值变成一个值”，`GATE` 负责“把这个值和同步控制完成点绑定为函数出口”。
+`JOIN` 负责“把分支值变成一个值”，`GATE` 负责“把这个值和同步控制完成点绑定为函数出口”。控制边的传递约简只在 `std::opt::ctrl`；建图器只跳过“前驱已经是直接值输入”的边，控制边只表达顺序，不参与共享判定（3.5）。
