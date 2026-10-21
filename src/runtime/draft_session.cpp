@@ -843,8 +843,23 @@ GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) {
 
 GraphDraft &RuntimeGraphDraftSession::rootDraft() { return edit(runtimeRoot_); }
 
+RuntimeGraphDraftSession::RootScope::RootScope(RuntimeGraphDraftSession &session)
+    : session_(session) {
+    mm::autoSpace().registerExternalRootTracer(
+        this,
+        "runtime.draftRoots",
+        [this](const camel::core::rtdata::Object::RefRelocator &relocate) {
+            session_.traceStaticSlots(relocate, nullptr, "Draft");
+        });
+}
+
+RuntimeGraphDraftSession::RootScope::~RootScope() {
+    mm::autoSpace().unregisterExternalRootTracer(this);
+}
+
 void RuntimeGraphDraftSession::traceStaticSlots(
-    const camel::core::rtdata::Object::RefRelocator &relocate, const Type *ownerType) {
+    const camel::core::rtdata::Object::RefRelocator &relocate, const Type *ownerType,
+    std::string_view ownerKind) {
     for (auto &[graph, entry] : drafts_) {
         GraphDraft &draft        = *entry->draft;
         const auto slots         = draft.staticSlots();
@@ -868,7 +883,7 @@ void RuntimeGraphDraftSession::traceStaticSlots(
                     .owner     = nullptr,
                     .ownerType = ownerType,
                     .slotType  = type,
-                    .ownerKind = "Txn",
+                    .ownerKind = ownerKind,
                     .slotName  = "draft",
                     .slotIndex = i,
                 });

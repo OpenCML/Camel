@@ -237,6 +237,10 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     try {
         const auto compiled = engineRules(ctx, norm, 1);
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
+        // A condition is Camel code, and so is a safepoint: every draft this session has opened
+        // must keep its static values relocatable until the commit reads them again, not only the
+        // one the engine is rewriting now.
+        camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
         for (camel::runtime::GCGraph *graph : base->graphs()) {
             if (isRuleSide(*graph)) {
                 continue;
@@ -272,6 +276,10 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         const auto compiled = engineRules(ctx, norm, 1);
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
         session.setGraphState(camel::runtime::GraphState::Tabled);
+        // A condition is Camel code, and so is a safepoint: every draft this session has opened
+        // must keep its static values relocatable until the commit reads them again, not only the
+        // one the engine is saturating now.
+        camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
         camel::runtime::Budget budget;
         budget.rounds = rounds < 0 ? 0 : static_cast<size_t>(rounds);
         for (camel::runtime::GCGraph *graph : base->graphs()) {
