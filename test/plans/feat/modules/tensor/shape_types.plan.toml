@@ -1,6 +1,7 @@
 id = "modules.tensor.shape_types"
 order = 363
 tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "modules", "tensor", "types"]
 
 [[tests]]

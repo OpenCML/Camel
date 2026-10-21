@@ -16,18 +16,22 @@ const RESULTS_ROOT = path.join(TEST_ROOT, 'results')
 const LOG_ROOT = path.join(RESULTS_ROOT, 'log')
 const REPO_ROOT = path.dirname(TEST_ROOT)
 const IS_WINDOWS = process.platform === 'win32'
-const CAMEL_EXE = path.join(REPO_ROOT, 'out', 'latest', 'bin', IS_WINDOWS ? 'camel.exe' : 'camel')
-const TOOL_EXES = {
-    camel: CAMEL_EXE,
-    python: null, // resolved on use (pythonExecutable)
-    node: process.execPath,
-    'camel-format': path.join(
-        REPO_ROOT,
-        'out',
-        'latest',
-        'bin',
-        IS_WINDOWS ? 'camel-format.exe' : 'camel-format'
-    ),
+// The build a run addresses. A Release build lands in out/latest; a Debug build has its own tree
+// at out/debug (scripts/collect-out.js), so `--build debug` cannot silently read a Release binary
+// and the two configurations can be tested without rebuilding one over the other.
+const BUILDS = {
+    release: { dir: 'latest', label: 'Release' },
+    debug: { dir: 'debug', label: 'Debug' },
+}
+
+function camelHome(build) {
+    return path.join(REPO_ROOT, 'out', BUILDS[build].dir)
+}
+
+function toolExecutable(tool, build) {
+    const ext = IS_WINDOWS ? '.exe' : ''
+    if (tool === 'node') return process.execPath
+    return path.join(camelHome(build), 'bin', `${tool}${ext}`)
 }
 const COLORS = {
     green: '\x1b[32m',
@@ -70,6 +74,11 @@ const TIMEOUT_SCALE = (() => {
     const scale = Number(process.env.CAMEL_TEST_TIMEOUT_SCALE)
     return Number.isFinite(scale) && scale > 0 ? scale : 1
 })()
+
+// A Debug build runs the same program through unoptimised C++: a loop of a million rounds takes
+// tens of seconds where the Release build takes under one. The debug layer multiplies a test's
+// own timeout by this, so a plan's budget still means "this is slow", not "this is Debug".
+const DEBUG_BUILD_TIMEOUT_SCALE = 4
 
 /**
  * A counting semaphore with FIFO order. A normal test holds one slot; a test marked
@@ -230,7 +239,9 @@ const DEFAULT_JOBS = (() => {
     return Math.max(1, count || 1)
 })()
 
-const TIERS = new Set(['fast', 'slow', 'all'])
+// `debug` is not a layer of an ordinary run: it selects the plans that exercise views, data
+// blocks and the executor on a Debug build, where the view-escape assertion exists at all.
+const TIERS = new Set(['fast', 'slow', 'all', 'debug'])
 
 function positiveInteger(value, what) {
     const parsed = Number(value)
@@ -241,10 +252,17 @@ function positiveInteger(value, what) {
 }
 
 function parseArgs(argv) {
+    const envBuild = process.env.CAMEL_TEST_BUILD
+    if (envBuild !== undefined && !Object.hasOwn(BUILDS, envBuild)) {
+        throw new Error(`CAMEL_TEST_BUILD must be one of ${Object.keys(BUILDS).join(', ')}, got '${envBuild}'`)
+    }
     const options = {
         updateGolden: false,
         // `fast` is the default layer: the full test set is opt-in (`--tier all`, `npm run test:all`).
         tier: 'fast',
+        // Which build the tests run against. `release` is out/latest; `debug` is out/debug.
+        build: envBuild || 'release',
+        buildExplicit: envBuild !== undefined,
         // `--jobs` defaults to the processor count: one test per core, no more. `--jobs 1` gives
         // exactly the historical serial execution, which is how the runner's own self-test
         // compares parallel output with serial output.
@@ -263,6 +281,16 @@ function parseArgs(argv) {
             const tier = arg.slice('--tier='.length)
             if (!TIERS.has(tier)) throw new Error(`--tier must be one of ${[...TIERS].join(', ')}, got '${tier}'`)
             options.tier = tier
+        } else if (arg === '--build' && i + 1 < argv.length) {
+            const build = argv[++i]
+            if (!Object.hasOwn(BUILDS, build)) throw new Error(`--build must be one of ${Object.keys(BUILDS).join(', ')}, got '${build}'`)
+            options.build = build
+            options.buildExplicit = true
+        } else if (arg.startsWith('--build=')) {
+            const build = arg.slice('--build='.length)
+            if (!Object.hasOwn(BUILDS, build)) throw new Error(`--build must be one of ${Object.keys(BUILDS).join(', ')}, got '${build}'`)
+            options.build = build
+            options.buildExplicit = true
         } else if (arg === '--jobs' && i + 1 < argv.length) {
             options.jobs = positiveInteger(argv[++i], '--jobs')
         } else if (arg.startsWith('--jobs=')) {
@@ -271,7 +299,54 @@ function parseArgs(argv) {
             options.targets.push(path.resolve(process.cwd(), arg))
         }
     }
+    // The debug layer never runs on a Release binary: its whole point is the assertions that are
+    // compiled out of one, and the escape case aborts. `--tier debug` therefore selects the
+    // Debug build; saying `--build release` with it is a contradiction, not a preference.
+    if (options.tier === 'debug') {
+        if (options.buildExplicit && options.build !== 'debug') {
+            throw new Error(`--tier debug runs on the Debug build; --build ${options.build} was given`)
+        }
+        options.build = 'debug'
+    }
     return options
+}
+
+/**
+ * Refuse to run the debug layer against anything but a Debug binary. out/debug is written by
+ * `collect-out.js debug` (the Debug build), and its absence is the common mistake; a binary left
+ * there by another configuration is caught by its own --version line, which names the build.
+ */
+function preflightBuild(build) {
+    const exe = toolExecutable('camel', build)
+    if (!fs.existsSync(exe)) {
+        console.error(
+            `${COLORS.red}[FAIL]${COLORS.reset} no ${BUILDS[build].label} binary at ${exe}`
+        )
+        console.error(
+            `    Build it with the shared helper: pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ${REPO_ROOT} -Config ${BUILDS[build].label}`
+        )
+        console.error(`    The ${BUILDS[build].label} tier never falls back to out/latest.`)
+        process.exit(2)
+    }
+    if (build !== 'debug') return
+    const home = camelHome(build)
+    const pathKey = IS_WINDOWS ? Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
+    const probe = spawnSync(exe, ['--version'], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        timeout: 30000,
+        env: {
+            ...process.env,
+            CAMEL_HOME: home,
+            [pathKey]: `${path.join(home, 'bin')}${path.delimiter}${process.env[pathKey] || ''}`,
+        },
+    })
+    const text = `${probe.stdout || ''}${probe.stderr || ''}`
+    if (probe.error || !/\(Debug\b/.test(text)) {
+        console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${exe} is not a Debug build: ${text.trim() || probe.error || 'no version'}`)
+        console.error('    Rebuild it with: npm run debug (through the shared helper, -Config Debug).')
+        process.exit(2)
+    }
 }
 
 /**
@@ -919,7 +994,7 @@ async function validateTest(test, result, context) {
 async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative) {
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
     const toolName = test.tool || 'camel'
-    const toolExe = toolName === 'python' ? pythonExecutable() : TOOL_EXES[toolName]
+    const toolExe = toolName === 'python' ? pythonExecutable() : toolExecutable(toolName, logContext.options.build)
     if (!toolExe) {
         throw new Error(`unknown test tool: ${toolName}`)
     }
@@ -952,15 +1027,18 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         }
         env[text.slice(0, eq)] = text.slice(eq + 1)
     }
-    env.CAMEL_HOME = path.join(REPO_ROOT, 'out', 'latest')
+    env.CAMEL_HOME = camelHome(logContext.options.build)
     // Windows commonly inherits `Path`; a second `PATH` key would hide the compiler paths.
     const pathKey = IS_WINDOWS ? Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
     env[pathKey] = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env[pathKey] || ''}`
 
+    const timeoutMs =
+        (test.timeout_ms || 10000) * TIMEOUT_SCALE *
+        (logContext.options.build === 'debug' ? DEBUG_BUILD_TIMEOUT_SCALE : 1)
     const proc = await runProcess(toolExe, args, {
         cwd: REPO_ROOT,
         env,
-        timeoutMs: (test.timeout_ms || 10000) * TIMEOUT_SCALE,
+        timeoutMs,
     })
     const raw = {
         command: `${toolExe} ${args.join(' ')}`.trim(),
@@ -1181,29 +1259,45 @@ function expandSweeps(doc, planPath) {
 /**
  * A test's layer: `tier` on the test first, then its plan. Only `slow` is special; anything else
  * (the old `smoke`/`feat`/`benchmark` labels included) is the fast layer, so a plan written
- * before the split still runs by default. A test that says `tier` must say one of the two.
+ * before the split still runs by default. `debug` is a third layer selected only by
+ * `--tier debug`: a test that aborts when an assertion fires, or that is only meaningful with
+ * assertions compiled in, lives there and is never part of an ordinary or `all` run.
  */
 function testTier(plan, test) {
-    if (test.tier !== undefined) {
-        if (test.tier !== 'fast' && test.tier !== 'slow') {
-            throw new Error(`test '${test.name}' of ${plan.id || plan.__planPath}: tier must be 'fast' or 'slow'`)
-        }
-        return test.tier
+    const tier = test.tier !== undefined
+        ? test.tier
+        : plan.tier === 'slow'
+            ? 'slow'
+            : plan.tier === 'debug'
+                ? 'debug'
+                : 'fast'
+    if (tier !== 'fast' && tier !== 'slow' && tier !== 'debug') {
+        throw new Error(`test '${test.name}' of ${plan.id || plan.__planPath}: tier must be 'fast', 'slow' or 'debug'`)
     }
-    return plan.tier === 'slow' ? 'slow' : 'fast'
+    return tier
 }
 
 /**
- * Select the tests of a layer. `all` keeps everything. A differential test or a back end that
- * compares against an earlier test needs that test's result, so the earlier test is kept even
- * when its own layer is the other one: a fast run must not fail because it left out the
- * reference a selected test compares against.
+ * Select the tests of a layer. A differential test or a back end that compares against an earlier
+ * test needs that test's result, so the earlier test is kept even when its own layer is the other
+ * one: a fast run must not fail because it left out the reference a selected test compares
+ * against.
+ *
+ * `debug` is a plan-set layer, not a label a plan carries instead of its normal layer: the plans
+ * that exercise views, data blocks and the executor hot paths still run fast in Release, and
+ * `debug_tier = true` on the plan also selects them on a Debug build. Their debug-only tests say
+ * `tier = "debug"`. `all` therefore leaves those tests out: it runs on the Release binary, where
+ * the debug layer's abort case would not abort.
  */
 function selectTier(plans, tier, namedPlans = new Set()) {
-    if (tier === 'all') return plans
     const order = []
     for (const plan of plans) {
         for (const test of plan.tests) order.push({ plan, test })
+    }
+    const wants = (plan, test) => {
+        if (tier === 'all') return testTier(plan, test) !== 'debug'
+        if (tier === 'debug') return plan.debug_tier === true || testTier(plan, test) === 'debug'
+        return testTier(plan, test) === tier
     }
     const indexOfName = new Map()
     const indexOfPlanName = new Map()
@@ -1216,7 +1310,7 @@ function selectTier(plans, tier, namedPlans = new Set()) {
         // A plan file named as a target runs in full: naming the plan is the intent, and a plan
         // whose tests are mostly slow would otherwise run almost nothing. A directory target
         // still selects the layer, so the whole-tree `--tier` stays meaningful.
-        if (namedPlans.has(entry.plan.__planPath) || testTier(entry.plan, entry.test) === tier) {
+        if (namedPlans.has(entry.plan.__planPath) || wants(entry.plan, entry.test)) {
             selected.add(index)
         }
     })
@@ -1455,6 +1549,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
 async function main() {
     const options = parseArgs(process.argv.slice(2))
+    preflightBuild(options.build)
     // Writing golden files from several tests at once would make the content depend on which
     // test finished last; update-golden is a deliberate, serial maintenance run.
     if (options.updateGolden && options.jobs !== 1) {
@@ -1477,7 +1572,7 @@ async function main() {
     ensureDir(logDir)
     const testCount = plans.reduce((count, plan) => count + plan.tests.length, 0)
 
-    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable: ${CAMEL_EXE}`)
+    console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable (${options.build}): ${toolExecutable('camel', options.build)}`)
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} discovered plans: ${plans.length}`)
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
@@ -1513,7 +1608,8 @@ async function main() {
         JSON.stringify(
             {
                 generated_at: new Date().toISOString(),
-                camel_exe: CAMEL_EXE,
+                camel_exe: toolExecutable('camel', options.build),
+                build: options.build,
                 update_golden: options.updateGolden,
                 tier: options.tier,
                 jobs: options.jobs,

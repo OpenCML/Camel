@@ -90,4 +90,34 @@ std::string debugRunViewSelfTest() {
         keptClean && keptStable ? "stable" : "moved");
 }
 
+std::string debugRunViewEscapeSelfTest() {
+    using namespace camel::core::type;
+
+    // The H29 escape re-created on purpose: a slot-shaped element is read through the reused
+    // thread-local view cell, a callback would return it, and the reduce would keep it as its
+    // accumulator. The store below is the production boundary (`storeReduceAccumulator`), the
+    // same one the nvm reduce operator calls; in a debug build its guard aborts here.
+    TupleType *pairType  = TupleType::create(std::vector<Type *>{Type::Int64(), Type::Int64()});
+    ArrayType *pairsType = ArrayType::create(pairType);
+    Array *pairs         = Array::create(camel::core::mm::autoSpace(), pairsType, 3, true);
+    const int64_t elements[3][2] = {{1, 30}, {2, 6}, {3, 20}};
+    for (size_t i = 0; i < 3; ++i) {
+        Tuple *element = Tuple::create(2, camel::core::mm::autoSpace());
+        element->set<int64_t>(0, elements[i][0], pairType);
+        element->set<int64_t>(1, elements[i][1], pairType);
+        pairs->set<slot_t>(i, toSlot(element), pairsType);
+    }
+    pairs->ensureBlock();
+
+    const slot_t view = pairs->getElementView(0);
+
+    ArrayType *cellType = ArrayType::create(pairType);
+    Array *cell         = Array::create(camel::core::mm::autoSpace(), cellType, 1);
+    storeReduceAccumulator(cell, view, cellType);
+
+    // Unreachable in a debug build. A release build has no guard, so the store materialised the
+    // view; saying so is what turns a missing abort into a loud test failure.
+    return "VIEW_ESCAPE not-caught: the store guard is compiled out of this build";
+}
+
 } // namespace camel::core::rtdata
