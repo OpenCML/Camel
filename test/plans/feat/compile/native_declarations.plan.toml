@@ -130,6 +130,17 @@ expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
 expect_diagnostic_code = "0x03000015"
 expect_output_contains = ["private_import.cml:8", "Reference 'at'"]
 
+# ---- The entry module's declarations answer under its declared name (handover H94, ruling 4) ----
+
+[[tests]]
+name = "native.entry_uri_prefix"
+desc = "A declaration in the entry module uses the `module` declaration's name as its URI prefix (`bytes:size`), not the runtime name `main`: the declaration is loaded, the call reaches the operator."
+kind = "behavior"
+case = "../../../cases/compile/native/entry_uri.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+
 # ---- A `.cml` beside a `.cmo` is that module's declarations, and has no bodies ----
 
 [[tests]]
