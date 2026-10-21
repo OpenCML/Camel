@@ -1,0 +1,20 @@
+/**
+ * The report a call site pre-renders names the recursion limit, not a placeholder (H46).
+ * `add` is an ordinary call; `depth(1000)` meets the default limit of 1000 open calls. The
+ * generated program prints the same two lines as the interpreters and stops with the same
+ * located MaxRecursionDepthExceeded report.
+ */
+module site_message
+
+func add(a: int, b: int): int { a + b }
+
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
+}
+
+func main(): int sync {
+    println(add(1, 2))
+    println(depth(1000))
+    println('not reached')
+    return 0
+}

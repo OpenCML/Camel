@@ -567,8 +567,9 @@ std::string ProgramEmitter::inspectComment(GCGraph *graph) const {
 }
 
 std::string ProgramEmitter::emit(const camel::runtime::Program &runtimeProgram, GCGraph *root) {
-    parts_.program     = &runtimeProgram;
-    const bool program = mode_ == CppEmitMode::Plain;
+    parts_.program        = &runtimeProgram;
+    parts_.recursionLimit = camel::execute::recursionLimit(*context_).frames;
+    const bool program    = mode_ == CppEmitMode::Plain;
     for (const char *reserved : {"entry", "rt", "std", "main", "depth", "lit", "program"}) {
         globals_.reserve(reserved);
     }
@@ -638,7 +639,7 @@ std::string ProgramEmitter::emit(const camel::runtime::Program &runtimeProgram, 
         source = module->path();
         stem   = camel::utils::pathToUtf8(camel::utils::pathFromUtf8(source).stem());
     }
-    const size_t limit = camel::execute::recursionLimit(*context_).frames;
+    const size_t limit = parts_.recursionLimit;
 
     const bool bridged = !parts_.bridgedOperators.empty();
     std::string out;
