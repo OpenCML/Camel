@@ -761,6 +761,10 @@ RuntimeGraphDraftSession::RuntimeGraphDraftSession(
     ASSERT(context_ != nullptr, "Runtime graph draft session requires a valid context.");
     ASSERT(program_ != nullptr, "Runtime graph draft session requires a program.");
     ASSERT(runtimeRoot_ != nullptr, "Runtime graph draft session requires a runtime root graph.");
+    // The session may replace the context's program only while the program it rewrites is one of
+    // that program's (mayPublish_ in the header): remembered here, because a later commit cannot
+    // tell an overtaken session from one that was never over the context's program.
+    mayPublish_ = context_->currentRuntimeProgram() == program_;
     work_ = std::make_unique<Program>(*program_);
 }
 
@@ -1062,17 +1066,25 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
 
     GCGraph *oldRuntimeRoot = runtimeRoot_;
 
+    // A session replaces the context's program only if it is one of that program's: opened over
+    // the program the context held then (`mayPublish_`: it may have been overtaken since, and
+    // then the commit merges), or working on the program the context holds now (its owner
+    // installed what an earlier commit returned). A session over a function value's program (a
+    // detached program: the ONNX export, a tile region, a gradient) rewrites that program and
+    // hands the commit back to its owner; publishing it would replace the program that is
+    // running with somebody's private copy.
+    const Program *current = context_->currentRuntimeProgram();
+    const bool contextProgram = mayPublish_ || current == program_;
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
     // program is left as it is. A shape no back end runs (GraphState::NonExecutable: the
     // export-only sessions) is never installed: it stays in a private program, whatever the
     // caller asked for.
     const bool installing = !detached && graphState_ != GraphState::NonExecutable &&
-                            program_->root() == oldRuntimeRoot;
+                            contextProgram && program_->root() == oldRuntimeRoot;
     // A session that is stale and found no conflict merges into the program the context has now
     // instead of forking the history (design 4.3.1): the graph versions it read and wrote are
     // unchanged there, so the commit is made on top of that program.
-    const Program *current = context_->currentRuntimeProgram();
     const bool merging =
         installing && current != nullptr && current != program_ && conflicts().empty();
     const Program *base = merging ? current : program_;
