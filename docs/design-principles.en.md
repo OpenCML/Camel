@@ -351,6 +351,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 
 - Names are always looked up lexically at the definition; when an operation is done on a value that depends on a type variable (such as `==` at a leaf, or the overload selection for a callback argument), overloads are in addition looked up in the module where the type of that value is declared. What the caller imported is not looked at.
 - To use a different operation, pass the function in explicitly as an argument (such as `tree_eq<my_eq>(a, b)`).
+- **Operators of a named type travel with the type**: for an operation on a value of any named type (not only in generics), besides the lexically visible overloads, the **exported** overloads of the module that declares the type are searched; a type reached through an alias or a re-export likewise. Overloads that are not exported are not visible.
 
 ### 5.8 Variance
 

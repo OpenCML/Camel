@@ -38,7 +38,9 @@ Nodes may additionally contain:
 - `parameter: { name, kind, index }`, where kind is `normal`, `with` or `capture`.
 - `callee`: the graph ID of a direct FUNC call or a static function value, never a graph
   name extracted from a label.
-- `loop: { kind, condition, body }`: explicit graph IDs; `condition` is null for a plain
+- `loop: { kind, condition, body, conditionRegion, bodyRegion }`: `conditionRegion` and
+  `bodyRegion` are the ids of the regions of the graph that hold the condition and the body;
+  `condition` and `body` are null (the node names no graph); `conditionRegion` is 0 for a plain
   `for` loop. Kind is `while`, `for`, or `for-while`.
 - `origin`: a decimal string preserving the complete uint64 source identity.
 - `source: { file, start: { line, character }, end: { line, character } }`: zero-based

@@ -190,6 +190,9 @@
 | H15h | 结构体字段的文本诊断定位、转换为自身类型通过、`string = 42` 的类型不符诊断、入口与源码同一数字文法 | 无 | 甲车道 |
 | H5b | 在声明类型的模块里找算子（设计原则 5.7，按 H5 报告第 5 节的计划） | 无 | 甲车道 |
 | H15i | 下溢一致、`inf`/`nan` 数据文本、`09` 与 `077` 的词法、元组字面量分支、删除不可达诊断 | 无 | 甲车道 |
+| H44 | ONNX 重名输出、折叠常量的 Safe 结构体 CAST（不依赖它展开）、结构体循环状态 | 无 | 丁车道 |
+| H40b | 块压力请求全量收集、重写 `gc_pacing`、回归用例、更正 C2 叙述 | 无 | 乙车道 |
+| H43 | 区域与循环的收尾（前端直接建循环区域、删除降低机制、JIT 的循环指令、自动微分读区域、ONNX 导出循环） | 无 | 丙车道交给施工方 |
 | H42 | 模块导出表改为每个程序一份，不再修改进程级的共享表（`clearExportedNamespaces`） | 无 | 丙车道 |
 | H41 | **缺陷**：`ort_loop_values`、`ort_grad_loop_values`、`lsp.editing`、`examples.ml.export_onnx_translate` 在 fsh-dev 上失败（H5 名义结构体之后） | 无 | 丁车道，优先 |
 | H40 | C2 峰值内存因每步 `take` 升高 150 MB：查清数据块回收是否及时触发并修复 | 无 | 乙车道 |
@@ -645,3 +648,16 @@ nvm、taskflow 得 `(1, 30)`（正确），fvm、jit 得 `(3, 20)`。`feat/examp
 - `ort_loop_values`、`ort_grad_loop_values`：ONNX 导出器拒绝"把依赖模型的值 `CAST` 成名义类型"（`cast of a model-dependent value to 'Run'`）——函数返回命名结构体时，H5 加入的恒等 `CAST` 被导出器当成数据转换。按 H5 的规则，布局相同的匿名值进入命名类型是**恒等**的，导出器应把它当作无操作。这两项需要 Python 的 onnx/onnxruntime；施工方机器若没有，请装上或在报告中说明。
 - `lsp.editing`、`examples.ml.export_onnx_translate`：请查明原因。
 - 另：Linux 上 `libcamel_objects` 需要 `POSITION_INDEPENDENT_CODE ON` 才能链接 `libcamel.so`（导出列表改为生成之后），协调者一方已在 fsh-dev 中加上；请确认 Windows 不受影响。
+
+### H43：区域与循环的收尾（2026-10-21 指派，丙车道交给施工方）
+
+协调者一方已完成：分支臂成为区域（前端直接建、各后端与调试器读区域、锚点删除、嵌套排布线性）；循环成为区域并在所有后端于函数的帧内原生执行（fvm 新指令 `LBEG`/`LTST`/`LEND`，`std::cpp` 写 `for (;;)`）。交接说明：[regions-and-loops.md](../design/graph-store/handover/regions-and-loops.md)；方案：[regions-plan.md](../design/graph-store/handover/regions-plan.md)。
+
+1. ~~前端直接建循环区域~~：已由协调者一方完成并合入（含 H22 的 `collectLoopAppends`/`inferLoopStateFromAppend` 移植到区域形式；`loop_lowering`、`:graph/original`、`native_loop` 已删除）。另：`failed_no_rule.error` 的宏诊断位置从 `grad` 调用处（15:13）移到 `f` 内部（10:12），疑与 develop 的求导活跃起点改动有关，请丁车道核对。
+2. **JIT 编译含循环的图**：x64 后端实现 `LBEG`/`LTST`/`LEND`（现在含循环的图解释执行，被调函数照常编译）。
+3. **自动微分读区域**：删除 `outlineLoopRegions`/`regionizeLoops`/`raiseBranchArms`/`lowerBranchArms` 这些过渡层与 `LoopView` 的子图模式。
+4. **ONNX 导出循环**（读区域，映射到 `Loop`）。
+5. 删除 NodeVM 的 `evalLoop` 回退（`0e88d09d`）：前端已直接建循环区域，确认不再有子图形式的 `LOOP` 后删除。
+6. 改掉仍带"降低"字样的名字（`loops.*_lowered`、`OperatorTraits::inspectsGraphs`）。
+7. **性能目标**（`docs/technical/39_loops.md`，1000 万轮两个状态的 `while`）：现在 nvm 1.96 s、fvm 1.02 s、jit 0.99 s；目标 nvm ≤ 0.7 s、fvm/jit ≤ 手写尾递归 0.49 s 的一半。剖析后逐步逼近。
+8. `feat/trans/cpp.agree_with_fvm`（slow 层）在里程碑时运行。

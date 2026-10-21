@@ -414,14 +414,6 @@ Rules buildRules() {
         false,
     };
 
-    // ---- Graphs (operators/graph.h) ----
-    // A function value of the generated program is its own C++ function: there is no copy of
-    // a graph to take back to its original.
-    r[":graph/original"] = {
-        [](OperatorCall &c) -> std::optional<std::string> { return c.norm(0).text; },
-        true,
-    };
-
     // ---- Arrays (struct.cpp, ops.cpp __builtin__idx__) ----
     r[":op/idx_arr"]          = faultingFunction("at", RuntimeDiag::IndexOutOfRange, 3);
     r[":struct/len_arr"]      = runtimeFunction("length");

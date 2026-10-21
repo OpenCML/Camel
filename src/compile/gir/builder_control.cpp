@@ -617,31 +617,6 @@ data_ptr_t Builder::literalElementInType(
     rejectLiteralData(data, type, where, nullptr, writtenAt);
 }
 
-void Builder::coerceGraphExit(
-    const compile_graph_ptr_t &graph, Type *target, const GCT::node_ptr_t &origin) {
-    Type *exitType = graph->funcType()->exitType();
-    if (exitType != nullptr && target->assignableFrom(exitType)) {
-        return;
-    }
-    // The nodes are added to the graph itself; no name is looked up, so the scopes of the
-    // position the loop stands at do no harm.
-    const compile_graph_ptr_t outer = std::exchange(currGraph_, graph);
-    node_handle_t output            = graph->draft().ref(graph->draft().exitNode());
-    node_handle_t coerced           = coerceTo(output, target, origin);
-    ASSERT(coerced != nullptr, "A graph is coerced only to a type its value enters.");
-    if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
-        // A literal took the place of the output (`[]`): what the output waited for (the
-        // statements of a sync body) is still waited for.
-        node_handle_t gate = currGraph_->addGateNode(target);
-        linkNodes(LinkType::Norm, coerced, gate);
-        linkNodes(LinkType::Ctrl, output, gate);
-        coerced = gate;
-    }
-    graph->setExitType(target);
-    setGraphReturnFromResult(graph, nodeIdOf(coerced), nodeIdOf(coerced), target);
-    currGraph_ = outer;
-}
-
 void Builder::coerceArmExit(
     const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
     Type *exitType = arm->exitType();
@@ -784,20 +759,21 @@ void Builder::noteVariable(node_handle_t variable) {
     }
 }
 
-Builder::arm_ptr_t
-Builder::buildArm(const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body) {
+Builder::arm_ptr_t Builder::buildArm(
+    const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body,
+    runtime::GCRegionKind kind, const std::function<void(ArmBuild &)> &declare) {
     auto arm                   = std::make_shared<ArmBuild>();
     runtime::GraphDraft &draft = currGraph_->draft();
     const uint32_t outerRegion = draft.insertRegion();
     arm->graph                 = currGraph_.get();
-    arm->region                = draft.addRegion(runtime::GCRegionKind::Arm, outerRegion);
+    arm->region                = draft.addRegion(kind, outerRegion);
     arm->firstNode             = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
     if (context_ && context_->sourceContext()) {
         const auto origin = deriveGirOrigin(
             context_,
             exec,
             camel::source::OriginKind::Graph,
-            "gir.brch.case.graph",
+            kind == runtime::GCRegionKind::Arm ? "gir.brch.case.graph" : "gir.loop.graph",
             {});
         if (origin != camel::source::kInvalidOriginId) {
             draft.setRegionOrigin(arm->region, static_cast<uint32_t>(origin));
@@ -839,6 +815,9 @@ Builder::buildArm(const GCT::node_ptr_t &exec, const std::function<node_handle_t
         leaveBlockScope();
     };
     try {
+        if (declare) {
+            declare(*arm);
+        }
         if (body) {
             synced_         = false;
             lastSyncedNode_ = {};
@@ -1823,36 +1802,6 @@ void Builder::mergeArmVariables(
     }
 }
 
-void Builder::buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec) {
-    // The graph is written inside the current one, like an arm: its scope is entered from
-    // here, so the names of the enclosing code are visible in it (and captured).
-    const bool atRoot = currGraph_ == rootGraph_;
-    enterGraphScope(graph, "");
-    if (atRoot) {
-        rootSubGraphOwners_[graph.get()] = unit_;
-    }
-    registerGraphOrigin(context_, graph, exec, "gir.loop.graph");
-    bodyStates_[graph.get()] = BodyState::Open;
-    try {
-        for (draft_node_ref_t portId : graph->draft().normPorts()) {
-            node_handle_t port = graph->draft().ref(portId);
-            insertNode(graph->nodePortName(port), port);
-            if (recorder_) {
-                recordDeclaration(graph->nodePortName(port), port, exec);
-            }
-        }
-        setBodyResult(graph, visitBodyNode(exec));
-    } catch (...) {
-        bodyStates_[graph.get()] = BodyState::Built;
-        failedBodies_.insert(graph.get());
-        leaveScope();
-        throw;
-    }
-    bodyStates_[graph.get()] = BodyState::Built;
-    unit_->builtBodies.push_back(graph);
-    leaveScope();
-}
-
 node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     ENTER("LOOP");
     using camel::core::LoopKind;
@@ -1971,50 +1920,72 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     Type *stateType =
         k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
 
-    // The two graphs, made before either is built so that every capture is made in both in
-    // the same order (captureTwins_). They take the state (the body the element first) as
-    // ordinary parameters; their captures become with-ports once they are built.
-    const size_t ordinal        = ++loopCounts_[currGraph_.get()];
-    const std::string graphBase = std::format("{}.loop{}", currGraph_->name(), ordinal);
-    const auto makeLoopGraph    = [&](bool withElement, const char *role) {
-        FunctionTypeFactory factory;
+    // The condition and the body are regions of the current graph, built where they are
+    // written. Their ports (the element, the values of the state) are Port nodes of the graph
+    // that are not its parameters; the captured values are read where they are.
+    // The names and types the region declares for its ports, from the ports themselves.
+    const auto refreshPorts = [&](ArmBuild &part, bool withElement) {
+        FunctionTypeFactory params;
+        std::vector<runtime::gc_node_ref_t> ids;
+        for (size_t i = 0; i < part.ports.size(); ++i) {
+            const size_t state = i - (withElement ? 1 : 0);
+            const std::string &name =
+                withElement && i == 0 ? gct->loopElementName() : gct->loopStateName(state);
+            ids.push_back(nodeIdOf(part.ports[i]));
+            params.addNormArg(name, nodeTypeOf(part.ports[i]), false);
+        }
+        params.setExitType(Type::Void());
+        part.graph->draft().setRegionPorts(part.region, ids);
+        part.graph->draft().setRegionParams(part.region, params.build());
+    };
+    const auto declarePorts = [&](ArmBuild &part, bool withElement,
+                                  const GCT::node_ptr_t &exec) {
+        const auto add = [&](const std::string &name, Type *type) {
+            node_handle_t port = currGraph_->addRegionPortNode(type, name);
+            // A port belongs to its region, as the nodes that read it do.
+            part.graph->draft().setNodeRegion(nodeIdOf(port), part.region);
+            insertNode(name, port);
+            if (recorder_) {
+                recordDeclaration(name, port, exec);
+            }
+            part.ports.push_back(port);
+        };
         if (withElement) {
-            factory.addNormArg(gct->loopElementName(), elementType, false);
+            add(gct->loopElementName(), elementType);
         }
         for (size_t j = 0; j < k; ++j) {
-            factory.addNormArg(gct->loopStateName(j), stateTypes[j], false);
+            add(gct->loopStateName(j), stateTypes[j]);
         }
-        return createCompileGraph(
-            context_->graphIds().allocate(),
-            factory.build(),
-            currGraph_,
-            std::format("{}.{}", graphBase, role));
+        refreshPorts(part, withElement);
     };
-    compile_graph_ptr_t condGraph =
-        camel::core::loopHasCondition(kind) ? makeLoopGraph(false, "cond") : nullptr;
-    compile_graph_ptr_t bodyGraph = makeLoopGraph(hasIterable, "body");
-    if (condGraph) {
-        captureTwins_[condGraph.get()] = bodyGraph;
-        captureTwins_[bodyGraph.get()] = condGraph;
-    }
-
-    if (condGraph) {
-        buildLoopGraph(condGraph, gct->loopCondition());
-        Type *condType = condGraph->funcType()->exitType();
-        if (condType == nullptr || condType->code() != TypeCode::Bool) {
-            diags_->of(SemanticDiag::LoopConditionNotBool)
-                .atOrigin(gct->loopCondition()->origin())
-                .commit(condType ? condType->toString() : std::string("void"));
-            throw BuildAbortException();
+    arm_ptr_t condPart;
+    arm_ptr_t bodyPart;
+    {
+        ExpectedValueScope partScope(expectedValueType_, nullptr);
+        if (camel::core::loopHasCondition(kind)) {
+            condPart = buildArm(
+                gct->loopCondition(),
+                {},
+                runtime::GCRegionKind::LoopCond,
+                [&](ArmBuild &part) { declarePorts(part, false, gct->loopCondition()); });
+            Type *condType = condPart->exitType();
+            if (condType == nullptr || condType->code() != TypeCode::Bool) {
+                diags_->of(SemanticDiag::LoopConditionNotBool)
+                    .atOrigin(gct->loopCondition()->origin())
+                    .commit(condType ? condType->toString() : std::string("void"));
+                throw BuildAbortException();
+            }
         }
+        bodyPart = buildArm(
+            gct->loopBody(),
+            {},
+            runtime::GCRegionKind::LoopBody,
+            [&](ArmBuild &part) { declarePorts(part, hasIterable, gct->loopBody()); });
     }
-    buildLoopGraph(bodyGraph, gct->loopBody());
     if (deferredEmpty) {
-        node_handle_t next = nullptr;
-        if (bodyGraph->draft().returnNode() != runtime::kInvalidNodeRef) {
-            next = loopStateValueOf(bodyGraph->draft().ref(bodyGraph->draft().returnNode()));
-        }
-        if (!inferLoopStateFromAppend(bodyGraph, gct, initial, stateTypes, 0, next)) {
+        node_handle_t next = loopStateValueOf(bodyPart->value);
+        if (bodyPart->returned || !inferLoopStateFromAppend(
+                                      bodyPart, condPart, gct, initial, stateTypes, 0, next)) {
             diags_->of(SemanticDiag::LoopStateWithoutType)
                 .atOrigin(gct->loopInitial(0)->origin())
                 .commit(
@@ -2023,13 +1994,17 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
         stateType = stateTypes.front();
+        refreshPorts(*bodyPart, hasIterable);
+        if (condPart) {
+            refreshPorts(*condPart, false);
+        }
     }
     // The body gives the next state: of the state's type, or a value that enters it (an
     // `int` where the state is an `int?`, design principles 3.8).
-    Type *bodyType = bodyGraph->funcType()->exitType();
+    Type *bodyType = bodyPart->exitType();
     if (bodyType == nullptr || !stateType->assignableFrom(bodyType)) {
         if (bodyType != nullptr && entersImplicitly(stateType, bodyType)) {
-            coerceGraphExit(bodyGraph, stateType, gct->loopBody());
+            coerceArmExit(bodyPart, stateType, gct->loopBody());
         } else {
             diags_->of(SemanticDiag::LoopBodyTypeMismatch)
                 .atOrigin(gct->loopBody()->origin())
@@ -2040,13 +2015,13 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
     }
 
-    markLoopStateInPlace(bodyGraph, gct, initial);
+    markLoopStateInPlace(bodyPart, gct, initial);
     // An empty-array state whose only use is `append` also becomes a collection slot: the loop
     // then hands out the appended values as one array, built by the driver in one pass, beside
     // the state the program sees (design principles 3.10; the tape autodiff and the exporter
     // read). The state stays the program's value and its gradient channel; the slot is
     // internal, and the FILL below hides it from the loop's users.
-    const std::vector<Type *> collected = collectLoopAppends(bodyGraph, gct, stateTypes, emptyInitial);
+    const std::vector<Type *> collected = collectLoopAppends(bodyPart, gct, stateTypes, emptyInitial);
     Type *loopValueType                  = stateType;
     if (!collected.empty()) {
         std::vector<Type *> components = stateTypes;
@@ -2056,26 +2031,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         loopValueType = TupleType::create(components);
     }
 
-    // Called by the LOOP node: the captures are with-ports, in the order both graphs share.
-    for (const compile_graph_ptr_t &graph : {condGraph, bodyGraph}) {
-        if (!graph) {
-            continue;
-        }
-        const std::vector<draft_node_ref_t> closureNodes(
-            graph->draft().closureNodes().begin(),
-            graph->draft().closureNodes().end());
-        for (draft_node_ref_t closureId : closureNodes) {
-            graph->draft().removeNormPort(closureId);
-            graph->draft().appendWithPort(closureId);
-            graph->draft().removeClosureNode(closureId);
-        }
-        graph->setParameterized(true);
-    }
-
-    node_handle_t loopNode = currGraph_->addLoopNode(
-        kind,
-        DraftGraphBuilder::LoopTarget{condGraph, bodyGraph},
-        loopValueType);
+    node_handle_t loopNode = currGraph_->addRegionLoopNode(kind, loopValueType);
     if (!collected.empty()) {
         currGraph_->draft().setLoopCollectionCount(
             nodeIdOf(loopNode), static_cast<uint32_t>(collected.size()));
@@ -2088,47 +2044,53 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     for (node_handle_t node : initial) {
         linkNodes(LinkType::Norm, node, loopNode);
     }
-    // The captured values are the With inputs, linked by the link step in the graphs' order
-    // (the condition graph has the same captures as the body graph).
-    addCaptureSite(loopNode, bodyGraph);
+    // The With inputs of the node are the results of its parts (the body's, then the
+    // condition's) and the slot the rounds are counted in; the parts are its regions.
+    std::vector<arm_ptr_t> parts{bodyPart};
+    linkNodes(LinkType::With, bodyPart->output, loopNode);
+    if (condPart) {
+        parts.push_back(condPart);
+        linkNodes(LinkType::With, condPart->output, loopNode);
+    }
+    linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
+    runtime::GraphDraft &draft = currGraph_->draft();
+    draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
+    draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
+    if (condPart) {
+        draft.setRegionOwner(condPart->region, nodeIdOf(loopNode), 0);
+        draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
+    }
 
-    // Running the loop is like calling its graphs (and entering an arm): it uses every
-    // variable they captured and writes those they write.
-    std::vector<CapturedUse> captured;
-    for (const compile_graph_ptr_t &graph : {condGraph, bodyGraph}) {
-        if (!graph) {
-            continue;
-        }
-        for (const CapturedUse &use : capturedUsesOf(graph)) {
-            auto known = std::ranges::find(captured, use.variable, &CapturedUse::variable);
-            if (known == captured.end()) {
-                captured.push_back(use);
-            } else {
-                known->written |= use.written;
-            }
+    // Running the loop is like entering an arm: it uses every variable its parts used and
+    // writes those they wrote.
+    std::vector<node_handle_t> capturedWrites;
+    mergeArmVariables(parts, loopNode, loopNode, capturedWrites);
+    const auto originOf = [&](node_handle_t variable) {
+        const auto origin = captureOriginOf_.find(variable);
+        return origin != captureOriginOf_.end() ? origin->second : variable;
+    };
+    std::vector<DraftGraphBuilder *> callees;
+    std::set<node_handle_t> directWrites;
+    for (const arm_ptr_t &part : parts) {
+        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
+        for (node_handle_t variable : part->directWrites) {
+            directWrites.insert(originOf(variable));
         }
     }
-    std::vector<node_handle_t> capturedWrites;
-    for (const CapturedUse &use : captured) {
-        orderAfterLastWriter(use.variable, loopNode);
-        if (use.written) {
-            capturedWrites.push_back(use.origin);
+    if (ArmBuild *outer = activeArm()) {
+        // The parts of this loop are part of the arm it is in.
+        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
+        for (const arm_ptr_t &part : parts) {
+            outer->directWrites.insert(part->directWrites.begin(), part->directWrites.end());
         }
     }
     if (!capturedWrites.empty() && !waited_ && !synced_) {
-        std::vector<DraftGraphBuilder *> graphs{bodyGraph.get()};
-        if (condGraph) {
-            graphs.push_back(condGraph.get());
+        std::vector<node_handle_t> origins;
+        for (node_handle_t variable : capturedWrites) {
+            origins.push_back(originOf(variable));
         }
         unit_->pendingIgnoredWrites.push_back(
-            {graphs, capturedWrites, {}, gct->origin(), "The loop", "its body writes"});
-    }
-    for (const CapturedUse &use : captured) {
-        if (use.written) {
-            recordWrite(use.variable, loopNode, loopNode, true);
-        } else {
-            pendingUsesOf(use.variable).push_back({loopNode, false});
-        }
+            {callees, origins, directWrites, gct->origin(), "The loop", "its body writes"});
     }
 
     if (synced_) {
@@ -2286,7 +2248,7 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
 }
 
 bool Builder::inferLoopStateFromAppend(
-    const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+    const arm_ptr_t &body, const arm_ptr_t &cond, const GCT::node_ptr_t &loop,
     std::vector<node_handle_t> &initial, std::vector<Type *> &stateTypes, size_t index,
     node_handle_t next) {
     if (next == nullptr || !nodeIsKind(next, runtime::GCNodeKind::Oper)) {
@@ -2300,8 +2262,9 @@ bool Builder::inferLoopStateFromAppend(
     if (normIns.size() != 1) {
         return false;
     }
-    node_handle_t port = nodeDraftOf(next)->ref(normIns.front());
-    if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(index)) {
+    const size_t portAt = index + (camel::core::loopHasIterable(loop->loopKind()) ? 1 : 0);
+    node_handle_t port  = nodeDraftOf(next)->ref(normIns.front());
+    if (port == nullptr || portAt >= body->ports.size() || body->ports[portAt] != port) {
         return false;
     }
     const auto withIns = withInputsOf(next);
@@ -2313,23 +2276,26 @@ bool Builder::inferLoopStateFromAppend(
         return false;
     }
     Type *newType = ArrayType::create(element);
-    // The body was built with the placeholder `void[]`: the append's operand, the parameter
-    // it reads and the empty literal all have to become the element array's type, and the
-    // call is resolved again so its instance carries the element layout.
-    retypeValueNode(bodyGraph.get(), port, newType);
-    retypeValueNode(bodyGraph.get(), next, newType);
+    // The parts were built with the placeholder `void[]`: the append's operand, the ports it
+    // reads and the empty literal all have to become the element array's type, and the call is
+    // resolved again so its instance carries the element layout.
+    DraftGraphBuilder *graph = currGraph_.get();
+    retypeValueNode(graph, port, newType);
+    retypeValueNode(graph, next, newType);
     retypeValueNode(nodeGraphOf(initial[index]), initial[index], newType);
-    if (bodyGraph->draft().exitNode() != runtime::kInvalidNodeRef) {
-        retypeValueNode(
-            bodyGraph.get(), bodyGraph->draft().ref(bodyGraph->draft().exitNode()), newType);
+    if (body->output != nullptr && body->output != next) {
+        retypeValueNode(graph, body->output, newType);
     }
-    bodyGraph->setExitType(newType);
+    body->type = newType;
+    if (cond && index < cond->ports.size()) {
+        retypeValueNode(graph, cond->ports[index], newType);
+    }
     const auto group = importedOperatorGroupNamed("append");
     if (group != nullptr) {
         const std::vector<StaticArg> statics(1);
         const auto resolved = group->resolve({element}, {newType}, statics, Modifier::None);
         if (resolved.has_value()) {
-            bodyGraph->retargetOperNode(next, *resolved);
+            graph->retargetOperNode(next, *resolved);
         }
     }
     stateTypes[index] = newType;
@@ -2337,21 +2303,18 @@ bool Builder::inferLoopStateFromAppend(
 }
 
 std::vector<Type *> Builder::collectLoopAppends(
-    const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
-    const std::vector<Type *> &stateTypes, const std::vector<bool> &emptyInitial) {
+    const arm_ptr_t &body, const GCT::node_ptr_t &loop, const std::vector<Type *> &stateTypes,
+    const std::vector<bool> &emptyInitial) {
     const size_t stateCount = loop->loopStateCount();
-    if (stateCount == 0 || stateTypes.size() != stateCount) {
+    if (stateCount == 0 || stateTypes.size() != stateCount || body->returned) {
         return {};
     }
-    runtime::GraphDraft &draft = bodyGraph->draft();
-    if (draft.returnKind() != runtime::GCReturnKind::Self ||
-        draft.returnNode() == runtime::kInvalidNodeRef) {
-        return {};
-    }
-    node_handle_t returned = loopStateValueOf(draft.ref(draft.returnNode()));
+    runtime::GraphDraft &draft = currGraph_->draft();
+    node_handle_t returned     = loopStateValueOf(body->value);
     if (returned == nullptr) {
         return {};
     }
+    const size_t portBase = camel::core::loopHasIterable(loop->loopKind()) ? 1 : 0;
     std::vector<node_handle_t> next(stateCount, nullptr);
     if (stateCount == 1) {
         next[0] = returned;
@@ -2400,7 +2363,8 @@ std::vector<Type *> Builder::collectLoopAppends(
             continue;
         }
         node_handle_t port = nodeDraftOf(next[j])->ref(normIns.front());
-        if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(j)) {
+        if (port == nullptr || portBase + j >= body->ports.size() ||
+            body->ports[portBase + j] != port) {
             continue;
         }
         if (normUsersOf(port).size() + withUsersOf(port).size() != 1) {
@@ -2440,7 +2404,10 @@ std::vector<Type *> Builder::collectLoopAppends(
     Type *resultType = TupleType::create(resultTypes);
     std::vector<size_t> slots(resultTypes.size());
     std::iota(slots.begin(), slots.end(), size_t{0});
-    node_handle_t result = bodyGraph->addFillNode(
+    // The tuple is a node of the body.
+    const uint32_t outerRegion = draft.insertRegion();
+    draft.setInsertRegion(body->region);
+    node_handle_t result = currGraph_->addFillNode(
         resultType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
     const slot_t empty = camel::core::rtdata::toSlot(::Tuple::create(
         resultTypes.size(), camel::core::mm::autoSpace()));
@@ -2452,27 +2419,21 @@ std::vector<Type *> Builder::collectLoopAppends(
         componentIds.push_back(nodeIdOf(component));
     }
     draft.setWithInputs(nodeIdOf(result), componentIds);
-    draft.setOutputNode(nodeIdOf(result));
-    draft.setExitNode(nodeIdOf(result));
-    draft.setReturnNode(nodeIdOf(result), runtime::GCReturnKind::Self);
-    bodyGraph->setExitType(resultType);
+    draft.setInsertRegion(outerRegion);
+    body->output = result;
+    body->value  = result;
+    body->type   = resultType;
     registerNodeOrigin(context_, result, loop->loopBody(), "gir.loop.collect");
     return collected;
 }
 
 void Builder::markLoopStateInPlace(
-    const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
-    std::vector<node_handle_t> &initial) {
+    const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial) {
     const size_t stateCount = loop->loopStateCount();
-    if (stateCount == 0 || initial.size() != stateCount) {
+    if (stateCount == 0 || initial.size() != stateCount || body->returned) {
         return;
     }
-    runtime::GraphDraft &draft = bodyGraph->draft();
-    if (draft.returnKind() != runtime::GCReturnKind::Self ||
-        draft.returnNode() == runtime::kInvalidNodeRef) {
-        return;
-    }
-    node_handle_t returned = loopStateValueOf(draft.ref(draft.returnNode()));
+    node_handle_t returned = loopStateValueOf(body->value);
     if (returned == nullptr) {
         return;
     }
@@ -2481,7 +2442,7 @@ void Builder::markLoopStateInPlace(
     // components and whose payload says which component each one fills; a component written as
     // a constant there (`(xs->append<7>, 0)`) has no value node and no rewrite of its own.
     if (stateCount == 1) {
-        markLoopStateInPlaceOne(bodyGraph, loop, initial, 0, returned);
+        markLoopStateInPlaceOne(body, loop, initial, 0, returned);
         return;
     }
     if (!nodeIsKind(returned, runtime::GCNodeKind::Fill)) {
@@ -2512,13 +2473,13 @@ void Builder::markLoopStateInPlace(
         next[slots[i]] = nodeDraftOf(returned)->ref(withIns[i]);
     }
     for (size_t j = 0; j < stateCount; ++j) {
-        markLoopStateInPlaceOne(bodyGraph, loop, initial, j, next[j]);
+        markLoopStateInPlaceOne(body, loop, initial, j, next[j]);
     }
 }
 
 void Builder::markLoopStateInPlaceOne(
-    const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
-    std::vector<node_handle_t> &initial, size_t index, node_handle_t next) {
+    const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
+    size_t index, node_handle_t next) {
     if (next == nullptr || !nodeIsKind(next, runtime::GCNodeKind::Oper)) {
         return;
     }
@@ -2544,7 +2505,8 @@ void Builder::markLoopStateInPlaceOne(
         return;
     }
     node_handle_t port = nodeDraftOf(next)->ref(normIns.front());
-    if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(index)) {
+    const size_t portAt = index + (camel::core::loopHasIterable(loop->loopKind()) ? 1 : 0);
+    if (port == nullptr || portAt >= body->ports.size() || body->ports[portAt] != port) {
         return;
     }
     if (normUsersOf(port).size() + withUsersOf(port).size() != 1) {

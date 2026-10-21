@@ -1253,9 +1253,6 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         context_->currentRuntimeProgram() == program_ && program_->root() == oldRuntimeRoot) {
         program_ = context_->installRuntimeProgram(committed);
     } else {
-        // A private copy of a program: it remembers the program it was made from, for the
-        // operators that read graphs (Program::original).
-        committed->setOriginal(program_->original() ? program_->original() : program_);
         program_ = committed;
         context_->trackDetachedRuntimeProgram(committed);
     }

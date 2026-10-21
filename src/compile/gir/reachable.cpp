@@ -67,14 +67,6 @@ void forEachReachableGraph(
         const auto &draft = curr->draft();
         for (draft_node_ref_t nodeId = 0; nodeId < draft.nodeSlotCount(); ++nodeId) {
             const auto *header = draft.header(nodeId);
-            if (header && header->kind == runtime::GCNodeKind::Loop) {
-                const auto &target = curr->loopTarget(nodeId);
-                if (target.cond) {
-                    visit(target.cond);
-                }
-                visit(target.body);
-                continue;
-            }
             if (!header || header->kind != runtime::GCNodeKind::Func) {
                 continue;
             }

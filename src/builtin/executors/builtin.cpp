@@ -30,10 +30,8 @@ using namespace camel::core::rtdata;
 #include "../operators/cast.h"
 #include "../operators/collection.h"
 #include "../operators/enum.h"
-#include "../operators/graph.h"
 #include "../operators/higher_order.h"
 #include "../operators/io.h"
-#include "../operators/loop.h"
 #include "../operators/macro.h"
 #include "../operators/mem.h"
 #include "../operators/ops.h"
@@ -354,12 +352,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // macro
         {"macro/cmp", __cmp__},
 
-        // Inserted by the runtime, never written by a program (operators/graph.h).
-        {"graph/original", __graph_original__},
-
-        // Inserted by the loop lowering, never written by a program (operators/loop.h).
-        {"loop/collector", __loop_collector__},
-        {"loop/collect", __loop_collect__},
 
         // Tagged forms T? and T! (operators/tagged.h). All are under op/: pure.
         {"op/tag_is_null", __is_null__},
@@ -428,7 +420,6 @@ void registerBuiltinOperatorTraits() {
         "tangent/scatter_add_arr",
         "tangent/init_arr",
         "tangent/last_arr",
-        "graph/original",
     };
     // Declared never to fault, where the implementation has no fault path at all: integer
     // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
@@ -438,7 +429,7 @@ void registerBuiltinOperatorTraits() {
         "op/add_i", "op/add_l", "op/add_f", "op/add_d", "op/sub_i", "op/sub_l", "op/sub_f",
         "op/sub_d", "op/lt_i",  "op/lt_l",  "op/lt_f",  "op/lt_d",  "op/le_i",  "op/le_l",
         "op/le_f",  "op/le_d",  "op/gt_i",  "op/gt_l",  "op/gt_f",  "op/gt_d",  "op/ge_i",
-        "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",   "graph/original",
+        "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",
     };
     auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {

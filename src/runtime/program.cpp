@@ -82,18 +82,6 @@ void Program::updateRefs(
                 });
         }
     }
-    if (original_ != nullptr) {
-        relocate(
-            const_cast<Program *>(original_),
-            nullptr,
-            RefTraceInfo{
-                .owner     = this,
-                .ownerType = type,
-                .slotType  = nullptr,
-                .ownerKind = "Program",
-                .slotName  = "program",
-            });
-    }
 }
 
 void Program::note(GCGraph *graph) { manager_->noteGraph(graph); }

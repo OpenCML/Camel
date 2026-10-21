@@ -232,24 +232,20 @@ DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t 
     return node;
 }
 
-runtime::DraftNodeRef DraftGraphBuilder::addLoopNode(
-    camel::core::LoopKind kind, const LoopTarget &target, camel::core::type::Type *type) {
-    ASSERT(target.body != nullptr, "A LOOP node needs a body graph.");
-    // The draft holds no graph yet: the encoder writes the runtime graphs of the targets
-    // (graph_encode.cpp), as it does for the callee of a FUNC node.
-    const runtime::gc_node_ref_t id = draft_->addLoopNode(runtime::GCLoopBody{.kind = kind}, type);
-    const auto node                 = ref(id);
-    loopTargets_[node.id]              = target;
-    addDependencyGraph(target.cond);
-    addDependencyGraph(target.body);
-    return node;
+runtime::DraftNodeRef
+DraftGraphBuilder::addRegionLoopNode(camel::core::LoopKind kind, camel::core::type::Type *type) {
+    return ref(draft_->addLoopNode(runtime::GCLoopBody{.kind = kind}, type));
 }
 
-const DraftGraphBuilder::LoopTarget &
-DraftGraphBuilder::loopTarget(runtime::DraftNodeRef node) const {
-    auto it = loopTargets_.find(node.id);
-    ASSERT(it != loopTargets_.end(), "DraftGraphBuilder loop target not found.");
-    return it->second;
+runtime::DraftNodeRef
+DraftGraphBuilder::addRegionPortNode(camel::core::type::Type *type, std::string name) {
+    const auto slotIndex            = addRuntimeSlot(type);
+    const runtime::gc_node_ref_t id = draft_->addPortNode(type, slotIndex);
+    const auto node                 = ref(id);
+    if (!name.empty()) {
+        registerNodePortName(node, std::move(name));
+    }
+    return node;
 }
 
 runtime::DraftNodeRef 
@@ -388,7 +384,6 @@ void DraftGraphBuilder::registerOperTarget(runtime::DraftNodeRef node, oper_idx_
 void DraftGraphBuilder::eraseNodeColdData(runtime::DraftNodeRef node) {
     nodePortNames_.erase(node.id);
     funcTargets_.erase(node.id);
-    loopTargets_.erase(node.id);
     drefTargets_.erase(node.id);
     operTargets_.erase(node.id);
 }
