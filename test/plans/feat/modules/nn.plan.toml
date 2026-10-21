@@ -1395,3 +1395,16 @@ expect_exit = 1
 expect_stdout_contains = ["RuntimeDiag::IndexOutOfRange", "Index -1 is out of range for the class dimension of softmax_cross_entropy of length 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "adam_update_bits"
+desc = "One Adam update on fixed inputs keeps the exact values of the fused update: the double intermediates and the order of the arithmetic are the ones the element-by-element loop produced (H64)."
+kind = "behavior"
+case = "../../../cases/modules/nn/adam_update_bits.cml"
+args = ["${case}", "--arg", "steps=3", "--arg", "lr=0.01", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["adam_update_bits w0=0.02799990028142929 w3=-0.029898999258875847 w5=-0.02849988080561161 b1=0.06099998205900192 scale=0.2799999993999999"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
