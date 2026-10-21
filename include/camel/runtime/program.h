@@ -52,7 +52,8 @@ class GCGraphManager;
 class Program final : public camel::core::rtdata::Object {
   public:
     Program() = default;
-    /// A copy holds the same graphs; it is not the manager's (a working table of a session).
+    /// A copy holds the same graphs; it is the manager's only when the caller reserved it (a
+    /// session's work table is a Program of the context's, so that what it binds is freed).
     Program(const Program &other)
         : camel::core::rtdata::Object(), byId_(other.byId_), own_(other.own_),
           satellite_(other.satellite_), version_(other.version_), count_(other.count_),

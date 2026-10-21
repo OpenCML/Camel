@@ -847,6 +847,11 @@ class GCGraphManager {
     /// the previous program held and nothing else holds is freed.
     void adoptRoot(const Program *program);
     void replaceRoot(const Program *program);
+    /// replaceRoot, but only while `expected` is still the installed program: a commit that
+    /// rewrote a program that is no longer the context's publishes only if nothing overtook it
+    /// (design 4.3.1, which asks for one compare-and-swap instead of a lock). Answers whether it
+    /// replaced it.
+    bool replaceRootIfCurrent(const Program *expected, const Program *program);
     /// The installed program, nullptr when there is none.
     const Program *root() const;
     // The collector reads this stable vector only when collections are allowed.

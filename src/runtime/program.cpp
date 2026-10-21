@@ -223,6 +223,23 @@ void GCGraphManager::replaceRoot(const Program *program) {
     collectIfGrown();
 }
 
+bool GCGraphManager::replaceRootIfCurrent(const Program *expected, const Program *program) {
+    bool replaced = false;
+    {
+        mm::NoCollectionScope noCollection;
+        std::lock_guard lock(mutex_);
+        if (current_ == expected) {
+            current_ = program;
+            rebuildGcRoots();
+            replaced = true;
+        }
+    }
+    if (replaced) {
+        collectIfGrown();
+    }
+    return replaced;
+}
+
 void GCGraphManager::adoptRoot(const Program *program) {
     {
         mm::NoCollectionScope noCollection;

@@ -91,6 +91,55 @@ EdgesOkTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
 }
 
 const camel::runtime::Program *
+CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    // A graph of the program the sessions reach, other than the root: the first session writes
+    // the root, the second another graph, so the two edits do not meet.
+    GCGraph *other = nullptr;
+    {
+        RuntimeGraphDraftSession probe(context_, program);
+        for (GCGraph *graph : probe.collectReachableRuntimeGraphs()) {
+            if (graph != program->root()) {
+                other = graph;
+                break;
+            }
+        }
+    }
+    if (other == nullptr) {
+        os << "MERGE skip=1\n";
+        return program;
+    }
+    const GraphId rootId      = program->root()->id();
+    const GCGraph *rootBefore = program->graph(rootId);
+    const GCGraph *otherBefore = program->graph(other->id());
+    RuntimeGraphDraftSession first(context_, program);
+    RuntimeGraphDraftSession second(context_, program);
+    first.edit(program->root()).addSyncNode();
+    second.edit(other).addSyncNode();
+    const Program *one = first.commit();
+    os << "MERGE stale=" << (context_->currentRuntimeProgram() == one ? 1 : 0) << "\n";
+    // The second session started from the program the first replaced; its graph (and nothing it
+    // wrote) changed in the program of the context, so the commit merges instead of forking.
+    const Program *two = second.commit();
+    const bool installed = context_->currentRuntimeProgram() == two;
+    // The root the first commit made has one more node than the program it started from; the
+    // merge keeps that version (or a version of the same content) and adds the second's graph.
+    const GCGraph *mergedRoot  = two->graph(rootId);
+    const GCGraph *mergedOther = two->graph(other->id());
+    const bool keptFirst       = mergedRoot != nullptr && one->graph(rootId) != nullptr &&
+                           mergedRoot->nodeCount() == one->graph(rootId)->nodeCount() &&
+                           mergedRoot->nodeCount() > rootBefore->nodeCount();
+    const bool keptSecond = mergedOther != nullptr && mergedOther != otherBefore;
+    os << "MERGE installed=" << (installed ? 1 : 0) << " first_kept=" << (keptFirst ? 1 : 0)
+       << " second_kept=" << (keptSecond ? 1 : 0)
+       << " root_edited=" << (mergedRoot != rootBefore ? 1 : 0) << "\n";
+    return two;
+}
+
+const camel::runtime::Program *
 CommitConflictTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
     if (program == nullptr || program->root() == nullptr) {
