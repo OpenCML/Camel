@@ -33,14 +33,13 @@ for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
             assert len(lines) == 7, lines
             for line in lines[5:]:
                 graph = json.loads(line)
-                if vm == 'std::nvm' or passes[0] == 'tiles::compile':
-                    assert graph['regions'] == [], graph
-                    assert sum(n['reason'] == 'context_arguments' for n in graph['excluded']) == 1, graph
-                else:
-                    # Lowered backends give graph-inspecting operators the original
-                    # structured graph. The decorator's private runtime copy is separate.
-                    assert len(graph['regions']) == 1, graph
-                    assert len(graph['regions'][0]['outputs']) == 1, graph
+                # The decorated value's graph is the outlined graph on every backend: a
+                # function value carries its own program and graph, so a graph-inspecting
+                # operator no longer sees a lowered backend's private copy. The single region
+                # the decorator outlined is the call the analysis excludes as a context
+                # argument.
+                assert graph['regions'] == [], graph
+                assert sum(n['reason'] == 'context_arguments' for n in graph['excluded']) == 1, graph
     print(f'{vm}: multi-state LOOP pass/decorator, CPU boundaries and hidden CUDA PASS')
 
 result = run(['tiles::compile', 'std::jgir'])

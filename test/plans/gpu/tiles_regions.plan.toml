@@ -33,8 +33,21 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 1
-expect_stdout_exact = "cpu fault once\n"
+# A run-time fault is printed on standard output after the program's own output (docs/cli.md,
+# "Output and diagnostics"): the CPU fallback runs once and the fault is not swallowed, so the
+# program's line is the first line of stdout and the diagnostic follows it.
+expect_stdout_starts_with = "cpu fault once"
 expect_output_contains = ["RuntimeDiag::DivisionByZero", "resident_fallback_fault.cml:5:16"]
+verify_script = """
+({ input, assert }) => {
+const stdout = input.normalized.stdout
+const line = 'cpu fault once'
+assert(stdout.startsWith(line), stdout)
+const rest = stdout.slice(line.length)
+assert(rest.indexOf(line) < 0, rest)
+assert(rest.includes('RuntimeDiag::DivisionByZero'), rest)
+}
+"""
 timeout_ms = 60000
 
 [[tests]]

@@ -274,7 +274,7 @@ class Compiler {
         }
         return {.type = type, .tensor = append(std::move(node))};
     }
-    size_t materialize(const Value &value) {
+    size_t materialize(const Value &value, const char *what) {
         if (value.tensor != SIZE_MAX)
             return value.tensor;
         if (value.constant && std::holds_alternative<double>(*value.constant))
@@ -283,7 +283,9 @@ class Compiler {
                     .op         = "constant64",
                     .attributes = {std::bit_cast<int64_t>(std::get<double>(*value.constant))},
                     .dtype      = DType::F64});
-        throw UnsupportedComputation("loop state/capture must be a tensor or f64 value");
+        throw UnsupportedComputation(
+            std::string(what) + " must be a tensor or f64 value (" +
+            (value.type != nullptr ? value.type->toString() : std::string("unknown")) + ")");
     }
     Value loop(Frame &frame, rt::gc_node_ref_t id) {
         const rt::LoopView view(*runtimeProgram, *frame.graph, id);
@@ -313,16 +315,20 @@ class Compiler {
         std::vector<size_t> inputs;
         for (size_t i = 0; i < view.stateCount(); ++i) {
             auto initial = eval(frame, view.initialState(i));
-            inputs.push_back(materialize(initial));
+            inputs.push_back(materialize(initial, "loop initial state"));
             auto state = nested.placeholder(initial.type);
             region->stateInputs.push_back(state.tensor);
             initials.push_back(std::move(initial));
             states.push_back(std::move(state));
         }
-        const std::vector<rt::gc_node_ref_t> outerRefs = view.externalInputs(true);
+        // Only values read from outside the regions are captured; a DATA node is lowered in
+        // place by eval(), so a constant (a tensor literal, a tuple FILL template, the round
+        // counter's initial value) is not a capture. Capturing the tuple template of the
+        // next-state FILL is what used to make a multi-state loop unlowerable.
+        const std::vector<rt::gc_node_ref_t> outerRefs = view.externalInputs(false);
         for (auto ref : outerRefs) {
             const auto outer = eval(frame, ref);
-            inputs.push_back(materialize(outer));
+            inputs.push_back(materialize(outer, "loop capture"));
             auto inner = nested.placeholder(outer.type);
             region->captureInputs.push_back(inner.tensor);
             captures.push_back(std::move(inner));
@@ -342,12 +348,12 @@ class Compiler {
         nested.eval(activation, view.bodyResult());
         auto result = nested.eval(activation, view.nextState());
         if (states.size() == 1)
-            region->nextStates.push_back(nested.materialize(result));
+            region->nextStates.push_back(nested.materialize(result, "loop next state"));
         else {
             if (result.fields.size() != states.size())
                 throw std::runtime_error("loop next-state tuple arity mismatch");
             for (const auto &field : result.fields)
-                region->nextStates.push_back(nested.materialize(field));
+                region->nextStates.push_back(nested.materialize(field, "loop next state"));
         }
         region->body         = std::move(nested.program);
         region->body.outputs = region->nextStates;
@@ -460,9 +466,38 @@ class Compiler {
                 break;
             }
             case rt::GCNodeKind::Cast: {
-                out                = eval(f, ins.front());
-                const auto *target = tensor::asTensorType(node->dataType());
-                if (!target || out.tensor == SIZE_MAX || !target->assignableFrom(out.type))
+                out          = eval(f, ins.front());
+                auto *target = node->dataType();
+                // A nominal struct annotation accepts an anonymous struct value whose fields
+                // match by name (design principles 5.2). The same order is an identity
+                // conversion; a different order is a copy the front end otherwise emits, but
+                // reordering the already evaluated fields keeps the same value.
+                if (target->code() == ty::TypeCode::Struct &&
+                    out.type->code() == ty::TypeCode::Struct && target->assignableFrom(out.type)) {
+                    const auto *named   = static_cast<ty::StructType *>(target);
+                    const auto *unnamed = static_cast<ty::StructType *>(out.type);
+                    if (unnamed->size() != out.fields.size())
+                        throw std::runtime_error("struct cast field count mismatch");
+                    bool ordered = named->size() == unnamed->size();
+                    for (size_t i = 0; ordered && i < named->size(); ++i)
+                        ordered = named->fieldName(i) == unnamed->fieldName(i);
+                    if (!ordered) {
+                        std::vector<Value> fields;
+                        fields.reserve(named->size());
+                        for (size_t i = 0; i < named->size(); ++i) {
+                            const auto at = unnamed->findField(named->fieldName(i));
+                            if (!at)
+                                throw std::runtime_error("struct cast field is missing");
+                            fields.push_back(std::move(out.fields[*at]));
+                        }
+                        out.fields = std::move(fields);
+                    }
+                    out.type = target;
+                    break;
+                }
+                const auto *tensorTarget = tensor::asTensorType(target);
+                if (!tensorTarget || out.tensor == SIZE_MAX ||
+                    !tensorTarget->assignableFrom(out.type))
                     throw std::runtime_error("unsupported cast or tensor shape assertion failed");
                 break;
             }
@@ -914,7 +949,7 @@ std::string loopEligibility(
             const auto ref = view.initialState(i);
             frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
         }
-        const std::vector<rt::gc_node_ref_t> outerRefs = view.externalInputs(true);
+        const std::vector<rt::gc_node_ref_t> outerRefs = view.externalInputs(false);
         for (auto ref : outerRefs)
             frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
         (void)compiler.loop(frame, id);
