@@ -55,14 +55,12 @@ struct ExecNode {
     const gc_node_ref_t *norm = nullptr;
     const gc_node_ref_t *with = nullptr;
     const std::byte *body     = nullptr; // the payload; null when the node has none
-    const GCBranchArm *arms   = nullptr; // BRCH only
     uint32_t normCount = 0;
     uint32_t withCount = 0;
-    uint32_t armCount  = 0;
+    uint32_t armCount  = 0; // BRCH only
 
     std::span<const gc_node_ref_t> normInputs() const { return {norm, normCount}; }
     std::span<const gc_node_ref_t> withInputs() const { return {with, withCount}; }
-    std::span<const GCBranchArm> branchArms() const { return {arms, armCount}; }
     template <typename Body> const Body *bodyAs() const {
         return reinterpret_cast<const Body *>(body);
     }

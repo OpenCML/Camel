@@ -965,11 +965,11 @@ bool FunctionEmitter::lowerBranch(
     GCGraph *g                = frame.graph;
     const gc_node_ref_t join  = g->nodeBodyAs<GCBrchBody>(brch)->join;
     const auto *joinNode      = join != kInvalidNodeRef ? g->node(join) : nullptr;
-    const auto arms           = g->branchArmsOf(brch);
+    const size_t armCount     = g->armCountOf(brch);
     const auto cases          = g->withInputsOf(brch);
     const auto selectorInputs = g->normInputsOf(brch);
     if (joinNode == nullptr || joinNode->kind != GCNodeKind::Join || selectorInputs.empty() ||
-        arms.size() < 2) {
+        armCount < 2 || g->withInputsOf(join).size() != armCount) {
         refuse(g, brch, std::format("a branch of {} is malformed", describeFunction(g)));
     }
     const std::string selector = valueOf(frame, selectorInputs.front()).text;
@@ -994,10 +994,10 @@ bool FunctionEmitter::lowerBranch(
     // to, resolveRuntimeBranchArmEntry) and running to the next arm's entry or the JOIN.
     const auto brchAt = std::find(order.begin(), order.end(), brch);
     const auto joinAt = std::find(order.begin(), order.end(), join);
-    std::vector<size_t> entries(arms.size(), 0);
+    std::vector<size_t> entries(armCount, 0);
     if (brchAt != order.end() && joinAt != order.end()) {
         const size_t joinPos = static_cast<size_t>(joinAt - order.begin());
-        for (size_t k = 0; k < arms.size(); ++k) {
+        for (size_t k = 0; k < armCount; ++k) {
             const gc_node_ref_t entry = g->execPlan().branchArmEntriesOfNode(brch)[k];
             const auto at = std::find(brchAt, joinAt, entry);
             entries[k]    = at == joinAt ? joinPos : static_cast<size_t>(at - order.begin());
@@ -1031,26 +1031,27 @@ bool FunctionEmitter::lowerBranch(
 
     Stmt branch;
     branch.kind = Stmt::Kind::Branch;
-    for (size_t k = 0; k < arms.size(); ++k) {
+    for (size_t k = 0; k < armCount; ++k) {
         Block body;
-        if (arms[k].head == arms[k].tail && isArmCall(*program_.program, g, arms[k].head) &&
-            !inlining_.contains(program_.program->calleeOf(*g, arms[k].head))) {
+        const gc_node_ref_t result = g->withInputsOf(join)[k];
+        if (isArmCall(*program_.program, g, result) &&
+            !inlining_.contains(program_.program->calleeOf(*g, result))) {
             // The front end's form: the arm is a graph of its own, lowered here.
-            body = lowerArmGraph(frame, arms[k].head, armTail);
-            frame.consumed.insert(arms[k].head);
+            body = lowerArmGraph(frame, result, armTail);
+            frame.consumed.insert(result);
         } else {
             const std::vector<gc_node_ref_t> region = regionOf(k);
-            body = lowerSequence(frame, region, resultThrough(g, arms[k].tail), armTail);
+            body = lowerSequence(frame, region, resultThrough(g, result), armTail);
             for (gc_node_ref_t n : region) {
                 frame.consumed.insert(n);
             }
         }
         std::string condition;
-        if (k + 1 < arms.size()) {
+        if (k + 1 < armCount) {
             if (cases.empty()) {
                 // `if`: the first arm when the condition holds; a branch on a number picks the
                 // arm of that index.
-                condition = arms.size() == 2 ? withoutParentheses(selector)
+                condition = armCount == 2 ? withoutParentheses(selector)
                                              : std::format("{} == {}", selector, k);
             } else {
                 condition = std::format("{} == {}", selector, valueOf(frame, cases[k]).text);

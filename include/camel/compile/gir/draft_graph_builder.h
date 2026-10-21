@@ -120,8 +120,7 @@ class DraftGraphBuilder {
     runtime::DraftNodeRef addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex);
     runtime::DraftNodeRef addAccsNode(camel::core::type::Type *type, std::string key);
     runtime::DraftNodeRef addBrchNode(
-        camel::core::type::Type *type, runtime::DraftNodeRef joinNode,
-        std::span<const runtime::GCBranchArm> arms, runtime::DraftNodeRef defaultArm = nullptr);
+        camel::core::type::Type *type, runtime::DraftNodeRef joinNode, runtime::gc_cnt_t armCount);
     runtime::DraftNodeRef addJoinNode(
         camel::core::type::Type *type, runtime::DraftNodeRef brchNode, runtime::gc_cnt_t armCount);
     runtime::DraftNodeRef 

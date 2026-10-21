@@ -1179,7 +1179,7 @@ node_handle_t Builder::buildBranch(
     const GCT::node_ptr_t &gct, node_handle_t condNode,
     const std::vector<compile_graph_ptr_t> *arms, bool valueless) {
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
-    node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, {}, nullptr);
+    node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, 0);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
     registerNodeOrigin(
         context_,
@@ -1211,7 +1211,6 @@ node_handle_t Builder::buildBranch(
     }
 
     linkNodes(LinkType::Norm, condNode, brchNode);
-    std::vector<runtime::GCBranchArm> branchArms;
     std::vector<node_handle_t> branchFuncs;
     // The variables the arms captured, and whether some arm writes them.
     std::vector<CapturedUse> captured;
@@ -1245,11 +1244,6 @@ node_handle_t Builder::buildBranch(
         // directly without frequent checks.
         auto funcNode = createFuncDataNode(subGraph, false, true, brchNode);
         branchFuncs.push_back(funcNode);
-        branchArms.push_back(
-            runtime::GCBranchArm{
-                .head = nodeIdOf(funcNode),
-                .tail = nodeIdOf(funcNode),
-            });
 
         if (absentElse) {
             // Design principles 3.7: an `if` without `else` has no value. Its arm may be of
@@ -1381,18 +1375,10 @@ node_handle_t Builder::buildBranch(
     }
 
     runtime::DraftBrchPayload payload{
-        .join       = nodeIdOf(joinNode),
-        .armCount   = static_cast<runtime::gc_cnt_t>(branchArms.size()),
-        .defaultArm = runtime::kInvalidNodeRef};
-    std::vector<std::byte> brchBytes(
-        sizeof(runtime::DraftBrchPayload) + sizeof(runtime::GCBranchArm) * branchArms.size());
+        .join     = nodeIdOf(joinNode),
+        .armCount = static_cast<runtime::gc_cnt_t>(branchFuncs.size())};
+    std::vector<std::byte> brchBytes(sizeof(runtime::DraftBrchPayload));
     std::memcpy(brchBytes.data(), &payload, sizeof(payload));
-    if (!branchArms.empty()) {
-        std::memcpy(
-            brchBytes.data() + sizeof(payload),
-            branchArms.data(),
-            sizeof(runtime::GCBranchArm) * branchArms.size());
-    }
     std::vector<draft_node_ref_t> brchNormInputs(
         normInputsOf(brchNode).begin(),
         normInputsOf(brchNode).end());
@@ -1419,7 +1405,7 @@ node_handle_t Builder::buildBranch(
             .ctrlInputs   = brchCtrlInputs});
     runtime::GCJoinBody joinBody{
         .brch     = nodeIdOf(brchNode),
-        .armCount = static_cast<runtime::gc_cnt_t>(branchArms.size())};
+        .armCount = static_cast<runtime::gc_cnt_t>(branchFuncs.size())};
     std::vector<draft_node_ref_t> joinNormInputs(
         normInputsOf(joinNode).begin(),
         normInputsOf(joinNode).end());

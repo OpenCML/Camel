@@ -72,10 +72,8 @@ enum class DraftNodeStorageClass : uint8_t {
 };
 
 struct DraftBrchPayload {
-    gc_node_ref_t join       = kInvalidNodeRef;
-    gc_cnt_t armCount        = 0;
-    gc_node_ref_t defaultArm = kInvalidNodeRef;
-    uint32_t reserved        = 0;
+    gc_node_ref_t join = kInvalidNodeRef;
+    gc_cnt_t armCount  = 0;
 };
 static_assert(std::is_trivially_copyable_v<DraftBrchPayload>);
 
@@ -332,8 +330,8 @@ class GraphDraft {
     gc_node_ref_t sourceRefOf(gc_node_ref_t draftId) const;
     std::span<const std::byte> payloadOf(gc_node_ref_t id) const;
     std::span<const std::byte> payloadOf(const DraftNode *node) const;
-    std::span<const GCBranchArm> branchArmsOf(gc_node_ref_t id) const;
-    std::span<const GCBranchArm> branchArmsOf(const DraftNode *node) const;
+    /// The number of arms of the BRCH `id` (0 for another node).
+    gc_cnt_t armCountOf(gc_node_ref_t id) const;
 
     gc_node_ref_t entryNode() const { return entry_; }
     gc_node_ref_t exitNode() const { return exit_; }
@@ -368,8 +366,6 @@ class GraphDraft {
     std::span<const gc_node_ref_t> ctrlUsersOf(const DraftNode *node) const;
     bool isControlAnchor(gc_node_ref_t id) const;
     bool isControlAnchor(const DraftNode *node) const;
-    bool isBranchArmAnchor(gc_node_ref_t id) const;
-    bool isBranchArmAnchor(const DraftNode *node) const;
     gc_node_ref_t resolveForwardedValueRef(gc_node_ref_t id) const;
     gc_node_ref_t resolveForwardedCtrlRef(gc_node_ref_t id) const;
     std::span<std::byte> mutablePayloadOf(gc_node_ref_t id);
@@ -416,8 +412,8 @@ class GraphDraft {
     gc_node_ref_t addAccsNode(
         camel::core::type::Type *type, std::string_view structKey, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addBrchNode(
-        camel::core::type::Type *type, gc_node_ref_t joinRef, std::span<const GCBranchArm> arms,
-        gc_node_ref_t defaultArm = kInvalidNodeRef, gc_slot_idx_t dataIndex = 0);
+        camel::core::type::Type *type, gc_node_ref_t joinRef, gc_cnt_t armCount,
+        gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addJoinNode(
         camel::core::type::Type *type, gc_node_ref_t brchRef, gc_cnt_t armCount,
         gc_slot_idx_t dataIndex = 0);
@@ -465,10 +461,6 @@ class GraphDraft {
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
-    /// Makes the anchors of arm `index` of the BRCH `brch` `arm`.
-    void setBranchArm(gc_node_ref_t brch, size_t index, GCBranchArm arm);
-    void
-    retargetBranchArmAnchors(gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId);
     /// Removes GATEs that wait on nothing (no control input): such a gate only forwards its value,
     /// so its users read the value directly. Rewrites that remove what a gate waited on (a pruned
     /// branch, a constant an inlined gate was ordered after) leave them behind. A gate that is the
@@ -531,12 +523,13 @@ class GraphDraft {
     /// Gives each arm that is the call of a graph (the form the front end builds) its region, the
     /// call alone in it.
     void regionizeArmCalls();
+    /// True when `id` is the call of the graph that is an arm (GCRegion::callSite): the arm is
+    /// that call until lowerBranchArms inlines it.
+    bool isArmCall(gc_node_ref_t id) const;
     /// The region of arm `index` of the BRCH `brch`; 0 when there is none.
     uint32_t armRegionOf(gc_node_ref_t brch, size_t index) const;
     /// Drops every region: all nodes are in the body.
     void clearRegions();
-    /// Makes the Inline region `id` the Arm region of arm `index` of the BRCH `owner`.
-    void setRegionArm(uint32_t id, gc_node_ref_t owner, uint32_t index);
     /// True when `inner` is `outer` or lies in it.
     bool regionWithin(uint32_t inner, uint32_t outer) const;
     /// Source origin of node `id` (see DraftNodeHeader::origin).

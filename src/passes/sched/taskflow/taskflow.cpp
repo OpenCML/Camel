@@ -136,7 +136,7 @@ TaskflowExecSchedPass::buildRuntimeBuildInfo(GCGraph *graph) {
         if (node->kind != GCNodeKind::Brch) {
             continue;
         }
-        const size_t armCount = graph->branchArmsOf(nodeRef).size();
+        const size_t armCount = graph->armCountOf(nodeRef);
         auto &arms            = info.branchArms[nodeRef];
         arms.reserve(armCount);
         for (size_t armIndex = 0; armIndex < armCount; ++armIndex) {
@@ -751,10 +751,10 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
                     place(ref, scopeIdx, itemIdx);
                     place(join, scopeIdx, itemIdx);
 
-                    const auto arms = graph->branchArmsOf(ref);
+                    const size_t armCount = graph->armCountOf(ref);
                     std::vector<int32_t> armScopes;
-                    armScopes.reserve(arms.size());
-                    for (size_t arm = 0; arm < arms.size(); ++arm) {
+                    armScopes.reserve(armCount);
+                    for (size_t arm = 0; arm < armCount; ++arm) {
                         const gc_node_ref_t entry =
                             graph->execPlan().branchArmEntriesOfNode(ref)[arm];
                         if (entry == join) {
@@ -1425,9 +1425,10 @@ void TaskflowExecSchedPass::runLinearBody(
             const size_t jumpIdx = camel::execute::selectRuntimeBranchArm(graph, nodeRef, frame);
             frame->set(node->dataIndex, static_cast<Int32>(jumpIdx));
 
-            const auto arms  = graph->branchArmsOf(nodeRef);
             const auto *body = graph->nodeBodyAs<camel::runtime::GCBrchBody>(nodeRef);
-            ASSERT(jumpIdx < arms.size(), "Taskflow linear BRCH arm index is out of range.");
+            ASSERT(
+                jumpIdx < graph->armCountOf(nodeRef),
+                "Taskflow linear BRCH arm index is out of range.");
             // Same arm range as NodeVM: from the arm's first executable node in the linear
             // order (nodes of an inlined arm can precede its recorded head) through its tail.
             if (skipNode != kInvalidNodeRef) {
@@ -2463,7 +2464,7 @@ gc_node_ref_t TaskflowExecSchedPass::branchArmEntryForLinear(
     std::lock_guard lock(linearCacheMutex_);
     auto [it, inserted] = linearArmEntryCache_[graph].try_emplace(brchRef);
     if (inserted) {
-        const size_t armCount = graph->branchArmsOf(brchRef).size();
+        const size_t armCount = graph->armCountOf(brchRef);
         it->second.reserve(armCount);
         for (size_t arm = 0; arm < armCount; ++arm) {
             it->second.push_back(graph->execPlan().branchArmEntriesOfNode(brchRef)[arm]);

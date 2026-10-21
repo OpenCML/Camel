@@ -357,17 +357,14 @@ void ProgramIndex::collect(
                 if (n != nullptr && n->kind == GCNodeKind::Brch && arms != nullptr) {
                     // An arm that is a call of a subgraph: that graph is the arm, and part of
                     // the graph that branches.
-                    for (const GCBranchArm &arm : g->branchArmsOf(it.ref())) {
-                        for (gc_node_ref_t ref : {arm.head, arm.tail}) {
-                            const GCNode *armNode =
-                                ref != kInvalidNodeRef ? g->node(ref) : nullptr;
-                            if (armNode != nullptr && armNode->kind == GCNodeKind::Func) {
-                                if (GCGraph *callee = program->calleeOf(*g, ref)) {
-                                    auto &owners = (*arms)[callee];
-                                    if (std::find(owners.begin(), owners.end(), g) ==
-                                        owners.end()) {
-                                        owners.push_back(g);
-                                    }
+                    const gc_node_ref_t join = g->nodeBodyAs<GCBrchBody>(it.ref())->join;
+                    for (gc_node_ref_t ref : g->withInputsOf(join)) {
+                        const GCNode *armNode = g->node(ref);
+                        if (armNode != nullptr && armNode->kind == GCNodeKind::Func) {
+                            if (GCGraph *callee = program->calleeOf(*g, ref)) {
+                                auto &owners = (*arms)[callee];
+                                if (std::find(owners.begin(), owners.end(), g) == owners.end()) {
+                                    owners.push_back(g);
                                 }
                             }
                         }

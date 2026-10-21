@@ -90,8 +90,7 @@ bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {
 bool isReplaceable(const GraphDraft &draft, gc_node_ref_t id) {
     // The entry node is only a marker (erasing it resets it, and encoding then derives it from
     // the first node), so it does not pin a node; inlining often leaves it on a dead value.
-    return id != draft.exitNode() && id != draft.outputNode() && id != draft.returnNode() &&
-           !draft.isBranchArmAnchor(id);
+    return id != draft.exitNode() && id != draft.outputNode() && id != draft.returnNode();
 }
 
 bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
@@ -148,24 +147,6 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
     for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
         work.insert(work.end(), inputs.begin(), inputs.end());
     }
-    // The head of a branch arm carries ordering whatever its kind. What an arm runs is what
-    // runs after its head, so the head stands for "the arm is taken". A head that is a pure
-    // node (the first operator of an inlined arm) used to be walked through to the BRCH it
-    // waits on: the users of a node replaced inside the arm then waited on the BRCH instead of
-    // on the head, were no longer part of what the arm runs, and the schedulers skipped them
-    // (an effect or the arm's value was lost).
-    std::vector<bool> armHead(draft.nodeSlotCount(), false);
-    for (gc_node_ref_t brch = 0; brch < draft.nodeSlotCount(); ++brch) {
-        const auto *h = draft.header(brch);
-        if (!h || h->kind != GCNodeKind::Brch) {
-            continue;
-        }
-        for (const auto &arm : draft.branchArmsOf(brch)) {
-            if (arm.head < armHead.size()) {
-                armHead[arm.head] = true;
-            }
-        }
-    }
     while (!work.empty()) {
         const gc_node_ref_t n = work.back();
         work.pop_back();
@@ -173,7 +154,7 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
             continue;
         }
         seen[n] = true;
-        if (armHead[n] || carriesOrdering(draft, n)) {
+        if (carriesOrdering(draft, n)) {
             sources.push_back(n);
             continue;
         }
@@ -275,7 +256,6 @@ uint64_t contentHash(const GCGraph &graph) {
     bytes(native->normPorts, native->normPortCount * sizeof(*native->normPorts));
     bytes(native->withPorts, native->withPortCount * sizeof(*native->withPorts));
     bytes(native->closure, native->closureCount * sizeof(*native->closure));
-    bytes(native->branchArms, native->branchArmCount * sizeof(*native->branchArms));
     for (uint64_t scalar :
          {uint64_t{native->entryNode},
           uint64_t{native->exitNode},

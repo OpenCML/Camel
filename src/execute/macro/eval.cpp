@@ -1121,10 +1121,11 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             // linear order (nodes of an inlined arm can precede its recorded head) through
             // its tail; an arm with nothing to execute resumes at the JOIN.
             size_t jumpIdx  = static_cast<size_t>(frame->get<Int32>(record->dataIndex));
-            const auto arms = runtimeGraph->branchArmsOf(runtimeNodeIndex);
             const auto *body =
                 runtimeGraph->nodeBodyAs<camel::runtime::GCBrchBody>(runtimeNodeIndex);
-            ASSERT(jumpIdx < arms.size(), "Macro BRCH arm index is out of range.");
+            ASSERT(
+                jumpIdx < runtimeGraph->armCountOf(runtimeNodeIndex),
+                "Macro BRCH arm index is out of range.");
             const auto entry = runtimeGraph->execPlan().branchArmEntriesOfNode(runtimeNodeIndex)[jumpIdx];
             if (skipRuntimeIndex.has_value()) {
                 enclosingArms.emplace_back(*skipRuntimeIndex, joinRuntimeIndex);

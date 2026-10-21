@@ -645,7 +645,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
     if (a->nodeCount != b->nodeCount || a->edgeCount != b->edgeCount ||
         a->payloadWordCount != b->payloadWordCount || a->normPortCount != b->normPortCount ||
         a->withPortCount != b->withPortCount || a->closureCount != b->closureCount ||
-        a->branchArmCount != b->branchArmCount || a->entryNode != b->entryNode ||
+        a->entryNode != b->entryNode ||
         a->exitNode != b->exitNode || a->outputNode != b->outputNode ||
         a->returnNode != b->returnNode || a->returnKind != b->returnKind ||
         before.funcType() != after.funcType() || before.closureType() != after.closureType() ||
@@ -681,8 +681,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
     }
     if (!sameArray(a->normPorts, b->normPorts, a->normPortCount) ||
         !sameArray(a->withPorts, b->withPorts, a->withPortCount) ||
-        !sameArray(a->closure, b->closure, a->closureCount) ||
-        !sameArray(a->branchArms, b->branchArms, a->branchArmCount)) {
+        !sameArray(a->closure, b->closure, a->closureCount)) {
         return false;
     }
     // Payloads, node by node: an OPER's cached implementation pointer is not content.

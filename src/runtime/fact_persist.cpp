@@ -167,12 +167,8 @@ uint64_t ownContentHash(const Program &program, const GCGraph &graph) {
             break;
         }
         case GCNodeKind::Brch:
-            for (const GCBranchArm &arm : graph.branchArmsOf(ref)) {
-                h.u64(arm.head);
-                h.u64(arm.tail);
-            }
             h.u64(graph.nodeBodyAs<GCBrchBody>(ref)->join);
-            h.u64(graph.nodeBodyAs<GCBrchBody>(ref)->defaultArm);
+            h.u64(graph.nodeBodyAs<GCBrchBody>(ref)->armCount);
             break;
         case GCNodeKind::Join:
             h.u64(graph.nodeBodyAs<GCJoinBody>(ref)->brch);

@@ -28,7 +28,6 @@
 
 #include "camel/runtime/draft_session.h"
 
-#include <unordered_set>
 
 namespace camel::passes::opt {
 
@@ -38,25 +37,13 @@ using camel::runtime::kInvalidNodeRef;
 
 namespace {
 
-/// The first FUNC node of the draft that is the head of an arm of a BRCH and is not the head an
-/// earlier splice left (`spliced`: the body of an arm may start with a call), or kInvalidNodeRef.
-gc_node_ref_t findArmCall(
-    const camel::runtime::GraphDraft &draft, const std::unordered_set<gc_node_ref_t> &spliced) {
-    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        const auto *header = draft.header(id);
-        if (!header || header->kind != GCNodeKind::Func || spliced.contains(id)) {
-            continue;
-        }
-        for (gc_node_ref_t pred : draft.ctrlInputsOf(id)) {
-            const auto *predHeader = draft.header(pred);
-            if (!predHeader || predHeader->kind != GCNodeKind::Brch) {
-                continue;
-            }
-            for (const auto &arm : draft.branchArmsOf(pred)) {
-                if (arm.head == id) {
-                    return id;
-                }
-            }
+/// The call of an arm the front end built as a graph: the node an Arm region names as its call
+/// (GCRegion::callSite) while the arm is that call, or kInvalidNodeRef.
+gc_node_ref_t findArmCall(const camel::runtime::GraphDraft &draft) {
+    for (uint32_t r = 1; r < draft.regionCount(); ++r) {
+        const auto &region = draft.region(r);
+        if (region.kind == camel::runtime::GCRegionKind::Arm && draft.alive(region.callSite)) {
+            return region.callSite;
         }
     }
     return kInvalidNodeRef;
@@ -81,16 +68,14 @@ const camel::runtime::Program *lowerBranchArms(
             continue;
         }
         camel::runtime::GraphDraft &draft = session.edit(graph);
-        std::unordered_set<gc_node_ref_t> spliced;
         std::vector<camel::runtime::GraphId> armGraphs;
-        for (gc_node_ref_t call = findArmCall(draft, spliced); call != kInvalidNodeRef;
-             call               = findArmCall(draft, spliced)) {
+        for (gc_node_ref_t call = findArmCall(draft); call != kInvalidNodeRef;
+             call               = findArmCall(draft)) {
             armGraphs.push_back(draft.calleeIdOf(call));
             const auto inlined = inlineCallInOrder(session, draft, call, true);
             if (!inlined) {
                 break;
             }
-            spliced.insert(inlined.ctrlEntry);
             changed = true;
         }
         draft.dropUncalledGraphs(armGraphs);
