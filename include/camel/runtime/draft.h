@@ -554,6 +554,14 @@ class GraphDraft {
     void clearRegions();
     /// True when `inner` is `outer` or lies in it.
     bool regionWithin(uint32_t inner, uint32_t outer) const;
+    /// True when node `id` lies in a copy that was inlined from the function `callee` is a version
+    /// of (an Inline region around it says the body came from that graph, at any depth). The
+    /// inline source is the history the inliner reads: a call of a function inside an inlined copy
+    /// of that function is not inlined again, or the copy would contain a copy of itself (design
+    /// 9.4, the H44c inline history). A type specialization counts as a version of the function it
+    /// refines the types of; a value specialization (a fixed-length unrolling, different
+    /// constants) is a callee of its own.
+    bool inlinedCopyOf(gc_node_ref_t id, const GCGraph *callee) const;
     /// Source origin of node `id` (see DraftNodeHeader::origin).
     uint64_t nodeOrigin(gc_node_ref_t id) const;
     /// The origin of the first live node that has one, 0 when none has: where to report

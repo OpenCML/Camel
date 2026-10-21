@@ -79,6 +79,8 @@ enum class InlineDecline : uint8_t {
     Recursive,        // the callee is recursive (it is not copied into its callers)
     ReachesRecursion, // the callee is not small and reaches a recursive function
     Duplication,      // the callee is not small and copying it to every call site costs too much
+    InlinedCopy,      // the call lies in an inlined copy of the callee: the function would be
+                      // copied into itself (the inline history; design 9.4)
     Strategy,         // the inline strategy does not select this call
 };
 

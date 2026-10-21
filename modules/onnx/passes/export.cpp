@@ -587,6 +587,15 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
                 no->callSites,
                 no->calleeNodes);
             break;
+        case InlineDecline::InlinedCopy:
+            why = std::format(
+                "the inliner ran before onnx::export and left this call because it lies in a "
+                "copy inlined from {} itself, where inlining it again would copy the function "
+                "into its own copy; the call is the recursion of that copy, and the export "
+                "reads it as the loop it is (write the call in the copy's own body without a "
+                "branch on runtime data if it must be unrolled instead)",
+                name);
+            break;
         default:
             why = "the inliner ran before onnx::export and left this call";
             break;

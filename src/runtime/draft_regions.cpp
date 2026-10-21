@@ -255,4 +255,36 @@ bool GraphDraft::regionWithin(uint32_t inner, uint32_t outer) const {
     return true;
 }
 
+bool GraphDraft::inlinedCopyOf(gc_node_ref_t id, const GCGraph *callee) const {
+    if (callee == nullptr || regions_.empty()) {
+        return false;
+    }
+    // What the call is inside of, by the function it is a copy of: a type specialization is that
+    // function with a more precise type, so it counts as the same callee (design 9.4). A value
+    // specialization (a fixed-length unrolling: the same function with different constants) is a
+    // callee of its own, which is what lets `export_gated_gru_step` unroll.
+    const auto functionOf = [](const GCGraph *graph, GraphId fallback) {
+        if (graph == nullptr) {
+            return fallback;
+        }
+        return isValid(graph->typeSpecializationRoot()) ? graph->typeSpecializationRoot()
+                                                        : graph->id();
+    };
+    const GraphId calleeFunction = functionOf(callee, callee->id());
+    // The region a call is in says what inlined body it belongs to; a region that is the body of
+    // a function inlined at its call carries the same source (an Arm region that became one).
+    for (uint32_t region = nodeRegion(id); region != 0 && region < regions_.size();
+         region = regions_[region].parent) {
+        const GraphId inlineOf = regions_[region].inlineOf;
+        if (inlineOf == callee->id()) {
+            return true;
+        }
+        const GCGraph *source = program_ != nullptr ? program_->graph(inlineOf) : nullptr;
+        if (functionOf(source, inlineOf) == calleeFunction) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace camel::runtime

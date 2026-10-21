@@ -1393,6 +1393,22 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     }
     committed->setRoot(committed->graph(oldRuntimeRoot->id()));
 
+    // The table is a cache, not an owner (specializations.h): an entry whose specialization the
+    // program does not hold names a graph the snapshot collected, and an entry whose callee got a
+    // new version names one this program no longer has. Neither resolves in a later session, so
+    // the program forgets them: it keeps the specializations its root reaches, and a session that
+    // needs another makes that one again. Nothing here binds a graph the closure does not reach,
+    // so a specialization nothing calls is collected with the snapshot it was in.
+    committed->specializations().eraseIf(
+        [&](const ProgramSpecializationKey &key, GraphId id) {
+            const GCGraph *specialized = committed->graph(id);
+            if (specialized == nullptr) {
+                return false;
+            }
+            const GCGraph *base = committed->graph(key.baseGraph);
+            return base != nullptr && base->revision() == key.baseRevision;
+        });
+
     // Publishing is a compare-and-swap against the program the commit was made on top of: the
     // graphs are encoded for that program, and the table replaces it only while it is still the
     // context's (design 4.3.1). A merge that lost the race to another commit remakes its table
@@ -1424,43 +1440,6 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             expected  = now;
         }
     }
-    // The specializations the program keeps are part of it, and a later session over this program
-    // reuses them (specializations.h): a graph the table names stays in the program even when
-    // nothing the root reaches calls it, and so does every graph it refers to. The rounds of a
-    // simplification make a specialization, inline it the next round, and would otherwise drop
-    // it; the entry would name a graph the program no longer holds, so every round would make the
-    // same specialization again and never reach a fixpoint.
-    {
-        std::vector<GraphId> pending;
-        pending.reserve(committed->specializations().size());
-        for (const auto &[key, id] : committed->specializations().entries()) {
-            pending.push_back(id);
-        }
-        std::vector<uint8_t> seen(committed->tableSize(), 0);
-        for (size_t head = 0; head < pending.size(); ++head) {
-            const GraphId id   = pending[head];
-            const size_t index = toValue(id);
-            if (index >= seen.size()) {
-                seen.resize(index + 1, 0);
-            }
-            if (seen[index]) {
-                continue;
-            }
-            seen[index] = 1;
-            GCGraph *graph = committed->graph(id);
-            if (graph == nullptr) {
-                graph = work_->graph(id);
-                if (graph == nullptr) {
-                    continue; // the graph is gone: the entry names nothing, and is not used
-                }
-                committed->bind(id, graph);
-            }
-            for (const GraphId ref : graph->refs()) {
-                pending.push_back(ref);
-            }
-        }
-    }
-
     if (!published) {
         // A private copy of a program: tracking it keeps it alive for the caller and out of the
         // context's root until something installs it.

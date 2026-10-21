@@ -49,10 +49,10 @@ struct GraphStats {
     // their payloads (camel/runtime/graph.h). A baseline for the graph-store work, not a
     // measure of the process's heap.
     size_t bytes = 0;
-    // The specializations the program remembers (camel/runtime/specializations.h). They are a
-    // property of the program, not of the graphs reachable from the root: a pass that
-    // specialized a call keeps its result for every pass that follows, even where nothing
-    // reachable calls it any more.
+    // The specializations the program remembers (camel/runtime/specializations.h). The table is a
+    // cache, not an owner: it lives with the program (a pass keeps the copies it made for the
+    // passes that follow) but a commit drops the entries whose graph nothing reachable calls any
+    // more, so an entry present here names a copy the root still reaches.
     size_t specializations = 0;
 
     std::string toJson() const;
