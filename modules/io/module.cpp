@@ -22,52 +22,20 @@
  * the readers of stdin and the writers of the terminal's mode and buffer; the standard streams and
  * `print`/`println`/`input`/`eprintln` are the prelude's.
  *
- * This step keeps the signatures in the operator groups below; the next step moves them to the
- * declaration module `stdlib/io.cml` (H19 step 10) and leaves here what only C++ knows: the
- * kernels, the executor and the operator traits.
+ * The signatures are written once, in the declaration module `stdlib/io.cml` (design principles
+ * 6.4; handover H19, step 10). What is left here is what only C++ knows: the kernels in
+ * operators.cpp, the executor that runs them, and the operator traits declared at load.
  */
 
 #include "module.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator_traits.h"
-#include "camel/core/type.h"
-#include "camel/core/type/resolver.h"
 #include "executor.h"
-#include "operators.h"
 
 using namespace camel::core::context;
 using namespace camel::core::module;
-using namespace camel::core::type;
 
-namespace {
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "set_terminal_raw_mode",
-            {{"io:set_terminal_raw_mode",
-              StaticFuncTypeResolver::create({}, {{Type::Bool(), false}}, Type::Void())}}),
-        OperatorGroup::create(
-            "has_input",
-            {{"io:has_input", StaticFuncTypeResolver::create({}, {}, Type::Bool())}}),
-        OperatorGroup::create(
-            "get_char",
-            {{"io:get_char", StaticFuncTypeResolver::create({}, {}, Type::String())}}),
-        OperatorGroup::create(
-            "get_chars",
-            {{"io:get_chars",
-              StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String())}}),
-        OperatorGroup::create(
-            "clear_input_buffer",
-            {{"io:clear_input_buffer", StaticFuncTypeResolver::create({}, {}, Type::Void())}}),
-    };
-    return groups;
-}
-} // namespace
-
-IOModule::IOModule(context_ptr_t ctx) : BuiltinModule("io", ctx) {
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
-}
+IOModule::IOModule(context_ptr_t ctx) : BuiltinModule("io", ctx) {}
 
 module_ptr_t IOModule::create(context_ptr_t ctx) { return std::make_shared<IOModule>(ctx); }
 

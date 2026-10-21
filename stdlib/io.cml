@@ -1,14 +1,15 @@
 /**
- * Signatures of the `io` module (C++ operators, modules/io).
- *
  * The terminal: what it has waiting to be read, the keys themselves, and raw mode. The standard
  * streams and `print`/`println`/`input`/`eprintln` are the prelude's; `Stream` and a `stdin` value
  * are later work (H19 question 5).
- *
- * For reference only: these declarations are not compiled. They are checked against the
- * operators the module registers, and docs/stdlib-reference.md is generated from them
- * (scripts/stdlib-reference.mjs).
  */
+
+// The declarations of the operators of the C++ module `modules/io` (design principles 6.4;
+// handover H19, steps 4 and 10). This file is the one source of their signatures; the C++ side
+// keeps the kernels, the executor and the operator traits. A declaration names
+// `io:<function>` by convention, so no `#op` tag is needed.
+
+module io
 
 /// Switches the terminal to raw mode (keys arrive one by one, unechoed) or back.
 /// @effect changes the terminal
