@@ -339,6 +339,31 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
     return inserted;
 }
 
+bool Module::replaceEntity(const Reference &ref, const entity &ent) {
+    const bool written = nativeEntityNS_->assign(ref, ent);
+    if (ent.isOperGroup() && ent.operGroup() != nullptr) {
+        auto &table = camel::core::OperatorTable::instance();
+        for (const auto &[uri, resolver] : ent.operGroup()->resolvers()) {
+            nativeOperatorGroups_[table.intern(uri)] = ent.operGroup();
+        }
+    }
+    return written;
+}
+
+void Module::inheritExportsFrom(const Module &other) {
+    other.exportedTypeNS_->forEach([&](const Reference &ref, Type *type) {
+        exportedTypeNS_->insert(ref, type);
+    });
+    other.nativeEntityNS_->forEach(
+        [&](const Reference &ref, const entity &ent) { exportEntity(ref, ent); });
+    for (const auto &[ident, tag] : other.declaredTags_) {
+        addDeclaredTag(ident, tag);
+    }
+    for (const Reference &ref : other.defaultImportedRefs_) {
+        exportDefaultImportRef(ref);
+    }
+}
+
 bool Module::exportTag(const std::string &qualifiedName) {
     const auto id = camel::core::tag::find(qualifiedName);
     if (!id.has_value()) {

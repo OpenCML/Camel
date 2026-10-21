@@ -727,6 +727,11 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
                     moduleName, camel::utils::pathToUtf8(declarations), shared_from_this()));
             declared->setDeclarationModule(true);
             declared->setImplementation(mod);
+            // One module, not two (design principles 6.4; handover H94, ruling 1): what the
+            // C++ module exports — its types, its constants and the groups and tags it
+            // declares — is what this module exports, and a `.cml` name is written into the
+            // same tables. An importer of the name never learns there were two objects.
+            declared->inheritExportsFrom(*mod);
             return declared;
         }
         return mod;

@@ -177,6 +177,9 @@ class Builder {
         // operator group once every declaration of the module has been read.
         struct NativeOperators {
             std::string name;
+            // Where the first declaration of the name is written, for a diagnostic about the
+            // name itself (a declaration that collides with an entity the C++ module exports).
+            camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
             std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>> rules;
         };
         std::vector<NativeOperators> nativeOperators;

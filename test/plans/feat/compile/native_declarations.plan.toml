@@ -120,3 +120,16 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["PASS"]
 timeout_ms = 120000
+
+# ---- The `.cml` and the `.cmo` are one module (handover H94, ruling 1) ----
+
+[[tests]]
+name = "native.one_module"
+desc = "The declaration module of a C++ module is that module, not a second one: the C++ module's types (`Json`) and constants (`pi`) are written in the `.cml` without an import, a type the `.cml` exports is read by an importer beside the C++ ones, and every C++ name still answers through the one module."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/native/one_module.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+timeout_ms = 120000

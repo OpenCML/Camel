@@ -267,7 +267,7 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
         unit_->nativeOperators.end(),
         [&](const ModuleUnit::NativeOperators &group) { return group.name == name; });
     if (found == unit_->nativeOperators.end()) {
-        unit_->nativeOperators.push_back({name, {}});
+        unit_->nativeOperators.push_back({name, gct->origin(), {}});
         found = unit_->nativeOperators.end() - 1;
     }
     found->rules.emplace_back(uri, std::move(resolver));
@@ -278,9 +278,23 @@ void Builder::exportNativeOperators() {
         if (group.rules.empty()) {
             continue;
         }
-        unit_->module->exportEntity(
-            Reference(group.name),
-            OperatorGroup::create(group.name, std::move(group.rules)));
+        const Reference ref(group.name);
+        const auto existing = unit_->module->getNativeEntity(ref);
+        if (existing.has_value() && !existing->isOperGroup()) {
+            // The C++ module exports something else under this name (a constant, a tag): the
+            // declaration cannot also be that name.
+            diags_->of(SemanticDiag::Redeclaration).atOrigin(group.origin).commit(group.name);
+            throw BuildAbortException();
+        }
+        const oper_group_ptr_t ops = OperatorGroup::create(group.name, std::move(group.rules));
+        if (existing.has_value()) {
+            // The C++ module exports an operator group of this name too: the declaration is the
+            // module's signature for it, so it replaces the group instead of being a second
+            // entity beside it (design principles 6.4; handover H94, ruling 1).
+            unit_->module->replaceEntity(ref, ops);
+        } else {
+            unit_->module->exportEntity(ref, ops);
+        }
         group.rules.clear();
     }
 }
