@@ -158,10 +158,28 @@ class RuntimeGraphDraftSession {
     /// Traces the static values the open drafts hold. The drafts keep them as raw slots, outside
     /// the object graph, so a collection at a safepoint would otherwise move one and leave the
     /// draft (and the graph a commit encodes) pointing at where it was. `ownerType` is the type
-    /// of the value that owns the session (a transaction), for the tracing report.
+    /// of the value that owns the session (a transaction), for the tracing report; `ownerKind`
+    /// names that owner there.
     void traceStaticSlots(
         const camel::core::rtdata::Object::RefRelocator &relocate,
-        const camel::core::type::Type *ownerType);
+        const camel::core::type::Type *ownerType, std::string_view ownerKind = "Txn");
+
+    /// Keeps the static values of every open draft alive and relocatable while Camel code may run:
+    /// a `when` condition of the rewrite engine is a safepoint, and the drafts are raw slots the
+    /// object graph does not reach. A transaction does not open one: its own trace callback calls
+    /// traceStaticSlots (modules/graph/txn.cpp). A rewrite engine does, from the first edit to the
+    /// commit, because it rewrites one draft after another while every condition can collect.
+    /// The session must not be moved while a scope is open.
+    class RootScope {
+      public:
+        explicit RootScope(RuntimeGraphDraftSession &session);
+        ~RootScope();
+        RootScope(const RootScope &)            = delete;
+        RootScope &operator=(const RootScope &) = delete;
+
+      private:
+        RuntimeGraphDraftSession &session_;
+    };
 
     /// Type-only specializations (see kTypeSpecializationTag) of the function `root` that the
     /// program holds: those reachable when first asked, plus those noted since.

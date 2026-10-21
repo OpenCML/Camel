@@ -394,6 +394,30 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "gc.rewrite_condition_keeps_drafts_rooted"
+desc = "A rule with a `when` condition rewrites a program of several functions while every safepoint moves the young objects: the condition is Camel code, so the rewrite session must keep the static values of every draft it has opened relocatable until the commit reads them again, not only those of the draft being rewritten."
+kind = "behavior"
+case = "../../../cases/modules/rules/when_target.cml"
+args = ["${case}", "when_rules::apply", "std::nvm"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_stdout_contains = ["7 10 5 12", "10 2.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gc.saturation_condition_keeps_drafts_rooted"
+desc = "The saturation engine with a conditional rule over a program that holds string constants: the drafts of the graphs saturated before the last one keep their static values across the safepoints the conditions reach."
+kind = "behavior"
+case = "../../../cases/modules/rules/extract_boundary.cml"
+args = ["${case}", "extract_boundary::check", "std::nvm"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_stdout_exact = "tabled nodes 33 unread constants 0\nextracted nodes 3 unread constants 0\nay by\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "gc.runtime_graph_constants.moving.nvm"
 desc = "The constants of graphs created while the program runs (autodiff pullbacks), reached only through Function values, are traced and updated by minor collections (nvm)."
 kind = "behavior"

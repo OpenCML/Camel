@@ -213,7 +213,11 @@ root tracers), and nothing read before a call is used after it.
   time it is used. With mark-sweep frameless code still has such constants as immediates.
 - **The macro pass** evaluates all candidates of a round before it opens a graph draft: a draft
   holds plain copies of static slots, and evaluation reaches safepoints. Any pass that
-  evaluates and rewrites must keep that order, or root what its drafts hold.
+  evaluates and rewrites must keep that order, or root what its drafts hold. The rewrite engine
+  takes the second way: one `RuntimeGraphDraftSession` rewrites graph after graph, a `when`
+  condition is Camel code and so a safepoint, and `RuntimeGraphDraftSession::RootScope` keeps the
+  static values of every draft the session has opened relocatable until the commit reads them
+  (`modules/rewrite/module.cpp`; the defect and its reproducer are in `reports/H74.md`).
 
 ## 5. What the generational collector relies on
 
