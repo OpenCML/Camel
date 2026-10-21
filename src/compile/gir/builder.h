@@ -1505,6 +1505,19 @@ class Builder {
     /// in-place form `append` declares) or a pure operation whose result is lost
     /// (rejectUnusedPureResult).
     const GCT::Node *unusedStatement_ = nullptr;
+
+    // ---- Comprehensions and static access (H51 steps 3 and 4) ------------------------------
+    //
+    // `t.[n].[m]` inside a `static for` names the same parent once per inner round. The parent's
+    // value does not change between the rounds of one expansion (the target is the same node:
+    // a parameter or a `let`), so the second `t.[n]` would be a second ACCS on the same parent.
+    // The access is remembered for the duration of the expansion and reused: a bound name and
+    // the access written out build the same graph. Only an expansion reuses it; outside one the
+    // cache is not consulted. Keyed by the target's draft node and the resolved field, both
+    // already compared by identity; a target that makes a fresh node (a `var` read, a call)
+    // therefore never matches an earlier round.
+    std::map<std::pair<node_handle_t, std::string>, node_handle_t> staticAccessCache_;
+    size_t staticExpansionDepth_ = 0;
     /// `xs = xs->op<w...>` (or `xs = op<w...>(xs)`) as the statement `gct` of a sync block,
     /// `xs` a variable holding an array and `op` an operator of a module that declares an
     /// in-place form for the overload the call resolves to (OperatorTable::setInPlaceForm;
