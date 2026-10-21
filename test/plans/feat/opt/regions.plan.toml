@@ -55,3 +55,25 @@ expect_exit = 0
 expect_stdout_contains = ["tensor("]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "regions.dot_clusters"
+desc = "std::gir_regions and std::rgir_regions draw the regions of a graph as clusters inside the cluster of its function; std::gir and std::rgir draw the same graph without them."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::inline", "std::gir_regions"]
+expect_exit = 0
+expect_output_contains = ["label=\"inlined forward\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.dot_default_unchanged"
+desc = "Without the regions option the dump has no region cluster."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::inline", "std::rgir"]
+expect_exit = 0
+expect_output_not_contains = ["inlined forward"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

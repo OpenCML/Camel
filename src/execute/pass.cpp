@@ -591,6 +591,10 @@ PassScopePtr initPassScope() {
                     // GIR formats: compact DOT by default, rich DOT for Graphviz, JSON for tools.
                     {"gir", def(PASS(GraphVizDumpPass))},
                     {"rgir", def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.rich = true}))},
+                    {"gir_regions", def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.regions = true}))},
+                    {"rgir_regions",
+                     def(PASS1(
+                         GraphVizDumpPass, (GraphVizDumpConfig{.rich = true, .regions = true})))},
                     {"jgir", def(PASS(JsonGirDumpPass))},
                     {"agir",
                      def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.annotateRoles = true}))},
