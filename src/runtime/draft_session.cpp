@@ -862,21 +862,18 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
         return closureCache_.graphs;
     }
 
-    // Breadth first: the closure is the graphs in the order they are first reached, and `closure`
-    // itself is the queue.
-    // (Marks by id: a table holds one version of each.)
+    // Breadth first: the closure is the graphs in the order they are first reached. The queue is
+    // of ids (a table holds one version of each), marked by id.
     std::vector<uint8_t> visited(work_->tableSize(), 0);
-    const auto reach = [&](GCGraph *next) {
-        if (next == nullptr) {
-            return;
-        }
-        const size_t index = toValue(next->id());
+    std::vector<GraphId> queue;
+    const auto reach = [&](GraphId id) {
+        const size_t index = toValue(id);
         if (index >= visited.size()) {
             visited.resize(index + 1, 0);
         }
         if (!visited[index]) {
             visited[index] = 1;
-            closure.push_back(next);
+            queue.push_back(id);
         }
     };
     // The graph an id names: in the work program, else (a function value of another program)
@@ -889,20 +886,40 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
         }
         return found;
     };
-    reach(runtimeRoot_);
-    for (size_t head = 0; head < closure.size(); ++head) {
-        GCGraph *graph = closure[head];
-        const size_t index = toValue(graph->id());
+    reach(runtimeRoot_->id());
+    for (size_t head = 0; head < queue.size(); ++head) {
+        const GraphId id = queue[head];
+        GCGraph *graph   = work_->graph(id);
+        if (graph == nullptr) {
+            graph = runtimeRoot_; // the root before the table knows it
+        }
+        const size_t index = toValue(id);
         if (index < draftedIds_.size() && draftedIds_[index]) {
             for (const auto &[next, home] : draftRefs(graph)) {
-                GCGraph *r = resolve(next, home);
-                reach(r);
+                if (resolve(next, home) != nullptr) {
+                    reach(next);
+                }
             }
-        } else {
-            for (const GraphId next : graph->refs()) {
-                reach(work_->graph(next));
+            continue;
+        }
+        if (index >= frozenKids_.size()) {
+            frozenKids_.resize(index + 1);
+        }
+        FrozenKids &kids = frozenKids_[index];
+        if (kids.graph != graph) {
+            kids.graph = graph;
+            kids.ids.assign(graph->refs().begin(), graph->refs().end());
+        }
+        for (const GraphId next : kids.ids) {
+            if (work_->graph(next) != nullptr) {
+                reach(next);
             }
         }
+    }
+    closure.reserve(queue.size());
+    for (const GraphId id : queue) {
+        GCGraph *graph = work_->graph(id);
+        closure.push_back(graph != nullptr ? graph : runtimeRoot_);
     }
 
     closureCache_ = ClosureCache{
