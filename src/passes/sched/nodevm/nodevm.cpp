@@ -26,6 +26,7 @@
 #include "camel/execute/function_call.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/loop_driver.h"
+#include "camel/execute/loop_frame.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
@@ -237,51 +238,6 @@ void NodeVMSchedPass::requireRecursionRoom(const camel::runtime::GCGraph *caller
     }
 }
 
-namespace {
-
-/// A loop of the plan that is running in a frame, for the rounds (camel/execute/loop_driver.h).
-struct ActiveLoop {
-    uint32_t loop = 0;
-    size_t round  = 0;
-    bool stopped  = false; // the test of the round ended the loop
-};
-
-/// The services the state of a loop needs from the frame the loop runs in.
-struct LoopFrameHost {
-    Frame &frame;
-    const camel::runtime::ExecPlan &plan;
-    const camel::runtime::ExecLoop &loop;
-
-    slot_t initialState(size_t j) { return frame.get<slot_t>(plan.loopSlots[loop.slotsOffset + j]); }
-    slot_t stateValue() { return frame.get<slot_t>(loop.stateSlot); }
-    void setStateValue(slot_t value) { frame.set(loop.stateSlot, value); }
-};
-
-camel::execute::LoopShape loopShapeOf(const camel::runtime::ExecLoop &loop) {
-    return camel::execute::LoopShape{
-        .iterates        = loop.iterates,
-        .stateCount      = loop.stateCount,
-        .collectionCount = loop.collectionCount,
-        .valueType       = loop.valueType,
-        .origin          = loop.origin,
-    };
-}
-
-/// Gives the ports at loopSlots[first ..< first + k] the values of the state.
-void bindLoopState(
-    Frame &frame, const camel::runtime::ExecPlan &plan, const camel::runtime::ExecLoop &loop,
-    size_t first) {
-    const auto shape = loopShapeOf(loop);
-    const slot_t state = frame.get<slot_t>(loop.stateSlot);
-    for (size_t j = 0; j < loop.stateCount; ++j) {
-        frame.set(
-            plan.loopSlots[loop.slotsOffset + first + j],
-            camel::execute::loopStateComponent(shape, state, j));
-    }
-}
-
-} // namespace
-
 slot_t NodeVMSchedPass::call(
     camel::runtime::GCGraph *rootRuntimeGraph, Frame *rootFrame,
     const camel::runtime::Program *rootProgram) {
@@ -324,7 +280,7 @@ slot_t NodeVMSchedPass::call(
         // wait here and are restored when the nested JOIN is reached.
         std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
         // The loops of the graph that are running, the innermost last.
-        std::vector<ActiveLoop> activeLoops;
+        camel::execute::ActiveLoops activeLoops;
 
         // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
@@ -364,71 +320,12 @@ slot_t NodeVMSchedPass::call(
             // A loop of the graph starts, tests its round, or ends one here. These come before the
             // end of an arm is looked for: going back to the start of a round does not pass it.
             if (hasLoops) [[unlikely]] {
-                bool jumped = false;
-                for (const uint32_t code : currPlan->loopEventsAt(i)) {
-                    const uint32_t index                 = code / 3;
-                    const camel::runtime::ExecLoop &loop = currPlan->loops[index];
-                    const auto event =
-                        static_cast<camel::runtime::ExecLoopEvent>(code % 3);
-                    LoopFrameHost host{*currFrame, *currPlan, loop};
-                    const size_t k = loop.stateCount;
-                    switch (event) {
-                    case camel::runtime::ExecLoopEvent::Begin:
-                        // Going back to the start of a round meets this again.
-                        if (activeLoops.empty() || activeLoops.back().loop != index) {
-                            activeLoops.push_back({index, 0, false});
-                            camel::execute::startLoopState(loopShapeOf(loop), host);
-                            if (loop.hasCond) {
-                                bindLoopState(*currFrame, *currPlan, loop, k);
-                            }
-                        }
-                        break;
-                    case camel::runtime::ExecLoopEvent::Test: {
-                        ActiveLoop &active = activeLoops.back();
-                        ASSERT(active.loop == index, "A loop tests a round it did not start.");
-                        bool stop = false;
-                        slot_t element = NullSlot;
-                        if (loop.hasCond) {
-                            stop = !fromSlot<bool>(currFrame->get<slot_t>(loop.condResultSlot));
-                        }
-                        if (!stop && loop.iterates) {
-                            const Array *array = currFrame->get<Array *>(loop.iterableSlot);
-                            if (active.round >= array->size()) {
-                                stop = true;
-                            } else {
-                                element = array->getSlot(active.round);
-                            }
-                        }
-                        if (stop) {
-                            active.stopped = true;
-                            if (loop.position != i) {
-                                i      = loop.position - 1;
-                                jumped = true;
-                            }
-                            break;
-                        }
-                        const size_t bodyPorts = loop.slotsOffset + k + (loop.hasCond ? k : 0);
-                        if (loop.iterates) {
-                            currFrame->set(currPlan->loopSlots[bodyPorts], element);
-                        }
-                        bindLoopState(
-                            *currFrame,
-                            *currPlan,
-                            loop,
-                            k + (loop.hasCond ? k : 0) + (loop.iterates ? 1 : 0));
-                    } break;
-                    case camel::runtime::ExecLoopEvent::End: {
-                        ActiveLoop &active = activeLoops.back();
-                        ASSERT(active.loop == index, "A loop ends a round it did not start.");
-                        if (active.stopped) {
-                            activeLoops.pop_back();
-                            break;
-                        }
-                        camel::execute::takeLoopRound(
-                            loopShapeOf(loop),
-                            host,
-                            currFrame->get<slot_t>(loop.bodyResultSlot));
-                        ++active.round;
+                const size_t resume = camel::execute::stepLoops(
+                    *currPlan,
+                    i,
+                    *currFrame,
+                    activeLoops,
+                    [&](const camel::runtime::ExecLoop &loop, size_t) {
                         try {
                             gcSafepoint("nodevm loop round");
                         } catch (const camel::core::mm::MemoryExhausted &e) {
@@ -439,18 +336,9 @@ slot_t NodeVMSchedPass::call(
                                 "collecting the values a loop produces each round",
                                 loop.origin);
                         }
-                        if (loop.hasCond) {
-                            bindLoopState(*currFrame, *currPlan, loop, k);
-                        }
-                        i      = loop.begin - 1;
-                        jumped = true;
-                    } break;
-                    }
-                    if (jumped) {
-                        break;
-                    }
-                }
-                if (jumped) {
+                    });
+                if (resume != camel::execute::kNoLoopJump) {
+                    i = resume - 1;
                     continue;
                 }
             }

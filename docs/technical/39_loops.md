@@ -85,7 +85,7 @@ leave the program, and a graph that has loops holds their nodes: the passes, the
 validator see them as nodes of one graph with regions. `LoopView` reads both forms
 (`inRegions()`); a loop in graph form only exists for the code that reads a loop as two graphs.
 `runtime::outlineLoopRegions` (`src/runtime/loop_outline.cpp`) makes that form from the region
-form, in a private program: the macro evaluator, FastVM (native loops under a debugger),
+form, in a private program: FastVM (native loops under a debugger),
 the lowering to tail recursion and autodiff use it; autodiff regionizes its gradient again.
 `test::outline_loops` shows the result in a dump.
 
@@ -245,7 +245,8 @@ condition first, then the next element, then the body), the ports a round binds
 (`bindLoopRound`: the element, the k values of the state, the captures) and what ends the loop;
 each interpreter supplies a frame and a call (`driveLoopRounds` is a template, so the services are
 inlined). NodeVM runs the rounds in the frame of the function and uses the same pieces of the
-driver (`startLoopState`, `takeLoopRound`). The driver takes one element of an array per round; the other sequences are turned
+driver (`startLoopState`, `takeLoopRound`), and so does the macro evaluator (`stepLoops`,
+`camel/execute/loop_frame.h`). The driver takes one element of an array per round; the other sequences are turned
 into their array of elements before the loop starts (section 2a), so no second form reaches it.
 The macro evaluator's limit on
 the rounds of a loop is `--max-macro-rounds <n>` (else `CAMEL_MAX_MACRO_ROUNDS`; default
@@ -255,7 +256,7 @@ A collecting loop keeps its state and its tapes in one tuple, `(stateâ€¦, tapeâ€
 components are updated in place, and each round's `v_c` is appended to tape `c` with
 `Array::append` (O(1) amortised, O(n) for the loop; the tape is uniquely owned by the loop, so the
 append is unobservable). The work tuple lives in the node's slot (NodeVM, FastVM) or in a rooted
-tuple (the macro evaluator), so the arrays are traced; the tapes grow on the run-time heap, so a
+tuple, so the arrays are traced; the tapes grow on the run-time heap, so a
 limit hit is `RuntimeDiag::MemoryExhausted` reported while "collecting the values a loop produces
 each round" at the loop's source location. There is no round limit. The lowering does the same
 with two hidden operators, `:loop/collector` (a fresh array, once before the loop) and

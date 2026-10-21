@@ -101,12 +101,6 @@ class MacroEvaluator {
 
     camel::core::context::context_ptr_t context_;
     const camel::runtime::Program *program_;
-    /// `program_` with the loops of the graph that holds them as two graphs each (the evaluator
-    /// runs a loop as a call of its condition and of its body each round): the graphs reachable
-    /// from the root, and, for a graph that is not among them, its own.
-    const camel::runtime::Program *loopProgram_ = nullptr;
-    std::unordered_map<camel::runtime::GraphId, const camel::runtime::Program *> loopPrograms_;
-    const camel::runtime::Program *programWithLoopGraphs(camel::runtime::GCGraph *graph);
     camel::core::context::FramePool framePool_;
     std::unique_ptr<MacroStaticAreaStore> staticAreas_;
     size_t recursionDepth_ = 0;
@@ -141,11 +135,6 @@ class MacroEvaluator {
     slot_t callNativeOperator(
         operator_t op, camel::core::OperId oper, ArgsView &withView, ArgsView &normView);
     slot_t executeGraph(camel::core::context::Frame *frame, camel::runtime::GCGraph *runtimeGraph);
-    /// The LOOP node `node` of `graph` run in `frame` (camel/runtime/loop.h), round by round:
-    /// the loop is not a recursion, so it takes no depth, only kMaxMacroLoopRounds rounds.
-    slot_t executeLoop(
-        camel::core::context::Frame *frame, camel::runtime::GCGraph *graph,
-        camel::runtime::gc_node_ref_t node);
 };
 
 std::vector<MacroCandidate>
