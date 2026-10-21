@@ -39,8 +39,8 @@ class ControlRegions {
   public:
     explicit ControlRegions(const GCGraph &graph);
 
-    /// Some branch of the graph has an arm region.
-    bool any() const { return !armsOf_.empty(); }
+    /// Some branch or loop of the graph has a region.
+    bool any() const { return !armsOf_.empty() || !loopsOf_.empty(); }
     /// The innermost control region around `node`; 0 when it is in none.
     uint32_t controlOf(gc_node_ref_t node) const {
         const uint32_t r = graph_.nodeRegion(node);

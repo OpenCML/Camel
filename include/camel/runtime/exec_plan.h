@@ -66,6 +66,40 @@ struct ExecNode {
     }
 };
 
+/// A LOOP node whose condition and body are regions of the graph, as a back end runs it in the
+/// frame of the graph (docs/technical/39_loops.md). In `topo` the nodes of the condition are one
+/// range, those of the body the next, and the LOOP node follows them: [begin, condEnd) is the
+/// condition, [condEnd, position) the body. A round is the condition, the test of the round
+/// (at `condEnd`), the body, and the LOOP node, which takes the result of the body as the state
+/// and starts the next round at `begin`. Slots are data slots of the frame.
+struct ExecLoop {
+    uint32_t position        = 0; // the topo index of the LOOP node
+    uint32_t begin           = 0;
+    uint32_t condEnd         = 0;
+    uint32_t stateCount      = 0; // k
+    uint32_t collectionCount = 0; // s
+    bool iterates            = false; // for, for ... while: one element a round
+    bool hasCond             = false; // while, for ... while
+    gc_data_idx_t stateSlot      = 0; // the slot of the LOOP node: the state, a tuple if it wraps
+    gc_data_idx_t iterableSlot   = 0;
+    gc_data_idx_t condResultSlot = 0;
+    gc_data_idx_t bodyResultSlot = 0;
+    /// loopSlots[slotsOffset ..< +k] the slots of the first values of the state, then k of the
+    /// condition's ports (when hasCond), then the body's ports: the element first (when it
+    /// iterates), then k.
+    uint32_t slotsOffset = 0;
+    /// The value type of the node when it wraps its state (k > 1 or it collects); else null.
+    const camel::core::type::TupleType *valueType = nullptr;
+    uint64_t origin = 0;
+};
+
+/// What a back end does at a position of the plan for a loop that starts or goes on there.
+enum class ExecLoopEvent : uint8_t {
+    Begin, // the loop is entered: the first state; the condition's ports
+    Test,  // the condition (if any) has run: stop, or bind the ports of the body
+    End,   // the LOOP node: take the next state and go back to `begin`, or leave
+};
+
 class ExecPlan {
   public:
     /// The live nodes in the order they run (every node after its inputs; an arm of a branch is
@@ -126,6 +160,19 @@ class ExecPlan {
     }
     /// The data slots of the ports a caller binds, norm ports then with ports.
     std::vector<gc_data_idx_t> calleePortSlots;
+
+    /// The loops of the graph that are regions of it. loopEventOffsets[i] ..< loopEventOffsets[i
+    /// + 1] are the events at topo index i, each `loop index * 3 + ExecLoopEvent`, the outer
+    /// loop's first; both are empty when the graph has no such loop.
+    std::vector<ExecLoop> loops;
+    std::vector<gc_data_idx_t> loopSlots;
+    std::vector<uint32_t> loopEventOffsets;
+    std::vector<uint32_t> loopEvents;
+    std::span<const uint32_t> loopEventsAt(size_t topoIndex) const {
+        return {
+            loopEvents.data() + loopEventOffsets[topoIndex],
+            loopEventOffsets[topoIndex + 1] - loopEventOffsets[topoIndex]};
+    }
 
     /// The function of each OPER node, by node reference, once a back end has resolved it; null
     /// until then (resolving an operator can import a module, and an unknown one is a fault of

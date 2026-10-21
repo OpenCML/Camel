@@ -27,10 +27,13 @@ await runTest(async (t) => {
         has(await repl.command('print acc'), /^acc: int = 0$/m, 'the first state')
 
         has(await repl.command('frames subgraphs'), /^Frames: subgraphs/m, 'frames subgraphs')
+        // NodeVM runs the body in the frame of the function; FastVM still calls it as a graph.
         has(
             await repl.command('bt'),
-            new RegExp(`^#0  squares \\[loop body at line ${L('body')}\\]  loops\\.cml:${L('body')}:`, 'm'),
-            'bt: the body as the subgraph frame it is',
+            backend === 'std::nvm'
+                ? new RegExp(`^#0  squares  loops\\.cml:${L('body')}:`, 'm')
+                : new RegExp(`^#0  squares \\[loop body at line ${L('body')}\\]  loops\\.cml:${L('body')}:`, 'm'),
+            'bt: the body as a subgraph frame, or part of the function frame',
         )
         await repl.command('frames functions')
 

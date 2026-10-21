@@ -85,7 +85,7 @@ leave the program, and a graph that has loops holds their nodes: the passes, the
 validator see them as nodes of one graph with regions. `LoopView` reads both forms
 (`inRegions()`); a loop in graph form only exists for the code that reads a loop as two graphs.
 `runtime::outlineLoopRegions` (`src/runtime/loop_outline.cpp`) makes that form from the region
-form, in a private program: NodeVM, the macro evaluator, FastVM (native loops under a debugger),
+form, in a private program: the macro evaluator, FastVM (native loops under a debugger),
 the lowering to tail recursion and autodiff use it; autodiff regionizes its gradient again.
 `test::outline_loops` shows the result in a dump.
 
@@ -194,7 +194,7 @@ contribution would be dropped without a sign of it.
 
 | Consumer | How it runs a LOOP |
 |---|---|
-| `std::nvm` | natively (`NodeVMSchedPass::evalLoop`): one call of the condition graph and one of the body graph per round, the state in the node's slot |
+| `std::nvm` | natively, in the frame of the function: the plan lays the nodes of the condition, those of the body and the LOOP node out as one range (`ExecLoop`), and the interpreter starts, tests and ends rounds at the positions the plan names (`ExecLoopEvent`); the state is in the node's slot |
 | `std::fvm`, `std::jit` | the private lowering at its entry, by default (faster today, section 5). Natively under a debugger and with `std::fvm(native_loop=true)`: one `SCHD` instruction (marks `LoopWhile`, `LoopFor`, `LoopForWhile`, the two graphs in extra words), run by `FastVMSchedPass::evalLoop` through the call path of the higher-order operators (a compiled body runs compiled), so that a debugger shows the loop's own graphs |
 | `std::macro` evaluator | natively, round by round, at most 1,000,000 rounds |
 | `std::prl` | the private lowering at its entry and when a runtime callback supplies an original graph containing a loop |
@@ -244,7 +244,8 @@ longer each write the round: `camel/execute/loop_driver.h` holds the order of a 
 condition first, then the next element, then the body), the ports a round binds
 (`bindLoopRound`: the element, the k values of the state, the captures) and what ends the loop;
 each interpreter supplies a frame and a call (`driveLoopRounds` is a template, so the services are
-inlined). The driver takes one element of an array per round; the other sequences are turned
+inlined). NodeVM runs the rounds in the frame of the function and uses the same pieces of the
+driver (`startLoopState`, `takeLoopRound`). The driver takes one element of an array per round; the other sequences are turned
 into their array of elements before the loop starts (section 2a), so no second form reaches it.
 The macro evaluator's limit on
 the rounds of a loop is `--max-macro-rounds <n>` (else `CAMEL_MAX_MACRO_ROUNDS`; default
