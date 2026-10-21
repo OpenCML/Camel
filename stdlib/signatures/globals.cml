@@ -315,6 +315,16 @@ inner func head(xs: T[]): T {
     return ':struct/head_arr'
 }
 
+/// The last element. An empty array has none: check len first. Negative indices are not
+/// counted from the end (a negative index is a fault), so this is how the last element is
+/// written.
+/// @pure
+/// @fails fault `IndexOutOfRange` when the array is empty
+/// @example last([1, 2, 3])    // 3
+inner func last(xs: T[]): T {
+    return ':struct/last_arr'
+}
+
 /// The elements after the first; empty for an array of fewer than two elements.
 /// @pure
 /// @example tail([1, 2, 3])    // [2, 3]

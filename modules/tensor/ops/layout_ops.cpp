@@ -388,6 +388,87 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
     return values;
 }
 
+// `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]` on a tensor: the slice of the first axis
+// (design principles 5.4), a view sharing the block. A slice of another axis, and a step other
+// than 1, are views with strides, which need the multidimensional array representation of H17:
+// the type rule rejects them at the call instead of a copy standing in for the view.
+slot_t sliceSubKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    const Array *input  = tensorArg(norm, 0);
+    const int64_t start = intArg(norm, 1);
+    const int64_t step  = intArg(norm, 3);
+    const bool wroteEnd = intArg(norm, 4) != 0;
+    if (input->rank() != 1) {
+        reportShapeError(
+            "[]",
+            "a slice of a tensor of rank 1; a slice of another dimension is a view with "
+            "strides, which needs the multidimensional array representation of H17");
+    }
+    const int64_t extent = input->dim(0);
+    const int64_t end    = wroteEnd ? intArg(norm, 2) : extent;
+    // Bounds outside the axis are a located fault, as for an array's slice (design principles
+    // 3.9); checked before the kernel so the diagnostic is SliceOutOfRange.
+    if (start < 0 || start > extent || end < 0 || end > extent) {
+        throwRuntimeFault(
+            RuntimeDiag::SliceOutOfRange, start, end, "axis 0 of a tensor", extent);
+    }
+    if (step != 1) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "[]",
+            "a slice step must be 1; a step other than 1 is a view with strides, which needs "
+            "the multidimensional array representation of H17");
+    }
+    const int64_t count = end > start ? end - start : 0;
+    return runKernel("slice_sub", [&] {
+        return wrap(viewTensor(
+            input, std::span<const int64_t>(&count, 1), resultAllocator(), start));
+    });
+}
+
+std::optional<Type *> sliceSubInfer(const InferContext &ctx) {
+    const TensorFacts in = ctx.facts(0);
+    if (!in.shape) {
+        return tensorOf(in); // rank unknown: nothing to check
+    }
+    if (in.shape->empty()) {
+        throw ShapeError("a tensor without dimensions has no first dimension to slice");
+    }
+    if (in.shape->size() > 1) {
+        throw ShapeError(
+            "a slice of the first dimension of a tensor of rank 2 or more is a view with "
+            "strides, which needs the multidimensional array representation of H17");
+    }
+    // The slice is a view sharing the block, which fixes the step: strides are H17's.
+    const auto step = ctx.constInt(3);
+    if (!step || *step != 1) {
+        throw ShapeError(
+            "a slice step other than the constant 1 is a view with strides, which needs the "
+            "multidimensional array representation of H17");
+    }
+    const int64_t extent = (*in.shape)[0];
+    const auto start     = ctx.constInt(1);
+    const auto end       = ctx.constInt(2);
+    const auto wroteEnd  = ctx.constInt(4);
+    if (extent == kUnknownDim || !start || !wroteEnd) {
+        return tensorOf(in.dtype, StaticShape{kUnknownDim});
+    }
+    const int64_t to = *wroteEnd != 0 ? (end ? *end : kUnknownDim) : extent;
+    if (to == kUnknownDim) {
+        return tensorOf(in.dtype, StaticShape{kUnknownDim});
+    }
+    // Extent and bounds are known at compile time: an interval that leaves the axis is an
+    // error here (design principles 3.9).
+    if (*start < 0 || *start > extent || to < 0 || to > extent) {
+        throw ShapeError(
+            std::format(
+                "slice bounds {}..{} are outside the first dimension of extent {}",
+                *start,
+                to,
+                extent));
+    }
+    return tensorOf(in.dtype, StaticShape{to > *start ? to - *start : 0});
+}
+
 // take(t, indices): rows along the first axis, in the order the indices give.
 slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     const Array *input = tensorArg(norm, 0);
@@ -448,6 +529,20 @@ std::optional<Type *> takeInfer(const InferContext &ctx) {
         return tensorOf(input.dtype, std::nullopt);
     }
     return tensorOf(input.dtype, out);
+}
+
+// `t[idx]` on a tensor: the rows the indices name, in that order, which is take (design
+// principles 5.4). Same kernel and shape rule as take; only the name a program writes differs.
+slot_t subscriptTakeKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
+    return takeKernel(with, norm, ctx);
+}
+
+std::optional<Type *> subscriptTakeInfer(const InferContext &ctx) {
+    try {
+        return takeInfer(ctx);
+    } catch (const ShapeError &e) {
+        throw ShapeError(std::string("t[idx]: ") + e.what());
+    }
 }
 
 // take_grad(t, indices, dy): scatter-add dy back into t's shape.
@@ -681,6 +776,29 @@ std::vector<OpDef> layoutOps() {
         .resultDoc = "Tensor",
         .infer     = takeInfer,
         .kernel    = &takeKernel,
+        .traits    = {}});
+    // The subscript forms of design principles 5.4: `t[a:b]` and `t[idx]` on a tensor. They
+    // merge into the built-in module's `__slice__` and `__idx__` groups as overloads.
+    defs.push_back(OpDef{
+        .name    = "slice_sub",
+        .exports = {"__slice__"},
+        .params =
+            {{"t", ParamKind::Tensor},
+             {"start", ParamKind::Int},
+             {"end", ParamKind::Int},
+             {"step", ParamKind::Int},
+             {"endWritten", ParamKind::Int}},
+        .resultDoc = "Tensor",
+        .infer     = sliceSubInfer,
+        .kernel    = &sliceSubKernel,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "idx_take",
+        .exports   = {"__idx__"},
+        .params    = {{"t", ParamKind::Tensor}, {"indices", ParamKind::TensorLike}},
+        .resultDoc = "Tensor",
+        .infer     = subscriptTakeInfer,
+        .kernel    = &subscriptTakeKernel,
         .traits    = {}});
     defs.push_back(OpDef{
         .name      = "take_grad",

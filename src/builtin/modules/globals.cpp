@@ -1461,6 +1461,24 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
                 {
+                    ":op/idx_take",
+                    // `t[idx]` with an int array takes the rows the indices name, in that
+                    // order (design principles 5.4; `take` in its function form).
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(arr: T[], indices: int[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array ||
+                                norm[1]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &indices = tt::as_ptr<ArrayType>(norm[1]);
+                            if (indices->elemType()->code() != TypeCode::Int64)
+                                return nullopt;
+                            return norm[0];
+                        }),
+                },
+                {
                     ":op/idx_str",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
@@ -1725,6 +1743,23 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
+            "last",
+            {
+                {
+                    ":struct/last_arr",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "<> (arr: T[]) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
+                            return arrType->elemType();
+                        }),
+                },
+            }),
+        OperatorGroup::create(
             "tail",
             {
                 {
@@ -1777,6 +1812,30 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             return arrType;
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "__slice__",
+            {
+                {
+                    ":op/slice_sub",
+                    // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first
+                    // dimension a subscript writes (design principles 5.4). `endWritten` says
+                    // whether the end was written at all: `t[a:]` runs to the end, and the end
+                    // argument stands for nothing when it is 0.
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {5, {false, false, false, false, false}}},
+                        "(arr: T[], start: int, end: int, step: int, endWritten: int) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            for (size_t i = 1; i < 5; ++i) {
+                                if (norm[i]->code() != TypeCode::Int64)
+                                    return nullopt;
+                            }
+                            return norm[0];
                         }),
                 },
             }),
