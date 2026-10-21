@@ -99,11 +99,16 @@ RuleObject *callRule(Context &ctx, ::Function *maker) {
 }
 
 /// The engine's rules for the rule functions of an array.
-std::vector<camel::runtime::Rule> engineRules(Context &ctx, Array *makers) {
+///
+/// A function is called for each rule, which can move the objects (a safepoint): the array is read
+/// again from the argument, which the collector keeps up to date, each time.
+std::vector<camel::runtime::Rule> engineRules(Context &ctx, ArgsView &norm, size_t argument) {
     std::vector<camel::runtime::Rule> out;
     uint16_t next = 1;
-    for (size_t i = 0; i < makers->size(); ++i) {
-        const RuleObject *rule = callRule(ctx, makers->get<::Function *>(i));
+    const size_t count = norm.get<Array *>(argument)->size();
+    for (size_t i = 0; i < count; ++i) {
+        const RuleObject *rule =
+            callRule(ctx, norm.get<Array *>(argument)->get<::Function *>(i));
         camel::runtime::RuleSource source;
         source.name          = std::string(rule->name());
         source.id            = next++;
@@ -135,9 +140,8 @@ bool isRuleSide(const camel::runtime::GCGraph &graph) {
 slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(norm.type(0));
     const auto *base = norm.get<const camel::runtime::Program *>(0);
-    auto *rules      = norm.get<Array *>(1);
     try {
-        const auto compiled = engineRules(ctx, rules);
+        const auto compiled = engineRules(ctx, norm, 1);
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
         for (camel::runtime::GCGraph *graph : base->graphs()) {
             if (isRuleSide(*graph)) {
