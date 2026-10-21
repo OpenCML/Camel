@@ -1,0 +1,13 @@
+module edits
+func inc(x: int): int {
+    return x * 3
+}
+
+func main(): int sync {
+    let a = 20 + 22
+    let b = a + 0
+    println(inc(b))
+    let s = 'text'
+    println(s)
+    return 0
+}

@@ -71,13 +71,16 @@ class CommonSubexpressionPass : public RuntimeGraphRewritePass {
 
 class AlgebraPass : public RuntimeGraphRewritePass {
   public:
-    explicit AlgebraPass(const camel::core::context::context_ptr_t &ctx, bool safeFp = false)
-        : RuntimeGraphRewritePass(ctx), safeFp_(safeFp) {}
+    explicit AlgebraPass(
+        const camel::core::context::context_ptr_t &ctx, bool safeFp = false,
+        bool neutralOnly = false)
+        : RuntimeGraphRewritePass(ctx), safeFp_(safeFp), neutralOnly_(neutralOnly) {}
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
     bool safeFp_;
+    bool neutralOnly_;
 };
 
 /// std::opt::extract: one writing for every value that has several (runtime/writings.h).
@@ -95,9 +98,13 @@ class ExtractPass : public RuntimeGraphRewritePass {
 
 class DeadCodePass : public RuntimeGraphRewritePass {
   public:
-    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    explicit DeadCodePass(const camel::core::context::context_ptr_t &ctx, bool valuesOnly = false)
+        : RuntimeGraphRewritePass(ctx), valuesOnly_(valuesOnly) {}
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
+
+  private:
+    bool valuesOnly_;
 };
 
 class ControlReductionPass : public RuntimeGraphRewritePass {

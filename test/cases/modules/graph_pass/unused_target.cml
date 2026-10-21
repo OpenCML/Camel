@@ -1,0 +1,20 @@
+module unused_target
+
+func waste(x: int, y: int): int {
+    let a = x * y
+    let b = a + 1
+    let c = b * b
+    return x + y
+}
+
+func spare(s: string): int {
+    let t = s + '!'
+    let u = len(t)
+    return 4
+}
+
+func main(): int sync {
+    println(waste(3, 4))
+    println(spare('ab'))
+    return 0
+}
