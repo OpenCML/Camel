@@ -176,13 +176,13 @@ std::optional<camel::core::attr::AttrSetId> Builder::staticGrantOf(const GCT::no
                 return std::nullopt;
             }
             if (module_->hasImportedRef(written, ImportLayer::Named)) {
-                return module_->getImportedEntity(written, ImportLayer::Named);
+                return importedEntity(written, ImportLayer::Named);
             }
             if (auto match = throughUsing(written, ref)) {
                 return match->ownName.empty() ? match->entity : std::nullopt;
             }
             if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
-                return module_->getImportedEntity(written, ImportLayer::Ambient);
+                return importedEntity(written, ImportLayer::Ambient);
             }
             return std::nullopt;
         };

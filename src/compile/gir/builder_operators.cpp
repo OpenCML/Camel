@@ -64,9 +64,10 @@ namespace camel::compile::gir {
 // take the first layer having it (visitDRefNode, "local > this module > imported > using >
 // built-in"); operatorOverloadsOf gathers every layer instead. The layers it reads are the
 // graph scopes of this module (local functions and the module's own), the module's generic
-// operator templates, and Module::importedOperatorOverloads (every import of a module brings
-// its operator overloads, as for a C++ module's operators). Nothing else of the name lookup
-// is involved, so the lookup can change around it as long as those three stay reachable.
+// operator templates, and ProgramExports::importedOperatorOverloads (every import of a
+// module brings its operator overloads, as for a C++ module's operators). Nothing else of the
+// name lookup is involved, so the lookup can change around it as long as those three stay
+// reachable.
 
 Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group) {
     OperatorOverloads set;
@@ -122,7 +123,7 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
     // the overloads of modules written in Camel are functions and templates.
     OperatorOverloads set;
     std::vector<std::pair<std::string, resolver_ptr_t>> resolvers;
-    for (const auto &imported : module_->importedOperatorOverloads(group)) {
+    for (const auto &imported : exports_->importedOperatorOverloads(*module_, group)) {
         const auto &ent = imported.overloads;
         if (ent.isOperGroup()) {
             if (const auto &ops = ent.operGroup()) {
@@ -251,7 +252,7 @@ bool Builder::addDeclaringModuleOverloads(
         if (!module) {
             continue;
         }
-        for (const auto &overload : module->exportedOperatorOverloads(wanted)) {
+        for (const auto &overload : exports_->exportedOperatorOverloads(*module, wanted)) {
             const entity &exported = overload.overloads;
             if (camel::core::module::detail::EntityAccess::isGraphSet(exported)) {
                 for (const auto &graph : *asCompileGraphSet(
@@ -286,7 +287,7 @@ bool Builder::hasDeclaringModuleOperator(
     }
     for (const auto &[moduleName, typeName] : declaringModulesOf(withTypes, normTypes)) {
         if (const module_ptr_t module = moduleNamed(moduleName);
-            module && !module->exportedOperatorOverloads(group).empty()) {
+            module && !exports_->exportedOperatorOverloads(*module, group).empty()) {
             return true;
         }
     }
@@ -626,7 +627,8 @@ void Builder::exportOperatorOverloads(const std::string &group, const GCT::node_
     bool exported = false;
     if (auto graphs = graphScope_->get(group, false);
         graphs.has_value() && graphs.value() && !graphs.value()->empty()) {
-        module_->exportEntity(
+        exports_->exportEntity(
+            *module_,
             Reference(group),
             camel::core::module::detail::EntityAccess::makeGraphSet(
                 eraseCompileGraphSet(graphs.value())));
@@ -641,7 +643,8 @@ void Builder::exportOperatorOverloads(const std::string &group, const GCT::node_
                 continue; // declared inside a function: not the module's
             }
             const Reference ref(std::format("{}#{}", group, index++));
-            module_->exportEntity(
+            exports_->exportEntity(
+                *module_,
                 ref,
                 camel::core::module::detail::EntityAccess::makeGenericTemplate(
                     std::static_pointer_cast<void>(tmpl)));
@@ -915,7 +918,7 @@ node_handle_t Builder::rebindingAppendOf(const GCT::node_ptr_t &gct) {
     // The operator that grows the array in place takes exactly the types `append` takes
     // for an array variable; any other combination is built as written, so that `append`
     // reports what does not fit.
-    const auto group = context_->importModule("")->getExportedEntity(Reference("__assn_append__"));
+    const auto group = context_->importModule("")->getNativeEntity(Reference("__assn_append__"));
     ASSERT(group.has_value() && group->isOperGroup(), "The built-in __assn_append__ is missing.");
     const std::vector<StaticArg> statics(2);
     const bool fits =
@@ -950,7 +953,7 @@ oper_group_ptr_t Builder::importedOperatorGroupNamed(const std::string &name) {
     if (auto graphs = graphsAt(name); graphs.has_value() && !graphs.value()->empty()) {
         return nullptr;
     }
-    const auto entity = module_->getImportedEntity(name);
+    const auto entity = importedEntity(name);
     return entity.has_value() && entity->isOperGroup() ? entity->operGroup() : nullptr;
 }
 

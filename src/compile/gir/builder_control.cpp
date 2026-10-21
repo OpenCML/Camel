@@ -1889,7 +1889,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         if (type != nullptr && type->code() != TypeCode::Array) {
             const std::vector<StaticArg> statics(1);
             std::optional<oper_idx_ptr_t> elements;
-            if (const auto group = module_->getImportedEntity("__iter__");
+            if (const auto group = importedEntity("__iter__");
                 group.has_value() && group->isOperGroup()) {
                 elements = group->operGroup()->resolve({}, {type}, statics, Modifier::None);
             }
@@ -2521,7 +2521,7 @@ void Builder::markLoopStateInPlaceOne(
     if (valueType == nullptr) {
         return;
     }
-    const auto group = module_->getImportedEntity("__append_owned__");
+    const auto group = importedEntity("__append_owned__");
     if (!group.has_value() || !group->isOperGroup()) {
         return;
     }
@@ -2534,7 +2534,7 @@ void Builder::markLoopStateInPlaceOne(
     // The loop starts from a private copy of its first value. A literal is a constant of the
     // graph: the same array object on every evaluation of the loop's site, so appending to it
     // in place would edit the program's own literal. One copy per loop entry buys every round.
-    const auto copyGroup = module_->getImportedEntity("__copy_arr__");
+    const auto copyGroup = importedEntity("__copy_arr__");
     if (!copyGroup.has_value() || !copyGroup->isOperGroup()) {
         return;
     }

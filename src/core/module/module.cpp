@@ -23,6 +23,8 @@
 #include "core/module/entity_internal.h"
 
 #include <algorithm>
+#include <unordered_set>
+#include <utility>
 
 namespace camel::core::module {
 
@@ -128,8 +130,8 @@ std::optional<Reference> refFromParts(const std::vector<std::string> &parts) {
 Module::Module(const std::string &name, const std::string &path, context_ptr_t ctx)
     : loaded_(false), name_(name), path_(path), context_(ctx),
       exportedTypeNS_(std::make_shared<Namespace<std::string, Type *>>()),
-      exportedEntityNS_(std::make_shared<Namespace<std::string, entity>>()), defaultImportedRefs_(),
-      importedRefMap_(), importedNamespaceBindings_(), importedEntityCache_() {}
+      nativeEntityNS_(std::make_shared<Namespace<std::string, entity>>()), defaultImportedRefs_(),
+      importedRefMap_(), importedNamespaceBindings_() {}
 
 void Module::importDefaultRefsFromMod(const module_ptr_t &mod) {
     // Default names are what a module of operators brings along; a module written in Camel
@@ -137,12 +139,6 @@ void Module::importDefaultRefsFromMod(const module_ptr_t &mod) {
     mod->declareDefaultRefs();
     for (const auto &ref : mod->defaultImportedRefs()) {
         markImportedRefFromMod(ref, ref, mod, true);
-    }
-}
-
-void Module::clearImportedEntityCache() {
-    for (auto &cache : importedEntityCache_) {
-        cache.clear();
     }
 }
 
@@ -156,9 +152,8 @@ void Module::importAllRefsFromMod(const module_ptr_t &mod) {
     };
     auto typeNS = mod->exportedTypeNS();
     typeNS->forEach([&](const Reference &ref, Type *) { appendModForRef(ref); });
-    auto entNS = mod->exportedEntityNS();
+    auto entNS = mod->nativeEntityNS();
     entNS->forEach([&](const Reference &ref, const entity &) { appendModForRef(ref); });
-    clearImportedEntityCache();
 }
 
 bool Module::imports(const module_ptr_t &mod) const {
@@ -197,9 +192,6 @@ void Module::markImportedRefFromMod(
         // Asked for by name as well: it is a named import.
         it->ambient = it->ambient && ambient;
     }
-    for (auto &cache : importedEntityCache_) {
-        cache.erase(localRef);
-    }
 }
 
 void Module::markImportedNamespaceFromMod(const Reference &localPrefix, const module_ptr_t &mod) {
@@ -218,7 +210,6 @@ void Module::markImportedNamespaceFromMod(const Reference &localPrefix, const mo
     if (it == importedNamespaceBindings_.end()) {
         importedNamespaceBindings_.push_back(std::move(binding));
     }
-    clearImportedEntityCache();
 }
 
 void Module::markImportedNamespaceFromMod(
@@ -238,7 +229,6 @@ void Module::markImportedNamespaceFromMod(
     if (it == importedNamespaceBindings_.end()) {
         importedNamespaceBindings_.push_back(std::move(binding));
     }
-    clearImportedEntityCache();
 }
 
 std::vector<Module::ImportedRefBinding>
@@ -273,46 +263,6 @@ Module::importedBindingsForRef(const Reference &ref, ImportLayer layer) const {
         result.push_back(ImportedRefBinding{binding.mod, *remoteRef});
     }
     return result;
-}
-
-bool Module::importAllRefsFromImportedNamespace(const Reference &localPrefix) {
-    bool importedAny      = false;
-    const auto localParts = refParts(localPrefix);
-
-    for (const auto &binding : importedNamespaceBindings_) {
-        if (!startsWith(localParts, binding.localPrefixParts)) {
-            continue;
-        }
-
-        std::vector<std::string> remotePrefix = binding.remotePrefixParts;
-        remotePrefix.insert(
-            remotePrefix.end(),
-            localParts.begin() + static_cast<std::ptrdiff_t>(binding.localPrefixParts.size()),
-            localParts.end());
-
-        auto importRef = [&](const Reference &remoteRef) {
-            const auto remoteParts = refParts(remoteRef);
-            if (!startsWith(remoteParts, remotePrefix)) {
-                return;
-            }
-            std::vector<std::string> localRefParts(
-                remoteParts.begin() + static_cast<std::ptrdiff_t>(remotePrefix.size()),
-                remoteParts.end());
-            auto localRef = refFromParts(localRefParts);
-            if (!localRef.has_value()) {
-                return;
-            }
-            markImportedRefFromMod(*localRef, remoteRef, binding.mod);
-            importedAny = true;
-        };
-
-        binding.mod->declareEntities();
-        binding.mod->exportedTypeNS()->forEach(
-            [&](const Reference &remoteRef, Type *) { importRef(remoteRef); });
-        binding.mod->exportedEntityNS()->forEach(
-            [&](const Reference &remoteRef, const entity &) { importRef(remoteRef); });
-    }
-    return importedAny;
 }
 
 void Module::noteImport(
@@ -375,12 +325,7 @@ bool Module::exportType(const Reference &ref, Type *type) {
 }
 
 bool Module::exportEntity(const Reference &ref, const entity &ent) {
-    return exportedEntityNS_->insert(ref, ent);
-}
-
-void Module::clearExportedNamespaces() {
-    exportedTypeNS_   = std::make_shared<Namespace<std::string, Type *>>();
-    exportedEntityNS_ = std::make_shared<Namespace<std::string, entity>>();
+    return nativeEntityNS_->insert(ref, ent);
 }
 
 std::optional<Type *> Module::getImportedType(const Reference &ref, ImportLayer layer) const {
@@ -416,24 +361,71 @@ Module::importedSource(const Reference &ref, ImportLayer layer) const {
     return std::make_pair(bindings.front().mod, bindings.front().remoteRef);
 }
 
-std::optional<entity> Module::getImportedEntity(const Reference &ref, ImportLayer layer) const {
-    auto bindings = importedBindingsForRef(ref, layer);
+// ---- ProgramExports (task H42) -------------------------------------------------------------
+//
+// An exported entity of a module written in Camel — a function's graph, a generic template, a
+// top-level value's node, a tag — is made by the builder of one program. The module object is
+// shared by every program that loads it, so these names live in the program's table; a module
+// declares the same names into another program without touching the first.
+
+bool ProgramExports::exportEntity(const Module &module, const Reference &ref, const entity &ent) {
+    if (!exports_[&module].entities->insert(ref, ent)) {
+        return false;
+    }
+    // A merged imported name may have been cached before this name existed (a module's exports
+    // are written while the program is declared; a decorated form is added after its body is
+    // built), so no cached merge survives a write.
+    imported_.clear();
+    return true;
+}
+
+std::optional<entity>
+ProgramExports::exportedEntity(const Module &module, const Reference &ref) const {
+    if (auto it = exports_.find(&module); it != exports_.end()) {
+        if (auto found = it->second.entities->get(ref); found.has_value()) {
+            return found;
+        }
+    }
+    // A C++ module's own names (its operator groups, constants and tags) are not program
+    // entities: it declares them once when it is loaded.
+    return module.getNativeEntity(ref);
+}
+
+void ProgramExports::forEachExportedEntity(
+    const Module &module,
+    const std::function<void(const Reference &, const entity &)> &visit) const {
+    std::unordered_set<std::string> declared;
+    if (auto it = exports_.find(&module); it != exports_.end()) {
+        std::as_const(*it->second.entities).forEach([&](const Reference &ref, const entity &ent) {
+            declared.insert(ref.toString());
+            visit(ref, ent);
+        });
+    }
+    std::as_const(*module.nativeEntityNS()).forEach([&](const Reference &ref, const entity &ent) {
+        if (!declared.contains(ref.toString())) {
+            visit(ref, ent);
+        }
+    });
+}
+
+std::optional<entity>
+ProgramExports::importedEntity(const Module &importer, const Reference &ref, ImportLayer layer) {
+    auto bindings = importer.importedBindingsForRef(ref, layer);
     if (bindings.empty()) {
         return std::nullopt;
     }
     // Return the cached result directly to avoid repeated merges.
-    auto &cache  = importedEntityCache_[static_cast<size_t>(layer)];
+    auto &cache  = imported_[&importer].merged[static_cast<size_t>(layer)];
     auto cacheIt = cache.find(ref);
     if (cacheIt != cache.end()) {
         return cacheIt->second;
     }
     std::vector<entity> collected;
     for (const auto &binding : bindings) {
-        const auto &mod = binding.mod;
-        mod->declareEntities();
-        auto opt = mod->getExportedEntity(binding.remoteRef);
-        if (opt) {
-            collected.push_back(std::move(*opt));
+        binding.mod->declareEntities();
+        auto found = exportedEntity(*binding.mod, binding.remoteRef);
+        if (found) {
+            collected.push_back(std::move(*found));
         }
     }
     auto merged = mergeImportedEntities(collected);
@@ -444,11 +436,12 @@ std::optional<entity> Module::getImportedEntity(const Reference &ref, ImportLaye
 }
 
 std::vector<Module::ImportedOperatorOverloads>
-Module::importedOperatorOverloads(const std::string &group) const {
-    std::vector<ImportedOperatorOverloads> result;
+ProgramExports::importedOperatorOverloads(const Module &importer, const std::string &group) {
+    std::vector<Module::ImportedOperatorOverloads> result;
     // The operator groups of the built-in module and of the modules of operators: brought
     // along by every import (the ambient layer), merged into one group.
-    if (auto ops = getImportedEntity(Reference(group)); ops.has_value() && ops->isOperGroup()) {
+    if (auto ops = importedEntity(importer, Reference(group));
+        ops.has_value() && ops->isOperGroup()) {
         result.push_back({nullptr, Reference(group), std::move(*ops)});
     }
     // The overloads a module written in Camel exports (`export func operator +`): every
@@ -456,14 +449,14 @@ Module::importedOperatorOverloads(const std::string &group) const {
     // are looked up in the modules imported, not among the names imported. A generic overload
     // is exported under `group#k` (the GIR builder's exportOperatorOverloads).
     std::vector<std::shared_ptr<Module>> modules;
-    for (const ImportSite &site : importSites_) {
+    for (const Module::ImportSite &site : importer.importSites_) {
         if (site.mod && std::ranges::find(modules, site.mod) == modules.end()) {
             modules.push_back(site.mod);
         }
     }
     std::ranges::sort(modules, [](const auto &a, const auto &b) { return a->name() < b->name(); });
     for (const auto &mod : modules) {
-        for (auto &overload : mod->exportedOperatorOverloads(group)) {
+        for (auto &overload : exportedOperatorOverloads(*mod, group)) {
             result.push_back(std::move(overload));
         }
     }
@@ -471,11 +464,11 @@ Module::importedOperatorOverloads(const std::string &group) const {
 }
 
 std::vector<Module::ImportedOperatorOverloads>
-Module::exportedOperatorOverloads(const std::string &group) {
+ProgramExports::exportedOperatorOverloads(Module &module, const std::string &group) {
     // The declarations of the module are complete before any function body of the program is
     // built (design principles 10.1), so this is a no-op by the time an operator is resolved.
-    declareEntities();
-    std::vector<ImportedOperatorOverloads> result;
+    module.declareEntities();
+    std::vector<Module::ImportedOperatorOverloads> result;
     const auto isOverloadOf = [&](const Reference &ref) {
         const std::string &ident = ref.ident();
         return ref.plain() &&
@@ -483,7 +476,7 @@ Module::exportedOperatorOverloads(const std::string &group) {
                                    ident[group.size()] == '#'));
     };
     std::vector<std::pair<Reference, entity>> found;
-    exportedEntityNS()->forEach([&](const Reference &ref, const entity &ent) {
+    forEachExportedEntity(module, [&](const Reference &ref, const entity &ent) {
         if (isOverloadOf(ref) && !ent.isOperGroup()) {
             found.emplace_back(ref, ent);
         }
@@ -491,22 +484,22 @@ Module::exportedOperatorOverloads(const std::string &group) {
     std::ranges::sort(found, [](const auto &a, const auto &b) {
         return a.first.toString() < b.first.toString();
     });
-    const auto self = shared_from_this();
+    const auto self = module.shared_from_this();
     for (auto &[ref, ent] : found) {
         result.push_back({self, ref, std::move(ent)});
     }
     return result;
 }
 
-// The export tables of a module written in Camel fill while it is declared (types while its
-// construction tree is built, the rest when the program's graph builder declares it); what is
-// asked for before that is not there yet.
+// The module's types fill while its construction tree is built (they are the module's own and
+// mean the same in every program); the program's entities fill when its graph builder declares
+// the module. What is asked for before that is not there yet.
 std::optional<Type *> Module::getExportedType(const Reference &ref) const {
     return exportedTypeNS_->get(ref);
 };
 
-std::optional<entity> Module::getExportedEntity(const Reference &ref) const {
-    return exportedEntityNS_->get(ref);
+std::optional<entity> Module::getNativeEntity(const Reference &ref) const {
+    return nativeEntityNS_->get(ref);
 };
 
 std::vector<Reference> Module::importedRefs() const {
@@ -537,7 +530,7 @@ const std::vector<Reference> &Module::defaultImportedRefs() const { return defau
 
 type_ns_ptr_t Module::exportedTypeNS() const { return exportedTypeNS_; }
 
-entity_ns_ptr_t Module::exportedEntityNS() const { return exportedEntityNS_; }
+entity_ns_ptr_t Module::nativeEntityNS() const { return nativeEntityNS_; }
 
 // ---- Tags (design principles 6.2; camel/core/tags.h) -------------------------------------
 

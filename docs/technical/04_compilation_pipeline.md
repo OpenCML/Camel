@@ -60,7 +60,7 @@
 
 （设计原则 10.1；图模型设计稿 3.7、3.9、第 8 节。）
 
-- **一个建图器**：程序的所有模块由同一个 `gir::Builder`（`Builder::of(context)`，`src/compile/gir/program.cpp`）建在同一张 `__root__` 上。每个模块是一个 `ModuleUnit`：它的 GCT、诊断与顶层作用域。模块顶层的值是 root 上的节点；函数各是各的图。
+- **一个建图器**：程序的所有模块由同一个 `gir::Builder`（`Builder::of(context)`，`src/compile/gir/program.cpp`）建在同一张 `__root__` 上。每个模块是一个 `ModuleUnit`：它的 GCT、诊断与顶层作用域。模块顶层的值是 root 上的节点；函数各是各的图。导出表也是**程序的一份**（`gir::Builder::exports()`，`ProgramExports`，`include/camel/core/module/module.h`）：模块对象只留它自己的原生声明（C++ 模块的算子组、常量与标签，以及类型声明），Camel 模块导出的函数图、泛型与顶层值记在程序的表里，所以同一个模块可以同时是两个程序的一部分（`compileAsProgram` 另开 builder，写另一张表），互不覆盖（设计原则 10.1，任务 H42）。
 - **捕获绑定到值**（`src/compile/gir/captures.cpp`）：捕获端口记着它代表的节点（"来源"）。直接调用处与函数值处，调用者按同一个来源取它看到的值（`captureInto`），不在调用处按名字重找。直接调用的捕获在链接步按被调图的端口次序接线（`linkCaptureSites`，不动点）。
 - **三步加载**：
   1. *声明*：`import` 只绑定名字。GCT 先声明本模块的类型（导出的类型立即导出），再把被导入的模块编译到 `CompileStage::Declared`，再建其余部分；之后 `Builder::declareModule` 建函数图（无函数体）、登记模板、顶层值与类型、填导出表。导出的值是 `ExportedValue`（`include/camel/compile/gir/value_entity.h`）。

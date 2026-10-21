@@ -148,7 +148,7 @@ Builder::throughUsing(const std::string &written, const GCT::node_ptr_t &at) {
                 if (!module_->hasImportedRef(prefixed, ImportLayer::Named)) {
                     continue;
                 }
-                match.entity = module_->getImportedEntity(prefixed, ImportLayer::Named);
+                match.entity = importedEntity(prefixed, ImportLayer::Named);
                 if (!match.entity) {
                     continue;
                 }
