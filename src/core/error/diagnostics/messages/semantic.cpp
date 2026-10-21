@@ -1184,7 +1184,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "'{3}' ({4}).",
                 "A tag argument is a compile-time constant of the kind the parameter declares: "
                 "write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', "
-                "and a string for 'string'.",
+                "a string for 'string', and the name of a function for 'func' (the fact is the "
+                "graph reference of that function).",
             },
         },
         {
@@ -1270,9 +1271,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagParameterType",
                 "The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an "
-                "int, a float, a bool or a string.",
-                "Declare the parameter with the kind of the constant the tag is written with: "
-                "'tag {1}<{0}: int> on ...'.",
+                "int, a float, a bool, a string or a func.",
+                "Declare the parameter with the kind of the argument the tag is written with: "
+                "'tag {1}<{0}: int> on ...'; a 'func' parameter is written with the name of a "
+                "function ('#vjp<rule>').",
             },
         },
         {

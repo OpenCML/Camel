@@ -517,6 +517,10 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);
     buildFuncBody(gct, graph, funcType, name, tags);
+    // A declaration tag whose argument names a function (`#vjp<cube_rule>`) keeps that graph
+    // in the reference table of the function's graph: the fact is a graph reference, and the
+    // reader finds it in the frozen graph (GCGraph::ruleGraphs).
+    attachRuleGraphs(graph, tags.declaration);
     if (name.empty()) {
         lambdaGraphs_[gct] = graph.get();
     }
@@ -529,6 +533,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         gct->decoratedBlock() ? std::vector<GCT::node_ptr_t>{} : appliedDecoratorsOf(gct);
     if (!annoNodes.empty()) {
         graph_ptr_t decorated = buildDecoratedGraph(name, graph, annoNodes);
+        attachRuleGraphs(decorated, tags.declaration);
         insertDecoratedGraph(name, decorated);
         decoratedOf_[graph.get()] = decorated;
     }

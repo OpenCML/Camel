@@ -42,9 +42,12 @@
 #include <algorithm>
 #include <cctype>
 #include <format>
+#include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "builder_helpers.h"
 #include "camel/core/data/primary.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
@@ -58,8 +61,9 @@ using namespace camel::core::error;
 namespace {
 
 /// The kind a tag parameter declares, as far as a tag can carry it. A tag argument is a
-/// compile-time constant: an integer, a real, a boolean or a string.
-enum class ArgKind { Int, Float, Bool, String, Other };
+/// compile-time constant: an integer, a real, a boolean or a string, or, for a parameter
+/// declared `func`, a function of the program (carried as its graph reference).
+enum class ArgKind { Int, Float, Bool, String, Func, Other };
 
 ArgKind kindOfDeclaredType(std::string_view type) {
     std::string t;
@@ -82,6 +86,9 @@ ArgKind kindOfDeclaredType(std::string_view type) {
     }
     if (t == "string" || t == "str" || t == "text") {
         return ArgKind::String;
+    }
+    if (t == "func" || t == "function") {
+        return ArgKind::Func;
     }
     return ArgKind::Other;
 }
@@ -114,6 +121,8 @@ const char *kindName(ArgKind kind) {
         return "bool";
     case ArgKind::String:
         return "string";
+    case ArgKind::Func:
+        return "func";
     default:
         return "other";
     }
@@ -175,6 +184,119 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
             .commit(use.name, std::to_string(decl.params.size()), std::to_string(use.args.size()));
         throw BuildAbortException();
     }
+    // The value of one constant argument, by the kind of data it is.
+    const auto valueOf =
+        [&](const camel::core::data::data_ptr_t &data) -> camel::core::attr::AttrValueId {
+        using camel::core::type::TypeCode;
+        switch (data->type()->code()) {
+        case TypeCode::Int32:
+            return camel::core::attr::integer(
+                std::static_pointer_cast<camel::core::data::IntData>(data)->data());
+        case TypeCode::Int64:
+            return camel::core::attr::integer(
+                std::static_pointer_cast<camel::core::data::LongData>(data)->data());
+        case TypeCode::Float32:
+            return camel::core::attr::real(
+                std::static_pointer_cast<camel::core::data::FloatData>(data)->data());
+        case TypeCode::Float64:
+            return camel::core::attr::real(
+                std::static_pointer_cast<camel::core::data::DoubleData>(data)->data());
+        case TypeCode::Bool:
+            return camel::core::attr::integer(
+                std::static_pointer_cast<camel::core::data::BoolData>(data)->data() ? 1 : 0);
+        case TypeCode::String:
+            return camel::core::attr::symbol(
+                std::static_pointer_cast<camel::core::data::StringData>(data)->data());
+        default:
+            diags_->of(SemanticDiag::TagArgumentUnsupported)
+                .atOrigin(use.origin)
+                .commit(data->toString(), use.name);
+            throw BuildAbortException();
+        }
+    };
+    // The written form of a constant, not the data's six-decimal rendering.
+    const auto writtenText = [](const camel::core::data::data_ptr_t &data) {
+        std::string written = data->toString();
+        if (data->type()->code() == camel::core::type::TypeCode::Float32) {
+            written = camel::utils::floatText(
+                std::static_pointer_cast<camel::core::data::FloatData>(data)->data());
+        } else if (data->type()->code() == camel::core::type::TypeCode::Float64) {
+            written = camel::utils::floatText(
+                std::static_pointer_cast<camel::core::data::DoubleData>(data)->data());
+        }
+        return written;
+    };
+    bool takesFunction = false;
+    for (const camel::core::tag::TagParam &param : decl.params) {
+        takesFunction = takesFunction || kindOfDeclaredType(param.type) == ArgKind::Func;
+    }
+    if (takesFunction) {
+        // A parameter declared `func` names a function of the program (design principles 6.2:
+        // `#vjp<cube_rule>`). Its fact is the graph reference of the function
+        // (attr::graphRef), not a data value: the graph is added to the reference table of the
+        // declaring graph by attachRuleGraphs, so the tag's reader finds it in the frozen graph
+        // instead of resolving the name again.
+        std::vector<camel::core::attr::AttrValueId> values;
+        values.reserve(use.args.size());
+        for (size_t i = 0; i < use.args.size(); ++i) {
+            const camel::core::tag::TagParam &param = decl.params[i];
+            const ArgKind declared                  = kindOfDeclaredType(param.type);
+            const GCT::node_ptr_t &arg              = use.args[i];
+            if (declared == ArgKind::Func) {
+                std::optional<compile_graph_ptr_t> graph;
+                if (arg != nullptr && arg->type() == GCT::NodeKind::DREF) {
+                    graph = functionGraphNamed(arg->name());
+                }
+                if (!graph.has_value()) {
+                    diags_->of(SemanticDiag::TagArgumentType)
+                        .atOrigin(use.origin)
+                        .commit(
+                            param.name,
+                            use.name,
+                            param.type,
+                            arg == nullptr ? std::string{} : arg->name(),
+                            "not a function of the program");
+                    throw BuildAbortException();
+                }
+                const camel::runtime::GraphId id = graph.value()->graphId();
+                tagFunctionGraphs_[camel::runtime::toValue(id)] = graph.value();
+                values.push_back(camel::core::attr::graphRef(id));
+                continue;
+            }
+            if (arg == nullptr || arg->type() != GCT::NodeKind::DATA) {
+                diags_->of(SemanticDiag::TagArgumentNotConstant)
+                    .atOrigin(use.origin)
+                    .commit(arg == nullptr ? std::string{} : arg->name(), use.name);
+                throw BuildAbortException();
+            }
+            if (declared == ArgKind::Other) {
+                diags_->of(SemanticDiag::TagParameterType)
+                    .atOrigin(use.origin)
+                    .commit(param.name, use.name, param.type);
+                throw BuildAbortException();
+            }
+            const ArgKind actual = kindOfValue(arg->data()->type()->code());
+            if (actual != declared) {
+                diags_->of(SemanticDiag::TagArgumentType)
+                    .atOrigin(use.origin)
+                    .commit(
+                        param.name,
+                        use.name,
+                        param.type,
+                        writtenText(arg->data()),
+                        kindName(actual));
+                throw BuildAbortException();
+            }
+            values.push_back(valueOf(arg->data()));
+        }
+        if (values.empty()) {
+            return camel::core::attr::unit();
+        }
+        if (values.size() == 1) {
+            return values.front();
+        }
+        return camel::core::attr::tuple(values);
+    }
     std::vector<camel::core::data::data_ptr_t> args;
     args.reserve(use.args.size());
     for (const auto &arg : use.args) {
@@ -233,49 +355,13 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
         }
         const ArgKind actual = kindOfValue(args[i]->type()->code());
         if (actual != declared) {
-            // The written form of the argument, not the data's six-decimal rendering.
-            std::string written = args[i]->toString();
-            if (args[i]->type()->code() == camel::core::type::TypeCode::Float32) {
-                written = camel::utils::floatText(
-                    std::static_pointer_cast<camel::core::data::FloatData>(args[i])->data());
-            } else if (args[i]->type()->code() == camel::core::type::TypeCode::Float64) {
-                written = camel::utils::floatText(
-                    std::static_pointer_cast<camel::core::data::DoubleData>(args[i])->data());
-            }
             diags_->of(SemanticDiag::TagArgumentType)
                 .atOrigin(use.origin)
-                .commit(param.name, use.name, param.type, written, kindName(actual));
+                .commit(
+                    param.name, use.name, param.type, writtenText(args[i]), kindName(actual));
             throw BuildAbortException();
         }
     }
-    auto valueOf = [&](const camel::core::data::data_ptr_t &data) {
-        using camel::core::type::TypeCode;
-        switch (data->type()->code()) {
-        case TypeCode::Int32:
-            return camel::core::attr::integer(
-                std::static_pointer_cast<camel::core::data::IntData>(data)->data());
-        case TypeCode::Int64:
-            return camel::core::attr::integer(
-                std::static_pointer_cast<camel::core::data::LongData>(data)->data());
-        case TypeCode::Float32:
-            return camel::core::attr::real(
-                std::static_pointer_cast<camel::core::data::FloatData>(data)->data());
-        case TypeCode::Float64:
-            return camel::core::attr::real(
-                std::static_pointer_cast<camel::core::data::DoubleData>(data)->data());
-        case TypeCode::Bool:
-            return camel::core::attr::integer(
-                std::static_pointer_cast<camel::core::data::BoolData>(data)->data() ? 1 : 0);
-        case TypeCode::String:
-            return camel::core::attr::symbol(
-                std::static_pointer_cast<camel::core::data::StringData>(data)->data());
-        default:
-            diags_->of(SemanticDiag::TagArgumentUnsupported)
-                .atOrigin(use.origin)
-                .commit(data->toString(), use.name);
-            throw BuildAbortException();
-        }
-    };
     if (args.empty()) {
         return camel::core::attr::unit();
     }
@@ -288,6 +374,52 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
         items.push_back(valueOf(arg));
     }
     return camel::core::attr::tuple(items);
+}
+
+std::optional<compile_graph_ptr_t> Builder::functionGraphNamed(const std::string &written) {
+    if (auto graphs = graphsAt(written); graphs.has_value() && graphs.value()->size() == 1) {
+        return graphs.value()->front();
+    }
+    if (auto decorated = decoratedGraphAt(written);
+        decorated.has_value() && overloadsOfDecorated(written, *decorated) == nullptr) {
+        return decorated.value();
+    }
+    if (auto entity = importedEntity(Reference(written)); entity.has_value()) {
+        using camel::core::module::detail::EntityAccess;
+        if (EntityAccess::isGraphSet(*entity)) {
+            auto set = asCompileGraphSet(EntityAccess::graphSet(*entity));
+            if (set != nullptr && set->size() == 1) {
+                return set->front();
+            }
+        } else if (EntityAccess::isDecoratedGraph(*entity)) {
+            return EntityAccess::decoratedGraph(*entity);
+        }
+    }
+    return std::nullopt;
+}
+
+void Builder::attachRuleGraphs(
+    const compile_graph_ptr_t &graph, camel::core::attr::AttrSetId set) {
+    if (!graph || set == camel::core::attr::kNoAttrs) {
+        return;
+    }
+    const std::function<void(camel::core::attr::AttrValueId)> attach =
+        [&](camel::core::attr::AttrValueId id) {
+            const camel::core::attr::Value value = camel::core::attr::value(id);
+            if (value.kind == camel::core::attr::ValueKind::Graph) {
+                const uint32_t key = static_cast<uint32_t>(std::stoul(value.text));
+                if (const auto it = tagFunctionGraphs_.find(key); it != tagFunctionGraphs_.end()) {
+                    graph->addRuleGraphRef(it->second);
+                }
+            } else if (value.kind == camel::core::attr::ValueKind::Tuple) {
+                for (camel::core::attr::AttrValueId item : value.items) {
+                    attach(item);
+                }
+            }
+        };
+    for (const camel::core::attr::Attr &attr : camel::core::attr::entries(set)) {
+        attach(attr.value);
+    }
 }
 
 void Builder::addTagFacts(

@@ -113,6 +113,9 @@ class Builder {
     /// replaced it (design principles 7.2: a numeric permission is a tag). Plain decorators
     /// (`@name`, `@name<args>`) are not affected.
     bool rejectParenthesizedName(syntax::cst::FuncAnno context);
+    /// Rejects the removed `@vjp<rule>` decorator at the annotation, naming the declaration tag
+    /// that replaced it (design principles 6.2, 8: a custom derivative rule is a tag).
+    bool rejectVjpAnnotation(syntax::cst::FuncAnno context);
     Value visitFuncDecl(syntax::cst::FuncDecl context);
     Value visitTagDecl(syntax::cst::TagDecl context);
     /// The permission groups the program declares (`tag fast = [reassociate, contract]`), by

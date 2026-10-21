@@ -3673,7 +3673,7 @@ The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}
 **Help**
 
 ```text
-A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', and a string for 'string'.
+A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', a string for 'string', and the name of a function for 'func' (the fact is the graph reference of that function).
 ```
 
 **Example** (`test/cases/compile/tags/err_float.cml`, run as `camel test/cases/compile/tags/err_float.cml`)
@@ -3759,13 +3759,13 @@ func main(): int { return 0 }
 **Message**
 
 ```text
-The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool or a string.
+The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool, a string or a func.
 ```
 
 **Help**
 
 ```text
-Declare the parameter with the kind of the constant the tag is written with: 'tag {1}<{0}: int> on ...'.
+Declare the parameter with the kind of the argument the tag is written with: 'tag {1}<{0}: int> on ...'; a 'func' parameter is written with the name of a function ('#vjp<rule>').
 ```
 
 **Example** (`test/cases/compile/tags/err_param_type.cml`, run as `camel test/cases/compile/tags/err_param_type.cml`)

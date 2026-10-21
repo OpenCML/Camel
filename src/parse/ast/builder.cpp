@@ -605,7 +605,7 @@ Value Builder::visitBlockStmt(cst::BlockStmt context) {
     // removed `@name(args)` spelling is reported here and grants nothing.
     node_ptr_t decorators = nullptr;
     for (const auto &anno : context->all<cst::FuncAnno>()) {
-        if (rejectParenthesizedName(anno)) {
+        if (rejectParenthesizedName(anno) || rejectVjpAnnotation(anno)) {
             continue;
         }
         if (!decorators) {
@@ -784,6 +784,20 @@ bool Builder::rejectParenthesizedName(cst::FuncAnno context) {
     diags_->of(SemanticDiag::InvalidAnnotation)
         .at(rangeOf(context->firstToken(), context->lastToken()))
         .commit(annotation, why);
+    return true;
+}
+
+bool Builder::rejectVjpAnnotation(cst::FuncAnno context) {
+    const std::string annotation = context->get<cst::IdentRef>()->text();
+    if (annotation != "vjp") {
+        return false;
+    }
+    diags_->of(SemanticDiag::InvalidAnnotation)
+        .at(rangeOf(context->firstToken(), context->lastToken()))
+        .commit(
+            annotation,
+            "a custom derivative rule is a declaration tag now: write '#vjp<rule>' before the "
+            "function (design principles 6.2, 8)");
     return true;
 }
 
@@ -1590,11 +1604,12 @@ void Builder::addTagUses(const node_ptr_t &owner, const syn::Node &context) {
 Value Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");
 
-    // Decorators are applied to the function. The removed `@name(args)` spelling is reported and
-    // adds no decorator (numeric permissions are tags now, design principles 7.2).
+    // Decorators are applied to the function. The removed `@name(args)` spelling and the removed
+    // `@vjp<rule>` decorator are reported and add no decorator (numeric permissions and custom
+    // derivative rules are tags now, design principles 7.2, 8).
     node_ptr_t annoListNode = nullptr;
     for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
-        if (rejectParenthesizedName(funcAnno)) {
+        if (rejectParenthesizedName(funcAnno) || rejectVjpAnnotation(funcAnno)) {
             continue;
         }
         if (!annoListNode) {

@@ -3,7 +3,7 @@
 // ordinary signature that tiles::run and tiles::source specialize on.
 module tiles_core_views
 import { Tensor, load_npy, save_npy, reshape, permute, slice, sum, zeros } from tensor
-import { grad, vjp } from autodiff
+import { grad } from autodiff
 import { run, source, inspect } from tiles
 import { get_env } from sys
 let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0], [2, 3])
@@ -12,7 +12,7 @@ func fixed(x: Tensor<f32, const [2, 3, 4]>): Tensor<f32> { return permute(x, [2,
 with <axes: int[]>
 func configured(x: Tensor<f32, const [2, 3, 4]>): Tensor<f32> { return permute(x, axes) }
 func rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3, 2]) }
-@vjp<rule>
+#vjp<rule>
 func mark(x: Tensor<f32>): Tensor<f32> { return x }
 with <x: Tensor<f32>>
 func loss(): float {
@@ -25,12 +25,12 @@ func negative_loss(): float {
 with <x: Tensor<f32>>
 func keep_loss(): float { return sum(sum(x, -2, true)) }
 func empty_rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3, 0]) }
-@vjp<empty_rule>
+#vjp<empty_rule>
 func empty_mark(x: Tensor<f32>): Tensor<f32> { return x }
 with <x: Tensor<f32>>
 func empty_loss(): float { return sum(empty_mark(sum(x, 1))) }
 func wide_rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [4, 5, 2]) }
-@vjp<wide_rule>
+#vjp<wide_rule>
 func wide_mark(x: Tensor<f32>): Tensor<f32> { return x }
 with <x: Tensor<f32>>
 func wide_loss(): float { return sum(wide_mark(sum(x, 1))) }

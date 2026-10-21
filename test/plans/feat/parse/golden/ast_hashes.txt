@@ -1350,7 +1350,8 @@ e92fc4ef8814a696 ok test/cases/modules/autodiff/collapse.cml
 cbe56823a0defb16 ok test/cases/modules/autodiff/collapse_random.cml
 706d8b780cd5a6d2 ok test/cases/modules/autodiff/collapse_runtime.cml
 ecabc798dfad7684 ok test/cases/modules/autodiff/control_flow_grad.cml
-105ac65cfd3f0744 ok test/cases/modules/autodiff/custom_rule.cml
+6a9f0c1586c020da ok test/cases/modules/autodiff/custom_rule.cml
+bab6482c191f615e no test/cases/modules/autodiff/err_vjp_annotation.cml
 07baf378f03c8edf ok test/cases/modules/autodiff/fused_grad_check.cml
 febc07afade00630 ok test/cases/modules/autodiff/grad_closure.cml
 23dac936ed9bc120 ok test/cases/modules/autodiff/grad_data_input.cml
@@ -1387,7 +1388,7 @@ e84622c94a2d8b1d ok test/cases/modules/autodiff/loop_grad_refuse_iterable.cml
 6e3201e5f5cd61a9 ok test/cases/modules/autodiff/loop_grad_sum.cml
 cf2929f08028ea5d ok test/cases/modules/autodiff/loop_grad_tuple_state.cml
 8fc0fbecd0196e7d ok test/cases/modules/autodiff/loop_grad_zero_rounds.cml
-22a6fb16c16dbf31 ok test/cases/modules/autodiff/macro_round_lifetime_gc.cml
+63d5933f8a7091e9 ok test/cases/modules/autodiff/macro_round_lifetime_gc.cml
 a39a5c1b020e70bc ok test/cases/modules/autodiff/math_sqrt.cml
 d1678e3a74fcd6f2 ok test/cases/modules/autodiff/nn_grad_check.cml
 9dbea1e463fc42d1 ok test/cases/modules/autodiff/pb_statics_gc.cml
@@ -1401,6 +1402,10 @@ eb59e7e14d901e74 ok test/cases/modules/autodiff/var_tensor_read_after_call.cml
 c1a7f4c1e1859ce6 ok test/cases/modules/autodiff/var_tensor_read_after_write.cml
 cf69646aa8871e50 ok test/cases/modules/autodiff/var_tensor_read_in_callee.cml
 5bd1e4ccb352ff2c ok test/cases/modules/autodiff/var_through_with_grad.cml
+e70037a6dfb879e1 ok test/cases/modules/autodiff/vjp_cross_module.cml
+d8fec165bbc7af1a ok test/cases/modules/autodiff/vjp_lib.cml
+4273e8f0d2c5f99d ok test/cases/modules/autodiff/vjp_user_a.cml
+ccc23f2cd2f04d2e ok test/cases/modules/autodiff/vjp_user_b.cml
 bff6688d24589720 ok test/cases/modules/autodiff/with_grad_old_name.cml
 e717022e42281990 ok test/cases/modules/graph_pass/camel_import_values.cml
 9e0f3f56a523c664 ok test/cases/modules/graph_pass/chain.cml
@@ -1506,7 +1511,7 @@ c3f7e8d4b69f8a75 ok test/cases/modules/onnx/export_train_step_conv.cml
 2e3b228d268b5fee ok test/cases/modules/onnx/export_train_step_dynamic.cml
 6784d5178ab0d83e ok test/cases/modules/onnx/export_train_step_dynamic_mean.cml
 750a31a7585b3b51 ok test/cases/modules/onnx/export_train_step_frozen.cml
-63f534f3c515ab6a ok test/cases/modules/onnx/export_train_step_vjp.cml
+ebbcffb58501f544 ok test/cases/modules/onnx/export_train_step_vjp.cml
 a095f3546d3d68db ok test/cases/modules/onnx/export_tree_recursion.cml
 ff988c994ec96e46 ok test/cases/modules/onnx/export_unsupported.cml
 e427d38b9aa8a3bf ok test/cases/modules/onnx/export_var_append.cml
@@ -1780,7 +1785,7 @@ d7f09150b2048d4a ok test/cases/modules/tiles/branch_effect.cml
 d39356dc4df797d4 ok test/cases/modules/tiles/cast_like.cml
 fa8efa1b9430518e ok test/cases/modules/tiles/compiled_region.cml
 0f969d23938d7bac ok test/cases/modules/tiles/consistency.cml
-3f924524b970918f ok test/cases/modules/tiles/core_views.cml
+e81cbddb0f82556d ok test/cases/modules/tiles/core_views.cml
 0ca64fb565c45f70 ok test/cases/modules/tiles/device_tree.cml
 bfe4215f09f673d1 ok test/cases/modules/tiles/device_tree_invalid.cml
 13e7a52c1cafbb42 ok test/cases/modules/tiles/empty_mean.cml

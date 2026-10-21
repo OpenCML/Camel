@@ -177,11 +177,10 @@ enum GCNodeFlag : uint8_t {
     kGCNodeFlagConstant = 1 << 1,
 };
 
-/// Properties a graph has besides its nodes (GCGraph::flags).
+/// Properties a graph has besides its nodes (GCGraph::flags). Bit 0 was the flag of a graph
+/// that carried a derivative rule as a closure value (the old `@vjp` decorator); a rule is a
+/// graph reference of the declaration now (kGraphRefRule), so no flag says it.
 enum GCGraphFlag : uint8_t {
-    /// The graph is a function that carries a vjp rule as its last closure value
-    /// (autodiff::attachRule).
-    kGraphFlagCarriesRule = 1 << 0,
     /// A commit looked at the graph's gates: none waits on nothing (GraphDraft::
     /// dissolveUnorderedGates). A graph without it is looked at by the next commit that
     /// reaches it; a graph with it is left as it is unless it is edited.
@@ -254,6 +253,7 @@ enum GCGraphRefRole : uint8_t {
     kGraphRefCallee = 1 << 0, // called directly by a FUNC node (a dependency)
     kGraphRefNested = 1 << 1, // written inside this graph (a lambda, a branch arm)
     kGraphRefStatic = 1 << 2, // the graph of a function constant of the static area
+    kGraphRefRule   = 1 << 3, // the graph a declaration tag of the graph names (a derivative rule)
 };
 
 /// "No graph" in a GCFuncRef or a GCLoopRef: a FUNC node that names no callee yet, the condition
@@ -603,10 +603,12 @@ class GCGraph : public camel::core::rtdata::Object {
     /// The entries of the reference table with role `role`, in table order.
     std::vector<GraphId> refsWithRole(uint8_t role) const;
     /// The graphs called directly, written inside this one, referred to by a function
-    /// constant: views of the reference table by role.
+    /// constant, and named by a declaration tag of the graph (a derivative rule): views of the
+    /// reference table by role.
     std::vector<GraphId> dependencies() const { return refsWithRole(kGraphRefCallee); }
     std::vector<GraphId> subGraphs() const { return refsWithRole(kGraphRefNested); }
     std::vector<GraphId> staticGraphRefs() const { return refsWithRole(kGraphRefStatic); }
+    std::vector<GraphId> ruleGraphs() const { return refsWithRole(kGraphRefRule); }
     std::span<const slot_t> staticSlots() const;
 
     bool hasNodePayload() const;

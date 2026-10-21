@@ -208,7 +208,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagParameterType"
 expect_diagnostic_line = 6
 expect_diagnostic_column = 2
-expect_output_contains = ["The parameter 'f' of the tag 'callback' is declared '(x: int) => int': a tag parameter is an int, a float, a bool or a string."]
+expect_output_contains = ["The parameter 'f' of the tag 'callback' is declared '(x: int) => int': a tag parameter is an int, a float, a bool, a string or a func."]
 
 [[tests]]
 name = "old_annotation_form"

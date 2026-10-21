@@ -1187,7 +1187,7 @@ bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
     // through their bodies.
     const auto opaque = [](const GCGraph *graph) {
         return graph == nullptr || graph->funcType() == nullptr ||
-               graph->funcType()->modifiers().macro() || carriesRule(graph);
+               graph->funcType()->modifiers().macro() || hasRule(graph);
     };
     GCGraph *graph  = nullptr;
     auto withInputs = draft_.withInputsOf(call);
@@ -1883,8 +1883,8 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         }
     }
     if (function == nullptr) {
-        // grad(f), with_grad(f) or vjp<rule>(f) of static functions that std::macro has
-        // not expanded (autodiff applied inside a function being differentiated).
+        // grad(f) and with_grad(f) of static functions that std::macro has not expanded
+        // (autodiff applied inside a function being differentiated).
         function = macroCallee(fill);
     }
     GCGraph *graph = nullptr;
@@ -1894,14 +1894,21 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         for (gc_node_ref_t input : draft_.normInputsOf(call)) {
             inputs.push_back(input);
         }
-        if (carriesRule(graph)) {
+        if (hasRule(graph)) {
             FunctionType *type = graph->funcType();
+            ::Function *rule   = ruleOf(function);
+            if (rule == nullptr) {
+                failAt(
+                    draft_.nodeOrigin(call),
+                    "a 'vjp' rule of this function is not part of the program being "
+                    "differentiated; the rule must be a function the program keeps");
+            }
             sites_.emplace(
                 call,
                 CallSite{
                     .inputs = std::move(inputs),
                     .plan   = makePlanTypes(portTypesOf(type), type->exitType()),
-                    .rule   = ruleOf(function),
+                    .rule   = rule,
                 });
             return std::nullopt;
         }
@@ -2043,13 +2050,12 @@ void ForwardRewrite::rewriteClosureCall(
         return nullptr;
     }
     const auto *body = reinterpret_cast<const rt::GCOperBody *>(draft_.payloadOf(callee).data());
-    // The three operators of this module that take a function, recognised by id.
+    // The two operators of this module that take a function, recognised by id. (A custom rule
+    // is a declaration tag now, `#vjp<rule>`: it is not a call of an operator.)
     static const camel::core::OperId kGrad =
         camel::core::OperatorTable::instance().intern("autodiff:grad");
     static const camel::core::OperId kValueAndGrad =
         camel::core::OperatorTable::instance().intern("autodiff:with_grad");
-    static const camel::core::OperId kVjp =
-        camel::core::OperatorTable::instance().intern("autodiff:vjp");
     const camel::core::OperId oper = body->oper;
     const auto staticFunction      = [&](gc_node_ref_t node) -> ::Function      *{
         const auto value = staticValue(draft_, node);
@@ -2079,13 +2085,6 @@ void ForwardRewrite::rewriteClosureCall(
                 result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), function->tupleType());
             }
         }
-    } else if (oper == kVjp && norm.size() == 1 && draft_.withInputsOf(callee).size() == 1) {
-        ::Function *function = staticFunction(norm.front());
-        ::Function *rule     = staticFunction(draft_.withInputsOf(callee).front());
-        if (function == nullptr || rule == nullptr) {
-            return nullptr;
-        }
-        result = attachRule(engine_.context(), function, rule);
     } else {
         return nullptr;
     }
@@ -2104,6 +2103,40 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
     Type *valueType        = type->exitType();
     const bool carriesFlow = tangentTypeOf(valueType) != nullptr && anyTangent(portTypes);
     if (!carriesFlow || type->modifiers().macro()) {
+        return;
+    }
+    if (hasRule(callee)) {
+        // The declaration has a custom rule (`#vjp<rule>`): the call computes its ordinary
+        // value as it is, and the rule, not the body, gives the gradient. The call is a site
+        // the backward pass replaces (visitRuleSite), as a call through a function value is.
+        ::Function *rule = ruleOf(draft_.program(), callee);
+        if (rule == nullptr) {
+            failAt(
+                draft_.nodeOrigin(call),
+                std::format(
+                    "the 'vjp' rule of '{}' is not part of the program being differentiated; "
+                    "the rule must be a function the program keeps",
+                    callee->name()));
+        }
+        std::vector<gc_node_ref_t> siteInputs = copyOf(draft_.withInputsOf(call));
+        for (gc_node_ref_t input : draft_.normInputsOf(call)) {
+            siteInputs.push_back(input);
+        }
+        if (siteInputs.size() != portTypes.size()) {
+            fail(
+                std::format(
+                    "call of '{}' passes {} arguments to {} ports",
+                    callee->name(),
+                    siteInputs.size(),
+                    portTypes.size()));
+        }
+        sites_.emplace(
+            call,
+            CallSite{
+                .inputs = std::move(siteInputs),
+                .plan   = makePlanTypes(portTypes, valueType),
+                .rule   = rule,
+            });
         return;
     }
     std::vector<gc_node_ref_t> inputs = copyOf(draft_.withInputsOf(call));

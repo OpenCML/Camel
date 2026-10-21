@@ -24,68 +24,35 @@
 #include "rules.h"
 
 #include "camel/core/mm.h"
-#include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/runtime/draft.h"
-#include "camel/runtime/program.h"
-
-#include <string_view>
-#include <vector>
 
 namespace camel::autodiff {
 
-namespace {
-
-constexpr std::string_view kRulePrefix = "autodiff.vjp/";
-
-} // namespace
-
-::Function *attachRule(
-    const camel::core::context::context_ptr_t &context, ::Function *function, ::Function *rule) {
-    namespace rt = camel::runtime;
-    using camel::core::type::TupleType;
-    using camel::core::type::Type;
-
-    rt::GCGraph *source = function->graph();
-    auto draft          = rt::GraphDraft::decode(*function->program(), source);
-    Type *ruleType      = rule->graph()->funcType();
-    const auto slot     = draft->allocateRuntimeSlot(ruleType);
-    const auto capture  = draft->addPortNode(ruleType, slot);
-    draft->appendClosureNode(capture);
-
-    const TupleType *closureType = function->tupleType();
-    std::vector<Type *> captured(closureType->types().begin(), closureType->types().end());
-    captured.push_back(ruleType);
-    auto *withRule = TupleType::create(std::move(captured));
-    draft->setClosureType(withRule);
-
-    draft->setId(context->graphIds().allocate());
-    draft->setFlags(draft->flags() | rt::kGraphFlagCarriesRule);
-    rt::GCGraph *graph =
-        draft->encode(std::string(kRulePrefix) + source->mangledName(), source->name());
-    auto *result = ::Function::create(
-        rt::makeProgram(*context, function->program(), std::span(&graph, 1)),
-        graph->id(),
-        withRule,
-        camel::core::mm::autoSpace());
-    for (size_t i = 0; i < closureType->size(); ++i) {
-        result->tuple()->set<slot_t>(i, function->tuple()->get<slot_t>(i), withRule);
-    }
-    result->tuple()->set<slot_t>(
-        closureType->size(),
-        camel::core::rtdata::toSlot<::Function *>(rule),
-        withRule);
-    return result;
+bool hasRule(const camel::runtime::GCGraph *graph) {
+    return graph != nullptr && !graph->ruleGraphs().empty();
 }
 
-bool carriesRule(const camel::runtime::GCGraph *graph) {
-    return graph != nullptr && (graph->flags() & camel::runtime::kGraphFlagCarriesRule) != 0;
+::Function *ruleOf(const camel::runtime::Program *program, const camel::runtime::GCGraph *graph) {
+    if (program == nullptr || graph == nullptr || graph->ruleGraphs().empty()) {
+        return nullptr;
+    }
+    // The first graph the declaration names is the rule (`#vjp<rule>` has one parameter).
+    camel::runtime::GCGraph *ruleGraph = program->graph(graph->ruleGraphs().front());
+    if (ruleGraph == nullptr) {
+        return nullptr;
+    }
+    // A rule is a function of the program, not a closure: an empty closure layout.
+    auto *closure =
+        camel::core::type::TupleType::create(std::vector<camel::core::type::Type *>{});
+    return ::Function::create(
+        program, ruleGraph->id(), closure, camel::core::mm::autoSpace());
 }
 
 ::Function *ruleOf(const ::Function *function) {
-    const auto *type = function->tupleType();
-    return camel::core::rtdata::fromSlot<::Function *>(
-        function->tuple()->get<slot_t>(type->size() - 1));
+    if (function == nullptr) {
+        return nullptr;
+    }
+    return ruleOf(function->program(), function->graph());
 }
 
 } // namespace camel::autodiff

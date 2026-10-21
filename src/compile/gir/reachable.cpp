@@ -51,6 +51,13 @@ void forEachReachableGraph(
             visit(dep);
         }
 
+        // A graph a declaration tag names is part of the program the same way a function
+        // constant's graph is: the tag's reader finds it through the frozen graph's reference
+        // table, so it must be encoded even when no node calls it.
+        for (const auto &rule : curr->ruleGraphs()) {
+            visit(rule);
+        }
+
         const auto staticSlots = curr->draft().staticSlots();
         const auto staticTypes = curr->draft().staticSlotTypes();
         for (size_t i = 0; i < staticSlots.size() && i < staticTypes.size(); ++i) {

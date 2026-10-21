@@ -141,9 +141,14 @@ class DraftGraphBuilder {
     void eraseSubGraph(const graph_ptr_t &graph);
     void addStaticGraphRef(const graph_ptr_t &graph);
     void eraseStaticGraphRef(const graph_ptr_t &graph);
+    /// A graph a declaration tag of this graph's declaration names (a derivative rule). It is
+    /// kept in the reference table so that it is encoded with the program and can be read back
+    /// from the frozen graph.
+    void addRuleGraphRef(const graph_ptr_t &graph);
     const std::vector<graph_ptr_t> &dependencyGraphs() const { return dependencyGraphs_; }
     const std::vector<graph_ptr_t> &subGraphs() const { return subGraphs_; }
     const std::vector<graph_ptr_t> &staticGraphRefs() const { return staticGraphRefs_; }
+    const std::vector<graph_ptr_t> &ruleGraphs() const { return ruleGraphRefs_; }
 
     const std::string &nodePortName(runtime::DraftNodeRef node) const;
     const std::string &nodePortName(runtime::gc_node_ref_t nodeId) const {
@@ -205,6 +210,7 @@ class DraftGraphBuilder {
     std::vector<graph_ptr_t> dependencyGraphs_;
     std::vector<graph_ptr_t> subGraphs_;
     std::vector<graph_ptr_t> staticGraphRefs_;
+    std::vector<graph_ptr_t> ruleGraphRefs_;
     std::unordered_map<const ::OperatorIndex *, std::shared_ptr<::OperatorIndex>>
         operIndexRegistry_;
     mutable ExtraStorage<4> extras_;

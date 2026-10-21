@@ -651,6 +651,7 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
     draft->dependencies_    = graph->dependencies();
     draft->subGraphs_       = graph->subGraphs();
     draft->staticGraphRefs_ = graph->staticGraphRefs();
+    draft->ruleGraphs_      = graph->ruleGraphs();
     draft->draftIdsBySourceRef_.assign(graph->nodeCount(), kInvalidNodeRef);
 
     std::vector<gc_node_ref_t> sourceToDraft(graph->nodeCount(), kInvalidNodeRef);
@@ -1403,6 +1404,15 @@ void GraphDraft::addStaticGraphRef(GraphId graph) {
     }
 }
 
+void GraphDraft::addRuleGraphRef(GraphId graph) {
+    ++mutations_;
+    touchRefs();
+    if (isValid(graph) &&
+        std::find(ruleGraphs_.begin(), ruleGraphs_.end(), graph) == ruleGraphs_.end()) {
+        ruleGraphs_.push_back(graph);
+    }
+}
+
 uint32_t GraphDraft::payloadGraphIndexOf(GraphId graph) {
     ++mutations_;
     if (!isValid(graph)) {
@@ -1495,6 +1505,7 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
         dependencies_,
         subGraphs_,
         staticGraphRefs_,
+        ruleGraphs_,
         payloadShape,
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(*this, payload); },
         staticSlots_);

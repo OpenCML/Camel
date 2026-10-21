@@ -1,0 +1,20 @@
+/**
+ * A function declared with `#vjp<rule>` in another module, imported through two modules (so
+ * `vjp_lib` is compiled once and the second import hits the module cache): the gradient of a call
+ * uses the rule, wherever the call is written.
+ *
+ * use_a(x) = scale(x) * 2, use_b(x) = scale(x) + 1, both at x = 2: the rule gives 20 and 10,
+ * the derivative of the body would give 16 and 4.
+ */
+module vjp_cross_module
+
+import { grad } from autodiff
+import { use_a } from vjp_user_a
+import { use_b } from vjp_user_b
+
+func main(): int sync {
+    let da = grad(use_a)<2.0>()
+    let db = grad(use_b)<2.0>()
+    'vjp_cross_module da={} db={}'->format<da, db>->println
+    return 0
+}

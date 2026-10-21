@@ -131,6 +131,10 @@ class Program final : public camel::core::rtdata::Object {
     std::vector<GCGraph *> staticGraphRefs(const GCGraph &graph) const {
         return resolve(graph.staticGraphRefs());
     }
+    /// The graphs a declaration tag of `graph`'s declaration names (a derivative rule).
+    std::vector<GCGraph *> ruleGraphs(const GCGraph &graph) const {
+        return resolve(graph.ruleGraphs());
+    }
     /// Calls `visitor` for every graph of the reference table of `graph`.
     template <typename Visitor> void traceGraphs(const GCGraph &graph, Visitor &&visitor) const {
         for (GraphId id : graph.refs()) {
