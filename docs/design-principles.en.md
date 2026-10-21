@@ -470,6 +470,7 @@ Keywords are kept only for modifiers that change semantics (such as `sync`, `exp
 - **`argmax` and `argmin`** compare by IEEE 754-2019 `maximum` and `minimum`: with a NaN they return the position of the first NaN; on ties they return the position of the first extreme value, with +0 greater than -0.
 - **Reductions**: a reduction over an empty range is a fault, even if the result itself has no elements. The sum of an int64 tensor is accumulated exactly in int64 and wraps on overflow, consistent with integer arithmetic.
 - There is only one rule for converting a float to text: the shortest one that reads back to the same number. `string`, `println` and `format` agree.
+- **The text of a NaN has no sign**: every NaN is written `nan` (`NAN` when a format specification asks for upper case), whatever its sign bit, with or without a format specification, on every back end.
 
 ---
 
