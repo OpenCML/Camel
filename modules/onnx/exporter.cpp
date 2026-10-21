@@ -252,6 +252,10 @@ class Evaluator {
 
     Value eval(Activation &act, gc_node_ref_t ref);
     Value evalNode(Activation &act, gc_node_ref_t ref);
+    /// The value of the CAST node `ref` applied to `src` (its evaluated source): performed now
+    /// for a constant, a no-op for a struct conversion of one layout, an ONNX Cast for a
+    /// model-dependent number, refused otherwise.
+    Value evalCast(Activation &act, gc_node_ref_t ref, Value src);
     Value evalOper(Activation &act, gc_node_ref_t ref);
     Value evalVariableRead(Activation &act, gc_node_ref_t ref);
     Value variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_ref_t at);
@@ -653,73 +657,8 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         }
         return it->second;
     }
-    case GCNodeKind::Cast: {
-        // `e as T` is a checked conversion. Of a constant it is performed now. Of a tensor that
-        // depends on the model input it is an assertion about element type and shape, and an
-        // ONNX model checks none when it runs: it is exported (as nothing) only when what is
-        // known of the value at export time already proves it, and refused otherwise.
-        const gc_node_ref_t source = g->normInputsOf(ref).front();
-        Value src                  = eval(act, source);
-        if (src.isConstant()) {
-            try {
-                return keep(n->dataType()->castSlotFrom(src.slot, src.ty), n->dataType());
-            } catch (const core::error::RuntimeFault &fault) {
-                // What the conversion says itself ("conversion to 'T' failed: ...").
-                unsupported(
-                    act,
-                    std::format(
-                        "this conversion of a constant always fails: {}",
-                        fault.formatArgs().empty() ? std::string(fault.what())
-                                                   : fault.formatArgs().front()));
-            }
-        }
-        if (tensor::asTensorType(n->dataType())) {
-            const TensorFacts facts = factsOf(src);
-            type::Type *known       = src.form == Value::Form::Tensor
-                                          ? tensor::TensorType::get(facts.dtype, facts.shape)
-                                          : inferenceTypeOf(src);
-            type::Type *declared    = g->node(source)->dataType();
-            const auto safety       = n->dataType()->castSafetyFrom(known);
-            if (safety == type::CastSafety::Safe ||
-                (declared && n->dataType()->castSafetyFrom(declared) == type::CastSafety::Safe)) {
-                return src;
-            }
-            const std::string have =
-                known ? known->toString() : std::string("a value of unknown type");
-            if (safety == type::CastSafety::Forbidden) {
-                unsupported(
-                    act,
-                    std::format(
-                        "this conversion to '{}' always fails: for the exported inputs the "
-                        "value is a '{}'",
-                        n->dataType()->toString(),
-                        have));
-            }
-            unsupported(
-                act,
-                std::format(
-                    "the conversion to '{}' of a value that depends on the model input cannot "
-                    "be checked when the model is exported: the value is only known to be a "
-                    "'{}', and an ONNX model does not check a shape or an element type when it "
-                    "runs. Convert to a type that leaves open what the inputs leave open (a "
-                    "negative extent for a dynamic axis), or export with inputs that fix it",
-                    n->dataType()->toString(),
-                    have));
-        }
-        if (src.form == Value::Form::Scalar &&
-            tensor::isSupportedTensorScalar(n->dataType()->code())) {
-            const TypeCode target = tensor::normalizeTensorDType(n->dataType()->code());
-            return Value::symbolicScalar(
-                emitter_.node(
-                    "Cast",
-                    {src.name},
-                    {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(target)))}),
-                n->dataType());
-        }
-        unsupported(
-            act,
-            std::format("cast of a model-dependent value to '{}'", n->dataType()->toString()));
-    }
+    case GCNodeKind::Cast:
+        return evalCast(act, ref, eval(act, g->normInputsOf(ref).front()));
     case GCNodeKind::Copy:
         // Exported values are never mutated in place, so a copy can share its source.
         return eval(act, g->normInputsOf(ref).front());
@@ -752,6 +691,94 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
             act,
             std::format("graph node kind {} has no export semantics", static_cast<int>(n->kind)));
     }
+}
+
+Value Evaluator::evalCast(Activation &act, gc_node_ref_t ref, Value src) {
+    GCGraph *g                 = act.graph;
+    type::Type *const target   = g->node(ref)->dataType();
+    const gc_node_ref_t source = g->normInputsOf(ref).front();
+    // `e as T` is a checked conversion. Of a constant it is performed now. Of a tensor that
+    // depends on the model input it is an assertion about element type and shape, and an ONNX
+    // model checks none when it runs: it is exported (as nothing) only when what is known of
+    // the value at export time already proves it, and refused otherwise.
+    if (src.isConstant()) {
+        try {
+            return keep(target->castSlotFrom(src.slot, src.ty), target);
+        } catch (const core::error::RuntimeFault &fault) {
+            // What the conversion says itself ("conversion to 'T' failed: ...").
+            unsupported(
+                act,
+                std::format(
+                    "this conversion of a constant always fails: {}",
+                    fault.formatArgs().empty() ? std::string(fault.what())
+                                               : fault.formatArgs().front()));
+        }
+    }
+    // A CAST between two struct types of one layout moves nothing (design principles 5.1 and
+    // 5.2): an anonymous struct value entering a named type whose fields are written in the
+    // same order, or an `as` between two named types whose declarations agree. The export-time
+    // aggregate already holds the fields in that order, so it becomes a value of the target
+    // type and writes no ONNX node. A conversion that reorders the fields is the front end's
+    // FILL (the builder's struct conversion), not a CAST; a CAST whose two struct types do not
+    // correspond falls through to the refusal below.
+    if (target->code() == TypeCode::Struct) {
+        type::Type *from = g->node(source)->dataType();
+        if (from != nullptr && from->code() == TypeCode::Struct &&
+            target->castSafetyFrom(from) == type::CastSafety::Safe) {
+            auto *targetStruct = static_cast<type::StructType *>(target);
+            if (!src.isAggregate() || src.fields.size() != targetStruct->size()) {
+                unsupported(
+                    act,
+                    std::format(
+                        "cast of a model-dependent value to '{}': the value does not hold one "
+                        "element per field",
+                        target->toString()));
+            }
+            return Value::aggregate(target, std::move(src.fields));
+        }
+    }
+    if (tensor::asTensorType(target)) {
+        const TensorFacts facts = factsOf(src);
+        type::Type *known       = src.form == Value::Form::Tensor
+                                      ? tensor::TensorType::get(facts.dtype, facts.shape)
+                                      : inferenceTypeOf(src);
+        type::Type *declared    = g->node(source)->dataType();
+        const auto safety       = target->castSafetyFrom(known);
+        if (safety == type::CastSafety::Safe ||
+            (declared && target->castSafetyFrom(declared) == type::CastSafety::Safe)) {
+            return src;
+        }
+        const std::string have = known ? known->toString() : std::string("a value of unknown type");
+        if (safety == type::CastSafety::Forbidden) {
+            unsupported(
+                act,
+                std::format(
+                    "this conversion to '{}' always fails: for the exported inputs the value "
+                    "is a '{}'",
+                    target->toString(),
+                    have));
+        }
+        unsupported(
+            act,
+            std::format(
+                "the conversion to '{}' of a value that depends on the model input cannot be "
+                "checked when the model is exported: the value is only known to be a '{}', and "
+                "an ONNX model does not check a shape or an element type when it runs. Convert "
+                "to a type that leaves open what the inputs leave open (a negative extent for "
+                "a dynamic axis), or export with inputs that fix it",
+                target->toString(),
+                have));
+    }
+    if (src.form == Value::Form::Scalar && tensor::isSupportedTensorScalar(target->code())) {
+        const TypeCode code = tensor::normalizeTensorDType(target->code());
+        return Value::symbolicScalar(
+            emitter_.node(
+                "Cast",
+                {src.name},
+                {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(code)))}),
+            target);
+    }
+    unsupported(act, std::format("cast of a model-dependent value to '{}'", target->toString()));
 }
 
 // ---------------------------------------------------------------- tail recursion as a Loop
@@ -964,6 +991,29 @@ bool holdsClosure(const Value &v) {
         return std::ranges::any_of(v.fields, holdsClosure);
     }
     return false;
+}
+
+/// Whether two struct types spell the same value layout. A named type and the anonymous type of
+/// its fields, written in the declaration's order, are one representation: a value of the
+/// anonymous type enters the named one by an identity CAST (design principles 5.2), and the two
+/// may meet where a branch's arms are typed (a returned literal next to a recursive call's
+/// result). Two named types are different types even when their fields agree.
+bool sameStructRepresentation(type::Type *a, type::Type *b) {
+    if (a == b) {
+        return true;
+    }
+    if (a == nullptr || b == nullptr || a->code() != TypeCode::Struct ||
+        b->code() != TypeCode::Struct) {
+        return false;
+    }
+    auto *sa = static_cast<type::StructType *>(a);
+    auto *sb = static_cast<type::StructType *>(b);
+    if (sa->named() == sb->named()) {
+        return false;
+    }
+    type::StructType *named = sa->named() ? sa : sb;
+    type::StructType *other = sa->named() ? sb : sa;
+    return named->castSafetyFrom(other) == type::CastSafety::Safe;
 }
 
 /// The leaves of a value: itself, or the elements of a tuple / struct, depth first.
@@ -1385,6 +1435,18 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
     case GCNodeKind::Gate: {
         const auto norm = g->normInputsOf(ref);
         return evalLoopBody(act, norm.empty() ? g->withInputsOf(ref).back() : norm.back(), loop);
+    }
+    case GCNodeKind::Cast: {
+        // A cast is not a decision: the branch under it decides whether the recursion goes on,
+        // and the conversion is applied to the value the path returns. (H5 puts a struct
+        // conversion between a returned branch and the function's exit; without this the
+        // branch is hidden from the loop translation and its recursive call is taken for a
+        // call in value position.)
+        BodyOutcome out = evalLoopBody(act, g->normInputsOf(ref).front(), loop);
+        if (out.result) {
+            out.result = evalCast(act, ref, std::move(*out.result));
+        }
+        return out;
     }
     case GCNodeKind::Func: {
         GCGraph *callee = programOf(g).calleeOf(*g, ref);
@@ -2866,7 +2928,8 @@ void Evaluator::collectArmLeaves(
     }
     if (isAggregateForm(a)) {
         const Value va = asAggregate(a), vb = asAggregate(b);
-        if (va.camelType != vb.camelType || va.fields.size() != vb.fields.size()) {
+        if (!sameStructRepresentation(va.camelType, vb.camelType) ||
+            va.fields.size() != vb.fields.size()) {
             unsupported(
                 act,
                 "the arms of a branch on a model-dependent condition yield different types");
