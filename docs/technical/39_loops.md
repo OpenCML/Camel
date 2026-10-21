@@ -53,7 +53,11 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
    where they are written like the arms of a branch (`Builder::buildArm`). Their ports (the
    state; the body the element first) are Port nodes of the graph that belong to the region and
    are declared as names in its scope; everything else the code names is read where it is, so a
-   loop has no capture table.
+   loop has no capture table. A constant is not a capture: a `DATA` node (a literal, a folded
+   literal, a static value) and any node whose value is known at build time (the `constant` flag)
+   is evaluated where it is read, in place, so `LoopView::externalInputs` leaves it out by default
+   (`constants = false`). A value that is merely loop-invariant -- a parameter, a module value
+   read through a capture port, a variable's cell -- is not constant and is an external input.
 3. Each part is a block (`sync` if written so, `return` ends the block with the next state).
    The condition must be a `bool` (`LoopConditionNotBool`); the body must give the state
    (`LoopBodyTypeMismatch`), a value that enters it (an `int` for an `int?`) gets the CAST at the

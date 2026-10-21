@@ -49,6 +49,7 @@
 #include "camel/passes/test/exec_plan.h"
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/arm_loop_regions.h"
+#include "camel/passes/test/loop_inputs.h"
 #include "camel/passes/trans/json/gir.h"
 #include "macro/macro.h"
 #include "pass_spec.h"
@@ -1134,6 +1135,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
         TEST_PASS(kArmLoopRegionsTestPass, ArmLoopRegionsTestPass),
+        TEST_PASS(kLoopInputsTestPass, LoopInputsTestPass),
         TEST_PASS(kExecPlanTestPass, ExecPlanTestPass),
         TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),

@@ -15,8 +15,11 @@ ENV = dict(os.environ, CAMEL_HOME=str(ROOT / 'out/latest'),
 
 
 def run(passes, env=ENV):
+    # One invocation is about 7 s alone; the sweep runs eight tests at once, and a shared host
+    # can multiply that, so the per-run budget is 240 s rather than 90 s (the H75 plan budget is
+    # 360 s).
     return subprocess.run([EXE, '--gc', 'generational', str(Path(__file__).with_suffix('.cml')), *passes],
-                          cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
+                          cwd=ROOT, env=env, capture_output=True, text=True, timeout=240)
 
 
 for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
