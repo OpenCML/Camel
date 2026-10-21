@@ -81,9 +81,27 @@ int defaultThreadCount() {
     return hw == 0 ? 1 : static_cast<int>(hw);
 }
 
+// The configured worker count, readable without creating a single thread: the
+// decision "is this range worth the pool" must not have the side effect of
+// creating the pool. 0 means "not computed yet".
+std::atomic<int> gThreadCount{0};
+
+int configuredThreadCount() {
+    int count = gThreadCount.load(std::memory_order_acquire);
+    if (count != 0) {
+        return count;
+    }
+    const int initial = std::max(defaultThreadCount(), 1);
+    int expected      = 0;
+    if (gThreadCount.compare_exchange_strong(expected, initial, std::memory_order_acq_rel)) {
+        return initial;
+    }
+    return expected;
+}
+
 class WorkerPool {
   public:
-    WorkerPool() { resize(defaultThreadCount()); }
+    explicit WorkerPool(int threads) { create(threads); }
 
     ~WorkerPool() { stopWorkers(); }
 
@@ -93,11 +111,7 @@ class WorkerPool {
         threads = std::max(threads, 1);
         std::lock_guard regionGuard(regionMutex_);
         stopWorkers();
-        threadCount_ = threads;
-        stopping_.store(false);
-        for (int i = 1; i < threadCount_; ++i) {
-            workers_.emplace_back([this] { workerLoop(); });
-        }
+        create(threads);
     }
 
     void run(int64_t count, int64_t grain, const RangeFn &fn) {
@@ -125,7 +139,14 @@ class WorkerPool {
             firstError_ = nullptr;
             generation_.fetch_add(1, std::memory_order_release);
         }
-        wake_.notify_all();
+        // Wake only as many workers as there are chunks to hand out. Waking the whole pool made
+        // every other worker wake up, find the chunks taken, and spin again; on a shared host
+        // that cost several hundred microseconds per region, more than the region itself (H54:
+        // a three-chunk product took 950 us at load 62 against 50 us on one thread). A worker
+        // that is spinning rather than waiting sees the new generation on its own.
+        for (int64_t i = 1; i < chunks; ++i) {
+            wake_.notify_one();
+        }
 
         runChunks();
 
@@ -144,6 +165,14 @@ class WorkerPool {
     }
 
   private:
+    void create(int threads) {
+        threadCount_ = threads;
+        stopping_.store(false);
+        for (int i = 1; i < threadCount_; ++i) {
+            workers_.emplace_back([this] { workerLoop(); });
+        }
+    }
+
     void workerLoop() {
         uint64_t seenGeneration = 0;
         for (;;) {
@@ -237,22 +266,41 @@ class WorkerPool {
     std::exception_ptr firstError_;
 };
 
+WorkerPool *&poolSlot() {
+    // A pointer rather than the object itself, so that `setNumThreads` can tell whether the pool
+    // has been created without creating it.
+    static WorkerPool *slot = nullptr;
+    return slot;
+}
+
 WorkerPool &pool() {
-    static WorkerPool instance;
+    static WorkerPool instance(configuredThreadCount());
+    poolSlot() = &instance;
     return instance;
 }
 
 } // namespace
 
-void parallelFor(int64_t count, int64_t grain, const RangeFn &fn) {
-    if (count <= 0) {
-        return;
+bool parallelWouldSplit(int64_t count, int64_t grain) noexcept {
+    if (count <= 0 || tInsideRegion) {
+        return false;
     }
+    const int64_t maxChunks = std::max<int64_t>(1, count / std::max<int64_t>(grain, 1));
+    return maxChunks >= 2 && configuredThreadCount() > 1;
+}
+
+void runParallelChunks(int64_t count, int64_t grain, const RangeFn &fn) {
     pool().run(count, grain, fn);
 }
 
-int numThreads() { return pool().threads(); }
+int numThreads() { return configuredThreadCount(); }
 
-void setNumThreads(int threads) { pool().resize(threads); }
+void setNumThreads(int threads) {
+    threads = std::max(threads, 1);
+    gThreadCount.store(threads, std::memory_order_release);
+    if (WorkerPool *created = poolSlot()) {
+        created->resize(threads);
+    }
+}
 
 } // namespace camel::tensor::kernels

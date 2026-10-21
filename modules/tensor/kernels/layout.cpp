@@ -154,7 +154,7 @@ permute(const Array *input, std::span<const int64_t> perm, mm::IAllocator &alloc
         T *dst      = out->dataAs<T>();
         parallelFor(
             rows,
-            std::max<int64_t>(1, 16384 / std::max<int64_t>(inner, 1)),
+            std::max<int64_t>(1, grainForWork(kNsPerFloat * 2.0) / std::max<int64_t>(inner, 1)),
             [&](int64_t begin, int64_t end) {
                 for (int64_t row = begin; row < end; ++row) {
                     // decode the outer index of this row

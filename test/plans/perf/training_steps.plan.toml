@@ -16,17 +16,33 @@ tags = ["perf", "training", "gpu"]
 #
 # The budgets are the mean of ten runs on the reference host (32 cores, Release); they are a
 # regression guard, not a goal, and the per-step numbers these programs print are in
-# docs/handover/reports/H48.md. The host is shared: the same plan measures 1.3-1.6x slower while
-# eight agents are building on it (dependency_chain.nvm 29.2 ms alone, 33.5 ms under load), so the
-# tolerance is 100 % -- a real regression is still caught, a busy neighbour is not a failure.
+# docs/handover/reports/H54.md and H48.md. The host is shared: the same plan measures 1.3-1.6x
+# slower while eight agents are building on it, so the tolerance is 100 % -- a real regression is
+# still caught, a busy neighbour is not a failure.
+#
+# H54 (the cost of one operator, reports/H54.md) took the thread pool out of these steps: a range
+# whose chunks are smaller than 40 us of work now runs on the calling thread, and the pool is only
+# created by a range that really splits. What the plan measured before and after it, medians of ten
+# runs (before at load 29-70, after at load 34-41):
+#
+#   dependency_chain.nvm      9.31 -> 8.84 ms    mlp_step.nvm       93.95 -> 48.14 ms
+#   dependency_chain.fvm      9.39 -> 8.69 ms    mlp_step.fvm       88.20 -> 48.37 ms
+#   transformer_step.nvm      6.63 -> 5.83 ms    transformer_step.profile  25.32 -> 20.71 ms
+#
+# and the per-step numbers behind them: the chain's round is 17.6 us (median; two 64^3 matmuls at
+# 6.7 us each, a broadcast add at 0.7 us), the C2 step is 0.96 ms (1.88 before), the Transformer
+# step 118 us. H48's 16.2 ms step and 45-78 us matmul were measured on the same host at load 85-90,
+# where the pool's wakeup storm dominated.
 #
 # std::nvm has no budget at all: by the author's ruling (reviews/H24-H25-H26.md, H43 item 7) it
 # is the node-at-a-time reference implementation, the performance is fvm's and jit's to carry, and
 # its per-step numbers are recorded here only to be compared against.
 #
-# `dependency_chain` has no budget on either back end: the round is two 64x64 matmuls whose cost
-# on this host is dominated by thread-pool wakeups, so the same plan measures 29-44 ms from one run
-# to the next (per-step numbers in H48.md). The bigger steps keep their guard.
+# `dependency_chain` has no budget on either back end either: every range in it is a single chunk
+# (64x64 products, 4096-element elementwise loops), so it never creates or touches the pool, and
+# what remains is two GEMMs that run at ~72 % of the core's FMA peak. Its round is 16.8-18.6 us
+# from one run to the next depending on the load, which is a property of the host, not of the
+# runtime; the guard would only measure the neighbours.
 
 [[tests]]
 name = "dependency_chain.nvm"

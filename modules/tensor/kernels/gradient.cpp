@@ -130,7 +130,7 @@ sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator)
         const int64_t rows = static_cast<int64_t>(numelOf(big.subspan(0, lead)));
         parallelFor(
             cols,
-            std::max<int64_t>(64, 16384 / std::max<int64_t>(rows, 1)),
+            std::max<int64_t>(64, grainForWork(kNsPerFloat * 2.0) / std::max<int64_t>(rows, 1)),
             [&](int64_t begin, int64_t end) {
                 for (int64_t r = 0; r < rows; ++r) {
                     const float *row = in + r * cols;
@@ -183,12 +183,14 @@ Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
     const int64_t n          = static_cast<int64_t>(xs->numel());
     constexpr float kScale   = 0.7978845608028654f; // sqrt(2 / pi)
     constexpr float kCubic   = 0.044715f;
-    constexpr int64_t kGrain = 4096;
+    // A polynomial element of this gradient is a few multiply-adds, about twice a plain
+    // elementwise element (parallel.h, kNsPerFloat).
+    const int64_t grain      = grainForWork(kNsPerFloat * 2.0);
     const float *px          = xs->dataAs<float>();
     // tanh goes through the vectorized unary kernel; the polynomial parts vectorize as they are.
     Array *inner = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
     float *pu           = inner->dataAs<float>();
-    parallelFor(n, kGrain, [&](int64_t begin, int64_t end) {
+    parallelFor(n, grain, [&](int64_t begin, int64_t end) {
         for (int64_t i = begin; i < end; ++i) {
             const float v = px[i];
             pu[i]         = kScale * (v + kCubic * v * v * v);
@@ -198,7 +200,7 @@ Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
     const float *pg   = gs->dataAs<float>();
     Array *out = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
     float *po         = out->dataAs<float>();
-    parallelFor(n, kGrain, [&](int64_t begin, int64_t end) {
+    parallelFor(n, grain, [&](int64_t begin, int64_t end) {
         for (int64_t i = begin; i < end; ++i) {
             const float v = px[i], t = pt[i];
             const float slope = 0.5f * (1.0f + t) +
