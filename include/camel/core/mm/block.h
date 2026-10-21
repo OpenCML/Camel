@@ -116,6 +116,19 @@ class Block final {
     /// old length. Contents are preserved. The data may move; callers re-read data().
     void grow(size_t newBytes);
 
+    /// Claims this block's bytes for the collector's promoted-block budget and returns the
+    /// bytes not claimed before (zero when the block was already counted). The collector calls
+    /// it when a value holding the block is promoted, and when an elder value takes the block
+    /// over (mm/alloc/allocator.h, noteBlockHeld); a block reached through several views is
+    /// therefore counted once, by identity, not once per view. Called under the allocator's
+    /// lock.
+    size_t claimPacingBytes() noexcept;
+
+    /// Marks the block as counted by the live-base measurement identified by `generation` and
+    /// returns true the first time. A sweep therefore sums each block once even when several
+    /// surviving views hold it. Called under the allocator's lock.
+    bool claimSweepGeneration(uint64_t generation) noexcept;
+
     /// Sets the logical length without changing the allocation (used by append after grow).
     void setBytes(size_t bytes) noexcept;
 
@@ -134,6 +147,11 @@ class Block final {
     void *block_ = nullptr;
     size_t capacity_ = 0;
     size_t bytes_    = 0;
+    /// Bytes already added to the promoted-block budget, and the sweep that last counted the
+    /// block in the elder live base. Identity is the Block object itself (blocks never move and
+    /// are not reused), so a block shared by views is counted once.
+    size_t pacedBytes_             = 0;
+    uint64_t sweepGeneration_      = 0;
     BlockRelease external_{};
     int device_ = 0;
 };
