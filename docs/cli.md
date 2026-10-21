@@ -150,6 +150,7 @@ Settings of a pass are parameters, no longer environment variables:
 | `std::fvm`, `std::jit` | `stats: string = ""` (append per-graph bytecode and execution counts of the run to this file) |
 | `std::jit` | `hot_threshold: int = 1` (calls from one call site before a graph is compiled; 0 compiles at the first call) |
 | `std::tf`, `std::prl` | `linear: bool = false` (evaluate node by node), `fanout_all: bool = false` (fan every unordered higher-order call out), `diag: bool = false` (print the decision for every graph), `bytecode: bool = true` (hand serial graphs to the bytecode interpreter), `gc_stats: int = 0` (1: statistics at the end of the run; 2: also one line per collection) |
+| `std::profile` | `top: int = 24` (rows of the operator table; 0 writes every operator that ran), `hints: bool = true` (report the element-wise loops that run on the host, and why they did not go to a device), `json: string = ""` (also write the report as one JSON object to this file) |
 | `onnx::export` | `out: string = ""` (the model file; see below) |
 
 What stays in the environment is the environment of the process, not of a pass: `CAMEL_HOME`, `CAMEL_STD_LIB`, `CAMEL_PACKAGES`, the logging and diagnostics-format variables, the resource limits and the collector (`CAMEL_GC*`, `CAMEL_*_SPACE_*`, `CAMEL_MAX_RECURSION_DEPTH`), the diagnostic traces and statistics (`CAMEL_EFFECT_TRACE`, `CAMEL_TYPE_STATS`, `CAMEL_STARTUP_PROFILE`), and `CAMEL_ENABLE_TEST_PASSES` (it decides which passes exist, for the tests). The growth budget of the rewrite engine is the `growth_budget` parameter of the passes above; it is not read from the environment.
@@ -177,6 +178,7 @@ A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) d
 - `std::fvm`: high-performance bytecode VM scheduler
 - `std::jit`: JIT-enabled bytecode VM scheduler. The JIT generates code for x86-64 only. In a build for another processor (arm64 macOS; `ENABLE_FASTVM_JIT` off) `std::jit` is accepted and runs the program on the bytecode interpreter, as `std::fvm` does, with the same results; the build says so once in its log (`-v`: `std::jit: this build has no native code generator ...`). It is a log line and not a warning, so the same command line runs on every platform, also under `-Werror`
 - `std::gir`: dump the current graph IR and stop
+- `std::profile`: profile the run and print a report when it ends (see "Profiling a run: `std::profile`")
 - `tensor::fuse`, `onnx::export`: passes contributed by modules. Writing `<module>::<pass>` on the command line loads the module `<module>` when the program has not imported it, so a program need not import a module only to be translated by its pass. A module that cannot be found, or that has no such pass, leaves the name unknown (`RuntimeDiag::UnrecognizedGraphPass`)
 
 The former integrated entry `std::opt::simplify` is now `std::opt`. Standalone `std::devirtualize` and `std::specialize` are now `std::opt::devirtualize` and `std::opt::specialize`.
@@ -199,6 +201,68 @@ Consequences of the rule:
 - Effects that the failed evaluation performed before it failed have happened at pass time (once per round of the pass). They are not repeated, since the program does not run.
 - Without `std::macro` in the pipeline nothing changes: the call is an ordinary call and fails, if at all, when it is reached.
 - `onnx.export_model` expands macros of the function it exports with the same evaluator while the program runs; a failed evaluation there is the same diagnostic, with stage `run`.
+
+### Profiling a run: `std::profile`
+
+    camel m.cml std::profile std::fvm
+    camel m.cml 'std::profile(json="profile.json")' std::jit
+    camel train.cml --arg steps=50 'std::profile(top=0)' std::nvm
+
+`std::profile` is a pass of the core, written before the scheduler like `std::stats`: it hands the
+program on unchanged and starts a recording session, and the driver writes the report when the run
+ends, on standard output (on standard error under `--output-format json`, so the diagnostics array
+keeps its shape). It works for every back end, because nothing in it belongs to one:
+`std::nvm`, `std::fvm`, `std::jit`, `std::tf` and the Tiles scheduler all record. Written after a
+consuming pass it never runs, like any other pass.
+
+What the report holds:
+
+- **Operators.** One row per operator that ran: the device it belongs to (`cpu`, or the device
+  when a `tiles:` operator drives one), the calls, the total time, what the first call cost and
+  the mean of the calls after it, and the share of the operator time. The first call is printed
+  apart because it pays one-time setup (a thread pool, a region compiled by NVRTC); a mean that
+  mixes it in says nothing about a step.
+- **Steps.** A step is one round of a loop of the program: every back end reports the rounds of a
+  loop from the same place (`include/camel/execute/loop_frame.h`). The report picks the loop that
+  carries the most operators per round as the step loop (the training loop of a training step) and
+  gives the operators, kernels, transfers and waits of one round, with the wall time as the median
+  of the rounds (a mean is at the mercy of whatever else the machine was doing). A program with no
+  loop reports the whole run as one step.
+- **The device.** Kernel launches, bytes host->device and device->host, synchronisations, and the
+  time the module spent compiling device code at run time (NVRTC). A module that drives a device
+  reports these itself (the Tiles module does, through `modules/tiles/include/tiles/internal/
+  profile_hooks.h`); the CPU path reports zero.
+- **Compilation.** The self time of every phase of the compilation that happened before the run:
+  parse, `compile`, `gct`, `gir`, `encode`, the import and load of each module, and one line per
+  pass. The driver turns the phase recorder on when the pipeline names this pass, so no phase
+  file is written and `--time-phases` is not needed.
+- **Hints.** One entry per loop that runs on the host, with the place in the source, its
+  operators, its rounds, and why it did not go to a device. The reason names the operator that
+  stops it (`tensor:sum` is not element-wise) or says that the body is a pure element-wise chain
+  that a device could take, and that nothing places it there yet.
+
+The recording is always compiled in and costs one flag check where it is off: an operator call
+costs a timestamp pair (the report prints what that costs on the machine it ran on), a loop round
+costs a few counter reads. Nothing is measured under `--timeit`, whose own report replaces the
+program's output.
+
+A run of a training step, short:
+
+    PROFILE camel
+      backend              std::nvm
+      device               cpu
+      run                  820.66 ms
+      operator calls       1082 (time inside them: 817.28 ms, 99.6% of the run)
+      measurement overhead 50 ns per operator call (one timestamp pair)
+
+    steps - the loop at test/cases/perf/mlp_step.cml:51:33: 50 rounds (49 measured)
+      operators per step   21 (min 21, max 21)
+      wall per step        median 16.22 ms, mean 16.25 ms, min 5.30 ms, max 56.16 ms
+
+    operators (device, calls, total, first call, mean after the first, share of operator time)
+      cpu  tensor:matmul                       100    291.43 ms      2.17 ms      2.92 ms   35.7%
+      cpu  nn:adam                              50     40.46 ms      1.23 ms     800.6 µs    5.0%
+      ...
 
 ### ONNX export as a pass (`onnx::export`)
 
