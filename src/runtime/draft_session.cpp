@@ -1194,6 +1194,13 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     // program is left as it is.
     if (!detached && context_->currentRuntimeProgram() == program_ &&
         program_->root() == oldRuntimeRoot) {
+        // A shape no back end runs stays in a private program (the export-only sessions commit
+        // programs that are not the context's): installing it would hand it to the pipeline.
+        if (graphState_ == GraphState::NonExecutable) {
+            throw std::logic_error(
+                "A session building non-executable graphs must not replace the program of the "
+                "context.");
+        }
         program_ = context_->installRuntimeProgram(committed);
     } else {
         // A private copy of a program: it remembers the program it was made from, for the

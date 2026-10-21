@@ -38,11 +38,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <format>
-#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -293,36 +289,14 @@ class EdgeChecker {
     std::vector<std::string> violations_;
 };
 
-/// CAMEL_GRAPH_EDGES: "record" prints the violations and goes on, "off" skips the checks;
-/// anything else (the default) fails the commit.
-const char *mode() {
-    static const char *value = std::getenv("CAMEL_GRAPH_EDGES");
-    return value ? value : "";
-}
-
 } // namespace
 
 void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, GraphState state) {
-    if (graph == nullptr || !graph->hasNodePayload() || std::strcmp(mode(), "off") == 0) {
+    if (graph == nullptr || !graph->hasNodePayload()) {
         return;
     }
     const std::vector<std::string> violations = EdgeChecker(program, *graph, state).run();
     if (violations.empty()) {
-        return;
-    }
-    if (std::strcmp(mode(), "record") == 0) {
-        std::string text;
-        for (const std::string &line : violations) {
-            text += "GRAPH-EDGE " + line + '\n';
-        }
-        if (const char *log = std::getenv("CAMEL_GRAPH_EDGES_LOG")) {
-            if (std::FILE *file = std::fopen(log, "a")) {
-                std::fputs(text.c_str(), file);
-                std::fclose(file);
-                return;
-            }
-        }
-        std::cerr << text;
         return;
     }
     std::string text = std::format(

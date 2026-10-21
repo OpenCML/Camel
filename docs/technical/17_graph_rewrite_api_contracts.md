@@ -235,7 +235,7 @@ docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
 1. **无环**：沿输入（值、`with`、控制）走，回不到自己。消息给出环上的路径。唯一的例外是会话声明自己建的形态没有后端会运行（`RuntimeGraphDraftSession::allowNonExecutable`；现在只有导出的 `enableBranchedCallSplit`，它造出同级 `JOIN`、其使用者合并的形态）；后端在建执行计划时拒绝环。
 2. **边上的类型相容**：`COPY`/`GATE` 的类型与输入相容，`CAST` 不是被禁止的转换，`JOIN` 的每条臂能放进 `JOIN`，`ACCS` 取出的元素类型相容，调用的实参、结果与被调图的形参、结果相容。**相容**指相等、互为细化（已知形状的张量与同元素类型的无形状张量）、或可互相赋值（`Type::unify`、`assignableFrom`），形参名与字段名不计。算子的结果不与算子的类型解析器比较：节点的类型是解析器结果的细化（形状推断之后）。
 
-环境变量 `CAMEL_GRAPH_EDGES=record` 只记录不拒绝（日志文件由 `CAMEL_GRAPH_EDGES_LOG` 指定），`off` 跳过检查；新增一类检查时先用 `record` 跑过快层，列出已有 pass 的违规，再让它强制。测试：`test/plans/feat/opt/edges.plan.toml`。
+新增一类检查时，先让一个测试 pass 在快层上只收集违规（不拒绝），列出已有 pass 的违规，再让它强制。测试：`test/plans/feat/opt/edges.plan.toml`。
 
 ### 4.3 提交冲突
 
