@@ -165,6 +165,62 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     }
 }
 
+/// `saturate(p, rules, rounds)`: the program with the rules applied both ways to the writings of
+/// every value, adding writings until nothing new is found or `rounds` rounds were made
+/// (rewrite design 3, graph store 3.5). The result has values with several writings: `extract`
+/// (or the pipeline, before a pass that runs or translates it) chooses one.
+slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    const TupleType *resultType = TupleType::fallible(norm.type(0));
+    const auto *base            = norm.get<const camel::runtime::Program *>(0);
+    const int64_t rounds        = norm.get<Int64>(2);
+    try {
+        const auto compiled = engineRules(ctx, norm, 1);
+        camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
+        session.setGraphState(camel::runtime::GraphState::Tabled);
+        camel::runtime::Budget budget;
+        budget.rounds = rounds < 0 ? 0 : static_cast<size_t>(rounds);
+        for (camel::runtime::GCGraph *graph : base->graphs()) {
+            if (isRuleSide(*graph)) {
+                continue;
+            }
+            camel::runtime::GraphDraft &draft = session.edit(graph);
+            camel::runtime::DraftWritings writings(
+                draft, camel::core::sem::NumericPolicy::relaxed());
+            writings.build();
+            writings.saturate(compiled, budget);
+            writings.save();
+        }
+        const camel::runtime::Program *committed = session.commitChecked();
+        return makeOk(toSlot(const_cast<camel::runtime::Program *>(committed)), resultType);
+    } catch (const camel::runtime::RuleCompileError &e) {
+        return makeError("RuleInvalid", e.what(), "<rewrite::saturate>");
+    } catch (const mm::MemoryExhausted &) {
+        throw;
+    } catch (const std::exception &e) {
+        return makeError("RewriteInvalid", e.what(), "<rewrite::saturate>");
+    }
+}
+
+/// `extract(p, cost)`: one writing for every value, chosen by the cost model of that name.
+slot_t extractKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    const TupleType *resultType = TupleType::fallible(norm.type(0));
+    const auto *base            = norm.get<const camel::runtime::Program *>(0);
+    const std::string cost(norm.get<String *>(1)->view());
+    const auto model = camel::runtime::findCostModel(cost);
+    if (!model) {
+        return makeError("NoCostModel", "There is no cost model '" + cost + "'.", "<rewrite::extract>");
+    }
+    try {
+        const camel::runtime::Program *extracted =
+            camel::runtime::extractWritings(ctx.shared_from_this(), base, *model);
+        return makeOk(toSlot(const_cast<camel::runtime::Program *>(extracted)), resultType);
+    } catch (const mm::MemoryExhausted &) {
+        throw;
+    } catch (const std::exception &e) {
+        return makeError("RewriteInvalid", e.what(), "<rewrite::extract>");
+    }
+}
+
 class RewriteExecutor final : public Executor {
   public:
     explicit RewriteExecutor(context_ptr_t ctx) : Executor(std::move(ctx), kernels()) {}
@@ -178,6 +234,8 @@ class RewriteExecutor final : public Executor {
             {"needs", needsKernel},
             {"consts", constsKernel},
             {"rewrite", rewriteKernel},
+            {"saturate", saturateKernel},
+            {"extract", extractKernel},
         };
     }
 };
@@ -212,6 +270,18 @@ class RewriteModule final : public BuiltinModule {
                               return std::nullopt;
                           return RuleType::get();
                       })}}));
+        const auto rulesOf = [](Type *array) {
+            if (array->code() != TypeCode::Array) {
+                return false;
+            }
+            const Type *element = static_cast<ArrayType *>(array)->elemType();
+            if (element == nullptr || element->code() != TypeCode::Function) {
+                return false;
+            }
+            const auto *maker = static_cast<const FunctionType *>(element);
+            return maker->normTypesCount() == 0 && maker->withTypesCount() == 0 &&
+                   RuleType::is(maker->exitType());
+        };
         exportEntity(
             "rewrite",
             OperatorGroup::create(
@@ -220,18 +290,40 @@ class RewriteModule final : public BuiltinModule {
                   DynamicFuncTypeResolver::create(
                       {{0, {}}, {2, {false, false}}},
                       "(p: Program, rules: (() => Rule)[]) => Program!",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      [rulesOf](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                           -> std::optional<Type *> {
                           // The Program type belongs to the module graph; it is told by its name.
+                          if (norm[0]->toString() != "Program" || !rulesOf(norm[1]))
+                              return std::nullopt;
+                          return TupleType::fallible(norm[0]);
+                      })}}));
+        exportEntity(
+            "saturate",
+            OperatorGroup::create(
+                "saturate",
+                {{"rewrite:saturate",
+                  DynamicFuncTypeResolver::create(
+                      {{0, {}}, {3, {false, false, false}}},
+                      "(p: Program, rules: (() => Rule)[], rounds: int) => Program!",
+                      [rulesOf](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
+                          if (norm[0]->toString() != "Program" || !rulesOf(norm[1]) ||
+                              norm[2]->code() != TypeCode::Int64)
+                              return std::nullopt;
+                          return TupleType::fallible(norm[0]);
+                      })}}));
+        exportEntity(
+            "extract",
+            OperatorGroup::create(
+                "extract",
+                {{"rewrite:extract",
+                  DynamicFuncTypeResolver::create(
+                      {{0, {}}, {2, {false, false}}},
+                      "(p: Program, cost: string) => Program!",
+                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
                           if (norm[0]->toString() != "Program" ||
-                              norm[1]->code() != TypeCode::Array)
-                              return std::nullopt;
-                          const Type *element = static_cast<ArrayType *>(norm[1])->elemType();
-                          if (element == nullptr || element->code() != TypeCode::Function)
-                              return std::nullopt;
-                          const auto *maker = static_cast<const FunctionType *>(element);
-                          if (maker->normTypesCount() != 0 || maker->withTypesCount() != 0 ||
-                              !RuleType::is(maker->exitType()))
+                              norm[1]->code() != TypeCode::String)
                               return std::nullopt;
                           return TupleType::fallible(norm[0]);
                       })}}));
@@ -257,7 +349,9 @@ class RewriteModule final : public BuiltinModule {
              {"two_way", true},
              {"needs", true},
              {"consts", true},
-             {"rewrite", true}});
+             {"rewrite", false},
+             {"saturate", false},
+             {"extract", false}});
         loaded_ = true;
         return true;
     }

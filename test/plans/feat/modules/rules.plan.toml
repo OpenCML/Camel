@@ -35,3 +35,44 @@ expect_exit = 1
 expect_output_contains = ["GraphPassFailed", "RuleTwoWay", "Rule 'swap' holds both ways"]
 expect_output_not_contains = ["56 42"]
 timeout_ms = 10000
+
+[[tests]]
+name = "rules.saturate_and_extract"
+desc = "simplify::saturated saturates both ways (swap rules included) and extracts by node count inside one Camel pass: the same operators as the greedy rewrite, the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "counts::report", "simplify::saturated", "counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.saturation_alone_needs_an_extraction"
+desc = "simplify::tabled only saturates: the program has values with several writings, and a pass that does not know them (counts::report) gets PassNeedsExtraction instead of the program."
+kind = "negative"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "simplify::tabled", "counts::report", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNeedsExtraction", "counts::report", "std::opt::extract"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.saturation_then_the_extract_pass"
+desc = "With std::opt::extract after the saturation, the program is back to one writing per value and runs."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "simplify::tabled", "std::opt::extract", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_exact = "56 42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.saturation_then_the_pipeline_extracts"
+desc = "A saturated program given to a back end is extracted by the pipeline with the default cost."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "simplify::tabled", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "56 42\n"
+timeout_ms = 10000

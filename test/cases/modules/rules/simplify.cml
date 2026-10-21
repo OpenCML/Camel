@@ -4,7 +4,7 @@
  */
 module simplify
 import { Program } from graph
-import { rewrite } from rewrite
+import { rewrite, saturate, extract } from rewrite
 
 rule add_zero(x: int) { x + 0 => x }
 rule mul_one(x: int) { x * 1 => x }
@@ -20,3 +20,19 @@ export func swapped(p: Program): Program! {
 }
 
 rule swap(a: int, b: int) { a + b <=> b + a }
+
+/// Both directions, then the cheapest writing of each value by node count.
+export func saturated(p: Program): Program! {
+    let tabled = saturate(p, [add_zero, mul_one, combine, fold, swap, swap_mul], 8)
+    return match tabled {
+        case error e => tabled
+        case q => extract(q, 'nodes')
+    }
+}
+
+/// Only the saturation: values with several writings, left for the pipeline to extract.
+export func tabled(p: Program): Program! {
+    return saturate(p, [add_zero, mul_one, combine, fold], 8)
+}
+
+rule swap_mul(a: int, b: int) { a * b <=> b * a }
