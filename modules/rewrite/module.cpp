@@ -346,11 +346,11 @@ class Sampler {
             return {code, toSlot<Int32>(v), static_cast<double>(v)};
         }
         case TypeCode::Float64: {
-            const double v = pickFloat(constant);
+            const double v = pickFloat(constant, code);
             return {code, toSlot<Float64>(v), v};
         }
         case TypeCode::Float32: {
-            const float v = static_cast<float>(pickFloat(constant));
+            const float v = static_cast<float>(pickFloat(constant, code));
             return {code, toSlot<Float32>(v), static_cast<double>(v)};
         }
         case TypeCode::Bool: {
@@ -386,11 +386,23 @@ class Sampler {
         return static_cast<int64_t>(rng_() % (2 * range + 1)) - range;
     }
 
-    double pickFloat(bool constant) {
+    double pickFloat(bool constant, TypeCode code) {
         const bool noNans  = (needs_ & camel::core::sem::kNoNans) != 0;
         const bool noInfs  = (needs_ & camel::core::sem::kNoInfs) != 0;
         const bool noZeros = (needs_ & camel::core::sem::kNoSignedZeros) != 0;
-        std::vector<double> specials{0.0, 1.0, -1.0, 2.0, 0.5, 3.0, 0.1, 1e-300, 1e300, 1e-310};
+        std::vector<double> specials{0.0, 1.0, -1.0, 2.0, 0.5, 3.0, 0.1};
+        // A special has to be a value of the parameter's own type: 1e300 is finite as a float64
+        // and an infinity as a float32, which would smuggle an infinity past `no_infs` and make
+        // every float32 rule that assumes finiteness fail its own check.
+        if (code == TypeCode::Float32) {
+            specials.push_back(1e-30);
+            specials.push_back(1e30);
+            specials.push_back(1e-40); // subnormal
+        } else {
+            specials.push_back(1e-300);
+            specials.push_back(1e300);
+            specials.push_back(1e-310); // subnormal
+        }
         if (!noZeros) {
             specials.push_back(-0.0);
         }
@@ -439,8 +451,9 @@ bool agree(
         const double eps       = single ? 1.2e-7 : 2.3e-16;
         const double magnitude = std::abs(x) + std::abs(y) + scale;
         // The smallest subnormal: a rounding in the subnormal range is absolute, not relative.
+        const double smallest  = single ? 1.4e-45 : 4.9e-324;
         const double allowed =
-            (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * 4.9e-324;
+            (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * smallest;
         return std::abs(x - y) <= allowed;
     }
     if (a.code == TypeCode::Int32) {

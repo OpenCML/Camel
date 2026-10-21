@@ -1,0 +1,69 @@
+/** The operator counts of the typed target, by element type (design 7: the counts are the test). */
+module typed_counts
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+func countOf(p: Program, function: string, operator: string): int {
+    return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
+}
+
+/// add, sub, mul, div, neg counts of the element type with this suffix.
+func show(p: Program, function: string, suffix: string) {
+    println('f ' + function,
+        countOf(p, function, ':op/add_' + suffix),
+        countOf(p, function, ':op/sub_' + suffix),
+        countOf(p, function, ':op/mul_' + suffix),
+        countOf(p, function, ':op/div_' + suffix),
+        countOf(p, function, ':op/neg_' + suffix))
+}
+
+export func report(p: Program): Program! sync {
+    show(p, 'i32_neutral', 'i')
+    show(p, 'i32_mul_one', 'i')
+    show(p, 'i32_mul_zero', 'i')
+    show(p, 'i32_div_one', 'i')
+    show(p, 'i32_neg', 'i')
+    show(p, 'i32_sub_self', 'i')
+    show(p, 'i32_add_self', 'i')
+    show(p, 'i32_combine', 'i')
+    show(p, 'i32_combine_wrap', 'i')
+    show(p, 'i32_fold', 'i')
+    show(p, 'i32_fold_wrap', 'i')
+    show(p, 'i32_fold_add_wrap', 'i')
+    show(p, 'i64_combine', 'l')
+    show(p, 'i64_add_self', 'l')
+    show(p, 'f32_neutral', 'f')
+    show(p, 'f32_mul_one', 'f')
+    show(p, 'f32_div_one', 'f')
+    show(p, 'f32_neg', 'f')
+    show(p, 'f32_add_self', 'f')
+    show(p, 'f32_combine', 'f')
+    show(p, 'f32_combine_over', 'f')
+    show(p, 'f32_fold', 'f')
+    show(p, 'f32_fold_granted', 'f')
+    show(p, 'f32_double', 'f')
+    show(p, 'f32_double_big', 'f')
+    show(p, 'f32_double_frac', 'f')
+    show(p, 'f32_mixed_ok', 'f')
+    show(p, 'f32_mixed_zero', 'f')
+    show(p, 'f32_mixed_ungranted', 'f')
+    show(p, 'f64_combine', 'd')
+    show(p, 'f64_add_self', 'd')
+    show(p, 'f64_combine_over', 'd')
+    show(p, 'f64_fold_zero', 'd')
+    show(p, 'f64_fold_over', 'd')
+    show(p, 'f64_mixed_zero', 'd')
+    show(p, 'f64_mixed_ok', 'd')
+    return p
+}

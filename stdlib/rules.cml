@@ -24,6 +24,7 @@ export rule int_zero_mul(x: int) { 0 * x => 0 }
 export rule int_div_one(x: int) { x / 1 => x }
 export rule int_neg_neg(x: int) { -(-x) => x }
 export rule int_sub_self(x: int) { x - x => 0 }
+export rule int_add_self(x: int) { x + x => x * 2 }
 export rule int_combine(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 export rule int_fold(x: int, const c1: int, const c2: int) { (x * c1) * c2 => x * (c1 * c2) }
 export rule int_fold_add(x: int, const c1: int, const c2: int) { (x + c1) + c2 => x + (c1 + c2) }
@@ -34,6 +35,54 @@ export rule int_add_assoc(a: int, b: int, c: int) { (a + b) + c <=> a + (b + c) 
 export rule int_mul_assoc(a: int, b: int, c: int) { (a * b) * c <=> a * (b * c) }
 export rule int_distribute(a: int, b: int, c: int) { a * (b + c) <=> a * b + a * c }
 
+// ---- Int32: the same wrapping laws at 32 bits ----
+//
+// The language has two integer element types, and a rule is written for one of them: the pattern
+// operators are the typed ones (`add_i`, `mul_i`, ...), so these rules never match an `int`
+// expression and the `int` rules above never match an `i32` one. The laws are the same because
+// two's-complement wraparound is a ring: the neutral elements, the inverse laws, association,
+// commutation and distribution are all exact. Only the constant-folded coefficients differ: the
+// rule's `c1 + c2` (or `c1 * c2`) is an i32 operation and wraps exactly as the program does.
+//
+// A coefficient the rule reads must be an i32 too. `constant` compares type codes, so a constant
+// of another type reads as null; the guards below keep a malformed graph (an `add_i` with an
+// `int` constant) from matching, mirroring algebra.cpp's typed scalar constant lookup.
+
+/// Whether the matched constant has the i32 element type.
+func isI32(c: Node): bool {
+    return match constant(c, i32(0)) {
+        case null => false
+        case _ => true
+    }
+}
+
+export rule int32_add_zero(x: i32) { x + 0 => x }
+export rule int32_zero_add(x: i32) { 0 + x => x }
+export rule int32_sub_zero(x: i32) { x - 0 => x }
+export rule int32_mul_one(x: i32) { x * 1 => x }
+export rule int32_one_mul(x: i32) { 1 * x => x }
+export rule int32_mul_zero(x: i32) { x * 0 => i32(0) }
+export rule int32_zero_mul(x: i32) { 0 * x => i32(0) }
+export rule int32_div_one(x: i32) { x / 1 => x }
+export rule int32_neg_neg(x: i32) { -(-x) => x }
+export rule int32_sub_self(x: i32) { x - x => i32(0) }
+export rule int32_add_self(x: i32) { x + x => x * 2 }
+export rule int32_combine(x: i32, const c1: i32, const c2: i32) {
+    x * c1 + x * c2 => x * (c1 + c2)
+} when isI32(c1) && isI32(c2)
+export rule int32_fold(x: i32, const c1: i32, const c2: i32) {
+    (x * c1) * c2 => x * (c1 * c2)
+} when isI32(c1) && isI32(c2)
+export rule int32_fold_add(x: i32, const c1: i32, const c2: i32) {
+    (x + c1) + c2 => x + (c1 + c2)
+} when isI32(c1) && isI32(c2)
+
+export rule int32_add_comm(a: i32, b: i32) { a + b <=> b + a }
+export rule int32_mul_comm(a: i32, b: i32) { a * b <=> b * a }
+export rule int32_add_assoc(a: i32, b: i32, c: i32) { (a + b) + c <=> a + (b + c) }
+export rule int32_mul_assoc(a: i32, b: i32, c: i32) { (a * b) * c <=> a * (b * c) }
+export rule int32_distribute(a: i32, b: i32, c: i32) { a * (b + c) <=> a * b + a * c }
+
 // ---- Floats: only what rounding does not touch ----
 
 export rule float_mul_one(x: float) { x * 1.0 => x }
@@ -42,6 +91,11 @@ export rule float_add_minus_zero(x: float) { x + -0.0 => x }
 export rule float_sub_zero(x: float) { x - 0.0 => x }
 export rule float_div_one(x: float) { x / 1.0 => x }
 export rule float_neg_neg(x: float) { -(-x) => x }
+
+/// `x + x => x * 2.0`: doubling is exact in IEEE arithmetic for every value, including the
+/// infinities, the NaNs and the subnormals (the exponent grows by one, the significand is
+/// unchanged), so the law needs no permission.
+export rule float_add_self(x: float) { x + x => x * 2.0 }
 
 export rule float_add_comm(a: float, b: float) { a + b <=> b + a }
 export rule float_mul_comm(a: float, b: float) { a * b <=> b * a }
@@ -67,32 +121,36 @@ func combineSameSign(c1: Node, c2: Node): bool {
         case a => match constant(c2, 0.0) {
             case null => false
             case b => finiteValue(a) && finiteValue(b) && a != 0.0 && b != 0.0 &&
-                          (a > 0.0) == (b > 0.0)
+                          (a > 0.0) == (b > 0.0) && finiteValue(a + b)
         }
     }
 }
 
 /// The opposite-sign case: cancellation can turn an infinity into a finite value or lose the
-/// sign of a zero, so the rule also needs the assumptions that rule those out.
+/// sign of a zero, so the rule also needs the assumptions that rule those out. A sum of zero
+/// (the coefficients cancel) is left alone: the rewrite would only change the sign of the zero.
 func combineMixedSign(c1: Node, c2: Node): bool {
     return match constant(c1, 0.0) {
         case null => false
         case a => match constant(c2, 0.0) {
             case null => false
             case b => finiteValue(a) && finiteValue(b) && a != 0.0 && b != 0.0 &&
-                          (a > 0.0) != (b > 0.0)
+                          (a > 0.0) != (b > 0.0) && a + b != 0.0
         }
     }
 }
 
-/// `(x*c1)*c2 => x*(c1*c2)`: both coefficients finite and nonzero. Removing the intermediate
-/// product may remove an overflow, which `no_infs` allows.
+/// `(x*c1)*c2 => x*(c1*c2)`: both coefficients finite and nonzero, and their product finite and
+/// nonzero. The product is the new coefficient: an overflowing product would become an infinity
+/// (the rewrite then computes `x*inf`), and one that underflows to zero would erase the term.
+/// Removing the intermediate product may remove an overflow, which `no_infs` allows.
 func foldCoefficients(c1: Node, c2: Node): bool {
     return match constant(c1, 0.0) {
         case null => false
         case a => match constant(c2, 0.0) {
             case null => false
-            case b => finiteValue(a) && finiteValue(b) && a != 0.0 && b != 0.0
+            case b => finiteValue(a) && finiteValue(b) && a != 0.0 && b != 0.0 &&
+                          finiteValue(a * b) && a * b != 0.0
         }
     }
 }
@@ -127,14 +185,99 @@ export rule float_double(x: float, const c: float) {
     x * c + x * c => x * (c + c)
 } when exactDoubling(c)
 
+// ---- Float32: the float laws at 32 bits ----
+//
+// The same laws as the float ones, and the same distinction: the exact ones need no permission,
+// the ones that change rounding need the numeric permission that allows it. The guards are
+// separate functions because `constant` compares type codes: reading an f32 constant with the
+// float sample `0.0` returns null and the rule would silently never fire.
+
+func finite32(x: f32): bool {
+    return x - x == 0.0
+}
+
+func combineSameSign32(c1: Node, c2: Node): bool {
+    return match constant(c1, f32(0.0)) {
+        case null => false
+        case a => match constant(c2, f32(0.0)) {
+            case null => false
+            case b => finite32(a) && finite32(b) && a != 0.0 && b != 0.0 &&
+                          (a > 0.0) == (b > 0.0) && finite32(a + b)
+        }
+    }
+}
+
+func combineMixedSign32(c1: Node, c2: Node): bool {
+    return match constant(c1, f32(0.0)) {
+        case null => false
+        case a => match constant(c2, f32(0.0)) {
+            case null => false
+            case b => finite32(a) && finite32(b) && a != 0.0 && b != 0.0 &&
+                          (a > 0.0) != (b > 0.0) && a + b != 0.0
+        }
+    }
+}
+
+func foldCoefficients32(c1: Node, c2: Node): bool {
+    return match constant(c1, f32(0.0)) {
+        case null => false
+        case a => match constant(c2, f32(0.0)) {
+            case null => false
+            case b => finite32(a) && finite32(b) && a != 0.0 && b != 0.0 &&
+                          finite32(a * b) && a * b != 0.0
+        }
+    }
+}
+
+/// `x*c + x*c => x*(2c)` is exact when `c` is a finite integer with `1 <= |c| <= 2^23`: doubling
+/// a rounded product commutes with rounding there, and `2c` is exactly representable.
+func exactDoubling32(c: Node): bool {
+    return match constant(c, f32(0.0)) {
+        case null => false
+        case v => finite32(v) && abs(v) >= 1.0 && trunc(v) == v && abs(v) <= 8388608.0
+    }
+}
+
+export rule float32_mul_one(x: f32) { x * 1.0 => x }
+export rule float32_one_mul(x: f32) { 1.0 * x => x }
+export rule float32_add_minus_zero(x: f32) { x + -0.0 => x }
+export rule float32_sub_zero(x: f32) { x - 0.0 => x }
+export rule float32_div_one(x: f32) { x / 1.0 => x }
+export rule float32_neg_neg(x: f32) { -(-x) => x }
+
+/// The f32 `x + x => x * 2.0`, exact for the same reason.
+export rule float32_add_self(x: f32) { x + x => x * 2.0 }
+
+export rule float32_add_comm(a: f32, b: f32) { a + b <=> b + a }
+export rule float32_mul_comm(a: f32, b: f32) { a * b <=> b * a }
+
+#requires<reassociate>
+export rule float32_combine(x: f32, const c1: f32, const c2: f32) {
+    x * c1 + x * c2 => x * (c1 + c2)
+} when combineSameSign32(c1, c2)
+
+#requires<reassociate, no_infs, no_signed_zeros>
+export rule float32_combine_mixed(x: f32, const c1: f32, const c2: f32) {
+    x * c1 + x * c2 => x * (c1 + c2)
+} when combineMixedSign32(c1, c2)
+
+#requires<reassociate, no_infs>
+export rule float32_fold(x: f32, const c1: f32, const c2: f32) {
+    (x * c1) * c2 => x * (c1 * c2)
+} when foldCoefficients32(c1, c2)
+
+export rule float32_double(x: f32, const c: f32) {
+    x * c + x * c => x * (c + c)
+} when exactDoubling32(c)
+
 /// The rules that make an expression smaller, applied one way to a fixpoint.
 export func simplify(p: Program): Program! {
-    return rewrite(p, [int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_combine, float_combine_mixed, float_fold, float_double])
+    return rewrite(p, [int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_self, int32_add_zero, int32_zero_add, int32_sub_zero, int32_mul_one, int32_one_mul, int32_mul_zero, int32_zero_mul, int32_div_one, int32_neg_neg, int32_sub_self, int32_combine, int32_fold, int32_fold_add, int32_add_self, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_combine, float_combine_mixed, float_fold, float_double, float_add_self, float32_mul_one, float32_one_mul, float32_add_minus_zero, float32_sub_zero, float32_div_one, float32_neg_neg, float32_combine, float32_combine_mixed, float32_fold, float32_double, float32_add_self])
 }
 
 /// Every rule, both ways where it holds both ways; the smallest writing of each value.
 export func saturate_all(p: Program): Program! {
-    let tabled = saturate(p, [int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm, float_combine, float_combine_mixed, float_fold, float_double], 6)
+    let tabled = saturate(p, [int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_self, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, int32_add_zero, int32_zero_add, int32_sub_zero, int32_mul_one, int32_one_mul, int32_mul_zero, int32_zero_mul, int32_div_one, int32_neg_neg, int32_sub_self, int32_combine, int32_fold, int32_fold_add, int32_add_self, int32_add_comm, int32_mul_comm, int32_add_assoc, int32_mul_assoc, int32_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm, float_combine, float_combine_mixed, float_fold, float_double, float_add_self, float32_mul_one, float32_one_mul, float32_add_minus_zero, float32_sub_zero, float32_div_one, float32_neg_neg, float32_add_comm, float32_mul_comm, float32_combine, float32_combine_mixed, float32_fold, float32_double, float32_add_self], 6)
     return match tabled {
         case error e => tabled
         case q => extract(q, 'nodes')
