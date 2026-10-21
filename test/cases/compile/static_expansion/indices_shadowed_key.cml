@@ -1,0 +1,16 @@
+/**
+ * `j` of `indices` is a compile-time key, not a runtime value: a local of the same name shadows
+ * it, and the access through the local is refused exactly as any other runtime key is.
+ */
+module indices_shadowed_key
+
+func bad(t: (int, int), k: int): int {
+    return static loop acc = 0 for (j) in indices t do {
+        let j = k
+        acc + t.[j]
+    }
+}
+
+func main(): int {
+    return bad((1, 2), 10)
+}

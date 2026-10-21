@@ -471,10 +471,15 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     ENTER("DREF");
     // `n` of a `static for`: a compile-time string, not a name of the enclosing scope. A use
-    // of it as a value (not as the key of `t.[n]`) becomes a constant. A binding of the body
-    // with the same name shadows it, as an ordinary local shadows anything outside it.
+    // of it as a value (not as the key of `t.[n]`) becomes a constant; the `j` of `indices`
+    // binds the round's integer node instead of a string. A binding of the body with the same
+    // name shadows it, as an ordinary local shadows anything outside it.
     if (auto staticValue = staticValueNamed(gct->name());
         staticValue.has_value() && !nodeAt(gct->name()).has_value()) {
+        if (node_handle_t valueNode = staticValueNodeNamed(gct->name())) {
+            LEAVE("DREF");
+            return valueNode;
+        }
         node_handle_t node = currGraph_->addStaticDataNode(
             tt::as_shared<Data>(std::make_shared<StringData>(*staticValue)));
         registerNodeOrigin(context_, node, gct, "gir.data.static.for");

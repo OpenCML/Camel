@@ -279,19 +279,43 @@ node_handle_t Builder::visitStaticForNode(
     const GCT::node_ptr_t &gct, std::vector<node_handle_t> *values, Type **shape) {
     ENTER("SFOR");
     // A `static for` written as a statement drops every round's value; written as the generator
-    // of a comprehension (`values`), each round's value is one field of the result.
-    Type *subject = boundType(gct->staticForType()->dataType());
-    if (subject == nullptr || subject->code() == TypeCode::TypeVar || containsTypeVar(subject)) {
-        diags_->of(SemanticDiag::StaticTypeNotConcrete)
-            .atOrigin(gct->origin())
-            .commit(subject == nullptr ? std::string("unknown") : subject->toString());
-        throw BuildAbortException();
-    }
-    if (!tree::isInternal(subject)) {
-        diags_->of(SemanticDiag::StaticForNotComposite)
-            .atOrigin(gct->origin())
-            .commit(subject->toString());
-        throw BuildAbortException();
+    // of a comprehension (`values`), each round's value is one field of the result. Two
+    // generators share the node: `fields T` walks a type's fields, `indices ts` (H51 step 6)
+    // walks the positions of a tuple value.
+    const bool byIndices = gct->staticForIndices();
+    Type *subject        = nullptr;
+    if (byIndices) {
+        node_handle_t operand = valueNodeOf(visit(gct->staticForOperand()));
+        subject = operand != nullptr ? boundType(valueTypeOf(nodeTypeOf(operand))) : nullptr;
+        if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
+            containsTypeVar(subject)) {
+            diags_->of(SemanticDiag::StaticTypeNotConcrete)
+                .atOrigin(gct->origin())
+                .commit(subject == nullptr ? std::string("unknown") : subject->toString());
+            throw BuildAbortException();
+        }
+        if (subject->code() != TypeCode::Tuple || !tree::isInternal(subject)) {
+            const std::string valueText = sourceTextOf(gct->staticForOperand());
+            diags_->of(SemanticDiag::StaticIndicesNotTuple)
+                .atOrigin(gct->origin())
+                .commit(valueText.empty() ? std::string("ts") : valueText, subject->toString());
+            throw BuildAbortException();
+        }
+    } else {
+        subject = boundType(gct->staticForOperand()->dataType());
+        if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
+            containsTypeVar(subject)) {
+            diags_->of(SemanticDiag::StaticTypeNotConcrete)
+                .atOrigin(gct->origin())
+                .commit(subject == nullptr ? std::string("unknown") : subject->toString());
+            throw BuildAbortException();
+        }
+        if (!tree::isInternal(subject)) {
+            diags_->of(SemanticDiag::StaticForNotComposite)
+                .atOrigin(gct->origin())
+                .commit(subject->toString());
+            throw BuildAbortException();
+        }
     }
 
     const std::string valueName = gct->staticForValueName();
@@ -303,11 +327,20 @@ node_handle_t Builder::visitStaticForNode(
         *shape = subject;
     }
     for (size_t i = 0; i < count; ++i) {
+        const std::string entryName = tree::childName(subject, i);
         // `F` is looked up from the front of the bindings (findTypeBinding scans from there),
-        // and the fields are walked in declaration order.
-        typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
+        // and the fields are walked in declaration order. `indices` binds no `F`: the round's
+        // position is an ordinary `int` value instead.
+        node_handle_t indexNode{};
+        if (!byIndices) {
+            typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
+        } else {
+            indexNode = currGraph_->addStaticDataNode(tt::as_shared<Data>(
+                std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(i))));
+            registerNodeOrigin(context_, indexNode, body, "gir.static.index");
+        }
         staticValueScopes_.emplace_back();
-        staticValueScopes_.back().push_back({valueName, tree::childName(subject, i)});
+        staticValueScopes_.back().push_back({valueName, entryName, indexNode});
         enterBlockScope();
         const GCT::Node *outerUnused = std::exchange(unusedStatement_, body);
         const GCT::Node *outerSyncedBlock =
@@ -329,7 +362,9 @@ node_handle_t Builder::visitStaticForNode(
                 unusedStatement_     = outerUnused;
                 leaveBlockScope();
                 staticValueScopes_.pop_back();
-                typeBindings_.erase(typeBindings_.begin());
+                if (!byIndices) {
+                    typeBindings_.erase(typeBindings_.begin());
+                }
                 throw;
             }
         }
@@ -350,11 +385,13 @@ node_handle_t Builder::visitStaticForNode(
         }
         leaveBlockScope();
         staticValueScopes_.pop_back();
-        typeBindings_.erase(typeBindings_.begin());
+        if (!byIndices) {
+            typeBindings_.erase(typeBindings_.begin());
+        }
         if (voidElement) {
             diags_->of(SemanticDiag::StaticComprehensionVoidElement)
                 .atOrigin(body->origin())
-                .commit(tree::childName(subject, i), subject->toString());
+                .commit(entryName, subject->toString());
             throw BuildAbortException();
         }
     }
@@ -365,22 +402,45 @@ node_handle_t Builder::visitStaticForNode(
 node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     ENTER("SLOOP");
     // `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: the fold the fields
-    // of `T` unroll into. The body is built once per field in the current graph; its value is
-    // the next state. No LOOP node, no region, and nothing of the state or the generator left
-    // in the graph: the first values are ordinary values and each round reads the previous
-    // round's node directly (a DREF to a state name resolves to that node).
-    Type *subject = boundType(gct->staticLoopType()->dataType());
-    if (subject == nullptr || subject->code() == TypeCode::TypeVar || containsTypeVar(subject)) {
-        diags_->of(SemanticDiag::StaticTypeNotConcrete)
-            .atOrigin(gct->origin())
-            .commit(subject == nullptr ? std::string("unknown") : subject->toString());
-        throw BuildAbortException();
-    }
-    if (!tree::isInternal(subject)) {
-        diags_->of(SemanticDiag::StaticForNotComposite)
-            .atOrigin(gct->origin())
-            .commit(subject->toString());
-        throw BuildAbortException();
+    // of `T` unroll into (or the positions of a tuple value, `in indices ts`). The body is built
+    // once per round in the current graph; its value is the next state. No LOOP node, no
+    // region, and nothing of the state or the generator left in the graph: the first values are
+    // ordinary values and each round reads the previous round's node directly (a DREF to a
+    // state name resolves to that node).
+    const bool byIndices = gct->staticLoopIndices();
+    Type *subject        = nullptr;
+    if (byIndices) {
+        node_handle_t operand = valueNodeOf(visit(gct->staticLoopOperand()));
+        subject = operand != nullptr ? boundType(valueTypeOf(nodeTypeOf(operand))) : nullptr;
+        if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
+            containsTypeVar(subject)) {
+            diags_->of(SemanticDiag::StaticTypeNotConcrete)
+                .atOrigin(gct->origin())
+                .commit(subject == nullptr ? std::string("unknown") : subject->toString());
+            throw BuildAbortException();
+        }
+        if (subject->code() != TypeCode::Tuple || !tree::isInternal(subject)) {
+            const std::string valueText = sourceTextOf(gct->staticLoopOperand());
+            diags_->of(SemanticDiag::StaticIndicesNotTuple)
+                .atOrigin(gct->origin())
+                .commit(valueText.empty() ? std::string("ts") : valueText, subject->toString());
+            throw BuildAbortException();
+        }
+    } else {
+        subject = boundType(gct->staticLoopOperand()->dataType());
+        if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
+            containsTypeVar(subject)) {
+            diags_->of(SemanticDiag::StaticTypeNotConcrete)
+                .atOrigin(gct->origin())
+                .commit(subject == nullptr ? std::string("unknown") : subject->toString());
+            throw BuildAbortException();
+        }
+        if (!tree::isInternal(subject)) {
+            diags_->of(SemanticDiag::StaticForNotComposite)
+                .atOrigin(gct->origin())
+                .commit(subject->toString());
+            throw BuildAbortException();
+        }
     }
 
     const size_t k              = gct->staticLoopStateCount();
@@ -388,9 +448,9 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     const std::string typeName  = gct->staticLoopTypeName();
     const GCT::node_ptr_t body  = gct->staticLoopBody();
 
-    // The names of the head are declared once, together (as for a run-time loop). The field
-    // name `n` is one of them for this purpose: `static loop n = ..., ... for (n, F)` would
-    // read the state where it meant the field.
+    // The names of the head are declared once, together (as for a run-time loop). The walked
+    // entry's name `n` (`j`) is one of them for this purpose: `static loop n = ..., ... for
+    // (n, F)` would read the state where it meant the field.
     {
         std::unordered_set<std::string> names;
         names.insert(valueName);
@@ -426,9 +486,17 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
 
     const size_t count = tree::arity(subject);
     for (size_t i = 0; i < count; ++i) {
-        typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
+        const std::string entryName = tree::childName(subject, i);
+        node_handle_t indexNode{};
+        if (!byIndices) {
+            typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
+        } else {
+            indexNode = currGraph_->addStaticDataNode(tt::as_shared<Data>(
+                std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(i))));
+            registerNodeOrigin(context_, indexNode, body, "gir.static.index");
+        }
         staticValueScopes_.emplace_back();
-        staticValueScopes_.back().push_back({valueName, tree::childName(subject, i)});
+        staticValueScopes_.back().push_back({valueName, entryName, indexNode});
         enterBlockScope();
         for (size_t j = 0; j < k; ++j) {
             // The state names read the previous round's value; each round has its own block
@@ -448,7 +516,9 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                 unusedStatement_     = outerUnused;
                 leaveBlockScope();
                 staticValueScopes_.pop_back();
-                typeBindings_.erase(typeBindings_.begin());
+                if (!byIndices) {
+                    typeBindings_.erase(typeBindings_.begin());
+                }
                 throw;
             }
         }
@@ -471,7 +541,9 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                             stateType->toString());
                     leaveBlockScope();
                     staticValueScopes_.pop_back();
-                    typeBindings_.erase(typeBindings_.begin());
+                    if (!byIndices) {
+                        typeBindings_.erase(typeBindings_.begin());
+                    }
                     throw BuildAbortException();
                 }
             }
@@ -497,7 +569,9 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                         stateType->toString());
                 leaveBlockScope();
                 staticValueScopes_.pop_back();
-                typeBindings_.erase(typeBindings_.begin());
+                if (!byIndices) {
+                    typeBindings_.erase(typeBindings_.begin());
+                }
                 throw BuildAbortException();
             }
             // One state per component of the body's tuple, in the order written. A state
@@ -517,7 +591,9 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
         }
         leaveBlockScope();
         staticValueScopes_.pop_back();
-        typeBindings_.erase(typeBindings_.begin());
+        if (!byIndices) {
+            typeBindings_.erase(typeBindings_.begin());
+        }
     }
     LEAVE("SLOOP");
     if (k == 1) {
@@ -535,7 +611,19 @@ node_handle_t Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) 
     // but the straight-line code of the rounds and one FILL.
     std::vector<node_handle_t> values;
     Type *shape = nullptr;
-    (void)visitStaticForNode(gct->comprehensionGenerator(), &values, &shape);
+    const GCT::node_ptr_t generator = gct->comprehensionGenerator();
+    if (gct->comprehensionIsStruct() && generator->staticForIndices()) {
+        // A struct comprehension names its fields from the walked type; positions have no
+        // names, so there is nothing to name the fields.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .atOrigin(generator->origin())
+            .commit(
+                "{ static for ... in indices ... }",
+                "a struct comprehension takes its field names from 'fields T'; write a "
+                "tuple comprehension '( static for ... in indices ... )' or walk 'fields T'");
+        throw BuildAbortException();
+    }
+    (void)visitStaticForNode(generator, &values, &shape);
     node_handle_t packed = packStaticValues(
         gct->comprehensionIsStruct(), shape, values, gct, "gir.static.comprehension.fill");
     LEAVE("SCOMP");

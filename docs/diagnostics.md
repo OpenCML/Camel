@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-197 diagnostics: 180 errors, 17 warnings.
+198 diagnostics: 181 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -165,6 +165,7 @@ prints one entry.
 | `0x0300017B` | [SemanticDiag::NativeDeclarationIncomplete](#nativedeclarationincomplete) | Error |
 | `0x0300017C` | [SemanticDiag::NativeDeclarationNotLoaded](#nativedeclarationnotloaded) | Error |
 | `0x0300017D` | [SemanticDiag::DeclarationModuleHasBody](#declarationmodulehasbody) | Error |
+| `0x0300017E` | [SemanticDiag::StaticIndicesNotTuple](#staticindicesnottuple) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -4230,6 +4231,36 @@ A Camel module found beside a C++ module of the same name declares that module's
 ```
 
 *No example: no test small enough to show raises it.*
+
+### StaticIndicesNotTuple
+
+`0x0300017E` · Error · `SemanticDiag::StaticIndicesNotTuple`
+
+**Message**
+
+```text
+'indices' walks the positions of a tuple, but '{0}' has type '{1}'.
+```
+
+**Help**
+
+```text
+'indices ts' walks the positions of an ordinary tuple: it needs a value of tuple type (a tuple variable or a tuple literal). A struct has named fields; walk it with 'fields T'. A 'T?' or 'T!' and a mutable cell are leaves (design principles 13.5).
+```
+
+**Example** (`test/cases/compile/static_expansion/indices_not_tuple.cml`, run as `camel test/cases/compile/static_expansion/indices_not_tuple.cml`)
+
+```camel
+module indices_not_tuple
+
+func bad(t: {a: int, b: int}): int {
+    return static loop acc = 0 for (j) in indices t do acc + 1
+}
+
+func main(): int {
+    return bad({a: 1, b: 2})
+}
+```
 
 ### VarParamInAsyncFunction
 

@@ -1011,9 +1011,11 @@ void ParserImpl::parseTypeCase() {
 /// staticForExpr : 'static' staticForHeader '=>' blockExpr
 /// `static for (n, F) in fields T => 块`（H51 步骤 3）：把结构体或元组的字段表在实例化时展开，
 /// 每个字段一份块。`n` 是字段名（元组是十进制下标），`F` 是字段类型；两者都只在块内可见。
+/// `static for (j) in indices ts => 块`（H51 步骤 6）：把元组 `ts` 的每个位置展开一次，`j`
+/// 是这一轮的位置（编译期整数）。两种头共用一个解析函数，只有 `in` 后面的写法不同。
 /// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。
-/// The header is shared with `static loop`: the same `for (n, F) in fields T` says what is
-/// walked, and only what follows it differs (`=> 块` or `do 表达式`).
+/// The header is shared with `static loop`: the same `for ... in ...` says what is walked, and
+/// only what follows it differs (`=> 块` or `do 表达式`).
 /// `fields` 后面是类型位置（H79 裁定 1）：`(` 一律按类型读，`fields ()` 是空元组类型。
 void ParserImpl::parseStaticFor() {
     const size_t m = mark();
@@ -1025,14 +1027,20 @@ void ParserImpl::parseStaticFor() {
     close(m, NK::StaticForExpr);
 }
 
-/// staticForHeader : 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr
-/// The two names, then the type, become children of the node being built (no node of their own,
-/// as the parser of `loop` reads its `loopState` nodes directly).
+/// staticForHeader : 'for' '(' identDef (',' identDef)? ')' 'in' ('fields' typeExpr
+///                                                       | 'indices' dataExpr)
+/// `fields` walks the fields of a type and binds two names (`n`, `F`); `indices` walks the
+/// elements of an ordinary tuple and binds one name (`j`, the position as an integer). The
+/// names and the walked shape become children of the node being built (no node of their own, as
+/// the parser of `loop` reads its `loopState` nodes directly).
 void ParserImpl::parseStaticForHeader() {
     if (!panic_ && expect(TK::KwFor)) {
+        uint32_t secondNameAt = kNone;
         if (!panic_ && expect(TK::LParen)) {
             parseIdentDef();
-            if (!panic_ && expect(TK::Comma)) {
+            if (cur_ == TK::Comma && !panic_) {
+                secondNameAt = pos_;
+                bump();
                 parseIdentDef();
             }
             if (!panic_) {
@@ -1042,15 +1050,23 @@ void ParserImpl::parseStaticForHeader() {
         if (!panic_ && expect(TK::KwIn)) {
             if (atWord(0, "fields")) {
                 bump();
-            } else if (!panic_) {
-                unexpected({e(TK::Identifier)});
-            }
-            // `fields` is followed by a type position (H79 ruling 1): the `(` there is always
-            // a type, so `fields ()` is the empty tuple. `static for` and `static loop` share
-            // this header, so the reading is enforced here rather than at either caller.
-            {
+                // `fields` is followed by a type position (H79 ruling 1): the `(` there is
+                // always a type, so `fields ()` is the empty tuple. `static for` and
+                // `static loop` share this header, so the reading is enforced here rather than
+                // at either caller.
                 TypeHeadScope typeHead(*this);
                 parseType();
+            } else if (atWord(0, "indices")) {
+                // `indices ts` walks a tuple value; `ts` is an ordinary expression, so this is
+                // not a type position and `TypeHeadScope` is not entered. It binds one name
+                // (`j`), so `(j, F) in indices ts` is rejected where the second name is.
+                if (secondNameAt != kNone) {
+                    error(SyntaxError::Kind::Unexpected, {e(TK::RParen)}, secondNameAt);
+                }
+                bump();
+                parseExpr();
+            } else if (!panic_) {
+                unexpected({e(TK::Identifier)});
             }
         }
     }
@@ -1059,8 +1075,9 @@ void ParserImpl::parseStaticForHeader() {
 /// staticLoopExpr : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
 /// `static loop acc = 0 for (n, F) in fields T do 表达式`（H51 步骤 5）：在实例化时按字段顺序
 /// 展开的折叠。状态头与普通的 `loop` 相同（一个名字时结果就是这个值，多个名字时是元组）；
-/// 遍历**只能是** `for (n, F) in fields T`——没有 `while`，也没有普通序列的 `for`，因为轮数
-/// 必须由类型在实例化时确定。`do` 后面是循环体，它的值是下一轮的状态；展开后没有 LOOP 节点。
+/// 遍历由 `staticForHeader` 给出：`in fields T`（步骤 5）或 `in indices ts`（步骤 6）。
+/// 没有 `while`，也没有普通序列的 `for`，因为轮数必须由类型在实例化时确定。`do` 后面是循环
+/// 体，它的值是下一轮的状态；展开后没有 LOOP 节点。
 void ParserImpl::parseStaticLoop() {
     const size_t m = mark();
     bump(); // static

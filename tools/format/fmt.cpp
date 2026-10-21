@@ -1067,12 +1067,21 @@ any Formatter::visitTypeCasePattern(cst::TypeCasePattern context) {
 
 /*
 staticForExpr
-    : STATIC FOR '(' identDef ',' identDef ')' IN 'fields' typeExpr '=>' blockExpr
+    : STATIC staticForHeader '=>' blockExpr
+    ;
+staticForHeader
+    : FOR '(' identDef (',' identDef)? ')' IN ('fields' typeExpr | 'indices' dataExpr)
     ;
 */
 any Formatter::visitStaticForExpr(cst::StaticForExpr context) {
     const auto valueName = context->get<cst::IdentDef>(0);
-    const auto typeName  = context->get<cst::IdentDef>(1);
+    const auto mode      = context->tok(TK::Identifier);
+    if (mode && mode.text() == "indices") {
+        return "static for (" + any_cast<string>(visitIdentDef(valueName)) + ") in indices " +
+               any_cast<string>(visit(context->expr())) + " => " +
+               any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    }
+    const auto typeName = context->get<cst::IdentDef>(1);
     return "static for (" + any_cast<string>(visitIdentDef(valueName)) + ", " +
            any_cast<string>(visitIdentDef(typeName)) + ") in fields " +
            formatTypeInTypePosition(context->type()) + " => " +
@@ -1104,6 +1113,14 @@ any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
                 any_cast<string>(visitIdentDef(state.get<cst::IdentDef>())) + " = " +
                 any_cast<string>(visit(state.expr()));
         first = false;
+    }
+    const auto mode = context->tok(TK::Identifier);
+    if (mode && mode.text() == "indices") {
+        text += " for (" +
+                any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(0))) +
+                ") in indices " + any_cast<string>(visit(context->expr())) + " do " +
+                any_cast<string>(visitBlockExpr(context->lastChild().node()));
+        return text;
     }
     text += " for (" +
             any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(0))) + ", " +

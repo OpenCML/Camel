@@ -137,15 +137,18 @@ class Tree {
     /// `match type` (children: TYPE, TCASE...) and one of its cases (child: the body).
     node_ptr_t makeTypeMatch();
     node_ptr_t makeTypeCase(uint16_t patterns);
-    /// `static for (n, F) in fields T` (children: TYPE, body). `valueName` is `n`, `typeName`
-    /// is `F`; both are bound only while the body is built.
-    node_ptr_t makeStaticFor(const std::string &valueName, const std::string &typeName);
+    /// `static for (n, F) in fields T` (children: TYPE, body) or `static for (j) in indices ts`
+    /// (children: the operand value, body). `valueName` is `n` (or `j`), `typeName` is `F`
+    /// (empty for `indices`); both are bound only while the body is built.
+    node_ptr_t makeStaticFor(
+        const std::string &valueName, const std::string &typeName, bool byIndices = false);
     /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body` (children: TYPE, the k
-    /// first values, body). `state` are the names of the state; `valueName` is `n` and
-    /// `typeName` is `F`, both bound only while the body is built.
+    /// first values, body), or the same over `indices ts` (children: the operand value, the k
+    /// first values, body). `state` are the names of the state; `valueName` is `n` (or `j`) and
+    /// `typeName` is `F` (empty for `indices`), both bound only while the body is built.
     node_ptr_t makeStaticLoop(
         const std::vector<std::string> &state, const std::string &valueName,
-        const std::string &typeName);
+        const std::string &typeName, bool byIndices = false);
     /// `t.[key]` (children: the target, the key expression).
     node_ptr_t makeStaticAccess();
     /// A comprehension (child: the `static for` that generates it): `isStruct` for

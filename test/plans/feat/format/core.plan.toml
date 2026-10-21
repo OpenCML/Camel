@@ -188,3 +188,17 @@ snapshot_compare = "text_exact"
 golden = "./golden/static_loop.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "format.indices_snapshot"
+desc = "Formats the one-name header of `indices`, in both a `static loop` and a tuple comprehension."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/indices.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/indices.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

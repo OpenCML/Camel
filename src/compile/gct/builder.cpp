@@ -2937,30 +2937,44 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
 
 /*
 staticForExpr
-    : STATIC FOR '(' identDef ',' identDef ')' IN 'fields' typeExpr '=>' blockExpr
+    : STATIC staticForHeader '=>' blockExpr
     ;
+staticForHeader
+    : FOR '(' identDef (',' identDef)? ')' IN ('fields' typeExpr | 'indices' dataExpr)
+    ;
+The walked shape is child 0: a TYPE for `fields`, the operand value for `indices` (H51 step 6).
 */
 node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
     ENTER("StaticFor");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticFor");
     const auto &load = ast->loadAs<AST::StaticForLoad>();
 
-    node_ptr_t forNode = tree_->makeStaticFor(load->valueName(), load->typeName());
+    node_ptr_t forNode =
+        tree_->makeStaticFor(load->valueName(), load->typeName(), load->byIndices());
     setOriginFromAst(
         context_, forNode, ast, camel::source::OriginKind::GctNode, "gct.static.for");
 
-    const auto &typeAst = ast->atAs<AST::TypeLoad>(0);
-    Type *subject       = visitType(typeAst);
-    node_ptr_t typeNode = tree_->makeType(subject, ImplMark::Graph);
-    setOriginFromAst(
-        context_, typeNode, typeAst, camel::source::OriginKind::GctNode, "gct.static.for.type");
-    *forNode << typeNode;
+    if (load->byIndices()) {
+        // `indices ts` walks a tuple value: the operand is an ordinary expression whose type is
+        // read when the expansion happens, so it is built as one here.
+        *forNode << visitData(ast->at(0));
+    } else {
+        const auto &typeAst = ast->atAs<AST::TypeLoad>(0);
+        Type *subject       = visitType(typeAst);
+        node_ptr_t typeNode = tree_->makeType(subject, ImplMark::Graph);
+        setOriginFromAst(
+            context_, typeNode, typeAst, camel::source::OriginKind::GctNode,
+            "gct.static.for.type");
+        *forNode << typeNode;
+    }
 
     // `F` names the type of one field in the body only. It is an ordinary type variable of the
     // enclosing function's instance: the graph builder binds it to the field type per round.
     pushScope();
-    typeScope_->insert(
-        Reference(load->typeName()), TypeVarType::create(load->typeName(), false));
+    if (!load->byIndices()) {
+        typeScope_->insert(
+            Reference(load->typeName()), TypeVarType::create(load->typeName(), false));
+    }
     node_ptr_t bodyNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     popScope();
     *forNode << bodyNode;
@@ -2972,10 +2986,10 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
 /*
 staticLoopExpr
     : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
-The AST node holds the first values of the state (a Repeated Data), the type, and the body
-(StaticLoopLoad). The GCT node holds the TYPE first, then the first values, then the EXEC
+The AST node holds the first values of the state (a Repeated Data), the walked shape, and the
+body (StaticLoopLoad). The GCT node holds the shape first, then the first values, then the EXEC
 body. `F` is an ordinary type variable of the enclosing function's instance, bound per field
-by the graph builder; `n` and the state names are bound per round.
+by the graph builder; `n` (or `j` for `indices`) and the state names are bound per round.
 */
 node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     ENTER("StaticLoop");
@@ -2987,18 +3001,24 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     for (const Reference &name : load->state()) {
         state.push_back(name.toString());
     }
-    node_ptr_t loopNode = tree_->makeStaticLoop(state, load->valueName(), load->typeName());
+    node_ptr_t loopNode =
+        tree_->makeStaticLoop(state, load->valueName(), load->typeName(), load->byIndices());
     setOriginFromAst(context_, loopNode, ast, camel::source::OriginKind::GctNode, "gct.static.loop");
 
     const ValueUseScope valueUseScope(*this);
     valueUse_ = {};
 
-    const auto &typeAst = ast->atAs<AST::TypeLoad>(1);
-    Type *subject       = visitType(typeAst);
-    node_ptr_t typeNode = tree_->makeType(subject, ImplMark::Graph);
-    setOriginFromAst(
-        context_, typeNode, typeAst, camel::source::OriginKind::GctNode, "gct.static.loop.type");
-    *loopNode << typeNode;
+    if (load->byIndices()) {
+        *loopNode << visitData(ast->at(1));
+    } else {
+        const auto &typeAst = ast->atAs<AST::TypeLoad>(1);
+        Type *subject       = visitType(typeAst);
+        node_ptr_t typeNode = tree_->makeType(subject, ImplMark::Graph);
+        setOriginFromAst(
+            context_, typeNode, typeAst, camel::source::OriginKind::GctNode,
+            "gct.static.loop.type");
+        *loopNode << typeNode;
+    }
 
     // The first values, evaluated once where the loop is, before the names of the head exist.
     for (const auto &init : *ast->atAs<AST::RepeatedLoad>(0)) {
@@ -3007,8 +3027,10 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
 
     // `F` names the type of one field in the body only (as in `static for`).
     pushScope();
-    typeScope_->insert(
-        Reference(load->typeName()), TypeVarType::create(load->typeName(), false));
+    if (!load->byIndices()) {
+        typeScope_->insert(
+            Reference(load->typeName()), TypeVarType::create(load->typeName(), false));
+    }
     node_ptr_t bodyNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(2));
     popScope();
     *loopNode << bodyNode;

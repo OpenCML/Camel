@@ -192,6 +192,10 @@ enum class SemanticDiag : uint32_t {
     StaticAccessNotConstant     = 0x000179,
     StaticComprehensionVoidElement = 0x00017A,
 
+    // `indices` (H51 step 6). 0x17B-0x17D are the body-less declaration diagnostics below, so
+    // this one takes the next free code after them.
+    StaticIndicesNotTuple = 0x00017E,
+
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,

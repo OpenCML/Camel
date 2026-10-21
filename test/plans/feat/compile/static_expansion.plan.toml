@@ -442,3 +442,114 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::StaticForNotComposite"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "indices"
+desc = "`indices` (H51 step 6) walks the positions of a tuple value at instantiation, in both `static for` and `static loop`: `j` is an ordinary int and a compile-time key, the trip count is the tuple's arity (zero for the empty tuple, the type parameter's at instantiation for a generic), and a generator nested in a `fields` body walks a local tuple."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/indices.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "6",
+  "0 1",
+  "3",
+  "2",
+  "7",
+  "14",
+  "11",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `indices changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "indices_graph_matches_unrolled"
+desc = "The graph of `static loop acc = 0 for (j) in indices t do acc + t.[j]` is the graph of the hand-written `((0 + t.0) + t.1) + t.2`: the same nodes and links, and no SFOR, SLOOP, SACC or LOOP node left."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/indices_graph.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const attribute = (text, key) => {
+  const at = text.indexOf(key + '="')
+  if (at < 0) return null
+  const from = at + key.length + 2
+  return text.slice(from, text.indexOf('"', from))
+}
+const shapeOf = (name) => {
+  const at = lines.findIndex((line) => line.includes(`label="${name}"`))
+  assert(at > 0, `the graph of ${name} is missing`)
+  const indent = lines[at - 1].slice(0, lines[at - 1].indexOf(lines[at - 1].trim()))
+  const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+  assert(end > at, `the graph of ${name} has no end`)
+  const shape = []
+  for (const line of lines.slice(at, end)) {
+    const label = attribute(line, 'label')
+    const type = attribute(line, 'type')
+    if (label === null || type === null) continue
+    shape.push(`${line.includes('->') ? 'edge' : 'node'} ${label.replace(name, 'expansion')} ${type}`)
+  }
+  return shape
+}
+const loop = shapeOf("loopSum")
+const unrolled = shapeOf("unrolled")
+assert(loop.length > 0, "the static loop graph has no nodes")
+assert(loop.join(String.fromCharCode(10)) === unrolled.join(String.fromCharCode(10)),
+  `the static loop is not the hand-written expansion: ${loop.join(String.fromCharCode(10))} --- ${unrolled.join(String.fromCharCode(10))}`)
+const left = lines.filter((line) => /type="(SLOOP|LOOP|SFOR|SACC|BRCH|CASE)"/.test(line))
+assert(left.length === 0, `a static or branch node was left in the graph: ${left[0]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "indices_not_tuple"
+desc = "`indices` walks tuples only: a struct value has named fields and no positions, so it is walked with `fields T`."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/indices_not_tuple.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticIndicesNotTuple"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "indices_shadowed_key"
+desc = "`j` is a compile-time key as well as a value: a body that declares a local `j` shadows it, and `t.[j]` through the local is a runtime key, refused as always."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/indices_shadowed_key.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessNotConstant"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "indices_two_names"
+desc = "The header of `indices` binds one name, the position: a second name (the `F` of `fields`) is a syntax error, not a silently unused binding."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/indices_two_names.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "indices_struct_comprehension"
+desc = "A struct comprehension names its fields from `fields T`; `indices` gives positions, not names, so the struct form is refused and the tuple form is the one to write."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/indices_struct_comprehension.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
