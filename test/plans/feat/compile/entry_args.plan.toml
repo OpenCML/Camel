@@ -729,6 +729,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "entry_args.timeit_failure_iteration"
+desc = "A --timeit run that fails names the iteration that failed: a program dividing by zero on its third execution gives a JSON report with \"iteration\": 3, and the text report prints the same number in its [timeit] 3/5 ... failed line (before H16 item 6 neither said which iteration it was)."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/entry_args/timeit_failure.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["timeit failure json: iteration 3 division by zero", "timeit failure text: same iteration 3", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
 name = "entry_args.cpp_bound"
 desc = "std::cpp translates a main with parameters (design principles 10.6): values bound with --arg when it translates are constants of the program."
 kind = "behavior"

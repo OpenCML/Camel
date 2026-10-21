@@ -40,7 +40,7 @@
 
 - `--input <file>`：输入文件路径（位置参数的替代写法；与 `--passes` 一起使用可避免歧义）  
 - `--passes <list>`：逗号分隔的遍列表（例如 `--passes std::gir,other`；遍的参数里的逗号不分隔）。省略时，第一个位置参数是文件，其余是遍。遍可以带参数：`std::opt(safe_fp=true)`（见“遍的参数”）  
-- `--timeit <pass>/<N>`：从全新的图出发把一个遍测量 `N` 次；文本模式打印各次样本和一张简表，`--output-format json` 则输出结构化的基准数据  
+- `--timeit <pass>/<N>`：从全新的图出发把一个遍测量 `N` 次；文本模式打印各次样本和一张简表，`--output-format json` 则输出结构化的基准数据。失败的那一轮会点出它是第几轮（从 1 起）：文本模式打印 `[timeit] i/N ... failed` 一行，JSON 模式输出一个 timeit 对象，带 `"iteration"`、诊断（没有诊断时是 `"failure"` 一句话）以及失败前已完成的样本  
 - `--dump-after-each-pass <dir>`：把第一个遍之前的图（`00_input`）和每个返回图的遍之后的图（`NN_<pass>`，`::` 写作 `.`）写入 `<dir>`：一份可读的 DOT（`.rgir.dot`，即 `std::rgir` 格式，每个节点带 `origin`/`span`/`srcfile`）和 `std::stats` 的计数（`.stats.json`）。调度遍和翻译遍消耗图，不留下快照。比较两份快照用 `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
 - `--arg <name>=<value>`：`main` 的一个参数的值（可重复；见“`main` 带参数或有返回值的程序”）  
 - `-o`, `--output <file>`：`main` 的返回值写到哪里（默认：标准输出；见同一节）  
