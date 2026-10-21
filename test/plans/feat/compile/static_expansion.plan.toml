@@ -79,7 +79,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fields_and_access"
-desc = "`static for (n, F) in fields T` expands a struct and an ordinary tuple in declaration order, `F` is usable as a type, an empty struct/tuple expands zero times, nesting works, and `t.[\"0\"]` is `t.[0]`."
+desc = "`static for (n, F) in fields T` expands a struct and an ordinary tuple in declaration order, `F` is usable as a type, an empty struct/tuple (including `fields ()`) expands zero times, nesting works, and `t.[\"0\"]` is `t.[0]`."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/fields_and_access.cml"
 args = ["${case}", "std::fvm"]
@@ -95,6 +95,7 @@ const want = [
   "p x 5",
   "q 0 6",
   "q 1 7",
+  "0",
   "0",
   "20",
 ].join(String.fromCharCode(10))
@@ -134,6 +135,75 @@ const want = [
 assert(input.normalized.stdout.trim() === want, `comprehension changed: ${input.normalized.stdout}`)
 }
 """
+timeout_ms = 8000
+
+[[tests]]
+name = "type_position_empty_tuple"
+desc = "`fields` and `match type` are followed by a type position (H79 ruling 1): `fields ()` is the empty tuple type in the comprehension and statement forms, and `match type ()` matches it, without a `type EmptyTuple = ()` alias."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/type_position_empty_tuple.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "empty tuple",
+  "0",
+  "empty tuple value",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `empty tuple type position changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehension_value_type"
+desc = "A comprehension's field types come from the round's values, not from `F` (H79 ruling 2): a recursive `widen` turns every int leaf of a nested struct/tuple into a float, the shape of `tree_map` with changed leaves."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehension_value_type.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "0.5 1.0 1.5 2.0",
+  "2.5",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `value-typed comprehension changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehension_field_order"
+desc = "A struct comprehension keeps the field names and declaration order of the walked type while each field takes the type of its round's value (H79 ruling 2): `{a: int, b: float}` with values `(F, float)` gives `{a: (int, float), b: (float, float)}`, `a` before `b`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehension_field_order.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "2 0.5 3.5 0.5",
+  "a then b",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `field order changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehension_field_order_graph"
+desc = "The packed struct type in the graph is the values' types in declaration order: one FILL with value_type `{ a: (int, float), b: (float, float) }`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehension_field_order.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["value_type=\"{ a: (int, float), b: (float, float) }\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]

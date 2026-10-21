@@ -967,11 +967,16 @@ void ParserImpl::parseMatch() {
 }
 
 /// matchTypeExpr : 'match' 'type' typeExpr '{' typeCase* '}'
+/// The type after `match type` is a type position (H79 ruling 1): a `(` there always opens a
+/// type, so `match type () { ... }` is a match on the empty tuple type.
 void ParserImpl::parseMatchType() {
     const size_t m = mark();
     bump(); // match
     bump(); // type
-    parseType();
+    {
+        TypeHeadScope typeHead(*this);
+        parseType();
+    }
     if (panic_ || !expect(TK::LBrace)) {
         return close(m, NK::MatchTypeExpr);
     }
@@ -1009,6 +1014,7 @@ void ParserImpl::parseTypeCase() {
 /// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。
 /// The header is shared with `static loop`: the same `for (n, F) in fields T` says what is
 /// walked, and only what follows it differs (`=> 块` or `do 表达式`).
+/// `fields` 后面是类型位置（H79 裁定 1）：`(` 一律按类型读，`fields ()` 是空元组类型。
 void ParserImpl::parseStaticFor() {
     const size_t m = mark();
     bump(); // static
@@ -1039,7 +1045,13 @@ void ParserImpl::parseStaticForHeader() {
             } else if (!panic_) {
                 unexpected({e(TK::Identifier)});
             }
-            parseType();
+            // `fields` is followed by a type position (H79 ruling 1): the `(` there is always
+            // a type, so `fields ()` is the empty tuple. `static for` and `static loop` share
+            // this header, so the reading is enforced here rather than at either caller.
+            {
+                TypeHeadScope typeHead(*this);
+                parseType();
+            }
         }
     }
 }

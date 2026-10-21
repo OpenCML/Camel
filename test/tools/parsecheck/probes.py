@@ -77,6 +77,12 @@ STATEMENTS = [
     "return a, b", "throw e", "use a = b::c", "use b::c", "using namespace a::b",
     "type P = (int, int)", "inner type Q = 'uri'", "type P<T> = (T, T)", "type P<T>= T",
     "type P<A, B,> = A", "let v = raise", "let a = 1 let b = 2", "a b", "a; b",
+    # `fields` and `match type` are followed by a type position: a `(` there is a type, so `()`
+    # is the empty tuple type and a function type takes one more pair of parentheses (H79 ruling 1).
+    "static for (n, F) in fields () => {}",
+    "let v = match type () { case tuple => 1 case _ => 2 }",
+    "static for (n, F) in fields ((x: int) => int) => {}",
+    "let v = match type ((x: int) => int) { case #leaf => 1 case _ => 2 }",
 ]
 
 # Not here: `import {} from a` and `export {}`, on which the ANTLR-based builder dereferences a

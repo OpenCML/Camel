@@ -1035,7 +1035,7 @@ matchTypeExpr
     ;
 */
 any Formatter::visitMatchTypeExpr(cst::MatchTypeExpr context) {
-    return "match type " + any_cast<string>(visitType(context->type())) + " {" +
+    return "match type " + formatTypeInTypePosition(context->type()) + " {" +
            formatList(
                vec(context->all<cst::TypeCase>()),
                context,
@@ -1075,8 +1075,20 @@ any Formatter::visitStaticForExpr(cst::StaticForExpr context) {
     const auto typeName  = context->get<cst::IdentDef>(1);
     return "static for (" + any_cast<string>(visitIdentDef(valueName)) + ", " +
            any_cast<string>(visitIdentDef(typeName)) + ") in fields " +
-           any_cast<string>(visitType(context->type())) + " => " +
+           formatTypeInTypePosition(context->type()) + " => " +
            any_cast<string>(visitBlockExpr(context->lastChild().node()));
+}
+
+/// A `(` at the head of a type after `fields` / `match type` opens a tuple or a parenthesised
+/// type, not a parameter list (H79 ruling 1), so a function type written there needs one more
+/// pair of parentheses: `fields ((x: int) => int)`. Every other type is printed as it is.
+string Formatter::formatTypeInTypePosition(syn::Node type) {
+    const string text = any_cast<string>(visitType(type));
+    syn::Node head    = type;
+    while (head && head.is(NK::TypeExpr)) {
+        head = head.type(0);
+    }
+    return head && head.is(NK::FuncType) && text.starts_with("(") ? "(" + text + ")" : text;
 }
 
 /*

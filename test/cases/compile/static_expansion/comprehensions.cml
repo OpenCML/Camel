@@ -6,9 +6,6 @@
  */
 module comprehensions
 
-/** `()` in a type position after `fields` would read as a function type, so name it. */
-type EmptyTuple = ()
-
 func doubled(t: {a: int, b: int}): {a: int, b: int} {
     return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
 }
@@ -31,16 +28,17 @@ func noFields(): {} {
     return { static for (n, F) in fields {} => 0 }
 }
 
-/** An empty tuple has no round either: the value is the empty tuple. */
-func noElements(): EmptyTuple {
-    return ( static for (n, F) in fields EmptyTuple => 0 )
+/** An empty tuple has no round either: the value is the empty tuple. `fields` is followed by a
+ * type position, so `()` there is the empty tuple type (H79 ruling 1). */
+func noElements(): () {
+    return ( static for (n, F) in fields () => 0 )
 }
 
 func describeEmpty(e: {}): string {
     return 'empty struct'
 }
 
-func describeEmptyTuple(e: EmptyTuple): string {
+func describeEmptyTuple(e: ()): string {
     return 'empty tuple'
 }
 

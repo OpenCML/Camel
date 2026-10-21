@@ -45,6 +45,15 @@ func emptyStruct(t: {}): int {
     return count
 }
 
+/** `fields` is followed by a type position, so `()` is the empty tuple type (H79 ruling 1). */
+func emptyTuple(): int {
+    var count = 0
+    static for (n, F) in fields () => {
+        count = count + 1
+    }
+    return count
+}
+
 func tupleKey(t: (int, int)): int {
     // A tuple element may be named by its decimal text or by its index; both are the same.
     return t.["0"] + t.[0]
@@ -55,6 +64,7 @@ func main(): int sync {
     showTuple((3, 4))
     nested({p: {x: 5}, q: (6, 7)})
     println(emptyStruct({}))
+    println(emptyTuple())
     println(tupleKey((10, 0)))
     return 0
 }
