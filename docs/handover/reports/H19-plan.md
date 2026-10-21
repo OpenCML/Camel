@@ -25,7 +25,7 @@
 | 8 | 去重与调用约定：`Set::has`、`append`/`extend`、`re::test`、`str::bytes` | 无 | 是 | `--verify-ops`、`stdlib_values`、示例 |
 | 9 | 资源名与 `eprintln` | 4 | 是 | `resources.plan`；stderr/stdout 分离 |
 | 10 | 其余固定签名模块声明化 | 1b、4–8 | 每个模块一次提交 | 每个模块 `--verify-ops`；`inspect --ops` 不变 |
-| 11 | 文档、示例、参考生成与收尾 | 全部 | 是 | 下面第 6 节的完整门禁 |
+| 11 | 文档、示例、参考生成与收尾 | 全部 | 是 | **已完成（H127）：** 旧签名写法已从文档删除，`--verify-ops` 拒绝签名文件里带函数体的条目；其余收尾项见第 6 节 |
 
 每个编号提交都能构建，相关模块计划与 `examples.plan.toml` 通过；不允许“先改名、下一次提交再修用户”的中间态（见 3.1）。
 
@@ -382,7 +382,9 @@ export native func decode(bytes: Bytes): string! = 'bytes:decode'
 
 ### 第 11 步：文档、示例与收尾
 
-- `docs/stdlib-reference.md` 用 `--write` 重新生成；`scripts/stdlib-reference.mjs` 的说明与 `docs/technical/09_operator_registration.md:272`“签名文件不参与编译”改成新机制（声明参与编译；只读签名只剩计算签名模块）。
+**本步的签名迁移部分已完成（H127，报告 `reports/H127.md`）**：文档里旧的“函数体写 `return '<URI>'`”写法改成无函数体的 `export func`，编译器不再特判任何 URI 函数体，`--verify-ops` 拒绝 `stdlib/signatures/*.cml` 里带函数体的条目。下面各条是这一步其余收尾事项的原始范围。
+
+- `docs/stdlib-reference.md` 用 `--write` 重新生成；`scripts/stdlib-reference.mjs` 的说明与 `docs/technical/09_operator_registration.md` §8“签名文件不参与编译”改成新机制（H127 已完成：声明参与编译；`stdlib/signatures/` 还剩尚未声明化的模块与 `json` 的计算签名）。
 - `examples/README.md` 的旧名（`algo.sorted`、`statistics` 等）改；`examples` 的 24 个程序逐个跑；`test/plans/feat/examples.plan.toml` 的 golden 只按 3.1 的“行为变化”清单更新，逐行 review，不整体 `--update-golden`。
 - `docs/tutorial`、`docs/technical/18`、`docs/technical/41` 等 grep 旧名并改；`docs/design/stdlib/README.cn.md` 的模块表如果与账本有出入，改设计稿或记差异，不在实现里悄悄偏离。
 - `docs/handover/README.cn.md` 的 H19 行在本提交里已改成“计划已提交（reports/H19-plan.md，2026-10-22；未开始实现）”；实现完成后再改成“已完成”并写 `docs/handover/reports/H19.md`。
