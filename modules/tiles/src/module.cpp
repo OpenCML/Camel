@@ -25,6 +25,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/function_call.h"
 #include "camel/profile/profile.h"
+#include "camel/utils/log.h"
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
@@ -605,6 +606,12 @@ class TilesModule final : public BuiltinModule {
     bool load() override {
         if (loaded_)
             return true;
+        // The one device probe of the process, reported here because the device sources are built
+        // without libcamel as well (see capability.h). The H117 plan counts this line: however
+        // many calls prefer a device, there must be one.
+        deviceProbeStarted = [] {
+            CAMEL_LOG_INFO_S("tiles", "probe: constructing the CUDA backend");
+        };
         // `std::profile` (camel/profile/profile.h): what the CUDA path of this module did. Each
         // hook asks the session itself, so a run without the pass records nothing.
         profile_hooks::kernel = [](const char *label) {

@@ -432,12 +432,55 @@ name = "gpu_preference.missing_device"
 kind = "negative"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
 # A device named by --devices must be there: it is a requirement, not a preference. 63 is
-# outside any machine's list, so this needs no GPU and no driver; the report names the device.
+# outside any machine's list, so this needs no GPU and no driver; the report names the device
+# and the first use that wanted it (the `available()` call here).
 args = ["--devices", "63", "${case}", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 13
 expect_output_contains = ["CUDA device 63 was named by --devices but is not available"]
+timeout_ms = 10000
+
+[[tests]]
+name = "gpu_probe.once_per_process"
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_fallback.cml"
+# No device: available() probes once, and the four @gpu calls take the host fallback from that
+# cached miss instead of constructing the back end again. Before H117 this run asked the driver
+# seven times (one per preferred call). The count is asserted on the module's info log, the only
+# line the probe writes; `--devices cpu` never reaches it (see host_only_is_silent).
+args = ["-vv", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+    const lines = input.normalized.stderr.split('\n').filter((line) => line.includes('probe: constructing the CUDA backend'));
+    assert(lines.length === 1, `expected one device probe, saw ${lines.length}`);
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_probe.host_only_is_silent"
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_fallback.cml"
+# `--devices cpu` is answered before the probe: the host-only selection never constructs the
+# back end, so there is nothing to log and the probe line does not appear at all.
+args = ["-vv", "--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+    const lines = input.normalized.stderr.split('\n').filter((line) => line.includes('probe: constructing the CUDA backend'));
+    assert(lines.length === 0, `the host-only selection probed the driver ${lines.length} time(s)`);
+}
+"""
 timeout_ms = 10000
 
 [[tests]]

@@ -399,27 +399,75 @@ ModuleLease Backend::module(const std::string &source) {
     return {shared_from_this(), std::move(compiled)};
 }
 namespace {
-/// Build the one back end of the process, turning "the run named a device and there is none"
-/// into the diagnostic that names it. Everything else is a capability miss as before.
-std::shared_ptr<Backend> createBackend() {
+/// What the one probe of the process found. Building the back end is what loads the driver and
+/// calls `cuInit`, so the answer — success or miss — is kept and no later caller asks again.
+/// A miss carries the sentence that explains it, and the device `--devices` named when that is
+/// what was missing.
+struct ProbeOutcome {
+    enum class Kind : uint8_t { Ready, Unavailable, DeviceMissing, Fault };
+
+    std::shared_ptr<Backend> backend;
+    Kind kind = Kind::Ready;
+    int ordinal = 0;
+    std::string reason;
+};
+
+/// Take the one measurement: build the back end, or record why it cannot be built.
+ProbeOutcome probeBackend() {
+    ProbeOutcome outcome;
     const auto &selection = camel::execute::selectedDevices();
-    if (selection.given && (selection.cpu || selection.cuda.empty()))
-        throw BackendUnavailable(
-            "the run selected the host only (--devices cpu) and does not use a CUDA device");
-    try {
-        return std::make_shared<Backend>();
-    } catch (const BackendUnavailable &e) {
-        // The driver or NVRTC is not there. Without `--devices` that is a capability miss (the
-        // host runs the program); with it the run named a device, so the report names it.
-        if (selection.given && !selection.cuda.empty())
-            throw DeviceUnavailable(selection.cuda.front(), e.what());
-        throw;
+    // The host-only selection needs no driver at all, and is answered before the probe: its
+    // fallback stays silent.
+    if (selection.given && (selection.cpu || selection.cuda.empty())) {
+        outcome.kind   = ProbeOutcome::Kind::Unavailable;
+        outcome.reason = "the run selected the host only (--devices cpu) and does not use a CUDA "
+                         "device";
+        return outcome;
     }
+    // One line per actual probe: the H117 test asserts there is exactly one for the process.
+    if (deviceProbeStarted)
+        deviceProbeStarted();
+    try {
+        outcome.backend = std::make_shared<Backend>();
+    } catch (const DeviceUnavailable &e) {
+        outcome.kind    = ProbeOutcome::Kind::DeviceMissing;
+        outcome.ordinal = e.ordinal();
+        outcome.reason  = e.what();
+    } catch (const BackendUnavailable &e) {
+        // The driver, NVRTC or the device is not there. Without `--devices` that is a capability
+        // miss (the host runs the program); with it the run named a device, so the report names
+        // it, exactly as `createBackend` did before the probe cached the answer.
+        outcome.kind = selection.given && !selection.cuda.empty()
+                           ? ProbeOutcome::Kind::DeviceMissing
+                           : ProbeOutcome::Kind::Unavailable;
+        outcome.ordinal = selection.cuda.empty() ? 0 : selection.cuda.front();
+        outcome.reason  = e.what();
+    } catch (const std::exception &e) {
+        // Not a capability miss: an ordinary back-end failure, which is reported as before. It
+        // is kept too, so a broken back end is not rebuilt on every preferred call.
+        outcome.kind   = ProbeOutcome::Kind::Fault;
+        outcome.reason = e.what();
+    }
+    return outcome;
 }
 } // namespace
 std::shared_ptr<Backend> sharedBackend() {
-    static auto instance = createBackend();
-    return instance;
+    // Once per process: the first caller that wants a device takes the measurement, and every
+    // later one reads its cached answer, including a miss. A fresh exception is built per call
+    // rather than rethrowing a shared one, so concurrent callers do not share an exception
+    // object.
+    static const ProbeOutcome outcome = probeBackend();
+    if (outcome.backend)
+        return outcome.backend;
+    switch (outcome.kind) {
+    case ProbeOutcome::Kind::DeviceMissing:
+        throw DeviceUnavailable(outcome.ordinal, outcome.reason);
+    case ProbeOutcome::Kind::Fault:
+        throw std::runtime_error(outcome.reason);
+    case ProbeOutcome::Kind::Unavailable:
+    default:
+        throw BackendUnavailable(outcome.reason);
+    }
 }
 Backend &backend() { return *sharedBackend(); }
 } // namespace camel::tiles::cuda_detail
