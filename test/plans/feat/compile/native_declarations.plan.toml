@@ -88,6 +88,35 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_type.cml:8:23", "argument types: <> (int)", "<bytes:size>: (content: Bytes) => int"]
 
+# ---- The declarations of `str`: what an importer sees (handover H19, step 10) ----
+
+[[tests]]
+name = "native.str_declaration_import"
+desc = "`str`'s declarations are the module's signature: an importer calls `split<sep>` with a with-parameter, `find` with a nullable result and `from_codepoints` with a fallible one, and every call reaches the C++ operator."
+kind = "behavior"
+case = "../../../cases/compile/native/str_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[a, b, c]\n2\nhi\n"
+
+[[tests]]
+name = "native.str_wrong_arity"
+desc = "`str:trim` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's, parameter name included."
+kind = "negative"
+case = "../../../cases/compile/native/str_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_arity.cml:10:17", "(string, string)", "<str:trim>: (s: string) => string"]
+
+[[tests]]
+name = "native.str_wrong_type"
+desc = "An `int` where the declaration says `string`: refused at the call, and the signature in the message has the parameter name the declaration gave it — `stdlib/str.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/str_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_type.cml:11:17", "argument types: <> (int)", "<str:trim>: (s: string) => string"]
+
 # ---- A declaration the module does not export is private (handover H94, ruling 3) ----
 
 [[tests]]

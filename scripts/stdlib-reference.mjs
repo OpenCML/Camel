@@ -49,7 +49,14 @@ const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'regist
 // a signature file for a C++ module, the library itself for a module written in Camel.
 const MODULES = [
     { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp' },
-    { name: 'str', title: '`str`: strings', kind: 'cpp' },
+    {
+        name: 'str',
+        title: '`str`: strings',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles (H19).
+        source: 'str.cml',
+        declaration: true,
+    },
     {
         name: 'bytes',
         title: '`bytes`: immutable binary values and UTF-8 conversion',
