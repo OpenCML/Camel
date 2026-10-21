@@ -99,7 +99,7 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Region &region) {
         auto payload = source.nodePayloadBytes(ref);
         if (node->kind == rt::GCNodeKind::Loop) {
             const rt::GCLoopBody graphs = rt::loopBodyOf(source, ref);
-            if (graphs.condGraph)
+            if (rt::isValid(graphs.condGraph))
                 draft.addDependency(graphs.condGraph);
             draft.addDependency(graphs.bodyGraph);
             loop = rt::GCLoopRef{

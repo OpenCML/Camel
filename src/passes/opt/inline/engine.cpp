@@ -113,7 +113,9 @@ size_t inlinedNodeCount(const GCGraph *graph) {
 /// True when running `graph` may have an effect or touch state: it holds an operator that is not
 /// registered as pure, a call of a function value (callee unknown here), or reaches such a graph.
 /// A cycle of graphs is pure when none of its members has an effect of its own.
-bool mayHaveEffects(const GCGraph *graph, std::unordered_set<const GCGraph *> &seen) {
+bool mayHaveEffects(
+    const camel::runtime::Program &program, const GCGraph *graph,
+    std::unordered_set<const GCGraph *> &seen) {
     if (!graph || !seen.insert(graph).second) {
         return false;
     }
@@ -132,28 +134,28 @@ bool mayHaveEffects(const GCGraph *graph, std::unordered_set<const GCGraph *> &s
             }
         }
         if (node->kind == GCNodeKind::Func) {
-            if (mayHaveEffects(graph->directCalleeGraphOf(it.ref()), seen)) {
+            if (mayHaveEffects(program, program.calleeOf(*graph, it.ref()), seen)) {
                 return true;
             }
         }
         if (node->kind == GCNodeKind::Loop) {
-            if (mayHaveEffects(graph->loopCondGraphOf(it.ref()), seen) ||
-                mayHaveEffects(graph->loopBodyGraphOf(it.ref()), seen)) {
+            if (mayHaveEffects(program, program.loopCondOf(*graph, it.ref()), seen) ||
+                mayHaveEffects(program, program.loopBodyOf(*graph, it.ref()), seen)) {
                 return true;
             }
         }
     }
-    for (GCGraph *sub : graph->subGraphs()) {
-        if (mayHaveEffects(sub, seen)) {
+    for (GCGraph *sub : program.subGraphs(*graph)) {
+        if (mayHaveEffects(program, sub, seen)) {
             return true;
         }
     }
     return false;
 }
 
-bool mayHaveEffects(const GCGraph *graph) {
+bool mayHaveEffects(const camel::runtime::Program &program, const GCGraph *graph) {
     std::unordered_set<const GCGraph *> seen;
-    return mayHaveEffects(graph, seen);
+    return mayHaveEffects(program, graph, seen);
 }
 
 /// True when values of `type` may hold a function: inlining a callee returning one exposes the
@@ -199,7 +201,7 @@ std::vector<const GCGraph *> directCallees(
         return callees;
     }
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-        if (GCGraph *callee = graph->directCalleeGraphOf(it.ref())) {
+        if (GCGraph *callee = session.work().calleeOf(*graph, it.ref())) {
             callees.push_back(callee);
         }
     }
@@ -354,7 +356,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
             if (!*it) {
                 continue;
             }
-            GCGraph *target = graph->directCalleeGraphOf(it.ref());
+            GCGraph *target = session.work().calleeOf(*graph, it.ref());
             if (!target) {
                 target = functionConstantGraph(graph, it.ref());
             }
@@ -374,7 +376,8 @@ struct RuntimeCallGraphSccInfo {
     std::unordered_set<const GCGraph *> reachesRecursion;
 };
 
-RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> &closure) {
+RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(
+    const camel::runtime::Program &program, const std::vector<GCGraph *> &closure) {
     RuntimeCallGraphSccInfo info;
     std::unordered_map<const GCGraph *, size_t> indexOf;
     indexOf.reserve(closure.size());
@@ -394,9 +397,9 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> 
             // callee: a function called from a loop body that calls the function the loop is
             // in is a recursion through the loop.
             for (GCGraph *callee :
-                 {graph->directCalleeGraphOf(it.ref()),
-                  graph->loopCondGraphOf(it.ref()),
-                  graph->loopBodyGraphOf(it.ref())}) {
+                 {program.calleeOf(*graph, it.ref()),
+                  program.loopCondOf(*graph, it.ref()),
+                  program.loopBodyOf(*graph, it.ref())}) {
                 if (!callee) {
                     continue;
                 }
@@ -744,7 +747,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                         if (!node || node->kind != GCNodeKind::Func) {
                             continue;
                         }
-                        GCGraph *callee = runtimeGraph->directCalleeGraphOf(it.ref());
+                        GCGraph *callee = session.work().calleeOf(*runtimeGraph, it.ref());
                         if (!callee) {
                             continue;
                         }
@@ -760,7 +763,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     }
                 }
 
-                sccInfo = analyzeRuntimeCallGraphScc(closure);
+                sccInfo = analyzeRuntimeCallGraphScc(session.work(), closure);
                 CAMEL_LOG_INFO_S(
                     "OptimizePass",
                     "Runtime rewrite SCC analysis finished: {} components, {} recursive graphs, "
@@ -1063,7 +1066,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
     // is spliced; the inliner hands a call's control predecessors to the body.
     // Only a body that has an effect or touches state cares when it runs; a pure
     // callee (most of a tensor program) gets no extra edge.
-    const bool calleeOrdered = mayHaveEffects(draft.calleeGraphOf(funcNodeId));
+    const bool calleeOrdered = mayHaveEffects(session.work(), draft.calleeGraphOf(funcNodeId));
     for (gc_node_ref_t source : argSources) {
         if (!calleeOrdered) {
             break;

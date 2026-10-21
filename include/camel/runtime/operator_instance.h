@@ -64,6 +64,6 @@ std::optional<camel::core::sem::ReorderFreedom> reorderFreedomOf(
  * at the node give no instance, "permissions" (the node's, when it has any), "freedom" (what
  * reorderFreedomOf allows, when the instance reduces)}.
  */
-void dumpOperatorInstances(GCGraph *root, std::ostream &os);
+void dumpOperatorInstances(const Program &program, std::ostream &os);
 
 } // namespace camel::runtime

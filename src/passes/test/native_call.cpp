@@ -46,7 +46,7 @@ NativeCallbackTestPass::apply(const camel::runtime::Program *program, std::ostre
         for (rt::gc_node_ref_t id = 0; id < owner->nodeCount(); ++id) {
             if (owner->node(id)->kind != rt::GCNodeKind::Func)
                 continue;
-            auto *callee = owner->directCalleeGraphOf(id);
+            auto *callee = session.work().calleeOf(*owner, id);
             if (!callee || callee->name() != "native_callback")
                 continue;
             if (owner->normInputsOf(id).size() != 2 || !owner->withInputsOf(id).empty())

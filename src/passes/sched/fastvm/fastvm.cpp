@@ -341,9 +341,10 @@ constexpr size_t kLateBytecodeReserve = size_t{1} << 22; // 4M bytecodes, 32 MiB
 
 } // namespace
 
-void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
+void FastVMSchedPass::precompile(
+    const camel::runtime::Program &program, camel::runtime::GCGraph *runtimeRoot) {
     ASSERT(runtimeRoot != nullptr, "Runtime root graph is null.");
-    auto linked = compileAndLink(context_, runtimeRoot, kFastVmCompileStrategy);
+    auto linked = compileAndLink(context_, program, runtimeRoot, kFastVmCompileStrategy);
     bytecodes_  = std::move(linked.codes);
     bytecodes_.reserve(bytecodes_.size() + std::max(kLateBytecodeReserve, bytecodes_.size() * 4));
     offsetMap_ = std::move(linked.offsetMap);
@@ -361,6 +362,7 @@ void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
     // graph created at run time can be collected and its address reused by a new one.
     auto linked = compileAndLinkFrom(
         context_,
+        programs_.of(graph),
         graph,
         kFastVmCompileStrategy,
         fastVmEntryPcOf,
@@ -499,7 +501,8 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
         program = camel::runtime::lowerLoopsToTailRecursion(context_, program);
     }
     camel::runtime::GCGraph *runtimeRoot = program->root();
-    precompile(runtimeRoot);
+    programs_.setMain(program);
+    precompile(*program, runtimeRoot);
 
     stackDepth_  = 0;
     nestedCalls_ = 0;
@@ -1095,7 +1098,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                         fastVmCallBoundarySafepoint();
                         auto *function = cur->get<Function *>(wargs[0]);
                         ASSERT(function != nullptr, "JIT CALL resolved a null Function callee.");
-                        auto *target = function->graph();
+                        auto *target = programs_.graphOf(function);
                         ASSERT(target != nullptr, "JIT CALL target has no runtime graph.");
                         const uint32_t callCount = noteIndirectCall(target);
                         requireNestedCallRoom(cur);
@@ -1366,7 +1369,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
 
 HigherOrderCallSite FastVMSchedPass::higherOrderCallSite(Function *func) {
     ASSERT(func != nullptr, "Higher-order call target function is null.");
-    camel::runtime::GCGraph *runtimeGraph = func->graph();
+    camel::runtime::GCGraph *runtimeGraph = programs_.graphOf(func);
     ASSERT(
         runtimeGraph != nullptr,
         "FastVM higher-order runtime call requires a materialized runtime graph.");

@@ -113,7 +113,7 @@ void checkBindingKinds(core::context::Context &context) {
     draft.setId(context.graphIds().allocate());
     auto *graph    = draft.encode("tiles.test.binding", "tiles.test.binding");
     auto *function = ::Function::create(
-        runtime::makeProgram(context, std::span(&graph, 1)),
+        runtime::makeProgram(context, nullptr, std::span(&graph, 1)),
         graph->id(),
         ty::TupleType::create(std::vector<ty::Type *>{}),
         core::mm::autoSpace());

@@ -18,6 +18,7 @@
  */
 
 #include "program_index.h"
+#include "camel/runtime/program.h"
 #include "values.h"
 
 #include "camel/core/module/module.h"
@@ -65,6 +66,7 @@ const char *kindName(GCNodeKind kind) {
         return "LOOP";
     case GCNodeKind::Bind:
     case GCNodeKind::Dref:
+    case GCNodeKind::Dead:
         // Reserved kinds: never part of a frozen graph (see GCNodeKind).
         break;
     }
@@ -325,7 +327,9 @@ void ProgramIndex::finishBindings() {
 void ProgramIndex::collect(
     GCGraph *root, std::map<LineKey, LineNodes> &lines, std::vector<GCGraph *> &graphs,
     std::unordered_set<origin_t> *origins, ArmOwners *arms) {
-    if (root == nullptr) {
+    const camel::runtime::Program *program =
+        root != nullptr ? ctx_->programOfRuntimeGraph(root) : nullptr;
+    if (program == nullptr) {
         return;
     }
     std::unordered_set<GCGraph *> seen{root};
@@ -340,7 +344,8 @@ void ProgramIndex::collect(
                 if (n != nullptr && n->kind == GCNodeKind::Loop && arms != nullptr) {
                     // The condition and the body of a loop are code of the function the loop
                     // is written in (design principles 12.1: they fold like arms).
-                    for (GCGraph *part : {g->loopCondGraphOf(it.ref()), g->loopBodyGraphOf(it.ref())}) {
+                    for (GCGraph *part :
+                         {program->loopCondOf(*g, it.ref()), program->loopBodyOf(*g, it.ref())}) {
                         if (part != nullptr) {
                             auto &owners = (*arms)[part];
                             if (std::find(owners.begin(), owners.end(), g) == owners.end()) {
@@ -357,7 +362,7 @@ void ProgramIndex::collect(
                             const GCNode *armNode =
                                 ref != kInvalidNodeRef ? g->node(ref) : nullptr;
                             if (armNode != nullptr && armNode->kind == GCNodeKind::Func) {
-                                if (GCGraph *callee = g->directCalleeGraphOf(ref)) {
+                                if (GCGraph *callee = program->calleeOf(*g, ref)) {
                                     auto &owners = (*arms)[callee];
                                     if (std::find(owners.begin(), owners.end(), g) ==
                                         owners.end()) {
@@ -386,7 +391,7 @@ void ProgramIndex::collect(
                 }
             }
         }
-        g->traceGraphs([&](GCGraph *next) {
+        program->traceGraphs(*g, [&](GCGraph *next) {
             if (seen.insert(next).second) {
                 queue.push_back(next);
             }
@@ -443,7 +448,9 @@ void ProgramIndex::running(GCGraph *root) {
 void ProgramIndex::findLiveGraphs(GCGraph *root) {
     liveGraphIds_.clear();
     liveOrigins_.clear();
-    if (root == nullptr) {
+    const camel::runtime::Program *program =
+        root != nullptr ? ctx_->programOfRuntimeGraph(root) : nullptr;
+    if (program == nullptr) {
         return;
     }
     // GCGraph::dependencies() are the graphs of the FUNC nodes (calls, the arms of branches)
@@ -462,7 +469,7 @@ void ProgramIndex::findLiveGraphs(GCGraph *root) {
                 }
             }
         }
-        for (const auto &next : {g->dependencies(), g->staticGraphRefs()}) {
+        for (const auto &next : {program->dependencies(*g), program->staticGraphRefs(*g)}) {
             for (GCGraph *graph : next) {
                 if (graph != nullptr && seen.insert(graph).second) {
                     queue.push_back(graph);
@@ -814,6 +821,8 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     if (auto it = graphs_.find(g); it != graphs_.end()) {
         return *it->second;
     }
+    const camel::runtime::Program *programOfGraph = ctx_->programOfRuntimeGraph(g);
+    ASSERT(programOfGraph != nullptr, "A graph of the debugged program is in no program.");
     auto info      = std::make_unique<GraphInfo>();
     info->graph    = g;
     info->name     = g->name();
@@ -887,7 +896,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
                 node.label       = std::string(body->uri());
             } break;
             case GCNodeKind::Func: {
-                GCGraph *callee = g->directCalleeGraphOf(node.ref);
+                GCGraph *callee = programOfGraph->calleeOf(*g, node.ref);
                 node.label      = callee ? callee->name() : std::string("?");
                 if (callee != nullptr && callee->name().rfind("__g_", 0) == 0) {
                     // What is passed to a compiler-made graph names its ports (see above).
@@ -1006,7 +1015,8 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
                         (line > 0 ? " at line " + std::to_string(line) : std::string()) + "]";
     } else if (info->name.rfind("__g_", 0) == 0) {
         std::string owner;
-        for (GCGraph *outer = g->outerGraph(); outer != nullptr; outer = outer->outerGraph()) {
+        for (GCGraph *outer = programOfGraph->outerOf(*g); outer != nullptr;
+             outer          = programOfGraph->outerOf(*outer)) {
             if (outer->name().rfind("__", 0) != 0) {
                 owner = outer->name();
                 break;

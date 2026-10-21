@@ -37,6 +37,7 @@
 namespace camel::runtime {
 
 class GraphDraft;
+class Program;
 
 /// The graph's cold data: its names and the names it captures.
 struct GCGraphDebugRecord {
@@ -58,13 +59,16 @@ struct GCGraphPayloadShape {
     bool permissions = false;
     // Whether some node has attributes: only then the graph has an attribute column.
     bool attrs = false;
+    // The graph the draft was decoded from: a chunk of the new graph that has all the content of
+    // the same chunk of this one is that chunk (GCNodeChunk::shares). nullptr: none.
+    const GCGraph *base = nullptr;
 };
 
 struct GCGraphPayloadArena {
     // The graph's reference table, already built, and the index of each entry: the encoder
     // writes a FUNC node's callee as its index (GCFuncRef).
-    std::span<GCGraph *const> refs;
-    const std::unordered_map<const GCGraph *, uint32_t> *refIndex = nullptr;
+    std::span<const GraphId> refs;
+    const std::unordered_map<GraphId, uint32_t> *refIndex = nullptr;
 
     GCNode *nodes              = nullptr; // nodeCount + 1 records
     uint32_t *origins          = nullptr; // nodeCount source origins
@@ -114,32 +118,33 @@ using FrameSlotTypes = std::optional<std::span<camel::core::type::Type *const>>;
 
 struct GCGraphBuildAccess {
     static size_t requiredBytes(
-        std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
-        std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payload,
+        std::span<const GraphId> dependencies, std::span<const GraphId> subGraphs,
+        std::span<const GraphId> staticGraphRefs, const GCGraphPayloadShape &payload,
         std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots);
 
     static GCGraph *constructInPlace(
         void *memory, size_t bytes, GraphId id, const GCGraphDerivation &derivation,
-        GCGraphDebugRecord *debugRecord,
-        camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
-        camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
-        GCGraph *outerGraph, std::span<GCGraph *const> dependencies,
-        std::span<GCGraph *const> subGraphs, std::span<GCGraph *const> staticGraphRefs,
-        const GCGraphPayloadShape &payloadShape,
+        GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
+        const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
+        camel::core::type::TupleType *closureType, GraphId outerGraph,
+        std::span<const GraphId> dependencies, std::span<const GraphId> subGraphs,
+        std::span<const GraphId> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
         const std::function<void(GCGraphPayloadArena &)> &emitPayload,
         std::span<const slot_t> staticSlots);
 
     static GCGraph *create(
         GraphId id, const GCGraphDerivation &derivation, GCGraphDebugRecord *debugRecord,
-        camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
-        camel::core::type::TupleType *closureType, GCGraph *outerGraph,
-        std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
-        std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
+        camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
+        camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
+        GraphId outerGraph, std::span<const GraphId> dependencies,
+        std::span<const GraphId> subGraphs, std::span<const GraphId> staticGraphRefs,
+        const GCGraphPayloadShape &payloadShape,
         const std::function<void(GCGraphPayloadArena &)> &emitPayload,
         std::span<const slot_t> staticSlots);
 
     /// Makes `copy`, a commit's encoding of `source`, have the revision of `source` when the
     /// commit did not change it (GCGraph::revision). Set before anything can see `copy`.
+    static void addFlags(GCGraph *graph, uint8_t flags) { graph->flags_ |= flags; }
     static void inheritRevision(GCGraph *copy, const GCGraph *source, bool changed) {
         if (!changed) {
             copy->revision_ = source->revision_;
@@ -147,22 +152,20 @@ struct GCGraphBuildAccess {
     }
 };
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft);
-void emitDraftNativePayload(
-    const GraphDraft &draft, GCGraphPayloadArena &payload,
-    const std::function<GCGraph *(GCGraph *)> &resolveRuntimeGraph = {});
+void emitDraftNativePayload(const GraphDraft &draft, GCGraphPayloadArena &payload);
 
 void collectStaticGraphRefsRecursive(
-    std::vector<GCGraph *> &refs, slot_t slot, camel::core::type::Type *type,
+    std::vector<GraphId> &refs, slot_t slot, camel::core::type::Type *type,
     std::unordered_set<const camel::core::rtdata::Object *> &visited);
 /// Structural checks on one encoded graph, in every build mode: node, slot and edge references
 /// in range, inputs and outputs mirroring each other, BRCH/JOIN arm counts, GATE with a value
 /// and a control input, FUNC with a callee, CALL with a callee input. Throws std::runtime_error;
 /// inside a pass that becomes RuntimeDiag::PassInternalError naming the pass.
-void validateRuntimeGraphPayload(const GCGraph *graph);
+void validateRuntimeGraphPayload(const Program &program, const GCGraph *graph);
 /// The branch-arm invariant (branch_arms.cpp; docs/technical/17_graph_rewrite_api_contracts.md,
 /// 4.1): between a BRCH and its JOIN every executed node belongs to exactly one arm. Part of
 /// validateRuntimeGraphPayload; throws std::runtime_error naming the graph, the node and the arms.
-void validateRuntimeBranchArms(const GCGraph *graph);
+void validateRuntimeBranchArms(const Program &program, const GCGraph *graph);
 /// The type invariant (graph_types.cpp): no type on the graph (function type, runtime, static
 /// and closure slots, at any depth) is an auxiliary type of the compiler. Part of
 /// validateRuntimeGraphPayload; throws std::runtime_error naming the graph and the type.
@@ -172,6 +175,6 @@ void validateRuntimeGraphTypes(const GCGraph *graph);
 /// the reference table (graphs refer to graphs only through it; the FUNC payload is an index
 /// into it by construction, checked by validateRuntimeGraphPayload). Run on each graph once the
 /// whole set of a commit is encoded.
-void validateRuntimeGraphCalls(const GCGraph *graph);
+void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph);
 
 } // namespace camel::runtime

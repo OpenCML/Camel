@@ -70,7 +70,7 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     const bool hasValueReturn = graph.funcType() != nullptr && graph.funcType()->hasExitType() &&
                                 graph.funcType()->exitType() != camel::core::type::Type::Void();
 
-    plan->directCallTargets.resize(count, nullptr);
+    plan->directCallTargetIds.resize(count, kInvalidGraphId);
     plan->directCallTailEligible.resize(count, 0);
     plan->directCallFeedsTailJoin.resize(count, 0);
     plan->directCallArgOffsets.resize(count + 1, 0);
@@ -132,9 +132,9 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
         if (!node || node->kind != GCNodeKind::Func) {
             continue;
         }
-        plan->directCallTargets[idx] = graph.directCalleeGraphOf(ref);
+        plan->directCallTargetIds[idx] = graph.calleeIdOf(ref);
         ASSERT(
-            plan->directCallTargets[idx] != nullptr,
+            plan->directCallTargetIds[idx] != kInvalidGraphId,
             "A direct FUNC target must be materialized into runtime metadata.");
         for (gc_node_ref_t argRef : graph.normInputsOf(ref)) {
             plan->directCallArgSlots.push_back(dataIndexOf(graph, argRef));
@@ -146,6 +146,23 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
         plan->directCallFeedsTailJoin[idx] =
             std::find(tailJoinArmValues.begin(), tailJoinArmValues.end(), ref) !=
             tailJoinArmValues.end();
+    }
+    plan->tailAnchorOk = anchorOk;
+    if (anchorOk) {
+        if (plan->tailValueIsJoin) {
+            plan->tailJoins.push_back(plan->tailValueRef);
+        }
+        for (const gc_node_ref_t value : tailJoinArmValues) {
+            if (graph.node(value)->kind == GCNodeKind::Join) {
+                plan->tailJoins.push_back(value);
+            }
+        }
+        for (size_t idx = 0; idx < count; ++idx) {
+            if (plan->directCallTailEligible[idx] || plan->directCallFeedsTailJoin[idx]) {
+                plan->tailCalls.push_back(plan->topo[idx]);
+            }
+        }
+        std::ranges::sort(plan->tailCalls);
     }
     plan->directCallArgOffsets[count]  = static_cast<uint32_t>(plan->directCallArgSlots.size());
     plan->branchArmEntryOffsets[count] = static_cast<uint32_t>(plan->branchArmEntries.size());

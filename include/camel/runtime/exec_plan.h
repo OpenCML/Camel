@@ -35,6 +35,7 @@
 #include "camel/core/operator.h"
 #include "camel/runtime/graph.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -80,8 +81,10 @@ class ExecPlan {
     /// The data slot of each node, by node reference.
     std::vector<gc_data_idx_t> dataIndexByRef;
 
-    /// Per topo index: the callee of a FUNC node (nullptr for other nodes).
-    std::vector<GCGraph *> directCallTargets;
+    /// Per topo index: the callee of a FUNC node, by id (kInvalidGraphId for other nodes). The
+    /// version of the callee is the one the program the graph is run in holds
+    /// (Program::graph): a version shared by several programs has callees that differ.
+    std::vector<GraphId> directCallTargetIds;
     /// Per topo index: the FUNC node's value is the graph's result and nothing but forwarding
     /// follows it (a tail call), or it feeds a tail JOIN through forwarding.
     std::vector<uint8_t> directCallTailEligible;
@@ -100,6 +103,19 @@ class ExecPlan {
     gc_node_ref_t tailValueRef = kInvalidNodeRef;
     size_t tailValueTopoIndex  = 0;
     bool tailValueIsJoin       = false;
+    /// The tail value is the last thing the graph does but forwarding GATEs: a call that is the
+    /// tail value, or feeds a tail JOIN through forwarding, replaces the rest of the graph (a
+    /// tail call). This is the one rule every back end uses.
+    bool tailAnchorOk = false;
+    /// The FUNC nodes in tail position (by node reference, sorted): the tail value itself and the
+    /// calls that feed a tail JOIN.
+    std::vector<gc_node_ref_t> tailCalls;
+    /// The JOIN nodes in tail position: the tail value when it is a JOIN, and every JOIN whose
+    /// value it yields through forwarding GATEs.
+    std::vector<gc_node_ref_t> tailJoins;
+    bool isTailCall(gc_node_ref_t ref) const {
+        return std::binary_search(tailCalls.begin(), tailCalls.end(), ref);
+    }
     /// The data slots of the ports a caller binds, norm ports then with ports.
     std::vector<gc_data_idx_t> calleePortSlots;
 

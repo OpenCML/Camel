@@ -81,7 +81,7 @@ TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream 
     camel::runtime::GCGraph *graph = program->root();
     ASSERT(graph != nullptr, "Topo dump requires a non-null runtime root graph.");
 
-    auto sortedGraphs = camel::runtime::collectReachableGraphs(graph);
+    auto sortedGraphs = camel::runtime::collectReachableGraphs(*program, graph);
     ostringstream oss;
 
     for (auto *runtimeGraph : sortedGraphs) {
@@ -102,7 +102,7 @@ TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream 
         auto describeRuntimeNode = [&](gc_node_ref_t nodeRef, const GCNode &node) -> string {
             switch (node.kind) {
             case GCNodeKind::Func: {
-                auto *callee          = runtimeGraph->directCalleeGraphOf(nodeRef);
+                auto *callee          = program->calleeOf(*runtimeGraph, nodeRef);
                 string name           = callee ? callee->name() : "<null>";
                 string res            = format("CALL: {} slot={}", name, node.dataIndex);
                 const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
@@ -205,8 +205,8 @@ TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream 
                 return res;
             }
             case GCNodeKind::Loop: {
-                const auto *cond = runtimeGraph->loopCondGraphOf(nodeRef);
-                const auto *body = runtimeGraph->loopBodyGraphOf(nodeRef);
+                const auto *cond = program->loopCondOf(*runtimeGraph, nodeRef);
+                const auto *body = program->loopBodyOf(*runtimeGraph, nodeRef);
                 string res       = format(
                     "LOOP: {} cond={} body={} slot={}",
                     camel::core::loopKindName(runtimeGraph->loopKindOf(nodeRef)),

@@ -262,6 +262,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
     try {
         const camel::runtime::ExecPlan *currPlan = &currRuntimeGraph->execPlan();
         std::span<const gc_node_ref_t> currNodes = currPlan->topo;
+        // The program the running graph belongs to: its direct callees are in it.
+        const camel::runtime::Program *currProgram = &programs_.of(currRuntimeGraph);
 
         // Branch execution is implemented by skipping until the selected arm's
         // entry, executing through the arm tail, and then resuming at JOIN.
@@ -470,7 +472,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 Function *func =
                     currFrame->get<Function *>(planDataIndex(*currPlan, withInputs.front()));
                 ASSERT(func != nullptr, "NodeVM CALL resolved a null Function callee.");
-                auto *funcRuntimeGraph = func->graph();
+                auto *funcRuntimeGraph = programs_.graphOf(func);
                 ASSERT(
                     funcRuntimeGraph != nullptr,
                     "NodeVM indirect CALL requires a materialized runtime graph target.");
@@ -491,7 +493,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
             case GCNodeKind::Func: {
                 auto *callerRuntimeGraph = currRuntimeGraph;
-                auto *runtimeTarget      = currPlan->directCallTargets[i];
+                auto *runtimeTarget      = currProgram->graph(currPlan->directCallTargetIds[i]);
                 ASSERT(
                     runtimeTarget != nullptr,
                     "NodeVM direct FUNC target must have a materialized runtime graph.");
@@ -519,6 +521,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                         // Switch to the callee graph and its topo sequence.
                         currRuntimeGraph = runtimeTarget;
                         currPlan         = &currRuntimeGraph->execPlan();
+                        currProgram      = &programs_.of(currRuntimeGraph);
                         currNodes        = currPlan->topo;
                     }
                     const auto *layout = &runtimeTarget->execPlan();
@@ -647,6 +650,7 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     camel::runtime::GCGraph *graph = program->root();
     (void)os;
     ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
+    programs_.setMain(program);
     Frame *rootFrame = framePool_.acquire(graph);
     slot_t result    = call(graph, rootFrame);
     context_->captureProcessExitCode(graph, result);
@@ -701,9 +705,9 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->getSlot(i);
         requireRecursionRoom(graph);
-        Frame *frame = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        slot_t result = call(func->graph(), frame);
+        slot_t result = call(programs_.graphOf(func), frame);
         currFrame.get<Array *>(resultSlot)->set<slot_t>(i, result, resultType);
     }
 }
@@ -730,9 +734,9 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->getSlot(i);
         requireRecursionRoom(graph);
-        Frame *frame = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        slot_t result = call(func->graph(), frame);
+        slot_t result = call(programs_.graphOf(func), frame);
         if (fromSlot<bool>(result)) {
             Array *target = currFrame.get<Array *>(resultSlot);
             target->append(currFrame.get<Array *>(arrSlot)->getSlot(i), resultType);
@@ -766,9 +770,9 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
         Function *func      = currFrame.get<Function *>(funcSlot);
         const slot_t args[] = {currFrame.get<slot_t>(resultSlot), arr->getSlot(i)};
         requireRecursionRoom(graph);
-        Frame *frame = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(args, 2));
-        currFrame.set(resultSlot, call(func->graph(), frame));
+        currFrame.set(resultSlot, call(programs_.graphOf(func), frame));
     }
 }
 
@@ -788,16 +792,16 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->getSlot(i);
         requireRecursionRoom(graph);
-        Frame *frame = framePool_.acquire(func->graph());
+        Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        call(func->graph(), frame);
+        call(programs_.graphOf(func), frame);
     }
     currFrame.set(dataIndexOf(graph, nodeRef), NullSlot);
 }
 
 void NodeVMSchedPass::evalLoop(
     camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
-    const camel::runtime::LoopView loop(*graph, nodeRef);
+    const camel::runtime::LoopView loop(programs_.of(graph), *graph, nodeRef);
     const size_t k           = loop.stateCount();
     const size_t collections = loop.collectionCount();
     const auto stateSlot     = dataIndexOf(graph, nodeRef);
@@ -867,8 +871,10 @@ void NodeVMSchedPass::evalMarkedOperator_isolate(
     ASSERT(!normInputs.empty(), "The fault-isolation node requires a function input.");
     const auto resultSlot = dataIndexOf(graph, nodeRef);
     Function *func        = currFrame.get<Function *>(dataIndexOf(graph, normInputs.front()));
-    ASSERT(func != nullptr && func->graph() != nullptr, "Fault-isolation callee is null.");
-    auto *target = func->graph();
+    ASSERT(
+        func != nullptr && programs_.graphOf(func) != nullptr,
+        "Fault-isolation callee is null.");
+    auto *target = programs_.graphOf(func);
 
     std::vector<slot_t> args;
     args.reserve(normInputs.size() - 1);
@@ -945,7 +951,7 @@ slot_t NodeVMSchedPass::evalNativeOperator(
                       std::span<const slot_t>
                           normalArgs) {
             requireRecursionRoom(currRuntimeGraph);
-            auto *target = function->graph();
+            auto *target = programs_.graphOf(function);
             Frame *frame = framePool_.acquire(target);
             bindMarkedFunctionFrame(frame, function, normalArgs, withArgs);
             return call(target, frame);

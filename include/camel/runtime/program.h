@@ -52,6 +52,49 @@ class Program {
         const size_t index = toValue(id);
         return index < byId_.size() ? byId_[index] : nullptr;
     }
+    /// The graphs a graph refers to, read in this program (graph.h, GCGraph::refs): the graph
+    /// of FUNC node `ref`; of LOOP node `ref` the condition (nullptr for a For loop) and the
+    /// body; the graph a graph is written in. nullptr where the id names no graph of the
+    /// program.
+    GCGraph *calleeOf(const GCGraph &graph, gc_node_ref_t ref) const {
+        return this->graph(graph.calleeIdOf(ref));
+    }
+    GCGraph *loopCondOf(const GCGraph &graph, gc_node_ref_t ref) const {
+        return this->graph(graph.loopCondIdOf(ref));
+    }
+    GCGraph *loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) const {
+        return this->graph(graph.loopBodyIdOf(ref));
+    }
+    GCGraph *outerOf(const GCGraph &graph) const { return this->graph(graph.outerGraphId()); }
+    /// The graphs `ids` name that the program holds, in order.
+    std::vector<GCGraph *> resolve(std::span<const GraphId> ids) const {
+        std::vector<GCGraph *> graphs;
+        graphs.reserve(ids.size());
+        for (GraphId id : ids) {
+            if (GCGraph *found = this->graph(id)) {
+                graphs.push_back(found);
+            }
+        }
+        return graphs;
+    }
+    /// Views of the reference table of `graph` by role (GCGraphRefRole), resolved.
+    std::vector<GCGraph *> dependencies(const GCGraph &graph) const {
+        return resolve(graph.dependencies());
+    }
+    std::vector<GCGraph *> subGraphs(const GCGraph &graph) const {
+        return resolve(graph.subGraphs());
+    }
+    std::vector<GCGraph *> staticGraphRefs(const GCGraph &graph) const {
+        return resolve(graph.staticGraphRefs());
+    }
+    /// Calls `visitor` for every graph of the reference table of `graph`.
+    template <typename Visitor> void traceGraphs(const GCGraph &graph, Visitor &&visitor) const {
+        for (GraphId id : graph.refs()) {
+            if (GCGraph *found = this->graph(id)) {
+                visitor(found);
+            }
+        }
+    }
     /// True when `graph` is the version this program holds of its graph.
     bool contains(const GCGraph *graph) const {
         return graph != nullptr && this->graph(graph->id()) == graph;
@@ -72,6 +115,45 @@ class Program {
         return graphs;
     }
     size_t size() const { return count_; }
+    /// One more than the largest id the table has room for.
+    size_t tableSize() const { return byId_.size(); }
+    /// Advances with every bind: equal versions of one program mean the same table.
+    uint64_t version() const { return version_; }
+    /// A satellite is a program made outside a commit (makeProgram, a draft group): the graphs
+    /// of the program it was made over, so that every id resolves, and the ones it adds. Only
+    /// those it adds are its own; the others are the versions the base had then, which a later
+    /// commit may have replaced and freed. A program that is not a satellite owns all it holds.
+    bool owns(GraphId id) const {
+        if (!satellite_) {
+            return graph(id) != nullptr;
+        }
+        const size_t index = toValue(id);
+        return index < own_.size() && own_[index] != 0;
+    }
+    /// Binds `graph` as one the satellite adds.
+    void bindOwn(GraphId id, GCGraph *graph) {
+        satellite_ = true;
+        bind(id, graph);
+        const size_t index = toValue(id);
+        if (index >= own_.size()) {
+            own_.resize(index + 1, 0);
+        }
+        own_[index] = 1;
+    }
+    /// Makes the program a satellite of what it holds.
+    void makeSatellite() { satellite_ = true; }
+    /// Binds the graphs `other` owns that this program does not hold.
+    void adoptMissing(const Program &other) {
+        if (&other == this) {
+            return;
+        }
+        for (size_t index = 0; index < other.byId_.size(); ++index) {
+            const GraphId id = static_cast<GraphId>(index);
+            if (other.byId_[index] != nullptr && other.owns(id) && graph(id) == nullptr) {
+                bind(id, other.byId_[index]);
+            }
+        }
+    }
     /// The program this one is a private copy of, nullptr when it is not one. A back end that
     /// runs a rewritten copy of the program (lowerLoopsToTailRecursion, which commits its
     /// session detached) gets a program whose original is the program it rewrote, followed
@@ -82,6 +164,7 @@ class Program {
 
     /// Construction; see the file comment.
     void bind(GraphId id, GCGraph *graph) {
+        ++version_;
         const size_t index = toValue(id);
         if (index >= byId_.size()) {
             byId_.resize(index + 1, nullptr);
@@ -98,15 +181,19 @@ class Program {
 
   private:
     std::vector<GCGraph *> byId_; // indexed by the value of the GraphId; nullptr where absent
+    std::vector<uint8_t> own_;    // satellite: 1 where the graph is one it adds
+    bool satellite_          = false;
+    uint64_t version_        = 0;
     size_t count_            = 0;
     GCGraph *root_           = nullptr;
     const Program *original_ = nullptr;
 };
 
 /// A program of its own, owned by `context`, for graphs created while the program runs and
-/// belonging to no commit (the gradient of a function, an outlined region): it holds exactly
-/// `graphs`, the first being its root.
-const Program *
-makeProgram(camel::core::context::Context &context, std::span<GCGraph *const> graphs);
+/// belonging to no commit (the gradient of a function, an outlined region): the graphs of
+/// `base` and `graphs`, the first of them its root. The graphs are rooted for the context's
+/// lifetime.
+const Program *makeProgram(
+    camel::core::context::Context &context, const Program *base, std::span<GCGraph *const> graphs);
 
 } // namespace camel::runtime

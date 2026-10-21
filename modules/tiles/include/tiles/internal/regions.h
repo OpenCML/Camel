@@ -65,9 +65,12 @@ struct RegionAnalysis {
     std::vector<std::string> exclusions;
     RegionTransfers transfers;
 };
-RegionAnalysis analyzeRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
+RegionAnalysis analyzeRegions(
+    const runtime::Program &program, const runtime::GCGraph &graph,
+    runtime::fact::FactStore &facts);
 std::string loopEligibility(
-    const runtime::GCGraph &graph, runtime::gc_node_ref_t node, runtime::fact::FactStore &facts);
+    const runtime::Program &program, const runtime::GCGraph &graph, runtime::gc_node_ref_t node,
+    runtime::fact::FactStore &facts);
 struct RegionDeviceOps {
     operator_t upload, execute, download;
     std::string uploadUri = "tiles:upload", executeUri = "tiles:run_device",
@@ -90,5 +93,7 @@ slot_t testCompiledCall(ArgsView &with, ArgsView &norm, core::context::Context &
 
 // Inspect one function graph without executing it or initializing CUDA. This is
 // candidate analysis with extracted drafts, not automatic graph execution.
-std::string inspectRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
+std::string inspectRegions(
+    const runtime::Program &program, const runtime::GCGraph &graph,
+    runtime::fact::FactStore &facts);
 } // namespace camel::tiles

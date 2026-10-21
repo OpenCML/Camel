@@ -99,7 +99,7 @@ assert(!facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'l
 
 [[tests]]
 name = "rewrite_inline"
-desc = "Facts computed before std::opt::inline: the graphs it changed (main, which gets the callees' bodies, the root and twice, which refer to them) read stale, apart from the shapes whose node types did not change (Cone: revalidated); the graphs it did not change keep every fact. Everything stale is computed again and every stored fact then equals a fresh computation. A private loop lowering (as std::fvm does) makes the graphs that held a loop, and those referring to them, new; the loops' own graphs and the others keep their facts."
+desc = "Facts computed before std::opt::inline: the graphs it changed (main, which gets the callees' bodies, the root and twice, which refer to them) read stale, apart from the facts about nodes that kept their id and whose inputs did not change (revalidated: a rewrite keeps the NodeIds of the nodes it leaves); the graphs it did not change keep every fact. Everything stale is computed again and every stored fact then equals a fresh computation. A private loop lowering (as std::fvm does) makes the graphs that held a loop, and those referring to them, new; the loops' own graphs and the others keep their facts."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_seed", "std::opt::inline", "test::facts_check"]
@@ -114,7 +114,7 @@ for (const l of [
   'FACTS seeded core.effects 9', 'FACTS seeded core.loopDomain 2', 'FACTS seeded core.resources 4',
   'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
   'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice.loop1.body valid=5 revalidated=0 stale=0',
-  'FACTS graph main valid=0 revalidated=2 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
+  'FACTS graph main valid=0 revalidated=3 stale=8', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
   'FACTS gone 0',
   'FACTS lowered count valid=0 revalidated=0 stale=2', 'FACTS lowered count.loop1.body valid=1 revalidated=0 stale=0',
   'FACTS lowered layer valid=6 revalidated=0 stale=0', 'FACTS lowered twice.loop1.body valid=5 revalidated=0 stale=0',
@@ -140,7 +140,7 @@ const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
 for (const l of [
   'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
   'FACTS graph count.loop1.cond valid=1 revalidated=0 stale=0',
-  'FACTS graph main valid=0 revalidated=1 stale=10', 'FACTS gone 0', '60.0',
+  'FACTS graph main valid=0 revalidated=2 stale=9', 'FACTS gone 0', '60.0',
 ]) line(l)
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
 }

@@ -36,9 +36,11 @@ using namespace camel::jit;
 
 #if ENABLE_FASTVM_JIT
 static const camel::runtime::Program *applyMirDump(
-    const context_ptr_t &context, camel::runtime::GCGraph *graph, std::ostream &os, bool slotOnly) {
+    const context_ptr_t &context, const camel::runtime::Program &program,
+    camel::runtime::GCGraph *graph, std::ostream &os, bool slotOnly) {
     auto linked = compileAndLink(
         context,
+        program,
         graph,
         {
             .enableTailCallDetection = true,
@@ -121,7 +123,7 @@ const camel::runtime::Program *
 JitRmirDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     camel::runtime::GCGraph *graph = program->root();
 #if ENABLE_FASTVM_JIT
-    return applyMirDump(context_, graph, os, true);
+    return applyMirDump(context_, *program, graph, os, true);
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump rmir.\n";
@@ -133,7 +135,7 @@ const camel::runtime::Program *
 JitMirDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     camel::runtime::GCGraph *graph = program->root();
 #if ENABLE_FASTVM_JIT
-    return applyMirDump(context_, graph, os, false);
+    return applyMirDump(context_, *program, graph, os, false);
 #else
     (void)graph;
     os << "[JIT] JIT not enabled (ENABLE_FASTVM_JIT=0), cannot dump MIR.\n";

@@ -37,6 +37,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/operator_instance.h"
+#include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 
 #include <algorithm>
@@ -111,10 +112,13 @@ FootprintCache &footprintCache() {
     return cache;
 }
 
-std::optional<GraphFootprint> cachedFootprint(const GCGraph *graph, uint64_t epoch) {
+std::optional<GraphFootprint>
+cachedFootprint(const Program &program, const GCGraph *graph, uint64_t epoch) {
     FootprintCache &cache = footprintCache();
     std::lock_guard lock(cache.mutex);
-    if (auto it = cache.entries.find({closureRevision(const_cast<GCGraph *>(graph)), epoch}); it != cache.entries.end()) {
+    if (auto it =
+            cache.entries.find({closureRevision(program, const_cast<GCGraph *>(graph)), epoch});
+        it != cache.entries.end()) {
         return it->second;
     }
     return std::nullopt;
@@ -154,7 +158,7 @@ bool merge(GraphFootprint &into, const GraphFootprint &from) {
 /// The walk that collects footprints (see the file comment).
 class FootprintWalk {
   public:
-    explicit FootprintWalk(uint64_t epoch) : epoch_(epoch) {}
+    FootprintWalk(const Program &program, uint64_t epoch) : program_(program), epoch_(epoch) {}
 
     /// The footprint of `graph`, as far as the walk knows it.
     GraphFootprint of(const GCGraph *graph);
@@ -164,7 +168,7 @@ class FootprintWalk {
         if (graph == nullptr) {
             return {};
         }
-        if (auto cached = cachedFootprint(graph, epoch_)) {
+        if (auto cached = cachedFootprint(program_, graph, epoch_)) {
             return *cached;
         }
         for (;;) {
@@ -180,12 +184,14 @@ class FootprintWalk {
         std::lock_guard lock(cache.mutex);
         for (const auto &[g, fp] : memo_) {
             cache.entries.insert_or_assign(
-                {closureRevision(const_cast<GCGraph *>(g)), epoch_}, fp);
+                {closureRevision(program_, const_cast<GCGraph *>(g)), epoch_},
+                fp);
         }
         return memo_[graph];
     }
 
   private:
+    const Program &program_;
     uint64_t epoch_;
     std::unordered_map<const GCGraph *, GraphFootprint> memo_;
     std::unordered_set<const GCGraph *> done_;
@@ -200,7 +206,8 @@ class FootprintWalk {
 class Resolver {
   public:
     using FootprintFn = std::function<GraphFootprint(const GCGraph *)>;
-    explicit Resolver(FootprintFn footprint) : footprint_(std::move(footprint)) {}
+    Resolver(const Program &program, FootprintFn footprint)
+        : program_(program), footprint_(std::move(footprint)) {}
 
     NodeResources node(const GCGraph &graph, gc_node_ref_t ref);
 
@@ -214,6 +221,7 @@ class Resolver {
     template <typename Bind>
     NodeResources fromFootprint(const GraphFootprint &fp, Bind &&bind) const;
 
+    const Program &program_;
     FootprintFn footprint_;
 };
 
@@ -229,13 +237,13 @@ GraphFootprint FootprintWalk::of(const GCGraph *graph) {
         recursed_ = true;
         return memo_[graph];
     }
-    if (auto cached = cachedFootprint(graph, epoch_)) {
+    if (auto cached = cachedFootprint(program_, graph, epoch_)) {
         memo_[graph] = *cached;
         done_.insert(graph);
         return *cached;
     }
     active_.insert(graph);
-    Resolver resolver([this](const GCGraph *callee) { return of(callee); });
+    Resolver resolver(program_, [this](const GCGraph *callee) { return of(callee); });
     GraphFootprint fp;
     for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
         const NodeResources r = resolver.node(*graph, ref);
@@ -315,7 +323,7 @@ NodeResources Resolver::node(const GCGraph &graph, gc_node_ref_t ref) {
         const auto norm = graph.normInputsOf(ref);
         const auto with = graph.withInputsOf(ref);
         return fromFootprint(
-            footprint_(graph.directCalleeGraphOf(ref)),
+            footprint_(program_.calleeOf(graph, ref)),
             [&](const sem::ResourceBinding &b) -> gc_node_ref_t {
                 if (b.kind == sem::ResourceBinding::Kind::Norm && b.index < norm.size()) {
                     return norm[b.index];
@@ -434,7 +442,7 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) {
 }
 
 NodeResources Resolver::loop(const GCGraph &graph, gc_node_ref_t ref) {
-    const LoopView view(graph, ref);
+    const LoopView view(program_, graph, ref);
     const auto captures = view.captures();
     NodeResources r;
     r.result = ResultAlias{.kind = ResultAlias::Kind::Unknown};
@@ -576,14 +584,16 @@ bool regionsMayOverlap(const std::optional<RegionBounds> &a, const std::optional
     return true;
 }
 
-NodeResources resourcesOf(const GCGraph &graph, gc_node_ref_t node) {
+NodeResources resourcesOf(const Program &program, const GCGraph &graph, gc_node_ref_t node) {
     // The graphs the node runs: each footprint a finished fixpoint (cached).
-    Resolver resolver([](const GCGraph *callee) { return footprintOf(callee); });
+    Resolver resolver(program, [&program](const GCGraph *callee) {
+        return footprintOf(program, callee);
+    });
     return resolver.node(graph, node);
 }
 
-GraphFootprint footprintOf(const GCGraph *graph) {
-    FootprintWalk walk(core::OperatorTable::instance().declarationEpoch());
+GraphFootprint footprintOf(const Program &program, const GCGraph *graph) {
+    FootprintWalk walk(program, core::OperatorTable::instance().declarationEpoch());
     return walk.run(graph);
 }
 
@@ -645,13 +655,14 @@ std::string_view conflictKindName(ConflictKind kind) {
     return "none";
 }
 
-ResourceConflict resourceConflict(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
+ResourceConflict
+resourceConflict(const Program &program, const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
     ResourceConflict conflict;
     if (a == b) {
         return conflict;
     }
-    const NodeResources ra = resourcesOf(graph, a);
-    const NodeResources rb = resourcesOf(graph, b);
+    const NodeResources ra = resourcesOf(program, graph, a);
+    const NodeResources rb = resourcesOf(program, graph, b);
     if (ra.external && rb.external) {
         conflict.kind = ConflictKind::External;
         conflict.why  = "both have effects outside the program";
@@ -761,10 +772,10 @@ bool exclusive(
 
 } // namespace
 
-std::vector<RequiredOrdering> requiredOrderings(const GCGraph &graph) {
+std::vector<RequiredOrdering> requiredOrderings(const Program &program, const GCGraph &graph) {
     std::vector<gc_node_ref_t> touching;
     for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
-        if (!resourcesOf(graph, ref).none()) {
+        if (!resourcesOf(program, graph, ref).none()) {
             touching.push_back(ref);
         }
     }
@@ -775,7 +786,7 @@ std::vector<RequiredOrdering> requiredOrderings(const GCGraph &graph) {
             if (exclusive(branches, touching[i], touching[j])) {
                 continue; // different arms of one branch: they never both run
             }
-            const ResourceConflict c = resourceConflict(graph, touching[i], touching[j]);
+            const ResourceConflict c = resourceConflict(program, graph, touching[i], touching[j]);
             if (!c) {
                 continue;
             }

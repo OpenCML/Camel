@@ -145,12 +145,12 @@ std::string describeFunction(const GCGraph *graph) {
     return std::format("function '{}'", graph->name().substr(0, graph->name().find('$')));
 }
 
-bool isArmCall(const GCGraph *graph, gc_node_ref_t ref) {
+bool isArmCall(const camel::runtime::Program &program, const GCGraph *graph, gc_node_ref_t ref) {
     const auto *node = graph->node(ref);
     if (node == nullptr || node->kind != GCNodeKind::Func) {
         return false;
     }
-    const GCGraph *callee = graph->directCalleeGraphOf(ref);
+    const GCGraph *callee = program.calleeOf(*graph, ref);
     if (callee == nullptr || !isAnonymousGraphName(callee->name())) {
         return false;
     }
@@ -695,7 +695,7 @@ void FunctionEmitter::lowerCall(
     Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail,
     bool &handled) {
     const GCGraph *g = frame.graph;
-    GCGraph *callee  = g->directCalleeGraphOf(ref);
+    GCGraph *callee  = program_.program->calleeOf(*g, ref);
     if (callee == nullptr) {
         refuse(g, ref, std::format("a call in {} has no callee", describeFunction(g)));
     }
@@ -1033,8 +1033,8 @@ bool FunctionEmitter::lowerBranch(
     branch.kind = Stmt::Kind::Branch;
     for (size_t k = 0; k < arms.size(); ++k) {
         Block body;
-        if (arms[k].head == arms[k].tail && isArmCall(g, arms[k].head) &&
-            !inlining_.contains(g->directCalleeGraphOf(arms[k].head))) {
+        if (arms[k].head == arms[k].tail && isArmCall(*program_.program, g, arms[k].head) &&
+            !inlining_.contains(program_.program->calleeOf(*g, arms[k].head))) {
             // The front end's form: the arm is a graph of its own, lowered here.
             body = lowerArmGraph(frame, arms[k].head, armTail);
             frame.consumed.insert(arms[k].head);
@@ -1065,7 +1065,7 @@ bool FunctionEmitter::lowerBranch(
 
 Block FunctionEmitter::lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail) {
     const GCGraph *g = frame.graph;
-    GCGraph *arm     = g->directCalleeGraphOf(call);
+    GCGraph *arm     = program_.program->calleeOf(*g, call);
     if (!arm->closureNodes().empty()) {
         refuse(
             g,
@@ -1465,10 +1465,10 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
                 }
                 continue;
             }
-            if (node->kind == GCNodeKind::Func && isArmCall(graph, user) &&
-                !escapeWalk_.contains(graph->directCalleeGraphOf(user))) {
+            if (node->kind == GCNodeKind::Func && isArmCall(*program_.program, graph, user) &&
+                !escapeWalk_.contains(program_.program->calleeOf(*graph, user))) {
                 // The arm's port that receives the cell must stay inside the arm too.
-                const GCGraph *arm = graph->directCalleeGraphOf(user);
+                const GCGraph *arm = program_.program->calleeOf(*graph, user);
                 escapeWalk_.insert(arm);
                 struct Leave {
                     std::unordered_set<const GCGraph *> &walk;

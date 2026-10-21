@@ -22,6 +22,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
+#include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/observer.h"
 #include "camel/execute/pass/runtime_sched.h"
@@ -146,6 +147,8 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     bytecode_vec_t ownBytecodes_;
     bytecode_vec_t &bytecodes_;
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap_;
+    // The programs whose graphs the run executes (a frozen graph names its callees by id).
+    camel::execute::RunPrograms programs_;
     std::vector<slot_t> tailArgValuesScratch_;
 
 #if ENABLE_FASTVM_JIT
@@ -228,7 +231,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     /// the execution observer, if any.
     void observeFault(const camel::core::error::RuntimeFault &fault);
 
-    void precompile(camel::runtime::GCGraph *runtimeRoot);
+    void precompile(const camel::runtime::Program &program, camel::runtime::GCGraph *runtimeRoot);
     /// Compiles and links a graph that has no bytecode yet (see graphEntryPc).
     void compileLate(camel::runtime::GCGraph *graph);
     HigherOrderCallSite higherOrderCallSite(Function *func);
@@ -337,6 +340,10 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 
     // Frames of direct calls and tail calls: used by the interpreter loops with and without
     // the JIT, and by compiled code.
+    /// The graph of a function value, whose program the run then knows.
+    camel::runtime::GCGraph *graphOfFunction(Function *function) {
+        return programs_.graphOf(function);
+    }
     inline ctx::Frame *acquireFrameForCall(camel::runtime::GCGraph *graph) {
         ASSERT(graph != nullptr, "Runtime graph is null.");
         return framePool_.acquire(graph);
