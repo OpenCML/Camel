@@ -242,7 +242,7 @@ root tracers), and nothing read before a call is used after it.
 1. Run its tests with `CAMEL_GC_POISON=1` (section 8). Tests under `test/plans/feat/modules`,
    `compile`, `linear`, `para`, `trans` and `smoke` are run that way by the default test set
    (`mm.gc_poison_sweep`), so a module with tests there is covered as it is.
-2. Run them with `CAMEL_GC=generational CAMEL_GC_VERIFY=both CAMEL_GC_STRESS_SAFEPOINT=1
+2. Run them with `--gc generational` with `CAMEL_GC_VERIFY=both CAMEL_GC_STRESS_SAFEPOINT=1
    CAMEL_GC_STRESS_MODE=minor CAMEL_GC_PROMOTION_AGE=1`: everything is promoted at once, which
    is what shows a missing write barrier (rule 6) as "Old-to-young reference is missing from
    remembered set".

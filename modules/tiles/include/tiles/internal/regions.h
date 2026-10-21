@@ -85,7 +85,7 @@ const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
     operator_t executor, const std::string &uri, size_t &count,
     const RegionDeviceOps *device = nullptr);
-// Register semantic-equivalence checks only when CAMEL_ENABLE_TEST_PASSES is enabled.
+// Register semantic-equivalence checks by naming them in a pipeline; no variable gates them.
 void registerRegionTestPasses(
     operator_t run, RegionDeviceOps device, RegionDeviceOps host, RegionDeviceOps preferred);
 slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &context);

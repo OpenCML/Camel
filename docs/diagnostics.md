@@ -4913,7 +4913,7 @@ Pass '{0}' failed with an internal error: {1}.
 The pass gave up without a diagnostic of its own: it built or was given a graph it cannot handle, which is a defect of the compiler rather than of the program. Try the pipeline without this pass or with the passes in another order, and report the program together with the pass list.
 ```
 
-**Example** (`test/cases/opt/generic/broken_graph.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 camel --output-format json test/cases/opt/generic/broken_graph.cml test::drop_call_argument std::fvm`)
+**Example** (`test/cases/opt/generic/broken_graph.cml`, run as `camel --output-format json test/cases/opt/generic/broken_graph.cml test::drop_call_argument std::fvm`)
 
 ```camel
 module broken_graph
@@ -5075,7 +5075,7 @@ Out of memory{0}: {1}.
 The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
 ```
 
-**Example** (`test/cases/loops/collection_oom.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 CAMEL_GC_HEAP_LIMIT_MB=16 camel test/cases/loops/collection_oom.cml test::loop_collect_summary ${backend}`)
+**Example** (`test/cases/loops/collection_oom.cml`, run as `CAMEL_GC_HEAP_LIMIT_MB=16 camel test/cases/loops/collection_oom.cml test::loop_collect_summary ${backend}`)
 
 ```camel
 // A collecting loop whose tapes outgrow the heap limit (CAMEL_GC_HEAP_LIMIT_MB): the failure is
@@ -5478,7 +5478,7 @@ Pass '{0}' cannot take the program: some values of it have several writings.
 An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).
 ```
 
-**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/feat/mm/writings/congruence.cml test::tabled std::opt::fold std::nvm`)
+**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::opt::fold std::nvm`)
 
 ```camel
 module congruence

@@ -70,8 +70,8 @@ name = "gc.config_and_summary"
 desc = "Checks GC configuration and human-readable summary diagnostic passes stay composable."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
-args = ["${case}", "std::gc::config", "std::gc::summary", "std::gcsnap"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=7", "CAMEL_GC_STRESS_SAFEPOINT=3", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "std::gc::config", "std::gc::summary", "std::gcsnap"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=7", "CAMEL_GC_STRESS_SAFEPOINT=3", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["\"youngCopying\": true", "\"allocInterval\": 7", "GC summary", "mode: young-copying", "\"regions\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -82,8 +82,8 @@ name = "gc.manual_collect_passes"
 desc = "Checks explicit minor and major GC diagnostic passes run and leave the graph executable."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
-args = ["${case}", "std::gc::minor", "std::gc::major", "std::gc::verify", "${run_nvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both"]
+args = ["--gc", "generational", "${case}", "std::gc::minor", "std::gc::major", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both"]
 expect_exit = 0
 expect_stdout_contains = ["\"kind\":\"gc.minor\"", "\"kind\":\"gc.major\"", "\"kind\":\"gc.verify\"", "gc_heap boxes=16 first=5 last=36 mapped3=9"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -94,8 +94,8 @@ name = "gc.young_copying_major_stress_heap"
 desc = "Checks a language-level heap workload survives young-copying major stress."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
-args = ["${case}", "std::gc::verify", "${run_nvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "gc_heap boxes=16 first=5 last=36 mapped3=9"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -106,8 +106,8 @@ name = "gc.young_copying_both_stress_heap"
 desc = "Checks a language-level heap workload survives combined minor and major young-copying stress."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
-args = ["${case}", "std::gc::verify", "${run_nvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "generational", "${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "gc_heap boxes=16 first=5 last=36 mapped3=9"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -118,8 +118,8 @@ name = "gc.remembered_set_minor_copying"
 desc = "Checks an old tuple retaining a young child through the remembered set survives repeated minor copying."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
-args = ["${case}", "std::gc::remembered_set"]
-envs = ["CAMEL_GC_POISON=0", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both"]
+args = ["--gc", "generational", "${case}", "std::gc::remembered_set"]
+envs = ["CAMEL_GC_POISON=0", "CAMEL_GC_VERIFY=both"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "\"kind\":\"gc.remembered_set\"", "Fibonacci(10) = 55"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
@@ -130,8 +130,8 @@ name = "gc.foreign_resource_lifetime"
 desc = "Checks foreign-resource dispose/finalize and rooted/pinned handle accounting under young copying."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_fib10.cml"
-args = ["${case}", "std::gc::foreign_resource"]
-envs = ["CAMEL_GC_POISON=0", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both"]
+args = ["--gc", "generational", "${case}", "std::gc::foreign_resource"]
+envs = ["CAMEL_GC_POISON=0", "CAMEL_GC_VERIFY=both"]
 expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "\"kind\":\"gc.foreign_resource\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -166,8 +166,8 @@ name = "gc.macro_constants.moving_stress.nvm"
 desc = "Object constants produced by std::macro survive the moving collector (moving stress, nvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
-args = ["${case}", "std::macro", "${run_nvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "generational", "${case}", "std::macro", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -190,8 +190,8 @@ name = "gc.macro_constants.moving_stress.fvm"
 desc = "Object constants produced by std::macro survive the moving collector (moving stress, fvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
-args = ["${case}", "std::macro", "${run_fvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "generational", "${case}", "std::macro", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -214,8 +214,8 @@ name = "gc.macro_constants.moving_stress.prl"
 desc = "Object constants produced by std::macro survive the moving collector (moving stress, prl)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
-args = ["${case}", "std::macro", "${run_prl}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "generational", "${case}", "std::macro", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -238,8 +238,8 @@ name = "gc.macro_constants.moving_stress.jit"
 desc = "Object constants produced by std::macro survive the moving collector (moving stress, jit)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
-args = ["${case}", "std::macro", "${run_jit}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+args = ["--gc", "generational", "${case}", "std::macro", "${run_jit}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -310,8 +310,8 @@ name = "gc.born_old.moving_stress.nvm"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, nvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
-args = ["${case}", "${run_nvm}"]
-envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC=generational", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "${run_nvm}"]
+envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -334,8 +334,8 @@ name = "gc.born_old.moving_stress.fvm"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, fvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
-args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC=generational", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -358,8 +358,8 @@ name = "gc.born_old.moving_stress.prl"
 desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, prl)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
-args = ["${case}", "${run_prl}"]
-envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC=generational", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "${run_prl}"]
+envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -385,8 +385,8 @@ skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "Without the moving collector std::jit compiles both graphs."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_jit_constants.cml"
-args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
-envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
+args = ["--gc", "mark-sweep", "-vv", "${case}", "std::opt::inline", "std::jit"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'count'", "compiled & cached graph 'tag'"]
 expect_stdout_contains = ["leaf 50", "leaf 60 200", "leaf 70 200"]
@@ -422,8 +422,8 @@ name = "gc.runtime_graph_constants.moving.nvm"
 desc = "The constants of graphs created while the program runs (autodiff pullbacks), reached only through Function values, are traced and updated by minor collections (nvm)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
-args = ["${case}", "${run_nvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -434,8 +434,8 @@ name = "gc.runtime_graph_constants.moving.fvm"
 desc = "The constants of graphs created while the program runs (autodiff pullbacks), reached only through Function values, are traced and updated by minor collections (fvm)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
-args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -446,8 +446,7 @@ name = "gc.live_table.generational.nvm"
 desc = "56,000 live rows are promoted while temporaries die: promotion into a full elder space used to throw std::bad_alloc; the space grows now (nvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_table.cml"
-args = ["${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_nvm}"]
-envs = ["CAMEL_GC=generational"]
+args = ["--gc", "generational", "${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_live_table total=11231"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -458,8 +457,7 @@ name = "gc.live_table.generational.fvm"
 desc = "56,000 live rows are promoted while temporaries die: promotion into a full elder space used to throw std::bad_alloc; the space grows now (fvm)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_table.cml"
-args = ["${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_fvm}"]
-envs = ["CAMEL_GC=generational"]
+args = ["--gc", "generational", "${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_live_table total=11231"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -470,8 +468,7 @@ name = "gc.live_table.generational.prl"
 desc = "56,000 live rows are promoted while temporaries die: promotion into a full elder space used to throw std::bad_alloc; the space grows now (prl)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_live_table.cml"
-args = ["${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_prl}"]
-envs = ["CAMEL_GC=generational"]
+args = ["--gc", "generational", "${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_prl}"]
 expect_exit = 0
 expect_stdout_contains = ["gc_live_table total=11231"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -482,8 +479,8 @@ name = "gc.macro_round_lifetime.moving_stress.nvm"
 desc = "Function-valued custom VJP results from a completed macro round must not trace retired graph carriers."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/macro_round_lifetime_gc.cml"
-args = ["${case}", "std::macro", "${run_nvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "std::macro", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["-12.0 -12.0 24.0", "[2, 3, 2] 12.0 120.0", "\n-12.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -494,8 +491,8 @@ name = "gc.macro_round_lifetime.moving_stress.fvm"
 desc = "Function-valued custom VJP results from a completed macro round must not trace retired graph carriers."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/macro_round_lifetime_gc.cml"
-args = ["${case}", "std::macro", "${run_fvm}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "std::macro", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["-12.0 -12.0 24.0", "[2, 3, 2] 12.0 120.0", "\n-12.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -506,8 +503,8 @@ name = "gc.macro_round_lifetime.moving_stress.jit"
 desc = "Function-valued custom VJP results from a completed macro round must not trace retired graph carriers."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/macro_round_lifetime_gc.cml"
-args = ["${case}", "std::macro", "${run_jit}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "std::macro", "${run_jit}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["-12.0 -12.0 24.0", "[2, 3, 2] 12.0 120.0", "\n-12.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -518,8 +515,8 @@ name = "gc.macro_round_lifetime.moving_stress.prl"
 desc = "Function-valued custom VJP results from a completed macro round must not trace retired graph carriers."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/macro_round_lifetime_gc.cml"
-args = ["${case}", "std::macro", "${run_prl}"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "std::macro", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["-12.0 -12.0 24.0", "[2, 3, 2] 12.0 120.0", "\n-12.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

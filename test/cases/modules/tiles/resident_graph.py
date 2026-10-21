@@ -6,7 +6,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[4]
 EXE = os.environ.get("CAMEL_EXE", str(ROOT / "out/latest/bin" / ("camel.exe" if os.name == "nt" else "camel")))
-env = dict(os.environ, CAMEL_ENABLE_TEST_PASSES="1")
+env = dict(os.environ)
 p = subprocess.run([EXE, str(Path(__file__).with_name("region_execution.cml")),
                     "tiles::test_outline_resident", "std::jgir"],
                    cwd=ROOT, env=env, capture_output=True, text=True)

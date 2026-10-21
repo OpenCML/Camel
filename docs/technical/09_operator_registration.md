@@ -202,7 +202,7 @@ traits 之外，算子表的每一项可以带一份只读、带版本的语义�
 
 `tensor` 模块的声明：数值部分在 `modules/tensor/ops/semantics.cpp` 的一张表里；下标语义与归约律在 `modules/tensor/ops/indexing.cpp`，与类型推断用同一个 `InferContext`，放在 `OpDef::index`（与 `OpDef::infer` 并列），注册时由 `OpRegistry::add` 包成 `indexing` 交给算子表。共用的构造工具是 `IndexBuilder`（`ops/indexing.h`；`nn` 模块的池化也用它）。已经持有 `InferContext` 的后端可以直接调 `ops::instantiate(def, ctx)`。内建的 `:op/` 标量算子与 `:mark/unordered_reduce_arr` 的记录在 `src/builtin/executors/builtin_semantics.cpp`。
 
-**声明是代码，登记时查不出它与内核是否一致**，所以每个声明都要过声明求值器：`CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/modules/tensor/index_semantics.cml tensor::test_index_eval` 对每个已声明的算子生成大量随机调用（空、长度 1、广播、负轴、可选参数缺省、NaN、±∞、±0、次正规数、int64 与 bool），只按声明（域、访问映射及其越界策略、写映射、归约律）算出结果，与 CPU 内核逐位比较（有上界的 `exp`、`log` 按上界），并顺带检查映射的健全性（读不越界、写落在结果内、唯一写恰好写一次）。新增或修改一个声明时，在 `index_eval.cpp` 的表里加上它的用例生成器；测试计划 `test/plans/feat/modules/index_semantics.plan.toml` 要求全部一致。
+**声明是代码，登记时查不出它与内核是否一致**，所以每个声明都要过声明求值器：`camel test/cases/modules/tensor/index_semantics.cml tensor::test_index_eval` 对每个已声明的算子生成大量随机调用（空、长度 1、广播、负轴、可选参数缺省、NaN、±∞、±0、次正规数、int64 与 bool），只按声明（域、访问映射及其越界策略、写映射、归约律）算出结果，与 CPU 内核逐位比较（有上界的 `exp`、`log` 按上界），并顺带检查映射的健全性（读不越界、写落在结果内、唯一写恰好写一次）。新增或修改一个声明时，在 `index_eval.cpp` 的表里加上它的用例生成器；测试计划 `test/plans/feat/modules/index_semantics.plan.toml` 要求全部一致。
 
 ## 5. 注册流程
 

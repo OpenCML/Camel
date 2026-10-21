@@ -32,17 +32,8 @@
 using namespace camel::core;
 using namespace camel::core::module;
 
-namespace {
-
-bool enabled() { return std::getenv("CAMEL_ENABLE_TEST_PASSES") != nullptr; }
-
-} // namespace
-
 TestAttrsBuiltinModule::TestAttrsBuiltinModule(context::context_ptr_t ctx)
     : BuiltinModule("test_attrs", ctx) {
-    if (!enabled()) {
-        return;
-    }
     exportEntity(
         "mark",
         attrDecoratorGroup("mark", "test_attrs:mark", 0, "(fn: Function) => Function"));
@@ -72,9 +63,6 @@ bool TestAttrsBuiltinModule::load() {
         return true;
     }
     loaded_ = true;
-    if (!enabled()) {
-        return true;
-    }
     context_->registerExecutorFactory("test_attrs", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<Executor>(
             ctx,

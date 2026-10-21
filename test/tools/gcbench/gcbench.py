@@ -8,9 +8,9 @@ alternating between them (mark-sweep, generational, mark-sweep, ...) so that bot
 drift of a machine that is busy with other work. The table gives, for each collector, the median
 wall time of the runs with the fastest and the slowest beside it as a measure of the noise, the
 median peak resident size (ru_maxrss of the child, the number `/usr/bin/time -v` prints as
-"Maximum resident set size"), what the allocator reports with CAMEL_GC_STATS=1 (collections and
-time stopped: medians; longest stop: the longest of all runs) and the one-minute load average
-of the machine before and after the benchmark.
+"Maximum resident set size"), what the allocator reports with a `std::profile(gc_stats=1)`
+pass (collections and time stopped: medians; longest stop: the longest of all runs) and the
+one-minute load average of the machine before and after the benchmark.
 
 The tensor benchmarks need the artifacts of benchmarks/ (`python3 benchmarks/run.py` generates
 them) and are skipped without them.
@@ -110,10 +110,11 @@ def run_once(camel, args, mode, extra_env):
     """One run: wall time, exit status, peak resident size and the allocator's statistics line."""
     env = dict(os.environ)
     env.update(extra_env)
-    env["CAMEL_GC"] = mode
-    env["CAMEL_GC_STATS"] = "1"
     for name in ("CAMEL_GC_ENABLE_YOUNG_COPYING", "CAMEL_GC_POISON"):
         env.pop(name, None)
+    # The collector and the statistics line are the run's, not the environment's: --gc and a
+    # profile pass before the back end (H81). args[0] is the entry file.
+    args = ["--gc", mode, args[0], "std::profile(gc_stats=1,report=false)", *args[1:]]
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         started = time.perf_counter()
         pid = os.fork()

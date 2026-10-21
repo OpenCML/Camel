@@ -19,7 +19,7 @@
 
 /*
  * TEST-ONLY passes over the graph facts (camel/runtime/facts.h). They can only be named when
- * the environment variable CAMEL_ENABLE_TEST_PASSES is set (fault.h). Each prints one line per
+ * a test pipeline names them (fault.h). Each prints one line per
  * check, `FACTS <check> <result>`.
  *
  * `test::facts` exercises the registry and the store on their own: the registration rules (one

@@ -7,9 +7,9 @@ tags = ["gpu", "modules", "tiles"]
 name = "compiled_region_fresh_inputs_and_captures"
 kind = "behavior"
 case = "../../cases/modules/tiles/compiled_region.cml"
-args = ["${case}", "tiles::compile", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::compile", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "tensor([      4.,      16.,      36.], dtype=float32)\ntensor([      2.,       4.,       6.], dtype=float32)\ntensor([      8.,      10.,      12.], dtype=float32)\ntensor([     64.,     100.,     144.], dtype=float32)\ntensor([      4.,      16.,      36.], dtype=float32)\n"
 timeout_ms = 60000
@@ -18,9 +18,9 @@ timeout_ms = 60000
 name = "resident_cpu_gpu_chain"
 kind = "behavior"
 case = "../../cases/modules/tiles/resident_fallback.cml"
-args = ["${case}", "${backend}"]
+args = ["--gc", "generational", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "cpu region once\n42.0\n364.0\n21.0\n"
 timeout_ms = 60000
@@ -29,9 +29,9 @@ timeout_ms = 60000
 name = "resident_fallback_fault"
 kind = "negative"
 case = "../../cases/modules/tiles/resident_fallback_fault.cml"
-args = ["${case}", "${backend}"]
+args = ["--gc", "generational", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 1
 expect_stdout_exact = "cpu fault once\n"
 expect_output_contains = ["RuntimeDiag::DivisionByZero", "resident_fallback_fault.cml:5:16"]
@@ -41,9 +41,9 @@ timeout_ms = 60000
 name = "outlined_execution"
 kind = "behavior"
 case = "../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline_gpu", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_gpu", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000
@@ -52,9 +52,9 @@ timeout_ms = 60000
 name = "outlined_resident_execution"
 kind = "behavior"
 case = "../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline_resident", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_resident", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000
@@ -74,7 +74,7 @@ name = "requires_device"
 kind = "negative"
 case = "../../cases/modules/tiles/region_execution.cml"
 args = ["${case}", "tiles::test_outline_gpu", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_TILES_DEVICE=invalid"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
 expect_output_contains = ["CAMEL_TILES_DEVICE must be a nonnegative device ordinal", "region_execution.cml:6:14"]
 timeout_ms = 10000
@@ -83,9 +83,9 @@ timeout_ms = 10000
 name = "preferred_resident_execution"
 kind = "behavior"
 case = "../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline_preferred", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_preferred", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000
@@ -94,9 +94,9 @@ timeout_ms = 60000
 name = "public_region_pass"
 kind = "behavior"
 case = "../../cases/modules/tiles/public_pass.cml"
-args = ["${case}", "tiles::compile", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::compile", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000

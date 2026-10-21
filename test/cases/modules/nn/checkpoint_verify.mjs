@@ -77,8 +77,8 @@ function denyWrites(directory) {
     return { undo: () => fs.chmodSync(directory, mode) }
 }
 const privileged = process.platform !== 'win32' && typeof process.getuid === 'function' && process.getuid() === 0
-function invoke(source, pass, mode, directory, extraEnv = {}, exit = 0) {
-    const result = spawnSync(camel, [path.join(cases, source), pass, '--arg', `mode=${mode}`, '--arg', `dir=${directory}`], {
+function invoke(source, pass, mode, directory, extraEnv = {}, exit = 0, options = []) {
+    const result = spawnSync(camel, [...options, path.join(cases, source), pass, '--arg', `mode=${mode}`, '--arg', `dir=${directory}`], {
         env: { ...process.env, ...extraEnv }, encoding: 'utf8', timeout: 30000
     })
     assert.ifError(result.error)
@@ -155,11 +155,11 @@ try {
         assert.deepEqual(fs.readdirSync(replaceDir).sort(), ['a.txt', 'manifest.json'], `${pass}: old leaves survived the replacement`)
     }
     const stress = {
-        CAMEL_GC: 'generational', CAMEL_GC_ENABLE_YOUNG_COPYING: '1', CAMEL_GC_VERIFY: 'both',
+        CAMEL_GC_ENABLE_YOUNG_COPYING: '1', CAMEL_GC_VERIFY: 'both',
         CAMEL_GC_STRESS_SAFEPOINT: '1', CAMEL_GC_STRESS_MODE: 'minor'
     }
     for (const pass of ['std::nvm', 'std::fvm', 'std::jit']) {
-        assert.equal(invoke('checkpoint_roundtrip.cml', pass, 1, path.join(root, 'nvm'), stress).stdout, original)
+        assert.equal(invoke('checkpoint_roundtrip.cml', pass, 1, path.join(root, 'nvm'), stress, 0, ['--gc', 'generational']).stdout, original)
     }
     const tensor = path.join(root, 'tensor')
     const bits = invoke('checkpoint_tensor.cml', 'std::jit', 0, tensor).stdout.trim()

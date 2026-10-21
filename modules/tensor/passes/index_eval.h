@@ -47,7 +47,7 @@
  * `EVAL_MISMATCH ...` for a disagreement (the first few), `QUERY <check> <result>` for the
  * facts that must give no instance (unknown ranks, Q9 broadcasts, constants that are not), and
  * a final `EVAL total ...` line. The program's graph is returned unchanged. It exists only when
- * the environment variable CAMEL_ENABLE_TEST_PASSES is set.
+ * a test pipeline names them.
  */
 
 #pragma once

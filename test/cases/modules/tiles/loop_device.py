@@ -38,10 +38,11 @@ with tempfile.TemporaryDirectory(prefix='camel-loop-device-') as folder:
     write(folder / 'a.npy', a)
     write(folder / 'b.npy', b)
     env = dict(os.environ, CAMEL_HOME=str(ROOT / 'out/latest'), TILES_TEST_OUT=str(folder),
-               CAMEL_GC='generational', CAMEL_GC_VERIFY='both',
+               CAMEL_GC_VERIFY='both',
                CAMEL_GC_STRESS_SAFEPOINT='1', CAMEL_GC_STRESS_MODE='minor')
     for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
-        result = subprocess.run([EXE, str(Path(__file__).with_suffix('.cml')), vm],
+        result = subprocess.run([EXE, '--gc', 'generational',
+                                 str(Path(__file__).with_suffix('.cml')), vm],
                                 cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
         assert result.returncode == 0, (vm, result.stdout, result.stderr)
         values, source = result.stdout.split('LOOP_SOURCE\n', 1)

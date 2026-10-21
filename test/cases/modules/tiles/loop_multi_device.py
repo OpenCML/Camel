@@ -114,10 +114,11 @@ def run_device_matrix():
         folder = Path(folder)
         a, b = prepare(folder)
         env = dict(os.environ, CAMEL_HOME=str(ROOT / 'out/latest'), TILES_TEST_OUT=str(folder),
-                   CAMEL_GC='generational', CAMEL_GC_VERIFY='both',
+                   CAMEL_GC_VERIFY='both',
                    CAMEL_GC_STRESS_SAFEPOINT='1', CAMEL_GC_STRESS_MODE='minor')
         for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
-            result = subprocess.run([EXE, str(Path(__file__).with_suffix('.cml')), vm],
+            result = subprocess.run([EXE, '--gc', 'generational',
+                                     str(Path(__file__).with_suffix('.cml')), vm],
                                     cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
             assert result.returncode == 0, (vm, result.stdout, result.stderr)
             verify_device(result.stdout, folder, a, b)

@@ -14,7 +14,7 @@
 |---|---|---|---|---|---|---|
 | globals（名字 ""） | 转换、输出、字符串/数组基础、高阶、Map/Set | C++（globals.cpp 1750 行 + src/builtin/operators） | 47 个名字（79 个重载） | int/i64/i32/float/f64/f32/string/parse_int/parse_float/error；print/println/input/sleep/exit；format/join/len；range/head/tail/slice/concat/contains/zip/append/extend；map/filter/reduce/foreach/apply/attempt；Map：get/get_or/put/remove/has/keys/values/items/merge；Set：add/union/intersect/difference/is_subset | 默认可见 | 全部 |
 | profiler | 性能追踪 begin/end/instant/enable | C++ | 4 | begin、end、instant、enable | 仅 Debug 构建（`#ifndef NDEBUG`），需导入 | 0 个测试/示例 |
-| test_attrs | 测试用装饰器 mark/flags/level/plain | C++ | 4 | 同左 | 只在 `CAMEL_ENABLE_TEST_PASSES` 下导出，需导入 | 3 个测试 |
+| test_attrs | 测试用装饰器 mark/flags/level/plain | C++ | 4 | 同左 | 测试用，需导入 | 3 个测试 |
 
 ### 1.2 用 Camel 写的库（stdlib/*.cml）
 
@@ -116,7 +116,7 @@
 - `io`：空模块，仍随构建发出，一个测试 import 它。可删。
 - `tree`：不是空壳。tree_map 等五个是类型导向的内联，核心建图器按 URI 硬编码展开（评审 modules #1），`stdlib` 层面只有签名登记。已出现在 stdlib-reference。
 - `sim`：两个基准内核，领域专用；`para::rendezvous`、`this::zen`：测试/彩蛋性质。
-- `tiles`：实验模块；导出里有 `test_call`、`test_compiled_call` 等，受 `CAMEL_ENABLE_TEST_PASSES` 控制。
+- `tiles`：实验模块；导出里有 `test_call`、`test_compiled_call` 等，测试用，在流水线里写出名字即可用。
 - `test_attrs` 受环境变量控制；`profiler` 仅 Debug。
 - `tensor_definitions` 不是给用户用的库，却放在 stdlib 目录下与用户库同级。
 - `perf` 的 `timeit` 用递归、`println` 和 `format` 打印，不适合当库接口；`perfms` 返回元组（均值, 误差）。

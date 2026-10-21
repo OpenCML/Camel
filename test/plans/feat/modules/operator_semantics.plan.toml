@@ -10,11 +10,11 @@ timeout_ms = 10000
 
 [[tests]]
 name = "registration_and_queries"
-desc = "test::operator_semantics (CAMEL_ENABLE_TEST_PASSES): each registration check of design 4.4 rejects one declaration, naming the operator and the reason; a well-formed one is accepted. bind accepts a recorded key of the same major version whose minor version is not above the declared one, and refuses another major version, a higher minor version, an unknown operator and one without semantics. Every accepted declaration increments the epoch, a rejected one leaves it. Permission names, finite_math for its four assumptions."
+desc = "test::operator_semantics (test-only): each registration check of design 4.4 rejects one declaration, naming the operator and the reason; a well-formed one is accepted. bind accepts a recorded key of the same major version whose minor version is not above the declared one, and refuses another major version, a higher minor version, an unknown operator and one without semantics. Every accepted declaration increments the epoch, a rejected one leaves it. Permission names, finite_math for its four assumptions."
 kind = "behavior"
 case = "../../../cases/consistency/values/max_min_special.cml"
 args = ["${case}", "test::operator_semantics"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -56,12 +56,12 @@ line('SEMANTICS permissions_text [reassociate, contract, no_nans, no_infs]')
 """
 
 [[tests]]
-name = "test_pass_needs_the_environment"
-desc = "test::operator_semantics is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
-kind = "negative"
+name = "test_pass_is_not_in_a_pipeline"
+desc = "test::operator_semantics is a test-only pass: no pipeline adds it, so a run that names no pass prints no check."
+kind = "behavior"
 case = "../../../cases/consistency/values/max_min_special.cml"
-args = ["${case}", "test::operator_semantics"]
-expect_exit = 1
+args = ["${case}"]
+expect_exit = 0
 expect_output_not_contains = ["SEMANTICS"]
 
 [[tests]]

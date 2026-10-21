@@ -110,7 +110,7 @@ expect_output_contains = ["InvalidPassParameter"]
 name = "module.parameters"
 desc = "A module pass with parameters of every type: constant expressions, an int where a float is declared, a string with a comma and a parenthesis; the module's alias."
 args = ["${case}", "tensor::test_echo(n=2*3, ratio=1, label=\"a,b)\", flag=true)", "tensor::echo(label=\"alias\")", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_stdout_starts_with = "test_echo: n=6 ratio=1 label=a,b) flag=true\ntest_echo: n=1 ratio=0.5 label=alias flag=false\ncamel-ran-marker\n"
 
@@ -118,7 +118,7 @@ expect_stdout_starts_with = "test_echo: n=6 ratio=1 label=a,b) flag=true\ntest_e
 name = "module.parameter_error"
 desc = "A module pass checks its parameters like any other."
 args = ["${case}", "tensor::test_echo(n=1.5)", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 1
 expect_output_contains = ["InvalidPassParameter", "parameter 'n' is a float, not an int"]
 
@@ -126,7 +126,7 @@ expect_output_contains = ["InvalidPassParameter", "parameter 'n' is a float, not
 name = "module_pass.written_explicitly"
 desc = "A pass a module contributes runs where the user writes it, not twice, also under its alias."
 args = ["${case}", "tensor::echo(label=\"mine\")", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_stdout_starts_with = "test_echo: n=1 ratio=0.5 label=mine flag=false\ncamel-ran-marker\n"
 
@@ -134,7 +134,7 @@ expect_stdout_starts_with = "test_echo: n=1 ratio=0.5 label=mine flag=false\ncam
 name = "module_import.adds_no_pass"
 desc = "Importing a module adds no pass to the pipeline (design principles 9.2): the case imports tensor, which registers tensor::fuse and, with the test passes, tensor::test_echo, yet only the scheduler written on the command line runs. It used to insert the registered passes before std::fvm, and test_echo would have printed."
 args = ["${case}", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 expect_output_not_contains = ["test_echo:"]
@@ -158,7 +158,7 @@ expect_output_not_contains = ["camel-ran-marker"]
 name = "timeit.adds_no_module_pass"
 desc = "--timeit is a CLI measurement option, not a pass and not a place where a module's registered passes join: timing std::fvm on a case that imports tensor with the test passes enabled prints no test_echo output."
 args = ["--timeit", "std::fvm/1", "${case}"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_output_not_contains = ["test_echo:"]
 

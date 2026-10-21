@@ -404,8 +404,8 @@ value computed in the arm) — every value the one the loop gives in the functio
 loop's condition and body are regions of where the loop is (section 4).
 
 `test/plans/feat/linear/loop_collect.plan.toml` covers collection slots through two test-only
-passes (`test::loop_collect`, `test::loop_collect_summary`, enabled by
-`CAMEL_ENABLE_TEST_PASSES=1`): the four shapes and the three ways a loop runs no rounds; the same
+passes (`test::loop_collect`, `test::loop_collect_summary`, named in the pipeline and gated by no
+environment variable): the four shapes and the three ways a loop runs no rounds; the same
 on `std::nvm`, `std::fvm`, `std::jit`, `std::prl`,
 with the back ends' output compared; `std::macro` on the two-value loop of `macro.cml`; a hundred
 thousand rounds of a `while` and a `for` loop with the tapes summarised by their lengths; and a

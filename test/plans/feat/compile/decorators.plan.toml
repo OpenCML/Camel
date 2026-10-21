@@ -2,12 +2,12 @@ id = "compile.decorators"
 order = 215
 tier = "fast"
 tags = ["feat", "compile", "decorators", "attributes", "semantics"]
-desc = "Node attributes and the decorators that grant them; decorators on blocks (language reference 7.6). A library operator declared to grant an attribute (OperatorTable::declareGrant), named by a decorator with constant with-arguments, is applied as the graph is built: the nodes written in the function or block get the attribute, the arms, loop bodies and lambdas written there too, no function they call. Each attribute key is registered by its library with the kind of its values (here a mark, flags of any width, an integer) and its rules: how nested grants combine and whether, and to what, two nodes that differ in it may be merged. Rewrites keep the attributes; CSE follows the merge rules. A decorated block is the block as a function of no parameters called where it is written, and behaves as the block without decorators. The decorators come from the test-only builtin module test_attrs (CAMEL_ENABLE_TEST_PASSES)."
+desc = "Node attributes and the decorators that grant them; decorators on blocks (language reference 7.6). A library operator declared to grant an attribute (OperatorTable::declareGrant), named by a decorator with constant with-arguments, is applied as the graph is built: the nodes written in the function or block get the attribute, the arms, loop bodies and lambdas written there too, no function they call. Each attribute key is registered by its library with the kind of its values (here a mark, flags of any width, an integer) and its rules: how nested grants combine and whether, and to what, two nodes that differ in it may be merged. Rewrites keep the attributes; CSE follows the merge rules. A decorated block is the block as a function of no parameters called where it is written, and behaves as the block without decorators. The decorators come from the test-only builtin module test_attrs (test-only)."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+envs = ["test-only passes=1"]
 
 [[tests]]
 name = "grants.results"
@@ -144,11 +144,9 @@ expect_exit = 1
 expect_output_contains = ["NoMatchingFunction", "block_mismatch.cml:12:"]
 
 [[tests]]
-name = "test_module_needs_the_environment"
-desc = "test_attrs exports its decorators only under CAMEL_ENABLE_TEST_PASSES."
-kind = "negative"
+name = "test_module_exported"
+desc = "test_attrs always exports its decorators; the module is imported by name like any other."
+kind = "behavior"
 case = "../../../cases/compile/decorators/cse.cml"
 args = ["${case}"]
-envs = []
-expect_exit = 1
-expect_output_contains = ["ImportNameNotExported"]
+expect_exit = 0

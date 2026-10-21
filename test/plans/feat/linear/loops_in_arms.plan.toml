@@ -93,7 +93,7 @@ desc = "The commit-time check of a loop's regions (requirement 3 of H45): a test
 kind = "behavior"
 case = "../../../cases/loops/arm_loops.cml"
 args = ["${case}", "test::arm_loop_regions", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_stdout_contains = ["ARM_LOOP_REGIONS refused", "breaks the branch-arm invariant", "is in arm 0 of BRCH", "is a region of the body (region 0)", "the condition and the body of a loop are regions of where the loop is", "then 6"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
