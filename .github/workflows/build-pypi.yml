@@ -64,6 +64,10 @@ jobs:
           #   slug: linux-arm64
           - runner: windows-latest
             slug: win-x64
+            # What that image really has, not what Conan guesses: windows-latest is
+            # windows-2025-vs2026, i.e. Visual Studio 2026 (VS 18) with MSVC 14.51, so the runtime
+            # version is v145. `vswhere -all -products *` reports the IDE; see the profile step.
+            msvc_runtime_version: v145
           # - runner: windows-11-arm
           #   slug: win-arm64
           # - runner: macos-latest
@@ -179,30 +183,39 @@ jobs:
         # requires 17, so `conan install` otherwise ends with "Current cppstd (14) is lower than
         # the required C++ standard (17)" and no wheel is ever built.
         #
-        # Windows also needs compiler.runtime_version, and it has to be v145. `conan profile detect`
-        # does not detect it there: for clang it hardcodes the VS 17 2022 assumption (Conan
-        # detect_api.default_msvc_runtime -> runtime_version=v143), while windows-latest is the
-        # windows-2025-vs2026 image, whose only Visual Studio is 2026 (VS 18, MSVC 14.51). Removing
-        # the setting is not an option either: with compiler=clang and runtime=dynamic, the
-        # VirtualBuildEnv that CMakeToolchain.generate() emits refuses to build a dependency --
-        # "Visual Studio Runtime version (v140-v145) not defined". Conan maps v145 to Visual Studio
-        # 18 and -vcvars_ver=14.5, which is the IDE and toolset this image really has. v143/v144
-        # map to Visual Studio 17 and fail with "VS non-existing installation: Visual Studio 17".
-        # Move this pin with the image; it is the one value that ties the wheel build to it.
+        # Windows also needs compiler.runtime_version, and the value must be what the image really
+        # has. `conan profile detect` cannot supply it: for clang on Windows it hardcodes the
+        # "LLVM/Clang in Windows with VS 17 2022" assumption and writes v143, which is not the
+        # image's runtime, and leaving the setting out makes the VirtualBuildEnv that
+        # CMakeToolchain.generate() emits refuse to build a dependency -- "Visual Studio Runtime
+        # version (v140-v145) not defined". So the matrix cell declares its image's value in
+        # msvc_runtime_version (v145 here) and this step applies it. Conan maps v145 to Visual
+        # Studio 18 and -vcvars_ver=14.5, which is what windows-2025-vs2026 installs; v143/v144
+        # map to Visual Studio 17 and fail with "VS non-existing installation".
+        #
+        # Next time the image moves, do not read the error: run `vswhere -all -products *` for the
+        # installed Visual Studio and look at the MSVC toolset. VS 18 -> v145. VS 17 -> v143 with
+        # the 14.3x toolset, v144 with 14.4x. Then put that value on the matrix cell.
+        env:
+          MSVC_RUNTIME_VERSION: ${{ matrix.cfg.msvc_runtime_version || '' }}
         run: |
           conan profile detect --force
           profile="$(conan profile path default)"
           # Not `sed -i`: on the Windows runner its rename crosses devices and fails.
           python - "$profile" <<'EOF'
-          import re, sys
+          import os, re, sys
           path = sys.argv[1]
           text = open(path, encoding="utf-8").read()
           text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
-          # Windows only: there is no runtime_version line on Linux, and pinning one there would be
-          # an invalid setting for gcc/clang.
-          if sys.platform == "win32":
+          # Linux cells leave this empty: they have no runtime_version line, and Conan rejects one
+          # for gcc/clang.
+          runtime = os.environ.get("MSVC_RUNTIME_VERSION", "").strip()
+          if runtime:
               text = re.sub(r"(?m)^compiler\.runtime_version=.*$",
-                            "compiler.runtime_version=v145", text)
+                            f"compiler.runtime_version={runtime}", text)
+          elif sys.platform == "win32":
+              sys.exit("this Windows runner needs msvc_runtime_version on its matrix cell "
+                       "(v145 for windows-2025-vs2026, v144 for windows-2022)")
           open(path, "w", encoding="utf-8", newline="\n").write(text)
           EOF
           cat "$profile"
