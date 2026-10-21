@@ -31,9 +31,30 @@ endfunction()
 # default of every thread the process creates, so the workers of the parallel scheduler get it
 # too, as on Linux, where a thread's stack has the size of the process's stack limit.
 set(CAMEL_STACK_SIZE_BYTES 33554432)
+
+# A Debug build nests larger native frames, and the limit a program meets must be the language's
+# recursion limit, not an accident of the frame size (H30 review, answer 2; design principles
+# 3.9: 1000 open calls). At -O0 one open call of std::nvm costs about 5.1 KiB of native stack
+# (measured on Windows x64, H32), and Windows lets a call use only a sixteenth of the stack
+# before the guard keeps the other fifteen sixteenths for SEH fault unwinding
+# (src/execute/limits.cpp): 32 MiB therefore refuses the 400th open call, well before 1000.
+#
+# The Debug tools reserve 128 MiB instead, of which a sixteenth is about 8 MiB, or about 1605
+# open calls at the measured cost: a margin of about 1.6x over the default limit. Release keeps
+# the 32 MiB above.
+#
+# /STACK takes a reserve and, optionally, a commit size. Only the reserve is given, so the commit
+# size stays the linker default (one page) and pages are committed as the stack is touched: this
+# is address space, not committed memory. The value is also the default of every thread the
+# process creates on Windows, and a std::tf worker takes the executable's reserve when it is
+# larger than 8 MiB (include/camel/utils/big_stack_thread.h), so the workers get it too.
+set(CAMEL_DEBUG_STACK_SIZE_BYTES 134217728)
 function(target_camel_stack_size target)
   if(WIN32)
-    target_link_options(${target} PRIVATE "LINKER:/STACK:${CAMEL_STACK_SIZE_BYTES}")
+    # One option, with the size chosen by the configuration: two -Xlinker options would have the
+    # second one dropped as a duplicate, and the linker then reads the value as an input file.
+    target_link_options(${target} PRIVATE
+      "LINKER:/STACK:$<IF:$<CONFIG:Debug>,${CAMEL_DEBUG_STACK_SIZE_BYTES},${CAMEL_STACK_SIZE_BYTES}>")
   endif()
 endfunction()
 
